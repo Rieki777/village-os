@@ -1,13 +1,13 @@
 /**
- * THE DECISION MATRIX, THE PLATFORM'S HALF, inside the Power block
- * (plan 2.3 and 7 item 3; 2026-09-27).
+ * THE DECISION MATRIX, THE PLATFORM'S HALF, inside the Power block's Say
+ * frame (plan 2.3 and 7 item 3; 2026-09-27, moved into Say in Wave 3b).
  *
  * The canvas's Decision Matrix has five columns, and for the decisions this
  * platform runs, every answer is a rule the platform already enforces. So
  * the server writes this half from those rules (shared/decisionMatrix.ts,
  * GET /api/canvas/decision-matrix) and this component only shows it. It is
- * read-only: the village's own columns come in a later wave, and nothing here
- * pretends to take an edit.
+ * read-only, and nothing here pretends to take an edit: the village's own
+ * rows are DecisionMatrixRows, beneath it on the same frame.
  *
  * ── HOW IT FITS A PHONE ────────────────────────────────────────────────────
  *
@@ -32,10 +32,10 @@
  *
  * Thirty-odd rows of five columns is long on any screen, so each of the three
  * groups is a heading that opens its own rows, and only the votes are open to
- * begin with. While the matrix is open, `onOpenChange` tells CanvasBaseline,
- * which lets the Power card take both columns of its grid: on a laptop that
- * is what gives the rows the 640px they line up in, and a card that tall
- * beside a one-column neighbour would stretch the neighbour with it.
+ * begin with. On the canvas the Power card already takes both columns of its
+ * grid while its frames are open (CanvasBlockCard): on a laptop that is what
+ * gives the rows the 640px they line up in. `onOpenChange` stays for any host
+ * that wants to know.
  *
  * The data is fetched when somebody opens the matrix, so a member reading
  * the other eleven blocks costs the server nothing.

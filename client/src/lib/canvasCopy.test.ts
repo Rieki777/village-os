@@ -97,6 +97,16 @@ describe("the files this test reads", () => {
         // block's public line, and for a member the words kept for members.
         // It shows no reading and no radar, and nothing counted across blocks.
         "CanvasPublicLines.tsx",
+        // The five frames of one block (Wave 3b, 2026-09-28): the frames
+        // themselves with Sense, See and Learn, the Say and Adopt frames, the
+        // suggestion box, and the village's own rows of the Decision Matrix.
+        // They sift nothing: what they pick out of a list is picked by
+        // client/src/lib/canvasFramesCopy.ts, held to its own sweep below.
+        "CanvasBlockFrames.tsx",
+        "CanvasFrameAdopt.tsx",
+        "CanvasFrameSay.tsx",
+        "CanvasSuggestionForm.tsx",
+        "DecisionMatrixRows.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
@@ -142,6 +152,33 @@ describe("no number on the canvas but a block's level", () => {
   it("never sorts the blocks by how they read", () => {
     // Canvas order is the only order. Sorting by level draws a league table.
     for (const f of SURFACE) expect(f.body, f.name).not.toMatch(/\.sort\(/);
+  });
+});
+
+describe("the frames' sentences, which pick within one block and count nothing", () => {
+  // client/src/lib/canvasFramesCopy.ts is where the five frames sift a list
+  // (the gaps of ONE block, the doors a block offers), so `.filter(` is
+  // allowed there and nowhere in the components. Every other shape a count
+  // takes is refused exactly as it is above.
+  const frames = { name: "canvasFramesCopy.ts", body: source("lib", "canvasFramesCopy.ts") };
+
+  it("carries no percent, no N of M and no count of anything", () => {
+    expect(frames.body.length).toBeGreaterThan(2000);
+    expect(frames.body).not.toContain("%");
+    expect(frames.body).not.toMatch(/\b\d+\s+of\s+\d+\b/);
+    expect(frames.body).not.toMatch(/\}\s+of\s+\$?\{/);
+    expect(frames.body).not.toMatch(/\bof (twelve|12)\b/i);
+    expect(frames.body).not.toMatch(/\.length\s*\}/);
+    expect(frames.body).not.toMatch(/\$\{[^}]*\.length[^}]*\}/);
+  });
+
+  it("combines and ranks nothing", () => {
+    expect(frames.body).not.toMatch(/\.reduce\(|\.sort\(|\.size\b/);
+    expect(frames.body).not.toMatch(/\b(average|averaged|mean|median|sum|summed|total|composite|overall|score|scorecard)\b/i);
+  });
+
+  it("never reaches across blocks: it takes one block's payload and no list of blocks", () => {
+    expect(frames.body).not.toMatch(/CANVAS_ORDER|CANVAS_BLOCK_IDS|newestLevels|CanvasPayload/);
   });
 });
 

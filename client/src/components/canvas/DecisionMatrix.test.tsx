@@ -215,7 +215,7 @@ describe("when the matrix cannot be read", () => {
 });
 
 describe("where it lives", () => {
-  it("opens from the Power block, and from no other block", async () => {
+  it("opens from the Power block's Say frame, and from no other block", async () => {
     answers.push({
       status: 200,
       body: { mayRecord: false, blocks: CANVAS_BLOCK_IDS.map((id) => ({ id, latest: null, history: [] })) },
@@ -226,21 +226,45 @@ describe("where it lives", () => {
       </Router>,
     );
     const power = await screen.findByTestId("canvas-block-power");
-    await waitFor(() => expect(within(power).getByRole("button", { name: "Show who decides what" })).toBeTruthy());
-    expect(screen.getAllByTestId("decision-matrix")).toHaveLength(1);
-    // Rendering the Power block asked for the canvas and nothing else.
+    // Closed, no block carries the matrix, and the canvas is all that was asked for.
+    expect(screen.queryByTestId("decision-matrix")).toBeNull();
     expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
 
-    // Open, the Power card takes both columns of the grid; closed, it gives one back.
+    // Open, the Power card takes both columns of the grid; the matrix is in its Say frame (Wave 3b).
     expect(power.className).not.toContain("md:col-span-2");
+    fireEvent.click(within(power).getByRole("button", { name: "Open this block: Power" }));
+    const frames = await screen.findByTestId("canvas-frames-power");
+    expect(power.className).toContain("md:col-span-2");
+    answers.push({ status: 200, body: powerBlock() }, { status: 200, body: { rows: [], pen: rowsPen, riskTagsAreInformation: "Risk tags are information." } });
+    fireEvent.click(within(frames).getByRole("button", { name: "Say" }));
+    await waitFor(() => expect(within(power).getByRole("button", { name: "Show who decides what" })).toBeTruthy());
+    expect(screen.getAllByTestId("decision-matrix")).toHaveLength(1);
+    // Nothing asked for the matrix yet: its data comes when somebody opens it.
+    expect(calls.map((c) => c.url)).not.toContain("/api/canvas/decision-matrix");
+
     answers.push({ status: 200, body: matrix() });
     fireEvent.click(within(power).getByRole("button", { name: "Show who decides what" }));
     await waitFor(() => expect(within(power).getByTestId("matrix-group-votes")).toBeTruthy());
-    expect(power.className).toContain("md:col-span-2");
     for (const id of CANVAS_BLOCK_IDS) {
       if (id !== "power") expect(screen.getByTestId(`canvas-block-${id}`).className, id).not.toContain("md:col-span-2");
     }
-    fireEvent.click(within(power).getByRole("button", { name: "Hide who decides what" }));
+    fireEvent.click(within(power).getByRole("button", { name: "Close this block: Power" }));
     expect(power.className).not.toContain("md:col-span-2");
+    expect(screen.queryByTestId("decision-matrix")).toBeNull();
   });
+});
+
+/** The Power block as GET /api/canvas/blocks/power serves it to a member, with nothing suggested. */
+const rowsPen = { pen: "consequence", how: "act", who: "admins", sentence: "The founders adopt this before the Game starts.", ballotBuilt: true, youMayAdopt: false };
+const powerBlock = () => ({
+  block: { id: "power", number: 7, name: "Power", briefSections: ["decisions"] },
+  answer: { sections: [{ id: "decisions", title: "Decisions", readable: true, status: "blank" }] },
+  reading: null,
+  observed: [],
+  proposals: [],
+  doors: [],
+  pens: {},
+  birthed: false,
+  servesPurpose: { scoped: true, matrixScoped: true, requiredToday: false },
+  notesArePublic: "Everyone in the village can read what you write here.",
 });

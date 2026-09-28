@@ -87,11 +87,17 @@ describe("what a member reads", () => {
     const power = within(screen.getByTestId("canvas-block-power"));
     expect(power.getByText("Forming")).toBeTruthy();
     expect(power.getByText(/Two people decide most things/)).toBeTruthy();
-    // The newest reading and the one before it both say who and when.
-    expect(power.getAllByText(/Recorded by Wren on/)).toHaveLength(2);
-    expect(power.getByText("Earlier readings")).toBeTruthy();
+    // The newest reading says who and when on the closed card.
+    expect(power.getAllByText(/Recorded by Wren on/)).toHaveLength(1);
+    expect(power.queryByText(/Nobody had asked who decides/)).toBeNull();
+    // The one before it is in the block's Sense frame (Wave 3b), with its own who and when.
+    fireEvent.click(power.getByRole("button", { name: "Open this block: Power" }));
+    expect(await power.findByText("Earlier readings")).toBeTruthy();
     expect(power.getByText(/Nobody had asked who decides/)).toBeTruthy();
+    expect(power.getAllByText(/Recorded by Wren on/)).toHaveLength(2);
     expect(within(screen.getByTestId("canvas-block-legal")).getByText("No reading yet")).toBeTruthy();
+    // Opening a block on Sense asked the server for nothing more.
+    expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
 
     const credit = screen.getByRole("link", { name: new RegExp(CANVAS_CREDIT.text.slice(0, 40)) });
     expect(credit.getAttribute("href")).toBe(CANVAS_CREDIT.url);
@@ -170,8 +176,9 @@ describe("what a member reads", () => {
     });
     const { container } = draw();
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
-    // What DID render: twelve newest readings and twelve earlier ones, each with its date.
-    expect(screen.getAllByText(/Recorded by Wren on/)).toHaveLength(24);
+    // What DID render: twelve newest readings, each with its date. The earlier
+    // ones wait in each block's Sense frame, behind "Open this block".
+    expect(screen.getAllByText(/Recorded by Wren on/)).toHaveLength(12);
     const date = readingDate(reading().recordedAt);
     expect(container.textContent).toContain(date);
 
@@ -180,9 +187,21 @@ describe("what a member reads", () => {
       ...CANVAS_ORDER.map((b) => `Block ${b.number}`),
       ...CANVAS_ORDER.map((b) => weeksPhrase(b.seasonWeeks)).filter(Boolean),
     ].sort((a, b) => b.length - a.length); // "Block 12" goes before "Block 1"
-    let rest = container.textContent ?? "";
-    for (const s of allowed) rest = rest.split(s).join(" ");
-    expect(rest.match(/.{0,30}\d.{0,30}/g)).toBeNull();
+    const leftover = () => {
+      let rest = container.textContent ?? "";
+      for (const s of allowed) rest = rest.split(s).join(" ");
+      return rest.match(/.{0,30}\d.{0,30}/g);
+    };
+    expect(leftover()).toBeNull();
+
+    // And with every block open on its Sense frame, where the earlier readings
+    // moved (Wave 3b): twenty-four readings, and still no digit but those.
+    for (const block of CANVAS_ORDER) {
+      fireEvent.click(within(screen.getByTestId(`canvas-block-${block.id}`)).getByRole("button", { name: `Open this block: ${block.name}` }));
+    }
+    await waitFor(() => expect(screen.getAllByText(/Recorded by Wren on/)).toHaveLength(24));
+    expect(leftover()).toBeNull();
+    expect(calls.map((c) => c.url)).toEqual(["/api/canvas"]);
   });
 
   it("says so in words when the canvas cannot be read", async () => {
@@ -222,7 +241,7 @@ describe("one meaning per level on the page", () => {
       .map((li) => li.textContent);
     const legal = within(screen.getByTestId("canvas-block-legal"));
     fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
-    const offered = legal.getAllByRole("radio").map((r) => r.closest("label")?.textContent);
+    const offered = (await legal.findAllByRole("radio")).map((r) => r.closest("label")?.textContent);
     expect(offered).toEqual(CANVAS_LEVELS.map((l) => `${CANVAS_SCALE_TEXT[l].word}: ${CANVAS_SCALE_TEXT[l].meaning}`));
     expect(offered).toEqual(legend);
   });
@@ -235,7 +254,7 @@ describe("what the pen can do", () => {
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
     const legal = within(screen.getByTestId("canvas-block-legal"));
     fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
-    fireEvent.click(legal.getByRole("button", { name: /save this reading/i }));
+    fireEvent.click(await legal.findByRole("button", { name: /save this reading/i }));
     await waitFor(() => expect(legal.getByRole("alert").textContent).toMatch(/1 \(Absent\) to 5 \(Thriving\)/));
     expect(calls).toHaveLength(1);
   });
@@ -246,7 +265,7 @@ describe("what the pen can do", () => {
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
     const legal = within(screen.getByTestId("canvas-block-legal"));
     fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
-    fireEvent.click(legal.getByLabelText(/Emerging/));
+    fireEvent.click(await legal.findByLabelText(/Emerging/));
     fireEvent.change(legal.getByLabelText(/Why, in one sentence/), {
       target: { value: "The land title is in one name and the statutes were never read by the group." },
     });
@@ -273,7 +292,7 @@ describe("what the pen can do", () => {
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
     const power = within(screen.getByTestId("canvas-block-power"));
     fireEvent.click(power.getByRole("button", { name: /record a reading/i }));
-    fireEvent.click(power.getByLabelText(/Growing/));
+    fireEvent.click(await power.findByLabelText(/Growing/));
     fireEvent.change(power.getByLabelText(/Why, in one sentence/), { target: { value: "The circle now decides and says so." } });
     answers.push({ status: 403, body: { error: "Recording a canvas reading is for whoever holds the village's story." } });
     fireEvent.click(power.getByRole("button", { name: /save this reading/i }));

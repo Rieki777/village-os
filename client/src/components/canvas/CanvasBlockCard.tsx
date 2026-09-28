@@ -1,7 +1,14 @@
 /**
  * One canvas block: the canvas's own question, its newest reading in words,
- * who gave it and when, the readings before it, and for the pen a way to add
- * another.
+ * who gave it and when, and the block's five frames behind "Open this block".
+ *
+ * THE FIVE FRAMES (Wave 3b, 2026-09-28) open under the card, one at a time:
+ * Sense, See, Learn, Say and Adopt (CanvasBlockFrames, its own lazy chunk).
+ * The readings before the newest and the reading form moved into Sense. The
+ * pen keeps "Record a reading" on the closed card, because the first reading
+ * of all twelve blocks is taken in one sitting, and it opens the block on
+ * Sense with the form already open. An open block takes both columns of the
+ * grid on a wide screen, so its forms and the Decision Matrix have the room.
  *
  * TWO VOICES ON ONE CARD, and each is labelled. The canvas's question leads,
  * quoted with a `cite` back to where it was published, and its description
@@ -12,15 +19,18 @@
  *
  * The level shows as its WORD. The radar above already places it on a ring,
  * and a numeral here would invite adding the twelve up, which R55 forbids.
- * The earlier readings are listed without a count for the same reason.
+ * The earlier readings (in Sense) are listed without a count for the same
+ * reason.
  */
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
 import { CANVAS_BLOCK_TEXT, CANVAS_FOUNDATION_TEXT, CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { recordedLine, weeksPhrase, type CanvasBlockView } from "@/lib/canvasCopy";
-import { RecordReadingForm } from "./RecordReadingForm";
+
+/** The five frames: their own chunk, fetched the first time any block is opened. */
+const CanvasBlockFrames = lazy(() => import("./CanvasBlockFrames"));
 
 export function CanvasBlockCard({
   block,
@@ -29,8 +39,6 @@ export function CanvasBlockCard({
   onSave,
   focusLabel,
   season,
-  children,
-  wide = false,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
@@ -45,29 +53,17 @@ export function CanvasBlockCard({
    * no weeks, and another programme's calendar is not this village's.
    */
   season?: { name: string; weeks: readonly number[] };
-  /**
-   * What a block hosts beneath its own words. The Power block hosts the
-   * platform's half of the Decision Matrix (CanvasBaseline hands it in); the
-   * others host nothing yet.
-   */
-  children?: ReactNode;
-  /**
-   * Take both columns of the grid on a wide screen. The Power block asks for
-   * it while its Decision Matrix is open: five columns need the room, and a
-   * card that tall beside a neighbour would stretch the neighbour with it.
-   */
-  wide?: boolean;
 }) {
-  const [writing, setWriting] = useState(false);
+  /** Closed (null), or open, and whether the reading form starts open. */
+  const [open, setOpen] = useState<{ recording: boolean } | null>(null);
   const latest = view.latest;
-  const earlier = view.history.slice(1);
   const canvas = CANVAS_BLOCK_TEXT[block.id];
 
   return (
     <article
       id={`canvas-block-${block.id}`}
       data-testid={`canvas-block-${block.id}`}
-      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}${wide ? " md:col-span-2" : ""}`}
+      className={`bg-white border rounded-xl p-5 scroll-mt-24 ${focusLabel ? "border-teal-deep" : "border-stone-200"}${open ? " md:col-span-2" : ""}`}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -131,43 +127,43 @@ export function CanvasBlockCard({
         </p>
       )}
 
-      {children}
-
-      {earlier.length > 0 && (
-        <details className="mt-3 text-sm">
-          <summary className="cursor-pointer font-medium text-teal-deep">Earlier readings</summary>
-          <ul className="mt-2 space-y-2">
-            {earlier.map((r) => (
-              <li key={r.id} className="text-stone-700">
-                <span className="font-medium text-stone-900">{r.word}</span>. {r.sentence}
-                <span className="block text-xs text-stone-600">{recordedLine(r)}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-
-      {mayRecord && !writing && (
+      <div className="mt-4 flex flex-wrap gap-2">
+        {mayRecord && !open && (
+          <button
+            type="button"
+            onClick={() => setOpen({ recording: true })}
+            className="min-h-[44px] text-sm font-medium rounded-lg px-3 text-teal-deep border border-teal-deep hover:bg-stone-50"
+          >
+            Record a reading
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setWriting(true)}
-          className="mt-4 text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50"
+          aria-expanded={!!open}
+          aria-controls={`canvas-frames-region-${block.id}`}
+          aria-label={`${open ? "Close this block" : "Open this block"}: ${block.name}`}
+          onClick={() => setOpen(open ? null : { recording: false })}
+          className={`min-h-[44px] text-sm font-medium rounded-lg px-3 border ${
+            open ? "text-stone-800 border-stone-300 hover:bg-stone-50" : "text-white bg-teal-deep border-teal-deep"
+          }`}
         >
-          Record a reading
+          {open ? "Close this block" : "Open this block"}
         </button>
-      )}
-      {mayRecord && writing && (
-        <RecordReadingForm
-          block={block}
-          firstReading={!latest}
-          onCancel={() => setWriting(false)}
-          onSave={async (reading) => {
-            const refused = await onSave(reading);
-            if (!refused) setWriting(false);
-            return refused;
-          }}
-        />
-      )}
+      </div>
+
+      <div id={`canvas-frames-region-${block.id}`}>
+        {open && (
+          <Suspense fallback={<p className="mt-4 text-sm text-stone-600">Opening {block.name}</p>}>
+            <CanvasBlockFrames
+              block={block}
+              view={view}
+              mayRecord={mayRecord}
+              onSaveReading={onSave}
+              startRecording={open.recording}
+            />
+          </Suspense>
+        )}
+      </div>
     </article>
   );
 }
