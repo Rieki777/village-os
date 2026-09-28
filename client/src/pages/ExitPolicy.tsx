@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
+import ClosingPolicyCard from "@/components/ClosingPolicyCard";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -169,6 +170,9 @@ export default function ExitPolicy() {
               </div>
             )}
           </div>
+
+          {/* The exit AND closing policy: what happens if the village itself ends (2026-09-25). */}
+          {policy && <ClosingPolicyCard closing={policy.closing} />}
 
           {user && (
             <div className="bg-card border border-border rounded-xl p-5">

@@ -245,6 +245,11 @@ beforeAll(async () => {
       },
     },
   })).status).toBe(200);
+  // What closing means, named AND adopted: blocking since Rye's ruling of
+  // 2026-09-25. Its own "no" and "yes" are server/closingPolicy.routes.e2e.test.ts.
+  expect((await call("PUT", "/api/admin/exit-policy/closing", {
+    body: { policyId: "own-words", statement: "If Larksfield closes, the barn and the land pass to the parish trust and the cash is shared among the members still here.", adopt: true },
+  })).status).toBe(200);
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "backups-drilled", done: true } })).status).toBe(200);
 
   /*

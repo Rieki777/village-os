@@ -63,6 +63,7 @@ import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
+import ClosingPolicyEditor from "@/components/admin/ClosingPolicyEditor";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
 import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
@@ -7225,6 +7226,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         </div>
         );
       })()}
+      {data && <ClosingPolicyEditor password={password} closing={data.policy?.closing} onSaved={load} />}
     </div>
   );
 }
@@ -8471,7 +8473,6 @@ export function SeasonTab({ password }: { password: string }) {
   );
 }
 
-
 // ── One hero image: upload (compressed for you) or point at your own URL ──────
 
 function BrandImageField({
@@ -9194,7 +9195,6 @@ function SettingsTab({ password }: { password: string }) {
     </div>
   );
 }
-
 
 /**
  * S69: payment products — define what the village asks money for, watch

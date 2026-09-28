@@ -465,6 +465,28 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     runbookAnchor: "exit-policy",
   },
   {
+    id: "closing-policy-named",
+    group: "reach",
+    title: "Name what closing this village means",
+    /*
+     * BLOCKING, BY RULING. Rye, 2026-09-25: "before you launch the village you
+     * have to articulate what it means to close a village ... one does need to
+     * be agreed to name upon before launching." Part of the exit and closing
+     * policy, so it sits beside the exit terms. Resolved in server/lib/launch.ts
+     * by server/lib/closingPolicy.ts: named means words the village ADOPTED,
+     * and the pre-filled default alone never counts.
+     */
+    why:
+      "If the village ever closes, its treasury and assets go somewhere. Say where now, while the question costs " +
+      "nothing, in words every member can read. Choose the platform's suggested default, shared in proportion to " +
+      "the contribution tokens people hold on closing day, or write your own.",
+    severity: "blocking",
+    checkKey: "closing-policy-named",
+    fixAt: "/admin?tab=exits-admin&setting=exit.closing",
+    fixLabel: "Name it",
+    runbookAnchor: "closing-policy",
+  },
+  {
     id: "backups-drilled",
     group: "reach",
     title: "Take one backup and restore it once",

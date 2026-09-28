@@ -135,6 +135,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { register as registerClosingPolicyRoutes } from "./routes/closingPolicy";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
@@ -14694,7 +14695,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         return res.status(400).json({ error: "unknown_circle", message: `Unknown ${label} "${id}"` });
       }
     }
-    const next = normalizeExitPolicy(body);
+    const next = normalizeExitPolicy(body, exitPolicyRepo.get());
     const blank = blankTerms(next);
     if (blank.length) {
       return res.status(400).json({
@@ -18850,6 +18851,7 @@ ${inner}
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
+  registerClosingPolicyRoutes(app, { isAdmin, adminActor, exitPolicy: exitPolicyRepo });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
