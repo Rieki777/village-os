@@ -3003,6 +3003,38 @@ export const VARIABLES: VariableDef[] = [
       { value: "none", label: "Do not ask" },
     ],
   },
+
+  // ── Canvas: the Governance Canvas Database on the village's shelf (0224) ──
+  {
+    key: "canvas.resources_sync",
+    category: "Canvas",
+    label: "Read the Governance Canvas Database every night",
+    /*
+     * ON by default, which is Rye's ruling (the Governance Canvas pieces,
+     * the resource database sync among them, are built AND switched on). The
+     * plan's first draft had it off, following "every module ships off", and
+     * the ruling overrode that. The canvas is core, not a module.
+     */
+    description:
+      "When on, the village reads the five public columns of the Governance Canvas Database once a night (the name, type, authors, description and address of each resource, and nothing about who suggested it) and checks that each address still opens. The Learn frame of every canvas block shows what it finds, with the date it was read. When off, no request leaves the village for either, and the shelf keeps the copy it has: the last one read, or the one shipped with the platform.",
+    type: "boolean",
+    default: "true",
+  },
+  {
+    key: "canvas.suggest_url",
+    category: "Canvas",
+    label: "Where members suggest a resource to the Governance Canvas Database",
+    /*
+     * SHIPS BLANK. The database's own suggestion form also asks for the
+     * suggester's name and email, and its public sheet shows every column to
+     * anyone, those included (plan 5.3). So no link to it appears until its
+     * keepers have fixed that and a village chooses to set this.
+     */
+    description:
+      "The address of the suggestion form the Governance Canvas Database's keepers run. When it is set, the Learn frame offers a link to it, and a member fills it in and sends it on that form themselves: this village sends nothing. Empty means no link is shown. It must be an https address.",
+    type: "text",
+    default: "",
+  },
 ];
 
 // ── Progression: the ladder's economics and thresholds, GENERATED per stage ──

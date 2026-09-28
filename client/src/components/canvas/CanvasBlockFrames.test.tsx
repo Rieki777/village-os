@@ -199,7 +199,10 @@ async function openPower(frame?: "See" | "Learn" | "Say" | "Adopt") {
   draw();
   const card = await screen.findByTestId("canvas-block-power");
   fireEvent.click(within(card).getByRole("button", { name: "Open this block: Power" }));
-  const frames = await screen.findByTestId("canvas-frames-power");
+  // The frames are a lazy chunk, and the file's first open transforms it
+  // (Learn's resources list included): on a busy machine that passed the
+  // default second on 2026-09-28 with nothing wrong, so it gets five.
+  const frames = await screen.findByTestId("canvas-frames-power", {}, { timeout: 5000 });
   if (frame) fireEvent.click(within(frames).getByRole("button", { name: frame }));
   return within(frames);
 }
@@ -294,17 +297,143 @@ describe("See", () => {
   });
 });
 
+const RESOURCES = "GET /api/canvas/resources?block=power&surface=learn";
+const SHEET = "https://docs.google.com/spreadsheets/d/1rDA_fXJe-WziLzhqV2WLBBTdSgNyPa7AwK_ftuGDs24/";
+
+const resource = (over: Record<string, unknown> = {}) => ({
+  key: "a".repeat(40),
+  name: "Consent decision making",
+  type: "Article",
+  authors: "Sociocracyforall",
+  description: "A proposal passes when no one holds a paramount objection.",
+  keywords: ["decision making", "consent"],
+  url: "https://www.sociocracyforall.org/consent-decision-making/",
+  linkPending: false,
+  link: "unchecked",
+  linkCheckedAt: null,
+  placing: { by: "platform", keyword: null },
+  blocks: ["power"],
+  ...over,
+});
+
+const shelf = (over: Record<string, unknown> = {}) => ({
+  block: "power",
+  surface: "learn",
+  resources: [
+    resource(),
+    resource({
+      key: "b".repeat(40),
+      name: "Governance Canvas",
+      type: "Canvas",
+      authors: "Bioregional Weaving Labs Collective & Commonland",
+      description: "The canvas itself.",
+      url: null,
+      linkPending: true,
+    }),
+    resource({
+      key: "c".repeat(40),
+      name: "A resource added upstream later",
+      authors: "A later author",
+      description: "Added after the platform's map was made.",
+      url: "https://example.org/later",
+      link: "broken",
+      linkCheckedAt: "2026-10-04T03:00:00.000Z",
+      placing: { by: "suggested", keyword: "voting" },
+    }),
+  ],
+  credit: { text: "Governance Canvas Database, Bioregional Weaving Labs Collective and Commonland", url: SHEET },
+  source: { kind: "snapshot", asOf: "2026-09-28T12:00:00.000Z", syncOn: true },
+  suggestUrl: null,
+  mayPlace: false,
+  ...over,
+});
+
 describe("Learn", () => {
-  it("says plainly what is not built, offers no button that would do nothing, and links only to what exists", async () => {
+  it("lists the database's resources for the block, credits the database, and dates the copy", async () => {
     answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", RESOURCES.slice(4), 200, shelf());
     const frames = await openPower("Learn");
-    expect(frames.getByTestId("canvas-learn-not-built").textContent).toBe(
-      "Readings and tools picked for Power, and a way to ask a question about it, are not built yet.",
-    );
+    const list = within(await frames.findByTestId("canvas-resources-list"));
+
+    // A resource with an address is a link that opens outside the village.
+    const consent = list.getByRole("link", { name: /Consent decision making/ });
+    expect(consent.getAttribute("href")).toBe("https://www.sociocracyforall.org/consent-decision-making/");
+    expect(consent.getAttribute("target")).toBe("_blank");
+    expect(list.getByText("Article, by Sociocracyforall")).toBeTruthy();
+    expect(list.getByText("A proposal passes when no one holds a paramount objection.")).toBeTruthy();
+
+    // A filename upstream is no link, and says so with nothing to click.
+    const pending = within(frames.getByTestId(`canvas-resource-${"b".repeat(40)}`));
+    expect(pending.queryByRole("link")).toBeNull();
+    expect(pending.getByText("The database lists this one without a link yet.")).toBeTruthy();
+
+    // A suggestion says which keyword put it here; a failed link says so and no more.
+    const later = within(frames.getByTestId(`canvas-resource-${"c".repeat(40)}`));
+    expect(later.getByText('Suggested for Power because its keywords include "voting".')).toBeTruthy();
+    expect(later.getByText(/^This address failed the village's last check on .+2026\. It may still open for you\.$/)).toBeTruthy();
+    // The platform's own placing is the ordinary case and says nothing.
+    expect(within(frames.getByTestId(`canvas-resource-${"a".repeat(40)}`)).queryByText(/Suggested|chose to show/)).toBeNull();
+
+    const credit = frames.getByTestId("canvas-resources-credit");
+    const creditLink = within(credit).getByRole("link", { name: "Governance Canvas Database, Bioregional Weaving Labs Collective and Commonland" });
+    expect(creditLink.getAttribute("href")).toBe(SHEET);
+    expect(credit.textContent).toMatch(/A copy of the database taken on .+2026 and shipped with this platform\. This village has not read the database itself yet\./);
+
+    // No suggestion form until the village sets one, and nothing for the pen to place.
+    expect(frames.queryByTestId("canvas-resources-suggest")).toBeNull();
+    expect(frames.queryByText("Choose where this shows")).toBeNull();
+    expect(asked(RESOURCES)[0].init.headers.Authorization).toBe("Bearer a-token");
+  });
+
+  it("says plainly what is still not built, offers no button that would do nothing, and links only to what exists", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", RESOURCES.slice(4), 200, shelf({ resources: [] }));
+    const frames = await openPower("Learn");
+    expect(await frames.findByText("The Governance Canvas Database lists nothing under Power yet.")).toBeTruthy();
+    expect(frames.getByTestId("canvas-learn-not-built").textContent).toBe("A way to ask a question about Power is not built yet.");
     expect(frames.queryByRole("button", { name: /ask/i })).toBeNull();
     expect(frames.getByRole("link", { name: /Print the canvas workbook/ }).getAttribute("href")).toBe("/canvas/workbook");
-    // Learn needs nothing from the server.
-    expect(calls.map((c) => c.key)).toEqual(["GET /api/canvas"]);
+    // Learn asks for its own resources and for nothing else.
+    expect(calls.map((c) => c.key)).toEqual(["GET /api/canvas", RESOURCES]);
+  });
+
+  it("offers the database's own suggestion form once the village has set it, and says the member sends it", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", RESOURCES.slice(4), 200, shelf({ suggestUrl: "https://forms.example.org/suggest", source: { kind: "database", asOf: "2026-10-05T02:00:00.000Z", syncOn: true } }));
+    const frames = await openPower("Learn");
+    const suggest = await frames.findByTestId("canvas-resources-suggest");
+    expect(within(suggest).getByRole("link", { name: "suggest it to the Governance Canvas Database" }).getAttribute("href")).toBe(
+      "https://forms.example.org/suggest",
+    );
+    expect(suggest.textContent).toContain("You send it yourself, and this village sends nothing.");
+    expect(frames.getByTestId("canvas-resources-credit").textContent).toMatch(/Read from the database on .+2026\. The village reads it again every night\./);
+  });
+
+  it("lets the pen choose where a resource shows, sends the blocks in canvas order, and reads the shelf again", async () => {
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", RESOURCES.slice(4), 200, shelf({ mayPlace: true, resources: [resource()] }));
+    answer("PUT", `/api/canvas/resources/${"a".repeat(40)}/blocks`, 200, { key: "a".repeat(40), blocks: ["power", "learning"], by: "village" });
+    const frames = await openPower("Learn");
+    const item = within(await frames.findByTestId(`canvas-resource-${"a".repeat(40)}`));
+    fireEvent.click(item.getByText("Choose where this shows"));
+    fireEvent.click(item.getByRole("checkbox", { name: "Learning" }));
+    expect((item.getByRole("checkbox", { name: "Power" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(item.getByRole("button", { name: "Save where it shows" }));
+    expect(await frames.findByText("Saved. Consent decision making now shows under the blocks you chose, in this village only.")).toBeTruthy();
+    const put = asked(`PUT /api/canvas/resources/${"a".repeat(40)}/blocks`)[0];
+    expect(JSON.parse(put.init.body)).toEqual({ blocks: ["power", "learning"] });
+    expect(put.init.headers.Authorization).toBe("Bearer a-token");
+    expect(asked(RESOURCES)).toHaveLength(2);
+    // Nothing to hand back: the platform's placing was never overridden here.
+    expect(item.queryByRole("button", { name: "Use the platform's placing" })).toBeNull();
+  });
+
+  it("shows the server's refusal when the shelf cannot be read, with a way to try again", async () => {
+    answer("GET", "/api/canvas", 200, canvas(false));
+    answer("GET", RESOURCES.slice(4), 500, { error: "The resources could not be read." });
+    const frames = await openPower("Learn");
+    await waitFor(() => expect(frames.getByRole("alert").textContent).toContain("could not be read just now."));
+    expect(frames.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });
 

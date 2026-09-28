@@ -1,0 +1,422 @@
+{
+  "voice-ok": "Quoted word for word from the Governance Canvas Database (Bioregional Weaving Labs Collective and Commonland). This text is theirs, and rewording it to pass our house style would misquote them.",
+  "about": "A snapshot of the five public columns of the Governance Canvas Database, shipped so a village with no network still has the resource shelf. Read by server/lib/canvasResourcesSync.ts through the same header check and normalising as the nightly read. No submitter's name, email, organisation or timestamp is in it.",
+  "credit": "Governance Canvas Database, Bioregional Weaving Labs Collective and Commonland",
+  "source": "https://docs.google.com/spreadsheets/d/1rDA_fXJe-WziLzhqV2WLBBTdSgNyPa7AwK_ftuGDs24/gviz/tq?tqx=out:csv&sheet=Database&headers=1&tq=select%20A%2CB%2CC%2CD%2CE",
+  "taken": "2026-09-28",
+  "header": [
+    "Governance resource name",
+    "Type",
+    "Author(s)",
+    "Short description",
+    "URL"
+  ],
+  "rows": [
+    [
+      "4 Returns Finance Assessment (4RFA)",
+      "Article",
+      "Commonland",
+      "Commonland assessment tool for mapping how a landscape is financed - funding needs, revenue models, capital flows and investment gaps across the 4 Returns. Keywords: resourcing, landscape finance, funding models, investment readiness, blended finance.",
+      "4RFA Introduction.pdf"
+    ],
+    [
+      "ABCD Process — Backcasting from sustainability principles",
+      "Article",
+      "The Natural Step",
+      "Four-step backcasting method (Awareness, Baseline, Creative solutions, Decide) that plans change backwards from agreed sustainability principles. Keywords: purpose, shared vision, strategic planning, backcasting, sustainability principles, learning.",
+      "https://www.thenaturalstep.de/solution/abcd-process/"
+    ],
+    [
+      "Beyond The Rules",
+      "Article",
+      "Dark Matter Labs",
+      "Practice-oriented inquiry by Dark Matter Labs into the underlying rules of governance structures and organising methods for 21st-century challenges. Keywords: institutional design, self-organising, rules and norms, distributed power, governance experiments.",
+      "https://darkmatterlabs.notion.site/Beyond-the-Rules-19e692bf98f54b44971ca34700e246fd"
+    ],
+    [
+      "Blended Finance and Catalytic Capital in Bioregional Financing Facilities",
+      "Article",
+      "Dark Matter Labs: Leon Seefeld",
+      "Discovery arc on how bioregional financing facilities combine catalytic, concessional and commercial capital, and what that asks of governance. Keywords: resourcing, blended finance, catalytic capital, BFF, risk sharing, financial governance.",
+      "[public]_v2_BFF Blended Finance & Catalytic Capital_DiscoveryArc#2_14.11.2025"
+    ],
+    [
+      "Capital Allocation Governance in Bioregional Financing Facilities",
+      "Article",
+      "Dark Matter Labs: Leon Seefeld",
+      "Discovery arc on who decides where money goes in a bioregional financing facility - allocation criteria, decision rights, safeguards and accountability. Keywords: decision making, capital allocation, resourcing, accountability, power, BFF.",
+      "[public]_v3_BFF Allocation Decision Governance_DiscoveryArc#1_28.01.2026"
+    ],
+    [
+      "Circular Cross Scalar Governance Spiral",
+      "Article",
+      "Tobias Luthe, Haley Fitzpatrick & Daniel Christian Wahl",
+      "Spiral model for governing across nested scales, from individual and community to bioregion and planet, in circular and regenerative systems. Keywords: multi-scale governance, subsidiarity, bioregional, regenerative systems, coordination.",
+      "https://tobiasluthe.de/wp-content/uploads/2025/05/Cross-scale-governance-spiral_May-2025.pdf"
+    ],
+    [
+      "Company Culture Iceberg",
+      "Article",
+      "The Right Questions",
+      "The iceberg model of organisational culture: visible behaviours above the waterline, values, beliefs and unspoken assumptions below. Keywords: culture, values, unwritten rules, power and influence, shared purpose, behaviour.",
+      "https://therightquestions.co/how-to-use-the-iceberg-model-of-organisational-culture/"
+    ],
+    [
+      "Consent decision making",
+      "Article",
+      "Sociocracyforall",
+      "Explains consent decision making, where a proposal passes when no one holds a paramount objection, rather than requiring consensus or a majority. Keywords: decision making, consent, objections, sociocracy, circles, power.",
+      "https://www.sociocracyforall.org/consent-decision-making/"
+    ],
+    [
+      "Decision-making methods: a comparison",
+      "Article",
+      "Sociocracy For All",
+      "Side-by-side comparison of consent, consensus, majority vote, advice process and autocratic decisions, and when each one fits. Keywords: decision making, consent, consensus, voting, advice process, power.",
+      "https://www.sociocracyforall.org/decision-making-methods-comparison/"
+    ],
+    [
+      "Governance for Complexity",
+      "Article",
+      "Good Shifts",
+      "Argues for governance designed in and for complexity - adaptive, distributed and emergent rather than command and control. Keywords: complexity, adaptive governance, distributed power, systems change, emergence, learning.",
+      "https://medium.com/good-shift/governance-in-and-for-complexity-eac108d8b589"
+    ],
+    [
+      "Governance Model voor Living Delta BFF",
+      "Article",
+      "Oogst van Morgen",
+      "Worked governance model for the Living Delta bioregional financing facility: bodies, roles, decision rights and safeguards. Keywords: BFF, legal structure, roles, decision making, accountability, bioregional finance, Nederlands.",
+      "Governance Model for Living Delta BFF.docx"
+    ],
+    [
+      "How You Can Use The NVC Process",
+      "Article",
+      "Marshall B. Rosenberg",
+      "Rosenberg's four-part Nonviolent Communication process - observations, feelings, needs, requests - set out on a single page. Keywords: conflict navigation, NVC, communication, feedback, relationships, facilitation.",
+      "https://nonviolentcommunication.com/wp-content/uploads/2021/11/4part_nvc_process.pdf"
+    ],
+    [
+      "Key Facts About Nonviolent Communication (NVC)",
+      "Article",
+      "Center for Nonviolent Communication",
+      "Short primer on the assumptions, intentions and practice behind Nonviolent Communication. Keywords: conflict navigation, NVC, communication, empathy, culture, facilitation.",
+      "https://nonviolentcommunication.com/wp-content/uploads/2019/07/key_facts_nvc.pdf"
+    ],
+    [
+      "Many-to-Many Agreement Example",
+      "Article",
+      "Dark Matter Labs",
+      "Example contract terms for many-to-many agreements, showing how multiple parties can hold shared commitments to each other. Keywords: legal structure, contracts, agreements, accountability, ownership, many-to-many.",
+      "2025_example_many-to-many_Contract_Terms.pdf"
+    ],
+    [
+      "Ostrom Didn’t Say That",
+      "Article",
+      "Shannon Dobbs",
+      "A corrective on how Elinor Ostrom's commons design principles are commonly misread and misapplied. Keywords: commons, Ostrom, design principles, self-governance, shared resources, ownership.",
+      "https://www.linkedin.com/pulse/ostrom-didnt-say-shannon-dobbs-8yozc/?trackingId=ZMD4pXRqQVqT3N4bC%2BPObA%3D%3D"
+    ],
+    [
+      "Peer feedback process",
+      "Article",
+      "Sociocracy For All",
+      "Sociocratic approach to peer feedback and performance reviews in self-managing circles. Keywords: learning, feedback, performance review, accountability, roles, sociocracy.",
+      "https://www.sociocracyforall.org/performance-reviews/"
+    ],
+    [
+      "Sociocracy – basic concepts and principles",
+      "Article",
+      "Sociocracy for all",
+      "Introduction to sociocracy: circles, double linking, consent decisions and role elections. Keywords: decision making, sociocracy, circles, consent, roles, distributed power.",
+      "https://www.sociocracyforall.org/sociocracy/"
+    ],
+    [
+      "Sociocracy and Nonviolent Communication (NVC)",
+      "Article",
+      "Sociocracy For All",
+      "How Nonviolent Communication and sociocracy reinforce each other in meetings, objections and conflict. Keywords: conflict navigation, decision making, NVC, sociocracy, meetings, culture.",
+      "https://www.sociocracyforall.org/sociocracy-and-nonviolent-communication-nvc/"
+    ],
+    [
+      "Whitepaper Cocratie",
+      "Article",
+      "Cocratie",
+      "Dutch whitepaper introducing Cocratie, a model for collective decision making and shared power in organisations. Keywords: decision making, ownership, participation, self-organisation, governance model, Nederlands.",
+      "https://www.cocratie.co/wp-content/uploads/2024/09/Whitepaper-Cocratie-V1.1-1.pdf"
+    ],
+    [
+      "Beginning Anew",
+      "Article",
+      "Plum Village",
+      "Plum Village practice for clearing hurt and restoring relationships in a group through appreciation, regret and honest sharing. Keywords: conflict navigation, culture, relationships, reconciliation, meetings, practice.",
+      "https://plumvillage.org/mindfulness/extended-practises#beginning-anew"
+    ],
+    [
+      "Bioregional Financing Facilities",
+      "Book",
+      "Leon Seefeld & Samantha Power",
+      "The BioFi book on designing bioregional financing facilities that channel capital into regenerative work in a place. Keywords: BFF, bioregional finance, resourcing, legal structure, governance design, capital allocation.",
+      "BioFi Book"
+    ],
+    [
+      "Sociocracy Books",
+      "Book",
+      "Sociocracy For All",
+      "Sociocracy For All's book list on sociocracy, circles and consent-based governance. Keywords: sociocracy, decision making, circles, consent, reading list, self-governance.",
+      "https://www.sociocracyforall.org/sociocracy-books/"
+    ],
+    [
+      "Commons Canvas",
+      "Canvas ",
+      "",
+      "Canvas for designing and stewarding a commons: the resource, the community, rules in use, boundaries and monitoring. Keywords: commons, ownership, stakeholders, rules, monitoring, Ostrom, self-governance.",
+      "Commons Canvas (versie 1.01).pdf"
+    ],
+    [
+      "Community Canvas Guidebook",
+      "Canvas ",
+      "Together Institute",
+      "Guidebook for building intentional communities across identity, experience and structure, with themes and practical questions per building block. Keywords: community building, purpose, membership, roles, rituals, culture, stakeholders.",
+      "https://github.com/communitycanvas/documents/raw/master/CommunityCanvas-Guidebook.pdf"
+    ],
+    [
+      "Governance Canvas",
+      "Canvas ",
+      "Bioregional Weaving Labs Collective & Commonland",
+      "The BWL Governance Canvas with 12 building blocks - purpose, team, roles, meetings, stakeholders, coordination, power, conflict, learning, resourcing, legal and impact - to make governance explicit and adaptable. Keywords: governance canvas, building blocks, landscape governance, multi-stakeholder, facilitation.",
+      "Governance Canvas"
+    ],
+    [
+      "Operating System (OS) Canvas",
+      "Canvas ",
+      "The Ready",
+      "The Ready's canvas mapping an organisation's operating system across domains such as purpose, authority, structure, meetings and information. Keywords: organisational design, authority, decision making, meetings, roles, self-management.",
+      "https://www.theready.com/os-canvas"
+    ],
+    [
+      "Power Mapping Template",
+      "Canvas ",
+      "Creately",
+      "Template for mapping who holds power and influence over an issue, how they relate, and how to move them. Keywords: power and influence, stakeholders, mapping, strategy, coordination, advocacy.",
+      "https://creately.com/usage/power-mapping-template/"
+    ],
+    [
+      "Sociocracy Team Canvas",
+      "Canvas ",
+      "Sociocracy30",
+      "The S3 Team Canvas helps a team or circle clarify where it stands and how to move forward; pairs with the S3 Delegation Canvas for defining the team's domain. Keywords: roles, team agreements, circles, domain, sociocracy, S3.",
+      "https://s3canvas.sociocracy30.org/s3-team-canvas.html"
+    ],
+    [
+      "Team Canvas",
+      "Canvas ",
+      "Team Canvas",
+      "The Business Model Canvas for teamwork: aligns purpose, roles, values, rules and goals in one facilitated session. Keywords: team, roles, shared purpose, values, alignment, kick-off, culture.",
+      "https://www.theteamcanvas.com/"
+    ],
+    [
+      "Regenerative Community Design Canvas",
+      "Canvas ",
+      "ATÖLYE & Josine Bakkes",
+      "Canvas and article on designing a regenerative community strategy. Keywords: community design, regenerative, purpose, stakeholders, culture, strategy.",
+      "https://medium.com/atolye/designing-a-regenerative-community-strategy-50670c2e8b37"
+    ],
+    [
+      "Bioregional Governance Training Guide",
+      "Report ",
+      "Ecolise",
+      "Training guide for facilitators building governance capacity in bioregional and community-led initiatives. Keywords: bioregional governance, training, facilitation, capacity building, learning, commons.",
+      "https://ecolise.eu/publications/bioregional-governance-training-guide/"
+    ],
+    [
+      "BWL Strategy 3.0",
+      "Report ",
+      "Bioregional Weaving Labs Collective",
+      "The BWL Collective's strategy: mission, governance model, teams, decision-making processes and principles for growth. Keywords: strategy, governance model, decision making, roles, subsidiarity, BWL Collective.",
+      "BWL STRATEGY 3.0 (FEBRUARY 2026 EDIT).docx"
+    ],
+    [
+      "Guide for Initiating a Landscape Leadership Lab",
+      "Report ",
+      "Commonland",
+      "Living guide for cluster teams initiating a two-year Landscape Leadership Lab: preconditions, 12 design principles, the U-process, hosting team, activities and budget. Keywords: LLL, social lab, leadership, hosting, facilitation, systems change, learning.",
+      "Guidebook for Initiating an LLL"
+    ],
+    [
+      "Landscape Governance Assessment Tool (LGAT) ",
+      "Report ",
+      "The World Bank",
+      "World Bank tool for assessing landscape governance - institutions, rights, participation and accountability at landscape scale. Keywords: landscape governance, assessment, institutions, accountability, participation, monitoring.",
+      "https://documents1.worldbank.org/curated/en/099040524042022845/pdf/P1807091d175eb0f31bdd01794d68c4d5f0.pdf"
+    ],
+    [
+      "Landscape Governance Workbook",
+      "Report ",
+      "Commonland",
+      "Commonland learning journey and workbook on governing multi-stakeholder landscape restoration. Keywords: landscape governance, multi-stakeholder, learning journey, roles, decision making, stakeholders.",
+      "Landscape Governance Workbook (A learning Journey by Commonland)"
+    ],
+    [
+      "Legal System Architecture - Experiment Log",
+      "Report ",
+      "Dark Matter Labs",
+      "Log of Dark Matter Labs' legal experiments: new entity forms, rights of nature and contractual architectures for shared stewardship. Keywords: legal structure, entity design, rights of nature, ownership, stewardship, contracts.",
+      "FINAL v.1- Experiment Log.pdf"
+    ],
+    [
+      "Many-to-Many Systems",
+      "Report ",
+      "Dark Matter Labs",
+      "Patterns, frameworks and tools for organising and governing many-to-many relationships, with layers for making sense of and shaping collaboration. Keywords: decision making, legal structure, monitoring, ownership, accountability, roles, shared purpose, stakeholders.",
+      "https://www.manytomany.systems/discover-the-system"
+    ],
+    [
+      "Mobiliseren van een Gebiedsteam",
+      "Report ",
+      "Oogst van Morgen",
+      "Dutch guide to mobilising a place-based area team: who to involve, which roles are needed and how to get started. Keywords: team, roles, stakeholders, gebiedsteam, mobilisation, landscape, Nederlands.",
+      "Mobiliseren van een Gebiedsteam NL.docx"
+    ],
+    [
+      "The MSP Guide: How to Design and Facilitate Multi-Stakeholder Partnerships",
+      "Report ",
+      "Wageningen University",
+      "Wageningen's guide to designing and facilitating multi-stakeholder partnerships, with principles, process phases and a large tool library. Keywords: multi-stakeholder, facilitation, stakeholders, coordination, process design, power.",
+      "https://mspguide.org"
+    ],
+    [
+      "Wegwijzer Rechten van de Natuur",
+      "Report ",
+      "Stichting Rechten van de Natuur",
+      "Dutch materials on giving nature legal rights and representation in decision making. Keywords: rights of nature, legal structure, representation, guardianship, stakeholders, Nederlands.",
+      "https://www.rechtenvandenatuur.org/materialen#content"
+    ],
+    [
+      "Assessing Landscape Governance A Participatory Approach",
+      "Scientific Paper ",
+      "Tropenbos International and EcoAgriculture Partners",
+      "Guidelines for assessing landscape governance participatively, with the stakeholders themselves doing the assessing. Keywords: landscape governance, assessment, participation, stakeholders, monitoring, multi-stakeholder.",
+      "https://www.tropenbos.org/resources/guidelines-assessing-landscape-governance-a-participatory-approach/"
+    ],
+    [
+      "Equitable and Inclusive Landscape Restoration Planning: Learning from a Restoration Opportunity Assessment in India",
+      "Scientific Paper ",
+      "Singh et al. 2021",
+      "Paper on equity and inclusion in restoration planning, drawing on a Restoration Opportunity Assessment in India. Keywords: equity, inclusion, participation, restoration planning, power, stakeholders, case study.",
+      "https://er.uwpress.org/content/39/1-2/108"
+    ],
+    [
+      "Governance and management dynamics of landscape restoration at\nmultiple scales: Learning from successful environmental managers in\nSweden",
+      "Scientific Paper ",
+      "Dawson et al. 2017",
+      "Study of how successful environmental managers in Sweden govern and manage landscape restoration across multiple scales. Keywords: multi-scale governance, landscape restoration, management, leadership, coordination, case study.",
+      "https://www.sciencedirect.com/science/article/abs/pii/S0301479717302165"
+    ],
+    [
+      "Scale‐sensitive governance in forest and landscape restoration: a systematic review",
+      "Scientific Paper ",
+      "Wiegant et al. 2022",
+      "Systematic review of scale-sensitive governance in forest and landscape restoration. Keywords: scale, multi-level governance, forest and landscape restoration, institutions, coordination, review.",
+      "https://link.springer.com/article/10.1007/s10113-022-01889-0"
+    ],
+    [
+      "The political ecology playbook for ecosystem restoration: Principles for effective, equitable, and transformative landscapes",
+      "Scientific Paper ",
+      "Osborne et al. 2021",
+      "Principles for effective, equitable and transformative restoration seen through political ecology: land rights, power and justice. Keywords: power, equity, justice, land rights, restoration principles, political ecology.",
+      "https://4returns.commonland.com/wp-content/uploads/2021/08/The-Political-Ecology-Playbook-for-Ecosystem-Restoration.pdf"
+    ],
+    [
+      "Toward Viable Landscape Governance Systems: What Works?",
+      "Scientific Paper ",
+      "Landscapes for People, Food and Nature Initiative.",
+      "Synthesis of what makes landscape governance systems work in practice, across integrated landscape initiatives worldwide. Keywords: landscape governance, integrated landscape management, multi-stakeholder platforms, institutions, what works.",
+      "https://www.cifor-icraf.org/knowledge/publication/4814/"
+    ],
+    [
+      "Transformative governance of biodiversity: insights for sustainable development",
+      "Scientific Paper ",
+      "Visseren-Hamakers et al. 2021",
+      "Introduces transformative governance of biodiversity through integrative, inclusive, adaptive, pluralist and anticipatory approaches. Keywords: transformative governance, biodiversity, inclusive, adaptive, systems change, sustainability.",
+      "https://www.sciencedirect.com/science/article/pii/S1877343521000749"
+    ],
+    [
+      "Prosocial Core Design Principles",
+      "Self-assessment ",
+      "Prosocial World",
+      "Ostrom's core design principles adapted by Prosocial World for any cooperating group, with a self-assessment per principle. Keywords: commons, Ostrom, design principles, decision making, conflict navigation, monitoring, shared purpose, self-assessment.",
+      "https://cdn.prod.website-files.com/670974f1f5eceafa2daf046b/670974f1f5eceafa2daf1bf3_Prosocial%20Principles%20Document%20Aug23.pdf"
+    ],
+    [
+      "Self-Assessment Framework for Bioregional Organizing Teams",
+      "Self-assessment ",
+      "The BioFi Project",
+      "BioFi framework for bioregional organising teams to assess their own readiness and maturity before building a financing facility. Keywords: self-assessment, readiness, team, roles, capacity, bioregional, BFF.",
+      "Self-Assessment Framework for Bioregional Organizing Teams"
+    ],
+    [
+      "Stocktake and Gap Analysis",
+      "Self-assessment ",
+      "Bioregioning Tayside and Dark Matter Labs",
+      "Template drawing on bioregional initiatives worldwide to evaluate the maturity of an initiative and identify critical gaps to close before developing a BFF. Keywords: self-assessment, gap analysis, maturity, decision making, roles, stakeholders, shared purpose, BFF.",
+      "https://docs.google.com/document/d/1vBgqRpYDy00Ber2DsOGoHnLIP-9Doy_W0qQsjRa67yU/edit?tab=t.0"
+    ],
+    [
+      "Weaving Team Self-Assessment",
+      "Self-assessment ",
+      "Bioregional Weaving Labs Collective",
+      "BWL tool for weaving teams to assess how they are doing together: roles, relationships, decision making, learning and support needs. Keywords: self-assessment, weaving team, roles, learning, team health, BWL.",
+      "20251211 - BWL - Weaving Team Self-Assessment Tool - v01 RH [Final]"
+    ],
+    [
+      "4 Returns Guidebook",
+      "Toolkit",
+      "Commonland",
+      "Commonland's practical guidebook for applying the 4 Returns framework across three zones and a 20-year horizon. Keywords: 4 Returns, landscape restoration, shared purpose, monitoring, impact, holistic landscape restoration.",
+      "https://4returns.commonland.com/lesson/about-the-4-returns-guidebook/"
+    ],
+    [
+      "CoCreative Tools for Collaborative Innovation",
+      "Toolkit",
+      "Cocreative",
+      "Open library of facilitation tools for collaborative innovation and multi-stakeholder change work. Keywords: facilitation, collaboration, co-creation, meetings, stakeholders, tools.",
+      "https://www.wearecocreative.com/creative-tools"
+    ],
+    [
+      "Community Weaving",
+      "Toolkit",
+      "Together Institute",
+      "Resources on the practice of community weaving: connecting people and tending relationships across a network. Keywords: weaving, community, relationships, stakeholders, network, culture.",
+      "https://www.community-weaving.org"
+    ],
+    [
+      "Contractual Role Cards ",
+      "Toolkit",
+      "Dark Matters Lab (Many-to-many)",
+      "Role cards for fluidly distributing power, responsibility, accountability and risk-holding between collaborators. Keywords: roles, responsibilities, accountability, risk, legal structure, many-to-many.",
+      "https://www.manytomany.systems/tools/role-cards-as-a-way-to-fluidly-distribute-responsibilities"
+    ],
+    [
+      "Onboarding Nature Toolkit",
+      "Toolkit",
+      "Onboarding Nature",
+      "Toolkit for giving nature a seat and a voice in organisational decision making. Keywords: rights of nature, stakeholders, representation, decision making, board, ecological accountability.",
+      "https://www.onboardingnature.com"
+    ],
+    [
+      "Sociocracy Resources",
+      "Toolkit",
+      "Sociocracy For All",
+      "Sociocracy For All's full library of articles, videos, templates and tools on sociocratic governance. Keywords: sociocracy, decision making, circles, consent, templates, learning.",
+      "https://www.sociocracyforall.org/content/"
+    ],
+    [
+      "Circular Value Flower",
+      "Book",
+      "Leclercq, Smit & Delgado",
+      "From local action to global inspiration: how communities around the world are shaping a circular future through collective, relational, and regenerative entrepreneurial practices. Building on the first edition of Circular Communities (2022), this second edition explores culturally diverse and community-led approaches to circular resource stewardship. These examples demonstrate how communities generate ecological, cultural, social, aesthetic and financial value by collectively closing resource loops.\n\nIn their new book, urban designer Els Leclercq, architect Mo Smit and regenerative entrepreneurship expert Fátima Delgado Medina expand on the Circular Value Flower: a value-based, relational model developed to analyse, communicate and design circular practices. This enables a holistic environmental approach by linking communities with the (urban) landscape and wider eco-system through resource stewardship.\n\nWritten for communities, spatial designers, policymakers, researchers, and practitioners, this book offers insights and instruments with which to design, collaborate, and act - supporting global circular practices and allowing these to flourish, connect, and grow into valuable networks.",
+      "https://books.open.tudelft.nl/home/catalog/book/262"
+    ]
+  ]
+}

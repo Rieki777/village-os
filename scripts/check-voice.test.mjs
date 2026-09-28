@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkSpan, isTest, SCAN_ROOTS } from "./check-voice.mjs";
+import { checkSpan, isTest, jsonWaiver, SCAN_ROOTS } from "./check-voice.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./check-voice.mjs", import.meta.url));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -96,6 +96,33 @@ check("isTest excludes anything under __tests__/", () => {
 check("SCAN_ROOTS covers docs/knowledge only, not the rest of docs/", () => {
   assert.deepStrictEqual(SCAN_ROOTS, ["client/src", "server", "shared", "docs/knowledge"]);
   assert.ok(!SCAN_ROOTS.includes("docs"), "docs/ at large must not be a default scan root");
+});
+
+// ── The JSON waiver: a quoting seed says so at its top level, and only there ─
+
+check("jsonWaiver takes a top-level reason, and nothing else", () => {
+  assert.strictEqual(jsonWaiver({ "voice-ok": "Quoted from the authors.", rows: [] }), "Quoted from the authors.");
+  assert.strictEqual(jsonWaiver({ "voice-ok": "   ", rows: [] }), null, "a blank reason waives nothing");
+  assert.strictEqual(jsonWaiver({ rows: [{ "voice-ok": "nested" }] }), null, "only the top level counts");
+  assert.strictEqual(jsonWaiver([{ "voice-ok": "in an array" }]), null);
+  assert.strictEqual(jsonWaiver("voice-ok"), null);
+});
+
+check("a seed with an em dash fails, and the same seed carrying a reason passes as one counted waiver", () => {
+  const dir = fs.mkdtempSync(path.join(ROOT, ".voice-json-"));
+  try {
+    const rel = path.relative(ROOT, dir).split(path.sep).join("/");
+    const words = { title: "Sociocracy – basic concepts, rather than a slogan" };
+    fs.writeFileSync(path.join(dir, "seed.json"), JSON.stringify(words));
+    const red = spawnSync(process.execPath, [SCRIPT, rel], { encoding: "utf8" });
+    assert.notStrictEqual(red.status, 0, `the unwaived seed must fail\n${red.stdout}${red.stderr}`);
+    fs.writeFileSync(path.join(dir, "seed.json"), JSON.stringify({ "voice-ok": "Quoted from the authors.", ...words }));
+    const green = spawnSync(process.execPath, [SCRIPT, rel], { encoding: "utf8" });
+    assert.strictEqual(green.status, 0, `the waived seed must pass\n${green.stdout}${green.stderr}`);
+    assert.match(green.stdout, /1 waiver\(s\)/, "and the waiver is counted where everyone reads it");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ── "0 violations" must never read the same as "the walk did not run" ──────

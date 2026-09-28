@@ -107,6 +107,12 @@ describe("the files this test reads", () => {
         "CanvasFrameSay.tsx",
         "CanvasSuggestionForm.tsx",
         "DecisionMatrixRows.tsx",
+        // The Learn frame's resources from the Governance Canvas Database
+        // (Wave 4, 2026-09-28): a list under one block, the credit, how old
+        // the copy is, and the pen's placing form. Its sentences and its one
+        // list edit live in client/src/lib/canvasResourcesCopy.ts, held to
+        // its own sweep below. It counts and ranks nothing.
+        "CanvasLearnResources.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
@@ -179,6 +185,34 @@ describe("the frames' sentences, which pick within one block and count nothing",
 
   it("never reaches across blocks: it takes one block's payload and no list of blocks", () => {
     expect(frames.body).not.toMatch(/CANVAS_ORDER|CANVAS_BLOCK_IDS|newestLevels|CanvasPayload/);
+  });
+});
+
+describe("the Learn frame's resources, which list and never rank or count", () => {
+  // client/src/lib/canvasResourcesCopy.ts holds the resources' sentences and
+  // the placing form's one list edit, so `.filter(` is allowed there; it may
+  // name every block, because a resource can show under several. Nothing in
+  // it counts resources or orders them: the server sends them in order.
+  const copy = { name: "canvasResourcesCopy.ts", body: source("lib", "canvasResourcesCopy.ts") };
+
+  it("carries no percent, no N of M and no count of anything", () => {
+    expect(copy.body.length).toBeGreaterThan(1000);
+    expect(copy.body).not.toContain("%");
+    expect(copy.body).not.toMatch(/\b\d+\s+of\s+\d+\b/);
+    expect(copy.body).not.toMatch(/\}\s+of\s+\$?\{/);
+    expect(copy.body).not.toMatch(/\.length\s*\}/);
+    expect(copy.body).not.toMatch(/\$\{[^}]*\.length[^}]*\}/);
+  });
+
+  it("combines and ranks nothing", () => {
+    expect(copy.body).not.toMatch(/\.reduce\(|\.sort\(|\.size\b/);
+    expect(copy.body).not.toMatch(/\b(average|averaged|mean|median|sum|summed|total|composite|overall|score|scorecard)\b/i);
+  });
+
+  it("renders the database's credit and its link beside the list", () => {
+    const learn = CANVAS_FILES.find((f) => f.name === "CanvasLearnResources.tsx")!;
+    expect(learn.body).toContain("payload.credit.text");
+    expect(learn.body).toContain("payload.credit.url");
   });
 });
 

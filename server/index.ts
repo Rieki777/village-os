@@ -103,6 +103,7 @@ import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
+import { register as registerCanvasResourceRoutes } from "./routes/canvasResources";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
@@ -24938,6 +24939,7 @@ ${inner}
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
+  registerCanvasResourceRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
   registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });

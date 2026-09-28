@@ -12,8 +12,9 @@
  *   See    what the live system already shows (the server's plain facts, each
  *          with its control), where the words and the settings part, and the
  *          settings behind the block.
- *   Learn  a slot the resources lane fills later. Until then it says plainly
- *          what is not built, and links only to what exists.
+ *   Learn  the Governance Canvas Database's resources for the block
+ *          (CanvasLearnResources, Wave 4), the canvas's own article and the
+ *          printable workbook. It says plainly what is still not built.
  *   Say    the village's answer, and the suggestion box (CanvasFrameSay).
  *   Adopt  the open suggestions and the pen's decision (CanvasFrameAdopt).
  *
@@ -50,6 +51,7 @@ import { CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { RecordReadingForm } from "./RecordReadingForm";
 import { CanvasFrameSay } from "./CanvasFrameSay";
 import { CanvasFrameAdopt } from "./CanvasFrameAdopt";
+import CanvasLearnResources from "./CanvasLearnResources";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -86,8 +88,8 @@ export default function CanvasBlockFrames({
    * another shows, so a suggestion half written under Say or a reading half
    * recorded under Sense survives a look at See. They used to unmount on every
    * switch and drop what was typed without a word (audit of Wave 3b,
-   * 2026-09-28). A frame never opened is never mounted, so Sense and Learn
-   * still ask the server for nothing.
+   * 2026-09-28). A frame never opened is never mounted, so Sense still asks
+   * the server for nothing, and Learn asks only for its resources.
    */
   const [opened, setOpened] = useState<readonly FrameId[]>([initialFrame]);
   const [payload, setPayload] = useState<BlockFramesPayload | null>(null);
@@ -110,8 +112,8 @@ export default function CanvasBlockFrames({
       .catch(() => setFailed(readFailure(null, null, "this block")));
   }, [block.id]);
 
-  // Sense needs nothing the card does not already hold, and Learn nothing at
-  // all; See, Say and Adopt need the block.
+  // Sense needs nothing the card does not already hold, and Learn reads only
+  // its own resources (CanvasLearnResources); See, Say and Adopt need the block.
   useEffect(() => {
     if (frame !== "sense" && frame !== "learn" && !asked.current) load();
   }, [frame, load]);
@@ -351,33 +353,37 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
 }
 
 /**
- * Learn: the slot the resources lane fills (plan 5). Nothing here pretends to
- * be built: the readings picked per block and "Ask about this" do not exist
- * yet, and the page says so. The knowledge shelf has no page a member can
- * open today, so there is no link to it. What exists is linked.
+ * Learn: the Governance Canvas Database's resources for this block (plan 5,
+ * CanvasLearnResources), then what else exists to read it with. "Ask about
+ * this" (the member companion, plan 5.4) is not built, and the frame says so
+ * and offers no button for it.
  */
 function LearnFrame({ block }: { block: CanvasBlock }) {
   return (
-    <section aria-label={`Learn about ${block.name}`} className="space-y-3 text-sm text-stone-800">
-      <p data-testid="canvas-learn-not-built">
-        Readings and tools picked for {block.name}, and a way to ask a question about it, are not built yet.
-      </p>
-      <ul className="space-y-2">
-        <li>
-          <a href={CANVAS_SOURCE_URL} target="_blank" rel="noreferrer" className="font-medium text-teal-deep hover:underline">
-            The canvas's own article
-            <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
-          </a>
-          , where its authors describe the canvas.
-        </li>
-        <li>
-          <Link href="/canvas/workbook" className="font-medium text-teal-deep hover:underline">
-            <Printer className="inline w-3 h-3 mr-1 align-[-1px]" aria-hidden="true" />
-            Print the canvas workbook
-          </Link>{" "}
-          to talk {block.name} through on paper. The questions under "Our questions to talk through" on this card are there too.
-        </li>
-      </ul>
+    <section aria-label={`Learn about ${block.name}`} className="space-y-4 text-sm text-stone-800">
+      <CanvasLearnResources block={block} />
+      <div className="space-y-2">
+        <h4 className="font-semibold text-stone-900">More to read it with</h4>
+        <ul className="space-y-2">
+          <li>
+            <a href={CANVAS_SOURCE_URL} target="_blank" rel="noreferrer" className="font-medium text-teal-deep hover:underline">
+              The canvas's own article
+              <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
+            </a>
+            , where its authors describe the canvas.
+          </li>
+          <li>
+            <Link href="/canvas/workbook" className="font-medium text-teal-deep hover:underline">
+              <Printer className="inline w-3 h-3 mr-1 align-[-1px]" aria-hidden="true" />
+              Print the canvas workbook
+            </Link>{" "}
+            to talk {block.name} through on paper. The questions under "Our questions to talk through" on this card are there too.
+          </li>
+        </ul>
+        <p className="text-xs text-stone-600" data-testid="canvas-learn-not-built">
+          A way to ask a question about {block.name} is not built yet.
+        </p>
+      </div>
     </section>
   );
 }

@@ -114,6 +114,27 @@ export const PASSIVE = [
 
 export const RHETORICAL = /^\s*(what if we could|have you ever|imagine if|ever wondered)/i;
 
+/**
+ * THE JSON WAIVER, for a seed that quotes somebody else's words (2026-09-28).
+ *
+ * A TypeScript line takes an inline `voice-ok:` comment and JSON has no
+ * comments, so a JSON document waives itself with a top-level `"voice-ok"`
+ * key holding the reason. The whole file is then skipped and counted as one
+ * waiver, printed with the others. It exists for
+ * `server/seeds/canvas-resources.json`, a snapshot of the Governance Canvas
+ * Database: its names and descriptions are its authors' (an em dash in one
+ * resource's name, "rather than requiring consensus" in another's
+ * description), and rewording a
+ * quotation to pass our house style would misquote them, the same reason
+ * shared/governanceCanvasText.ts waives its lines. A blank reason waives
+ * nothing, and neither does the key anywhere below the top level.
+ */
+export function jsonWaiver(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const reason = parsed["voice-ok"];
+  return typeof reason === "string" && reason.trim() ? reason.trim() : null;
+}
+
 function walkFiles(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
@@ -264,6 +285,9 @@ if (isMain) {
       } catch {
         continue; // Not our gate to enforce; the boot seeder fails loud on bad JSON.
       }
+      // A seed that is somebody else's words, quoted, says so at its top
+      // level, and the whole file is waived and counted (see `jsonWaiver`).
+      if (jsonWaiver(parsed)) { waived++; continue; }
       checkJson(parsed, null, rel, text.split("\n"), findings);
       continue;
     }

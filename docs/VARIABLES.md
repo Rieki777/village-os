@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 175 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 177 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 190 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 192 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-216 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 34 text, 1 longtext.
+218 dials in 33 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 25 boolean, 29 choice, 35 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -72,6 +72,7 @@ Each dial also says WHEN a change lands. 190 of them as soon as it is saved, and
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
+| Canvas | 2 | 2 | 0 |
 
 ## Every dial by name
 
@@ -295,6 +296,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Share of members a need aims to reach when nobody said otherwise | `needs.default_breadth_pct` | Needs | integer | `100` | the whole village |
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
 | Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+| Read the Governance Canvas Database every night | `canvas.resources_sync` | Canvas | boolean | `true` | the whole village |
+| Where members suggest a resource to the Governance Canvas Database | `canvas.suggest_url` | Canvas | text | blank | the whole village |
 
 ## Membership
 
@@ -3870,6 +3873,38 @@ What it may be set to:
 
 - `recommended` Ask for it, and let the vote open anyway.
 - `none` Do not ask.
+
+## Canvas
+
+2 dials. 2 for the whole village.
+
+### Read the Governance Canvas Database every night
+
+When on, the village reads the five public columns of the Governance Canvas Database once a night (the name, type, authors, description and address of each resource, and nothing about who suggested it) and checks that each address still opens. The Learn frame of every canvas block shows what it finds, with the date it was read. When off, no request leaves the village for either, and the shelf keeps the copy it has: the last one read, or the one shipped with the platform.
+
+| Fact | Value |
+| --- | --- |
+| Key | `canvas.resources_sync` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where members suggest a resource to the Governance Canvas Database
+
+The address of the suggestion form the Governance Canvas Database's keepers run. When it is set, the Learn frame offers a link to it, and a member fills it in and sends it on that form themselves: this village sends nothing. Empty means no link is shown. It must be an https address.
+
+| Fact | Value |
+| --- | --- |
+| Key | `canvas.suggest_url` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
 
 ## What this file is made from
 

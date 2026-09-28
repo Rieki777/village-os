@@ -47,6 +47,7 @@ what, where, what breaks without it.
 | `SENTINEL_WMS_URL` / `MAPBOX_TOKEN` / `GOOGLE_MAPS_STATIC_KEY` / `ESRI_API_KEY` | (2026-09-02) The key for whichever provider `SATELLITE_PROVIDER` names (`keyEnv` in `server/lib/satellite.ts`). Sentinel takes a WMS base URL rather than a key, because every keyless route to Sentinel-2 is a WMS somebody operates and naming one here would point every village at a host this project does not run. Mapbox and Google forbid serving their imagery from a cache; Esri's standard layer is not licensed for holding tiles offline. | That provider reports not ready and names the exact missing variable |
 | `BACKUP_EXPORT_TOKEN` | (2026-09-02) Authenticates `GET /api/admin/backup/uploads-archive`, which is how the scheduled backup pulls the uploads volume. This route is gated by the token and NOT by an admin session. 32 bytes of hex; mirror it as the backup workflow's secret. | The route answers 503, member uploads are in no backup, and the database dump keeps succeeding so the backup still looks green |
 | `SCHEDULER_ENABLED` | (2026-09-02) Turns the background scheduler off when set to `0`/`off`/`false`/`no`. **Unset means ON**, which is correct. | Set by accident: loans never settle, cycles never close, digests never send, and the only signal is one boot-log line saying NOT STARTED and naming this variable |
+| `CANVAS_DB_URL` | (2026-09-28, optional) Where the nightly `canvas-resources-sync` job reads the Governance Canvas Database's five public columns as CSV. **Leave it unset**: the default is the database's own public address, and only a test or a fork keeping its own https mirror sets it. Fetched through the pinned-IP guard (https only, public addresses only, 15 seconds, 1 MB). The dial `canvas.resources_sync` (on by default) switches the read off entirely. | The database's own address is read. A read that fails or a sheet whose headers changed writes nothing and keeps the last good rows; the failures report names the job |
 | `HYPHA_LISTENER_*` | (2026-09-02) Fifteen variables for a village running its OWN Base listener process (`server/lib/hypha/selfHostedListener.ts`) instead of the shared ReGen hub. **The web process imports none of them**, so setting them changes nothing until that second process is started. Required: `CONTRACT_ADDRESS`, `RPC_URL`, `WEBHOOK_URL`, `WEBHOOK_SECRET`, `START_BLOCK` on a first run, and at least one of `PASSED_TOPIC0`/`FAILED_TOPIC0`. Optional: `AGREEMENT_ID_TOPIC_INDEX` (0-3), `SPACE_ID`, `CONFIRMATIONS`, `POLL_INTERVAL_MS`, `MAX_ATTEMPTS`, `DATA_DIR`, `CHECKPOINT_PATH`, `DEADLETTER_PATH`. | The listener refuses to start and names the first missing one. The shared hub path (`GOVERNANCE_HUB_SECRET`) is unaffected |
 | `GOOGLE_TOKEN_ENDPOINT` | (dev/CI only) Points the Google token exchange at a local stand-in. Enforced: a value that is not an http loopback address is logged and ignored, and the real Google endpoint is used. | Google is used, which is correct in production |
 | `TEST_DATABASE_URL` | (dev/CI only, local .env) scratch-schema MySQL for DB-backed tests. The harness creates a uniquely-named `village_test_*` schema per provision and drops it after; never point it at the app schema. It also keeps a `village_tpl_*` TEMPLATE schema, migrated once and cloned per suite, swept after 24 hours — so the account needs CREATE/DROP DATABASE rights and will show two families of scratch schema. `pnpm measure:provisioning` prints what that costs. | DB suites skip AND an unfiltered run fails; `ALLOW_NO_TEST_DB=1` accepts the smaller suite |
@@ -179,6 +180,19 @@ above the size of a gathering, not to the size of one person's usage.
 - The `brand` row of the `app_config` table, via the admin Setup Wizard
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
+- `server/seeds/canvas-resources.json` (2026-09-28, migration 0224) — a
+  snapshot of the Governance Canvas Database's five public columns, taken on
+  the date it carries. It is loaded into `canvas_resources` the first time the
+  shelf is read or the nightly read fails while the table is EMPTY, so a
+  village with no network still shows each canvas block's resources, dated as
+  a copy. A shelf that has ever been read never gets it again. The text is the
+  database keepers' (Bioregional Weaving Labs Collective and Commonland), not
+  ours: it is listed in `THIRD_PARTY_NOTICES.md` and waived from the house
+  voice guard by its own `"voice-ok"` key. To refresh it, replace its `rows`
+  and `taken` from the CSV at `CANVAS_DATABASE.csvUrl`
+  (`shared/canvasResources.ts`); `shared/canvasResources.test.ts` and
+  `shared/canvasResourceTags.test.ts` then say which rows the platform's
+  block map is missing.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
 
 ## Brand overlay (make it yours)

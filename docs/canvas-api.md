@@ -315,3 +315,42 @@ After the Birthing every write answers `409` and says to suggest the row on the 
   here writes to the public pulse, except adopting a purpose statement, which writes the same pulse
   line `PUT /api/admin/purpose` writes. Every adopt, decline, withdraw and matrix write leaves an
   admin audit event.
+
+## The Learn frame's resources (Wave 4)
+
+`server/routes/canvasResources.ts`, over the `canvas_resources` table (migration 0224). The rows
+come from the Governance Canvas Database, a public spreadsheet kept by the Bioregional Weaving Labs
+Collective and Commonland: its five public columns only, read nightly by the job
+`canvas-resources-sync` while the dial `canvas.resources_sync` is on (the default), or the snapshot
+in `server/seeds/canvas-resources.json` when the village has never read it. The shapes are
+`CanvasResourcesPayload` and `CanvasResourceView` in `shared/canvasResources.ts`; import them.
+
+### GET /api/canvas/resources?block=<id>&surface=learn|safety
+
+Same door as `GET /api/canvas`. `block` is required (`400` otherwise); `surface` defaults to
+`learn`. The answer lists the resources that show under the block in this village, the village's
+own placings first, then the platform's map, then keyword suggestions, each group by name. A
+withdrawn row (gone upstream) is never listed. `surface=safety` leaves out every Nonviolent
+Communication row (`safetyExcluded`, `shared/canvasResourceTags.ts`).
+
+- `resources[].placing` is `{ by: "village" | "platform" | "suggested", keyword }`; `keyword` is
+  the row's own keyword that suggested the block, for a suggestion only.
+- `resources[].url` is null and `linkPending` true when the database gives a filename or nothing.
+- `resources[].link` is `unchecked`, `ok`, `broken` or `refused`, from the nightly link check.
+- `credit` is the text and the spreadsheet's address; show both beside the list.
+- `source` is `{ kind: "database" | "snapshot", asOf, syncOn }`: when the shelf was last read, or
+  when the shipped snapshot was taken.
+- `suggestUrl` is the database's own suggestion form once the village sets `canvas.suggest_url`,
+  otherwise null. The member sends that form; the village sends nothing.
+- `mayPlace` is whether this viewer holds the canvas pen (`story.tell`).
+
+### PUT /api/canvas/resources/:key/blocks
+
+The canvas pen, through the one gate. Body `{ "blocks": CanvasBlockId[] }` places the resource
+under exactly those blocks in this village (an empty list shows it nowhere); `{ "blocks": null }`
+hands it back to the platform's placing. `400` for anything else, `404` for an unknown key, `403`
+with `RESOURCE_PEN_REFUSAL` for a member without the pen. Answers `{ key, blocks, by }`.
+
+There is no route that runs the read on demand. A failed or refused read fails the job, which
+reaches the admins through the failures report (`GET /api/admin/failures`) and the error notice,
+and the next night is the retry.
