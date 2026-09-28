@@ -63,6 +63,7 @@ import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
+import { ConflictDoorFields } from "@/components/admin/ConflictDoorFields";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
 import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
@@ -7101,14 +7102,6 @@ function ExitsAdminTab({ password }: { password: string }) {
                 onChange={(e) => setVol({ noticePeriodDays: Number(e.target.value) })}
                 className={`${inputCls} w-full mt-1 min-h-[44px]`} />
             </label>
-            <label className="text-xs text-gray-500">Restorative intake role
-              <select value={policyDraft.restorative?.intakeContactRole ?? ""}
-                onChange={(e) => setRes({ intakeContactRole: e.target.value })}
-                className={`${inputCls} w-full mt-1 min-h-[44px]`}>
-                <option value="">none configured</option>
-                {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-              </select>
-            </label>
           </div>
 
           <label className="text-xs text-gray-500 block mb-4">
@@ -7196,6 +7189,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             onChange={(next) => setRes({ steps: next })}
           />
           <p className="text-[11px] mb-4 -mt-2">{mark(stale.includes("The restorative path"))}</p>
+          <ConflictDoorFields restorative={policyDraft.restorative} roles={roles} onChange={setRes} inputCls={inputCls} />
 
           {/*
             THE ACKNOWLEDGEMENT.
@@ -9462,17 +9456,16 @@ function LaunchBanner({ password }: { password: string }) {
   }, [password]);
 
   if (!status || status.launchedAt) return null;
-  const total = (status.items ?? []).length;
-  const done = (status.items ?? []).filter((i: any) => i.state === "ok").length;
+  // What is left, as the journey page says it. A "done of total" count here was a score (R55).
+  const recommended = Number(status.recommendedOpen ?? 0);
   return (
     <a
       href="/journey-to-launch"
       className="block bg-amber-400 text-teal-950 px-6 py-2.5 text-sm font-medium hover:bg-amber-300 transition-colors"
     >
       <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
-      {done} of {total} done
-      {status.blockingOpen > 0 && ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open`}
-      {status.blockingOpen === 0 && " · ready when a founder says so"}
+      {status.blockingOpen > 0 ? `${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open` : "nothing blocking, ready when a founder asks the village"}
+      {` · ${recommended} recommended remaining`}
       <span className="float-right">→</span>
     </a>
   );

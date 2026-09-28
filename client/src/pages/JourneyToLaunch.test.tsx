@@ -320,7 +320,7 @@ describe("the canvas view", () => {
     expect(screen.getByRole("button", { name: "Canvas" })).toBeTruthy();
   });
 
-  it("sits beside the admin's other views and takes the readiness figure off the screen", async () => {
+  it("sits beside the admin's other views and takes the counts off the screen", async () => {
     auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
     answer({
       "/api/admin/launch": { status: 200, body: STATUS },
@@ -330,10 +330,66 @@ describe("the canvas view", () => {
     });
     draw();
     await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
-    expect(screen.getByText("Readiness").parentElement?.className).not.toContain("hidden");
+    expect(screen.getByTestId("journey-remaining").className).not.toContain("hidden");
     fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
-    expect(screen.getByText("Readiness").parentElement?.className).toContain("hidden");
+    expect(screen.getByTestId("journey-remaining").className).toContain("hidden");
     expect(screen.queryByText(/Take one backup/i)).toBeNull();
+  });
+
+  /*
+   * THE CANVAS ROW'S LINK IS THIS PAGE. The view is read from the address on
+   * arrival, so a plain link to `?view=canvas` from the launch view would move
+   * the address and leave the screen where it was. The row switches the view.
+   */
+  it("opens the Canvas view in place from the canvas row on the checklist", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    const canvasRow = {
+      id: "canvas-on-record",
+      group: "governance",
+      title: "Put every canvas block on record",
+      why: "Each block carries a reading.",
+      detail: "No block has a reading yet",
+      severity: "blocking",
+      state: "missing",
+      fixAt: "/journey-to-launch?view=canvas",
+      fixLabel: "Open the Canvas",
+      checkKey: "canvas:on-record",
+    };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, items: [...STATUS.items, canvasRow], blockingOpen: 2 } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText("Put every canvas block on record")).toBeTruthy());
+    // Its own section, named for what it asks.
+    expect(screen.getByText("How the village decides and cares")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Open the Canvas/ }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(window.location.search).toBe("?view=canvas");
+    expect(screen.queryByText("Put every canvas block on record")).toBeNull();
+  });
+});
+
+/*
+ * R55: NO READINESS SCORE. The header carried a percentage and a bar, a
+ * composite number over rows of different weight. What is left is two counts,
+ * and nothing on the admin's page reads as a grade.
+ */
+describe("what is left, said without a score", () => {
+  it("shows the two counts and no percentage, bar or readiness figure", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, recommendedOpen: 3 } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+    });
+    const { container } = draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    expect(screen.getByTestId("journey-remaining").textContent).toBe("1 blocking · 3 recommended remaining");
+    expect(screen.queryByText(/Readiness/)).toBeNull();
+    expect(container.textContent ?? "").not.toMatch(/\d+\s*%/);
+    expect(container.querySelector("[style*='width']"), "no bar drawn to a width").toBeNull();
   });
 });

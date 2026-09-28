@@ -31,6 +31,7 @@ export type LaunchGroup =
   | "brand" // name, tagline, copy — the overlay that de-Amoras a fork
   | "integrations" // third-party keys: Stripe, Resend, Anthropic
   | "modules" // which parts of the platform this village runs
+  | "governance" // how the village decides, reads itself, and meets a conflict
   | "reach"; // domain, DNS, email deliverability — being findable
 
 export type LaunchSeverity =
@@ -423,6 +424,82 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixLabel: "Open the game variables",
   },
 
+  // ── Governance: how the village decides, reads itself and meets a conflict ─
+  //
+  // THREE ROWS BY RULING, 2026-09-25/27, all BLOCKING (Rye chose Option B of
+  // the canvas plan's Decision 1). They resolve in the `canvas:` and
+  // `governance:` branch of server/lib/launch.ts, through
+  // server/lib/launchGovernance.ts, and never through server/index.ts. The
+  // exit policy's terms moved in beside them, because what a departure means
+  // and where a conflict goes are the same question a member asks.
+  {
+    id: "canvas-on-record",
+    group: "governance",
+    title: "Put every canvas block on record",
+    /*
+     * EVERY ONE OF THE TWELVE, and "not decided yet" counts. Rye ruled on
+     * 2026-09-24 that every block is on record before a village's Birthing,
+     * and a reading of Absent with its sentence IS a record: the village said
+     * where it stands. What the row refuses is a block nobody has looked at.
+     * It never scores the readings, never counts them against twelve on the
+     * page, and never asks for a level above one (R55).
+     */
+    why: "Before the village is asked to start, each of the twelve governance canvas blocks carries at least one reading, so the village starts as it actually is. A reading of \"not decided yet, because...\" is enough: Absent, with one sentence saying why.",
+    severity: "blocking",
+    checkKey: "canvas:on-record",
+    fixAt: "/journey-to-launch?view=canvas",
+    fixLabel: "Open the Canvas",
+  },
+  {
+    id: "exit-policy-terms",
+    group: "governance",
+    title: "Write your exit policy's actual terms",
+    why:
+      "Every village ships with a placeholder that says the terms are still to be decided by the " +
+      "community. Honest on day one, a broken promise once people have contributed real value and " +
+      "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
+    severity: "blocking",
+    checkKey: "exit-policy-terms",
+    // The editor is on Departures. This row used to send a founder to Settings, which holds no term.
+    fixAt: "/admin?tab=exits-admin",
+    fixLabel: "Write the terms",
+    runbookAnchor: "exit-policy",
+  },
+  {
+    id: "conflict-door",
+    group: "governance",
+    title: "Give a conflict somewhere to go",
+    /*
+     * A DOOR AND A PROMISE, and the platform supplies neither. The door is a
+     * live holder of the exit policy's intake role, or a named contact outside
+     * the village; below three members who are not founders, only the outside
+     * contact will do, because everybody inside is somebody a conflict could
+     * be about. The promise is a reply time in hours, and there is no default
+     * for it: a number the platform typed would be a promise nobody here made.
+     */
+    why: "A member with a conflict needs somebody to bring it to, and to know when they will hear back. That means a person who holds the intake role today, or a named contact outside the village, and a reply time in hours the village chose. With fewer than three members who are not founders, the outside contact is required, so nobody has to take a conflict to the people it may be about.",
+    severity: "blocking",
+    checkKey: "governance:conflict-door",
+    fixAt: "/admin?tab=exits-admin",
+    fixLabel: "Open Departures",
+  },
+  {
+    id: "governance-on-for-members",
+    group: "governance",
+    title: "Open governance to your members",
+    /*
+     * THE REFUSAL THAT USED TO BE SILENT. `POST /api/admin/launch/propose`
+     * refused a village whose governance module sat below members, and no row
+     * on this list said so: every item could read done and the button still
+     * answered no. This row is that refusal, where a founder can see it.
+     */
+    why: "Starting the Game is the village's first vote, and members answer votes through the governance module. While it is off, or open to admins only, the vote would open and no member could answer it.",
+    severity: "blocking",
+    checkKey: "governance:on-for-members",
+    fixAt: "/admin?tab=modules&module=governance",
+    fixLabel: "Open Modules",
+  },
+
   // ── Reach: the real-world acts only a human can do ───────────────────────
   {
     id: "custom-domain",
@@ -449,20 +526,6 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixAt: "/admin?tab=integrations",
     fixLabel: "Set it in the environment",
     runbookAnchor: "env",
-  },
-  {
-    id: "exit-policy-terms",
-    group: "reach",
-    title: "Write your exit policy's actual terms",
-    why:
-      "Every village ships with a placeholder that says the terms are still to be decided by the " +
-      "community. Honest on day one, a broken promise once people have contributed real value and " +
-      "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
-    severity: "blocking",
-    checkKey: "exit-policy-terms",
-    fixAt: "/admin?tab=settings",
-    fixLabel: "Write the terms",
-    runbookAnchor: "exit-policy",
   },
   {
     id: "backups-drilled",

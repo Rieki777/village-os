@@ -35,6 +35,17 @@ export default function ExitPolicy() {
   // The role an intake reaches, named by the published policy, so a member
   // knows who will read their words before they send them.
   const intakeRoleLabel = policy?.restorative?.intakeRole?.name ? `${policy.restorative.intakeRole.name} role` : "intake role";
+  // The conflict door's promise and its outside contact, printed only once the
+  // village has stated them: a blank here is a promise nobody made yet.
+  const replyHours = Number(policy?.restorative?.replyHours) || 0;
+  const within = replyHours === 1 ? "1 hour" : `${replyHours} hours`;
+  const outside = policy?.restorative?.outsideContact;
+  const outsideNamed = !!(outside?.name && outside?.howToReach);
+  // The promise belongs to whoever receives the request. With an intake role
+  // that is its holders. With none, the outside contact is the only way in, so
+  // the page says so plainly, and never "also" beside a door that is not there.
+  // A reply time with no door at all promises nothing, and is not printed.
+  const hasIntake = !!policy?.restorative?.intakeContactRole;
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -150,6 +161,18 @@ export default function ExitPolicy() {
                 <li key={i} className="text-sm text-foreground">{s}</li>
               ))}
             </ol>
+            {hasIntake && replyHours > 0 && (
+              <p className="text-sm text-muted-foreground mb-2">
+                Bring it to the {intakeRoleLabel} and you hear back within {within}.
+              </p>
+            )}
+            {outsideNamed && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {hasIntake ? "You can also bring it to somebody outside the village" : "Bring it to somebody outside the village"}: {outside.name}
+                {outside.organisation ? `, ${outside.organisation}` : ""}. {outside.howToReach}
+                {!hasIntake && replyHours > 0 ? ` You hear back within ${within}.` : ""}
+              </p>
+            )}
             {user && policy?.restorative?.intakeContactRole && (
               <div className="border-t border-border pt-3 space-y-2">
                 <p className="text-xs text-muted-foreground">
