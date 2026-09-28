@@ -63,7 +63,11 @@
  *
  * After the Birthing, a dial or module door files a mechanics proposal through
  * `openMechanicsProposal` (server/lib/mechanicsPropose.ts), the body of
- * `POST /api/game/mechanics/proposals`, and the village decides it. The
+ * `POST /api/game/mechanics/proposals`, and the village decides it. Only the
+ * suggestion's author presses that Adopt (`FILED_BY_PROPOSER`): the proposal
+ * carries its filer's name, standing and per-cycle count, and a member who
+ * filed somebody else's words could then withdraw them, leaving the canvas
+ * saying "adopted" for a change nobody voted on. The
  * consequence pen's vote (the exit terms, the care door and the matrix, at the
  * structural tier) has no machinery yet, so those answer 409 and say so; the
  * purpose statement's vote already has its own route and the answer names it.
@@ -187,6 +191,18 @@ export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Lo
 /** The purpose statement's vote has its own door. */
 export const PURPOSE_CHANGE_DOOR = "/api/governance/purpose-changes";
 
+/**
+ * Said to anybody but its author who presses Adopt on a suggestion that files
+ * a mechanics proposal. The proposal carries its filer's name, standing and
+ * per-cycle count, so it is filed by the member whose words it is.
+ */
+export const FILED_BY_PROPOSER =
+  "The Game has started, so this is filed as a proposal in the name of the member who suggested it, and only they can file it. " +
+  "You can suggest your own version.";
+
+/** A pen whose adoption files a mechanics proposal in the adopter's name. */
+const filesAProposal = (rule: CanvasAdoptionRule): boolean => rule.how === "ballot" && (rule.pen === "dial" || rule.pen === "module");
+
 function blockView(id: CanvasBlockId) {
   const b = CANVAS_BLOCKS[id];
   return {
@@ -267,7 +283,13 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     return false;
   };
 
-  const penView = async (req: Request, user: any, rule: CanvasAdoptionRule) => {
+  /**
+   * `proposedBy` is given when the view is of one suggestion. Where adopting
+   * files a mechanics proposal, only that suggestion's author may press it
+   * (`FILED_BY_PROPOSER`); on a block's own pens it is absent, and the answer
+   * is whether this person may file suggestions of their own.
+   */
+  const penView = async (req: Request, user: any, rule: CanvasAdoptionRule, proposedBy?: string) => {
     // A vote is "built" when the machinery it files into can carry it out:
     // a dial through a mechanics proposal, the purpose statement through its
     // own change vote, and a module only once the mechanics executor carries a
@@ -283,7 +305,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       who: rule.who,
       sentence: canvasPenSentence(rule),
       ballotBuilt,
-      youMayAdopt: ballotBuilt && (await mayTake(req, user, rule)),
+      youMayAdopt:
+        ballotBuilt &&
+        (proposedBy !== undefined && filesAProposal(rule) ? String(user.id) === proposedBy : await mayTake(req, user, rule)),
     };
   };
 
@@ -306,7 +330,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       ...(p.status !== "open"
         ? { decidedBy: p.decidedBy, decisionNote: p.decisionNote, decidedAt: p.decidedAt, outcome: p.outcome }
         : {}),
-      pen: await penView(req, user, rule),
+      pen: await penView(req, user, rule, p.proposedBy),
       youProposedIt: String(user.id) === p.proposedBy,
     };
   };
@@ -516,6 +540,16 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       .filter(Boolean)
       .join("\n\n");
 
+  /**
+   * What a filing says. An open proposal goes to the village; a draft (its
+   * author is below the proposer bar) waits for a sponsor, and the mechanics
+   * door's own sentence says so.
+   */
+  const filedMessage = (body: Record<string, unknown>): string =>
+    body.status === "open"
+      ? "Filed as a proposal to change the Game's rules. The village decides it."
+      : String(body.message ?? "Filed as a draft proposal. It opens once a qualified member sponsors it.");
+
   type Effect = { ok: true; outcome: Record<string, unknown>; message: string } | { ok: false; status: number; body: Record<string, unknown> };
 
   /**
@@ -586,7 +620,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
           message: `Adopted. ${door.label} is now set as suggested.`,
         };
       }
-      // After the Birthing: the proposal that would change it, filed by the adopter.
+      // After the Birthing: the proposal that would change it, filed by the
+      // member who wrote the suggestion and by nobody else.
+      if (p.proposedBy !== String(user.id)) return { ok: false, status: 403, body: { error: FILED_BY_PROPOSER } };
       const rationale = rationaleFor(p);
       const filed = await openMechanicsProposal(deps.mechanicsPropose, user, {
         title: `${block.name}: ${door.label}`.slice(0, 200),
@@ -597,7 +633,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       return {
         ok: true,
         outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
-        message: "Filed as a proposal to change the Game's rules. The village decides it.",
+        message: filedMessage(filed.body),
       };
     }
 
@@ -619,8 +655,10 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
           message: `Adopted. ${door.label}: ${result.lifecycle}.`,
         };
       }
-      // After the Birthing: the proposal that would change it. The mechanics
-      // validator answers for itself whether this build can carry it out.
+      // After the Birthing: the proposal that would change it, filed by its
+      // author, as for a dial. The mechanics validator answers for itself
+      // whether this build can carry it out.
+      if (p.proposedBy !== String(user.id)) return { ok: false, status: 403, body: { error: FILED_BY_PROPOSER } };
       const filed = await openMechanicsProposal(deps.mechanicsPropose, user, {
         title: `${block.name}: ${door.label}`.slice(0, 200),
         rationale: rationaleFor(p),
@@ -630,7 +668,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       return {
         ok: true,
         outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
-        message: "Filed as a proposal to change the Game's rules. The village decides it.",
+        message: filedMessage(filed.body),
       };
     }
 

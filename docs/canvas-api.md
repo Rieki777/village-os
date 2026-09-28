@@ -67,7 +67,7 @@ seat (`villageHandoverState().complete`).
 | `prose` | `words` in any section but the four below | `story.tell`, asked of the one gate | the same |
 | `admin` | `words` in `people`, `legal`, `land`, `constraints` | administrators | administrators |
 | `purpose` | `purpose` | the founders (the same `isAdmin` test `PUT /api/admin/purpose` applies), until the handover | the same until the handover; after it, a vote through `POST /api/governance/purpose-changes` |
-| `dial` | the three dial doors | `dial.set`, asked of the gate inside the dial write | any member files a mechanics proposal; the village votes |
+| `dial` | the three dial doors | `dial.set`, asked of the gate inside the dial write | the member who wrote the suggestion files it as a mechanics proposal in their own name; the village votes |
 | `module` | `module:governance` | administrators (the lifecycle route's own guard) | a mechanics proposal for a module a vote can move; the governance module is never moved by a change set (`NEVER_BY_CHANGESET`), so it stays with administrators |
 | `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators | a vote of the whole village at the structural tier. **Not built yet**: adopting answers 409 `CONSEQUENCE_VOTE_NOT_BUILT` and the suggestion stays open |
 
@@ -84,6 +84,11 @@ only where it will work:
   "youMayAdopt": false     // this viewer, asked without side effects; the write still asks the real guard
 }
 ```
+
+Where adopting files a mechanics proposal (the `dial` pen, and a `module` pen a vote can move, after
+the Birthing), a suggestion's `pen.youMayAdopt` is true for its author only: the proposal carries
+the filer's name, standing and per-cycle count. On a block's own `pens`, the same key says whether
+this person may file suggestions of their own.
 
 ## GET /api/canvas/blocks/:id
 
@@ -199,7 +204,7 @@ What adopting does, by pen and moment:
 | `prose`, `admin` | `briefWrite`, confirmed by the adopter; the section's audience is left where it was | `{ "wrote": "brief-section", "section", "revision" }` |
 | `purpose`, before the handover | `founderPenRefusal`, then `writeGoverningPurpose` | `{ "wrote": "purpose-statement", "writtenAt" }` |
 | `dial`, before the Birthing | `writeDial` (the body of `PUT /api/admin/variables/:key`) | `{ "wrote": "dial", "key", "value", "previous" }` |
-| `dial`, after the Birthing | `openMechanicsProposal` (the body of `POST /api/game/mechanics/proposals`), filed by the adopter | `{ "filed": "mechanics-proposal", "id", "status" }` |
+| `dial`, after the Birthing | `openMechanicsProposal` (the body of `POST /api/game/mechanics/proposals`), filed by the suggestion's author and nobody else | `{ "filed": "mechanics-proposal", "id", "status" }`; `status` is `open`, or `draft` when the author is below the proposer bar, and `message` then says it waits for a sponsor |
 | `module` (administrators) | `setModuleLifecycle`, the write behind `PUT /api/admin/modules/:id/lifecycle`, with its shared-password posture; no example content is seeded | `{ "wrote": "module-lifecycle", "module", "lifecycle" }` |
 | `consequence`, before the Birthing | `saveExitPolicy` (the body of `PUT /api/admin/exit-policy`) with the suggestion's fields laid over the policy, or `writeDecisionMatrixRow` | `{ "wrote": "exit-policy", "door", "fields" }` or `{ "wrote": "matrix-row", "rowId" }` |
 
@@ -213,6 +218,8 @@ Responses:
   from the dial write, `400 { "error": "unknown_role", "message": "..." }` from the exit-policy
   save, `429` from the mechanics proposal's per-cycle ceiling. **The suggestion stays open** and
   nothing is recorded as adopted.
+- `403 { "error": FILED_BY_PROPOSER }` anybody but the author pressing Adopt on a suggestion that
+  files a mechanics proposal. The suggestion stays open.
 - `409 { "error": CONSEQUENCE_VOTE_NOT_BUILT }` the consequence pen after the Birthing
 - `409 { "error": "...", "door": "/api/governance/purpose-changes" }` the purpose statement after the
   handover: the change vote has its own route (a `proposal.open` holder opens it, with a purpose line)

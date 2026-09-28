@@ -257,7 +257,8 @@ describe("who adopts a canvas answer", () => {
   it("says each answer in one sentence, and a vote in a different one", () => {
     expect(canvasPenSentence(whoAdoptsCanvasAnswer("consequence", before))).toBe("The founders adopt this before the Game starts.");
     expect(canvasPenSentence(whoAdoptsCanvasAnswer("consequence", after))).toBe("The Game has started, so adopting this goes to a vote of the whole village.");
-    expect(canvasPenSentence(whoAdoptsCanvasAnswer("dial", after))).toContain("files a proposal");
+    // The filing is the suggestion's author's (FILED_BY_PROPOSER in server/routes/canvasFrames.ts).
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("dial", after))).toContain("the member who suggested this files it as a proposal");
   });
 });
 

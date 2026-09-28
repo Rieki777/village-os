@@ -298,8 +298,10 @@ export function whoMayPutHandToVillage(
  *                because no transferable power covers the exit policy today.
  *   dial         a dial the block maps to. Before the Birthing, `dial.set`
  *                asked of the gate, inside the dial write's own route; after,
- *                a mechanics proposal, which any member may file and the
- *                village decides.
+ *                a mechanics proposal, which the village decides. Any member
+ *                may file one; on the canvas, the suggestion's author files it
+ *                in their own name (`FILED_BY_PROPOSER`,
+ *                server/routes/canvasFrames.ts).
  *   module       a module switched on or off (governance, on the Power
  *                block). Before the Birthing, the administrators, which is the
  *                lifecycle route's own guard; after, a mechanics proposal
@@ -372,7 +374,9 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
 export function canvasPenSentence(rule: CanvasAdoptionRule): string {
   if (rule.how === "ballot") {
     if (rule.pen === "purpose") return "Every power is with the village now, so a new statement goes to a vote of the whole village.";
-    if (rule.pen === "dial" || rule.pen === "module") return "The Game has started, so adopting this files a proposal and the village votes on it.";
+    if (rule.pen === "dial" || rule.pen === "module") {
+      return "The Game has started, so the member who suggested this files it as a proposal, and the village votes on it.";
+    }
     return "The Game has started, so adopting this goes to a vote of the whole village.";
   }
   if (rule.pen === "purpose") return "The founders keep the purpose statement until every power is handed to the village.";

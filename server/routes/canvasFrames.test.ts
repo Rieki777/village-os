@@ -37,23 +37,27 @@ import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { capabilityDecision, HANDOVER_SET, type Capability, type CapabilityCtx } from "../../shared/capabilities";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
+import { calendarUpsert } from "../lib/calendar";
 import { capabilityHoldings, moveCapabilityToVillage } from "../lib/capabilityHolding";
 import { recordMechanicsChangeRow } from "../lib/changeset";
 import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import { recordGameStart } from "../lib/gameStart";
 import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
-import { proposalById } from "../lib/mechanics";
+import { confirmManual } from "../lib/launch";
+import { proposalById, proposalsOpenedSince } from "../lib/mechanics";
 import { effectiveLifecycle, loadModuleSettings } from "../lib/modules";
+import type { IntakeHolding } from "../lib/restorativeIntake";
 import { loadVariables, numberVar, setVariable, stringVar } from "../lib/variables";
 import { briefGet, briefWrite } from "../lib/villageBrain";
 import { wireReaders } from "../lib/villageReaders";
 import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
 import { dbDocument } from "../repos/store-db";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
-import { CONSEQUENCE_VOTE_NOT_BUILT, PEN_REFUSALS, PURPOSE_CHANGE_DOOR, register } from "./canvasFrames";
+import { CONSEQUENCE_VOTE_NOT_BUILT, FILED_BY_PROPOSER, PEN_REFUSALS, PURPOSE_CHANGE_DOOR, register } from "./canvasFrames";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvasFrames.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -84,6 +88,10 @@ let base = "";
 const exitPolicyRepo = () => exitDoc!;
 let exitDoc: ReturnType<typeof dbDocument<any>> | null = null;
 const activity: string[] = [];
+/** The seats the See frame is handed, as `loadRoleHolders` hands them. Empty unless a test seats somebody. */
+let HOLDERS: IntakeHolding[] = [];
+/** Whether the mechanics standing check calls the filer qualified to open a proposal, or only to draft one. */
+let QUALIFIED = true;
 
 const who = (req: express.Request) => {
   const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -164,7 +172,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       getPool: () => pool,
       firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
       loadRoles: () => ROLES as any,
-      roleHolders: () => [],
+      roleHolders: () => HOLDERS,
       exitPolicy: {
         isAdmin,
         loadRoles: () => ROLES as any,
@@ -197,7 +205,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       },
       mechanicsPropose: {
         getPool: () => pool,
-        standingFor: async () => ({ denied: false, qualified: true }),
+        standingFor: async () => ({ denied: false, qualified: QUALIFIED }),
         readMintRules: async () => new Map(),
         addActivity,
         firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
@@ -288,6 +296,84 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
           expect(f.text, `${id}:${f.id}`).not.toMatch(/\d+\s*(of|out of|\/)\s*\d+|%|score/i);
           expect(f.text, `${id}:${f.id}`).not.toBe("This could not be read just now.");
         }
+      }
+    });
+
+    it("counts every role, gathering and decision the village has, past what the guide's prompt can carry", async () => {
+      // Each reader's answer here is longer than its prompt budget (roles.all
+      // 700 tokens, events.week 500, record.decisions 800), which is where a
+      // capped answer stops being a list.
+      const words = (seed: string, n: number) => `${seed} `.repeat(n).slice(0, n);
+      const roleIds = Array.from({ length: 14 }, (_, i) => `cf-many-${i + 1}`);
+      const recordIds = Array.from({ length: 8 }, (_, i) => `cf-rec-${i + 1}`);
+      for (const [i, id] of roleIds.entries()) {
+        await pool.query( // module-review-ok: seeding the scratch schema this suite provisioned
+          "INSERT INTO roles (id, name, description, capabilities) VALUES (?,?,?,?)",
+          [id, `Hedge keeper ${i + 1}`, words("Keeps the hedges and the paths along them.", 240), JSON.stringify([])],
+        );
+      }
+      for (let i = 0; i < 12; i++) {
+        await calendarUpsert(pool, {
+          sourceModule: "cf-test", sourceId: `gathering-${i + 1}`, kind: "gathering", layer: "village",
+          title: words("A long gathering by the pond to plan the winter planting.", 200),
+          locationText: "The pond field, behind the long barn",
+          startsAt: new Date(Date.now() + (i + 2) * 60 * 60 * 1000),
+        });
+      }
+      for (const [i, id] of recordIds.entries()) {
+        await pool.query( // module-review-ok: seeding the scratch schema this suite provisioned
+          "INSERT INTO village_record (id, section, slug, title, body, occurred_at, source, is_example) VALUES (?,?,?,?,?,?,?,0)",
+          [id, "decisions", id, `Decision ${i + 1}`, words("We agreed this at the circle after a long talk.", 600), new Date(Date.UTC(2026, 6, i + 1, 12)), "decision"],
+        );
+      }
+      try {
+        const fact = async (blockId: string, factId: string) =>
+          (await block("member", blockId)).body.observed.find((f: any) => f.id === factId).text;
+        // Soft, so a regression names every fact it broke, not only the first.
+        expect.soft(await fact("roles", "roles-written")).toBe(`${ROLES.length + roleIds.length} roles are written down.`);
+        expect.soft(await fact("meetings", "gatherings")).toBe("12 gatherings are on the calendar in the next seven days.");
+        expect.soft(await fact("learning", "decisions-recorded")).toBe("Decisions are on the village record, the newest from 8 July 2026.");
+      } finally {
+        await pool.query("DELETE FROM roles WHERE id IN (?)", [roleIds]); // module-review-ok: removing this test's own rows
+        await pool.query("DELETE FROM events WHERE source_module = 'cf-test'"); // module-review-ok: removing this test's own rows
+        await pool.query("DELETE FROM village_record WHERE id IN (?)", [recordIds]); // module-review-ok: removing this test's own rows
+      }
+    });
+
+    it("counts a seat whose term has run out as empty, by the gate's own lapse rule", async () => {
+      const seats = [
+        { id: "cf-rh-care", roleId: "cf-care", userId: "cf-member", termEndsAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        { id: "cf-rh-cover", roleId: "cf-cover", userId: "cf-founder", termEndsAt: null },
+        { id: "cf-rh-tellers", roleId: "cf-tellers", userId: "cf-teller", termEndsAt: null },
+      ];
+      for (const s of seats) {
+        await pool.query( // module-review-ok: seating the scratch schema this suite provisioned
+          "INSERT INTO role_holders (id, role_id, user_id, term_ends_at) VALUES (?,?,?,?)",
+          [s.id, s.roleId, s.userId, s.termEndsAt],
+        );
+      }
+      HOLDERS = seats;
+      try {
+        const fact = (await block("member", "roles")).body.observed.find((f: any) => f.id === "roles-empty");
+        expect(fact.text).toBe("Nobody holds Care Holder today.");
+      } finally {
+        HOLDERS = [];
+        await pool.query("DELETE FROM role_holders WHERE id IN (?)", [seats.map((s) => s.id)]); // module-review-ok: removing this test's own rows
+      }
+    });
+
+    it("says a cap set after the launch decline is the village's own number, never the platform's", async () => {
+      const fact = async () => (await block("member", "resourcing")).body.observed.find((f: any) => f.id === "issuance-cap").text;
+      expect(await confirmManual(pool, "issuance-cap", "cf-founder", "declined")).toEqual({ ok: true, answer: "declined" });
+      try {
+        expect(await fact()).toMatch(/^The founders chose to keep the platform's issuance cap: \d+ tokens per lunar cycle\.$/);
+        expect((await setVariable(pool, "ledger.admin_mint_cycle_cap", "500")).ok).toBe(true);
+        const text = await fact();
+        expect(text).toContain("500 tokens per lunar cycle");
+        expect(text).not.toContain("platform's");
+      } finally {
+        await setVariable(pool, "ledger.admin_mint_cycle_cap", String(VARIABLES_BY_KEY["ledger.admin_mint_cycle_cap"]!.default));
+        await confirmManual(pool, "issuance-cap", "cf-founder", false);
       }
     });
   });
@@ -527,6 +613,34 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(filed?.proposerUserId).toBe("cf-member");
       expect(filed?.changeSet).toEqual([{ key: "membership.vouches_required", from: "4", to: "5" }]);
       expect(numberVar("membership.vouches_required")).toBe(4);
+    });
+
+    it("only the member who wrote a dial suggestion files it, in their own name, and a draft says it is a draft", async () => {
+      const p = (await propose("member", {
+        blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: { value: "6" }, body: "Six people should know a newcomer.",
+      })).body.proposal;
+      const seenBy = async (as: Who) => (await block(as, "team")).body.proposals.find((x: any) => x.id === p.id);
+      expect((await seenBy("teller")).pen).toMatchObject({ pen: "dial", how: "ballot", youMayAdopt: false });
+      expect((await seenBy("admin")).pen).toMatchObject({ pen: "dial", how: "ballot", youMayAdopt: false });
+      expect((await seenBy("member")).pen).toMatchObject({ pen: "dial", how: "ballot", youMayAdopt: true });
+      for (const as of ["teller", "admin"] as const) {
+        expect(await adopt(as, p.id)).toEqual({ status: 403, body: { error: FILED_BY_PROPOSER } });
+        expect(await proposalsOpenedSince(pool, PEOPLE[as].id, new Date(0))).toBe(0);
+      }
+      expect((await seenBy("member")).status).toBe("open");
+
+      // The author is below the proposer bar: the filing is a draft in their
+      // name, and the answer is the mechanics door's own sentence for that.
+      QUALIFIED = false;
+      try {
+        const r = await adopt("member", p.id);
+        expect(r.status).toBe(200);
+        expect(r.body.outcome).toMatchObject({ filed: "mechanics-proposal", status: "draft" });
+        expect(r.body.message).toMatch(/^Saved as a draft: /);
+        expect((await proposalById(pool, String(r.body.outcome.id)))?.proposerUserId).toBe("cf-member");
+      } finally {
+        QUALIFIED = true;
+      }
     });
 
     it("the care door and the matrix wait for a vote nothing builds yet, and nothing moves", async () => {

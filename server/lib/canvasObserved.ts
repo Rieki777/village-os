@@ -17,7 +17,13 @@
  *
  * ── EVERY READ IS ONE THE PLATFORM ALREADY MAKES ───────────────────────────
  *
- *   roles, empty seats      READERS `roles.all`, `seats.vacant` (villageReaders.ts)
+ *   roles                   READERS `roles.all` (villageReaders.ts)
+ *   empty seats             READERS `seats.vacant`'s gate, then `loadRoles` and
+ *                           `roleHolders` handed in, counted with the gate's own
+ *                           lapse rule (`holdingHasLapsed`). The reader's SQL
+ *                           counts every role_holders row, and a seat whose term
+ *                           ran out stays in that table and grants nothing, so
+ *                           the reader would call a lapsed seat held
  *   the week's gatherings   READERS `events.week`
  *   decisions on record     READERS `record.decisions`
  *   how many accounts       READERS `members.summary` (admins only, by its own audience)
@@ -36,10 +42,15 @@
  *   tools, Work With Us,    handed in from the collections server/index.ts holds,
  *   the legal entity        so this file opens no second cache over those tables
  *
- * The readers run through `callReader`, which asks the viewer's audience, the
- * module switch and the capability exactly as it does for the guide, so a fact
- * a viewer may not read is simply absent. No SQL is written here: the raw-SQL
- * register is at its ceiling, and every read above already exists.
+ * A reader is asked through its own gate, `readerRefusal`, which checks the
+ * viewer's audience, the module switch and the capability exactly as it does
+ * for the guide, so a fact a viewer may not read is simply absent. The answer
+ * is then read WHOLE, never through `callReader`: that door caps every answer
+ * to the guide's prompt budget (`capTokens`), and past the budget an array
+ * comes back as `{ items, truncated }`, which a count here would read as
+ * nothing at all. Ten described roles or eight gatherings in a week were
+ * enough to tell a busy village it had none. No SQL is written here: the
+ * raw-SQL register is at its ceiling, and every read above already exists.
  *
  * ── A READ THAT FAILS SAYS SO ──────────────────────────────────────────────
  *
@@ -62,8 +73,9 @@ import { issuanceCapDecisionFor } from "./launch";
 import { effectiveLifecycle } from "./modules";
 import { peerSharedItems } from "./network";
 import { intakeRoleForReaders, type IntakeHolding } from "./restorativeIntake";
+import { holdingHasLapsed } from "./stewardship";
 import { boolVar, numberVar, stringVar } from "./variables";
-import { callReader, type ReaderViewer } from "./villageReaders";
+import { READERS, readerRefusal, type ReaderViewer, type VillageReader } from "./villageReaders";
 
 /** One thing the live system shows, in a sentence, with where to change it. */
 export interface ObservedFact {
@@ -79,7 +91,7 @@ export interface ObservedDeps {
   pool: Pool;
   viewer: ReaderViewer;
   readExitPolicy(): any;
-  loadRoles(): ReadonlyArray<{ id: string; name?: string | null }>;
+  loadRoles(): ReadonlyArray<{ id: string; name?: string | null; isExample?: unknown }>;
   roleHolders(): ReadonlyArray<IntakeHolding>;
   /** The tools the Tools Hub lists, as its collection holds them. */
   tools(): ReadonlyArray<{ enabled?: unknown; isExample?: unknown }>;
@@ -130,10 +142,29 @@ async function readAll(readers: readonly FactReader[]): Promise<ObservedFact[]> 
   return out;
 }
 
-/** A reader's rows, or null when this viewer may not call it (module off, audience, capability). */
+/**
+ * The reader by its key. A key no reader carries any more throws, so the fact
+ * says it could not be read instead of quietly leaving the frame.
+ */
+function readerNamed(key: string): VillageReader {
+  const r = READERS.find((x) => x.key === key);
+  if (!r) throw new Error(`no reader named ${key}`);
+  return r;
+}
+
+/** Whether this viewer may call the reader (module on, audience, capability). */
+function mayRead(deps: ObservedDeps, key: string): boolean {
+  return readerRefusal(readerNamed(key), deps.viewer) === null;
+}
+
+/**
+ * A reader's WHOLE answer, or null when this viewer may not call it. Read past
+ * the reader's gate and never through `callReader`, whose prompt cap turns a
+ * long list into `{ items, truncated }` (see the header).
+ */
 async function reader<T>(deps: ObservedDeps, key: string): Promise<T | null> {
-  const r = await callReader(key, { pool: deps.pool, viewer: deps.viewer });
-  return r.ok ? (r.data as T) : null;
+  if (!mayRead(deps, key)) return null;
+  return (await readerNamed(key).read({ pool: deps.pool, viewer: deps.viewer })) as T;
 }
 
 function exitFacts(deps: ObservedDeps, which: "terms" | "restorative"): FactReader[] {
@@ -278,11 +309,17 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
           href: "/roles",
           label: "Who holds what",
           read: async () => {
-            const seats = await reader<Array<{ role: string; holders: number }>>(deps, "seats.vacant");
-            if (!seats) return null;
-            const empty = seats.filter((s) => s.holders === 0).map((s) => s.role);
-            if (!seats.length) return null;
-            return empty.length ? `Nobody holds ${listed(empty)}.` : "Every role has somebody in it.";
+            // The seats reader's gate, and a count held today: a seat whose
+            // term ran out is empty, the same answer the gate and the care
+            // role's fact give (see the header).
+            if (!mayRead(deps, "seats.vacant")) return null;
+            const roles = deps.loadRoles().filter((r) => !r.isExample);
+            if (!roles.length) return null;
+            const holders = deps.roleHolders();
+            const empty = roles
+              .filter((r) => !holders.some((h) => h.roleId === r.id && !holdingHasLapsed(h, now)))
+              .map((r) => String(r.name || r.id));
+            return empty.length ? `Nobody holds ${listed(empty)} today.` : "Every role has somebody in it today.";
           },
         },
         {
@@ -429,6 +466,11 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
             const d = await issuanceCapDecisionFor(deps.pool);
             const cap = `${d.capTokens} tokens per lunar cycle`;
             if (d.answer === "set") return `The village set its own issuance cap: ${cap}.`;
+            // A decline stays on record after a number is set, and then the
+            // number is the village's own (shared/issuanceCap.ts, `overridden`).
+            if (d.answer === "declined" && d.overridden) {
+              return `Asked at launch, the founders named no issuance cap of their own. The village has set one since: ${cap}.`;
+            }
             if (d.answer === "declined") return `The founders chose to keep the platform's issuance cap: ${cap}.`;
             return `Nobody has decided the issuance cap yet, so the platform's ${cap} binds.`;
           },
