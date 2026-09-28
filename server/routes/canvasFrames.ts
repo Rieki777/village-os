@@ -307,17 +307,22 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     // SAY: the adopted words, per section. An admin reads every row; a member
     // reads the rows the brief opened to members, and never the four sections
     // plan 2.3 keeps with administrators, whatever their audience column says.
-    const rows = await briefAll(pool, admin ? "admin" : "member");
+    // A row that exists and is not opened to members says so ("not-shared")
+    // instead of reading as blank, so a member is never told nothing is written
+    // where something is.
+    const rows = await briefAll(pool, "admin");
     const byId = new Map<string, BriefRow>(rows.map((r) => [r.section, r]));
     const sections = block.briefSections.map((section) => {
       const spec = BRIEF_BY_ID[section];
-      const readable = admin || !isAdminOnlySection(section);
-      const row = readable ? byId.get(section) : undefined;
+      const stored = byId.get(section);
+      const adminOnly = isAdminOnlySection(section);
+      const readable = admin || (!adminOnly && (!stored || stored.audience === "member"));
+      const row = readable ? stored : undefined;
       return {
         id: section,
         title: spec?.title ?? section,
         readable,
-        status: row ? row.status : readable ? "blank" : "admin-only",
+        status: row ? row.status : readable ? "blank" : adminOnly ? "admin-only" : "not-shared",
         ...(row ? { body: row.body, audience: row.audience, updatedAt: row.updatedAt, revision: row.revision } : {}),
       };
     });

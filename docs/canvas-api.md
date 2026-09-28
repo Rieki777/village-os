@@ -131,8 +131,8 @@ One block, everything its five frames need. `404` for an id that is not a canvas
 
 - `answer.sections`: an admin reads every row. A member reads rows whose audience is `member`, and
   NEVER `people`, `legal`, `land` or `constraints`, which come back `readable: false` with no body.
-  `status` is `confirmed` (adopted), `proposed` (a draft the guide or intake wrote), `blank` or
-  `admin-only`.
+  `status` is `confirmed` (adopted), `proposed` (a draft the guide or intake wrote), `blank`
+  (nothing written), `not-shared` (written, and not opened to members; no body) or `admin-only`.
 - `observed` never carries a score, a percentage or an "N of M". A fact the viewer may not read is
   absent. A read that failed says `"This could not be read just now."` with its link. The facts per
   block are listed in the header of `server/lib/canvasObserved.ts`.

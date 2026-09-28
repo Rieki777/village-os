@@ -245,6 +245,15 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       const asAdmin = (await block("admin", "legal")).body.answer.sections;
       expect(asAdmin.find((s: any) => s.id === "legal").body).toBe("Title sits with the founders' trust.");
     });
+
+    it("says a section is written and not shared, until it is opened to members", async () => {
+      const economy = async (as: Who) => (await block(as, "resourcing")).body.answer.sections.find((s: any) => s.id === "economy");
+      expect(await economy("member")).toMatchObject({ readable: true, status: "blank" });
+      await briefWrite(pool, { section: "economy", body: "Dues are forty a month.", audience: "admin", source: "admin", confirmedBy: "cf-admin" });
+      expect(await economy("member")).toEqual({ id: "economy", title: expect.any(String), readable: false, status: "not-shared" });
+      await briefWrite(pool, { section: "economy", body: "Dues are forty a month.", audience: "member", source: "admin", confirmedBy: "cf-admin" });
+      expect(await economy("member")).toMatchObject({ readable: true, status: "confirmed", body: "Dues are forty a month." });
+    });
   });
 
   describe("the See frame", () => {
