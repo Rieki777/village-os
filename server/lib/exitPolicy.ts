@@ -27,6 +27,7 @@
 import { faucetFor } from "./economy";
 import { isListedForTrade } from "./exchange";
 import { allTokens } from "./ledger";
+import { closingForReaders, type ClosingSection, type ClosingSectionForReaders } from "../../shared/closingPolicies";
 
 export interface ExitPolicyVoluntary {
   noticePeriodDays: number;
@@ -108,6 +109,14 @@ export interface ExitPolicy {
   voluntary: ExitPolicyVoluntary;
   involuntary: ExitPolicyInvoluntary;
   restorative: ExitPolicyRestorative;
+  /**
+   * WHAT CLOSING THIS VILLAGE MEANS (Rye, 2026-09-25), or absent when the
+   * village has not started on it, which is every policy saved before this
+   * existed. Written only by `PUT /api/admin/exit-policy/closing`, carried
+   * through every other save by `normalizeExitPolicy`, and served to readers
+   * without `adoptedBy` by `withPolicyDefaults`. shared/closingPolicies.ts.
+   */
+  closing?: ClosingSection | ClosingSectionForReaders;
 }
 
 /**
@@ -206,14 +215,20 @@ const sameSteps = (a: unknown, b: string[]): boolean =>
  * defaults at the TOP level only, so a client that sent `voluntary` without
  * `unwindSteps` replaced the whole section and silently dropped published
  * terms. Merging per section means a partial body can only add.
+ *
+ * `stored` is the document on record, and the ONE thing taken from it is the
+ * closing section, which this save must neither drop nor rewrite: it has its
+ * own writer (server/lib/closingPolicy.ts says why), and any `closing` in the
+ * body is ignored.
  */
-export function normalizeExitPolicy(body: any): ExitPolicy {
+export function normalizeExitPolicy(body: any, stored?: any): ExitPolicy {
   const v = body?.voluntary ?? {};
   const i = body?.involuntary ?? {};
   const r = body?.restorative ?? {};
   const notice = Number(v.noticePeriodDays);
   return {
     placeholder: body?.placeholder === true,
+    ...(stored?.closing ? { closing: stored.closing } : {}),
     voluntary: {
       noticePeriodDays: Number.isFinite(notice) && notice >= 0 ? Math.floor(notice) : DEFAULT_EXIT_POLICY.voluntary.noticePeriodDays,
       valuationMethod: text(v.valuationMethod) || DEFAULT_EXIT_POLICY.voluntary.valuationMethod,
@@ -388,6 +403,8 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
     ...(stored ?? {}),
     ...d,
     ...(stored ?? {}),
+    // Who adopted the closing words stays in the record; the page says when.
+    ...(stored?.closing ? { closing: closingForReaders(stored.closing) } : {}),
     voluntary: { ...d.voluntary, ...(stored?.voluntary ?? {}) },
     involuntary: {
       ...d.involuntary,

@@ -1850,3 +1850,18 @@ season sees the blocks in canvas order and loses nothing.
   JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
   takes it off; `GET /api/canvas/season` reads it back for an admitted member
   or an admin (403 to any other signed-in account).
+
+## Naming what closing your village means (no migration, 2026-09-27) <a id="closing-policy"></a>
+
+- **Before the launch vote can open, the village names what happens to its treasury and assets if it
+  ever closes** (the blocking row "Name what closing this village means"). In Admin, Departures, under
+  the published policy: choose "Shared by closing-day balances" (the platform's suggested default: in
+  proportion to the contribution tokens each person holds on closing day, and a member who already
+  redeemed receives nothing more) or "In the village's own words", edit the statement, tick "The
+  village adopts these words" and save. The pre-filled words saved without the tick are a draft and do
+  not count. It is stored as the `closing` section of the `exit-policy` app_config document, written by
+  `PUT /api/admin/exit-policy/closing` (`{ policyId, statement, adopt }`, admin session). Every reader
+  sees it at `/exit-policy`; the platform computes and moves nothing on closing. An exit policy saved
+  before this existed reads as "not named yet" until you do this, so a running village sees one new
+  blocking row and nothing else changes. With the default adopted and the redemption module on, the
+  redemption form tells a member what redeeming gives up before they ask.

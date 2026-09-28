@@ -112,6 +112,34 @@
       "required": true,
       "text": ["Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "Print this workbook to fill in by hand", "Our questions to talk through"],
       "forbidden": ["%", "of 12"]
+    },
+    {
+      "id": "closing-policy",
+      "path": "/exit-policy",
+      "required": true,
+      "text": ["If the village closes", "has not yet named what happens to its treasury and assets"],
+      "expect": {
+        "visitor": { "forbidden": ["Propose a change"] },
+        "founder": { "text": ["Propose a change"] }
+      },
+      "views": [
+        {
+          "id": "propose",
+          "click": "Propose a change",
+          "roles": ["founder"],
+          "text": ["Should this village change what closing means?", "The change you propose"]
+        }
+      ]
+    },
+    {
+      "id": "admin-departures",
+      "path": "/admin?tab=exits-admin",
+      "required": true,
+      "expect": {
+        "visitor": { "text": ["$villageName Admin"] },
+        "member": { "text": ["Not an admin"] },
+        "founder": { "text": ["What closing this village means", "Shared by closing-day balances", "In the village's own words", "The village adopts these words as what closing means here", "Nothing saved yet"] }
+      }
     }
   ]
 }

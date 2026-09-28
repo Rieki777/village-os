@@ -41,6 +41,7 @@ import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
 import { governingPurpose } from "./governingPurpose";
+import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -247,6 +248,14 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
             : problem
           : `Written, ${countWords(doc.statement)} words`,
       });
+      continue;
+    }
+
+    // WHAT CLOSING MEANS (Rye, 2026-09-25), read off the exit policy document
+    // the same way the statement above is read: a pool, no cache, nothing in
+    // server/index.ts. server/lib/closingPolicy.ts.
+    if (req.checkKey === CLOSING_CHECK_KEY) {
+      items.push({ ...req, ...(await closingLaunchCheck(pool)) });
       continue;
     }
 

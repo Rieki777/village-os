@@ -112,6 +112,7 @@ import {
 } from "../lib/redemptionStore";
 import { balanceOf, memberAccount } from "../lib/ledger";
 import { numberVar, stringVar } from "../lib/variables";
+import { redemptionClosingNoticeFor } from "../lib/closingPolicy";
 
 type Deps = Pick<
   AppDeps,
@@ -389,6 +390,10 @@ export function register(app: Express, deps: Deps): void {
         || (await redemptionKeyHolders().catch(() => [] as string[])).includes(String(user.id)),
       perCycle,
       openedThisCycle,
+      // The closing policy's consequence for redeeming, or null when the
+      // village has not named one that reads closing-day balances (Rye,
+      // 2026-09-25). shared/closingPolicies.ts `redemptionClosingNotice`.
+      closingNotice: await redemptionClosingNoticeFor(pool),
       // ONE RESOLUTION PER TOKEN, so the form can show what each is worth
       // before a member picks one. `moneyContext` reads the posted price for
       // that token and the one daily rate table.
