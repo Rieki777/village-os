@@ -266,7 +266,7 @@ describe.skipIf(!configured)("the canvas in public", () => {
     it("keeps a line where a first name is an ordinary word in lower case, and a title a founder was stored under (controls)", async () => {
       roster.push({ id: "cp-will", name: "Will Harper", email: "will@example.test", role: "member", roleCapabilities: [], membershipGranted: true });
       roster.push({ id: "cp-default", name: "Founder", email: "founder@example.test", role: "founder", roleCapabilities: [], membershipGranted: false });
-      const line = "Until the handover, the founder keeps the pen, and the stewards will review every change.";
+      const line = "Founder keeps the pen until the handover, and the stewards will review every change.";
       const r = await put("power", line);
       expect(r.status, r.text).toBe(200);
       expect((await call("GET", CANVAS_PUBLIC_PATH, null)).body.blocks.find((b: any) => b.id === "power")).toEqual({ id: "power", line, withheld: false });

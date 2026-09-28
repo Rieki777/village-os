@@ -130,6 +130,7 @@ describe("a name that is also an ordinary word", () => {
   it("lets through the lines a village writes about how it works", () => {
     for (const line of [
       "Until the handover, the founder keeps the purpose pen.",
+      "Founder keeps the purpose pen until every power is handed over.",
       "Founders hand over one power at a time.",
       "The stewards will review every proposal within a week.",
       "Any member may propose a change to any dial.",
