@@ -28,7 +28,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { CLOSING_REDEMPTION_NOTICE, PROPORTIONAL_CLOSING_STATEMENT } from "../shared/closingPolicies";
@@ -151,7 +151,7 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-closing-"));
   // A village that has NOT started its Game: the launch vote is the subject.
   testDb = await provisionTestDb({ gameStarted: false });
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
