@@ -420,6 +420,8 @@ describe.skipIf(!DB_CONFIGURED)("the agreements route, end to end (defect 9)", (
       const v = await call("POST", `/api/governance/ballots/${ballotId}/vote`, { choice: "yes" }, t);
       expect(v.status, v.text).toBe(200);
     }
+    // A ballot passes when its window ends and not before, so the window runs out first.
+    await pool.query("UPDATE ballots SET closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema: the window running out
     const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { outcomeNote: "Everyone on the roll said yes." });
     expect(closed.status, closed.text).toBe(200);
     // Not yet: a carried agreement lands after the steward's window, like every Game change.
