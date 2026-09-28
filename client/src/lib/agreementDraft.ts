@@ -10,7 +10,7 @@
  * None of these touches a canvas block, a level or a count, and none of them
  * is ever shown as a number.
  */
-import type { AgreementPractice, LadderRung, LadderRungNumber } from "@shared/conflictAgreement";
+import type { AgreementPractice, LadderRung, LadderRungNumber, OutsideContact } from "@shared/conflictAgreement";
 
 /** The list without its `index`th row. */
 export function removeAt<T>(list: readonly T[], index: number): T[] {
@@ -51,4 +51,59 @@ export function ideasNotYetAdded<I extends { name: string }>(ideas: readonly I[]
   const out: I[] = [];
   for (const idea of ideas) if (!practices.some((p) => p.name === idea.name)) out.push(idea);
   return out;
+}
+
+/**
+ * AN OUTSIDE CONTACT'S ID IS NEVER REUSED FOR ANOTHER PERSON (Wave 3a audit,
+ * 2026-09-28).
+ *
+ * The ombuds door's record keeps the contact's id, and the members' card says
+ * "the village has a note that you asked" wherever a member's asks carry the
+ * same id. Ids were `oc-1`, `oc-2`, counted from the list on screen, so
+ * removing the only contact and adding another handed the new person `oc-1`,
+ * and every member who had asked the old one was told they had asked the new
+ * one. A new id is now made from the clock, so it was never anybody's.
+ */
+export function freshContactId(taken: readonly string[], now: number = Date.now()): string {
+  const base = `oc-${now.toString(36)}`;
+  let id = base;
+  for (let n = 1; taken.includes(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/**
+ * The contacts as they are sent: a contact whose name or way of reaching them
+ * changed since the agreement was loaded is a different person to the ombuds
+ * door, so it goes with a fresh id, and the power clause follows it. Typing a
+ * new person over an old row used to keep the old id, with the same false
+ * "you asked" as above. A typo fixed in a name also takes a fresh id: the
+ * members who asked see "Ask to talk" again, which is the safe mistake.
+ */
+export function contactsWithFreshIds<D extends { outsideContacts: OutsideContact[]; whenPowerInvolved: { outsideContactId: string } }>(
+  draft: D,
+  loaded: readonly OutsideContact[],
+  now: number = Date.now(),
+): D {
+  const taken: string[] = [];
+  for (const c of loaded) taken.push(c.id);
+  for (const c of draft.outsideContacts) taken.push(c.id);
+  const moved = new Map<string, string>();
+  const outsideContacts: OutsideContact[] = [];
+  for (const c of draft.outsideContacts) {
+    const was = loaded.find((o) => o.id === c.id);
+    if (!was || (was.name.trim() === c.name.trim() && was.howToReach.trim() === c.howToReach.trim())) {
+      outsideContacts.push(c);
+      continue;
+    }
+    const id = freshContactId(taken, now);
+    taken.push(id);
+    moved.set(c.id, id);
+    outsideContacts.push({ ...c, id });
+  }
+  const powerId = moved.get(draft.whenPowerInvolved.outsideContactId);
+  return {
+    ...draft,
+    outsideContacts,
+    whenPowerInvolved: powerId ? { ...draft.whenPowerInvolved, outsideContactId: powerId } : draft.whenPowerInvolved,
+  };
 }

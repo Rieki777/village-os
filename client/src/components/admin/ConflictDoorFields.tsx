@@ -60,8 +60,8 @@ export function ConflictDoorFields({
         Before the village is asked to start, a member with a conflict needs somebody to bring it to and a
         reply time the village chose. That is a person who holds the intake role today, or a named contact
         outside the village. With fewer than three members who are not founders, the outside contact is
-        required. Everything here is public, and the exit policy page shows the reply time and the outside
-        contact to anyone, so give a way of reaching the outside contact that is meant to be public.
+        required. The exit policy page shows the roles, the reply time and the outside contact's organisation
+        to anyone. The outside contact's name and how to reach them show to members only.
       </p>
 
       <div className="grid sm:grid-cols-3 gap-3 mb-3">

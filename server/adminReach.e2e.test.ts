@@ -83,6 +83,33 @@ async function call(
 /** A read with NO token, which is how a visitor reaches a public page. */
 const asStranger = (route: string) => call("GET", route, undefined, "");
 
+/**
+ * Runs `fn` as the village was before its Game started, then puts the start
+ * back exactly as it was. `provisionTestDb()` starts every village by default,
+ * and after the Birthing the conflict path (the restorative block) changes only
+ * by a village vote on its conflict agreement (`saveExitPolicy`,
+ * server/routes/exits.ts, Wave 3a audit). The writes wrapped here are a
+ * founder setting the village up, which is the side of that moment they belong on.
+ */
+async function beforeTheBirthing<T>(query: (sql: string, args?: unknown[]) => Promise<any>, fn: () => Promise<T>): Promise<T> {
+  const [rows] = await query("SELECT value FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  const row = (rows as any[])[0];
+  await query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  try {
+    return await fn();
+  } finally {
+    if (row) {
+      await query("INSERT INTO app_config (config_key, value) VALUES ('game-start', ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        typeof row.value === "string" ? row.value : JSON.stringify(row.value),
+      ]);
+    }
+  }
+}
+
+/** The exit policy's save, made before the Birthing (see `beforeTheBirthing`). */
+const saveTermsBeforeTheBirthing = (body: unknown) =>
+  beforeTheBirthing((sql, args) => testDb!.conn.query(sql, args as any), () => call("PUT", "/api/admin/exit-policy", body)); // module-review-ok: hands the suite's own scratch-schema connection to the fixture helper above
+
 beforeAll(async () => {
   if (!DB_CONFIGURED) return;
   if (!fs.existsSync(DIST)) {
@@ -182,7 +209,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
         steps: ["A private cup of tea", "A facilitated sit-down", "A written agreement and a date to revisit it"],
       },
     };
-    const saved = await call("PUT", "/api/admin/exit-policy", terms);
+    const saved = await saveTermsBeforeTheBirthing(terms);
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
 
     // THE SEAM. A visitor's read of the published page.
@@ -212,7 +239,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
       involuntary: { decidingDomainId: "", appealDomainId: "", process: "Our own words about asking someone to leave." },
       restorative: { intakeContactRole: "", steps: [...DEFAULT_EXIT_POLICY.restorative.steps] },
     };
-    const refused = await call("PUT", "/api/admin/exit-policy", half);
+    const refused = await saveTermsBeforeTheBirthing(half);
     expect(refused.status, JSON.stringify(refused.json)).toBe(409);
     expect(refused.json.error).toBe("terms_still_platform_default");
     expect(String(refused.json.message)).toContain("The restorative path");
@@ -229,7 +256,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
         steps: DEFAULT_EXIT_POLICY.restorative.steps.map((s) => `  ${s.toUpperCase()}  `),
       },
     };
-    const stillRefused = await call("PUT", "/api/admin/exit-policy", cosmetic);
+    const stillRefused = await saveTermsBeforeTheBirthing(cosmetic);
     expect(stillRefused.status, JSON.stringify(stillRefused.json)).toBe(409);
 
     // Written in the village's own words, the acknowledgement is available.
@@ -237,7 +264,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
       ...half,
       restorative: { intakeContactRole: "", steps: ["We sit down first", "We write what we agreed"] },
     };
-    const accepted = await call("PUT", "/api/admin/exit-policy", own);
+    const accepted = await saveTermsBeforeTheBirthing(own);
     expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
     const published = await asStranger("/api/exit-policy");
     expect(published.json.policy.placeholder).toBe(false);

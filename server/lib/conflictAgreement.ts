@@ -31,9 +31,12 @@
  *
  * The agreement is public with roles only. Outside contacts are named by
  * organisation or role, safety contacts are left out, and every piece of text
- * that names a member of this village is withheld (`memberNameMatcher`). The
- * same guard runs over the exit policy's restorative block for anybody who is
- * not a member, because that block now carries the agreement's words.
+ * that names a member of this village (`memberNameMatcher`), or names one of
+ * the agreement's own contacts or how to reach them (`contactsMatcher`), is
+ * withheld. The same guard runs over the exit policy's restorative block for
+ * anybody who is not a member, WHETHER OR NOT an agreement is stored: with
+ * one, the block carries the agreement's words; without one, it still names
+ * the outside contact the Departures editor stored.
  *
  * ── THE OMBUDS DOOR KEEPS A POINTER AND NO WORDS ──────────────────────────
  *
@@ -59,8 +62,23 @@ import { outsideContactOf, replyHoursOf } from "./exitPolicy";
 
 export { CONFLICT_AGREEMENT_KEY };
 
-/** The key an open agreement ballot's proposed document waits under. */
+/** The prefix every agreement ballot's proposed document waits under, one key per ballot (`proposalKeyFor`). */
 export const CONFLICT_AGREEMENT_PROPOSAL_KEY = "conflict-agreement-proposal";
+
+/**
+ * THE KEY ONE BALLOT'S PROPOSED AGREEMENT IS KEPT UNDER, and it is never
+ * reused by another ballot.
+ *
+ * This was one shared key, which every new ballot's open overwrote (Wave 3a
+ * audit, 2026-09-28). A carried change does not land at its close: it waits
+ * for its landing date, and the close frees the subject, so a second change
+ * could open in that window, overwrite the first one's agreement, and leave
+ * the village's carried vote held for ever with "not recorded against it".
+ * One key per ballot, like `gps_change_proposals` keeps one row per ballot,
+ * and the carried vote finds its own words however many open after it.
+ * `bal-<ms>-<6>` is 24 characters, so the key fits `config_key` varchar(64).
+ */
+export const proposalKeyFor = (ballotId: string): string => `${CONFLICT_AGREEMENT_PROPOSAL_KEY}:${ballotId}`;
 
 /** The key the ombuds door's pointers are kept under. */
 export const OMBUDS_ASKS_KEY = "ombuds-asks";
@@ -69,9 +87,9 @@ export const OMBUDS_ASKS_KEY = "ombuds-asks";
 export const AGREEMENT_MEMBERS_ONLY =
   "The full agreement and its contacts are for the village's members. The public page shows its roles.";
 
-/** What an admin is told once the Game has started. */
+/** What an admin is told once the Game has started. Opening the vote takes `proposal.open` held as a member, so this never says "every member". */
 export const AGREEMENT_BALLOT_NOW =
-  "The Game has started, so a change to the conflict agreement goes to the village as a vote. Open it from the agreement, where every member can.";
+  "The Game has started, so a change to the conflict agreement goes to the village as a vote. A member who can open votes opens it from the agreement on the governance page.";
 
 /** What a member is told before the Birthing when they try to open a change vote. */
 export const AGREEMENT_FOUNDERS_NOW =
@@ -128,9 +146,28 @@ export function withConflictAgreement<P extends { restorative?: unknown }>(polic
   } as P;
 }
 
-/** What the exit policy's editor is told when it tries to change a block the agreement answers. */
+/**
+ * What the exit policy's editor is told when it tries to change a block the
+ * agreement answers. The refusal comes before any write, so it says that
+ * nothing was saved: it used to end "the rest of this policy saves as usual",
+ * which a steward read after pressing Publish as a partial save.
+ */
 export const RESTORATIVE_IN_AGREEMENT =
-  "The restorative path, the intake and cover roles, the reply time and the outside contact now come from the village's conflict agreement. Change them there, on the governance page; the rest of this policy saves as usual.";
+  "Nothing was saved. The restorative path, the intake and cover roles, the reply time and the outside contact now come from the village's conflict agreement, so change them there, on the governance page. Reload this page to edit the rest of the policy.";
+
+/**
+ * What the exit policy's editor is told after the Birthing when it tries to
+ * change the restorative block, whether or not an agreement is stored.
+ * Plan section 2.3 puts the conflict path under the consequence pen: the
+ * founders before the Birthing, a village vote after it. The vote is
+ * `POST /api/governance/conflict-agreement-changes`, which works with no
+ * stored agreement too (its closer stores the one it carries).
+ */
+export const RESTORATIVE_IS_A_VOTE =
+  "Nothing was saved. The Game has started, so the restorative path, the intake and cover roles, the reply time and the outside contact change only by a vote on the village's conflict agreement. A member who can open votes opens it from the agreement on the governance page. Reload this page to edit the rest of the policy.";
+
+/** The door that vote is opened through, named in the refusal's body. */
+export const AGREEMENT_CHANGE_DOOR = "/api/governance/conflict-agreement-changes";
 
 /**
  * Does an exit policy body's restorative block say the same as the one a
@@ -340,6 +377,54 @@ export function memberNameMatcher(names: ReadonlyArray<string | null | undefined
   };
 }
 
+/** Folded, lower case, with every space gone, so "0412 555 000" and "0412555000" are one phrase. */
+const squash = (s: unknown) => foldAccents(String(s ?? "")).toLowerCase().replace(/\s+/g, "");
+
+/**
+ * DOES THIS TEXT NAME ONE OF THE AGREEMENT'S OWN CONTACTS, OR SAY HOW TO REACH ONE?
+ *
+ * The agreement tells the founder its outside contacts are named publicly by
+ * organisation or role and never by name, and that the public never sees the
+ * safety contacts. `memberNameMatcher` only knew the village's members, so a
+ * contact's name or number written into a step, the power clause, a rung, the
+ * appeal or a practice was printed to anybody (Wave 3a audit, 2026-09-28). The
+ * people it exposed are third parties: a mediator, and a contact for abuse or
+ * violence.
+ *
+ * An outside contact's name is matched the way a member's is (they are a
+ * person by definition). A safety contact's name, which is as often a service
+ * as a person, is matched as its whole phrase, and every way of reaching
+ * either kind is matched as a phrase with the spaces taken out. Phrases under
+ * four characters are ignored. Its mistakes go the safe way, like the
+ * member rule: text that merely contains a contact's phrase is withheld.
+ */
+export function contactsMatcher(
+  agreements: ReadonlyArray<Pick<ConflictAgreementContent, "outsideContacts" | "safetyContacts"> | null | undefined>,
+): (text: string) => boolean {
+  const present = agreements.filter((a): a is Pick<ConflictAgreementContent, "outsideContacts" | "safetyContacts"> => !!a);
+  const people = memberNameMatcher(present.flatMap((a) => a.outsideContacts.map((c) => c.name)));
+  const phrases = new Set<string>();
+  for (const a of present) {
+    for (const c of a.outsideContacts) phrases.add(squash(c.howToReach));
+    for (const c of a.safetyContacts) {
+      phrases.add(squash(c.name));
+      phrases.add(squash(c.howToReach));
+    }
+  }
+  const list = Array.from(phrases).filter((p) => p.length >= 4);
+  return (text: string) => {
+    if (people(text)) return true;
+    const t = squash(text);
+    return !!t && list.some((p) => t.includes(p));
+  };
+}
+
+/** One guard from several: the text is withheld when any of them says so. */
+export const anyOf =
+  (...guards: ReadonlyArray<(text: string) => boolean>) =>
+  (text: string): boolean =>
+    guards.some((g) => g(text));
+
 /** A role as a reader sees it: its name, or null when the id no longer names a role. */
 type RoleRef = { id: string; name: string } | null;
 
@@ -354,8 +439,13 @@ type Guarded = string | null;
 
 export interface PublicAgreementView {
   steps: Array<{ what: Guarded; whoInRoom: Guarded }>;
-  careRole: { id: string; name: Guarded } | null;
-  coverRole: { id: string; name: Guarded } | null;
+  /**
+   * `heldToday` is the restorative intake's own reach rule (`liveIntakeRecipients`),
+   * the same answer /exit-policy prints from, so the card promises a reply only
+   * while somebody holds the role that would send it.
+   */
+  careRole: { id: string; name: Guarded; heldToday: boolean } | null;
+  coverRole: { id: string; name: Guarded; heldToday: boolean } | null;
   replyHours: number | null;
   outsideContacts: Array<{ id: string; label: Guarded }>;
   whenPowerInvolved: { role: Guarded; outsideContact: Guarded; words: Guarded };
@@ -381,6 +471,7 @@ export function publicAgreementView(
   a: ConflictAgreement,
   roles: ReadonlyArray<{ id: string; name?: string | null }>,
   namesMember: (text: string) => boolean,
+  heldToday: (roleId: string) => boolean = () => false,
 ): PublicAgreementView {
   let withheld = false;
   const g = (text: string): Guarded => {
@@ -394,7 +485,7 @@ export function publicAgreementView(
   };
   const role = (id: string) => {
     const r = roleRef(id, roles);
-    return r ? { id: r.id, name: g(r.name) } : null;
+    return r ? { id: r.id, name: g(r.name), heldToday: heldToday(r.id) } : null;
   };
   const byId = new Map(a.outsideContacts.map((c) => [c.id, c]));
   const powerRole = roleRef(a.whenPowerInvolved.roleId, roles);
@@ -428,11 +519,12 @@ export function publicAgreementView(
 /**
  * THE EXIT POLICY'S RESTORATIVE BLOCK FOR SOMEBODY WHO IS NOT A MEMBER.
  *
- * The block carries the agreement's words once there is one, and /exit-policy,
- * /governance and /roles print it to anybody, signed in or not. So it gets the
- * public view's rule: a step naming a member becomes `NAME_WITHHELD`, and the
- * outside contact is its organisation or role with no name and no way to
- * reach them. Members read the block whole.
+ * /exit-policy, /governance and /roles print this block to anybody, signed in
+ * or not, and it applies whether or not an agreement is stored. So it gets
+ * the public view's rule: a step naming a member or a contact (the caller
+ * hands both guards, `anyOf`) becomes `NAME_WITHHELD`, and the outside
+ * contact is its organisation or role with no name and no way to reach them.
+ * Members read the block whole.
  */
 export function restorativeForPublic<R extends { steps?: unknown; outsideContact?: unknown }>(
   r: R,

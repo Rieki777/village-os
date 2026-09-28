@@ -3726,10 +3726,24 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // RESTORATIVE INTAKE (the F12 hard rule as code): configure the intake
     // role, send a private message — it reaches the role's holders through
     // the notification spine and NOTHING else. No thread, no event, no row.
-    await api("PUT", "/api/admin/exit-policy", {
+    //
+    // This village started its Game at provisioning, and after the Birthing
+    // the intake role changes only by a village vote on the conflict
+    // agreement (saveExitPolicy, server/routes/exits.ts, Wave 3a audit). The
+    // founder's setup is written on the side of that moment it belongs to:
+    // the start is lifted for this one save and put back exactly as it was.
+    const [[startRow]] = await testDb.conn.query<any[]>("SELECT value FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await testDb.conn.query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const intakeRoleSaved = await api("PUT", "/api/admin/exit-policy", {
       ...pol.json.policy,
       restorative: { ...pol.json.policy.restorative, intakeContactRole: "founders-circle" },
     }, founderToken);
+    if (startRow) {
+      await testDb.conn.query("INSERT INTO app_config (config_key, value) VALUES ('game-start', ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        typeof startRow.value === "string" ? startRow.value : JSON.stringify(startRow.value),
+      ]);
+    }
+    expect(intakeRoleSaved.status, JSON.stringify(intakeRoleSaved.json)).toBe(200);
     const [[fBefore]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
     /*
      * THE EMAIL IS WHERE THE WORDS USED TO LEAVE. The intake is emailed at

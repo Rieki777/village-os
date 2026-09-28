@@ -14610,7 +14610,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
 
   // Member exit (S52, F12): the published policy and a departure's steps, in server/routes/exits.ts.
-  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, hasMembership, agreementStored: () => conflictAgreementRepo.exists(), readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
+  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, hasMembership, agreementStored: () => conflictAgreementRepo.exists(), agreementDoc: () => conflictAgreementRepo.get(), readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
 
   // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
   registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
@@ -24939,7 +24939,7 @@ ${inner}
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
 

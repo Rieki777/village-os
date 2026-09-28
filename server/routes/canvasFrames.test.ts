@@ -38,13 +38,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { capabilityDecision, HANDOVER_SET, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { PROPOSAL_BODY_MAX } from "../../shared/canvasFrames";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
 import { calendarUpsert } from "../lib/calendar";
-import { capabilityHoldings, moveCapabilityToVillage } from "../lib/capabilityHolding";
+import { STEWARD_ROLE_ID, capabilityHoldings, moveCapabilityToVillage } from "../lib/capabilityHolding";
 import { recordMechanicsChangeRow } from "../lib/changeset";
-import { RESTORATIVE_IN_AGREEMENT } from "../lib/conflictAgreement";
 import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import { recordGameStart } from "../lib/gameStart";
 import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
@@ -58,7 +58,15 @@ import { wireReaders } from "../lib/villageReaders";
 import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
 import { dbDocument } from "../repos/store-db";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
-import { CONSEQUENCE_VOTE_NOT_BUILT, FILED_BY_PROPOSER, PEN_REFUSALS, PURPOSE_CHANGE_DOOR, register } from "./canvasFrames";
+import {
+  CARE_DOOR_IN_AGREEMENT,
+  CARE_DOOR_IS_THE_AGREEMENT_VOTE,
+  CONSEQUENCE_VOTE_NOT_BUILT,
+  FILED_BY_PROPOSER,
+  PEN_REFUSALS,
+  PURPOSE_CHANGE_DOOR,
+  register,
+} from "./canvasFrames";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvasFrames.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -152,7 +160,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
     await exitDoc.load();
 
     const app = express();
-    app.use(express.json());
+    app.use(express.json({ limit: "1mb" })); // the limit server/index.ts sets
     const isAdmin = async (req: express.Request) => ["admin", "founder"].includes(who(req)?.role ?? "");
     const addActivity = async (_kind: string, text: string) => {
       activity.push(text);
@@ -178,6 +186,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       roleHolders: () => HOLDERS,
       exitPolicy: {
         isAdmin,
+        getPool: () => pool,
         loadRoles: () => ROLES as any,
         circlesRepo: { all: () => [] } as any,
         exitPolicyRepo: exitPolicyRepo() as any,
@@ -407,6 +416,15 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect((await propose("member", { blockId: "purpose", target: "purpose", body: "We grow food." })).status).toBe(400);
     });
 
+    it("keeps a suggestion at the stated limit whole, in a script whose characters take three bytes each", async () => {
+      // 40,000 characters of CJK is 120,000 bytes under utf8mb4: past what TEXT holds.
+      const long = "村".repeat(PROPOSAL_BODY_MAX);
+      const r = await propose("member", { blockId: "team", sectionId: "membership", body: long });
+      expect(r.status).toBe(201);
+      const kept = (await block("teller", "team")).body.proposals.find((p: any) => p.id === r.body.proposal.id);
+      expect(kept.body).toBe(long);
+    });
+
     it("lets only an administrator mark a suggestion as drafted from the live system", async () => {
       expect((await propose("member", { blockId: "team", sectionId: "membership", body: "Drafted words.", source: "derived" })).status).toBe(403);
       const r = await propose("admin", { blockId: "team", sectionId: "membership", body: "Drafted words.", source: "derived" });
@@ -544,7 +562,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       try {
         const r = await adopt("admin", p.id);
         expect(r.status).toBe(409);
-        expect(r.body).toMatchObject({ error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT });
+        expect(r.body).toEqual({ error: "restorative_in_agreement", message: CARE_DOOR_IN_AGREEMENT });
       } finally {
         AGREEMENT_STORED = false;
       }
@@ -670,13 +688,13 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       }
     });
 
-    it("the care door and the matrix wait for a vote nothing builds yet, and nothing moves", async () => {
+    it("the care door is sent to the conflict agreement's own vote, the matrix waits for one nothing builds yet, and nothing moves", async () => {
       const p = (await propose("member", {
         blockId: "conflict", target: "setting", door: "exit:restorative", servesPurpose: LINE,
         change: { replyHours: 24 }, body: "A day, not two.",
       })).body.proposal;
       expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot", ballotBuilt: false, youMayAdopt: false });
-      expect(await adopt("admin", p.id)).toEqual({ status: 409, body: { error: CONSEQUENCE_VOTE_NOT_BUILT } });
+      expect(await adopt("admin", p.id)).toEqual({ status: 409, body: { error: CARE_DOOR_IS_THE_AGREEMENT_VOTE } });
       await exitPolicyRepo().load();
       expect((exitPolicyRepo().get() as any).restorative.replyHours).toBe(48);
       expect((await block("admin", "conflict")).body.proposals.map((x: any) => x.id)).toContain(p.id);
@@ -712,6 +730,20 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(r.pens.dial).toMatchObject({ how: "ballot", youMayAdopt: true });
       expect(r.pens.consequence).toMatchObject({ how: "ballot", ballotBuilt: false });
       expect(r.observed.find((f: any) => f.id === "birthing").text).toMatch(/^The Game started on /);
+    });
+
+    it("says the steward seat holds the powers once the launch seats them there, and never that the administrators do", async () => {
+      await pool.query( // module-review-ok: the founding seat on the scratch schema this suite provisioned, as the launch seats it
+        "INSERT INTO roles (id, name, capabilities) VALUES (?, 'Founding Stewards', ?) ON DUPLICATE KEY UPDATE name = VALUES(name), capabilities = VALUES(capabilities)",
+        [STEWARD_ROLE_ID, JSON.stringify(HANDOVER_SET)],
+      );
+      for (const cap of HANDOVER_SET) {
+        expect(await moveCapabilityToVillage(pool, { capability: cap, holderRoleId: STEWARD_ROLE_ID }), cap).toEqual({ ok: true });
+      }
+      const text = (await block("member", "power")).body.observed.find((f: any) => f.id === "powers-held").text;
+      expect(text).toBe(
+        "The village holds none of its transferable powers yet. The Founding Stewards seat holds them until the village moves them to roles its members hold.",
+      );
     });
   });
 

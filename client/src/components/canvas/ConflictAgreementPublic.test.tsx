@@ -22,7 +22,7 @@ const posts: Array<{ url: string; body: any }> = [];
 
 const PUBLIC = {
   steps: [{ what: "We talk it out", whoInRoom: "the two of us" }],
-  careRole: { id: "care", name: "Care Holder" },
+  careRole: { id: "care", name: "Care Holder", heldToday: true },
   coverRole: null,
   replyHours: 24,
   outsideContacts: [{ id: "oc-1", label: "Ombuds at Cohort Care" }],
@@ -175,6 +175,31 @@ describe("ConflictAgreementPublic", () => {
     expect(screen.getByText("We talk it out, then ask Mara")).toBeTruthy();
     expect(screen.getByText(/Day crisis line/)).toBeTruthy();
     expect(screen.getByText(/ada@new\.invalid/)).toBeTruthy();
+  });
+
+  it("promises a reply only while somebody holds the care role, for a visitor and for a member alike", async () => {
+    token = null;
+    serve(MEMBERS);
+    const held = renderCard();
+    expect(await screen.findByText(/Someone who reaches out hears back within 24 hours\./)).toBeTruthy();
+    held.unmount();
+
+    const unheld = { ...PUBLIC, careRole: { id: "care", name: "Care Holder", heldToday: false } };
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/conflict-agreement/public") return { ok: true, status: 200, json: async () => ({ stored: true, agreement: unheld }) };
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const visitor = renderCard();
+    expect(await screen.findByText(/Nobody holds the Care Holder role today, so a private intake would reach nobody\./)).toBeTruthy();
+    expect(screen.queryByText(/hears back within/)).toBeNull();
+    visitor.unmount();
+
+    // A member reads the members' copy, where the role says how many hold it today.
+    token = "a-token";
+    serve({ ...MEMBERS, roles: [{ id: "care", name: "Care Holder", liveHolders: 0 }] });
+    renderCard();
+    expect(await screen.findByText(/Nobody holds the Care Holder role today/)).toBeTruthy();
+    expect(screen.queryByText(/hears back within/)).toBeNull();
   });
 
   it("an account the server does not count as a member sees only the public card", async () => {

@@ -18,6 +18,14 @@
 -- `change_json`). `body` is the suggestion in the proposer's words, which is
 -- what the village reads.
 --
+-- `body` and `change_json` are MEDIUMTEXT. The validator allows 40,000
+-- characters (PROPOSAL_BODY_MAX, the length a brief section keeps), and TEXT
+-- holds 65,535 BYTES: under utf8mb4 a long suggestion in Cyrillic or CJK was
+-- refused by strict mode well under the stated limit, and answered a 500. A
+-- restorative `steps` list rides in `change_json` with no cap of its own
+-- beyond the 1 MB body limit. The brief the words are adopted into is
+-- MEDIUMTEXT too (0052). Changed before this file ran on any live database.
+--
 -- `serves_purpose` is the proposer's line on how it serves the governing
 -- purpose. It is NULL on every suggestion that only changes wording, and the
 -- route asks for it only where the plan scopes it: the power, conflict, roles
@@ -61,8 +69,8 @@ CREATE TABLE IF NOT EXISTS `canvas_proposals` (
   `target` varchar(16) NOT NULL DEFAULT 'words',
   `section_id` varchar(64) NULL,
   `door` varchar(64) NULL,
-  `change_json` text NULL,
-  `body` text NOT NULL,
+  `change_json` mediumtext NULL,
+  `body` mediumtext NOT NULL,
   `serves_purpose` text NULL,
   `source` varchar(16) NOT NULL DEFAULT 'member',
   `proposed_by` varchar(64) NOT NULL,

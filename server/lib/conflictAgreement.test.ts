@@ -10,8 +10,10 @@ import {
   AGREEMENT_BALLOT_NOW,
   NAME_WITHHELD,
   adoptedByBallot,
+  anyOf,
   asksBy,
   conflictAgreementWrite,
+  contactsMatcher,
   effectiveAgreement,
   memberNameMatcher,
   ombudsAskProblem,
@@ -223,14 +225,34 @@ describe("names: the public view refuses to print a member", () => {
   });
 
   it("names roles and outside contacts by organisation or role, and leaves the safety contacts out", () => {
-    const view = publicAgreementView(storedDoc(), ROLES, names);
+    const view = publicAgreementView(storedDoc(), ROLES, names, (id) => id === "care");
     expect(view.withheld).toBe(false);
-    expect(view.careRole).toEqual({ id: "care", name: "Care Holder" });
-    expect(view.coverRole).toEqual({ id: "cover", name: "Care Cover" });
+    expect(view.careRole).toEqual({ id: "care", name: "Care Holder", heldToday: true });
+    expect(view.coverRole).toEqual({ id: "cover", name: "Care Cover", heldToday: false });
     expect(view.outsideContacts).toEqual([{ id: "oc-1", label: "Ombuds at Cohort Care" }]);
     expect(view.whenPowerInvolved.role).toBe("Stewards");
     expect("safetyContacts" in view).toBe(false);
     expect("adoptedBy" in view).toBe(false);
+  });
+
+  it("knows the agreement's own contacts by name and by how to reach them, spaced or not, and ignores a phrase too short to mean anything", () => {
+    const own = contactsMatcher([
+      {
+        outsideContacts: [{ id: "oc-1", name: "Maria Lopez", organisation: "Harbour Mediation", role: "Mediator", howToReach: "0412 555 000" }],
+        safetyContacts: [
+          { name: "Sam Reid", howToReach: "sam.reid@example.org", when: "" },
+          { name: "Gp", howToReach: "999", when: "" },
+        ],
+      },
+    ]);
+    expect(own("We call Maria first")).toBe(true);
+    expect(own("Ring 0412555000 any time")).toBe(true);
+    expect(own("Appeal to sam reid")).toBe(true);
+    expect(own("Write to SAM.REID@example.org")).toBe(true);
+    expect(own("We talk it out, the two of us")).toBe(false);
+    expect(own("Call 999 in an emergency")).toBe(false);
+    expect(anyOf(names, own)("Then Mara sits with us")).toBe(true);
+    expect(contactsMatcher([null])("Anything at all")).toBe(false);
   });
 
   it("the exit policy's block, for somebody who is not a member, withholds named steps and the contact's person", () => {

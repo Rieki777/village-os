@@ -31,8 +31,11 @@
  * ── WHAT THE PUBLIC READS ─────────────────────────────────────────────────
  *
  * Roles, never people. `publicAgreementView` withholds every piece of text
- * that names a member of this village, leaves the safety contacts out, and
- * names outside contacts by organisation or role.
+ * that names a member of this village or one of the agreement's own contacts
+ * (a name, or how to reach them), leaves the safety contacts out, and names
+ * outside contacts by organisation or role. Each role says whether anybody
+ * holds it today, so the page promises a reply only while somebody would
+ * send one.
  *
  * ── THE OMBUDS DOOR ───────────────────────────────────────────────────────
  *
@@ -50,15 +53,17 @@ import { decisionLink, notifyRollRows } from "../lib/ballotNotices";
 import {
   AGREEMENT_FOUNDERS_NOW,
   AGREEMENT_MEMBERS_ONLY,
-  CONFLICT_AGREEMENT_PROPOSAL_KEY,
   OMBUDS_ASKS_KEY,
   agreementForAdoption,
+  anyOf,
   asksBy,
   conflictAgreementWrite,
+  contactsMatcher,
   effectiveAgreement,
   memberNameMatcher,
   ombudsAskProblem,
   ombudsPointer,
+  proposalKeyFor,
   proposedAgreement,
   publicAgreementView,
 } from "../lib/conflictAgreement";
@@ -68,7 +73,7 @@ import { readGameStart } from "../lib/gameStart";
 import { liveIntakeRecipients, type IntakeHolding } from "../lib/restorativeIntake";
 import { numberVar, stringVar } from "../lib/variables";
 import { appendToConfigList, readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
-import { thresholdsFor } from "../../shared/ballotSubjects";
+import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
 import {
   CONFLICT_AGREEMENT,
@@ -80,6 +85,7 @@ import {
   type ConflictAgreementContent,
 } from "../../shared/conflictAgreement";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
+import { mayReadCanvas } from "./canvas";
 
 /** The one subject ref, so a second change cannot open while one is running (`open_key` is unique while open). */
 export const AGREEMENT_BALLOT_REF = "agreement";
@@ -196,13 +202,28 @@ export function register(app: Express, deps: Deps): void {
   const current = () => effectiveAgreement(deps.agreement.get(), deps.readExitPolicy()?.restorative, roleIds());
   const namesMember = async () => memberNameMatcher((await deps.members.all()).map((m: any) => m?.name));
 
-  /** Members read it whole, and so do admins. */
-  const mayRead = async (req: Parameters<Deps["isAdmin"]>[0], user: any) => deps.hasMembership(user) || (await isAdmin(req));
+  /**
+   * Members read it whole, and so do admins. "Member" is the canvas's answer
+   * (`mayReadCanvas`): `membershipGranted`, or a stage grant at Member or
+   * above, which PUT /api/admin/players/:id/stage writes alone and
+   * server/lib/admission.ts counts as an admission. This asked
+   * `hasMembership` only, so a member placed by stage grant read every canvas
+   * block and voted on changes to this agreement, and was refused the
+   * agreement itself, its safety contacts and the ombuds door as a
+   * non-member (Wave 3a audit, 2026-09-28). One predicate, one answer.
+   */
+  const mayRead = (req: Parameters<Deps["isAdmin"]>[0], user: any) => mayReadCanvas(deps, req, user);
+
+  /** Whether anybody holds this role today, by the intake's own reach rule. */
+  const heldToday = (roleId: string) => liveIntakeRecipients(deps.roleHolders(), roleId).length > 0;
 
   app.get("/api/conflict-agreement/public", async (_req, res) => {
     const { agreement, stored } = current();
     if (!stored) return res.json({ stored: false, agreement: null });
-    res.json({ stored: true, agreement: publicAgreementView(agreement, deps.loadRoles(), await namesMember()) });
+    res.json({
+      stored: true,
+      agreement: publicAgreementView(agreement, deps.loadRoles(), anyOf(await namesMember(), contactsMatcher([agreement])), heldToday),
+    });
   });
 
   app.get("/api/conflict-agreement", async (req, res) => {
@@ -235,7 +256,7 @@ export function register(app: Express, deps: Deps): void {
             id: open.id,
             title: open.title,
             closesAt: open.closesAt,
-            proposal: proposedAgreement(await readConfigDocument(pool, CONFLICT_AGREEMENT_PROPOSAL_KEY), open.id, roleIds()),
+            proposal: proposedAgreement(await readConfigDocument(pool, proposalKeyFor(open.id)), open.id, roleIds()),
           }
         : null,
       yourAsks: asksBy(await readConfigDocument(pool, OMBUDS_ASKS_KEY), String(user.id)),
@@ -320,6 +341,8 @@ export function register(app: Express, deps: Deps): void {
     }
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
+    // The village's own settings ride along, so a structural bar the village
+    // raised is the bar this vote freezes, as the Decision Matrix prints it.
     const dials = thresholdsFor(
       { subjects: [CONFLICT_AGREEMENT] },
       villageMethod === "hypha" ? "custom" : (villageMethod as BallotMethod),
@@ -327,6 +350,7 @@ export function register(app: Express, deps: Deps): void {
         unityPct: Math.max(0, numberVar("governance.unity_pct")),
         quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
       },
+      thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)),
     );
     const conducts: BallotMethod = dials.method ?? (villageMethod === "hypha" ? "custom" : villageMethod);
     const snapshot = deps.weightModeNow();
@@ -338,7 +362,13 @@ export function register(app: Express, deps: Deps): void {
       subjectType: CONFLICT_AGREEMENT,
       subjectRef: AGREEMENT_BALLOT_REF,
       title,
-      docMarkdown: ballotDocument(checked.content, standing.agreement, roleName, await namesMember(), deps.firstName(user.name)),
+      docMarkdown: ballotDocument(
+        checked.content,
+        standing.agreement,
+        roleName,
+        anyOf(await namesMember(), contactsMatcher([checked.content, standing.agreement])),
+        deps.firstName(user.name),
+      ),
       method: conducts,
       weightMode: snapshot.mode,
       weightToken: snapshot.token,
@@ -347,8 +377,10 @@ export function register(app: Express, deps: Deps): void {
       durationDays: Math.max(1, numberVar(conducts === "consent" ? "governance.consent_window_days" : "governance.vote_days")),
       openedBy: user.id,
       electorate,
+      // One key per ballot, never shared: a carried change waiting for its
+      // landing date keeps its own words however many open after it.
       onOpen: (conn, ballotId) =>
-        writeConfigDocument(conn, CONFLICT_AGREEMENT_PROPOSAL_KEY, {
+        writeConfigDocument(conn, proposalKeyFor(ballotId), {
           ballotId,
           agreement: checked.content,
           proposedBy: String(user.id),

@@ -37,13 +37,16 @@
  * ── THE RESTORATIVE BLOCK CAN BELONG TO THE CONFLICT AGREEMENT ─────────────
  *
  * Once a village saves a conflict agreement (server/lib/conflictAgreement.ts),
- * `readExitPolicy()` answers the restorative block from it. Two things here
+ * `readExitPolicy()` answers the restorative block from it. Three things here
  * follow (2026-09-28):
  *
- *   1. The public read serves that block to anybody who is not a member with
- *      the agreement's public rule: a step naming a member is withheld, and
- *      the outside contact is its organisation, with no name and no way to
- *      reach them. Members read it whole.
+ *   1. The public read serves the block to anybody who is not a member with
+ *      the agreement's public rule, WHETHER OR NOT an agreement is stored: a
+ *      step naming a member, or one of the agreement's own contacts or how to
+ *      reach them, is withheld, and the outside contact is its organisation,
+ *      with no name and no way to reach them. Members read it whole, and a
+ *      member is the canvas's answer (`mayReadCanvas`), a stage grant at
+ *      Member included.
  *   2. The policy's own save leaves the block alone while the agreement holds
  *      it, and refuses a body that tries to change it, naming where it lives.
  *      Storing it would be a change no reader ever sees. For the same reason
@@ -51,6 +54,13 @@
  *      readers are served them: a village whose stored block still holds the
  *      platform's starting steps can clear its draft banner once the agreement
  *      answers them.
+ *   3. After the Birthing the save refuses any change to the block, stored
+ *      agreement or not. Plan section 2.3 puts the conflict path under the
+ *      consequence pen: the founders before the Birthing, a village vote
+ *      after it (`POST /api/governance/conflict-agreement-changes`, which works
+ *      with no stored agreement too). Without this, a village birthed with no
+ *      agreement document had its conflict path rewritten by an admin alone
+ *      while every member was told only a vote could change it.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -77,7 +87,19 @@ import {
 } from "../lib/exitPolicy";
 import type { makeIdentityGate } from "../lib/identityConfirm";
 import { intakeRoleForReaders, type IntakeHolding } from "../lib/restorativeIntake";
-import { RESTORATIVE_IN_AGREEMENT, memberNameMatcher, restorativeForPublic, sameRestorative } from "../lib/conflictAgreement";
+import {
+  AGREEMENT_CHANGE_DOOR,
+  RESTORATIVE_IN_AGREEMENT,
+  RESTORATIVE_IS_A_VOTE,
+  anyOf,
+  contactsMatcher,
+  effectiveAgreement,
+  memberNameMatcher,
+  restorativeForPublic,
+  sameRestorative,
+} from "../lib/conflictAgreement";
+import { readGameStart } from "../lib/gameStart";
+import { mayReadCanvas } from "./canvas";
 import type { DbDocument } from "../repos/store-db";
 import { cancelOpenExit, markExitResolved, markExitSettling } from "../repos/exits";
 
@@ -97,6 +119,8 @@ export type ExitDeps = Pick<
 > & {
   /** Whether the village has saved a conflict agreement, which then answers the restorative block. */
   agreementStored(): boolean;
+  /** The stored agreement document, raw, for the contacts the public read must never print. */
+  agreementDoc(): unknown;
   /**
    * The policy with the platform defaults read through: the copy every READER
    * is served, so every response here builds on it and never on
@@ -123,7 +147,7 @@ export type ExitDeps = Pick<
 };
 
 /** What the exit-policy save needs, and nothing it does not. */
-export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored">;
+export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "getPool" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored">;
 
 /**
  * THE EXIT-POLICY SAVE, as one callable function (canvas-frames-server lane,
@@ -147,6 +171,11 @@ export async function saveExitPolicy(
       error: "incomplete_policy",
       message: "The policy needs voluntary, involuntary and restorative sections",
     } };
+  }
+  // After the Birthing the restorative block is the village's to change, by a
+  // vote on its conflict agreement, whether or not an agreement is stored.
+  if ((await readGameStart(deps.getPool())).started && !sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
+    return { status: 409, body: { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_VOTE, door: AGREEMENT_CHANGE_DOOR } };
   }
   // While the conflict agreement holds the restorative block, this save
   // carries the stored block forward and refuses a body that changes it.
@@ -214,10 +243,14 @@ export function register(app: Express, deps: ExitDeps): void {
     const policy: any = deps.readExitPolicy();
     // Signed in or not, both are fine here; only a member reads the block whole.
     const viewer = await deps.authedUser(req);
-    const member = !!viewer && (deps.hasMembership(viewer) || (await deps.isAdmin(req)));
+    const member = !!viewer && (await mayReadCanvas(deps, req, viewer));
+    const own = effectiveAgreement(deps.agreementDoc(), policy?.restorative, deps.loadRoles().map((r: any) => String(r.id))).agreement;
     const restorative = member
       ? policy?.restorative ?? {}
-      : restorativeForPublic(policy?.restorative ?? {}, memberNameMatcher((await deps.members.all()).map((m: any) => m?.name)));
+      : restorativeForPublic(
+          policy?.restorative ?? {},
+          anyOf(memberNameMatcher((await deps.members.all()).map((m: any) => m?.name)), contactsMatcher([own])),
+        );
     const namedCircle = (id: unknown) => {
       const wanted = String(id ?? "");
       if (!wanted) return null;
@@ -292,6 +325,8 @@ export function register(app: Express, deps: ExitDeps): void {
       terms: EXIT_POLICY_TERMS,
       circles: deps.circlesRepo.all().map((c: any) => ({ id: c.id, name: c.name })),
       conflictAgreementStored: deps.agreementStored(),
+      // After the Birthing the restorative block changes only by a village vote, so Departures stops offering it.
+      gameStarted: (await readGameStart(deps.getPool())).started,
     });
   });
 

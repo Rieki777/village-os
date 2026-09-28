@@ -180,10 +180,26 @@ export const PEN_REFUSALS: Record<CanvasPen, string> = {
   admin: "This section stays with the administrators. You can suggest words, and they decide.",
 };
 
-/** The consequence pen's vote, which nothing builds yet. */
+/** The consequence pen's vote for the exit terms and the matrix, which nothing builds yet. */
 export const CONSEQUENCE_VOTE_NOT_BUILT =
   "The Game has started, so this goes to a vote of the whole village at the structural tier. " +
   "That vote is not built yet, so this suggestion stays open until it is.";
+
+/**
+ * The care door's vote IS built: it is the conflict agreement's change vote
+ * (POST /api/governance/conflict-agreement-changes), which carries the whole
+ * agreement and not one field of it, so a canvas suggestion cannot go to it
+ * as it stands. Saying "not built yet" here promised a pick-up that would
+ * never come (Wave 3a audit, 2026-09-28).
+ */
+export const CARE_DOOR_IS_THE_AGREEMENT_VOTE =
+  "The Game has started, so the care door changes only by a vote on the village's conflict agreement. " +
+  "A member who can open votes opens it from the agreement on the governance page, /governance#conflict-agreement. " +
+  "That vote carries the whole agreement, so this suggestion cannot go to it as it stands.";
+
+/** Before the Birthing, once an agreement is stored, the care door's words live in it. */
+export const CARE_DOOR_IN_AGREEMENT =
+  "Nothing was adopted. The care door now comes from the village's conflict agreement, so change it there, on the governance page, /governance#conflict-agreement.";
 
 /** A suggestion somebody else is deciding at this moment. */
 export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Look again in a moment.";
@@ -673,7 +689,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     }
 
     // The consequence pen: the exit terms, the care door and the matrix.
-    if (rule.how === "ballot") return { ok: false, status: 409, body: { error: CONSEQUENCE_VOTE_NOT_BUILT } };
+    if (rule.how === "ballot") {
+      return { ok: false, status: 409, body: { error: p.door === "exit:restorative" ? CARE_DOOR_IS_THE_AGREEMENT_VOTE : CONSEQUENCE_VOTE_NOT_BUILT } };
+    }
     if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.consequence } };
     if (p.target === "matrix") {
       const parsed = parseMatrixRow(p.change);
@@ -683,6 +701,11 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       return { ok: true, outcome: { wrote: "matrix-row", rowId }, message: "Adopted. The Decision Matrix carries this row." };
     }
     const answer = await saveExitPolicy(deps.exitPolicy, req, exitBodyWith(String(p.door), p.change ?? {}));
+    // The save's own sentence speaks to the Departures editor ("reload this
+    // page to edit the rest of the policy"), which is not where this is.
+    if (answer.status === 409 && answer.body.error === "restorative_in_agreement") {
+      return { ok: false, status: 409, body: { error: "restorative_in_agreement", message: CARE_DOOR_IN_AGREEMENT } };
+    }
     if (answer.status !== 200) return { ok: false, status: answer.status, body: answer.body };
     return {
       ok: true,

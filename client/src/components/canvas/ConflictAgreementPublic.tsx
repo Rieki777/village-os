@@ -42,11 +42,14 @@ const ConflictAgreementEditor = lazy(() => import("./ConflictAgreementEditor"));
 /** Text the public may read, or null where the server withheld it for naming a member. */
 type Guarded = string | null;
 
-/** What GET /api/conflict-agreement/public answers, as `publicAgreementView` builds it. */
+/**
+ * What GET /api/conflict-agreement/public answers, as `publicAgreementView` builds it.
+ * `heldToday` is whether anybody holds the role today, by the intake's own reach rule.
+ */
 export interface PublicAgreement {
   steps: Array<{ what: Guarded; whoInRoom: Guarded }>;
-  careRole: { id: string; name: Guarded } | null;
-  coverRole: { id: string; name: Guarded } | null;
+  careRole: { id: string; name: Guarded; heldToday?: boolean } | null;
+  coverRole: { id: string; name: Guarded; heldToday?: boolean } | null;
   replyHours: number | null;
   outsideContacts: Array<{ id: string; label: Guarded }>;
   whenPowerInvolved: { role: Guarded; outsideContact: Guarded; words: Guarded };
@@ -82,11 +85,11 @@ const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00Z` : i
  */
 export function readable(
   a: ConflictAgreementContent & { version?: number; adoptedHow?: PublicAgreement["adoptedHow"]; adoptedAt?: string | null },
-  roles: ReadonlyArray<{ id: string; name: string }>,
+  roles: ReadonlyArray<{ id: string; name: string; liveHolders?: number }>,
 ): PublicAgreement {
   const role = (id: string) => {
     const r = id ? roles.find((x) => x.id === id) : undefined;
-    return r ? { id: r.id, name: r.name } : null;
+    return r ? { id: r.id, name: r.name, heldToday: (r.liveHolders ?? 0) > 0 } : null;
   };
   const powerContact = a.outsideContacts.find((c) => c.id === a.whenPowerInvolved.outsideContactId);
   return {
@@ -108,6 +111,26 @@ export function readable(
     reviewDate: a.reviewDate,
     withheld: false,
   };
+}
+
+/**
+ * THE REPLY PROMISE, only while somebody would keep it (Wave 3a audit,
+ * 2026-09-28). The card printed "hears back within N hours" whether or not
+ * anybody held the care role, while /exit-policy, on the same village, said
+ * nobody did. Every seat has a term, so a held care role goes empty at a
+ * season turn as a matter of course. The rule is /exit-policy's: a request
+ * reaches the care role's live holders and nobody else, so the promise is
+ * printed while the care role is held, and the same "Nobody holds" sentence
+ * otherwise. With no care role, the outside contacts are the way in, and the
+ * promise is theirs.
+ */
+function replyLine(a: PublicAgreement): string {
+  if (a.replyHours === null) return "";
+  if (a.careRole) {
+    if (a.careRole.heldToday) return ` Someone who reaches out hears back within ${hours(a.replyHours)}.`;
+    return ` Nobody holds the ${a.careRole.name ?? "care"} role today, so a private intake would reach nobody.`;
+  }
+  return a.outsideContacts.length > 0 ? ` Someone who reaches a contact outside the village hears back within ${hours(a.replyHours)}.` : "";
 }
 
 export function AgreementBody({ a }: { a: PublicAgreement }) {
@@ -137,7 +160,7 @@ export function AgreementBody({ a }: { a: PublicAgreement }) {
         <h3 className="font-semibold text-stone-900">Who hears it first</h3>
         <p className="mt-1">
           {a.careRole ? <>The {show(a.careRole.name)} role{a.coverRole ? <>, and the {show(a.coverRole.name)} role when they cannot</> : null}.</> : "No role is named yet."}
-          {a.replyHours !== null ? ` Someone who reaches out hears back within ${hours(a.replyHours)}.` : ""}
+          {replyLine(a)}
         </p>
         {outside.length > 0 && (
           <p className="mt-1">

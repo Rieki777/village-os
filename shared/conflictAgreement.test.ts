@@ -105,8 +105,8 @@ describe("parseAgreementContent: the shape every save passes", () => {
   });
 
   it("refuses an unknown care or cover role, a cover without a care role, and a cover that is the care role", () => {
-    expect(refusal({ ...good(), careRole: "ghost" })).toEqual({ ok: false, frame: "care", error: 'Unknown care role "ghost"' });
-    expect(refusal({ ...good(), coverRole: "ghost" }).error).toBe('Unknown cover role "ghost"');
+    expect(refusal({ ...good(), careRole: "ghost" })).toEqual({ ok: false, frame: "care", error: "The care role chosen here no longer exists. Choose another role, or none." });
+    expect(refusal({ ...good(), coverRole: "ghost" }).error).toBe("The cover role chosen here no longer exists. Choose another role, or none.");
     expect(refusal({ ...good(), careRole: "", coverRole: "cover" }).error).toContain("choose the care role first");
     expect(refusal({ ...good(), coverRole: "care" }).error).toContain("The cover role is the care role itself");
   });

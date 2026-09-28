@@ -64,7 +64,7 @@ import { hasGoverningPurpose } from "../../shared/governingPurpose";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import type { CanvasBlockId } from "../../shared/governanceCanvas";
 import { LIFECYCLE_RANK } from "../../shared/modules";
-import { villageHandoverState } from "./capabilityHolding";
+import { STEWARD_ROLE_ID, capabilityHoldings, villageHandoverState } from "./capabilityHolding";
 import { outsideContactNamed, platformDefaultTermKeys, replyHoursOf } from "./exitPolicy";
 import { readGameStart } from "./gameStart";
 import { governingPurpose } from "./governingPurpose";
@@ -425,8 +425,21 @@ function facts(block: CanvasBlockId, deps: ObservedDeps): FactReader[] {
           label: "The village's powers",
           read: async () => {
             const h = await villageHandoverState(deps.pool);
-            if (!h.held.length) return "The village holds none of its transferable powers yet. The administrators carry them.";
-            return `The village holds these powers: ${listed(h.held.map((c) => capabilityLabel(c as Capability)))}.`;
+            if (h.held.length) return `The village holds these powers: ${listed(h.held.map((c) => capabilityLabel(c as Capability)))}.`;
+            // WHO CARRIES THEM, by where they sit (Wave 3a audit, 2026-09-28).
+            // The launch seats all of them at the steward seat, which
+            // `villageHandoverState` rightly does not count as handed over,
+            // and from then on the seat's holders act and an admin who is not
+            // seated meets the gate's hatch. So "the administrators carry
+            // them" is true only while none sits there.
+            const atSeat = await capabilityHoldings(deps.pool)
+              .then((rows) => rows.filter((r) => r.holderRoleId === STEWARD_ROLE_ID))
+              .catch(() => []);
+            if (!atSeat.length) return "The village holds none of its transferable powers yet. The administrators carry them.";
+            const seat = atSeat[0].holderRoleName ?? "steward";
+            return h.remaining.length === atSeat.length
+              ? `The village holds none of its transferable powers yet. The ${seat} seat holds them until the village moves them to roles its members hold.`
+              : `The village holds none of its transferable powers yet. The ${seat} seat holds some of them and the administrators carry the rest.`;
           },
         },
         {

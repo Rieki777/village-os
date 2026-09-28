@@ -148,6 +148,52 @@ describe("ConflictAgreementEditor", () => {
     expect((await screen.findByRole("status")).textContent).toContain("The vote is open");
   });
 
+  it("shows a care role retired since as gone, never as 'No role chosen', and choosing none clears it", async () => {
+    serve(payload({ agreement: { ...payload().agreement, careRole: "r-old" } }));
+    render(<ConflictAgreementEditor />);
+    await screen.findByDisplayValue("We talk first");
+    fireEvent.click(frameButton("Who hears it first"));
+    const care = screen.getByLabelText(/The care role: who hears a request first/) as HTMLSelectElement;
+    expect(care.value).toBe("r-old");
+    expect(care.selectedOptions[0].textContent).toBe("No longer in the list. Choose another, or none");
+    fireEvent.change(care, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save as a draft" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body.agreement.careRole).toBe("");
+  });
+
+  it("sends a contact typed over, or added where one was removed, under a new id, so nobody's ask follows them", async () => {
+    const ada = { id: "oc-1", name: "Ada Quill", organisation: "Cohort Care", role: "Ombuds", howToReach: "ada@example.invalid" };
+    const loaded = payload({ agreement: { ...payload().agreement, outsideContacts: [ada], whenPowerInvolved: { roleId: "", outsideContactId: "oc-1", words: "" } } });
+
+    serve(loaded);
+    const typed = render(<ConflictAgreementEditor />);
+    await screen.findByDisplayValue("We talk first");
+    fireEvent.click(frameButton("Who hears it first"));
+    fireEvent.change(screen.getByDisplayValue("Ada Quill"), { target: { value: "Ben Ortiz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save as a draft" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const over = sent[0].body.agreement;
+    expect(over.outsideContacts[0].name).toBe("Ben Ortiz");
+    expect(over.outsideContacts[0].id).not.toBe("oc-1");
+    expect(over.whenPowerInvolved.outsideContactId).toBe(over.outsideContacts[0].id);
+    typed.unmount();
+
+    sent.length = 0;
+    serve(loaded);
+    render(<ConflictAgreementEditor />);
+    await screen.findByDisplayValue("We talk first");
+    fireEvent.click(frameButton("Who hears it first"));
+    fireEvent.click(screen.getByRole("button", { name: "Remove this contact" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a contact outside the village" }));
+    fireEvent.change(screen.getByLabelText("Their name"), { target: { value: "Ben Ortiz" } });
+    fireEvent.change(screen.getByLabelText("Organisation"), { target: { value: "Cohort Care" } });
+    fireEvent.change(screen.getByLabelText("How to reach them"), { target: { value: "ben@example.invalid" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save as a draft" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body.agreement.outsideContacts[0].id).not.toBe("oc-1");
+  });
+
   it("gives a member with no pen every frame to read and no button that writes", async () => {
     serve(payload({ pen: { how: "founders", mayWrite: false, mayPropose: false } }));
     render(<ConflictAgreementEditor />);

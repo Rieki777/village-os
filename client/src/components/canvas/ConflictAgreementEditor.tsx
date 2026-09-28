@@ -27,7 +27,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authToken } from "@/lib/gameApi";
-import { ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "@/lib/agreementDraft";
+import { contactsWithFreshIds, freshContactId, ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "@/lib/agreementDraft";
 import {
   AGREEMENT_FRAMES,
   APPEAL_NOT_ENFORCED,
@@ -108,11 +108,14 @@ const label = "block text-xs font-medium text-stone-600";
 const smallButton = "min-h-[44px] rounded-lg border border-stone-300 px-3 text-sm text-stone-700 hover:bg-stone-50";
 const primary = "min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-50";
 
-function newContactId(taken: readonly string[]): string {
-  let n = taken.length + 1;
-  while (taken.includes(`oc-${n}`)) n += 1;
-  return `oc-${n}`;
-}
+/**
+ * What a picker shows for a saved choice it no longer offers: a role retired
+ * since, or an outside contact whose row was emptied. Without this option the
+ * browser shows the picker's first option ("No role chosen"), the founder sees
+ * the state they want, and every save is refused with an id the page never
+ * showed (Wave 3a audit, 2026-09-28).
+ */
+const GONE = "No longer in the list. Choose another, or none";
 
 function roleLabel(r: RoleOption): string {
   if (r.liveHolders === 0) return `${r.name}, nobody holds it today`;
@@ -163,7 +166,9 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
   const send = async (kind: "draft" | "adopt" | "propose") => {
     setError(null);
     setNotice(null);
-    const parsed = parseAgreementContent(bodyOf(draft), { roleIds });
+    // A contact typed over, or added where one was removed, is a new person to the ombuds door.
+    const outgoing = contactsWithFreshIds(draft, payload.agreement.outsideContacts);
+    const parsed = parseAgreementContent(bodyOf(outgoing), { roleIds });
     if (!parsed.ok) {
       setError(parsed.error);
       setFrame(parsed.frame);
@@ -182,8 +187,8 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
     try {
       const r =
         kind === "propose"
-          ? await fetch("/api/governance/conflict-agreement-changes", { method: "POST", headers: headers(), body: JSON.stringify({ agreement: bodyOf(draft) }) })
-          : await fetch("/api/admin/conflict-agreement", { method: "PUT", headers: headers(), body: JSON.stringify({ agreement: bodyOf(draft), adopt: kind === "adopt" }) });
+          ? await fetch("/api/governance/conflict-agreement-changes", { method: "POST", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing) }) })
+          : await fetch("/api/admin/conflict-agreement", { method: "PUT", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing), adopt: kind === "adopt" }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         setError(String(d?.error ?? "That was not saved."));
@@ -308,6 +313,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                 The care role: who hears a request first
                 <select className={input} value={draft.careRole} onChange={(e) => set({ careRole: e.target.value, coverRole: e.target.value && e.target.value !== draft.coverRole ? draft.coverRole : "" })}>
                   <option value="">No role chosen</option>
+                  {draft.careRole && !payload.roles.some((r) => r.id === draft.careRole) && <option value={draft.careRole}>{GONE}</option>}
                   {payload.roles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {roleLabel(r)}
@@ -319,6 +325,9 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                 The cover role: who hears it when the care role cannot
                 <select className={input} value={draft.coverRole} disabled={!draft.careRole} onChange={(e) => set({ coverRole: e.target.value })}>
                   <option value="">No cover</option>
+                  {draft.coverRole && !rolesOtherThan(payload.roles, draft.careRole).some((r) => r.id === draft.coverRole) && (
+                    <option value={draft.coverRole}>{GONE}</option>
+                  )}
                   {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={r.id}>
                       {roleLabel(r)}
@@ -365,7 +374,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     set({
                       outsideContacts: [
                         ...draft.outsideContacts,
-                        { id: newContactId(draft.outsideContacts.map((c) => c.id)), name: "", organisation: "", role: "", howToReach: "" },
+                        { id: freshContactId(draft.outsideContacts.map((c) => c.id)), name: "", organisation: "", role: "", howToReach: "" },
                       ],
                     })
                   }
@@ -402,6 +411,12 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                   }}
                 >
                   <option value="">Not named yet</option>
+                  {(draft.whenPowerInvolved.roleId
+                    ? !rolesOtherThan(payload.roles, draft.careRole).some((r) => r.id === draft.whenPowerInvolved.roleId)
+                    : !!draft.whenPowerInvolved.outsideContactId &&
+                      !namedContacts(draft.outsideContacts).some((c) => c.id === draft.whenPowerInvolved.outsideContactId)) && (
+                    <option value={draft.whenPowerInvolved.roleId ? `role:${draft.whenPowerInvolved.roleId}` : `contact:${draft.whenPowerInvolved.outsideContactId}`}>{GONE}</option>
+                  )}
                   {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={`role:${r.id}`}>
                       {roleLabel(r)}

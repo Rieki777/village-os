@@ -25,8 +25,11 @@
  *                                every synchronous read. So it is WRITTEN only
  *                                through that handle. The launch checklist,
  *                                which has a pool and no cache, READS it here.
- *   conflict-agreement-proposal  what an open agreement ballot would adopt.
- *                                Nothing caches it. Written here INSIDE the
+ *   conflict-agreement-proposal:<ballot id>
+ *                                what one agreement ballot would adopt, one
+ *                                key per ballot so a carried change waiting
+ *                                for its landing keeps its own words. Nothing
+ *                                caches it. Written here INSIDE the
  *                                transaction that opens the ballot, which is
  *                                why the writer takes a connection too.
  *   ombuds-asks                  the ombuds door's pointers. Nothing caches it,

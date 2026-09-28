@@ -2,7 +2,7 @@
  * The conflict agreement editor's row edits (client/src/lib/agreementDraft.ts).
  */
 import { describe, expect, it } from "vitest";
-import { ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "./agreementDraft";
+import { contactsWithFreshIds, freshContactId, ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "./agreementDraft";
 
 describe("agreementDraft", () => {
   it("removes exactly one row and leaves the list it was handed alone", () => {
@@ -25,5 +25,17 @@ describe("agreementDraft", () => {
     expect(rolesOtherThan([{ id: "care" }, { id: "cover" }], "care")).toEqual([{ id: "cover" }]);
     expect(namedContacts([{ name: " " }, { name: "Ada" }])).toEqual([{ name: "Ada" }]);
     expect(ideasNotYetAdded([{ name: "Beginning Anew" }, { name: "A walk" }], [{ name: "A walk", when: "" }])).toEqual([{ name: "Beginning Anew" }]);
+  });
+
+  it("never hands a contact an id another contact had, and keeps the id of a contact nobody changed", () => {
+    const now = Date.UTC(2026, 8, 28);
+    expect(freshContactId([], now)).toBe(`oc-${now.toString(36)}`);
+    expect(freshContactId([`oc-${now.toString(36)}`], now)).toBe(`oc-${now.toString(36)}-1`);
+    const ada = { id: "oc-1", name: "Ada Quill", organisation: "Cohort Care", role: "", howToReach: "ada@x" };
+    const same = { outsideContacts: [{ ...ada, organisation: "Cohort Care Network" }], whenPowerInvolved: { outsideContactId: "oc-1" } };
+    expect(contactsWithFreshIds(same, [ada], now)).toEqual(same);
+    const typedOver = contactsWithFreshIds({ outsideContacts: [{ ...ada, name: "Ben Ortiz" }], whenPowerInvolved: { outsideContactId: "oc-1" } }, [ada], now);
+    expect(typedOver.outsideContacts[0].id).toBe(`oc-${now.toString(36)}`);
+    expect(typedOver.whenPowerInvolved.outsideContactId).toBe(`oc-${now.toString(36)}`);
   });
 });

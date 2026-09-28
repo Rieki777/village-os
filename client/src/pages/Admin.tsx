@@ -7092,8 +7092,8 @@ export function ExitsAdminTab({ password }: { password: string }) {
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
           <p className="text-xs text-gray-500 mb-4">
-            Every field here is printed at /exit-policy for anyone to read,
-            signed in or not. This is the highest-stakes copy on the site: it
+            Every field here is printed at /exit-policy, signed in or not, except the outside
+            contact's name and how to reach them, which only members see. This is the highest-stakes copy on the site: it
             says what happens to a person, and to what they built, when they
             leave{policyDraft.placeholder ? ". The banner above it says these are still the platform's starting terms" : ""}.
           </p>
@@ -7184,7 +7184,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
             </label>
           </div>
 
-          {data?.conflictAgreementStored ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} /> : (<>
+          {data?.conflictAgreementStored || data?.gameStarted ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} byVote={!!data?.gameStarted} /> : (<>
           <StepListEditor
             label="The restorative path"
             hint="Printed under Repair before departure. Its content reaches only the people in the room; these are the steps, never the content."

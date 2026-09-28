@@ -20,12 +20,12 @@ const POLICY = {
   restorative: { intakeContactRole: "", steps: ["We talk it out. In the room: the two of us"] },
 };
 
-function serve(conflictAgreementStored: boolean) {
+function serve(conflictAgreementStored: boolean, gameStarted = false) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (String(url).endsWith("/admin/exits")) {
-        return { ok: true, status: 200, json: async () => ({ policy: POLICY, defaults: POLICY, circles: [], exits: [], conflictAgreementStored }) };
+        return { ok: true, status: 200, json: async () => ({ policy: POLICY, defaults: POLICY, circles: [], exits: [], conflictAgreementStored, gameStarted }) };
       }
       return { ok: true, status: 200, json: async () => [] };
     }),
@@ -48,6 +48,16 @@ describe("the Departures tab and the conflict agreement", () => {
     expect(screen.queryByDisplayValue("We talk it out. In the room: the two of us")).toBeNull();
     // The rest of the policy still edits.
     expect(await screen.findByLabelText("How contributed value is honored")).toBeTruthy();
+  });
+
+  it("after the Birthing, with no agreement stored, the fields go too: the path changes only by a village vote", async () => {
+    serve(false, true);
+    render(<ExitsAdminTab password="secret" />);
+    const link = await screen.findByRole("link", { name: "Open the agreement, where a member who can open votes proposes a change" });
+    expect(link.getAttribute("href")).toBe(AGREEMENT_HREF);
+    expect(screen.getByText(/change only by a village vote on its conflict agreement/)).toBeTruthy();
+    expect(screen.queryByDisplayValue("We talk it out. In the room: the two of us")).toBeNull();
+    expect(screen.queryByText("Where a conflict goes")).toBeNull();
   });
 
   it("before there is an agreement, the restorative fields are there as before", async () => {

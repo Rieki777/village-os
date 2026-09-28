@@ -8,11 +8,14 @@
  *
  * ── IT READS WHAT THE BALLOT ASKED, NEVER THE DOCUMENT ────────────────────
  *
- * The agreement being adopted was written under `conflict-agreement-proposal`
- * inside the transaction that opened the ballot, with the ballot's id beside
- * it. A proposal carrying any other id is some other vote's, so this holds
- * and says why instead of adopting it. The markdown members read is copy and
- * is never parsed back.
+ * The agreement being adopted was written under this ballot's own key
+ * (`proposalKeyFor`, `conflict-agreement-proposal:<ballot id>`) inside the
+ * transaction that opened the ballot, with the ballot's id beside it. A key
+ * per ballot, because a carried change waits for its landing date after the
+ * close has freed the subject, and a second change opened in that window used
+ * to overwrite the one shared key. A proposal carrying any other id is some
+ * other vote's, so this holds and says why instead of adopting it. The
+ * markdown members read is copy and is never parsed back.
  *
  * ── IT RUNS THE SAME CHECKS THE OPEN RAN ──────────────────────────────────
  *
@@ -33,7 +36,7 @@ import type { BallotRow } from "./ballots";
 import type { CloseRouting } from "./applyDue";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { DEFAULT_EXIT_POLICY } from "./exitPolicy";
-import { CONFLICT_AGREEMENT_PROPOSAL_KEY, adoptedByBallot, agreementForAdoption } from "./conflictAgreement";
+import { adoptedByBallot, agreementForAdoption, proposalKeyFor } from "./conflictAgreement";
 
 export interface ConflictAgreementCloserDeps {
   getPool: () => Pool;
@@ -91,7 +94,7 @@ export function conflictAgreementCloser(deps: ConflictAgreementCloserDeps) {
       return out;
     };
 
-    const asked = (await readConfigDocument<{ ballotId?: unknown; agreement?: unknown }>(deps.getPool(), CONFLICT_AGREEMENT_PROPOSAL_KEY)) ?? null;
+    const asked = (await readConfigDocument<{ ballotId?: unknown; agreement?: unknown }>(deps.getPool(), proposalKeyFor(b.id))) ?? null;
     if (!asked || String(asked.ballotId ?? "") !== b.id) {
       return hold("the agreement this vote would adopt was not recorded against it, so there is nothing to write");
     }

@@ -36,8 +36,10 @@ import {
   NAME_WITHHELD,
   OMBUDS_ASKS_KEY,
   RESTORATIVE_IN_AGREEMENT,
+  proposalKeyFor,
   withConflictAgreement,
 } from "../lib/conflictAgreement";
+import { loadVariables, setVariable } from "../lib/variables";
 import { conflictAgreementCloser } from "../lib/conflictAgreementCloser";
 import { ballotById } from "../lib/ballots";
 import { conflictDoorFacts } from "../lib/launchGovernance";
@@ -47,7 +49,7 @@ import { register as registerExits } from "./exits";
 const configured = testDbConfigured();
 if (!configured) console.warn("[conflictAgreement.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
 
-type Person = { id: string; name: string; role: string; membershipGranted: boolean; roleCapabilities: string[] };
+type Person = { id: string; name: string; role: string; membershipGranted: boolean; stageGranted?: string; roleCapabilities: string[] };
 
 /** The people in this village, by the bearer token each one sends. */
 const PEOPLE: Record<string, Person> = {
@@ -55,7 +57,13 @@ const PEOPLE: Record<string, Person> = {
   proposer: { id: "ca-proposer", name: "Tomás Vey", role: "member", membershipGranted: true, roleCapabilities: ["proposal.open"] },
   admin: { id: "ca-admin", name: "Moss Fielding", role: "admin", membershipGranted: true, roleCapabilities: [] },
   stranger: { id: "ca-stranger", name: "Rook Talbot", role: "member", membershipGranted: false, roleCapabilities: [] },
+  // Admitted the other way: an admin placed them at Member (PUT /api/admin/players/:id/stage writes only this).
+  granted: { id: "ca-granted", name: "Wren Oakes", role: "member", membershipGranted: false, stageGranted: "member", roleCapabilities: [] },
 };
+
+/** Who holds each role today. The care role is held unless a case empties it. */
+const HELD = [{ roleId: "ca-care", userId: "ca-admin", termEndsAt: null }];
+let HOLDERS: Array<{ roleId: string; userId: string; termEndsAt: null }> = HELD;
 
 const ROLES = [
   { id: "ca-care", name: "Care Holder" },
@@ -120,13 +128,15 @@ const agreement = (over: Record<string, unknown> = {}) => ({
 
 /** Put the village back where every case starts: no agreement, the old policy, not started. */
 async function reset() {
-  await pool.query("DELETE FROM app_config WHERE config_key IN (?,?,?,?,?)", [ // module-review-ok: each case starts from the same village, on the scratch schema this suite provisioned
+  await pool.query("DELETE FROM app_config WHERE config_key IN (?,?,?,?,?) OR config_key LIKE ?", [ // module-review-ok: each case starts from the same village, on the scratch schema this suite provisioned
     CONFLICT_AGREEMENT_KEY,
     CONFLICT_AGREEMENT_PROPOSAL_KEY,
     OMBUDS_ASKS_KEY,
     "game-start",
     "exit-policy",
+    `${CONFLICT_AGREEMENT_PROPOSAL_KEY}:%`,
   ]);
+  HOLDERS = HELD;
   await pool.query("DELETE FROM ballots WHERE subject_type = ?", [CONFLICT_AGREEMENT]); // module-review-ok: fixture cleanup on the scratch schema this suite provisioned
   await writeConfigDocument(pool, "exit-policy", OLD_POLICY);
   await exitPolicyRepo.load();
@@ -173,7 +183,7 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
         notices.push(n);
         return { fresh: true } as any;
       },
-      roleHolders: () => [{ roleId: "ca-care", userId: "ca-admin", termEndsAt: null }],
+      roleHolders: () => HOLDERS,
     };
     register(app, {
       ...common,
@@ -198,6 +208,7 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       roleIdsFor: () => [],
       notifyAdmins: async () => {},
       agreementStored: () => agreementRepo.exists(),
+      agreementDoc: () => agreementRepo.get(),
       readExitPolicy,
       exitPolicyRepo,
     } as any);
@@ -237,6 +248,17 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
     it("the public view says there is no agreement yet, until there is one", async () => {
       expect((await call("GET", "/api/conflict-agreement/public", null)).body).toEqual({ stored: false, agreement: null });
     });
+
+    it("a member the village admitted by a stage grant reads the whole agreement, reaches the ombuds door, and reads the exit policy whole", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      const full = await call("GET", "/api/conflict-agreement", "granted");
+      expect(full.status).toBe(200);
+      expect(full.body.agreement.safetyContacts).toEqual([{ name: "Night crisis line", howToReach: "0800 000 000", when: "" }]);
+      expect((await call("POST", "/api/conflict-agreement/ombuds-asks", "granted", { contactId: "oc-1" })).status).toBe(201);
+      const r = (await call("GET", "/api/exit-policy", "granted")).body.policy.restorative;
+      expect(r.outsideContact).toMatchObject({ name: "Ada Quill", howToReach: "ada@example.invalid" });
+      expect(r.steps[1]).toBe("Then we ask Mara to sit with us. In the room: the two of us and the Care Holder");
+    });
   });
 
   describe("the public view names roles, never people", () => {
@@ -248,7 +270,7 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       expect(view.withheld).toBe(true);
       expect(view.steps[0]).toEqual({ what: "We talk it out", whoInRoom: "the two of us" });
       expect(view.steps[1].what).toBeNull();
-      expect(view.careRole).toEqual({ id: "ca-care", name: "Care Holder" });
+      expect(view.careRole).toEqual({ id: "ca-care", name: "Care Holder", heldToday: true });
       expect(view.outsideContacts).toEqual([{ id: "oc-1", label: "Ombuds at Cohort Care" }]);
       const text = JSON.stringify(r.body);
       for (const hidden of ["Mara", "Ada Quill", "ada@example.invalid", "Night crisis line", "ca-admin"]) expect(text, hidden).not.toContain(hidden);
@@ -264,6 +286,49 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       const m = (await call("GET", "/api/exit-policy", "member")).body.policy.restorative;
       expect(m.steps[1]).toBe("Then we ask Mara to sit with us. In the room: the two of us and the Care Holder");
       expect(m.outsideContact.name).toBe("Ada Quill");
+    });
+
+    it("says whether anybody holds the care role today, so the page promises a reply only when somebody would send it", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      expect((await call("GET", "/api/conflict-agreement/public", null)).body.agreement.careRole).toEqual({ id: "ca-care", name: "Care Holder", heldToday: true });
+      HOLDERS = [];
+      expect((await call("GET", "/api/conflict-agreement/public", null)).body.agreement.careRole).toEqual({ id: "ca-care", name: "Care Holder", heldToday: false });
+    });
+
+    it("never prints the agreement's own contacts, by name or by how to reach them, wherever the founders wrote them", async () => {
+      const named = agreement({
+        steps: [
+          { what: "We ring Ada Quill first", whoInRoom: "the two of us" },
+          { what: "Or we write to ada@example.invalid", whoInRoom: "the two of us" },
+          { what: "We talk it out", whoInRoom: "the two of us" },
+        ],
+        whenPowerInvolved: { roleId: "ca-stewards", outsideContactId: "", words: "Call 0800 000 000 if it cannot wait" },
+        consequencesLadder: { rungs: [{ rung: 1, words: "We ask for a change." }, { rung: 2, words: "We write it down." }], appeal: "Appeal through the Night crisis line." },
+      });
+      expect((await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: named, adopt: true })).status).toBe(200);
+      const hidden = ["Ada Quill", "ada@example.invalid", "0800 000 000", "Night crisis line"];
+
+      const view = (await call("GET", "/api/conflict-agreement/public", null)).body.agreement;
+      expect(view.withheld).toBe(true);
+      expect(view.steps.map((s: any) => s.what)).toEqual([null, null, "We talk it out"]);
+      expect(view.whenPowerInvolved.words).toBeNull();
+      expect(view.consequencesLadder.appeal).toBeNull();
+      for (const h of hidden) expect(JSON.stringify(view), h).not.toContain(h);
+
+      const exits = (await call("GET", "/api/exit-policy", "stranger")).body.policy.restorative;
+      expect(exits.steps.slice(0, 2)).toEqual([NAME_WITHHELD, NAME_WITHHELD]);
+      for (const h of hidden) expect(JSON.stringify(exits), h).not.toContain(h);
+
+      // A member still reads every word of it.
+      expect((await call("GET", "/api/exit-policy", "member")).body.policy.restorative.steps[0]).toBe("We ring Ada Quill first. In the room: the two of us");
+
+      // And so does the vote's page, which anybody who can open the vote reads.
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      const opened = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: { ...named, replyHours: 12 } });
+      expect(opened.status).toBe(200);
+      const doc = (await ballotById(pool, opened.body.ballot.id))!.docMarkdown;
+      expect(doc).toContain(`1. ${BALLOT_NAME_WITHHELD}`);
+      for (const h of hidden) expect(doc, h).not.toContain(h);
     });
   });
 
@@ -372,7 +437,7 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       expect(ballot!.unityPct).toBeGreaterThanOrEqual(80);
       expect(ballot!.quorumPct).toBeGreaterThanOrEqual(50);
       // Written in the same transaction as the ballot.
-      const proposal = await readConfigDocument<any>(pool, CONFLICT_AGREEMENT_PROPOSAL_KEY);
+      const proposal = await readConfigDocument<any>(pool, proposalKeyFor(ballot!.id));
       expect(proposal.ballotId).toBe(ballot!.id);
       expect(proposal.agreement.replyHours).toBe(12);
       expect(ballot!.docMarkdown).toContain("It goes to the Stewards role instead.");
@@ -454,6 +519,72 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       // Every reader sees it at once, with no reload.
       expect((await call("GET", "/api/exit-policy", "member")).body.policy.restorative.replyHours).toBe(12);
       expect((await readConfigDocument<any>(pool, CONFLICT_AGREEMENT_KEY)).replyHours).toBe(12);
+    });
+
+    it("a second change opened while a carried one waits to land leaves the first one's agreement where it was, and both land", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      const first = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 12 }) });
+      expect(first.status).toBe(200);
+      // The first carries and waits for its landing date. Its close frees the
+      // subject, exactly as closeBallot's own statement does.
+      await pool.query( // module-review-ok: closeBallot's statement, on the scratch schema; its window has not ended inside a test
+        "UPDATE ballots SET status='passed', closed_at=NOW(), open_key=CONCAT(open_key, ':', id) WHERE id=? AND status='open'",
+        [first.body.ballot.id],
+      );
+      const second = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 6 }) });
+      expect(second.status).toBe(200);
+      expect((await call("GET", "/api/conflict-agreement", "member")).body.openBallot.proposal.replyHours).toBe(6);
+
+      const closer = conflictAgreementCloser({
+        getPool: () => pool,
+        agreement: agreementRepo,
+        loadRoles: () => ROLES,
+        notify: async () => {},
+        notifyAdmins: async () => {},
+        addActivity: async () => {},
+        recordAudit: () => {},
+        ballotLink: (b) => `/decisions/${b.id}`,
+      });
+      const landed = await closer((await ballotById(pool, first.body.ballot.id))!, "passed", "", "system");
+      expect(landed.held).toBeNull();
+      expect(landed.applied).toEqual(["conflict-agreement"]);
+      expect(agreementOfRepo()).toMatchObject({ replyHours: 12, adoptedBy: `ballot:${first.body.ballot.id}` });
+
+      const then = await closer((await ballotById(pool, second.body.ballot.id))!, "passed", "", "system");
+      expect(then.applied).toEqual(["conflict-agreement"]);
+      expect(agreementOfRepo()).toMatchObject({ replyHours: 6, adoptedBy: `ballot:${second.body.ballot.id}` });
+    });
+
+    it("the vote freezes the village's own structural bar when the village raised it above the platform's", async () => {
+      await call("PUT", "/api/admin/conflict-agreement", "admin", { agreement: agreement(), adopt: true });
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      expect((await setVariable(pool, "governance.tier_structural_unity_pct", "90")).ok).toBe(true);
+      expect((await setVariable(pool, "governance.tier_structural_quorum_pct", "70")).ok).toBe(true);
+      try {
+        const opened = await call("POST", "/api/governance/conflict-agreement-changes", "proposer", { agreement: agreement({ replyHours: 12 }) });
+        expect(opened.status).toBe(200);
+        expect(opened.body.ballot).toMatchObject({ unityPct: 90, quorumPct: 70 });
+      } finally {
+        await pool.query("DELETE FROM game_variables WHERE config_key LIKE 'governance.tier_structural%'"); // module-review-ok: fixture cleanup on the scratch schema this suite provisioned
+        await loadVariables(pool);
+      }
+    });
+
+    it("after the Birthing, with no agreement stored, the exit policy's own save cannot change the conflict path, and stores nothing", async () => {
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      const served = readExitPolicy() as any;
+      const same = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, voluntary: { ...served.voluntary, noticePeriodDays: 14 } });
+      expect(same.status).toBe(200);
+
+      const changed = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, restorative: { ...served.restorative, steps: ["The administrators decide"] } });
+      expect(changed.status).toBe(409);
+      expect(changed.body).toMatchObject({ error: "restorative_is_a_vote", door: "/api/governance/conflict-agreement-changes" });
+      const stored = await readConfigDocument<any>(pool, "exit-policy");
+      expect(stored.restorative.steps).toEqual(OLD_POLICY.restorative.steps);
+      expect(stored.voluntary.noticePeriodDays).toBe(14);
+      // Departures is told, so it stops offering the fields.
+      expect((await call("GET", "/api/admin/exits", "admin")).body.gameStarted).toBe(true);
     });
   });
 

@@ -176,7 +176,7 @@ export const AGREEMENT_FRAMES = [
     id: "power",
     title: "When power is involved",
     question: "When it involves someone who holds power here, such as a founder, a steward or the care holder, who holds it instead?",
-    hint: "A role, or one of the outside contacts. The care role cannot hold it instead, because the conflict may be about its holder.",
+    hint: "A role, or one of the outside contacts. The care role cannot hold it instead, because the conflict may be about its holder. Name roles in the words: the public page shows this frame.",
     weight: "recommended",
   },
   {
@@ -190,14 +190,14 @@ export const AGREEMENT_FRAMES = [
     id: "ladder",
     title: "Consequences and appeal",
     question: "What is our ladder of consequences, and how does someone appeal?",
-    hint: "Write words for the rungs this village uses. Any rung past a request needs an appeal written here first.",
+    hint: "Write words for the rungs this village uses. Any rung past a request needs an appeal written here first. Name roles here: the public page shows this frame.",
     weight: "recommended",
   },
   {
     id: "practices",
     title: "Practices",
     question: "Which shared practices keep small tensions small, and when?",
-    hint: "Nothing is filled in for you. Add the ones this village actually keeps.",
+    hint: "Nothing is filled in for you. Add the ones this village actually keeps. The public page shows this frame.",
     weight: "optional",
   },
   {
@@ -297,8 +297,9 @@ export function parseAgreementContent(body: unknown, ctx: { roleIds: readonly st
   // 2. Who hears it first.
   const careRole = str(b.careRole);
   const coverRole = str(b.coverRole);
-  if (careRole && !ctx.roleIds.includes(careRole)) return fail("care", `Unknown care role "${careRole}"`);
-  if (coverRole && !ctx.roleIds.includes(coverRole)) return fail("care", `Unknown cover role "${coverRole}"`);
+  // Worded for the founder, who sees a role's name and never its id: the usual cause is a role retired since.
+  if (careRole && !ctx.roleIds.includes(careRole)) return fail("care", "The care role chosen here no longer exists. Choose another role, or none.");
+  if (coverRole && !ctx.roleIds.includes(coverRole)) return fail("care", "The cover role chosen here no longer exists. Choose another role, or none.");
   if (coverRole && !careRole) return fail("care", "A cover role covers the care role, so choose the care role first.");
   if (coverRole && coverRole === careRole) {
     return fail("care", "The cover role is the care role itself, so nobody covers when its holders cannot. Choose a second role, or leave cover empty.");

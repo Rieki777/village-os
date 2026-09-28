@@ -69,7 +69,7 @@ seat (`villageHandoverState().complete`).
 | `purpose` | `purpose` | the founders (the same `isAdmin` test `PUT /api/admin/purpose` applies), until the handover | the same until the handover; after it, a vote through `POST /api/governance/purpose-changes` |
 | `dial` | the three dial doors | `dial.set`, asked of the gate inside the dial write | the member who wrote the suggestion files it as a mechanics proposal in their own name; the village votes |
 | `module` | `module:governance` | administrators (the lifecycle route's own guard) | a mechanics proposal for a module a vote can move; the governance module is never moved by a change set (`NEVER_BY_CHANGESET`), so it stays with administrators |
-| `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators | a vote of the whole village at the structural tier. **Not built yet**: adopting answers 409 `CONSEQUENCE_VOTE_NOT_BUILT` and the suggestion stays open |
+| `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators; for `exit:restorative`, only while no conflict agreement is stored (once one is, adopting answers 409 `restorative_in_agreement` with `CARE_DOOR_IN_AGREEMENT`, and the agreement is changed on /governance) | a vote of the whole village at the structural tier. For `exit:terms` and the matrix it is **not built yet**: adopting answers 409 `CONSEQUENCE_VOTE_NOT_BUILT` and the suggestion stays open. For `exit:restorative` the vote is the conflict agreement's own (`POST /api/governance/conflict-agreement-changes`), which carries the whole agreement, so adopting answers 409 `CARE_DOOR_IS_THE_AGREEMENT_VOTE` and the suggestion cannot go to it as it stands |
 
 Each proposal and each block carries a `PenView` so the page can name the pen and offer a button
 only where it will work:
@@ -220,7 +220,12 @@ Responses:
   nothing is recorded as adopted.
 - `403 { "error": FILED_BY_PROPOSER }` anybody but the author pressing Adopt on a suggestion that
   files a mechanics proposal. The suggestion stays open.
-- `409 { "error": CONSEQUENCE_VOTE_NOT_BUILT }` the consequence pen after the Birthing
+- `409 { "error": CONSEQUENCE_VOTE_NOT_BUILT }` the consequence pen after the Birthing, for the exit
+  terms and the matrix
+- `409 { "error": CARE_DOOR_IS_THE_AGREEMENT_VOTE }` the care door (`exit:restorative`) after the
+  Birthing: its vote is the conflict agreement's own, opened from /governance
+- `409 { "error": "restorative_in_agreement", "message": CARE_DOOR_IN_AGREEMENT }` the care door
+  before the Birthing, once a conflict agreement is stored: the agreement holds those fields
 - `409 { "error": "...", "door": "/api/governance/purpose-changes" }` the purpose statement after the
   handover: the change vote has its own route (a `proposal.open` holder opens it, with a purpose line)
 - `409` already adopted or declined, or somebody deciding it at this moment (`BEING_DECIDED`)

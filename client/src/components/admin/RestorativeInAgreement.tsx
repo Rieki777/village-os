@@ -7,20 +7,27 @@
  * whose edits would be refused, prints what the policy now carries, and points
  * at where the agreement is written.
  *
+ * AFTER THE BIRTHING the same is true whether or not an agreement is stored
+ * (`byVote`): the block changes only by a village vote on the conflict
+ * agreement, and the policy's save refuses anything else (`saveExitPolicy`,
+ * server/routes/exits.ts). So the fields go, and the words say it is a vote.
+ *
  * Out of client/src/pages/Admin.tsx because that file sits at its line
  * ratchet. Light-only like the rest of the admin panel.
  */
 export const AGREEMENT_HREF = "/governance#conflict-agreement";
 
-export function RestorativeInAgreement({ steps }: { steps: unknown }) {
+export function RestorativeInAgreement({ steps, byVote = false }: { steps: unknown; byVote?: boolean }) {
   const lines = Array.isArray(steps) ? steps.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
   return (
     <div className="mb-4 rounded-lg border border-stone-200 p-3">
       <p className="text-xs font-medium text-stone-700">The restorative path</p>
       <p className="text-[11px] text-stone-600 mt-1">
-        This comes from the village's conflict agreement now, with the care and cover roles, the reply time and the outside contact.{" "}
+        {byVote
+          ? "The Game has started, so this path, the care and cover roles, the reply time and the outside contact change only by a village vote on its conflict agreement."
+          : "This comes from the village's conflict agreement now, with the care and cover roles, the reply time and the outside contact."}{" "}
         <a href={AGREEMENT_HREF} className="text-teal-deep underline">
-          Change it in the agreement
+          {byVote ? "Open the agreement, where a member who can open votes proposes a change" : "Change it in the agreement"}
         </a>
         .
       </p>
