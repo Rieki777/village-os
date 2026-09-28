@@ -26,7 +26,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { addChange, createDraft, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
 
 const configured = testDbConfigured();
@@ -67,7 +67,7 @@ async function draftWith(
 describe.skipIf(!configured)("a draft that makes a circle", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
   });
   afterAll(async () => {
     await pool?.end();
