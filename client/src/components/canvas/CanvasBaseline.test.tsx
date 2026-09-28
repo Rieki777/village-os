@@ -191,6 +191,25 @@ describe("what a member reads", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Sign in to read the canvas."));
     expect(screen.queryByTestId("canvas-radar")).toBeNull();
   });
+
+  it("prints the server's own sentence to an account the village has not admitted, and offers no retry", async () => {
+    const sentence = "The canvas and its season are for the village's members. They open to you once the village admits you.";
+    answers.push({ status: 403, body: { error: sentence } });
+    draw();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(sentence));
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByTestId("canvas-radar")).toBeNull();
+  });
+
+  it("offers Try again when the read failed for another reason, and reads the canvas again", async () => {
+    answers.push({ status: 500, body: {} }, { status: 200, body: payload(false) });
+    draw();
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/could not be read just now/));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(calls.map((c) => c.url)).toEqual(["/api/canvas", "/api/canvas"]);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });
 
 describe("what the pen can do", () => {

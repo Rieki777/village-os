@@ -53,11 +53,11 @@
           "id": "canvas",
           "click": "Canvas",
           "roles": ["member", "founder"],
-          "text": ["The canvas baseline", "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "$canvasReading", "No reading yet", "$seasonName", "$seasonWeekTitle"],
-          "forbidden": ["%", "of 12", "No season is loaded"],
+          "text": ["The canvas baseline", "Governance Canvas by the Bioregional Weaving Labs Collective and Commonland", "$canvasReading", "No reading yet", "$seasonName", "$seasonWeekTitle", "Canvas moon"],
+          "forbidden": ["%", "of 12", "No season is loaded", "New moon", "could not be read"],
           "expect": {
-            "founder": { "text": ["Record a reading", "Load a different season file", "Take the season off"] },
-            "member": { "forbidden": ["Record a reading", "Load a different season file", "Load a season file", "Take the season off"] }
+            "founder": { "text": ["Record a reading", "Load a different season file", "Take the season off", "Download this season file"] },
+            "member": { "forbidden": ["Record a reading", "Load a different season file", "Load a season file", "Take the season off", "Download this season file"] }
           }
         },
         {

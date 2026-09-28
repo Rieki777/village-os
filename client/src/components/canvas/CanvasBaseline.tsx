@@ -3,7 +3,9 @@
  * governance canvas blocks, and sees each block's newest reading.
  *
  * Mounted as the "Canvas" view on /journey-to-launch, for members and admins
- * alike (server/routes/canvas.ts answers any signed-in member). Season Two
+ * alike (server/routes/canvas.ts answers an admitted member or an admin, and
+ * refuses a signed-in account the village has not admitted with its own
+ * sentence, which this view prints as it comes). Season Two
  * projects take their first reading of every block on Saturday 3 October,
  * and Rye ruled on 2026-09-24 that every block must be on record before a
  * village's Birthing.
@@ -88,20 +90,20 @@ export function CanvasBaseline({
   season?: Pick<CanvasSeason, "name" | "weeks"> | null;
 } = {}) {
   const [data, setData] = useState<CanvasPayload | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  /** Why the read failed, and whether asking again could help: a refusal (401, 403) gets the same answer twice. */
+  const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 
   const load = useCallback(() => {
+    setFailed(null);
     fetch("/api/canvas", { headers: headers() })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d?.error === "auth_required" ? "Sign in to read the canvas." : "The canvas could not be read just now.");
-        return d as CanvasPayload;
+        if (r.ok) return setData(d as CanvasPayload);
+        if (r.status === 401 || d?.error === "auth_required") return setFailed({ message: "Sign in to read the canvas.", retry: false });
+        if (r.status === 403 && typeof d?.error === "string" && d.error) return setFailed({ message: d.error, retry: false });
+        setFailed({ message: "The canvas could not be read just now.", retry: true });
       })
-      .then((d) => {
-        setData(d);
-        setFailed(null);
-      })
-      .catch((e: Error) => setFailed(e.message));
+      .catch(() => setFailed({ message: "The canvas could not be read just now.", retry: true }));
   }, []);
   useEffect(() => {
     load();
@@ -138,9 +140,18 @@ export function CanvasBaseline({
         </header>
 
         {failed ? (
-          <p role="alert" className="text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3">
-            {failed}
-          </p>
+          <div role="alert" className="text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3 space-y-2">
+            <p>{failed.message}</p>
+            {failed.retry && (
+              <button
+                type="button"
+                onClick={load}
+                className="text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep bg-white hover:bg-stone-50"
+              >
+                Try again
+              </button>
+            )}
+          </div>
         ) : !data ? (
           <p className="text-sm text-stone-600 py-8 text-center">
             <Loader2 className="w-4 h-4 animate-spin inline mr-2" />

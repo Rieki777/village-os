@@ -1813,7 +1813,8 @@ season sees the blocks in canvas order and loses nothing.
   the handover, any admin or founder). Open the Canvas tab, open "Load a
   season file", paste the JSON or choose the `.json` file, press "Check the
   file", read the preview, then "Save this season". "Take the season off"
-  goes back to canvas order. Every member can read the week map.
+  goes back to canvas order; "Download this season file" hands the pen a
+  copy first, since taking a season off deletes it.
 - **A template ships with the platform:** `docs/seasons/season-two-2026.json`
   (thirteen Saturdays from 26 September to 19 December 2026, 11:00
   America/Los_Angeles). Copy it and change the dates, titles and blocks to

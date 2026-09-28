@@ -198,8 +198,12 @@ describe("the week map on the Canvas view", () => {
       const link = within(week2).getByRole("link", { name });
       expect(link.getAttribute("href")).toBe(`#canvas-block-${id}`);
     }
-    // The moon between two sessions sits in the map by its date.
-    expect(screen.getByText(/New moon, Mon 12 Oct/)).toBeTruthy();
+    // The moon between two sessions sits in the map by its date, named for the
+    // reading it sets and never as a claim about the sky ("New moon").
+    expect(screen.getByText(/Canvas moon, Mon 12 Oct/)).toBeTruthy();
+    expect(screen.queryByText(/New moon/)).toBeNull();
+    // A week's foundations use the canvas's own names, the ones the cards below use.
+    expect(within(week2).getByText("Foundations: Internal Rules & Regulations")).toBeTruthy();
 
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
     expect(cardOrder().slice(0, 2)).toEqual(["power", "conflict"]);
@@ -370,8 +374,100 @@ describe("the pen loads a season", () => {
     draw();
     fireEvent.click(await screen.findByRole("button", { name: /take the season off/i }));
     expect(confirm).toHaveBeenCalledTimes(1);
+    // The question says the season itself goes, and what it takes to have it back.
+    expect(String(confirm.mock.calls[0]?.[0])).toMatch(/to load it again you will need its file/);
     await waitFor(() => expect(screen.getByText(/No season is loaded/)).toBeTruthy());
     const del = calls.find((c) => c.method === "DELETE")!;
     expect(del.init.headers.Authorization).toBe("Bearer a-token");
+  });
+
+  it("lets the pen take off a stored season that no longer reads, which clears the red line for everyone", async () => {
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(true));
+    answer("GET", "/api/canvas/season", 200, { ...NO_SEASON(true), problem: "The stored season could not be read: nope." });
+    answer("GET", "/api/canvas/season", 200, NO_SEASON(true));
+    answer("DELETE", "/api/canvas/season", 200, { removed: true });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    draw();
+    // The pen is told what to do about it, in the alert itself.
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/could not be read: nope\. .*Take the stored season off below/));
+    // Nothing to download: a season that does not read is not a file anybody could load again.
+    expect(screen.queryByRole("link", { name: /download this season file/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /take the season off/i }));
+    expect(String(confirm.mock.calls[0]?.[0])).toMatch(/It no longer reads/);
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+    await waitFor(() => expect(screen.getByText(/No season is loaded/)).toBeTruthy());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("offers the pen the stored season as a file, the same season the form takes back", async () => {
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(true));
+    answer("GET", "/api/canvas/season", 200, withSeason({ mayEdit: true }));
+    draw();
+    const link = await screen.findByRole("link", { name: /download this season file/i });
+    expect(link.getAttribute("download")).toBe("test-season.json");
+    const href = link.getAttribute("href") ?? "";
+    const prefix = "data:application/json;charset=utf-8,";
+    expect(href.startsWith(prefix)).toBe(true);
+    const file = JSON.parse(decodeURIComponent(href.slice(prefix.length)));
+    expect(file).toEqual(SEASON);
+  });
+
+  it("keeps the form closed until the pen opens it, and says where a season file comes from", async () => {
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(true));
+    answer("GET", "/api/canvas/season", 200, NO_SEASON(true));
+    draw();
+    const summary = await screen.findByText("Load a season file");
+    expect((summary.closest("details") as HTMLDetailsElement).open).toBe(false);
+    expect(screen.getByText(/comes from whoever runs your season/)).toBeTruthy();
+    expect(screen.getByText(/docs\/seasons/)).toBeTruthy();
+  });
+
+  it("says the save worked, by the form, and closes it", async () => {
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(true));
+    answer("GET", "/api/canvas/season", 200, withSeason({ mayEdit: true }));
+    answer("PUT", "/api/canvas/season", 200, { season: SEASON, ignored: [], savedBy: { id: "u1", name: "Wren" }, savedAt: "2026-10-01T09:00:00.000Z" });
+    draw();
+    const summary = await screen.findByText("Load a different season file");
+    const details = summary.closest("details") as HTMLDetailsElement;
+    details.open = true;
+    // The element fires "toggle" as a task, as a browser does; let it land before going on.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fireEvent.change(screen.getByLabelText("Season file"), { target: { value: JSON.stringify(SEASON) } });
+    fireEvent.click(screen.getByRole("button", { name: "Check the file" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save this season" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Saved A test season. The week map above reads it now."));
+    expect(details.open).toBe(false);
+  });
+});
+
+describe("when the season cannot be read", () => {
+  const draw = () =>
+    render(
+      <Router>
+        <CanvasView />
+      </Router>,
+    );
+
+  it("prints the server's members-only sentence to an account the village has not admitted, and offers no retry", async () => {
+    const sentence = "The canvas and its season are for the village's members. They open to you once the village admits you.";
+    answer("GET", "/api/canvas", 403, { error: sentence });
+    answer("GET", "/api/canvas/season", 403, { error: sentence });
+    draw();
+    await waitFor(() => expect(screen.getAllByRole("alert").map((a) => a.textContent)).toEqual([sentence, sentence]));
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText(/No season is loaded/)).toBeNull();
+  });
+
+  it("offers Try again after any other failure, and reads the season again", async () => {
+    answer("GET", "/api/canvas", 200, EMPTY_CANVAS(false));
+    answer("GET", "/api/canvas/season", 500, {});
+    answer("GET", "/api/canvas/season", 200, NO_SEASON(false));
+    draw();
+    const again = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByText("The season could not be read just now.")).toBeTruthy();
+    fireEvent.click(again);
+    await waitFor(() => expect(screen.getByText(/No season is loaded/)).toBeTruthy());
+    expect(calls.filter((c) => c.url === "/api/canvas/season")).toHaveLength(2);
+    expect(screen.queryByText("The season could not be read just now.")).toBeNull();
   });
 });

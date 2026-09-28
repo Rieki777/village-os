@@ -8,6 +8,11 @@
  * fetch of their own. A season that cannot be read, or none at all, leaves
  * the baseline exactly as it was, in canvas order, so a village without a
  * season file (a self-hosted one, or one a release behind) loses nothing.
+ *
+ * A read that failed for a reason worth retrying (the network, a 5xx) offers
+ * "Try again", which reads the season again; a refusal (401 sign in, 403 not
+ * admitted yet) prints the server's own sentence and offers nothing, because
+ * asking again gets the same answer.
  */
 import { useCallback, useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
@@ -20,22 +25,29 @@ const headers = (): Record<string, string> => {
   return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 };
 
+/** Why a read of the season failed, in words, and whether asking again could help. */
+function seasonReadFailure(status: number | null, error: unknown): { message: string; retry: boolean } {
+  if (status === 401 || error === "auth_required") return { message: "Sign in to read the season.", retry: false };
+  if (status === 403 && typeof error === "string" && error) return { message: error, retry: false };
+  return { message: "The season could not be read just now.", retry: true };
+}
+
 export function CanvasView() {
   const [payload, setPayload] = useState<CanvasSeasonPayload | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 
   const load = useCallback(() => {
+    setFailed(null);
     fetch("/api/canvas/season", { headers: headers() })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d?.error === "auth_required" ? "Sign in to read the season." : "The season could not be read just now.");
-        return d as CanvasSeasonPayload;
+        if (!r.ok) {
+          setFailed(seasonReadFailure(r.status, d?.error));
+          return;
+        }
+        setPayload(d as CanvasSeasonPayload);
       })
-      .then((d) => {
-        setPayload(d);
-        setFailed(null);
-      })
-      .catch((e: Error) => setFailed(e.message));
+      .catch(() => setFailed(seasonReadFailure(null, null)));
   }, []);
   useEffect(() => {
     load();
@@ -81,7 +93,14 @@ export function CanvasView() {
   // the two lay out identically (the lane's live QA compares every element).
   return (
     <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
-      <CanvasSeason payload={payload} failed={failed} now={now} onSave={save} onRemove={remove} />
+      <CanvasSeason
+        payload={payload}
+        failed={failed?.message ?? null}
+        onRetry={failed?.retry ? load : undefined}
+        now={now}
+        onSave={save}
+        onRemove={remove}
+      />
       <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
     </div>
   );
