@@ -349,7 +349,7 @@ export default function ResourcesLens({
 /**
  * The words beside the strokes. Declared and measured are said in words as
  * well as drawn in dashes, and a currency pair with no rate on file is said
- * PLAINLY: the ECB's daily list carries no CRC, so a colones amount stays a
+ * PLAINLY: until 2026-09-25 the daily list carried no CRC, so a colones amount stayed a
  * colones amount until an admin records a manual rate. Reads the viewer's
  * stored display choice and the fx table itself, so the page passes nothing.
  */

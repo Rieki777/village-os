@@ -148,10 +148,27 @@ describe("hasDailyRate", () => {
     for (const q of FX_QUOTES) expect(hasDailyRate(q)).toBe(true);
   });
 
-  it("answers no for CRC, which the ECB daily list does not carry", () => {
-    // Measured 2026-08-21 and the reason this is a question: the first
-    // village's own currency is the one that would fail a rule.
-    expect(hasDailyRate("CRC")).toBe(false);
+  it("answers YES for CRC, since 2026-09-25, and the flip is the point", () => {
+    /*
+     * This case asserted FALSE until the source changed, and it was right to:
+     * measured 2026-08-21, the ECB daily list does not carry colones and never
+     * will, so the first village's own currency was the one a rule would have
+     * refused. That is why this is a question and not a rule.
+     *
+     * The question has not changed. Its ANSWER has, because the source now
+     * carries 165 quotes with no key. Keeping the case and flipping it is
+     * deliberate: deleting it would lose the only place that records why the
+     * platform ever had to ask.
+     */
+    expect(hasDailyRate("CRC")).toBe(true);
+  });
+
+  it("still answers no for a currency nobody quotes, so it is a question either way", () => {
+    // The reason the manual-rate row exists. A village may name a currency no
+    // source carries, and this must keep saying so rather than becoming a rule
+    // now that the common cases happen to pass.
+    expect(hasDailyRate("ZZZ")).toBe(false);
+    expect(hasDailyRate("XBT")).toBe(false);
   });
 
   it("is case and space insensitive, and says no to nothing at all", () => {
@@ -165,6 +182,11 @@ describe("hasDailyRate", () => {
     // hand-typed copy beside the picker was the alternative, and it would
     // have been wrong the first time a quote was added.
     expect(FX_QUOTES.length).toBeGreaterThan(5);
-    expect((FX_QUOTES as readonly string[]).includes("CRC")).toBe(false);
+    expect((FX_QUOTES as readonly string[]).includes("CRC")).toBe(true);
+    // Every quote the list carried when it was the ECB's fourteen. The source
+    // swap must not have quietly dropped one to gain the rest.
+    for (const q of ["USD", "CHF", "GBP", "JPY", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK", "MXN", "BRL", "PLN", "CZK"]) {
+      expect(FX_QUOTES as readonly string[], q).toContain(q);
+    }
   });
 });
