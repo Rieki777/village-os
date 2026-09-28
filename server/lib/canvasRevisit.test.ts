@@ -221,7 +221,7 @@ describe.skipIf(!configured)("delivery through the real notification spine", () 
   let db: TestDb;
   let pool: Pool;
   const sent: Array<{ to: string[]; subject: string; html: string }> = [];
-  const SECRET = "canvas-revisit-test-secret";
+  const SECRET = "canvas-revisit-test-secret"; // module-review-ok: a fixture signing secret for the presence test on a scratch schema, same as every DB-backed suite
 
   const spine = (): NotifyDeps => ({
     pool,
