@@ -6,7 +6,10 @@
  * more, and this is where a founder answers them:
  *
  *   the cover role        a second permission role, for when the intake role's
- *                         holders cannot take a request;
+ *                         holders cannot take a request. RECORDED ONLY, today:
+ *                         an intake still reaches the intake role's live
+ *                         holders and nobody else, and the checklist counts
+ *                         only them, so the field says so where it is chosen;
  *   the reply time        whole hours, promised to a member who asks for care,
  *                         with NO platform default: the box starts empty and a
  *                         number here is one the village chose;
@@ -57,8 +60,8 @@ export function ConflictDoorFields({
         Before the village is asked to start, a member with a conflict needs somebody to bring it to and a
         reply time the village chose. That is a person who holds the intake role today, or a named contact
         outside the village. With fewer than three members who are not founders, the outside contact is
-        required. Everything here is printed on the public exit policy page, so give a way of reaching the
-        outside contact that is meant to be public.
+        required. Everything here is public, and the exit policy page shows the reply time and the outside
+        contact to anyone, so give a way of reaching the outside contact that is meant to be public.
       </p>
 
       <div className="grid sm:grid-cols-3 gap-3 mb-3">
@@ -73,7 +76,7 @@ export function ConflictDoorFields({
             {roles.map((role) => <option key={role.id} value={role.id}>{role.name ?? role.id}</option>)}
           </select>
         </label>
-        <label className="text-xs text-gray-500">Cover role, when the intake role cannot
+        <label className="text-xs text-gray-500">Cover role, recorded only for now
           <select value={cover} disabled={!intake}
             onChange={(e) => onChange({ coverRole: e.target.value })}
             className={field}>
@@ -82,6 +85,9 @@ export function ConflictDoorFields({
               <option key={role.id} value={role.id}>{role.name ?? role.id}</option>
             ))}
           </select>
+          <span className="block mt-1 text-[11px] text-gray-500">
+            A request still goes only to the intake role, and the checklist counts only its holders.
+          </span>
         </label>
         <label className="text-xs text-gray-500">Promised reply time, in hours
           <input type="number" min={1} max={720} step={1} inputMode="numeric"

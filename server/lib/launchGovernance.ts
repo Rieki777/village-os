@@ -41,14 +41,16 @@
  * above one. The radar on the Canvas view is the one place levels are drawn.
  */
 import type { Pool } from "mysql2/promise";
+import { GAME_CONFIG } from "../../shared/gameConfig";
 import { CANVAS_BLOCK_IDS, CANVAS_BLOCKS } from "../../shared/governanceCanvas";
 import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import { allCanvasReadings } from "../repos/canvasReadings";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { holdingsForRoles } from "../repos/permissionHoldings";
 import { roleCapabilityRow } from "../repos/stewardRoles";
-import { admittedNonFounderCount } from "../repos/users";
+import { nonFounderAdmissionRecords } from "../repos/users";
 import { outsideContactNamed, outsideContactOf, replyHoursOf, withPolicyDefaults } from "./exitPolicy";
+import { isAdmitted } from "./admission";
 import { holdingHasLapsed } from "./stewardship";
 
 /** The check keys shared/launchRequirements.ts names, spelled once so the two cannot drift. */
@@ -110,7 +112,7 @@ export interface ConflictDoorFacts {
   liveIntakeHolders: number;
   /** Holders of the intake role whose term has run out. */
   lapsedIntakeHolders: number;
-  /** Admitted members who are not founders. */
+  /** Members who are not founders and were admitted, by the one admission rule (server/lib/admission.ts). */
   nonFounderMembers: number;
 }
 
@@ -211,7 +213,7 @@ export async function conflictDoorFacts(pool: Pool, now: Date = new Date()): Pro
     intakeRoleName,
     liveIntakeHolders: live,
     lapsedIntakeHolders: lapsed,
-    nonFounderMembers: await admittedNonFounderCount(pool),
+    nonFounderMembers: (await nonFounderAdmissionRecords(pool)).filter((r) => isAdmitted(r, GAME_CONFIG.stages)).length,
   };
 }
 

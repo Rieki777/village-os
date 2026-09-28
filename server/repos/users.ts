@@ -348,28 +348,38 @@ export async function lockUserRowForUpdate(conn: PoolConnection, id: string): Pr
 }
 
 /**
- * How many members the village has admitted who are not founders.
+ * The two admission records of every account that is not a founder and holds
+ * either one.
  *
- * The launch checklist's `conflict-door` row asks it (server/lib/launchGovernance.ts):
- * below three, a named contact outside the village is required, because every
- * person inside is somebody a conflict could be about.
+ * The launch checklist's `conflict-door` row counts the admitted among them
+ * (server/lib/launchGovernance.ts): below three, a named contact outside the
+ * village is required, because every person inside is somebody a conflict
+ * could be about.
  *
- * ADMITTED IS `membership_granted`, the same field `hasMembership` reads in
- * server/index.ts, so this counts exactly the people that gate lets in. An
- * anonymised account has it cleared by the erasure (server/lib/erasure.ts), and
- * an example row is a standing demonstration and never a person.
+ * THE RECORDS AND NOT A COUNT, because admitted is a rule on a ladder and the
+ * ladder is configuration. `isAdmitted` (server/lib/admission.ts) reads either
+ * record: `membership_granted`, or a stage grant at Member or above, which is
+ * an admin placing somebody there by hand. A count taken here in SQL could
+ * only read the first, and it once did: a village whose members were placed
+ * at Member by hand was told it had fewer than three while its launch roll
+ * held more.
  *
- * An account a founder placed at Member by a stage grant alone, with no
- * membership record, is NOT counted. That can only make the count smaller, and
- * a smaller count asks for the outside contact sooner, which is the safe side
- * of this question to be wrong on.
+ * An anonymised account has both records cleared by the erasure
+ * (server/lib/erasure.ts), and an example row is a standing demonstration and
+ * never a person.
  */
-export async function admittedNonFounderCount(pool: Pool): Promise<number> {
+export async function nonFounderAdmissionRecords(
+  pool: Pool,
+): Promise<Array<{ membershipGranted: boolean; stageGranted: string | null }>> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM users WHERE membership_granted = 1 AND is_example = 0 " +
-      "AND (role IS NULL OR role <> 'founder')",
+    "SELECT membership_granted, stage_granted FROM users WHERE is_example = 0 " +
+      "AND (role IS NULL OR role <> 'founder') " +
+      "AND (membership_granted = 1 OR (stage_granted IS NOT NULL AND stage_granted <> ''))",
   );
-  return Number(rows[0]?.n ?? 0);
+  return rows.map((r) => ({
+    membershipGranted: Number(r.membership_granted) === 1,
+    stageGranted: r.stage_granted == null ? null : String(r.stage_granted),
+  }));
 }
 
 /**

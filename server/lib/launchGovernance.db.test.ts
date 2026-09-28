@@ -95,6 +95,13 @@ const setAdmitted = async (id: string, admitted: boolean) => {
   });
 };
 
+/** An admin placing somebody on a rung by hand, with no membership record. */
+const setStageGrant = async (id: string, stageId: string | null) => {
+  await usersRepo(pool).update(id, (m) => {
+    m.stageGranted = stageId;
+  });
+};
+
 describe.skipIf(!configured)("the governance rows on the launch vote", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
@@ -186,6 +193,26 @@ describe.skipIf(!configured)("the governance rows on the launch vote", () => {
     } finally {
       await setAdmitted("usr-m3", true);
       await writePolicy(policy() as any);
+    }
+  });
+
+  it("counts somebody an admin placed at Member by hand, and nobody placed below it", async () => {
+    // Two admitted by membership record. The guest holds no record at all yet.
+    await setAdmitted("usr-m3", false);
+    try {
+      // Immersant is a granted rung BELOW Member: a hand placement there is not an admission.
+      await setStageGrant("usr-guest", "immersant");
+      expect(await launchVoteBlocked(pool, deps())).toEqual(refusedOn("conflict-door"));
+      expect((await item("conflict-door")).detail).toContain("Fewer than three members here are not founders");
+
+      // At Member the admission rule reads them in, as the launch roll does, so three
+      // are admitted and the Care role's live holder is a door on its own.
+      await setStageGrant("usr-guest", "member");
+      expect(await launchVoteBlocked(pool, deps())).toBeNull();
+      expect((await item("conflict-door")).detail).toBe("The Care role is held today, and a member hears back within 48 hours");
+    } finally {
+      await setStageGrant("usr-guest", null);
+      await setAdmitted("usr-m3", true);
     }
   });
 

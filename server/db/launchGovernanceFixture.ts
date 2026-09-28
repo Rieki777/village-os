@@ -14,9 +14,9 @@
  *                            sentence: "not decided yet, because..." is a
  *                            reading, and it is the cheapest honest one.
  *   CONFLICT_DOOR_READY      spread into the exit policy's `restorative` body.
- *                            A named outside contact, because these villages
- *                            have fewer than three admitted members who are
- *                            not founders, and a reply time the village chose.
+ *                            A named outside contact, which opens the door in
+ *                            a village of any size, and a reply time the
+ *                            village chose.
  *
  * The refusals themselves are not left unobserved by clearing them here: they
  * are driven row by row in server/lib/launchGovernance.db.test.ts.
