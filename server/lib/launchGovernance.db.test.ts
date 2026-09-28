@@ -16,9 +16,9 @@
  * Order-dependent by design: one village, walked through its states in turn,
  * each test putting back what it moved.
  */
-import mysql from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { confirmManual, launchStatus, launchVoteBlocked, type LaunchDeps } from "./launch";
 import { writeGoverningPurpose } from "./governingPurpose";
 import { normalizeExitPolicy } from "./exitPolicy";
@@ -38,7 +38,7 @@ if (!configured) {
 }
 
 let db: TestDb;
-let pool: mysql.Pool;
+let pool: Pool;
 
 /** The governance module's effective lifecycle, as the test sets it. */
 let governance = "members";
@@ -98,7 +98,7 @@ const setAdmitted = async (id: string, admitted: boolean) => {
 describe.skipIf(!configured)("the governance rows on the launch vote", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisions and drops
 
     // One founder, three admitted members who are not founders, and two
     // accounts that must NOT count toward those three: a guest nobody has
