@@ -44,6 +44,7 @@ import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
 import { calendarUpsert } from "../lib/calendar";
 import { capabilityHoldings, moveCapabilityToVillage } from "../lib/capabilityHolding";
 import { recordMechanicsChangeRow } from "../lib/changeset";
+import { RESTORATIVE_IN_AGREEMENT } from "../lib/conflictAgreement";
 import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import { recordGameStart } from "../lib/gameStart";
 import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
@@ -92,6 +93,8 @@ const activity: string[] = [];
 let HOLDERS: IntakeHolding[] = [];
 /** Whether the mechanics standing check calls the filer qualified to open a proposal, or only to draft one. */
 let QUALIFIED = true;
+/** Whether the village has saved a conflict agreement, which then holds the restorative block. False unless a test says so. */
+let AGREEMENT_STORED = false;
 
 const who = (req: express.Request) => {
   const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -179,8 +182,8 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         circlesRepo: { all: () => [] } as any,
         exitPolicyRepo: exitPolicyRepo() as any,
         readExitPolicy: () => withPolicyDefaults(exitPolicyRepo().get()),
-        // No conflict agreement in this village: the save judges the exit policy's own restorative block.
-        agreementStored: () => false,
+        // No conflict agreement unless a test stores one: the save then judges the exit policy's own restorative block.
+        agreementStored: () => AGREEMENT_STORED,
       },
       dialWrite: {
         mayAct: async (req, cap: Capability) => {
@@ -527,6 +530,28 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(refused.body.error).toBe("unknown_role");
       await exitPolicyRepo().load();
       expect((exitPolicyRepo().get() as any).restorative.intakeContactRole).toBe("cf-care");
+    });
+
+    it("the care door, once a conflict agreement holds the restorative block: the save refuses, names where it lives, and nothing moves", async () => {
+      const p = (await propose("member", {
+        blockId: "conflict", target: "setting", door: "exit:restorative", servesPurpose: LINE,
+        change: { steps: ["Write to the care holder"], replyHours: 72 },
+        body: "One step and three days.",
+      })).body.proposal;
+      await exitPolicyRepo().load();
+      const before = JSON.stringify((exitPolicyRepo().get() as any).restorative);
+      AGREEMENT_STORED = true;
+      try {
+        const r = await adopt("admin", p.id);
+        expect(r.status).toBe(409);
+        expect(r.body).toMatchObject({ error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT });
+      } finally {
+        AGREEMENT_STORED = false;
+      }
+      await exitPolicyRepo().load();
+      expect(JSON.stringify((exitPolicyRepo().get() as any).restorative)).toBe(before);
+      // The suggestion stays open for the pen, with nothing recorded as adopted.
+      expect((await block("admin", "conflict")).body.proposals.map((x: any) => x.id)).toContain(p.id);
     });
 
     it("a matrix row: the founders adopt it and the village's matrix carries it", async () => {
