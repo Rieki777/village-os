@@ -102,6 +102,9 @@ writes nothing except through HTTP routes:
   platform's words, so the page shows its draft state). A seeded role, because
   a fork with no AI key makes a new capability role only through a
   `role_declare` ballot, and a ballot passes when its window ends and not before;
+- the conflict door's promise on the same exit policy: a reply within 48 hours
+  and a named contact outside the village, which `/exit-policy` prints and the
+  launch checklist's `conflict-door` row reads;
 - governance on for members; a governing purpose statement when
   `/api/admin/purpose` exists; canvas readings when `/api/canvas` exists (seven
   blocks read covering every level from 1 to 5, Purpose read twice, five empty),
@@ -148,7 +151,7 @@ per-role `expect` too: the Canvas view requires "Record a reading" of the founde
 who holds the pen and forbids it to a member). Text is matched without case,
 with whitespace collapsed, and `$villageName`, `$restorativeStep`,
 `$careRoleName`, `$careHolderName`, `$canvasReading`, `$seasonName`,
-`$seasonWeekTitle` and `$viewerName` come from the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
+`$seasonWeekTitle`, `$conflictReplyTime`, `$outsideContactName` and `$viewerName` come from the seed. `$brandTerms` is the BANNED list in `scripts/check-brand-refs.mjs`,
 matched as whole words everywhere, so a fresh village showing another village's
 name fails. A new seed fact goes in `seed.mjs`'s `facts`.
 

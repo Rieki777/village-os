@@ -22,6 +22,8 @@
  *   - a care holder: a member seated in the Trained Practitioners role, with a
  *     term to the March equinox, named as the exit policy's restorative intake
  *     role, and the restorative steps written in the village's own words;
+ *   - the conflict door's promise: a reply time in hours and a named contact
+ *     outside the village, both on the exit policy;
  *   - governance switched on for members;
  *   - a governing purpose statement, when the route exists;
  *   - canvas readings, when the route exists: at least one block at each level
@@ -77,6 +79,14 @@ const PEOPLE = [
 /** The seeded capability role that holds care here, and how long the seat runs. */
 const CARE_ROLE = "practitioners";
 const CARE_TERM_ENDS_ON = "2027-03-20";
+
+/**
+ * The conflict door's promise and its outside contact (Wave 2, the launch
+ * checklist's `conflict-door` row). The platform supplies neither, so the
+ * village names both, and /exit-policy prints them.
+ */
+const REPLY_HOURS = 48;
+const OUTSIDE_CONTACT = { name: "Hazel Quinn", organisation: "Valley Mediation Network", howToReach: "hazel@valley-mediation.test" };
 
 const RESTORATIVE_STEPS = [
   "Ask the care holder for a quiet first conversation; nothing is written down yet.",
@@ -191,6 +201,8 @@ const skipped = [];
 let canvasRecorded = false;
 /** Set when the season file loads: { name, lastWeekTitle, weeks }. */
 let seasonLoaded = null;
+/** Set when the exit policy keeps the conflict door's reply time and outside contact. */
+let conflictDoor = false;
 
 try {
   console.log(`\nseeding ${VILLAGE} on ${BASE} (build ${h.build})`);
@@ -272,13 +284,21 @@ try {
       process: p0.involuntary?.process ?? "",
       grounds: p0.involuntary?.grounds ?? [],
     },
-    restorative: { intakeContactRole: CARE_ROLE, steps: RESTORATIVE_STEPS },
+    restorative: { intakeContactRole: CARE_ROLE, steps: RESTORATIVE_STEPS, replyHours: REPLY_HOURS, outsideContact: OUTSIDE_CONTACT },
   }, founder.token);
   const pol2 = await must("re-read exit policy", "GET", "/api/exit-policy");
   const wording = pol2.json.platformWording ?? [];
   if (pol2.json.policy?.restorative?.intakeContactRole !== CARE_ROLE) throw new Error("the exit policy did not keep the intake role");
   if (wording.includes("restorativeSteps")) throw new Error("the restorative steps still read as the platform's words");
   log(`restorative steps written in the village's words; intake reaches ${careRole.name} (terms still in the platform's words: ${wording.join(", ") || "none"})`);
+  // A build before the conflict door's fields drops them on save, so the walk's lines about them go unmeasured there.
+  const kept = pol2.json.policy?.restorative;
+  conflictDoor = kept?.replyHours === REPLY_HOURS && kept?.outsideContact?.name === OUTSIDE_CONTACT.name;
+  if (conflictDoor) log(`conflict door: a reply within ${REPLY_HOURS} hours, and ${OUTSIDE_CONTACT.name} outside the village`);
+  else {
+    skipped.push("conflict door: this build does not keep a reply time or an outside contact");
+    log("SKIPPED conflict door: the exit policy did not keep a reply time or an outside contact on this build");
+  }
 
   // 9. Governance on for members.
   const gov = await must("governance on", "PUT", "/api/admin/modules/governance/lifecycle", { lifecycle: "members" }, founder.token);
@@ -364,6 +384,8 @@ try {
       // The season's name and its LAST week's title: the week map lists every week whatever
       // today's date is, so this holds all season long and after it.
       ...(seasonLoaded ? { seasonName: seasonLoaded.name, seasonWeekTitle: seasonLoaded.lastWeekTitle } : {}),
+      // The conflict door as /exit-policy and the launch checklist word it.
+      ...(conflictDoor ? { conflictReplyTime: `${REPLY_HOURS} hours`, outsideContactName: OUTSIDE_CONTACT.name } : {}),
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },
@@ -392,6 +414,7 @@ function printSummary(s) {
   for (const [id, r] of Object.entries(latest)) console.log(`    ${id.padEnd(13)} ${r.level} ${LEVEL_WORD[r.level]} (${r.moment})`);
   console.log(`    empty: ${s.emptyBlocks.join(", ")}`);
   console.log(`  care holder: ${s.facts.careHolderName} in ${s.facts.careRoleName}`);
+  if (s.facts.conflictReplyTime) console.log(`  conflict door: a reply within ${s.facts.conflictReplyTime}; outside contact ${s.facts.outsideContactName}`);
   if (s.facts.seasonName) console.log(`  season: ${s.facts.seasonName} (last week: ${s.facts.seasonWeekTitle})`);
   console.log(`  skipped: ${s.skipped.length ? s.skipped.join("; ") : "nothing"}`);
   console.log(`  tokens and passwords (test values, outside the repository): ${tokensFile()}`);
