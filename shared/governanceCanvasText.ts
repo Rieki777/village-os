@@ -48,6 +48,37 @@
  * "5 Thriving – Working well & alive"), so the dash there is layout and the
  * surfaces choose their own separator.
  *
+ * ── WHICH SOURCE EACH STRING FOLLOWS ───────────────────────────────────────
+ *
+ * Two public sources carry this text and they differ in places:
+ *
+ *   the canvas deck:  https://docs.google.com/presentation/d/1bdvTKMP1qiUMSGpMzsTiBwYVLU0wQ4WW2ib_WzLJbXc
+ *   the post:         the Substack article the credit links to
+ *
+ * Every string follows the DECK, with one exception. The Wave 1 audit
+ * compared every string here against the deck's text export by script; the
+ * four foundations and the Impact and Team questions were read against that
+ * export again on 2026-09-27, when the Personal Leadership line was restored:
+ *
+ *   - Impact's question follows the POST ("How do we holistically monitor
+ *     our impact & performance?"). The deck's text reads "How do
+ *     holistically monitor ...", dropping "we", a typo, and quoting a typo
+ *     would misrepresent the authors as surely as a rewrite. This is the one
+ *     exception.
+ *   - Team's question follows the deck's canvas slide ("...core values and
+ *     guiding principles?"). The post's is shorter ("...core values?").
+ *   - Personal Leadership follows the deck, whole: "Personal Leadership is
+ *     the human heartbeat of governance. Every stakeholder — board member,
+ *     staff, or community partner — brings their own integrity, awareness,
+ *     and commitment to the whole." The post also has "emotional
+ *     self-regulation" in that list. Until 2026-09-27 this file cut "— board
+ *     member, staff, or community partner —" from the middle with no mark,
+ *     which matched neither source, and its test pinned the cut.
+ *
+ * A quotation here may START or END inside the authors' sentence (each
+ * foundation's description begins after "X is" or "The X", and carries no
+ * closing stop), and it never drops words from the middle.
+ *
  * Every map is keyed by the union it describes, so a block, foundation or
  * level added to the registry and forgotten here is a compile error and never
  * a blank line on a card.
@@ -172,7 +203,7 @@ export const CANVAS_FOUNDATION_TEXT: Record<CanvasFoundation, CanvasFoundationTe
   "personal-leadership": {
     name: "Personal Leadership",
     description:
-      "the human heartbeat of governance. Every stakeholder brings their own integrity, awareness, and commitment to the whole",
+      "the human heartbeat of governance. Every stakeholder — board member, staff, or community partner — brings their own integrity, awareness, and commitment to the whole", // voice-ok: quoted from the Governance Canvas, verbatim
   },
 };
 

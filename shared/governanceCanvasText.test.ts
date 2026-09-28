@@ -123,10 +123,37 @@ describe("the four foundations", () => {
       },
       "personal-leadership": {
         name: "Personal Leadership",
+        // The deck's sentence whole. This pin used to hold a copy with
+        // "board member, staff, or community partner" cut from the middle,
+        // which matched neither published source.
         description:
-          "the human heartbeat of governance. Every stakeholder brings their own integrity, awareness, and commitment to the whole",
+          "the human heartbeat of governance. Every stakeholder — board member, staff, or community partner — brings their own integrity, awareness, and commitment to the whole",
       },
     });
+  });
+
+  it("drops no words from the middle: each description is the end of the deck's sentence, whole", () => {
+    // The deck's four foundation sentences as its text export prints them,
+    // read on 2026-09-27. A description may begin inside the sentence (after
+    // "X is" or "The X") and leaves off the closing stop; everything from
+    // where it begins to the stop must be there, in order.
+    const deck: Record<keyof typeof CANVAS_FOUNDATION_TEXT, string> = {
+      "legal-framework":
+        "The Legal Framework sets the outer boundaries — the statutory duties, corporate structure, and accountability obligations that any organisation must honour.",
+      "internal-rules":
+        "Internal Rules & Regulations translate legal obligations into operational policies: bylaws, decision-making protocols, and codes of conduct that guide day-to-day choices.",
+      culture:
+        "Organisational Culture is the living layer — the shared values, norms, and stories that determine how people actually behave when no one is watching.",
+      "personal-leadership":
+        "Personal Leadership is the human heartbeat of governance. Every stakeholder — board member, staff, or community partner — brings their own integrity, awareness, and commitment to the whole.",
+    };
+    for (const f of CANVAS_FOUNDATIONS) {
+      expect(deck[f].endsWith(` ${CANVAS_FOUNDATION_TEXT[f].description}.`), f).toBe(true);
+    }
+    // The phrase the misquote dropped, held on its own so a later trim of it is caught by name.
+    expect(CANVAS_FOUNDATION_TEXT["personal-leadership"].description).toContain(
+      "Every stakeholder — board member, staff, or community partner — brings their own integrity"
+    );
   });
 });
 
