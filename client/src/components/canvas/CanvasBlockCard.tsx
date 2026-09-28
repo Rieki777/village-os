@@ -14,7 +14,7 @@
  * and a numeral here would invite adding the twelve up, which R55 forbids.
  * The earlier readings are listed without a count for the same reason.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
@@ -29,6 +29,7 @@ export function CanvasBlockCard({
   onSave,
   focusLabel,
   season,
+  children,
 }: {
   block: CanvasBlock;
   view: CanvasBlockView;
@@ -43,6 +44,12 @@ export function CanvasBlockCard({
    * no weeks, and another programme's calendar is not this village's.
    */
   season?: { name: string; weeks: readonly number[] };
+  /**
+   * What a block hosts beneath its own words. The Power block hosts the
+   * platform's half of the Decision Matrix (CanvasBaseline hands it in); the
+   * others host nothing yet.
+   */
+  children?: ReactNode;
 }) {
   const [writing, setWriting] = useState(false);
   const latest = view.latest;
@@ -116,6 +123,8 @@ export function CanvasBlockCard({
           </Link>
         </p>
       )}
+
+      {children}
 
       {earlier.length > 0 && (
         <details className="mt-3 text-sm">

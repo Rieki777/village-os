@@ -83,6 +83,10 @@ describe("the files this test reads", () => {
         // are held to every rule below like the rest of the canvas.
         "CanvasSeason.tsx",
         "CanvasView.tsx",
+        // The platform's half of the Decision Matrix, inside the Power block
+        // (2026-09-27). It shows a vote's quorum and unity, which the server
+        // writes as plain numbers, and it is held to every rule below.
+        "DecisionMatrix.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);
@@ -159,6 +163,13 @@ describe("the credit", () => {
     const baseline = CANVAS_FILES.find((f) => f.name === "CanvasBaseline.tsx")!;
     expect(baseline.body).toContain("CANVAS_CREDIT.text");
     expect(baseline.body).toContain("CANVAS_CREDIT.url");
+  });
+
+  it("renders with the Decision Matrix, whose five columns are the canvas's", () => {
+    const matrix = CANVAS_FILES.find((f) => f.name === "DecisionMatrix.tsx")!;
+    expect(matrix.body).toContain("CANVAS_CREDIT.text");
+    expect(matrix.body).toContain("CANVAS_CREDIT.url");
+    expect(matrix.body).toContain("CANVAS_DECISION_MATRIX_COLUMNS");
   });
 
   it("renders on the workbook, and travels in its Markdown file", () => {

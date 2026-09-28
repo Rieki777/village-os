@@ -33,7 +33,7 @@
  * Light only, by ruling. The network lives here; the cards and the form are
  * handed functions and hold no fetch of their own.
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ExternalLink, Loader2, Printer } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
@@ -49,6 +49,13 @@ import { CANVAS_SCALE_TEXT } from "@shared/governanceCanvasText";
 import { newestLevels, radarDescription, type CanvasBlockView, type CanvasPayload } from "@/lib/canvasCopy";
 import { CanvasRadar } from "./CanvasRadar";
 import { CanvasBlockCard } from "./CanvasBlockCard";
+
+/**
+ * The platform's half of the Decision Matrix, which the Power block hosts.
+ * Its own chunk, loaded when the cards render: a member who never opens it
+ * still pays for the code once, and the data only when they open it.
+ */
+const DecisionMatrix = lazy(() => import("./DecisionMatrix"));
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -209,7 +216,13 @@ export function CanvasBaseline({
               onSave={save}
               focusLabel={inFocus.has(block.id) ? focusLabel : undefined}
               season={season ? { name: season.name, weeks: seasonWeeksOf(season, block.id) } : undefined}
-            />
+            >
+              {block.id === "power" && (
+                <Suspense fallback={null}>
+                  <DecisionMatrix />
+                </Suspense>
+              )}
+            </CanvasBlockCard>
           ))}
         </div>
       )}
