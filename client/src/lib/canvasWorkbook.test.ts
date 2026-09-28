@@ -17,7 +17,15 @@ import {
   CANVAS_KEY_MOMENTS,
   CANVAS_SCALE_TEXT,
 } from "@shared/governanceCanvasText";
-import { MATRIX_BLANK_ROWS, defaultPaper, levelLine, workbookFilename, workbookMarkdown } from "./canvasWorkbook";
+import {
+  MATRIX_BLANK_ROWS,
+  WORKBOOK_WHAT_IS_OURS,
+  WORKBOOK_WHAT_IS_QUOTED,
+  defaultPaper,
+  levelLine,
+  workbookFilename,
+  workbookMarkdown,
+} from "./canvasWorkbook";
 
 const md = workbookMarkdown("Willowbrook");
 const lines = md.split("\n");
@@ -25,10 +33,19 @@ const lines = md.split("\n");
 describe("the Markdown workbook", () => {
   it("is headed with the village's name and credits the canvas at the top and the foot", () => {
     expect(lines[0]).toBe("# Governance Canvas workbook for Willowbrook");
-    const credit = `Quoted from the ${CANVAS_CREDIT.text}: ${CANVAS_CREDIT.url}`;
+    const credit = `${WORKBOOK_WHAT_IS_QUOTED} ${CANVAS_CREDIT.text}: ${CANVAS_CREDIT.url}`;
     expect(lines[2]).toBe(credit);
     expect(lines.filter((l) => l === credit)).toHaveLength(2);
     expect(lines.lastIndexOf(credit)).toBeGreaterThan(lines.indexOf("## Key moments"));
+  });
+
+  it("says, beside each credit, that the questions under our heading are the platform's and not the authors'", () => {
+    expect(WORKBOOK_WHAT_IS_QUOTED).toMatch(/^The canvas's questions, descriptions, foundations, levels, key moments and Decision Matrix columns are quoted from the$/);
+    expect(WORKBOOK_WHAT_IS_OURS).toContain('"Our questions to talk through"');
+    expect(WORKBOOK_WHAT_IS_OURS).toContain("The canvas's authors did not write them.");
+    const at = lines.reduce<number[]>((acc, l, i) => (l.startsWith(WORKBOOK_WHAT_IS_QUOTED) ? [...acc, i] : acc), []);
+    expect(at).toHaveLength(2);
+    for (const i of at) expect(lines[i + 2]).toBe(WORKBOOK_WHAT_IS_OURS);
   });
 
   it("lists the five levels in the canvas's words", () => {

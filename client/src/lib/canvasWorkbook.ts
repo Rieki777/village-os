@@ -67,10 +67,22 @@ export function workbookHowTo(mark: "circle" | "tick"): string {
   );
 }
 
+/**
+ * Our words: what on these pages is quoted, ahead of the credit's name. The
+ * credit sits over pages that mix the canvas's text with our own prompts, so
+ * it says which is which, as the Canvas view's credit does.
+ */
+export const WORKBOOK_WHAT_IS_QUOTED =
+  "The canvas's questions, descriptions, foundations, levels, key moments and Decision Matrix columns are quoted from the";
+
+/** Our words: whose the rest is. "Our" on these pages is the platform's, never the authors'. */
+export const WORKBOOK_WHAT_IS_OURS =
+  'The questions under "Our questions to talk through" and the notes on using this workbook are written by the platform this village runs on. The canvas\'s authors did not write them.';
+
 /** Our words: where the readings go once the village has its own instance. */
 export const WORKBOOK_AFTER =
   "Once your village has its own instance, whoever holds the village's story records each block's level and " +
-  "sentence on the Canvas view of Journey to Launch, where every reading is kept with its date.";
+  "sentence in the Canvas tab of the Launch Plan, where every reading is kept with its date.";
 
 /** Our words, above the five levels. */
 export const WORKBOOK_LEVELS_NOTE =
@@ -116,11 +128,13 @@ function row(cells: readonly string[]): string {
 
 /** The whole workbook as Markdown, for the village of that name. */
 export function workbookMarkdown(villageName: string): string {
-  const credit = `Quoted from the ${CANVAS_CREDIT.text}: ${CANVAS_CREDIT.url}`;
+  const credit = `${WORKBOOK_WHAT_IS_QUOTED} ${CANVAS_CREDIT.text}: ${CANVAS_CREDIT.url}`;
   const out: string[] = [
     `# Governance Canvas workbook for ${villageName}`,
     "",
     credit,
+    "",
+    WORKBOOK_WHAT_IS_OURS,
     "",
     "Filled in by:",
     "",
@@ -197,6 +211,8 @@ export function workbookMarkdown(villageName: string): string {
     "---",
     "",
     credit,
+    "",
+    WORKBOOK_WHAT_IS_OURS,
     "",
   );
   return out.join("\n");

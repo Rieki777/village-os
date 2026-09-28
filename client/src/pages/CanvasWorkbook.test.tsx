@@ -28,7 +28,7 @@ import {
   CANVAS_KEY_MOMENTS,
   CANVAS_SCALE_TEXT,
 } from "@shared/governanceCanvasText";
-import { MATRIX_BLANK_ROWS } from "@/lib/canvasWorkbook";
+import { MATRIX_BLANK_ROWS, WORKBOOK_WHAT_IS_OURS, WORKBOOK_WHAT_IS_QUOTED } from "@/lib/canvasWorkbook";
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <div data-testid="layout">{children}</div>,
@@ -78,6 +78,9 @@ describe("what the printed workbook carries", () => {
       expect(link.getAttribute("href")).toBe(CANVAS_CREDIT.url);
       // On paper a link cannot be clicked, so the address is printed too.
       expect(screen.getByTestId(id).textContent).toContain(CANVAS_CREDIT.url);
+      // Which words are quoted, and that "Our questions" are the platform's, beside every credit.
+      expect(screen.getByTestId(id).textContent).toContain(WORKBOOK_WHAT_IS_QUOTED);
+      expect(screen.getByTestId(id).textContent).toContain(WORKBOOK_WHAT_IS_OURS);
     }
     expect(fetch).not.toHaveBeenCalled();
   });

@@ -44,19 +44,25 @@ import {
   WORKBOOK_LEVELS_NOTE,
   WORKBOOK_MATRIX_NOTE,
   WORKBOOK_MOMENTS_NOTE,
+  WORKBOOK_WHAT_IS_OURS,
+  WORKBOOK_WHAT_IS_QUOTED,
   blockHeading,
   workbookHowTo,
 } from "@/lib/canvasWorkbook";
 
-/** The credit, linked, in the words every canvas surface uses. */
+/**
+ * The credit, linked, saying which words are quoted and whose the rest are,
+ * as the Canvas view's credit does: the pages below mix the canvas's text
+ * with our prompts, under a heading that carries the village's name.
+ */
 function Credit({ testId }: { testId: string }) {
   return (
     <p className="text-sm text-stone-700" data-testid={testId}>
-      Quoted from the{" "}
+      {WORKBOOK_WHAT_IS_QUOTED}{" "}
       <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-900 underline">
         {CANVAS_CREDIT.text}
       </a>
-      . The canvas lives at <span className="break-all">{CANVAS_CREDIT.url}</span>
+      . The canvas lives at <span className="break-all">{CANVAS_CREDIT.url}</span>. {WORKBOOK_WHAT_IS_OURS}
     </p>
   );
 }
