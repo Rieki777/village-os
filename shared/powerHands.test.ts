@@ -239,6 +239,15 @@ describe("who adopts a canvas answer", () => {
     expect(later.capability).toBeUndefined();
   });
 
+  it("a module is the founders' to switch before the Birthing, and a proposal any member files after", () => {
+    expect(whoAdoptsCanvasAnswer("module", before)).toMatchObject({ how: "act", who: "admins" });
+    expect(whoAdoptsCanvasAnswer("module", after)).toMatchObject({ how: "ballot", who: "any-member" });
+    // The module the vote runs on: no vote can move it, so it stays with them.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, votable: false })).toMatchObject({ how: "act", who: "admins" });
+    // Only the module pen reads it.
+    expect(whoAdoptsCanvasAnswer("consequence", { ...after, votable: false })).toMatchObject({ how: "ballot" });
+  });
+
   it("the administrators' sections stay theirs whatever happens", () => {
     for (const facts of [before, after, handedOver]) {
       expect(whoAdoptsCanvasAnswer("admin", facts)).toMatchObject({ how: "act", who: "admins" });

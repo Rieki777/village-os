@@ -32,12 +32,12 @@ describe("the setting doors", () => {
     }
   });
 
-  it("maps plan 2.3's table: Team, Power, Conflict and Resourcing write; Roles, Meetings and Power's switch link out", () => {
+  it("maps plan 2.3's table: Team, Power, Conflict and Resourcing write; Roles and Meetings link out", () => {
     expect(doorsForBlock("team").map((d) => d.id)).toEqual(["dial:membership.vouches_required", "exit:terms"]);
-    expect(doorsForBlock("power").map((d) => d.id)).toEqual(["dial:governance.default_method"]);
+    expect(doorsForBlock("power").map((d) => d.id)).toEqual(["dial:governance.default_method", "module:governance"]);
     expect(doorsForBlock("conflict").map((d) => d.id)).toEqual(["exit:restorative"]);
     expect(doorsForBlock("resourcing").map((d) => d.id)).toEqual(["dial:ledger.admin_mint_cycle_cap"]);
-    expect(UNWIRED_DOORS.map((d) => d.block)).toEqual(["roles", "meetings", "power"]);
+    expect(UNWIRED_DOORS.map((d) => d.block)).toEqual(["roles", "meetings"]);
     for (const quiet of ["stakeholders", "coordination", "learning", "legal", "impact"] as const) {
       expect(doorsForBlock(quiet), quiet).toEqual([]);
     }
@@ -73,6 +73,9 @@ describe("parsing a suggestion", () => {
     expect(dial.ok && dial.proposal.change).toEqual({ value: "4" });
     expect(parseCanvasProposal({ blockId: "power", target: "setting", door: "dial:membership.vouches_required", change: { value: "4" }, body: "Four." }).ok).toBe(false);
     expect(parseCanvasProposal({ blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: {}, body: "Four." }).ok).toBe(false);
+    const on = parseCanvasProposal({ blockId: "power", target: "setting", door: "module:governance", change: { to: "members" }, body: "Let us vote here." });
+    expect(on.ok && on.proposal.change).toEqual({ to: "members" });
+    expect(parseCanvasProposal({ blockId: "power", target: "setting", door: "module:governance", change: { to: "everyone" }, body: "Let us vote here." }).ok).toBe(false);
     const roles = parseCanvasProposal({ blockId: "roles", target: "setting", body: "A year." });
     expect(!roles.ok && roles.error).toContain("Seat terms");
   });
@@ -125,5 +128,6 @@ describe("which pen a suggestion needs", () => {
     expect(penForProposal({ target: "setting", door: "dial:governance.default_method" })).toBe("dial");
     expect(penForProposal({ target: "setting", door: "exit:restorative" })).toBe("consequence");
     expect(penForProposal({ target: "setting", door: "exit:terms" })).toBe("consequence");
+    expect(penForProposal({ target: "setting", door: "module:governance" })).toBe("module");
   });
 });

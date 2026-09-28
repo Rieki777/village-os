@@ -300,6 +300,14 @@ export function whoMayPutHandToVillage(
  *                asked of the gate, inside the dial write's own route; after,
  *                a mechanics proposal, which any member may file and the
  *                village decides.
+ *   module       a module switched on or off (governance, on the Power
+ *                block). Before the Birthing, the administrators, which is the
+ *                lifecycle route's own guard; after, a mechanics proposal
+ *                carrying the lifecycle change, which the village decides.
+ *                Unless no vote can carry it (`votable: false`): the module
+ *                the vote itself runs on is never moved by a change set
+ *                (`NEVER_BY_CHANGESET`, server/lib/changeset.ts), so it stays
+ *                with the administrators after the Birthing too.
  *   admin        `people`, `legal`, `land` and `constraints`. Plan 2.3 keeps
  *                these with administrators for reading and writing, before
  *                the Birthing and after it.
@@ -311,13 +319,19 @@ export function whoMayPutHandToVillage(
  * makes this call agree with it: without it, the birth state ("nobody holds
  * it") would answer "a ballot", where Rye's answer is "the founder".
  */
-export type CanvasPen = "purpose" | "prose" | "consequence" | "dial" | "admin";
+export type CanvasPen = "purpose" | "prose" | "consequence" | "dial" | "module" | "admin";
 
 export interface CanvasPenFacts {
   /** The village's Game has started (`readGameStart`). The Birthing. */
   birthed: boolean;
   /** Every transferable power is with the village (`villageHandoverState().complete`). */
   handoverComplete: boolean;
+  /**
+   * Whether a vote can carry this change at all. Absent means yes. Only the
+   * module pen reads it: a module a change set may never move stays with the
+   * administrators after the Birthing, because a vote would have nowhere to go.
+   */
+  votable?: boolean;
 }
 
 export interface CanvasAdoptionRule {
@@ -337,6 +351,7 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     prose: () => whoMayPutHandToVillage(false, [], "the-gate"),
     consequence: () => whoMayPutHandToVillage(facts.birthed, [], "admins"),
     dial: () => whoMayPutHandToVillage(facts.birthed, [], "the-gate"),
+    module: () => whoMayPutHandToVillage(facts.birthed && facts.votable !== false, [], "admins"),
     admin: () => whoMayPutHandToVillage(false, [], "admins"),
   };
   const rule = asked[pen]();
@@ -357,13 +372,14 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
 export function canvasPenSentence(rule: CanvasAdoptionRule): string {
   if (rule.how === "ballot") {
     if (rule.pen === "purpose") return "Every power is with the village now, so a new statement goes to a vote of the whole village.";
-    if (rule.pen === "dial") return "The Game has started, so adopting this files a proposal and the village votes on it.";
+    if (rule.pen === "dial" || rule.pen === "module") return "The Game has started, so adopting this files a proposal and the village votes on it.";
     return "The Game has started, so adopting this goes to a vote of the whole village.";
   }
   if (rule.pen === "purpose") return "The founders keep the purpose statement until every power is handed to the village.";
   if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
   if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
   if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
+  if (rule.pen === "module") return "The administrators switch this part of the Game on or off in the module library.";
   return "The founders adopt this before the Game starts.";
 }
 

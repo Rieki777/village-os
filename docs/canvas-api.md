@@ -28,8 +28,8 @@ do not restate these lists.
 | `ProposalTarget` | `words` (a brief section), `purpose` (the governing purpose statement), `setting` (a setting behind a door), `matrix` (a human row of the Decision Matrix) |
 | `ProposalSource` | `member`, `derived` (drafted from the live system), `import` |
 | `ProposalStatus` | `open`, `adopted`, `declined`. A suggestion moves once and is never reopened |
-| `CanvasDoorId` | `dial:membership.vouches_required` and `exit:terms` (Team), `dial:governance.default_method` (Power), `exit:restorative` (Conflict), `dial:ledger.admin_mint_cycle_cap` (Resourcing) |
-| `CanvasPen` | `purpose`, `prose`, `consequence`, `dial`, `admin` |
+| `CanvasDoorId` | `dial:membership.vouches_required` and `exit:terms` (Team), `dial:governance.default_method` and `module:governance` (Power), `exit:restorative` (Conflict), `dial:ledger.admin_mint_cycle_cap` (Resourcing) |
+| `CanvasPen` | `purpose`, `prose`, `consequence`, `dial`, `module`, `admin` |
 
 What each target can carry, and where:
 
@@ -37,11 +37,10 @@ What each target can carry, and where:
 | --- | --- | --- | --- |
 | `words` | any block with brief sections | `sectionId`, one of the block's `briefSections` | none |
 | `purpose` | `purpose` only | `body` is the statement itself, held to `purposeStatementProblem` | none |
-| `setting` | the door's block only | `door` | a dial door: `{ "value": string }`; `exit:terms`: any of `noticePeriodDays` (whole days), `valuationMethod`, `unwindSteps` (string[]), `involuntaryProcess`; `exit:restorative`: any of `steps` (string[]), `intakeContactRole` (a role id, or `""`), `coverRole`, `replyHours` (whole hours, or `null`). At least one field |
+| `setting` | the door's block only | `door` | a dial door: `{ "value": string }`; `module:governance`: `{ "to": <lifecycle> }`, one of `off`, `preview`, `members`, `public`; `exit:terms`: any of `noticePeriodDays` (whole days), `valuationMethod`, `unwindSteps` (string[]), `involuntaryProcess`; `exit:restorative`: any of `steps` (string[]), `intakeContactRole` (a role id, or `""`), `coverRole`, `replyHours` (whole hours, or `null`). At least one field |
 | `matrix` | `power` only | `change` | `{ rowId?, subject, approval, consultation, information, method?, riskTags?: string[] }` |
 
-The settings plan 2.3 maps to Roles (seat terms), Meetings (the season's dates) and Power (the
-governance module switched on for members) have no door yet. A suggestion cannot carry a value for
+The settings plan 2.3 maps to Roles (seat terms) and Meetings (the season's dates) have no door yet. A suggestion cannot carry a value for
 them; the block's `doors` list names each with `wired: false`, a link to its own control and a
 sentence saying why.
 
@@ -69,6 +68,7 @@ seat (`villageHandoverState().complete`).
 | `admin` | `words` in `people`, `legal`, `land`, `constraints` | administrators | administrators |
 | `purpose` | `purpose` | the founders (the same `isAdmin` test `PUT /api/admin/purpose` applies), until the handover | the same until the handover; after it, a vote through `POST /api/governance/purpose-changes` |
 | `dial` | the three dial doors | `dial.set`, asked of the gate inside the dial write | any member files a mechanics proposal; the village votes |
+| `module` | `module:governance` | administrators (the lifecycle route's own guard) | a mechanics proposal for a module a vote can move; the governance module is never moved by a change set (`NEVER_BY_CHANGESET`), so it stays with administrators |
 | `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators | a vote of the whole village at the structural tier. **Not built yet**: adopting answers 409 `CONSEQUENCE_VOTE_NOT_BUILT` and the suggestion stays open |
 
 Each proposal and each block carries a `PenView` so the page can name the pen and offer a button
@@ -122,7 +122,7 @@ One block, everything its five frames need. `404` for an id that is not a canvas
     { "id": "dial:membership.vouches_required", "label": "...", "href": "/game-mechanics", "kind": "dial", "wired": true },
     { "label": "The term on each seat", "href": "/roles", "why": "...", "wired": false }
   ],
-  "pens": { "words": PenView, "adminWords": PenView, "purpose": PenView, "dial": PenView, "consequence": PenView },
+  "pens": { "words": PenView, "adminWords": PenView, "purpose": PenView, "dial": PenView, "module": PenView, "consequence": PenView },
   "birthed": false,
   "servesPurpose": { "scoped": false, "matrixScoped": false, "requiredToday": true },
   "notesArePublic": "Everyone in the village can read what you write here."
@@ -200,6 +200,7 @@ What adopting does, by pen and moment:
 | `purpose`, before the handover | `founderPenRefusal`, then `writeGoverningPurpose` | `{ "wrote": "purpose-statement", "writtenAt" }` |
 | `dial`, before the Birthing | `writeDial` (the body of `PUT /api/admin/variables/:key`) | `{ "wrote": "dial", "key", "value", "previous" }` |
 | `dial`, after the Birthing | `openMechanicsProposal` (the body of `POST /api/game/mechanics/proposals`), filed by the adopter | `{ "filed": "mechanics-proposal", "id", "status" }` |
+| `module` (administrators) | `setModuleLifecycle`, the write behind `PUT /api/admin/modules/:id/lifecycle`, with its shared-password posture; no example content is seeded | `{ "wrote": "module-lifecycle", "module", "lifecycle" }` |
 | `consequence`, before the Birthing | `saveExitPolicy` (the body of `PUT /api/admin/exit-policy`) with the suggestion's fields laid over the policy, or `writeDecisionMatrixRow` | `{ "wrote": "exit-policy", "door", "fields" }` or `{ "wrote": "matrix-row", "rowId" }` |
 
 Responses:

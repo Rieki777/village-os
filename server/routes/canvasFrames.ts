@@ -51,11 +51,17 @@
  *   statement   same `isAdmin` test `PUT /api/admin/purpose` applies
  *   a matrix    `writeDecisionMatrixRow`, behind the consequence pen
  *   row
+ *   a module    `setModuleLifecycle` (server/lib/modules.ts), the write behind
+ *               `PUT /api/admin/modules/:id/lifecycle`, behind that route's
+ *               own `isAdmin` and its shared-password posture. The route's
+ *               courtesy of seeding example content on a first enable is not
+ *               taken: a canvas adoption is the village's own words, and the
+ *               route's own `examples: false` is the same choice
  *
  * A refusal from the setting is answered as it came, and the suggestion stays
  * open: nothing is recorded as adopted that did not happen.
  *
- * After the Birthing, a dial door files a mechanics proposal through
+ * After the Birthing, a dial or module door files a mechanics proposal through
  * `openMechanicsProposal` (server/lib/mechanicsPropose.ts), the body of
  * `POST /api/game/mechanics/proposals`, and the village decides it. The
  * consequence pen's vote (the exit terms, the care door and the matrix, at the
@@ -74,6 +80,7 @@ import { capabilityDecision, type Capability } from "../../shared/capabilities";
 import {
   CANVAS_DOORS,
   doorsForBlock,
+  isCanvasDoorId,
   isAdminOnlySection,
   parseCanvasProposal,
   parseMatrixRow,
@@ -103,7 +110,10 @@ import { writeDial, type DialWriteDeps } from "../lib/dialWrite";
 import { recordEvent } from "../lib/events";
 import { readGameStart } from "../lib/gameStart";
 import { founderPenRefusal, governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
+import { NEVER_BY_CHANGESET } from "../lib/changeset";
+import { EXECUTABLE_ITEM_KINDS } from "../lib/mechanics";
 import { openMechanicsProposal, type MechanicsProposeDeps } from "../lib/mechanicsPropose";
+import { setModuleLifecycle } from "../lib/modules";
 import type { IntakeHolding } from "../lib/restorativeIntake";
 import { briefAll, briefWrite, type BriefRow } from "../lib/villageBrain";
 import { allCanvasReadings, type CanvasReadingRow } from "../repos/canvasReadings";
@@ -139,6 +149,8 @@ export interface CanvasFrameDeps
   dialWrite: DialWriteDeps;
   /** The mechanics proposal's collaborators, handed to `openMechanicsProposal` whole. */
   mechanicsPropose: MechanicsProposeDeps;
+  /** The lifecycle route's own posture check: true while no admin has a real credential. */
+  sharedPasswordPosture(): Promise<boolean>;
   addActivity(
     kind: string,
     text: string,
@@ -160,6 +172,7 @@ export const PEN_REFUSALS: Record<CanvasPen, string> = {
   prose: "Adopting canvas words is for whoever holds the village's story. You can suggest words, and they adopt them.",
   consequence: "The founders adopt this before the Game starts. You can suggest it, and they decide.",
   dial: "Adopting this changes one of the village's dials, which is for whoever may turn them. You can suggest it, and they decide.",
+  module: "Switching a part of the Game on or off is for the founders before the Game starts. You can suggest it, and they decide.",
   admin: "This section stays with the administrators. You can suggest words, and they decide.",
 };
 
@@ -229,6 +242,17 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
   };
 
   /**
+   * The pen a suggestion needs, asked of the one predicate. A module door adds
+   * whether a vote could carry it at all: the module the vote runs on is never
+   * moved by a change set, so it stays with the administrators.
+   */
+  const ruleFor = (p: { target: CanvasProposalRow["target"]; sectionId?: string | null; door?: string | null }, facts: CanvasPenFacts) => {
+    const door = p.door && isCanvasDoorId(p.door) ? CANVAS_DOORS[p.door] : null;
+    const withVote = door?.kind === "module" ? { ...facts, votable: !NEVER_BY_CHANGESET.has(String(door.moduleId)) } : facts;
+    return whoAdoptsCanvasAnswer(penForProposal(p), withVote);
+  };
+
+  /**
    * Whether this person may take the step the rule names, asked without the
    * request's side effects: the page uses it to offer a button, and the write
    * still asks the real guard. The same shape as `mayRecord` in
@@ -244,7 +268,15 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
   };
 
   const penView = async (req: Request, user: any, rule: CanvasAdoptionRule) => {
-    const ballotBuilt = rule.how === "act" || rule.pen === "dial" || rule.pen === "purpose";
+    // A vote is "built" when the machinery it files into can carry it out:
+    // a dial through a mechanics proposal, the purpose statement through its
+    // own change vote, and a module only once the mechanics executor carries a
+    // lifecycle change (`EXECUTABLE_ITEM_KINDS`), which it does not today.
+    const ballotBuilt =
+      rule.how === "act" ||
+      rule.pen === "dial" ||
+      rule.pen === "purpose" ||
+      (rule.pen === "module" && EXECUTABLE_ITEM_KINDS.has("module_lifecycle"));
     return {
       pen: rule.pen,
       how: rule.how,
@@ -257,7 +289,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
 
   /** A suggestion as the page renders it. The purpose line is absent where the field does not exist. */
   const proposalView = async (req: Request, user: any, p: CanvasProposalRow, facts: CanvasPenFacts) => {
-    const rule = whoAdoptsCanvasAnswer(penForProposal(p), facts);
+    const rule = ruleFor(p, facts);
     return {
       id: p.id,
       blockId: p.blockId,
@@ -368,6 +400,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     if (block.briefSections.some((s) => isAdminOnlySection(s))) pens.adminWords = await penView(req, user, whoAdoptsCanvasAnswer("admin", facts));
     if (id === "purpose") pens.purpose = await penView(req, user, whoAdoptsCanvasAnswer("purpose", facts));
     if (doorsForBlock(id).some((d) => d.kind === "dial")) pens.dial = await penView(req, user, whoAdoptsCanvasAnswer("dial", facts));
+    for (const d of doorsForBlock(id).filter((x) => x.kind === "module")) {
+      pens.module = await penView(req, user, ruleFor({ target: "setting", door: d.id }, facts));
+    }
     if (id === "power" || doorsForBlock(id).some((d) => d.kind === "exit-policy")) {
       pens.consequence = await penView(req, user, whoAdoptsCanvasAnswer("consequence", facts));
     }
@@ -475,6 +510,12 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     return body;
   };
 
+  /** What a filed mechanics proposal says for itself: the suggestion, its purpose line, and where it came from. */
+  const rationaleFor = (p: CanvasProposalRow): string =>
+    [p.body, p.servesPurpose ? `How it serves the purpose: ${p.servesPurpose}` : "", `Suggested on the canvas's ${CANVAS_BLOCKS[p.blockId].name} block.`]
+      .filter(Boolean)
+      .join("\n\n");
+
   type Effect = { ok: true; outcome: Record<string, unknown>; message: string } | { ok: false; status: number; body: Record<string, unknown> };
 
   /**
@@ -485,7 +526,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     const pool = getPool();
     const facts = await penFacts();
     const pen = penForProposal(p);
-    const rule = whoAdoptsCanvasAnswer(pen, facts);
+    const rule = ruleFor(p, facts);
     const block = CANVAS_BLOCKS[p.blockId];
 
     if (pen === "prose" || pen === "admin") {
@@ -546,13 +587,44 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         };
       }
       // After the Birthing: the proposal that would change it, filed by the adopter.
-      const rationale = [p.body, p.servesPurpose ? `How it serves the purpose: ${p.servesPurpose}` : "", `Suggested on the canvas's ${block.name} block.`]
-        .filter(Boolean)
-        .join("\n\n");
+      const rationale = rationaleFor(p);
       const filed = await openMechanicsProposal(deps.mechanicsPropose, user, {
         title: `${block.name}: ${door.label}`.slice(0, 200),
         rationale,
         changes: [{ key: door.dialKey, to: value }],
+      });
+      if (filed.status !== 200) return { ok: false, status: filed.status, body: filed.body };
+      return {
+        ok: true,
+        outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
+        message: "Filed as a proposal to change the Game's rules. The village decides it.",
+      };
+    }
+
+    if (pen === "module") {
+      const door = CANVAS_DOORS[p.door!];
+      const to = String((p.change as { to?: unknown } | null)?.to ?? "");
+      if (rule.how === "act") {
+        // Before the Birthing: the lifecycle route's own guard, then its write.
+        if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.module } };
+        const sharedOnly = await deps.sharedPasswordPosture();
+        const result = await setModuleLifecycle(String(door.moduleId), to as any, String(user.id), { sharedPasswordPosture: () => sharedOnly });
+        if (!result.ok) {
+          const { status, ...body } = result as { ok: false; status: number } & Record<string, unknown>;
+          return { ok: false, status, body };
+        }
+        return {
+          ok: true,
+          outcome: { wrote: "module-lifecycle", module: door.moduleId, lifecycle: result.lifecycle },
+          message: `Adopted. ${door.label}: ${result.lifecycle}.`,
+        };
+      }
+      // After the Birthing: the proposal that would change it. The mechanics
+      // validator answers for itself whether this build can carry it out.
+      const filed = await openMechanicsProposal(deps.mechanicsPropose, user, {
+        title: `${block.name}: ${door.label}`.slice(0, 200),
+        rationale: rationaleFor(p),
+        changes: [{ kind: "module_lifecycle", moduleId: door.moduleId, to }],
       });
       if (filed.status !== 200) return { ok: false, status: filed.status, body: filed.body };
       return {
@@ -631,7 +703,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         // person, so where the pen is the village's vote only the proposer
         // can take a suggestion back.
         if (note.length < 2) return { status: 400, body: { error: "Say in a sentence why this is declined. The note is public, like the suggestion." } };
-        const rule = whoAdoptsCanvasAnswer(penForProposal(p), await penFacts());
+        const rule = ruleFor(p, await penFacts());
         if (rule.how === "ballot") {
           return { status: 409, body: { error: "The village decides this by vote, so nobody declines it alone. The member who suggested it can withdraw it." } };
         }

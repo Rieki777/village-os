@@ -9001,6 +9001,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
   }
   // ── End Lane C zone ────────────────────────────────────────────────────────
 
+  /** No per-admin identity with a real credential exists yet. The lifecycle route and the canvas module door both ask this. */
+  const sharedPasswordPostureNow = async (): Promise<boolean> =>
+    (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0;
   app.put("/api/admin/modules/:id/lifecycle", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     // `examples: false` skips the seed-on-enable below for THIS request only
@@ -9009,14 +9012,12 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const { lifecycle, examples } = req.body ?? {};
     // Funds-bearing modules refuse to enable while no per-admin identity with
     // a real credential exists (invariants #11-#12).
-    const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
-    );
+    const sharedOnly = await sharedPasswordPostureNow();
     const result = await setModuleLifecycle(
       req.params.id,
       String(lifecycle) as ModuleLifecycle,
       adminActor(req)?.id ?? null,
-      { sharedPasswordPosture: () => adminsWithPasswords.length === 0 },
+      { sharedPasswordPosture: () => sharedOnly },
     );
     if (!result.ok) {
       const { status, ...body } = result as any;
@@ -24925,7 +24926,7 @@ ${inner}
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render

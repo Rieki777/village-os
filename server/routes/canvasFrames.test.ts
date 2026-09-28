@@ -46,7 +46,7 @@ import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import { recordGameStart } from "../lib/gameStart";
 import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
 import { proposalById } from "../lib/mechanics";
-import { loadModuleSettings } from "../lib/modules";
+import { effectiveLifecycle, loadModuleSettings } from "../lib/modules";
 import { loadVariables, numberVar, setVariable, stringVar } from "../lib/variables";
 import { briefGet, briefWrite } from "../lib/villageBrain";
 import { wireReaders } from "../lib/villageReaders";
@@ -202,6 +202,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         addActivity,
         firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
       },
+      sharedPasswordPosture: async () => false,
       addActivity,
       tools: () => [],
       submissions: () => [],
@@ -452,6 +453,22 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(rows[0].riskTags).toEqual(["land"]);
     });
 
+    it("governance for members: the founders switch it on through the lifecycle write", async () => {
+      expect(effectiveLifecycle("governance")).toBe("off");
+      const p = (await propose("member", {
+        blockId: "power", target: "setting", door: "module:governance", change: { to: "members" }, servesPurpose: LINE, body: "Let the village vote here.",
+      })).body.proposal;
+      expect(p.pen).toMatchObject({ pen: "module", how: "act", who: "admins" });
+      expect(await adopt("member", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.module } });
+      expect(effectiveLifecycle("governance")).toBe("off");
+      const r = await adopt("admin", p.id);
+      expect(r.status).toBe(200);
+      expect(r.body.outcome).toEqual({ wrote: "module-lifecycle", module: "governance", lifecycle: "members" });
+      expect(effectiveLifecycle("governance")).toBe("members");
+      const fact = (await block("member", "power")).body.observed.find((f: any) => f.id === "governance-on").text;
+      expect(fact).toBe("Governance is on for members, so the village can vote here.");
+    });
+
     it("declining: the pen says why, a member without it cannot, and the proposer can withdraw", async () => {
       const words = (await propose("member", { blockId: "team", sectionId: "membership", body: "Anybody may join." })).body.proposal;
       expect((await decline("teller", words.id)).status).toBe(400);
@@ -527,6 +544,18 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       const refused = await call("POST", "/api/canvas/decision-matrix/rows", "admin", row);
       expect(refused.status).toBe(409);
       expect(refused.body.error).toContain(CONSEQUENCE_VOTE_NOT_BUILT);
+    });
+
+    it("the part of the Game that holds the vote stays the administrators' to switch, because no vote can move it", async () => {
+      const p = (await propose("member", {
+        blockId: "power", target: "setting", door: "module:governance", change: { to: "public" }, servesPurpose: LINE, body: "Open governance to everyone.",
+      })).body.proposal;
+      expect(p.pen).toMatchObject({ pen: "module", how: "act", who: "admins", youMayAdopt: false });
+      expect(await adopt("member", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.module } });
+      expect(effectiveLifecycle("governance")).toBe("members");
+      const r = await adopt("admin", p.id);
+      expect(r.status).toBe(200);
+      expect(effectiveLifecycle("governance")).toBe("public");
     });
 
     it("words are still the story's holder's to adopt", async () => {

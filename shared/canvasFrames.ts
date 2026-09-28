@@ -23,12 +23,13 @@
  *
  * Plan 2.3's table maps seven blocks to settings. A door in `CANVAS_DOORS` is
  * one the adopt route can write by CALLING that setting's own logic, with its
- * own guard: the dial write behind `PUT /api/admin/variables/:key` and the
- * exit-policy save behind `PUT /api/admin/exit-policy`. The three settings
- * whose logic is not callable from here yet (seat terms, the season's dates,
- * the governance module's lifecycle) are `UNWIRED_DOORS`: the page links to
- * their own controls, a suggestion cannot carry a value for them, and the
- * report that shipped this file says so. A door is never simulated.
+ * own guard: the dial write behind `PUT /api/admin/variables/:key`, the
+ * exit-policy save behind `PUT /api/admin/exit-policy`, and the module
+ * lifecycle write behind `PUT /api/admin/modules/:id/lifecycle`. The two
+ * settings whose logic is not callable from here yet (seat terms and the
+ * season's dates) are `UNWIRED_DOORS`: the page links to their own controls, a
+ * suggestion cannot carry a value for them, and the report that shipped this
+ * file says so. A door is never simulated.
  */
 import { ALIGNMENT_MAX_CHARS, ALIGNMENT_MIN_WORDS, countWords, purposeStatementProblem } from "./governingPurpose";
 import { CANVAS_BLOCKS, isCanvasBlockId, type CanvasBlockId } from "./governanceCanvas";
@@ -63,17 +64,20 @@ export const CANVAS_DOOR_IDS = [
   "dial:governance.default_method",
   "exit:restorative",
   "dial:ledger.admin_mint_cycle_cap",
+  "module:governance",
 ] as const;
 export type CanvasDoorId = (typeof CANVAS_DOOR_IDS)[number];
 
 export interface CanvasDoor {
   id: CanvasDoorId;
   block: CanvasBlockId;
-  kind: "dial" | "exit-policy";
+  kind: "dial" | "exit-policy" | "module";
   /** What the door changes, as a member reads it. */
   label: string;
   /** The dial's key, on a dial door. */
   dialKey?: string;
+  /** The module's id, on a module door. */
+  moduleId?: string;
   /** The setting's own control, for a person who wants to see it there. */
   href: string;
 }
@@ -117,6 +121,14 @@ export const CANVAS_DOORS: Record<CanvasDoorId, CanvasDoor> = {
     dialKey: ISSUANCE_CAP_KEY,
     href: "/game-mechanics",
   },
+  "module:governance": {
+    id: "module:governance",
+    block: "power",
+    kind: "module",
+    label: "Governance switched on for members",
+    moduleId: "governance",
+    href: "/admin?tab=modules&module=governance",
+  },
 };
 
 export function isCanvasDoorId(value: unknown): value is CanvasDoorId {
@@ -139,12 +151,6 @@ export const UNWIRED_DOORS: ReadonlyArray<{ block: CanvasBlockId; label: string;
     label: "The season's dates",
     href: "/admin?tab=season",
     why: "The season's dates are set on the season list.",
-  },
-  {
-    block: "power",
-    label: "Governance switched on for members",
-    href: "/admin?tab=modules&module=governance",
-    why: "A module is switched on in the module library.",
   },
 ];
 
@@ -202,7 +208,10 @@ export function servesPurposeProblem(scoped: boolean, raw: unknown, hasStatement
 export function penForProposal(p: { target: ProposalTarget; sectionId?: string | null; door?: string | null }): CanvasPen {
   if (p.target === "purpose") return "purpose";
   if (p.target === "matrix") return "consequence";
-  if (p.target === "setting") return p.door && isCanvasDoorId(p.door) && CANVAS_DOORS[p.door].kind === "dial" ? "dial" : "consequence";
+  if (p.target === "setting") {
+    const kind = p.door && isCanvasDoorId(p.door) ? CANVAS_DOORS[p.door].kind : null;
+    return kind === "dial" ? "dial" : kind === "module" ? "module" : "consequence";
+  }
   return isAdminOnlySection(String(p.sectionId ?? "")) ? "admin" : "prose";
 }
 
@@ -211,6 +220,14 @@ export function penForProposal(p: { target: ProposalTarget; sectionId?: string |
 /** A dial door's new value, as the dial write takes it. */
 export interface DialChange {
   value: string;
+}
+
+/** The lifecycles a module door can move a module to, in the module registry's words. */
+export const MODULE_DOOR_LIFECYCLES = ["off", "preview", "members", "public"] as const;
+
+/** A module door's new lifecycle. */
+export interface ModuleChange {
+  to: (typeof MODULE_DOOR_LIFECYCLES)[number];
 }
 
 /** The exit terms a Team suggestion can set. Every field optional; at least one present. */
@@ -353,7 +370,7 @@ export interface CanvasProposalInput {
   target: ProposalTarget;
   sectionId: BriefSectionId | null;
   door: CanvasDoorId | null;
-  change: DialChange | ExitTermsChange | RestorativeChange | MatrixRowChange | null;
+  change: DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange | null;
   body: string;
   source: ProposalSource;
 }
@@ -438,6 +455,13 @@ export function parseCanvasProposal(body: unknown): { ok: true; proposal: Canvas
     if (!value) return { ok: false, error: "Say what the setting should be." };
     if (value.length > 255) return { ok: false, error: "A setting's value is at most 255 characters." };
     return { ok: true, proposal: { ...base, target: "setting", sectionId: null, door: door.id, change: { value } } };
+  }
+  if (door.kind === "module") {
+    const to = str((b.change as Record<string, unknown> | undefined)?.to);
+    if (!(MODULE_DOOR_LIFECYCLES as readonly string[]).includes(to)) {
+      return { ok: false, error: "Say how widely the module should be switched on: off, preview, members or public." };
+    }
+    return { ok: true, proposal: { ...base, target: "setting", sectionId: null, door: door.id, change: { to: to as ModuleChange["to"] } } };
   }
   const parsed = door.id === "exit:terms" ? parseExitTerms(b.change) : parseRestorative(b.change);
   if (!parsed.ok) return parsed;
