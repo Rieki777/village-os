@@ -378,4 +378,27 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
     expect(row("power:story.tell").approval.text).toContain("with Storytellers");
     for (const person of ["Wren", "Ash", "Canvas Founder", "Juniper", "Linden", people.pen.id]) expect(r.text).not.toContain(person);
   });
+
+  it("serves a block's Learn frame the Governance Canvas Database from the shipped snapshot, through the real wiring, and places a resource only by the pen", async () => {
+    // The scheduler is off here, so nothing has read the database: the first read loads the snapshot bundled into dist.
+    const r = await call("GET", "/api/canvas/resources?block=conflict", undefined, people.member.token);
+    expect(r.status, r.text).toBe(200);
+    expect(r.json.source.kind).toBe("snapshot");
+    expect(r.json.credit.text).toBe("Governance Canvas Database, Bioregional Weaving Labs Collective and Commonland");
+    const names: string[] = r.json.resources.map((x: any) => x.name);
+    expect(names).toContain("Beginning Anew");
+    expect(names.filter((n) => /NVC|Nonviolent/.test(n))).toHaveLength(3);
+    const safety = await call("GET", "/api/canvas/resources?block=conflict&surface=safety", undefined, people.member.token);
+    expect(safety.json.resources.map((x: any) => x.name).filter((n: string) => /NVC|Nonviolent/.test(n))).toEqual([]);
+    expect((await call("GET", "/api/canvas/resources?block=conflict", undefined, people.stranger.token)).status).toBe(403);
+    expect((await call("GET", "/api/canvas/resources?block=conflict", undefined, "")).status).toBe(401);
+
+    const beginning = r.json.resources.find((x: any) => x.name === "Beginning Anew");
+    const refused = await call("PUT", `/api/canvas/resources/${beginning.key}/blocks`, { blocks: ["meetings"] }, people.member.token);
+    expect(refused.status, refused.text).toBe(403);
+    const placed = await call("PUT", `/api/canvas/resources/${beginning.key}/blocks`, { blocks: ["conflict", "meetings"] }, people.pen.token);
+    expect(placed.status, placed.text).toBe(200);
+    const meetings = await call("GET", "/api/canvas/resources?block=meetings", undefined, people.member.token);
+    expect(meetings.json.resources[0]).toMatchObject({ name: "Beginning Anew", placing: { by: "village", keyword: null } });
+  });
 });
