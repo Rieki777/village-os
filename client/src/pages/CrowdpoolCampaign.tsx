@@ -39,6 +39,13 @@ interface Need {
   id: string; name: string; kind: string; capitalType: string; description: string | null;
   estimatedValue: number; quantityWanted: number; quantityClaimed: number; quantityDelivered: number;
   needDeadline: string | null; priorityPinned: boolean; groupClaimable: boolean;
+  /**
+   * 'count' or 'hours_per_week', from hub contract 3 onward. ABSENT MEANS
+   * COUNT: every need that predates the field, and every hub older than
+   * contract 3, sends none, so the missing value has to keep its old meaning
+   * or the whole back catalogue changes unit the day the field arrives.
+   */
+  capacityUnit?: string;
 }
 interface PoolEvent { id: string; type: string; who: string; item: string | null; at: string | null }
 /** Just enough of a sibling card to name it and link to it. */
@@ -339,7 +346,7 @@ export default function CrowdpoolCampaign() {
                             <p className="text-xs mt-1.5 leading-relaxed" style={{ color: "#4a3a26" }}>{n.description}</p>
                           )}
                           <div className="mt-2.5">
-                            <SlotMeter wanted={n.quantityWanted} claimed={n.quantityClaimed} delivered={n.quantityDelivered} tint={tint} />
+                            <SlotMeter wanted={n.quantityWanted} claimed={n.quantityClaimed} delivered={n.quantityDelivered} tint={tint} unit={n.capacityUnit} />
                           </div>
                           {n.needDeadline && (
                             <p className="text-[11px] mt-1.5" style={{ color: "#8a6a33" }}>

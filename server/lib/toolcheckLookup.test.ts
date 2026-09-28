@@ -51,7 +51,7 @@ vi.mock("https", async (importOriginal) => {
 });
 
 import { guardedFetchJson } from "./toolcheck";
-import { ecbDailyUrl, parseEcbSeries, refreshDailyRates } from "./fxRates";
+import { dailyRatesUrl, parseDailyRates, refreshDailyRates } from "./fxRates";
 
 /** Self-signed for CN=fx.ecb.test, valid to 2126, generated for this test. */
 const FIXTURE_KEY = `-----BEGIN PRIVATE KEY-----
@@ -103,22 +103,23 @@ eJCtt90AuIWaa108EfOGjfzSETg5AGYEC2mydlDmpFYvj6Z7R48XFOp3R/Oi7S+l
 YVmI4Zp0AJm9dhZJbw8q4F1xzA==
 -----END CERTIFICATE-----`;
 
-/** The ECB body the fixture serves: trimmed from the live 2026-08-21 answer. */
-const ECB_BODY = JSON.stringify({
-  header: { id: "fixture" },
-  dataSets: [{ series: { "0:0:0:0:0": { observations: { "0": [0.9353] } }, "0:1:0:0:0": { observations: { "0": [1.1699] } } } }],
-  structure: {
-    dimensions: {
-      series: [
-        { id: "FREQ", values: [{ id: "D" }] },
-        { id: "CURRENCY", values: [{ id: "CHF" }, { id: "USD" }] },
-        { id: "CURRENCY_DENOM", values: [{ id: "EUR" }] },
-        { id: "EXR_TYPE", values: [{ id: "SP00" }] },
-        { id: "EXR_SUFFIX", values: [{ id: "A" }] },
-      ],
-      observation: [{ id: "TIME_PERIOD", values: [{ id: "2026-08-21" }] }],
-    },
-  },
+/**
+ * The body the fixture serves, trimmed from the live answer of 2026-09-25.
+ *
+ * It used to be the ECB's SDMX. The source changed because the ECB daily
+ * reference list does not carry colones and the first village this platform
+ * serves prices in them; this one answers 166 codes with no key. The envelope
+ * is kept verbatim because `parseDailyRates` checks `result` and `base_code`
+ * before it reads a single rate, and a fixture that dropped them would be
+ * testing a parser nobody ships.
+ */
+const RATES_BODY = JSON.stringify({
+  result: "success",
+  provider: "https://www.exchangerate-api.com",
+  time_last_update_unix: 1790294551,
+  time_last_update_utc: "Fri, 25 Sep 2026 00:02:31 +0000",
+  base_code: "EUR",
+  rates: { CHF: 0.941694, USD: 1.13807 },
 });
 
 let fixture: https.Server;
@@ -128,7 +129,7 @@ let lookupCalls: Array<{ options: any; delivered: any }> = [];
 beforeAll(async () => {
   fixture = https.createServer({ key: FIXTURE_KEY, cert: FIXTURE_CERT }, (req, res) => {
     res.setHeader("content-type", "application/json");
-    res.end(ECB_BODY);
+    res.end(RATES_BODY);
   });
   await new Promise<void>((r) => fixture.listen(0, "127.0.0.1", r));
   fixturePort = (fixture.address() as AddressInfo).port;
@@ -181,7 +182,8 @@ describe("both lookup forms resolve, over a real dial to the HTTPS fixture", () 
   it("completes a guarded fetch and hands the array form the one vetted address", async () => {
     lookupMock.mockResolvedValue([{ address: VETTED, family: 4 }]);
     const doc = await guardedFetchJson("https://fx.ecb.test/service/data/EXR/x?format=jsondata", 5000);
-    expect(doc?.header?.id).toBe("fixture");
+    expect(doc?.result).toBe("success");
+    expect(doc?.base_code).toBe("EUR");
     expect(lookupCalls).toHaveLength(1);
     // Node >= 20's contract: an ARRAY, exactly one entry, the vetted address.
     expect(lookupCalls[0].delivered.all).toEqual([{ address: VETTED, family: 4 }]);
@@ -234,10 +236,14 @@ describe("the fx job dials for real (lane harm metric, R39 condition 3)", () => 
     expect(writes).toHaveLength(2);
     expect(writes[0].sql).toContain("fx_rates");
     expect(writes.map((w) => w.args[0]).sort()).toEqual(["CHF", "USD"]);
-    expect(writes.find((w) => w.args[0] === "CHF")?.args[1]).toBe(0.9353);
-    // And the URL the job dialled is the fixed-literal ECB one.
-    expect(lookupCalls[0].options.path).toBe(new URL(ecbDailyUrl()).pathname + new URL(ecbDailyUrl()).search);
+    expect(writes.find((w) => w.args[0] === "CHF")?.args[1]).toBe(0.941694);
+    // The day stored is the SOURCE's, taken from time_last_update_unix, never
+    // this machine's: a job running before the source updates would otherwise
+    // write today's row from yesterday's numbers, and latestRates takes MAX.
+    expect(writes.find((w) => w.args[0] === "CHF")?.args[2]).toBe("2026-09-25");
+    // And the URL the job dialled carries no currency codes at all.
+    expect(lookupCalls[0].options.path).toBe(new URL(dailyRatesUrl()).pathname + new URL(dailyRatesUrl()).search);
     // The parser answered the same rows the fixture served.
-    expect(parseEcbSeries(JSON.parse(ECB_BODY))).toHaveLength(2);
+    expect(parseDailyRates(JSON.parse(RATES_BODY))).toHaveLength(2);
   });
 });
