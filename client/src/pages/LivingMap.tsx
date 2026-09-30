@@ -50,6 +50,7 @@ import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
+import { useVillageName, useVillageLocation } from "@/hooks/useVillageName";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -139,6 +140,8 @@ export default function LivingMap() {
   const modules = useModules();
   const mapModule = useModule("map");
   const [, navigate] = useLocation();
+  const villageName = useVillageName();
+  const villageLocation = useVillageLocation();
   const frame = useRef<HTMLIFrameElement | null>(null);
   const [presence, setPresence] = useState<Presence>("checking");
   /** The URL the manifest names, hashed and immutable where available. */
@@ -1035,18 +1038,15 @@ export default function LivingMap() {
               className="font-display text-3xl tracking-[0.5em] uppercase"
               style={{ color: "#e8a13c", textShadow: "0 2px 14px #000" }}
             >
-              Amora
+              {villageName}
             </h1>
             <p
               className="mt-3 text-xs tracking-[0.2em] uppercase"
               style={{ color: "#cfe0b8" }}
             >
-              a living village · osa, costa rica
-            </p>
-            <p
-              className="mt-4 text-[11px] tracking-[0.14em] uppercase opacity-60"
-            >
-              9°13′55″N · 83°50′04″W · the hills above playa dominicalito
+              {villageLocation
+                ? `a living village · ${villageLocation}`
+                : "a living village"}
             </p>
             <button
               type="button"

@@ -247,6 +247,10 @@ describe("/training", () => {
 describe("/map", () => {
   /** The artifact's boot handshake, which is what sends the lens reads. */
   async function mapIsReady() {
+    // The shell defers the iframe behind Enter the Land (deep links skip it).
+    // Click through so the lens mounts the way a visitor would.
+    const enter = await screen.findByRole("button", { name: /Enter the Land/i });
+    enter.click();
     await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
     window.dispatchEvent(new MessageEvent("message", { origin: window.location.origin, data: { type: "grounds-ready" } }));
     // `/api/map` is the lens's other read, made for everyone: seeing it proves
