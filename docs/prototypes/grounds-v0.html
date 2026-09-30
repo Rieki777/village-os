@@ -5105,7 +5105,10 @@ function zonesExport(){ // the geometry layer IS map_zones now — real phases, 
   return zs}
 function addrSrc(x){const a=(x.addr==='lexicon guess')?'resolver-guess':x.addr; // legacy value normalized at the boundary
   return (x.at!=null)?(a||'creator'):(a||'pool')}
-function buildExportJSON(){
+function buildExportJSON(status){
+  /* status defaults to draft so Export and autosave stay unpublished copies;
+     doPublish alone asks for 'published' so the live row says what it is. */
+  if(status==null)status='draft';
   const iso=new Date().toISOString();
   const structures=SCENE.structures.map((s,i)=>({key:s.key,name:s.name,archetype:s.archetype,
     anchor:{x:Math.round(s.x),y:Math.round(s.y)},
@@ -5128,7 +5131,7 @@ function buildExportJSON(){
   const ring=SCENE.bound.map(pt=>{const[la,lo]=worldToLatLon(pt[0],pt[1]);return[+lo.toFixed(7),+la.toFixed(7)]});
   ring.push(ring[0]);
   const out={
-    map_scene:{key:'amora-grounds',name:SCENE.name,status:'draft',visibility:'founders',version:(window.BUILD_VERSION||'v0.7'),
+    map_scene:{key:'amora-grounds',name:SCENE.name,status:status,visibility:'founders',version:(window.BUILD_VERSION||'v0.7'),
       bounds:{w:W,h:H,units:'scene'},
       georef:{pin:[GEOREF.lat,GEOREF.lon],pin_world:GEOREF.pinW,zoom:GEOREF.z,meters_per_unit:GEOREF.mPerUnit,
         masterplan_affine:AF,note:'world = masterplan·(sx,sy)+(dx,dy); IAF inverts; worldToLatLon maps world→WGS84'},
@@ -7729,8 +7732,12 @@ function setHash(h){HASHMUTE=true;
   setTimeout(()=>{HASHMUTE=false},0)}
 window.setHash=setHash;
 function leaveIntro(){if(!document.body.classList.contains('intro'))return;
-  document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove()}
-function routeHash(){if(HASHMUTE)return;const h=location.hash||'';
+  document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove();
+  shellPost({type:'intro-done'})}
+function routeHash(){if(HASHMUTE)return;
+  /* Shell appends &skipIntro when it already showed its own gate; strip it so
+     #/circles and friends still match exactly. */
+  const h=(location.hash||'').replace(/[&?]skipIntro\b/ig,'').replace(/[?&]$/,'');
   if(h==='#/circles'){leaveIntro();if(!document.body.classList.contains('circles'))setMapType('circles',true);return}
   if(h==='#/loom'){leaveIntro();if(document.body.classList.contains('circles'))setMapType('living',true);if(!document.body.classList.contains('loom'))openLoom();return}
   const m=h.match(/^#\/(place|module|journey)\/([A-Za-z0-9_-]+)(?:\?item=([A-Za-z0-9_:-]+))?/);if(!m)return;
@@ -8484,7 +8491,11 @@ function applyScene(scene,version){
   if(SCENE_APPLIED&&mine){
     toast('The live map changed. Your draft is untouched.');
     renderDraftBar();return false}
-  if(restoreScene(scene)){SCENE_APPLIED=true;BASE_VERSION=+version||0;PUBLISH_MARK=0;
+  if(restoreScene(scene)){SCENE_APPLIED=true;BASE_VERSION=+version||0;
+    /* Published scene's edits are the live baseline; 0 made every historical
+       edit look unpublished and blocked later live updates. editSeq is set
+       inside restoreScene from map_edits. */
+    PUBLISH_MARK=editSeq;
     renderDraftBar();return true}
   return false;
 }
@@ -8582,13 +8593,13 @@ window.EDIT_VERBS=EDIT_VERBS;
 async function doPublish(){
   const note=$('pubNote').value.trim();
   $('pubConfirm').disabled=true;$('pubConfirm').textContent='Publishing...';
-  const r=await shellAsk('publish',{scene:buildExportJSON(),baseVersion:BASE_VERSION,note:note||null});
+  const r=await shellAsk('publish',{scene:buildExportJSON('published'),baseVersion:BASE_VERSION,note:note||null});
   $('pubConfirm').disabled=false;$('pubConfirm').textContent='Publish it';
   if(r.ok){
     closePublish();
     BASE_VERSION=+r.version||BASE_VERSION;PUBLISH_MARK=editSeq;
     LIVE=(r.live&&r.live.version)?r.live:{version:r.version};
-    LIVE_SCENE=buildExportJSON();
+    LIVE_SCENE=buildExportJSON('published');
     $('pubNote').value='';
     renderDraftBar();liveSince(r.version);
     return}
@@ -8641,7 +8652,7 @@ async function doDiscard(){
   /* Back to the live land. Falling back to a reload rather than leaving the
      discarded work on screen: the row is gone, and a map still showing it
      would be the one lie this whole round exists to stop telling. */
-  if(LIVE_SCENE&&restoreScene(LIVE_SCENE)){PUBLISH_MARK=0;DRAFT_HOLD=null;renderDraftBar();
+  if(LIVE_SCENE&&restoreScene(LIVE_SCENE)){PUBLISH_MARK=editSeq;DRAFT_HOLD=null;renderDraftBar();
     return toast('Draft thrown away. You are looking at the live map.')}
   toast('Draft thrown away.');
 }
@@ -9236,8 +9247,14 @@ if(document.body.classList.contains('pocket')){
         maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door. Tap <b>Take the walk</b> and I will show you around.')}},700)}
 
 
-/* intro */
+/* intro
+   The shell may already have gated on Enter the Land and appended #skipIntro
+   so this file does not ask twice. Still wire enterBtn for standalone loads. */
+if(/skipIntro/i.test(location.hash)){
+  leaveIntro();
+}
 $('enterBtn').onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
+  shellPost({type:'intro-done'});
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
     maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door. Want the short walk?`);
     setTimeout(()=>{if(!JWALK)maiaSay(`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`)},9000)})};

@@ -111,6 +111,30 @@ function pocketProfile(): boolean {
   return "ontouchstart" in window && Math.min(window.innerWidth, window.innerHeight) < 820;
 }
 
+/**
+ * A hash that already points somewhere on the land — a place, module, journey,
+ * circles or loom — so the shell should not re-gate on Enter. Plain `#hud=…`
+ * is only a layout hint and still shows the gate.
+ */
+function hashIsMapDeepLink(hash: string): boolean {
+  if (!hash.startsWith("#/")) return false;
+  const rest = hash.slice(2);
+  if (!rest || /^hud=/i.test(rest)) return false;
+  return true;
+}
+
+/**
+ * Tell the artifact the shell already ran its intro gate. Empty hash becomes
+ * `#skipIntro`; an existing hash keeps its route and gains `&skipIntro` so
+ * `/skipIntro/i` still matches inside the file.
+ */
+function withSkipIntro(hash: string): string {
+  if (/skipIntro/i.test(hash)) return hash || "#skipIntro";
+  if (!hash) return "#skipIntro";
+  if (/[?&=]/.test(hash)) return `${hash}${/[?&]$/.test(hash) ? "" : "&"}skipIntro`;
+  return `${hash}&skipIntro`;
+}
+
 export default function LivingMap() {
   const modules = useModules();
   const mapModule = useModule("map");
@@ -237,6 +261,26 @@ export default function LivingMap() {
   const [initialHash] = useState(() =>
     typeof window === "undefined" ? "" : window.location.hash,
   );
+
+  /**
+   * THE ENTER GATE. The artifact is ~5.7 MB, mostly base64 plates. Mounting
+   * the iframe on every `/map` visit paid that cost before anyone asked to
+   * enter. The shell holds the gate; deep links still open straight in.
+   */
+  const [entered, setEntered] = useState(() => hashIsMapDeepLink(
+    typeof window === "undefined" ? "" : window.location.hash,
+  ));
+  const [preparing, setPreparing] = useState(() => hashIsMapDeepLink(
+    typeof window === "undefined" ? "" : window.location.hash,
+  ));
+
+  /* A stuck prepare never strands the visitor: twenty seconds is longer than
+     a healthy config push and short enough to recover from a quiet failure. */
+  useEffect(() => {
+    if (!preparing) return;
+    const t = window.setTimeout(() => setPreparing(false), 20_000);
+    return () => window.clearTimeout(t);
+  }, [preparing]);
 
   useEffect(() => {
     let live = true;
@@ -700,7 +744,10 @@ export default function LivingMap() {
         // means a signed-out visitor still gets the published land and the
         // village's own photograph under it, even though their hand request
         // tells them they may do nothing.
-        pushConfig();
+        // Preparing clears once the published scene has been asked for: that
+        // is the heavy hand-off. The rest ride alongside and do not gate the
+        // overlay.
+        void pushConfig().finally(() => setPreparing(false));
         pushGround();
         pushHand();
         pushPhotos();
@@ -973,10 +1020,52 @@ export default function LivingMap() {
         </div>
       )}
 
-      {presence === "present" && (
+      {presence === "present" && !entered && (
+        <div
+          className="absolute inset-0 z-[5] flex items-center justify-center px-6"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(8,14,9,.35), rgba(5,8,5,.88))",
+          }}
+          role="dialog"
+          aria-label="Enter the Living Map"
+        >
+          <div className="text-center" style={{ color: "#f3e6c8" }}>
+            <h1
+              className="font-display text-3xl tracking-[0.5em] uppercase"
+              style={{ color: "#e8a13c", textShadow: "0 2px 14px #000" }}
+            >
+              Amora
+            </h1>
+            <p
+              className="mt-3 text-xs tracking-[0.2em] uppercase"
+              style={{ color: "#cfe0b8" }}
+            >
+              a living village · osa, costa rica
+            </p>
+            <p
+              className="mt-4 text-[11px] tracking-[0.14em] uppercase opacity-60"
+            >
+              9°13′55″N · 83°50′04″W · the hills above playa dominicalito
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setEntered(true);
+                setPreparing(true);
+              }}
+              className="mt-7 min-h-[44px] px-8 py-2.5 text-sm rounded-lg border border-[#e8a13c]/60 bg-[#e8a13c]/15 text-[#f3e6c8] hover:bg-[#e8a13c]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e8a13c]"
+            >
+              Enter the Land
+            </button>
+          </div>
+        </div>
+      )}
+
+      {presence === "present" && entered && (
         <iframe
           ref={frame}
-          src={`${groundsUrl}${initialHash}`}
+          src={`${groundsUrl}${withSkipIntro(initialHash)}`}
           onLoad={onLoad}
           title="Living map of the village"
           className="block h-full w-full border-0"
@@ -984,6 +1073,21 @@ export default function LivingMap() {
              the nav shim, so this frame is not sandboxed away from us. */
           allow="fullscreen"
         />
+      )}
+
+      {/* Preparing sits above the iframe; pointer-events none so Leave (and
+          the land beneath) stay reachable while the config push finishes. */}
+      {presence === "present" && entered && preparing && (
+        <div
+          className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none"
+          aria-live="polite"
+        >
+          <p
+            className="px-4 py-2 text-sm rounded-lg border border-border bg-background/90 text-foreground shadow-sm backdrop-blur-sm"
+          >
+            Preparing the land…
+          </p>
+        </div>
       )}
     </div>
   );
