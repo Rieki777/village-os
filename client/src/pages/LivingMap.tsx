@@ -1025,25 +1025,15 @@ export default function LivingMap() {
 
       {presence === "present" && !entered && (
         <div
-          className="absolute inset-0 z-[5] flex items-center justify-center px-6"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(8,14,9,.35), rgba(5,8,5,.88))",
-          }}
+          className="absolute inset-0 z-[5] flex items-center justify-center px-6 bg-background/90 backdrop-blur-sm"
           role="dialog"
           aria-label="Enter the Living Map"
         >
-          <div className="text-center" style={{ color: "#f3e6c8" }}>
-            <h1
-              className="font-display text-3xl tracking-[0.5em] uppercase"
-              style={{ color: "#e8a13c", textShadow: "0 2px 14px #000" }}
-            >
+          <div className="text-center text-foreground">
+            <h1 className="font-display text-3xl tracking-[0.5em] uppercase text-foreground">
               {villageName}
             </h1>
-            <p
-              className="mt-3 text-xs tracking-[0.2em] uppercase"
-              style={{ color: "#cfe0b8" }}
-            >
+            <p className="mt-3 text-xs tracking-[0.2em] uppercase text-muted-foreground">
               {villageLocation
                 ? `a living village · ${villageLocation}`
                 : "a living village"}
@@ -1054,7 +1044,7 @@ export default function LivingMap() {
                 setEntered(true);
                 setPreparing(true);
               }}
-              className="mt-7 min-h-[44px] px-8 py-2.5 text-sm rounded-lg border border-[#e8a13c]/60 bg-[#e8a13c]/15 text-[#f3e6c8] hover:bg-[#e8a13c]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e8a13c]"
+              className="mt-7 min-h-[44px] px-8 py-2.5 text-sm rounded-lg border border-border bg-background/95 text-foreground shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Enter the Land
             </button>
