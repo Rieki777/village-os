@@ -50,7 +50,7 @@ import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
-import { useVillageName, useVillageLocation } from "@/hooks/useVillageName";
+import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -112,36 +112,10 @@ function pocketProfile(): boolean {
   return "ontouchstart" in window && Math.min(window.innerWidth, window.innerHeight) < 820;
 }
 
-/**
- * A hash that already points somewhere on the land — a place, module, journey,
- * circles or loom — so the shell should not re-gate on Enter. Plain `#hud=…`
- * is only a layout hint and still shows the gate.
- */
-function hashIsMapDeepLink(hash: string): boolean {
-  if (!hash.startsWith("#/")) return false;
-  const rest = hash.slice(2);
-  if (!rest || /^hud=/i.test(rest)) return false;
-  return true;
-}
-
-/**
- * Tell the artifact the shell already ran its intro gate. Empty hash becomes
- * `#skipIntro`; an existing hash keeps its route and gains `&skipIntro` so
- * `/skipIntro/i` still matches inside the file.
- */
-function withSkipIntro(hash: string): string {
-  if (/skipIntro/i.test(hash)) return hash || "#skipIntro";
-  if (!hash) return "#skipIntro";
-  if (/[?&=]/.test(hash)) return `${hash}${/[?&]$/.test(hash) ? "" : "&"}skipIntro`;
-  return `${hash}&skipIntro`;
-}
-
 export default function LivingMap() {
   const modules = useModules();
   const mapModule = useModule("map");
   const [, navigate] = useLocation();
-  const villageName = useVillageName();
-  const villageLocation = useVillageLocation();
   const frame = useRef<HTMLIFrameElement | null>(null);
   const [presence, setPresence] = useState<Presence>("checking");
   /** The URL the manifest names, hashed and immutable where available. */
@@ -265,25 +239,7 @@ export default function LivingMap() {
     typeof window === "undefined" ? "" : window.location.hash,
   );
 
-  /**
-   * THE ENTER GATE. The artifact is ~5.7 MB, mostly base64 plates. Mounting
-   * the iframe on every `/map` visit paid that cost before anyone asked to
-   * enter. The shell holds the gate; deep links still open straight in.
-   */
-  const [entered, setEntered] = useState(() => hashIsMapDeepLink(
-    typeof window === "undefined" ? "" : window.location.hash,
-  ));
-  const [preparing, setPreparing] = useState(() => hashIsMapDeepLink(
-    typeof window === "undefined" ? "" : window.location.hash,
-  ));
-
-  /* A stuck prepare never strands the visitor: twenty seconds is longer than
-     a healthy config push and short enough to recover from a quiet failure. */
-  useEffect(() => {
-    if (!preparing) return;
-    const t = window.setTimeout(() => setPreparing(false), 20_000);
-    return () => window.clearTimeout(t);
-  }, [preparing]);
+  const { entered, preparing, setPreparing, onEnter } = useMapEnterGate();
 
   useEffect(() => {
     let live = true;
@@ -747,9 +703,7 @@ export default function LivingMap() {
         // means a signed-out visitor still gets the published land and the
         // village's own photograph under it, even though their hand request
         // tells them they may do nothing.
-        // Preparing clears once the published scene has been asked for: that
-        // is the heavy hand-off. The rest ride alongside and do not gate the
-        // overlay.
+        // Preparing clears once the published scene has been asked for.
         void pushConfig().finally(() => setPreparing(false));
         pushGround();
         pushHand();
@@ -1023,34 +977,7 @@ export default function LivingMap() {
         </div>
       )}
 
-      {presence === "present" && !entered && (
-        <div
-          className="absolute inset-0 z-[5] flex items-center justify-center px-6 bg-background/90 backdrop-blur-sm"
-          role="dialog"
-          aria-label="Enter the Living Map"
-        >
-          <div className="text-center text-foreground">
-            <h1 className="font-display text-3xl tracking-[0.5em] uppercase text-foreground">
-              {villageName}
-            </h1>
-            <p className="mt-3 text-xs tracking-[0.2em] uppercase text-muted-foreground">
-              {villageLocation
-                ? `a living village · ${villageLocation}`
-                : "a living village"}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setEntered(true);
-                setPreparing(true);
-              }}
-              className="mt-7 min-h-[44px] px-8 py-2.5 text-sm rounded-lg border border-border bg-background/95 text-foreground shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Enter the Land
-            </button>
-          </div>
-        </div>
-      )}
+      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={onEnter} />
 
       {presence === "present" && entered && (
         <iframe
@@ -1065,20 +992,6 @@ export default function LivingMap() {
         />
       )}
 
-      {/* Preparing sits above the iframe; pointer-events none so Leave (and
-          the land beneath) stay reachable while the config push finishes. */}
-      {presence === "present" && entered && preparing && (
-        <div
-          className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none"
-          aria-live="polite"
-        >
-          <p
-            className="px-4 py-2 text-sm rounded-lg border border-border bg-background/90 text-foreground shadow-sm backdrop-blur-sm"
-          >
-            Preparing the land…
-          </p>
-        </div>
-      )}
     </div>
   );
 }
