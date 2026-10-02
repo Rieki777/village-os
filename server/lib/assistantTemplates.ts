@@ -27,6 +27,7 @@
  */
 
 import { villageTimezone } from "./villageReaders";
+import { renderCanvasAnswers, renderCanvasLibrary, renderMatrixRows } from "./companionCanvas";
 
 /** The organize route's response shape, so the client renders it unchanged. */
 export interface Rendered {
@@ -429,6 +430,13 @@ export const RENDERERS: Record<string, Renderer> = {
         `could answer: ${named(asked, r.more)}.`,
     );
   },
+
+  // The canvas's three (Wave 4, the companion). Written beside the readers in
+  // server/lib/companionCanvas.ts, which also writes the no-model answer, so
+  // the two ways of saying the canvas cannot drift apart.
+  "canvas.answers": renderCanvasAnswers,
+  "canvas.library": renderCanvasLibrary,
+  "matrix.rows": renderMatrixRows,
 };
 
 /** Reader keys a template can answer. Derived, so a test can hold it to the registry. */

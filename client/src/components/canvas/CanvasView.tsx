@@ -13,12 +13,17 @@
  * "Try again", which reads the season again; a refusal (401 sign in, 403 not
  * admitted yet) prints the server's own sentence and offers nothing, because
  * asking again gets the same answer.
+ *
+ * THE COMPANION (Wave 4, plan 5.4): the view holds the companion's panel, and
+ * its header, every block card and each block's Learn frame carry an Ask door
+ * (client/src/components/companion/Companion.tsx).
  */
 import { useCallback, useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
 import { CanvasBaseline } from "./CanvasBaseline";
 import { CanvasSeason } from "./CanvasSeason";
+import { AskButton, CompanionProvider } from "@/components/companion/Companion";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -92,16 +97,21 @@ export function CanvasView() {
   // break-word does not change that width; anywhere does. On ordinary text
   // the two lay out identically (the lane's live QA compares every element).
   return (
-    <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
-      <CanvasSeason
-        payload={payload}
-        failed={failed?.message ?? null}
-        onRetry={failed?.retry ? load : undefined}
-        now={now}
-        onSave={save}
-        onRemove={remove}
-      />
-      <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
-    </div>
+    <CompanionProvider>
+      <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
+        <div className="flex justify-end">
+          <AskButton block={null} label="Ask about the canvas" />
+        </div>
+        <CanvasSeason
+          payload={payload}
+          failed={failed?.message ?? null}
+          onRetry={failed?.retry ? load : undefined}
+          now={now}
+          onSave={save}
+          onRemove={remove}
+        />
+        <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+      </div>
+    </CompanionProvider>
   );
 }

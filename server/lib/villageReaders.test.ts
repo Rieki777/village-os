@@ -216,8 +216,10 @@ describe("the village record is readable", () => {
     // Without this reader the derivation job fills a table the tool loop
     // cannot see, and "what did we decide about X" stays unanswerable.
     expect(READER_KEYS).toContain("record.decisions");
-    // Nine since round 4 (lane L6 added events.week, the week-ahead reader).
-    expect(READER_KEYS).toHaveLength(9);
+    // Nine since round 4 (lane L6 added events.week, the week-ahead reader),
+    // twelve since Wave 4 (the companion: canvas.answers, canvas.library,
+    // matrix.rows).
+    expect(READER_KEYS).toHaveLength(12);
     const r = READERS.find((x) => x.key === "record.decisions")!;
     expect(r.audience).toBe("member");
     // The brain is core: no module of its own, so a fork with everything
