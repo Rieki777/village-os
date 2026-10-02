@@ -114,7 +114,15 @@ export type Capability =
    * not anybody holds this seat. The key opens one door: stopping a landing
    * inside its window, in the open, with a name and a reason on it.
    */
-  | "steward.veto"; // stop a carried decision inside its window, and say why
+  | "steward.veto" // stop a carried decision inside its window, and say why
+  // ── The comms key (Village Comms, 0228) ──────────────────────────────────
+  //
+  // The village's email: which automations run, what they say, and the
+  // letters it sends to people who agreed to get them. It passes the test the
+  // handover keys set: a member can finish "the village's ____ look after
+  // that". The sender, the domain and the provider key are NOT behind it;
+  // they stay with the admin in the secrets plane (docs/comms/BUILD_SPEC.md 8).
+  | "comms.manage"; // run the village's email: automations, their words, and letters
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -156,6 +164,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "quest.approve",
   "redemption.confirm",
   "steward.veto",
+  "comms.manage",
 ];
 
 /**
@@ -211,6 +220,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "steward.veto": "Stop a carried decision inside its window, and say why",
+  "comms.manage": "Run the village's email: its automations, their words, and letters",
 };
 
 /**
@@ -315,6 +325,10 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
   // moderation, the library, the village's public voice and its own dials to
   // everyone who did enough quests, which is how you get a power with no
   // holder and nobody to ask about it.
+  //
+  // `comms.manage` is absent for the same reason, the way `feed.announce` is.
+  // A letter reaches every inbox that said yes to the village at once, so who
+  // may send one is an appointment and never a rung.
 };
 
 /**
@@ -402,6 +416,23 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "event.manage": true,
   "exchange.manage": true,
   "forum.moderate": true,
+  /*
+   * THE VILLAGE'S EMAIL, and it copies `feed.announce` rather than
+   * `message.send`. Writing to a person is a personal act, but running the
+   * village's own automations and letters is a job the village fills, and the
+   * plan Rye approved on 2026-10-02 says so in as many words: "It can be
+   * handed to a role, and the village can hold it."
+   *
+   * The condition this column sets is met by construction. Every route that
+   * acts on it asks `guardCapability` (server/routes/comms.ts and the comms
+   * routes that follow it), so the escape hatch and the public record are
+   * both there, and a read that refuses asks `mayStillSee`.
+   *
+   * IT JOINS HANDOVER_SET, which is the consequence to know about: a village
+   * launching after this entrusts it to the founding seat with the others,
+   * and the handover counts it.
+   */
+  "comms.manage": true,
   // ── The seven that crossed in 0103 ──────────────────────────────────────
   //
   // Each of these was `false` for one mechanical reason: its routes asked
@@ -696,6 +727,10 @@ export const DENIABLE: Record<Capability, boolean> = {
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
+  // A job, like `feed.announce`: pausing it stops somebody sending the
+  // village's letters and changing its automations, and takes away nothing
+  // they hold as a say in a decision.
+  "comms.manage": true,
 };
 
 /**
@@ -810,6 +845,9 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "dial.set": true,
   "quest.approve": true,
   "redemption.confirm": true,
+  // An ordinary appointment, the same as `feed.announce`: a badge is an
+  // honest way to hand the village's email to somebody.
+  "comms.manage": true,
 };
 
 /**

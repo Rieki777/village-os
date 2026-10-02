@@ -407,7 +407,7 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
       expect(r.holder).toBe(STEWARD_ROLE_ID);
       expect(r.ballot, "the vote that started the Game moved it, not an administrator").toBe(LAUNCH_BALLOT);
     }
-    expect(rows).toHaveLength(19);
+    expect(rows).toHaveLength(HANDOVER_SET.length);
   });
 
   it("tells each seated founder, once, and says when the seat ends", async () => {

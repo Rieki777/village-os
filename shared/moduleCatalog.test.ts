@@ -213,10 +213,24 @@ describe("moduleCatalog", () => {
      *                           the currency dials from an earlier sweep, and
      *                           the price of that is noise a person reads
      *                           once.
+     *
+     * Judged on 2026-10-02, by the comms foundation lane:
+     *
+     *   comms.quiet_start_hour, comms.quiet_end_hour
+     *                           matched on "time zone", and read in the
+     *                           READER's own zone (the village's when theirs is
+     *                           unknown), so 8 to 20 means the same hours of
+     *                           the day in every village on the planet.
+     *   comms.time_poll_settle_minutes
+     *                           a duration, matched on "the time on the
+     *                           calendar" in its own description.
      */
     expect(hits).toEqual([
       "calendar.cross_quarters",
       "calendar.year_anchor",
+      "comms.quiet_end_hour",
+      "comms.quiet_start_hour",
+      "comms.time_poll_settle_minutes",
       "cycle.mode",
       "economy.claims_week_starts",
       "events.past_visible_days",

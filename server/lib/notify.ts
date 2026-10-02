@@ -268,6 +268,14 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // written to name no one and quote nothing.
     case "moderation":
       return "immediate";
+    // Village Comms (docs/comms/BUILD_SPEC.md 5.9 and 5.11). A path's contact
+    // person asked to write to somebody three weeks in, and a host asked for
+    // the recap while the gathering is fresh. Both ask a person to act today,
+    // and a digest tomorrow is a day the other person waits. Without these
+    // two cases both would be in-app only, and silently so.
+    case "comms_path_handoff":
+    case "comms_host_recap":
+      return "immediate";
     default:
       return "off";
   }

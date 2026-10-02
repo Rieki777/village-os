@@ -68,7 +68,8 @@ describe("module images", () => {
   // the drawn fallback, and that costs nothing against the image budget. The
   // case above keeps this list honest: a module named here may not also ship
   // a file, and may not be a module that does not exist.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra"]);
+  // `comms` ships no art of its own: its card is the drawn hue and the Mail emblem.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

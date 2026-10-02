@@ -184,4 +184,6 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
     "agree that a member has been paid off the platform, and destroy the tokens they redeemed",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",
+  "comms.manage":
+    "run the village's email: turn automations on and off, change their words, and send letters to people who agreed to get them",
 };

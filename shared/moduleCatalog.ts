@@ -414,6 +414,22 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 175,
     emblem: "Landmark",
   },
+  comms: {
+    promise: "The village's email in one place: every email recorded, and every person able to say stop.",
+    benefits: [
+      "Reminders and changes for the gatherings people said yes to",
+      "A few emails that walk somebody along the path they chose",
+      "Guests with no account can say they are coming, and confirm by email",
+      "A live vote on a session time, where the time that is winning is the time",
+      "Letters to the people who agreed to get them, with a record of each one",
+    ],
+    forWhom: "Villages that want to stay in touch with everybody they meet, by email, from inside the village's own platform.",
+    setupSummary:
+      "Add your email provider key, your sending domain, a sender, delivery reports and a postal address in Comms Settings, then send yourself a test.",
+    dataSummary: "Email addresses, what each person agreed to receive, and a record of every email sent to them.",
+    hue: 235,
+    emblem: "Mail",
+  },
   saberra: {
     promise: "An outside reading of how your village is organised, offered back as suggestions you decide on.",
     benefits: [

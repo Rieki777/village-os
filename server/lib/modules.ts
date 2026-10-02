@@ -510,6 +510,7 @@ const READINESS_HINTS: Record<string, string> = {
   hypha: "Set your DHO address, then confirm one token contract first",
   redemption: "Write how redemption works here first",
   events: "Say which hemisphere this village is in first",
+  comms: "Finish the checklist in Comms Settings first",
 };
 
 /**
@@ -545,6 +546,7 @@ const READINESS_TARGETS: Record<string, SetupTarget> = {
   // Hypha's address moves as its two halves are answered, so its reader picks
   // between these rather than reading one fixed entry.
   hypha: settingTarget("hypha.org_url"),
+  comms: { kind: "tab", tab: "comms-settings", label: "Comms Settings" },
 };
 
 /**
@@ -718,6 +720,23 @@ export function attachModuleReadiness(getPool: () => Pool): void {
         hint,
         target,
       });
+      continue;
+    }
+    if (def.id === "comms") {
+      /*
+       * NOT READY, AND SAYING WHERE TO GO. What ready means for comms is the
+       * Settings checklist (docs/comms/BUILD_SPEC.md 5.15): the provider key,
+       * a verified sending domain, a sender, delivery reports, a postal
+       * address, and a test email that was delivered. None of that can be read
+       * yet, because the settings document and the domain check land with the
+       * setup lane (B4), which replaces this reader with the real answer.
+       *
+       * Answering "not ready" until then is the honest direction. The other
+       * one would tell a founder their village can send email when nothing
+       * has checked that it can, and the Go-live card would offer itself on
+       * the strength of a guess.
+       */
+      def.readiness = async () => ({ ready: false, hint, target });
       continue;
     }
     def.readiness = async () => {

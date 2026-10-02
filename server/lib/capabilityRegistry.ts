@@ -261,6 +261,9 @@ export const NOT_YET_WIRED: Readonly<Record<string, string>> = {
    * Anything added here is a promise that the key gates nothing, and it has to
    * be deleted by whoever makes it gate something.
    */
+  "comms.manage":
+    "The Comms screens that turn automations on, change their words and send letters are being " +
+    "built. This line comes out when the first route asks for the key.",
 };
 
 /**
