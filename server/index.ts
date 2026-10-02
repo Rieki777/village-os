@@ -127,6 +127,7 @@ import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
+import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -19563,6 +19564,7 @@ ${inner}
 
   // The live org the open map polls for: server/routes/mapOrg.ts.
   registerMapOrgRoutes(app, { authedUser, isAdmin, capabilityCtx, circlesRepo, members, firstName, lapseContext, getPool });
+  registerMapMasterplanRoutes(app, { authedUser, capabilityCtx, getPool, uploadsDir: UPLOADS_DIR });
 
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {
