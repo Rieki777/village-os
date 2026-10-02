@@ -120,3 +120,47 @@ describe("the village's own facts", () => {
     }
   });
 });
+
+/**
+ * THE VILLAGE'S OWN WELCOME AND WALK, ON THE JOURNEY (Rye, 2026-10-02).
+ *
+ * "Onboarding is something that founders should do and really personalize
+ * and put their spirit into it. So just add this to a journey to launch
+ * that's suggested remove the example journey for now."
+ *
+ * SUGGESTED is the word that sets the severity: a village launches without a
+ * walk and the map simply offers none. The check itself is pinned in
+ * shared/mapWalkDocument.test.ts and server/lib/launchVillageFacts.test.ts;
+ * this pins the row.
+ */
+describe("the welcome-and-walk requirement", () => {
+  const item = LAUNCH_REQUIREMENTS.find((r) => r.id === "welcome-walk");
+
+  it("is on the journey, recommended and never blocking", () => {
+    expect(item, "no launch requirement \"welcome-walk\"").toBeTruthy();
+    expect(item!.severity).toBe("recommended");
+    expect(item!.group).toBe("brand");
+  });
+
+  it("is a real check read from the walk's document, never a box a founder ticks", () => {
+    expect(item!.checkKey).toBe("village:walk");
+    expect(item!.checkKey.startsWith("manual:")).toBe(false);
+    expect(item!.declinable).toBeFalsy();
+  });
+
+  it("links to the walk editor on the map, where the walk is written", () => {
+    // The editor moved onto the map on 2026-09-23 (VillageSettingsDoor); the
+    // client test pins that this address opens it.
+    expect(item!.fixAt).toBe("/map?settings=walk");
+  });
+
+  it("names no persona and no dash in its copy", () => {
+    // Platform copy, read aloud by whatever guide a village runs: the same
+    // reasoning as the assistant rows above, which name no persona and no
+    // pronoun for it. The village's name is held off by check-brand-refs.
+    for (const words of [item!.title, item!.why, item!.fixLabel]) {
+      expect(words).not.toMatch(/\b(she|her|hers)\b/i);
+      expect(words).not.toMatch(/[\u2013\u2014]/);
+    }
+  });
+});

@@ -37,7 +37,7 @@
 import type express from "express";
 import type { Express } from "express";
 import { hasCapability } from "../../shared/capabilities";
-import { WALK_GESTURES, sanitiseMapVocabulary, sanitiseWalk } from "../../shared/mapAddress";
+import { WALK_GESTURES, sanitiseMapVocabulary, sanitiseWalk, storedWalkWelcome, walkDocumentFrom } from "../../shared/mapAddress";
 import { changeSummary, sceneProblem, sceneSizeProblem, sceneSummary } from "../../shared/mapScene";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
@@ -410,17 +410,22 @@ export function register(app: Express, deps: Deps): void {
     res.json(await walkReport(getPool(), { source, days: Number(req.query.days) || 90 }));
   });
 
-  /** The whole walk document, every language, for the editor. */
+  /**
+   * The whole walk document, every language, for the editor: the steps, and
+   * the village's own welcome beside them (shared/mapAddress.ts says why the
+   * two share one document).
+   */
   app.get("/api/admin/map/walk", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ walk: sanitiseWalk(mapWalkRepo.get()), gestures: WALK_GESTURES });
+    const doc = mapWalkRepo.get();
+    res.json({ walk: sanitiseWalk(doc), welcome: storedWalkWelcome(doc), gestures: WALK_GESTURES });
   });
 
   app.put("/api/admin/map/walk", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const next = sanitiseWalk(req.body?.walk ?? req.body);
-    await mapWalkRepo.put(next as any);
-    res.json({ success: true, walk: next });
+    const next = walkDocumentFrom(mapWalkRepo.get(), req.body);
+    await mapWalkRepo.put(next.doc as any);
+    res.json({ success: true, walk: next.walk, welcome: next.welcome });
   });
 
   /**

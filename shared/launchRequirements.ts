@@ -250,6 +250,32 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixAt: "/admin?tab=setup",
     fixLabel: "Open Project Settings",
   },
+  {
+    id: "welcome-walk",
+    group: "brand",
+    title: "Write your village's welcome and walk",
+    /*
+     * RYE'S RULING, 2026-10-02: "Onboarding is something that founders should
+     * do and really personalize and put their spirit into it. So just add this
+     * to a journey to launch that's suggested remove the example journey for
+     * now."
+     *
+     * SUGGESTED, SO RECOMMENDED. A village launches perfectly well without a
+     * walk: the map offers none and the guide greets people plainly. The seed's
+     * example walk is never offered in its place, which is the other half of
+     * the ruling and lives in the map artifact.
+     *
+     * A REAL CHECK, read from the walk's own document (`village:walk` in
+     * server/lib/launch.ts, `welcomeWalkCheck` in shared/mapAddress.ts): done
+     * once the walk the map is served has a stop with a place. The editor lives
+     * on the map under Village settings, so the link opens that door.
+     */
+    why: "The first words a newcomer reads on the map, and the short walk the guide takes them on. The map offers no walk until the village writes its own, and the guide greets people plainly until you give it your words.",
+    severity: "recommended",
+    checkKey: "village:walk",
+    fixAt: "/map?settings=walk",
+    fixLabel: "Write it on the map",
+  },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
   {

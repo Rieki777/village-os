@@ -163,7 +163,7 @@ import {
   MAP_VOCABULARY_DOC,
   MAP_WALK_DOC,
   sanitiseMapKey,
-  sanitiseWalk,
+  servedWalk,
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
@@ -19277,17 +19277,15 @@ ${inner}
    * `{type:'config'}` message, so the map applies all three in one pass with
    * no chance of a half-configured frame between two round trips.
    *
-   * `walk` is null when the village has written none for the requested
-   * language. Null is the instruction to use the artifact's own seed, and it
-   * is deliberately not an empty array: the artifact reads a non-empty array
-   * as a replacement and would treat `[]` as a walk with no steps.
+   * `walk` and `welcome` are null when the village has written none for the
+   * language: no walk is offered and the guide greets people plainly. Null
+   * never means the artifact's seed (Rye, 2026-10-02; shared/mapAddress.ts).
    */
   app.get("/api/map/config", async (req, res) => {
     const lang = typeof req.query.lang === "string" && /^[a-z]{2}$/.test(req.query.lang)
       ? req.query.lang
       : DEFAULT_WALK_LANG;
-    const walkDoc = sanitiseWalk(mapWalkRepo.get());
-    const steps = walkDoc[lang] ?? walkDoc[DEFAULT_WALK_LANG] ?? null;
+    const served = servedWalk(mapWalkRepo.get(), lang);
     /*
      * The published scene rides along (0063), for exactly the reason the walk
      * and the vocabulary do: one call, one push, no half-configured frame.
@@ -19319,7 +19317,7 @@ ${inner}
     const housingEntries = await housingPublicEntries(getPool());
     res.json({
       skin: getBrand().skin,
-      walk: steps && steps.length ? steps : null,
+      walk: served.walk, welcome: served.welcome,
       vocabulary: mapVocabRepo.get(),
       // JSON text, not an object: the bytes the map wrote are the bytes it
       // gets back. The shell parses it once, on its way into the frame.

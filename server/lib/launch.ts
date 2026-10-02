@@ -40,6 +40,7 @@ import {
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
+import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
 
 /**
@@ -438,13 +439,16 @@ export async function issuanceCapDecisionFor(pool: Pool): Promise<IssuanceCapDec
  *             back whether or not a human looked; only `timezoneAnswer`,
  *             written on a real change or an explicit confirmation, says
  *             somebody answered.
+ *   walk      a stored walk IS the answer too, and it is the third fact: the
+ *             map ships no walk of a village's own, so what is in that
+ *             document a founder wrote (Rye, 2026-10-02).
  *
  * An unreadable or missing document reads as unanswered, which is true: a
  * village that has stored nothing has said nothing.
  *
  * Exported for its own tests. The checklist path reaches it through
  * `launchStatus`, which needs a village's whole world to answer; this reads
- * two documents and can be asked directly with a stub pool.
+ * one document per fact and can be asked directly with a stub pool.
  */
 export async function villageFactFor(
   pool: Pool,
@@ -458,6 +462,14 @@ export async function villageFactFor(
   if (fact === "currency") {
     const doc = await readConfigDocument<{ project?: { fiatCurrency?: string } }>(pool, "brand");
     return projectCurrencyCheck(doc?.project?.fiatCurrency ?? null);
+  }
+  /*
+   * THE VILLAGE'S OWN WALK, read from the document the map is served from.
+   * A stored walk IS the answer, the same shape as the currency: nothing ships
+   * in that document, so whatever is in it a founder wrote.
+   */
+  if (fact === "walk") {
+    return welcomeWalkCheck(await readConfigDocument(pool, MAP_WALK_DOC));
   }
   return {
     state: "missing",
