@@ -575,3 +575,104 @@ describe("out of sight, the walk waits (F39)", () => {
     });
   });
 });
+
+/* F04. With her voice on, the 6.5 s dwell cut every stop off mid-sentence,
+   and the village news cut in between stops. The voice here is stubVoice. */
+describe("with her voice on, every stop is heard to its end (F04)", () => {
+  describe("a whole journey, spoken", () => {
+    let b: Booted;
+    let news: string[] = [];
+    beforeAll(async () => {
+      b = boot("#skipIntro", DESK, {});
+      await settle(200);
+      // The in-browser engine wants a 90 MB download; the device voice is the floor this measures.
+      b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+      news = b.run<string[]>("SCENE.pulse.map(p=>p.msg.split(' · ')[0].trim()+'.')");
+      b.run("playJourney('j4')");
+      await until(() => walking(b) === null, 60000);
+    });
+    afterAll(() => b?.close());
+
+    it("ran to its end", () => {
+      expect(walking(b)).toBeNull();
+      expect(lines(b).some((d) => (d.textContent ?? "").includes("The walk ends here.")), "the closing line").toBe(true);
+    });
+
+    it("let every stop finish before the next began", () => {
+      const stops = b.said.filter((u) => / at [A-Z]/.test(u.text));
+      expect(stops.length, "stops spoken").toBe(4);
+      const cut = b.said.filter((u) => u.cutAt !== null).map((u) => `${u.text.slice(0, 40)}... cut at ${u.cutAt} of ${u.needs} ms`);
+      expect(cut, "lines cancelled while she was still speaking").toEqual([]);
+      expect(stops.every((u) => u.ended)).toBe(true);
+    });
+
+    it("says the opening line with the first stop, so the landing cannot cut it", () => {
+      expect(b.said[0]?.text).toMatch(/^Investor Journey\. 4 stops, .*\. Discover: Discover /);
+      expect(b.said[0]?.cutAt, "the first thing she said ran to its end").toBeNull();
+    });
+
+    it("keeps the village news out of the walk", () => {
+      // From her first stop to her closing line. News after the walk is welcome.
+      const all = lines(b);
+      const from = all.indexOf(stopLines(b)[0] as HTMLElement);
+      const to = all.findIndex((d) => (d.textContent ?? "").includes("The walk ends here."));
+      expect(from >= 0 && to > from, "the walk's lines are in her log").toBe(true);
+      const heard = all.slice(from, to).filter((d) => news.some((n) => (d.textContent ?? "").includes(n)));
+      expect(heard.map((d) => d.textContent), "news lines in her log during the walk").toEqual([]);
+    });
+
+    it("walks on when her line is stopped by something newer", async () => {
+      b.run("playJourney('j4')");
+      await landed(b, stopLines(b).length + 1);
+      const t = Date.now();
+      const ceiling = (b.said[b.said.length - 1]?.words ?? 0) * 450 + 12000;
+      // Switching her to read cancels the line mid-sentence. A walk still waiting on that line
+      // would sit at its ceiling; this one walks on at the reading pace.
+      b.run("mvMode('read')");
+      expect(await until(() => (walking(b)?.i ?? 0) >= 1, real(ceiling) * 0.8), "walked on well before the ceiling").toBe(true);
+      expect(Date.now() - t).toBeLessThan(real(ceiling) * 0.8);
+      b.run("jEnd()");
+    });
+
+    it("settles a line played as audio when it is stopped, which pausing an <audio> never reports", async () => {
+      // An <audio> that plays and never ends, the way a paused one behaves.
+      b.run(`window.Audio=function(){return {play:()=>new Promise(()=>{}),pause(){},onended:null,onerror:null}};
+        URL.createObjectURL=()=>'blob:line';URL.revokeObjectURL=()=>{};
+        window.__settled=false;mvPlayBlob(new Blob(['x']),MV_SEQ).then(()=>{window.__settled=true})`);
+      await settle(20);
+      expect(b.run<boolean>("__settled"), "still playing").toBe(false);
+      b.run("mvStop()");
+      await settle(20);
+      expect(b.run<boolean>("__settled"), "settled by mvStop").toBe(true);
+      expect(b.uncaught).toEqual([]);
+    });
+  });
+
+  it("does not wait for good on a line that never says it ended", async () => {
+    const b = boot("#skipIntro", DESK, { neverEnds: true });
+    await settle(200);
+    b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+    b.run("playJourney('j4')");
+    await landed(b, 1);
+    const words = b.said[b.said.length - 1]?.words ?? 0;
+    // The ceiling: 450 ms a word plus the 12 s the in-browser engine may hold a line.
+    const ceiling = words * 450 + 12000;
+    expect(await until(() => (walking(b)?.i ?? 0) >= 1, real(ceiling) + 10000), "walked on after the ceiling").toBe(true);
+    b.close();
+  });
+
+  it("does not sit at the ceiling when the voice drops a line without a word", async () => {
+    const b = boot("#skipIntro", DESK, { drops: true });
+    await settle(200);
+    b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+    b.run("playJourney('j4')");
+    await landed(b, 1);
+    const t = Date.now();
+    const ceiling = (b.said[b.said.length - 1]?.words ?? 0) * 450 + 12000;
+    expect(ceiling, "the ceiling this would otherwise wait for").toBeGreaterThan(25000);
+    // A dropped line is over once it has not started in 2.5 s; then the reading pace.
+    expect(await until(() => (walking(b)?.i ?? 0) >= 1, real(ceiling) * 0.8), "walked on well before the ceiling").toBe(true);
+    expect(Date.now() - t).toBeLessThan(real(ceiling) * 0.8);
+    b.close();
+  });
+});

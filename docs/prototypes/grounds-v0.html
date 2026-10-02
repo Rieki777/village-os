@@ -5204,6 +5204,16 @@ function mvKokoroUsable(){
 window.mvKokoroUsable=mvKokoroUsable;
 
 let MV_SEQ=0,MV_AUDIO=null,MV_URL=null,MV_KTTS=null,MV_KLOAD=null;
+/* WHEN A LINE IS OVER. A walk waits for her to finish a stop before it moves
+   on (hold, in the journey), so every way a line can end has to say so:
+   it ran out, it failed, or something newer took the voice. That last one
+   fires no event of its own. Pausing an <audio> fires neither `ended` nor
+   `error`, so a line stopped by mvStop would have kept a walk waiting for
+   good. MV_WAIT holds the settle of every line in flight and mvStop settles
+   them all. MV_LINE is the newest line's promise and MV_TALK says whether it
+   is still going; neither ever rejects. */
+let MV_WAIT=[],MV_LINE=Promise.resolve(),MV_TALK=false;
+function mvSettle(){const w=MV_WAIT;MV_WAIT=[];w.forEach(function(f){try{f()}catch(_){}})}
 
 /* Markup in, speech out. Deliberately a string transform and NOT innerHTML on
    a detached node: assigning innerHTML fires <img onerror> even off-document,
@@ -5225,13 +5235,14 @@ function mvCleanAudio(){
    the toggle going quiet, and when a walk ends. */
 function mvStop(){MV_SEQ++;mvCleanAudio();
   try{if('speechSynthesis'in window)speechSynthesis.cancel()}catch(_){}
-  MVOICE.tier=null}
+  MVOICE.tier=null;mvSettle()}
 window.mvStop=mvStop;
 
 function mvTier(t){MVOICE.tier=t}
 
 function mvPlayBlob(blob,seq){return new Promise(function(res){
   if(seq!==MV_SEQ)return res();
+  MV_WAIT.push(res);
   mvCleanAudio();
   let url;try{url=URL.createObjectURL(blob)}catch(_){return res()}
   const a=new Audio(url);MV_AUDIO=a;MV_URL=url;
@@ -5300,16 +5311,28 @@ function mvDeviceVoice(){try{
   return en.find(function(v){return MV_SHE.test(v.name||'')})||en[0]||all[0]||null}
   catch(_){return null}}
 
+/* Settles when the utterance ends, fails, or is superseded. It used to return
+   the moment speak() was called, so nothing could wait for the line. */
 function mvDevice(t,seq){
-  if(!('speechSynthesis'in window))return false;
-  try{
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(t);
-    const v=mvDeviceVoice();if(v)u.voice=v;
-    u.rate=1;u.pitch=1.02;
-    u.onstart=function(){if(seq===MV_SEQ)mvTier('device')};
-    speechSynthesis.speak(u);return true}
-  catch(_){return false}}
+  if(!('speechSynthesis'in window))return Promise.resolve(false);
+  return new Promise(function(res){
+    try{
+      speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance(t);
+      const v=mvDeviceVoice();if(v)u.voice=v;
+      u.rate=1;u.pitch=1.02;
+      let started=false;
+      u.onstart=function(){started=true;if(seq===MV_SEQ)mvTier('device')};
+      u.onend=u.onerror=function(){res(true)};
+      MV_WAIT.push(function(){res(true)});
+      speechSynthesis.speak(u);
+      /* Chrome now and then drops an utterance spoken straight after a
+         cancel: no start, no end, no error. MEASURED in one of three real
+         runs with Zira, on the first stop, and the walk then sat at its
+         ceiling for 30 s in silence. A line that has not started and is
+         neither speaking nor queued after 2.5 s is over. */
+      setTimeout(function(){try{if(!started&&!speechSynthesis.speaking&&!speechSynthesis.pending)res(false)}catch(_){res(false)}},2500)}
+    catch(_){res(false)}})}
 
 async function mvSpeakAsync(text){
   if(MVOICE.mode!=='hear')return;
@@ -5325,12 +5348,23 @@ async function mvSpeakAsync(text){
     if(seq!==MV_SEQ)return;
     if(ready&&await mvKokoroSpeak(t,seq))return;
     if(seq!==MV_SEQ)return}
-  mvDevice(t,seq)}
+  await mvDevice(t,seq)}
 
 /* The synchronous door every caller uses. Nothing above may reject into a
-   caller's lap: a voice that throws must cost silence and nothing else. */
-function mvSpeak(text){try{const p=mvSpeakAsync(text);if(p&&p.catch)p.catch(function(){})}catch(_){}}
+   caller's lap: a voice that throws must cost silence and nothing else.
+   It hands back the line's promise (MV_LINE) for the one caller that waits
+   on it, the walk. A line with nothing to say leaves the one in flight alone,
+   in the voice and in MV_LINE both. */
+function mvSpeak(text){let p;
+  if(MVOICE.mode!=='hear'||!mvStrip(text))return Promise.resolve();
+  try{p=Promise.resolve(mvSpeakAsync(text)).catch(function(){})}catch(_){p=Promise.resolve()}
+  MV_LINE=p;MV_TALK=true;
+  p.then(function(){if(MV_LINE===p)MV_TALK=false});
+  return p}
 window.mvSpeak=mvSpeak;
+/* Is she in the middle of saying something out loud? */
+function mvBusy(){return MVOICE.mode==='hear'&&MV_TALK}
+window.mvBusy=mvBusy;
 
 function mvPaint(){
   const b=$('maiaVoice');if(!b)return;
@@ -5570,7 +5604,13 @@ let pulseI=0;
 setInterval(()=>{const feed=SCENE.pulse.filter(p=>p&&p.src!=='sample');if(!feed.length)return;
   const p=feed[pulseI++%feed.length];const s=BY[p.at];if(!s)return;
   addSparkle(s.x,s.y-10,p.t==='heart'?'#ff9bb0':'#ffe9a3');toast(p.msg);
-  if(pulseI%3===1)maiaSay(escq(p.msg.split(' · ')[0].trim())+'.')},14000);
+  /* THE NEWS NEVER TALKS OVER HER. During a walk it stays out of her log
+     altogether: a line between two stops reads as part of the walk, and said
+     out loud it cancelled the stop she was on. MEASURED with the device
+     voice: it cut a walk's opening line after 1.16 s and its fourth stop
+     mid-sentence, and on production one run never heard stop 1 at all. Any
+     other time it is written down, and said out loud only when she is quiet. */
+  if(pulseI%3===1&&!JWALK)maiaSay(escq(p.msg.split(' · ')[0].trim())+'.',null,mvBusy()?'':undefined)},14000);
 
 /* keyboard */
 addEventListener('keydown',e=>{
@@ -8182,6 +8222,10 @@ window.jRowsOff=jRowsOff;
 /* Long enough to read a line at, and it never runs while she is paused. A
    1.5 second stop was a slideshow; this is a walk. */
 const JDWELL=6500;
+/* When she is speaking, the pause after her line ends before the walk moves,
+   and the time a spoken word is allowed when working out the ceiling (the
+   device voice measured 350 to 380 ms a word, so 450 leaves room). */
+const JBREATH=1200,JWORD=450;
 let JWALK=null,JTMR=null,JSHEET=false;
 /* body.jwalk marks a journey walking with her sheet up, whoever opened the
    sheet, so a short screen can give the walk a shorter sheet (the CSS at
@@ -8255,20 +8299,43 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
   const back=JWALK.i>0;
   const lead=back?('Picking it up at stop '+(JWALK.i+1)+' of '+stops.length+'. ')
     :(stops.length+' stops, and you can stop me at any one of them. ');
-  const open=j.name+'. '+lead;
+  /* The opening line is written now and SAID with the first stop. Spoken on
+     its own it was cut off by that stop's line the moment the camera landed,
+     about a second in. */
+  JWALK.lead=j.name+'. '+lead;
   maiaSay('<b>'+escq(j.name)+'</b>. '+lead
     +'<b>Esc</b> ends the walk.'
     +(skipped?'<div style="margin-top:3px;opacity:.72">'+skipped+' step'+(skipped>1?'s':'')
       +' of this journey has no place on the land yet. Drag them on the Loom.</div>':''),
-    null,open);
-  const hold=()=>{clearTimeout(JTMR);
+    null,'');
+  /* HER VOICE SETS THE PACE WHILE SHE SPEAKS. JDWELL is a reading pace, and
+     hear mode used to keep it too, so every new stop cancelled the line
+     before it. MEASURED with the device voice (Zira): 35 words take 12.97 s
+     and the stop moved on after about 8, and all 8 stops of the tour were cut
+     with speaking:true. So when a stop is spoken (`spoken` is its line's
+     promise) the clock starts when the line is over, JBREATH after it and
+     never sooner than JDWELL from the landing. The ceiling, armed first,
+     covers a line that never says it ended (Chrome sometimes drops `end`) and
+     the time the in-browser engine may hold a line while it loads. Read, the
+     pace is JDWELL, as it always was.
+     `beat` is the stop this hold belongs to. A line can end after the walk
+     has moved on, and an old stop must never arm the clock for a new one. */
+  const hold=(spoken,said)=>{clearTimeout(JTMR);
     if(!JWALK||JWALK.id!==id||JWALK.paused)return;
-    /* GUIDE.on is checked here as well as cleared by stop(), because this is
-       the timer that used to move the map six seconds after somebody had
-       already taken it back. Two locks on the one door that was open. */
-    JTMR=setTimeout(()=>{if(JWALK&&JWALK.id===id&&!JWALK.paused&&GUIDE.on){JWALK.i++;step()}},JDWELL);
-    tourTimer=JTMR};
+    const beat=JWALK.beat,t0=Date.now();
+    const arm=ms=>{clearTimeout(JTMR);
+      if(!JWALK||JWALK.id!==id||JWALK.paused||JWALK.beat!==beat)return;
+      /* GUIDE.on is checked here as well as cleared by stop(), because this is
+         the timer that used to move the map six seconds after somebody had
+         already taken it back. Two locks on the one door that was open. */
+      JTMR=setTimeout(()=>{if(JWALK&&JWALK.id===id&&!JWALK.paused&&GUIDE.on){JWALK.i++;step()}},ms);
+      tourTimer=JTMR};
+    if(!spoken){arm(JDWELL);return}
+    const words=String(said||'').split(/\s+/).filter(Boolean).length;
+    arm(Math.max(JDWELL,words*JWORD+MV_KOKORO.wait));
+    spoken.then(()=>arm(Math.max(JDWELL-(Date.now()-t0),JBREATH)))};
   const step=()=>{if(!JWALK||JWALK.id!==id)return;
+    JWALK.beat=(JWALK.beat|0)+1;
     if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jRowsOff();
       /* HER SHEET STAYS UP FOR HER LAST LINE. Every other ending drops it
          (jHalt says why: a person who took the map back wants the screen),
@@ -8327,8 +8394,9 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
       if(!own&&!x.st.body)JWALK.told[s.key]=JWALK.i+1;   // the latest stop here, so a third visit points at the second
       const again=was?'We stood here at stop '+was+' as well.':'';
       const text=line?escq(line):deep?deep.html:x.st.body?'':escq(again);
-      const said=own?((line||deep.say)+(x.st.body?' '+x.st.body:''))
-        :(head+' at '+s.name+'. '+(x.st.body||(deep?deep.say:again)));
+      const said=(JWALK.lead?JWALK.lead+' ':'')+(own?((line||deep.say)+(x.st.body?' '+x.st.body:''))
+        :(head+' at '+s.name+'. '+(x.st.body||(deep?deep.say:again))));
+      JWALK.lead='';
       jRowsOff();
       maiaSay('<b>'+title+'</b> at '+escq(s.name)
         +(text?'<div style="margin-top:3px">'+text+'</div>':'')
@@ -8336,7 +8404,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
            has just said exactly that. */
         +body+jRow(JWALK.i+1,stops.length,own||!deep),
         null,said);
-      hold()})};
+      hold(mvBusy()?MV_LINE:null,said)})};
   window.jNext=()=>{clearTimeout(JTMR);if(!JWALK||JWALK.id!==id)return;
     JWALK.paused=false;JWALK.i++;step()};
   /* Tell me more stays where it is and says what is actually there. */
