@@ -28,8 +28,9 @@
  *  1. THE HASH, both ways. `/map#/place/greenhouse` opens the iframe at the
  *     same address (once, via `src`, because reassigning `src` reloads
  *     four megabytes), and the artifact's `{type:'route'}` writes its address
- *     back into the visible URL. Back, Forward, a reload and a pasted link all
- *     go through components/map/mapHistory.ts, which says what each one does.
+ *     back into the visible URL, replacing it and never adding an entry. Back,
+ *     Forward, a reload and a pasted link all go through
+ *     components/map/mapHistory.ts, which says what each one does.
  *  2. `postMessage({type:'nav', route})`. The listener is here and ready. The
  *     artifact does not send it yet; when the map workstream adds it, same-tab
  *     SPA navigation starts working with no change on this side.
@@ -243,8 +244,11 @@ export default function LivingMap() {
   const { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash } = useMapEnterGate(uncovered);
   /** The artifact has booted, so on a phone its own bar carries the door out. */
   const [groundsReady, setGroundsReady] = useState(false);
-  /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts. */
-  const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt });
+  /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts.
+     Back and Leave the map both go to the page before the map (D6), and a
+     phone's #/circles link goes to /map/circles (D8), which is why it is told
+     which layout the artifact is drawing. */
+  const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt, pocket });
   const enterTheLand = useCallback(() => {
     markEntered();
     onEnter();
@@ -915,7 +919,7 @@ export default function LivingMap() {
           </p>
           <button type="button" onClick={exitApp}
             className="mt-6 px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted">
-            Back to the village
+            Leave the map
           </button>
         </div>
       )}

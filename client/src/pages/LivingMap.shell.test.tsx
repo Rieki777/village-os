@@ -11,7 +11,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { Router } from "wouter";
+import { Route, Router, Switch } from "wouter";
 import type { ReactNode } from "react";
 
 vi.mock("@/components/Layout", () => ({
@@ -231,5 +231,53 @@ describe("a slow download (F47)", () => {
     expect(cover()).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(12_000));
     expect(post.mock.calls.map(([m]) => (m as { type?: string }).type)).not.toContain("uncovered");
+  });
+});
+
+describe("leaving the map lands on the page before it (D6, D8)", () => {
+  /*
+   * The whole shell under the router, with the page the visitor came from in
+   * front of it. Before this model, the Leave the map door from an open door
+   * went to `/` (the arrival entry rewritten as the village door), and from
+   * there Back was the only way to the page the visitor had been on.
+   */
+  function arriveFrom(before: string, url: string) {
+    window.history.pushState(null, "", before);
+    window.history.pushState(null, "", url);
+    return render(
+      <Router>
+        <Switch>
+          <Route path="/quests"><p>the quests page</p></Route>
+          <Route path="/map/circles"><p>the org chart</p></Route>
+          <Route path="/map"><LivingMap /></Route>
+        </Switch>
+      </Router>,
+    );
+  }
+
+  it("the Leave the map door goes back to the page before, and the address followed the map without adding entries", async () => {
+    arriveFrom("/quests", "/map#/place/greenhouse");
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const length = window.history.length;
+    fromMap({ type: "route", hash: "#/module/stay", user: true });
+    expect(window.location.pathname + window.location.hash).toBe("/map#/module/stay");
+    expect(window.history.length, "a door is not a page").toBe(length);
+    act(() => {
+      leave()!.click();
+    });
+    await waitFor(() => expect(screen.queryByText("the quests page")).toBeTruthy());
+    expect(window.location.pathname).toBe("/quests");
+  });
+
+  it("a phone's #/circles link opens the org chart in place of the map, so Back does not bounce", async () => {
+    arriveFrom("/quests", "/map#/circles&hud=pocket");
+    const length = window.history.length;
+    await waitFor(() => expect(screen.queryByText("the org chart")).toBeTruthy());
+    expect(window.location.pathname).toBe("/map/circles");
+    expect(window.history.length, "replaced, never pushed").toBe(length);
+    act(() => {
+      window.history.back();
+    });
+    await waitFor(() => expect(screen.queryByText("the quests page")).toBeTruthy());
   });
 });
