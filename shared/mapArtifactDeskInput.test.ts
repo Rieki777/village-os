@@ -355,3 +355,40 @@ describe("Space presses the focused control, and is the shortcut only on the lan
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F26. The seven dock doors were icon-only buttons whose only text lived in
+   data-tip, which no screen reader reads, and the hour button's name was the
+   glyph. Chromium's own tree (read over CDP) is where the bare names were
+   measured; here the attributes that feed it are read back. */
+describe("every door on the right rail, and the hour, has a name", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("names each dock door after the first sentence of its tip, and hides its icon", () => {
+    const doors = [...b.doc.querySelectorAll<HTMLElement>("#dock button")];
+    expect(doors.length, "the seven doors").toBe(7);
+    for (const d of doors) {
+      const tip = (d.getAttribute("data-tip") ?? "").split(".")[0];
+      expect(tip, `${d.dataset.m} has a tip to agree with`).not.toBe("");
+      expect(d.getAttribute("aria-label"), `the name of the ${d.dataset.m} door`).toBe(tip);
+      const svg = d.querySelector("svg");
+      expect(svg, `${d.dataset.m} carries its MICON`).not.toBeNull();
+      expect(svg?.getAttribute("aria-hidden"), `${d.dataset.m}'s icon is decoration`).toBe("true");
+    }
+  });
+
+  it("names the hour, and says which hour once a person has set it", () => {
+    const day = b.doc.getElementById("dayBtn") as HTMLButtonElement;
+    expect(day.getAttribute("aria-label")).toBe("Time of day");
+    day.click();
+    expect(day.textContent).toBe("🌇");
+    expect(day.getAttribute("aria-label")).toBe("Time of day: dusk");
+    day.click();
+    expect(day.getAttribute("aria-label")).toBe("Time of day: night");
+    expect(b.uncaught).toEqual([]);
+  });
+});
