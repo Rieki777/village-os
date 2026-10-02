@@ -7066,6 +7066,27 @@ function applyVocabulary(voc){
     rebuildMedia();flowSpriteReset();took.push('media')}
   return took}
 window.applyVocabulary=applyVocabulary;window.VOCAB_KEYS=VOCAB_KEYS;
+/* THE WORDS THE VILLAGE HOLDS IN VILLAGE SETTINGS (N29, the twin of F78).
+   The shell pushes the village's vocabulary after every scene, and
+   applyVocabulary puts it over the scene's: a zone list or a flow list
+   replaces the scene's, a named phase wins over the scene's name for it.
+   So a rename here of a word the village holds reached no visitor at all,
+   while it went on the publish card as a change every visitor would see.
+   And none of these editors is screen-only: a zone rename rewrites the
+   drawn zones, and media and phases live in the scene the publish carries.
+   So inside the village a word the village holds is not edited here, and
+   the editor says where it is. A word the village leaves to the scene
+   (an empty list, an unnamed phase) is still renamed here, where it wins. */
+let VILLAGE_VOCAB=null;
+function heldVocab(voc){if(!voc||typeof voc!=='object')return null;
+  const list=k=>Array.isArray(voc[k])&&voc[k].some(x=>k==='media'?!!(x&&x.key):!!vocabWord(x));
+  const ph=voc.phases&&typeof voc.phases==='object'&&!Array.isArray(voc.phases)?voc.phases:{};
+  return{zone:list('zone'),media:list('media'),
+    phases:Object.keys(ph).filter(n=>typeof ph[n]==='string'&&ph[n].trim()).map(String)}}
+function vocabHeld(k,n){if(!inShell()||!VILLAGE_VOCAB)return false;
+  return k==='phases'?VILLAGE_VOCAB.phases.includes(String(n)):!!VILLAGE_VOCAB[k]}
+const VOCAB_HOME='The words every visitor sees here are set in Village Settings, under The map\'s words.';
+window.vocabHeld=vocabHeld;
 let inspKey=null;
 function setDerived(s){s.state=derivedState(s);const el=pEls[s.key];if(el){
     el.className='poi st-'+s.state;
@@ -9647,6 +9668,7 @@ function renderVocab(){const host=$('skVocab');if(!host)return;
   host.innerHTML=SUBTYPES.zone.map((z,i)=>`<button class="chip" data-vz="${i}" data-tip="Click to rename. Your land, your words; every drawn zone follows.">${escq(z)}</button>`).join('')
    +`<button class="chip" data-vz="+" style="border-style:dashed">+ word</button>`;
   host.querySelectorAll('[data-vz]').forEach(b=>b.onclick=()=>{
+    if(vocabHeld('zone'))return toast(VOCAB_HOME);
     const i=b.dataset.vz;
     const inp=document.createElement('input');inp.type='text';inp.value=i==='+'?'':SUBTYPES.zone[+i];
     inp.style.cssText='width:92px;background:rgba(44,33,20,.9);border:1px solid #c9a25e;border-radius:6px;color:#fff;font-family:inherit;font-size:10.5px;padding:3px 7px';
@@ -10118,6 +10140,7 @@ function renderMediaVocab(){const host=$('skMedia');if(!host)return;
   host.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>mediaEditor(b,b.dataset.vm))}
 window.renderMediaVocab=renderMediaVocab;
 function mediaEditor(btn,idx){
+  if(vocabHeld('media'))return toast(VOCAB_HOME);
   const L=SCENE.vocabulary.media,add=idx==='+';
   const m=add?{key:'',name:'',color:'#e8c877',glyph:'seed'}:L[+idx];
   const used=add?0:SCENE.flows.filter(f=>mediaKey(f.medium)===m.key).length;
@@ -10163,6 +10186,7 @@ function renderPhaseVocab(){const host=$('skPhases');if(!host)return;
   host.innerHTML=[1,2,3].map(nn=>`<button class="chip" data-vp="${nn}" data-tip="Click to rename. Every surface that names a phase follows; the export keeps the number.">${escq(phaseName(nn))}</button>`).join('');
   host.querySelectorAll('[data-vp]').forEach(b=>b.onclick=()=>{
     const nn=+b.dataset.vp;
+    if(vocabHeld('phases',nn))return toast(VOCAB_HOME);
     const inp=document.createElement('input');inp.type='text';inp.value=phaseName(nn);
     inp.style.cssText='width:96px;background:rgba(44,33,20,.9);border:1px solid #c9a25e;border-radius:6px;color:#fff;font-family:inherit;font-size:10.5px;padding:3px 7px';
     b.replaceWith(inp);inp.focus();inp.select&&inp.select();
@@ -11291,6 +11315,7 @@ addEventListener('message',e=>{
   if(d.scene&&typeof d.scene==='object')applyScene(d.scene,d.sceneVersion);
   if(d.skin)applySkinExport(d.skin);
   if(Array.isArray(d.walk)&&d.walk.length)window.WALK=d.walk;
+  if(d.vocabulary)VILLAGE_VOCAB=heldVocab(d.vocabulary);
   if(d.vocabulary&&applyVocabulary(d.vocabulary).length){
     /* The land redraws itself every frame, but these are DOM and do not. */
     if(typeof renderMediaVocab==='function')renderMediaVocab();
