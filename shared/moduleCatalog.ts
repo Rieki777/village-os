@@ -414,6 +414,21 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 175,
     emblem: "Landmark",
   },
+  saberra: {
+    promise: "An outside reading of how your village is organised, offered back as suggestions you decide on.",
+    benefits: [
+      "A service that keeps your organisational record proposes circles and roles",
+      "Every suggestion goes to your review queue, so nothing changes until somebody agrees",
+      "Roles carry what the service knows about them, so a member can see what a seat involves before putting their hand up",
+      "Circles and roles it holds are stored beside yours, in its own words",
+      "Tensions and risks it is tracking reach your stewards",
+    ],
+    forWhom: "Villages that already keep their organisational memory with an outside service.",
+    setupSummary: "You hold your own connection: a subdomain at the service and your own token.",
+    dataSummary: "Circles, roles and their state, under the service's own field names. No member is named.",
+    hue: 198,
+    emblem: "Network",
+  },
 };
 
 // ── The builders' shelf ──────────────────────────────────────────────────────

@@ -366,6 +366,27 @@ does NOT push until told. Scratch goes in the lane own subdirectory, never a sha
   control (1,827 `.sql` files across 25 `drizzle/` directories) it answers 0199. An empty channel
   is a channel to re-ask, never a channel to believe.
   `0216` stays burned and unrefilled, per the launch-powers row above. Confirmed again at landing.
+- **saberra lane (a seat carries what a module knows about it), 2026-09-24: holds 0221** for
+  `drizzle/0221_a_seat_carries_what_a_module_knows.sql` on `wt/saberra-boundary-fix`. One new
+  table, `module_entity_facts`, no `ALTER` and no touch to an existing object, so the rollback is
+  free: the previous release neither reads nor writes it.
+  **`--next` said 0219 and would have collided.** `origin/main` already carries
+  `0219_a_proposal_says_what_it_serves.sql` and another lane holds `0220`, so the four-way check
+  is what found 0221 and the script alone would not have. That is the second time the flag has
+  been wrong in this document's history, and it is wrong for the same reason both times: it reads
+  the working tree and the working tree is one lane's view of a number claimed across all of them.
+  Verified free on disk, across every remote ref, and here.
+- **saberra lane (a draft can make a circle), 2026-09-28: holds 0224** for
+  `drizzle/0224_a_draft_can_make_a_circle.sql` on `wt/saberra-boundary-fix`. One `MODIFY COLUMN`
+  adding `create_circle` to the `op` enum on `org_draft_changes`, the same shape as `0208` which
+  added `move_circle` to that column. Expand-only: the previous release reads and writes every
+  value it already knew and never writes this one, and a row carrying it is one that release
+  cannot apply, which is correct rather than unsafe because it also cannot create the proposals
+  that produce one.
+  **`--next` said 0222 and would have collided, for the third time in this branch.** Remote refs
+  already held `0222` and `0223`; the flag reads the working tree, and the working tree is one
+  lane's view of a number claimed across all of them. Verified free on disk, across every remote
+  ref, and here.
 - **membrane lane (invitations), 2026-09-14: holds 0209** for
   `drizzle/0209_a_member_arrives_by_invitation.sql` (one new table, `member_invites`). Measured three
   ways before the file was created: every remote and local ref and every worktree disk reached 0207

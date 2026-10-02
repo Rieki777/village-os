@@ -80,6 +80,7 @@ import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
+import { register as registerSaberraRoutes } from "./routes/saberra";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
@@ -9994,6 +9995,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
   // â”€â”€ S19-S23: the village map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€─
   app.use("/api/map", requireModule("map"));
+  app.use("/api/saberra", requireModule("saberra"));
   app.use("/api/circles", requireModule("map"));
   /*
    * `/api/admin/circles` IS DELIBERATELY NOT BEHIND `requireModule("map")`.
@@ -26194,6 +26196,7 @@ ${inner}
     isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
+  registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 

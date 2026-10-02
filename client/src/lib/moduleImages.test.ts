@@ -63,7 +63,12 @@ describe("module images", () => {
    * failure this suite was written for (five modules rendering as broken
    * images) stays caught for everything else.
    */
-  const DRAWN_FALLBACK = new Set(["redemption"]);
+  // `saberra` is here for the same reason `redemption` is: it ships no art
+  // file on purpose. Its catalog entry carries a hue and an emblem, which is
+  // the drawn fallback, and that costs nothing against the image budget. The
+  // case above keeps this list honest: a module named here may not also ship
+  // a file, and may not be a module that does not exist.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

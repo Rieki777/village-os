@@ -60,15 +60,38 @@ describe("the shipped registry", () => {
     expect(moduleListingProblems()).toEqual([]);
   });
 
-  it("ships no listing yet, so the library adds no secret slot", () => {
-    expect(vendorModules()).toEqual([]);
-    expect(registrySecretKeys()).toEqual([]);
+  /*
+   * These two used to assert that the registry carried NO listing at all,
+   * which was true for as long as every module was written and carried by the
+   * platform. The first connected listing makes that premise false, so they
+   * assert the rule the old ones were standing in for: a listing contributes
+   * exactly the secret slots it declares and no others, and support routes by
+   * TIER rather than uniformly at the platform.
+   */
+  it("adds exactly the secret slots its listings declare, and no others", () => {
+    const declared = vendorModules().flatMap((m) => m.vendor?.secretKeys ?? []);
+    expect(registrySecretKeys().slice().sort()).toEqual(declared.slice().sort());
+    // A managed listing's credential is the platform's and lives in env only,
+    // so it may never reach a village's secret store.
+    for (const m of vendorModules()) {
+      if (m.tier === "managed") expect(m.vendor?.secretKeys, m.id).toEqual([]);
+    }
   });
 
-  it("routes every platform module's support at the platform", () => {
+  it("routes support by tier: the platform answers for its own, a vendor for theirs", () => {
     for (const m of MODULES) {
-      expect(supportRoute(m).party, m.id).toBe("platform");
-      expect(supportRoute(m).vendorName, m.id).toBeNull();
+      const route = supportRoute(m);
+      if (m.tier === "connected" && m.vendor) {
+        expect(route.party, m.id).toBe("vendor");
+        expect(route.vendorName, m.id).toBe(m.vendor.legalName);
+        expect(route.supportEmail, m.id).toBe(m.vendor.supportEmail);
+      } else {
+        // Managed names no vendor to a village on purpose: the platform sold
+        // the sentence "call us", and naming the party behind it sells
+        // something else.
+        expect(route.party, m.id).toBe("platform");
+        expect(route.vendorName, m.id).toBeNull();
+      }
     }
   });
 });
@@ -423,8 +446,24 @@ describe("a member-pii listing owes a member driver", () => {
     expect(reqs.find((r) => r.id === "listing-member-driver-fixture")).toBeDefined();
   });
 
-  it("adds nothing today, because the shipped registry holds no listings", () => {
-    expect(listingRequirements(MODULES)).toEqual([]);
+  /*
+   * This used to assert the shipped registry produced NO listing requirements,
+   * which was true while it held no listings. The first connected listing makes
+   * that false and the rule underneath it is what matters: a connected listing
+   * asks a village to hold its own credential, and only a `member-pii` one owes
+   * a member driver. Asserting the SHAPE keeps the test meaningful as the
+   * registry grows, where asserting emptiness would just get deleted.
+   */
+  it("asks a real connected listing for its credential, and owes no member driver while it names nobody", () => {
+    const connected = MODULES.filter((m) => m.tier === "connected");
+    expect(connected.length, "no connected listing ships, so this proves nothing").toBeGreaterThan(0);
+    const reqs = listingRequirements(MODULES);
+    for (const m of connected) {
+      expect(reqs.find((r) => r.id === `listing-credential-${m.id}`), m.id).toBeDefined();
+      if (m.dataClass !== "member-pii") {
+        expect(reqs.find((r) => r.id === `listing-member-driver-${m.id}`), m.id).toBeUndefined();
+      }
+    }
   });
 });
 

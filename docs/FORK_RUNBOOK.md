@@ -426,6 +426,19 @@ nothing had ever read the column).
 
 ## Integrations
 
+- Organisational Memory module (`saberra`, the first `connected`-tier listing;
+  `drizzle/0221_a_seat_carries_what_a_module_knows.sql` adds `module_entity_facts`). Ships OFF. A village holds its OWN
+  connection, so there is nothing shared between two villages here and nothing to
+  provision centrally. Two things per village:
+  - **Secret** `sera_api_secret`, set in the admin secrets panel. Environment fallback
+    `SERA_API_SECRET`. Ask the vendor for a READ-SCOPED token; a structure-write token
+    is a separate credential and is not needed to read.
+  - **Config** `apiUrl`, the vendor's address for this village, and `dashboardUrl`,
+    where the link out opens. Both must be https. `apiUrl` is the one the sync sends
+    the village's sealed key to, so it is read from `module_settings` and never from a
+    request.
+  Nothing is fetched until a steward with `intake.moderate` presses sync, and nothing
+  it returns changes the chart until a steward accepts it in the review queue.
 - Hypha (DHO config): set `hypha.org_url` (v3 S13) — every governance
   surface deep-links from this one value; blank hides all Hypha buttons.
   Confirm the four derived links resolve against your own DHO

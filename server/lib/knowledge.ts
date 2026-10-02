@@ -289,6 +289,7 @@ export const SHELF_BUDGET = {
  * explicit in both directions.
  */
 export const MODULE_DOCS: Readonly<Record<string, string>> = {
+  saberra: "organisational-memory.md",
   map: "village-map.md",
   exchange: "internal-exchange.md",
   feed: "gratitude-feed.md",
