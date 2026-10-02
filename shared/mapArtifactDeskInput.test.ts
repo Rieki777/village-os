@@ -577,3 +577,113 @@ describe("the leave prompt guards unsaved work, and nothing else", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F20 and F68. The wheel, a trackpad pinch (ctrl-wheel) and a mouse drag
+   were bound to the canvas alone, and a building's plate, a name and a mark
+   are their own elements beside it, so over any of them a notch did nothing,
+   a pinch was left to the browser and a drag moved nothing. jsdom hit-tests
+   nothing, so the events are dispatched on the elements a pointer lands on,
+   which is what a browser does; the land's own camera says whether it moved. */
+describe("the wheel, a pinch and a drag work over a building, a name and a mark", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  type Cam = { x: number; y: number; z: number };
+  const cam = () => b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+  const home = () =>
+    b.run("travel=null;cam.x=1200;cam.y=600;cam.z=0.84;cam.vx=cam.vy=0;panelKey=null;$('panel').classList.remove('open')");
+  const at = { clientX: 700, clientY: 450 };
+  const wheel = (el: Element, init: WheelEventInit) => {
+    const ev = new b.window.WheelEvent("wheel", { bubbles: true, cancelable: true, ...at, ...init });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  const pointer = (el: EventTarget, type: string, x: number, y: number) =>
+    el.dispatchEvent(
+      new b.window.PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+        pointerType: "mouse",
+        clientX: x,
+        clientY: y,
+      }),
+    );
+  const click = (el: Element, x: number, y: number) =>
+    el.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true, cancelable: true, clientX: x, clientY: y, detail: 1 }));
+  /** Down on the element, 150 px across the window, up and the click a browser sends after it. */
+  const drag = (el: Element) => {
+    pointer(el, "pointerdown", 700, 450);
+    pointer(el, "pointermove", 775, 490);
+    pointer(el, "pointermove", 850, 525);
+    const moved = cam();
+    pointer(el, "pointerup", 850, 525);
+    click(el, 850, 525);
+    return moved;
+  };
+  const marks = () => {
+    const seal = b.doc.querySelector("#badges .bseal");
+    return {
+      "the Greenhouse's plate": b.run<Element>("pEls.greenhouse"),
+      "the Greenhouse's name": b.run<Element>("bEls.greenhouse"),
+      "a district plate": b.run<Element>("bEls['d_'+SCENE.districts[0].id]"),
+      "a mark": seal as Element,
+    };
+  };
+
+  it("finds each kind of mark on the land (the positive control)", () => {
+    for (const [what, el] of Object.entries(marks())) {
+      expect(el, what).toBeTruthy();
+      expect(b.doc.getElementById("scene")?.contains(el), `${what} is outside the canvas`).toBe(false);
+    }
+  });
+
+  it("zooms the land on a wheel notch and takes a pinch from the browser, over each of them", () => {
+    for (const [what, el] of Object.entries(marks())) {
+      home();
+      expect(wheel(el, { deltaY: -100 }), `the notch over ${what} is the map's`).toBe(true);
+      expect(cam().z, `a notch over ${what} zooms`).toBeGreaterThan(0.9);
+      home();
+      expect(wheel(el, { deltaY: -10, ctrlKey: true }), `a pinch over ${what} is not the page's`).toBe(true);
+      expect(cam().z, `a pinch over ${what} zooms`).toBeGreaterThan(0.84);
+    }
+    home();
+    expect(wheel(b.doc.getElementById("scene") as Element, { deltaY: -100 }), "the canvas, as before").toBe(true);
+  });
+
+  it("pans on a drag begun on each of them, and the click at the end opens nothing", async () => {
+    for (const [what, el] of Object.entries(marks())) {
+      home();
+      const moved = drag(el);
+      expect(Math.round(1200 - moved.x), `a drag from ${what} pans across`).toBe(Math.round(150 / 0.84));
+      expect(b.run<string | null>("panelKey"), `the drag from ${what} opens no place`).toBeNull();
+      expect(b.run<boolean>("!!travel"), `nor flies anywhere`).toBe(false);
+      await settle(120); // the swallow lasts 80 ms past the release
+    }
+  });
+
+  it("still opens the place on a plain click on a building, a name or a mark", async () => {
+    for (const [what, el] of Object.entries(marks())) {
+      if (what === "a district plate") continue; // it flies to its district, checked below
+      home();
+      pointer(el, "pointerdown", 700, 450);
+      pointer(el, "pointerup", 700, 450);
+      click(el, 700, 450);
+      expect(b.run<string | null>("panelKey"), `a click on ${what}`).toBeTruthy();
+      await settle(120);
+    }
+    home();
+    const plate = marks()["a district plate"];
+    pointer(plate, "pointerdown", 700, 450);
+    pointer(plate, "pointerup", 700, 450);
+    click(plate, 700, 450);
+    expect(b.run<boolean>("!!travel"), "a click on a district plate flies to it").toBe(true);
+    b.run("travel=null");
+    expect(b.uncaught).toEqual([]);
+  });
+});

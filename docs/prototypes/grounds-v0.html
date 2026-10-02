@@ -2848,36 +2848,79 @@ window.GUIDE=GUIDE;
    WHAT THIS COSTS: dragging a building with a FINGER in build mode is now a
    mouse-and-pen action. It was never usable by finger anyway, because the
    camera moved underneath the building the whole time. */
-cv.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='touch')return; // fingers belong to touchNav, the only path that reads them
-  if(window.boundPointerDown&&window.boundPointerDown(e)){cv.setPointerCapture(e.pointerId);return}
-  if(window.featPointerDown&&window.featPointerDown(e)){cv.setPointerCapture(e.pointerId);return}
+/* THE PAN ITSELF, wherever on the land the hand came down. */
+let panFrom=null,panOnMark=false,PAN_MOVED=false,panGen=0;
+function beginPan(e,onMark){
   window.GUIDE&&GUIDE.hand();   // the one cancel path, and it runs BEFORE the flight is dropped
   dragging=true;cv.classList.add('dragging');lastP=[e.clientX,e.clientY];cam.vx=cam.vy=0;
+  panFrom=[e.clientX,e.clientY];panOnMark=!!onMark;PAN_MOVED=false;panGen++;
   /* A flight NOBODY GUIDED still keeps its promise, and that is right: the
      Enter button's welcome line rides one of these and she may always speak.
      A guided flight has already been dropped by GUIDE.hand above, callback
      and all, which is what stops the walk re-arming six seconds later. */
-  if(travel){const d=travel.done;travel=null;d&&d()}
+  if(travel){const d=travel.done;travel=null;d&&d()}}
+cv.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch')return; // fingers belong to touchNav, the only path that reads them
+  if(window.boundPointerDown&&window.boundPointerDown(e)){cv.setPointerCapture(e.pointerId);return}
+  if(window.featPointerDown&&window.featPointerDown(e)){cv.setPointerCapture(e.pointerId);return}
+  beginPan(e,false);
   cv.setPointerCapture(e.pointerId)});
+/* A DRAG THAT STARTS ON A BUILDING, A NAME OR A MARK MOVES THE LAND TOO.
+   Those are their own elements in #icons, #banners and #badges, siblings of
+   #scene and not its children, so a mouse that came down on one never
+   reached the pan above. MEASURED at 1440x900: a 150 px drag begun on the
+   Food Forest's plate moved the camera 0, the same drag 54 px away on bare
+   land moved it 151.7 world px, and the plates, names and marks are exactly
+   what a person aims at. Their events bubble through the three layers even
+   though the layers are pointer-events:none, which governs hit testing only.
+   Build mode keeps its own drag: a building's pointerdown starts startDrag,
+   which stops the event before it gets here. No pointer capture, because
+   capture would take the click away from the building, and the window's own
+   pointermove and pointerup already carry the pan. */
+const LAND_MARKS=['icons','banners','badges'].map(id=>document.getElementById(id));
+for(const el of LAND_MARKS)el.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch'||e.button!==0)return;
+  beginPan(e,true)});
 addEventListener('pointermove',e=>{
   if(e.pointerType==='touch')return; // ditto, and hover is not a thing a finger has
   if(dragging&&lastP){const dx=(e.clientX-lastP[0])/cam.z,dy=(e.clientY-lastP[1])/cam.z;
-    cam.x-=dx;cam.y-=dy;cam.vx=-dx;cam.vy=-dy;lastP=[e.clientX,e.clientY];clampCam()}
+    cam.x-=dx;cam.y-=dy;cam.vx=-dx;cam.vy=-dy;lastP=[e.clientX,e.clientY];clampCam();
+    /* Past a few pixels this is a pan and no longer a click. The card a
+       building raised on hover stays where it was drawn, so it goes. */
+    if(!PAN_MOVED&&panFrom&&Math.hypot(e.clientX-panFrom[0],e.clientY-panFrom[1])>4){PAN_MOVED=true;if(panOnMark)hideHover()}}
   else updateHover(e.clientX,e.clientY)});
 /* pointerup stays open to fingers because it only CLEARS state, and clearing
    twice is the same as clearing once. pointercancel joins it: the browser
    fires that one when it has concluded the pointer will produce no more
    events, which is exactly the moment a half-finished drag would otherwise be
    left with dragging=true and the land stuck to a hand that is gone. */
-const endPointer=()=>{dragging=false;cv.classList.remove('dragging');lastP=null};
+const endPointer=()=>{dragging=false;cv.classList.remove('dragging');lastP=null;
+  if(PAN_MOVED){const g=panGen;setTimeout(()=>{if(g===panGen)PAN_MOVED=false},80)}};
 addEventListener('pointerup',endPointer);
 addEventListener('pointercancel',endPointer);
-cv.addEventListener('wheel',e=>{e.preventDefault();window.GUIDE&&GUIDE.hand();const[wx,wy]=screenToWorld(e.clientX,e.clientY);
+/* A PAN THAT BEGAN ON A MARK ENDS ON IT, so its click is swallowed. The
+   building or name moves WITH the land, so the pointer is still over it when
+   the button comes up, and the click that follows would open the place, or
+   on a district plate fly the camera back to where the pan started. The
+   canvas keeps its own rule (the momentum test on its click). Captured on the
+   document so one guard covers the building, the name and the mark, whatever
+   each one's own click does. Cleared 80 ms after the release, as startDrag
+   clears dragMoved. */
+document.addEventListener('click',e=>{if(!PAN_MOVED)return;
+  const t=e.target;if(t&&t.closest&&t.closest('#icons,#banners,#badges')){e.stopPropagation();e.preventDefault()}},true);
+/* THE WHEEL ZOOMS WHEREVER THE POINTER IS ON THE LAND. It listened on the
+   canvas alone, so over a building, a name or a mark a notch did nothing
+   (z 0.84 stayed 0.84 over the Food Forest; 54 px away the same five notches
+   took it to 1.548), a zoom that drifted onto a mark stalled halfway, and a
+   trackpad pinch there was never prevented, so the browser zoomed the page.
+   The same three layers as the pan, and no further: the panels, the Loom and
+   the reading sheets keep their own wheel. */
+function wheelZoom(e){e.preventDefault();window.GUIDE&&GUIDE.hand();const[wx,wy]=screenToWorld(e.clientX,e.clientY);
   /* ctrlKey means a trackpad pinch, not a scroll: follow the fingers
      continuously instead of stepping, and never let the page zoom instead. */
   cam.z*=e.ctrlKey?Math.exp(-e.deltaY*0.012):(e.deltaY<0?1.13:0.885);clampCam();
-  const[nx,ny]=screenToWorld(e.clientX,e.clientY);cam.x+=wx-nx;cam.y+=wy-ny;clampCam()},{passive:false});
+  const[nx,ny]=screenToWorld(e.clientX,e.clientY);cam.x+=wx-nx;cam.y+=wy-ny;clampCam()}
+for(const el of [cv,...LAND_MARKS])el.addEventListener('wheel',wheelZoom,{passive:false});
 cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=screenToWorld(e.clientX,e.clientY);travelTo(wx,wy,Math.max(cam.z,1.15))});
 /* THE WEBKIT GESTURE EVENTS, WIDENED TO THE MAP'S OWN CHROME AND NO FURTHER.
    These are Safari-only and they are the belt to touch-action's braces: on
@@ -2896,11 +2939,17 @@ cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=
    resize text, and taking it from a panel of prose would be the accessibility
    failure this whole lane is trying not to commit. */
 (function safariPinch(){let gz=1,gx=0,gy=0; // Safari speaks gestures where others speak ctrl-wheel
-  cv.addEventListener('gesturestart',e=>{e.preventDefault();window.GUIDE&&GUIDE.hand('pinch');gz=cam.z;gx=e.clientX;gy=e.clientY},{passive:false});
-  cv.addEventListener('gesturechange',e=>{e.preventDefault();
+  const start=e=>{e.preventDefault();window.GUIDE&&GUIDE.hand('pinch');gz=cam.z;gx=e.clientX;gy=e.clientY};
+  const change=e=>{e.preventDefault();
     const[wx,wy]=screenToWorld(gx,gy);cam.z=Math.max(minZoom(),Math.min(ZMAX,gz*e.scale));
     const mx=(typeof e.clientX==='number')?e.clientX:gx,my=(typeof e.clientY==='number')?e.clientY:gy;
-    const[nx,ny]=screenToWorld(mx,my);cam.x+=wx-nx;cam.y+=wy-ny;gx=mx;gy=my;clampCam()},{passive:false});
+    const[nx,ny]=screenToWorld(mx,my);cam.x+=wx-nx;cam.y+=wy-ny;gx=mx;gy=my;clampCam()};
+  /* The marks on the land pinch the map as the canvas does, for the reason
+     the wheel above does: a trackpad pinch that begins over a building is a
+     pinch at the map, and Safari sends it as these and never as ctrl-wheel. */
+  for(const el of [cv,...LAND_MARKS]){
+    el.addEventListener('gesturestart',start,{passive:false});el.addEventListener('gesturechange',change,{passive:false});
+    if(el!==cv)el.addEventListener('gestureend',e=>e.preventDefault(),{passive:false})}
   cv.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
   for(const id of ['vitals','pbar','pnav']){const s=document.getElementById(id);if(!s)continue;
     for(const t of ['gesturestart','gesturechange','gestureend'])
