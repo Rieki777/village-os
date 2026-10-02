@@ -64,7 +64,15 @@ export default function LadderChip({
     >
       <Icon className={shape.iconInk ? `h-3.5 w-3.5 shrink-0 ${shape.iconInk}` : "h-3.5 w-3.5 shrink-0"} aria-hidden="true" />
       {label}
-      {suffix ? <span className="text-muted-foreground">{suffix}</span> : null}
+      {/* The space is a text node of its own: a flex container drops it from
+          the layout (the gap spaces the chip), and the chip's text still reads
+          "Term set at seating" rather than "Termset at seating". */}
+      {suffix ? (
+        <>
+          {" "}
+          <span className="text-muted-foreground">{suffix}</span>
+        </>
+      ) : null}
       <span className="sr-only">{srWords}</span>
     </span>
   );

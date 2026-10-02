@@ -30,7 +30,7 @@ import Breadcrumb from "@/components/power/Breadcrumb";
 import Legend from "@/components/power/Legend";
 import SearchBar, { type SearchHit } from "@/components/power/SearchBar";
 import FilterChips from "@/components/power/FilterChips";
-import HolderCard from "@/components/power/HolderCard";
+import MapSeatCard from "@/components/power/MapSeatCard";
 import CircleCard from "@/components/power/CircleCard";
 import CirclePeek from "@/components/power/CirclePeek";
 import SeatSheet from "@/components/power/SeatSheet";
@@ -654,7 +654,7 @@ export default function VillageMap() {
                       arrangeHint={arranging && !publishing ? "press M to pick it up and move it" : undefined}
                     />
                   </div>
-                  <aside data-scroll-contain className="w-80 shrink-0 bg-card border border-border rounded-2xl p-5 sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block">
+                  <aside data-scroll-contain className={`w-80 shrink-0 bg-card border border-border rounded-2xl ${selectedSeat ? "p-3" : "p-5"} sticky top-24 max-h-[80vh] overflow-y-auto hidden md:block`}>
                     {/* Arranging rides the top of this card, so the canvas never moves when it turns on. */}
                     {arranging && (
                       <ArrangeBar
@@ -676,7 +676,7 @@ export default function VillageMap() {
                             <X className="w-4 h-4" aria-hidden="true" />
                           </button>
                         </div>
-                        <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                        <MapSeatCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                       </div>
                     ) : focusedCircle ? (
                       <CircleCard
@@ -737,12 +737,12 @@ export default function VillageMap() {
                   the peek, not out of the circle. */}
               {(selectedSeat || (focusedCircle && sheetOpen)) && (
                 <div className="md:hidden">
-                  <SeatSheet
+                  <SeatSheet className={selectedSeat ? "px-3" : ""}
                     label={selectedSeat ? selectedSeat.name : focusedCircle!.name}
                     onClose={() => (selectedSeat ? setSelected(null) : setSheetOpen(false))}
                   >
                     {selectedSeat ? (
-                      <HolderCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
+                      <MapSeatCard seat={selectedSeat} circle={selectedCircle} data={data} onPickPerson={pickPerson} />
                     ) : (
                       <CircleCard
                         circle={focusedCircle!}
