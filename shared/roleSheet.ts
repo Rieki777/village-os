@@ -710,6 +710,17 @@ function factsFor(input: SeatInput, now: Date): SeatSheetView["facts"] {
 
 export const textOrNull = (v: string | null | undefined): string | null => (v && v.trim() ? v.trim() : null);
 
+/**
+ * What the badge's SeatGlyph draws as held. An open seat draws its empty ring
+ * whatever a hand-set state sits over; every other state draws the held-now
+ * count where the lapse flags were served, else the seated count.
+ */
+function badgeHeld(state: SeatStateWord, hc: number | null, lapse: { read: boolean; lapsed: number }): number {
+  if (state === "open") return 0;
+  const seated = hc ?? 0;
+  return lapse.read ? seated - lapse.lapsed : seated;
+}
+
 export function seatSheet(input: SeatInput, ctx: SheetContext): SeatSheetView {
   const proposal = input.mode === "proposal";
   const lapse = lapseReading(input);
@@ -754,7 +765,7 @@ export function seatSheet(input: SeatInput, ctx: SheetContext): SeatSheetView {
     badge: proposal
       ? { word: "proposed", label: SHEET_WORDS.proposed, held: 0 }
       : input.state
-        ? { word: input.state, label: STATE_WORDS[input.state], held: lapse.read ? (hc ?? 0) - lapse.lapsed : (hc ?? 0) }
+        ? { word: input.state, label: STATE_WORDS[input.state], held: badgeHeld(input.state, hc, lapse) }
         : null,
     chips: {
       keySeat: input.criticality === "high",

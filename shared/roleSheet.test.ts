@@ -36,7 +36,14 @@ import {
   type SheetContext,
 } from "./roleSheet";
 import { permissionSheet } from "./permissionSheet";
-import { PUBLIC_AGENT_NAME, fromMapSeat, fromOrgSeat, fromPermissionRole, fromProposedSeat } from "./roleSheetInputs";
+import {
+  PUBLIC_AGENT_NAME,
+  fromMapSeat,
+  fromOrgSeat,
+  fromPermissionRole,
+  fromProposedSeat,
+  seasonForSheet,
+} from "./roleSheetInputs";
 import { daysUntil as mapDaysUntil } from "../client/src/components/power/types";
 
 const ROOT = path.resolve(__dirname, "..");
@@ -381,6 +388,16 @@ describe("the state line, where the badge and the figures meet", () => {
     expect(sheet(fromMap({ ...SAMPLE_DECLARED, state: "expired", stateSource: "derived" }, false)).stateLine).toBe(
       "Everyone seated here is ready to be re-chosen.",
     );
+  });
+
+  it("hands the badge's glyph the held-now count where it is read, else Seated, and 0 on an open seat", () => {
+    expect(sheet(fromMap(SAMPLE_MAP)).badge).toMatchObject({ word: "partial", held: 1 });
+    expect(sheet(fromMap(SAMPLE_MAP, false, false)).badge).toMatchObject({ word: "partial", held: 2 });
+    expect(sheet(fromMap(SAMPLE_DECLARED)).badge).toMatchObject({ held: 2 });
+    // An open state set by hand over a seated seat still draws the empty ring.
+    expect(sheet(fromMap({ ...SAMPLE_DECLARED, state: "open" })).badge).toMatchObject({ word: "open", held: 0 });
+    // Control: the same seat, filled, draws the two it holds.
+    expect(sheet(fromMap({ ...SAMPLE_DECLARED, state: "filled" })).badge).toMatchObject({ word: "filled", held: 2 });
   });
 
   it("tells the truth about the live seat declared Held with nobody in it", () => {
@@ -813,6 +830,27 @@ describe("helpers moved here", () => {
     expect(termWords(at(12))).toBe("term ends in 12 days");
     expect(termWords(at(90))).toMatch(/^term ends /);
     expect(termWords(null)).toBeNull();
+  });
+
+  it("reads /api/season into the clock, and an unread or open-ended season into no clock", () => {
+    const served = {
+      current: { id: "s1", name: "Season of Foundations", endsOn: "2027-03-21", startsOn: "2026-09-21" },
+      upcoming: null,
+      daysLeft: 171,
+      openEnded: false,
+    };
+    expect(seasonForSheet(served)).toEqual(SEASON);
+    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: seasonForSheet(served) }).clock).toMatchObject({ key: "seasonDays", value: 171 });
+    // Not landed, or failed: unread, so no clock and never a 0.
+    expect(seasonForSheet(null)).toBeNull();
+    expect(seasonForSheet(undefined)).toBeNull();
+    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: seasonForSheet(null) }).clock).toBeNull();
+    // Open-ended: the route sends no days left.
+    const open = seasonForSheet({ ...served, daysLeft: null, openEnded: true });
+    expect(open).toEqual({ ...SEASON, daysLeft: null });
+    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: open }).clock).toBeNull();
+    // No current season at all.
+    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: seasonForSheet({ current: null, daysLeft: null }) }).clock).toBeNull();
   });
 
   it("formats a civil date as the day it names", () => {
