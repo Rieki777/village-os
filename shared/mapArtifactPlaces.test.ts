@@ -117,6 +117,8 @@ interface Booted {
   everLit: Set<string>;
   /** The type of every message the map posted to its shell. */
   posted: string[];
+  /** Every function handed to setInterval, by its period, so a slow tick can be turned by hand. */
+  intervals: Map<number, (() => void)[]>;
   run<T>(src: string): T;
   /** A message from the shell, in the shape LivingMap.tsx posts it. */
   post(data: Record<string, unknown>): void;
@@ -126,6 +128,7 @@ interface Booted {
 function boot(hash: string, opts: { shell?: boolean; width?: number; height?: number } = {}): Booted {
   const uncaught: unknown[] = [];
   const posted: string[] = [];
+  const intervals = new Map<number, (() => void)[]>();
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (e) => {
     if (e.type === "unhandled-exception") uncaught.push(e.cause ?? e);
@@ -140,6 +143,11 @@ function boot(hash: string, opts: { shell?: boolean; width?: number; height?: nu
       Object.assign(w, { innerWidth: opts.width ?? 1440, innerHeight: opts.height ?? 900 });
       stubTheMissingPlatform(w);
       w.Element.prototype.scrollIntoView = function () {};
+      const every = w.setInterval.bind(w);
+      w.setInterval = ((fn: () => void, ms?: number, ...rest: unknown[]) => {
+        if (typeof fn === "function") intervals.set(ms ?? 0, [...(intervals.get(ms ?? 0) ?? []), fn]);
+        return every(fn, ms, ...rest);
+      }) as typeof w.setInterval;
       if (opts.shell) {
         const shell = { postMessage: (m: { type?: string }) => posted.push(String(m?.type)) };
         Object.defineProperty(w, "parent", { configurable: true, get: () => shell });
@@ -163,6 +171,7 @@ function boot(hash: string, opts: { shell?: boolean; width?: number; height?: nu
     toasts,
     everLit,
     posted,
+    intervals,
     run: <T>(src: string) => window.eval(src) as T,
     post(data) {
       const own = window.eval("JSON").parse(JSON.stringify(data));
@@ -608,5 +617,75 @@ describe("sample conversations, on the desk and in the pocket", () => {
 
   it("counts only the real conversation on the help badge", () => {
     expect(pocket.window.document.getElementById("pbBadge")?.textContent).toBe("1");
+  });
+});
+
+/**
+ * MAIA TELLS NO SAMPLE AS NEWS, AND CLAIMS NOTHING SHE DID NOT DO (F45).
+ *
+ * "What's alive?" answered with one fixed sentence ("Today so far: Sol
+ * finished the seedling census, ... fourteen kilos came out of the beds")
+ * that read nothing. The seed's sample pulse played as a toast every 14 s
+ * and Maia narrated two of them as news. An ask she could not match was
+ * told "so yours is saved", and nothing was sent anywhere.
+ */
+describe("Maia, on what is alive and on what she keeps", () => {
+  let m: Booted;
+  const lastLine = () => {
+    const log = m.window.document.getElementById("maiaLog");
+    return (log?.lastElementChild?.textContent ?? "").replace(/\s+/g, " ").trim();
+  };
+  beforeAll(async () => {
+    m = boot("#skipIntro", { shell: true });
+    await settle(200);
+    m.post(config(SEED));
+    await settle(50);
+  });
+  afterAll(() => m?.close());
+
+  it("answers What's alive? from the map, and says no live feed reaches it", () => {
+    m.run("conciergeMatch('what happened today')");
+    const said = lastLine();
+    const quests = m.run<number>("SCENE.quests.filter(x=>x.at&&BY[x.at]).length");
+    expect(said).toContain("No live feed of the village's day reaches this map yet");
+    expect(said).toContain(`${quests} open quest`);
+    expect(said).not.toMatch(/Sol|fourteen kilos|Today so far/);
+  });
+
+  it("plays none of the seed's sample pulse, as a toast or as Maia's news", async () => {
+    const ticks = m.intervals.get(14000) ?? [];
+    expect(ticks.length, "the pulse replay's 14 s tick (the control: it exists)").toBe(1);
+    const toastsBefore = m.toasts.length;
+    const linesBefore = m.window.document.getElementById("maiaLog")?.children.length ?? 0;
+    for (let i = 0; i < 6; i++) ticks[0]();
+    await settle(20);
+    expect(m.toasts.slice(toastsBefore)).toEqual([]);
+    expect(m.window.document.getElementById("maiaLog")?.children.length ?? 0).toBe(linesBefore);
+  });
+
+  it("still plays a pulse a feed sends", async () => {
+    m.run("SCENE.pulse.push({t:'quest',at:'greenhouse',msg:'A pulse from a feed'})");
+    const ticks = m.intervals.get(14000) ?? [];
+    ticks[0]();
+    await settle(20);
+    expect(m.toasts).toContain("A pulse from a feed");
+  });
+
+  it("does not tell an unmatched ask that it was saved", () => {
+    m.run("conciergeMatch('zqxv plover glossolalia')");
+    const said = lastLine();
+    expect(said).toContain("Nothing on the land matches that yet.");
+    expect(said).not.toMatch(/saved|teach the village/);
+  });
+
+  it("does not quote the sample hearts as this cycle's gratitude", () => {
+    m.run("conciergeMatch('thank you')");
+    const said = lastLine();
+    expect(said).toContain("/gratitude");
+    expect(said).not.toContain("132");
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
   });
 });

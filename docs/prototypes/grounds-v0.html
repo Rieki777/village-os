@@ -2116,13 +2116,13 @@ const SCENE={
     {from:null,to:'ridgeA',medium:'materials-raw',note:'cement and steel, imported',phase:2},
     {from:null,to:'community',medium:'energy',note:'grid power. A solar array is a quest waiting to be written',phase:1},
   ],
-  pulse:[ // sample pulse — replays as ripples
-    {t:"quest",at:"greenhouse",msg:"Sol completed “Seedling census” at the Greenhouse · +15 ♥"},
-    {t:"heart",at:"kitchen",msg:"Gratitude at the Hearth, “for the storm-drain crew” · ♥×4"},
-    {t:"member",at:"gate",msg:"A new member just walked in through The Gate. Say hola to Rivka"},
-    {t:"fund",at:"ridgeA",msg:"Ridge Hamlet crowdpool reached 72%. First wall Saturday"},
-    {t:"harvest",at:"greenhouse",msg:"14 kg harvest logged · the beds are singing"},
-    {t:"quest",at:"foodforest",msg:"Swale stakes are in on the east slope · dig day is on"},
+  pulse:[ // sample pulse: replays only what a feed sends, so these six never play (see the replay)
+    {t:"quest",at:"greenhouse",msg:"Sol completed “Seedling census” at the Greenhouse · +15 ♥",src:"sample"},
+    {t:"heart",at:"kitchen",msg:"Gratitude at the Hearth, “for the storm-drain crew” · ♥×4",src:"sample"},
+    {t:"member",at:"gate",msg:"A new member just walked in through The Gate. Say hola to Rivka",src:"sample"},
+    {t:"fund",at:"ridgeA",msg:"Ridge Hamlet crowdpool reached 72%. First wall Saturday",src:"sample"},
+    {t:"harvest",at:"greenhouse",msg:"14 kg harvest logged · the beds are singing",src:"sample"},
+    {t:"quest",at:"foodforest",msg:"Swale stakes are in on the east slope · dig day is on",src:"sample"},
   ],
 };
 /* ---- georef: triangulate the authored masterplan scene onto the satellite foundation ----
@@ -5418,12 +5418,29 @@ const LEX=[
     if(document.body.classList.contains('pocket')){openWall();
       maiaSay(`Get Involved lists every open seat and quest. Tap any row and I will take you there. Claim something small; the land loves small and steady.`);return}
     $('attnBtn').click();maiaSay(`Here's what needs hands. I'll cycle you through; press <b>Space</b> or the banner button for the next one. Claim something small; the land loves small and steady.`)}},
-  {re:/happen|alive|news|today|pulse/i,fn:()=>{maiaSay(`Today so far: Sol finished the seedling census, the Ridge crowdpool crossed <b>72%</b>, fourteen kilos came out of the beds, and the Hearth is prepping the <b>full-moon feast</b>. It's a good day on the land.`)}},
+  {re:/happen|alive|news|today|pulse/i,fn:()=>aliveNow()},
   {re:/vision|master ?plan|future|dream/i,fn:()=>{setMode('vision');$('lyVision').click&&null}},
   {re:/night|dark|moon/i,fn:()=>{dayAuto=false;dayPhase=1.85;showDayHeld();maiaSay(`Night on the land. Watch the windows: every lit one is a room where the game is real.`)}},
   {re:/quest/i,fn:()=>{openPanel('greenhouse',1);maiaSay(`The Greenhouse holds the friendliest first quests. The <b>seedling census</b> is a lovely way in.`)}},
   {re:/seat|role|job/i,fn:()=>{openWall();maiaSay(`Get Involved lists every open seat and quest in one place, the map's honest sibling. Click any row and I'll take you there.`)}},
 ];
+/* WHAT IS ALIVE, SAID FROM WHAT THE MAP HOLDS. This was one fixed sentence,
+   "Today so far: Sol finished the seedling census, the Ridge crowdpool
+   crossed 72%, fourteen kilos came out of the beds...", that read nothing:
+   Sol and the fourteen kilos were sample copy, and the census it called
+   finished is an open quest on the same map. No feed of the village's day
+   reaches this map yet, so Maia says so, then says what the published land
+   itself carries: places with something on, the pools the founder set, and
+   the open work. All of it is on screen already; none of it is news. */
+function aliveNow(){
+  const the=n=>/^the\s/i.test(n)?n:'the '+n;
+  const on=SCENE.structures.filter(s=>s.event).slice(0,3).map(s=>`<b>${escq(s.event)}</b> at ${escq(the(s.name))}`);
+  const pools=SCENE.structures.filter(s=>s.state==='funding'&&s.fund>0).sort((a,b)=>b.fund-a.fund).slice(0,2)
+    .map(s=>`a pool at <b>${Math.round(s.fund*100)}%</b> for ${escq(the(s.name))}`);
+  const q=SCENE.quests.filter(x=>x.at&&BY[x.at]).length,st=SCENE.seats.filter(x=>x.at&&BY[x.at]&&seatOpen(x)).length;
+  const bits=[...on,...pools];
+  return maiaSay(`No live feed of the village's day reaches this map yet, so I can tell you what the map holds right now. ${bits.length?'On the land: '+bits.join(', ')+'. ':''}<b>${q}</b> open quest${q===1?'':'s'} and <b>${st}</b> open seat${st===1?'':'s'} wait for hands. Press <b>Space</b> to see what needs them most.`)}
+window.aliveNow=aliveNow;
 window.CONCIERGE_LOG=window.CONCIERGE_LOG||[];
 function conciergeMatch(txt){const t=txt.toLowerCase();
   const done=(kind,id)=>CONCIERGE_LOG.push({query:txt,matched_kind:kind,matched_id:id||null,method:'deterministic',contacted:false});
@@ -5436,7 +5453,7 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   for(const[re,m,c]of MODV)if(window.MODULES&&MODULES[m]&&re.test(t)){openDoor(m,c);done('module',m);
     return maiaSay(`That lives behind the <b>${MODULES[m].name}</b> door. Opening it now.`)}
   if(/gratitud|thank/.test(t)){done('module','gratitude');
-    return maiaSay(`Gratitude flows at <a href="${siteHref('/gratitude')}" target="_blank" rel="noopener">/gratitude</a>, where 132 ♥ moved this cycle. It isn't money you spend; it's recognition you give.`)}
+    return maiaSay(`Gratitude is recognition you give, and it flows at <a href="${siteHref('/gratitude')}" target="_blank" rel="noopener">/gratitude</a>.`)}
   const questBest=()=>{let best=null,bs=0;
     for(const q of SCENE.quests){const words=(q.q+' '+(q.desc||'')).toLowerCase().split(/[^a-zà-ÿ]+/);
       let sc=0;for(const w of new Set(t.split(/[^a-zà-ÿ]+/)))if(w.length>3&&words.includes(w))sc++;
@@ -5458,7 +5475,10 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
       :`The <b>${escq(seat.s)}</b> seat at the <b>${escq(nameOf(seat.at))}</b> is held.`)}
   for(const l of LEX)if(l.re.test(txt)){done('lex',null);return l.fn()}
   done('none',null);
-  maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: ${WELCOME_WALK_ON?'<button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'name'} any building.`)}
+  /* It used to end "unmatched asks teach the village which role or place is
+     missing, so yours is saved". Nothing was sent: CONCIERGE_LOG lives in this
+     tab and reaches a founder only in their own export. Said plainly now. */
+  maiaSay(`Nothing on the land matches that yet. ${WELCOME_WALK_ON?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or press <b>Space</b> to see what needs hands.`)}
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
@@ -5485,9 +5505,15 @@ $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
 let TOUR=[],tourI=-1,tourTimer=null;
 function startTour(){if(!WELCOME_WALK_ON)return;const id=welcomeJourney();if(id)playJourney(id)}
 
-/* pulse replay → ripples + narration */
+/* pulse replay → ripples + narration
+   ONLY WHAT A FEED SENT. The seed's six are sample copy, and they played as
+   toasts every 14 s, two of them narrated by Maia as news: "Sol completed
+   Seedling census", "A new member just walked in through The Gate. Say hola
+   to Rivka". Nobody did either. Nothing feeds SCENE.pulse yet, so the replay
+   is quiet until something does, and a feed's own items play as before. */
 let pulseI=0;
-setInterval(()=>{const p=SCENE.pulse[pulseI++%SCENE.pulse.length];const s=BY[p.at];if(!s)return;
+setInterval(()=>{const feed=SCENE.pulse.filter(p=>p&&p.src!=='sample');if(!feed.length)return;
+  const p=feed[pulseI++%feed.length];const s=BY[p.at];if(!s)return;
   addSparkle(s.x,s.y-10,p.t==='heart'?'#ff9bb0':'#ffe9a3');toast(p.msg);
   if(pulseI%3===1)maiaSay(escq(p.msg.split(' · ')[0].trim())+'.')},14000);
 
