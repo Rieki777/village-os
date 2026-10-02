@@ -40,6 +40,47 @@ async function getJson<T>(path: string): Promise<T | null> {
   }
 }
 
+/**
+ * THE ROLES WITH POWERS (`/api/roles`), ONE READ SHARED BY EVERY ASKER.
+ *
+ * The "roles" picker below and the wizard's live preview of the picked role
+ * (`WizardRolePreview`) both read this list, and the review step names the
+ * picked role from it. One loader is what keeps them from becoming twins that
+ * fetch twice and drift apart: the preview can never draw a role the picker
+ * did not offer under that name.
+ *
+ * The answer is tiered (holder names ride `map.viewPeople`), so a different
+ * session asks again, and a read older than a minute is asked again, so a
+ * wizard left open does not preview a role as it stood an hour ago. A failed
+ * read is dropped at once, so the next asker tries again instead of
+ * inheriting the failure. Null when the list cannot be had.
+ */
+const ROLES_FRESH_MS = 60_000;
+let rolesRead: { token: string | null; at: number; list: Promise<any[] | null> } | null = null;
+
+export function loadPermissionRoles(): Promise<any[] | null> {
+  const token = authToken();
+  if (!rolesRead || rolesRead.token !== token || Date.now() - rolesRead.at > ROLES_FRESH_MS) {
+    const entry = {
+      token,
+      at: Date.now(),
+      list: getJson<unknown>("/api/roles").then((r) => (Array.isArray(r) ? r : null)),
+    };
+    rolesRead = entry;
+    entry.list.then((r) => {
+      if (r === null && rolesRead === entry) rolesRead = null;
+    });
+  }
+  return rolesRead.list;
+}
+
+/** A role as the picker offers it, and as the review step names it. */
+export const roleOption = (r: any): PickOption => ({
+  value: String(r.id),
+  label: String(r.name ?? r.id),
+  hint: r.description ? String(r.description).slice(0, 120) : undefined,
+});
+
 /** The whole list for a source, or an empty list when it cannot be had. */
 export async function loadPickOptions(source: PickSource): Promise<PickOption[]> {
   switch (source) {
@@ -160,14 +201,8 @@ export async function loadPickOptions(source: PickSource): Promise<PickOption[]>
        * platform demo content in a village's own list of who looks after what
        * is indistinguishable from the village's own decision.
        */
-      const roles = await getJson<any[]>("/api/roles");
-      return (roles ?? [])
-        .filter((r: any) => !r.isExample)
-        .map((r: any) => ({
-          value: String(r.id),
-          label: String(r.name ?? r.id),
-          hint: r.description ? String(r.description).slice(0, 120) : undefined,
-        }));
+      const roles = await loadPermissionRoles();
+      return (roles ?? []).filter((r: any) => !r.isExample).map(roleOption);
     }
     case "members":
       // Searched, never listed. See searchMembers below.

@@ -24,7 +24,7 @@
  * three states, not the site shell around them.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -740,5 +740,101 @@ describe("each key opens its own section, and only refusing both closes the page
     await waitFor(() => expect(screen.getByText("The claims did not load")).toBeTruthy());
     expect(screen.getByText("Nothing waiting")).toBeTruthy();
     expect(screen.queryByText("No finished work is waiting for a witness.")).toBeNull();
+  });
+});
+
+/**
+ * A PROPOSED SEAT, PREVIEWED AS THE ROLE CARD IT WOULD BECOME.
+ *
+ * The textarea is the redaction path and stays exactly as it was: the preview
+ * only reads it. It reads it the way accepting does (`readProposedSeats`), so
+ * a vendor's spellings preview as they would publish, a key nothing reads is
+ * named, and text that is not JSON yet says so instead of drawing a seat.
+ * Only `role.proposed` gets one; every other kind is shown as before.
+ */
+describe("the role card preview on a proposed seat", () => {
+  const item = (id: string, kind: string, payload: Record<string, unknown>) => ({
+    id,
+    batchId: "b1",
+    moduleId: "vendor",
+    kind,
+    payload,
+    quote: null,
+    sourceRef: null,
+    sourceOccurredAt: null,
+    evidence: "absent",
+    audience: "steward",
+    trustTier: "extracted_unreviewed",
+    confidence: null,
+    significance: null,
+    subjectRef: null,
+    receivedAt: "2026-08-14T10:00:00.000Z",
+    correlationId: null,
+  });
+  const queueOf = (...items: ReturnType<typeof item>[]) => ({
+    ...EMPTY,
+    counts: { proposals: items.length, quests: 0 },
+    batches: [{ batchId: "b1", moduleId: "vendor", receivedAt: "2026-08-14T10:00:00.000Z", items }],
+  });
+  const SEAT = { name: "Water Steward", aim: "Keep the well clean and the spring tested.", seats: 2 };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("draws a proposed seat as its card, above the textarea", async () => {
+    answerWith(200, queueOf(item("p1", "role.proposed", SEAT)));
+    renderReview();
+    const box = await screen.findByLabelText(/Change anything before you accept it/i);
+    const card = await screen.findByRole("article");
+    expect(within(card).getByRole("heading", { level: 3, name: "Water Steward" })).toBeTruthy();
+    expect(within(card).getAllByText("Proposed").length).toBeGreaterThan(0);
+    expect(within(card).getByText("Keep the well clean and the spring tested.")).toBeTruthy();
+    expect(screen.getByText("A preview of the text below, read the way accepting reads it.")).toBeTruthy();
+    // Above the textarea, in reading order.
+    expect(card.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // And the textarea still holds the payload exactly as it arrived.
+    expect((box as HTMLTextAreaElement).value).toBe(JSON.stringify(SEAT, null, 2));
+  });
+
+  it("follows the steward's edit, reads a vendor's spellings, and names a key it did not read", async () => {
+    answerWith(200, queueOf(item("p1", "role.proposed", SEAT)));
+    renderReview();
+    await screen.findByRole("heading", { level: 3, name: "Water Steward" });
+    fireEvent.change(screen.getByLabelText(/What it proposes/), {
+      target: {
+        value: JSON.stringify({ role_name: "Seed Keeper", seat_count: 3, why_it_matters: "Seeds are the next season.", colour: "green" }),
+      },
+    });
+    expect(await screen.findByRole("heading", { level: 3, name: "Seed Keeper" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 3, name: "Water Steward" })).toBeNull();
+    expect(screen.getByText("Seeds are the next season.")).toBeTruthy();
+    expect(screen.getByText("Not read: colour.")).toBeTruthy();
+  });
+
+  it("says the text is not valid JSON yet, and draws no card", async () => {
+    answerWith(200, queueOf(item("p1", "role.proposed", SEAT)));
+    renderReview();
+    // Known positive: the card is there before the edit.
+    await screen.findByRole("article");
+    fireEvent.change(screen.getByLabelText(/What it proposes/), { target: { value: '{"name": "Water' } });
+    expect(await screen.findByText("The text below is not valid JSON yet, so there is nothing to preview.")).toBeTruthy();
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  it("draws no preview for any other kind of proposal", async () => {
+    answerWith(
+      200,
+      queueOf(item("p1", "circle.proposed", { name: "Water Circle" }), item("p2", "role.proposed", SEAT)),
+    );
+    renderReview();
+    // The seat beside it has its card (the known positive), and the circle has none.
+    const cards = await screen.findAllByRole("article");
+    expect(cards).toHaveLength(1);
+    expect(within(cards[0]).getByRole("heading", { level: 3, name: "Water Steward" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 3, name: "Water Circle" })).toBeNull();
   });
 });

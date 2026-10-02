@@ -21,19 +21,22 @@ import {
   ClipboardList,
   Scale,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import InfoTip from "@/components/InfoTip";
 import SeatClaimCard from "@/components/SeatClaimCard";
 import { swatchFor } from "@/lib/swatch";
-import { gameFetch } from "@/lib/gameApi";
+import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
+import SeatAction from "@/components/power/SeatAction";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
+import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
+import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-
-type RoleStatus = "filled" | "open" | "forming" | "partial";
+import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
+import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 
 interface RoleEntry {
   id: string;
@@ -41,19 +44,24 @@ interface RoleEntry {
   /** The circle this seat sits in, resolved from its id to a display name. */
   group: string;
   circleId?: string | null;
-  status: RoleStatus;
+  status: SeatStateWord;
   holders?: string[];
-  holderNote?: string;
-  aim: string;
-  domain: string;
-  accountabilities: string[];
-  whyItMatters?: string;
-  // Legacy key some stored cards may still carry.
-  evolutionaryPurpose?: string;
   icon?: string;
   color?: string;
   /** A seeded demonstration seat. Its history is demo rows, so it stays off. */
   isExample?: boolean;
+  /** The `/api/org` row as it arrived, which the role card reads for itself. */
+  raw: any;
+}
+
+/** What every expanded card on the page reads besides its own row. */
+interface SheetSource {
+  circles: any[];
+  people: PeopleTier | null;
+  village: unknown;
+  ctx: SheetContext;
+  /** The raise-hand route lives under `/api/map`, so the door follows that module. */
+  raiseHand: boolean;
 }
 
 /** Icon names a card may reference; anything unknown falls back to CircleDot. */
@@ -66,15 +74,21 @@ const ICONS: Record<string, React.ElementType> = {
 // village's circle names, living in platform code: a fork got no subtitle for
 // any circle it actually had. They come from the circle's own purpose now.
 
-const statusBadge: Record<RoleStatus, { label: string; className: string }> = {
-  filled: { label: "Filled", className: "bg-sage/15 text-sage border border-sage/30" },
-  open: { label: "Open Role", className: "bg-amber/15 text-amber-700 border border-amber/40" },
-  forming: { label: "Forming", className: "bg-teal/15 text-teal-deep border border-teal/30" },
-  partial: { label: "Partially Filled", className: "bg-gold/20 text-amber-800 border border-gold/40" },
+// The header's badge says the seat's state in the card's own words
+// (`STATE_WORDS`), keyed by the union, so the row and the card below it can
+// never disagree and a sixth state cannot draw an empty badge. A seat whose
+// term reached its date used to fall through to "Open Role" here.
+const statusBadge: Record<SeatStateWord, string> = {
+  filled: "bg-sage/15 text-sage border border-sage/30",
+  open: "bg-amber/15 text-amber-700 border border-amber/40",
+  forming: "bg-teal/15 text-teal-deep border border-teal/30",
+  partial: "bg-gold/20 text-amber-800 border border-gold/40",
+  expired: "bg-gold/20 text-amber-800 border border-gold/40",
 };
 
-function normalizeStatus(s: unknown): RoleStatus {
+function normalizeStatus(s: unknown): SeatStateWord {
   const v = String(s ?? "").toLowerCase();
+  if (isSeatState(v)) return v;
   if (v.startsWith("fill")) return "filled";
   if (v.startsWith("part")) return "partial";
   if (v.startsWith("form")) return "forming";
@@ -86,24 +100,22 @@ interface RoleCardProps {
   expanded: boolean;
   onToggle: () => void;
   index: number;
-  /** Whether holder names reached this reader at all. */
-  canSeePeople: boolean;
   /** Whether this reader may say what the seat is held for. */
   canTagNeeds: boolean;
+  sheet: SheetSource;
 }
 
-function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }: RoleCardProps) {
+function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleCardProps) {
   // Whose words the vendor panel shows. Taken from the listing rather than
   // written here, because another fork's connector is a different service
   // and a literal would be this platform naming one of them.
   const vendorName = useModule("saberra")?.name ?? "the connected service";
+  const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
   const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
-  const badge = statusBadge[role.status];
   const holders = (role.holders ?? []).filter(Boolean);
-  const why = role.whyItMatters ?? role.evolutionaryPurpose ?? "";
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -112,7 +124,9 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
       transition={{ delay: index * 0.04 }}
     >
       <button
+        id={headerId}
         onClick={onToggle}
+        aria-expanded={expanded}
         className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border"
       >
         <div className="flex items-start justify-between gap-4">
@@ -123,8 +137,8 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="font-display text-lg font-bold text-foreground leading-tight">{role.name}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.className}`}>
-                  {badge.label}
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
+                  {STATE_WORDS[role.status]}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -150,60 +164,26 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
             className="overflow-hidden"
           >
             <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-5">
-              {(holders.length > 0 || role.holderNote) && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Held By</h4>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {holders.length > 0 ? holders.join(", ") : "open"}
-                    {role.holderNote && (
-                      <span className="text-muted-foreground italic"> {role.holderNote}</span>
-                    )}
-                  </p>
-                </div>
-              )}
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Aim
-                  <InfoTip tip="The aim is what this role works toward: the outcome it exists to keep alive." label="What an aim is" />
-                </h4>
-                <p className="text-sm text-foreground leading-relaxed">{role.aim}</p>
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Domain
-                  <InfoTip tip="The domain is what this role decides on without asking. Inside it the role holder has real authority; outside it they bring proposals." label="What a domain is" />
-                </h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{role.domain}</p>
-              </div>
-              {(role.accountabilities ?? []).length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                    Key Accountabilities
-                    <InfoTip tip="Accountabilities are the ongoing activities the circle can count on this role to keep doing." label="What accountabilities are" />
-                  </h4>
-                  <ul className="space-y-1.5">
-                    {role.accountabilities.filter(Boolean).map((a) => (
-                      <li key={a} className="text-sm text-muted-foreground flex gap-2">
-                        <span className="text-sage mt-0.5 flex-shrink-0">✓</span>
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {why && (
-                <div className="pt-4 border-t border-border">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Why This Role Matters</h4>
-                  <p className="text-sm text-muted-foreground italic leading-relaxed">{why}</p>
-                </div>
-              )}
-              {/* "Held By" above is the seat today. This is the seat's whole
-                  record, ended holdings included, which is the half a village
-                  loses when it keeps its org chart in a document. Fetched only
-                  once a reader opens the card. */}
+              {/* The role card, the same one the map draws, from this page's
+                  own `/api/org` row at whatever tier it was served. The row
+                  header above already says the circle and the state, so the
+                  card leaves both out and is named by that header. Its one
+                  door is a raised hand, offered while the map module is on
+                  for this reader; the contact relay stays on the map. */}
+              <SeatTradingCard
+                embedded
+                labelledBy={headerId}
+                input={fromOrgSeat(role.raw, sheet.circles, sheet.people, sheet.village, { raiseHand: sheet.raiseHand })}
+                ctx={sheet.ctx}
+                action={<SeatAction circleId={role.circleId ?? null} />}
+              />
+              {/* The card is the seat today. This is the seat's whole record,
+                  ended holdings included, which is the half a village loses
+                  when it keeps its org chart in a document. Fetched only once
+                  a reader opens the card. */}
               {!role.isExample && (
                 <div className="pt-4 border-t border-border">
-                  <SeatHistory roleId={role.id} canSeePeople={canSeePeople} />
+                  <SeatHistory roleId={role.id} canSeePeople={!!sheet.people?.visible} />
                 </div>
               )}
               {/* Which of the village's needs this seat carries (R18). A
@@ -239,11 +219,21 @@ export default function Roles() {
   const [circles, setCircles] = useState<any[]>([]);
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
+  const [village, setVillage] = useState<unknown>(undefined);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
+  // The card's clock and the village's class names: one cached read each for
+  // the whole page, however many rows are opened.
+  const season = useSeason();
+  const classNames = useClassNames();
+  // A raised hand posts under `/api/map`, which the map module gates. Offered
+  // only while this reader's catalog lists the module as on: a catalog that
+  // failed to load offers nothing, because the door would answer 404.
+  const map = useModule("map");
+  const raiseHand = !!map && map.lifecycle !== "off";
 
   // Seats are rows now (0049), not cards in a document. `state` arrives
   // DERIVED from live holdings against the seat count, so the page can no
@@ -264,6 +254,7 @@ export default function Roles() {
         );
         setCircles(data.circles ?? []);
         setPeople(data.people ?? null);
+        setVillage(data.village);
         setSeatCounts({
           seats: (data.roles as any[]).reduce((n, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles as any[]).reduce((n, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -276,14 +267,10 @@ export default function Roles() {
             group: String(circleById.get(r.circleId)?.name ?? "Unplaced roles"),
             status: normalizeStatus(r.state),
             holders: (r.holders ?? []).map((h: any) => h.name).filter(Boolean),
-            holderNote: (r.holders ?? []).map((h: any) => h.note).filter(Boolean).join(" "),
-            aim: String(r.aim ?? ""),
-            domain: String(r.domain ?? ""),
-            accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities : [],
-            whyItMatters: r.whyItMatters ?? "",
             icon: r.icon ?? undefined,
             color: r.color ?? undefined,
             isExample: !!r.isExample,
+            raw: r,
           })),
         );
       })
@@ -292,6 +279,13 @@ export default function Roles() {
 
   const toggle = (id: string) =>
     setExpandedRole((prev) => (prev === id ? null : id));
+  const sheet: SheetSource = {
+    circles,
+    people,
+    village,
+    ctx: { now: new Date(), season: seasonForSheet(season), classNames },
+    raiseHand,
+  };
 
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
@@ -400,8 +394,8 @@ export default function Roles() {
                       expanded={expandedRole === role.id}
                       onToggle={() => toggle(role.id)}
                       index={i}
-                      canSeePeople={!!people?.visible}
                       canTagNeeds={canTagNeeds}
+                      sheet={sheet}
                     />
                   ))}
                 </div>
