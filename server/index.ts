@@ -132,6 +132,7 @@ import { register as registerSitePullRoutes } from "./routes/sitePull";
 import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
+import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -6597,11 +6598,11 @@ async function startServer() {
    * throughout, so any script-src or style-src worth writing would blank the
    * map. frame-ancestors stands on its own and needs no allowlist to maintain.
    *
-   * Permissions-Policy denies all three of camera, microphone and geolocation:
-   * grep across client/, server/, shared/ and the map prototype finds no
-   * getCurrentPosition, no watchPosition and no navigator.geolocation, so
-   * nothing in this build asks for any of them. A page that starts needing one
-   * removes it from this list, which is a deliberate act rather than a default.
+   * Permissions-Policy denies camera and geolocation outright. The microphone
+   * is allowed for THIS origin only, `microphone=(self)`, because MicButton's
+   * speech input (the journal, every guide chat) needs it, and `microphone=()`
+   * made every mic fail silently with `not-allowed`. Frames from elsewhere stay
+   * denied. Widening a list here is a deliberate act and never a default.
    *
    * NO Strict-Transport-Security. It is set once and believed for its whole
    * max-age, so it can only be sent when EVERY hostname this app answers on
@@ -6615,7 +6616,7 @@ async function startServer() {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
     next();
   });
 
@@ -18891,6 +18892,7 @@ ${inner}
   registerLandRoutes(app, { isAdmin, authedUser, guardCapability, getPool, uploadsDir: UPLOADS_DIR });
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
+  registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
    * Put a redemption to the village, with the setup every village-wide vote
@@ -26627,6 +26629,7 @@ ${inner}
       portraits: await portraitsForMember(pool, user.id),
       portraitBudget: await grantsForMember(pool, user.id),
       gratitudeDistributions: await distributionsForMember(pool, user.id),
+      journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

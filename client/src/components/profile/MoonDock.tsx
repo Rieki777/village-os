@@ -30,24 +30,25 @@
  * for reduced motion gets the same moon, still. Not the same animation at 1ms,
  * which lands on an arbitrary frame; the composition without the motion.
  *
- * ── WHERE IT SITS, AND WHY THAT DIFFERS ON A PHONE ───────────────────────
+ * ── WHERE IT SITS: BOTTOM LEFT, AT EVERY WIDTH ───────────────────────────
  *
- * Bottom right on a wide screen. On a phone that corner is already taken: the
- * shortcuts FAB is there, and the tab bar owns the bottom edge. A QA pass at a
- * real 390px viewport showed the dock hidden entirely below `sm`, which made
- * the whole feature desktop-only for the members most likely to want a glance
- * at the moon.
+ * The bottom-right corner belongs to the shortcuts FAB. It used to hold it on
+ * phones only, so the dock sat bottom right on a wide screen and moved left
+ * below `sm`. The FAB now shows at every width (a ruling), and from `md` up
+ * its trigger sat over the lower third of the moon: a click there opened the
+ * shortcuts instead of the calendar. So the dock takes the bottom LEFT
+ * everywhere, and the panel opens from that side. Same control, same name,
+ * the opposite corner, and the same SIZE as the FAB on a phone so the two read
+ * as a pair. (Between `sm` and `md` the two had already collided, since the
+ * dock moved right at `sm` while the FAB kept the phone offset until `md`.)
  *
- * So on a phone it moves to the bottom LEFT and lifts clear of the tab bar,
- * and the panel opens from that side. Same control, same name, one corner
- * over, and the same SIZE as the FAB so the two read as a pair.
- *
- * The offset is copied from MobileFab deliberately, expression and all:
+ * The phone offset is copied from MobileFab deliberately, expression and all:
  * `max(calc(env(safe-area-inset-bottom, 0px) + 3.5rem), 3.5rem)`. A plain
  * `bottom-20` measured right on the test device and would have drifted into
  * the tab bar on a notched phone, because the bar grows by the inset and a
- * fixed rem does not. Sharing the expression means the safe area cancels on
- * both and they stay level on every device.
+ * fixed rem does not. From `md` up, where there is no bar, both sit 1.5rem
+ * in from their corners (`md:bottom-6`). Sharing the numbers keeps the two
+ * level on every device.
  *
  * ── REACHABLE WITHOUT A MOUSE ────────────────────────────────────────────
  *
@@ -167,15 +168,25 @@ export default function MoonDock() {
   };
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-40" aria-hidden={false}>
+    <div
+      className="pointer-events-none fixed inset-0 z-40"
+      aria-hidden={false}
+      // The phone offsets ride variables, as the FAB's does, so `md:` classes
+      // can take over from them: an inline `bottom` beats every class.
+      style={
+        {
+          "--moon-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 3.5rem), 3.5rem)",
+          "--moon-panel-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 9rem), 9rem)",
+        } as React.CSSProperties
+      }
+    >
       {open && (
         <div
           ref={panel}
           role="dialog"
           aria-modal="false"
           aria-label={`${name}. This moon's calendar.`}
-          style={{ bottom: "max(calc(env(safe-area-inset-bottom, 0px) + 9rem), 9rem)" }}
-          className="pointer-events-auto absolute left-4 right-4 max-h-[55vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl sm:left-auto sm:right-6 sm:w-80"
+          className="pointer-events-auto absolute bottom-[var(--moon-panel-bottom)] left-4 right-4 max-h-[55vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-xl sm:right-auto sm:w-80 md:bottom-[7.5rem] md:left-6"
         >
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -225,8 +236,7 @@ export default function MoonDock() {
         // The breath, and the still version for anyone who asked for one.
         animate={reduced ? undefined : { scale: [1, 1.045, 1] }}
         transition={reduced ? undefined : { duration: 20, repeat: Infinity, ease: "easeInOut" }}
-        style={{ bottom: "max(calc(env(safe-area-inset-bottom, 0px) + 3.5rem), 3.5rem)" }}
-        className="pointer-events-auto absolute left-4 inline-flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-lg hover:border-notice sm:left-auto sm:right-6 sm:h-16 sm:w-16"
+        className="pointer-events-auto absolute bottom-[var(--moon-bottom)] left-4 inline-flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-lg hover:border-notice sm:h-16 sm:w-16 md:bottom-6 md:left-6"
       >
         <MoonGlyph phase={lunar.phase} size={38} hemisphere={answer?.hemisphere ?? "north"} />
       </motion.button>

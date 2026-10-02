@@ -105,6 +105,7 @@ import path from "node:path";
 import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
+import { forgetMemberJournal } from "./journal";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -548,6 +549,22 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "needs-after-tombstone",
       run: async () => {
         await forgetMemberNeeds(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The journal (0227): entries, pulse numbers, the feedback yes, and
+       * feedback in both directions. "Only you can read this" is the whole
+       * promise of those tables, so they leave with the member, deleted.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the routes
+       * write for anybody signed in, and the tombstone is where the member's
+       * sessions die. Run here, the delete comes after the last moment they
+       * could save an entry or queue a message.
+       */
+      name: "journal-after-tombstone",
+      run: async () => {
+        await forgetMemberJournal(pool, target.id);
       },
     },
     {
