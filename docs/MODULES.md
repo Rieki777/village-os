@@ -99,10 +99,10 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
-| Village Comms | `comms` | Connect | no | included | member-pii | required | none yet |
+| Village Comms | `comms` | Connect | no | included | member-pii | required | [comms.md](modules/comms.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 26 modules, four of them core. Nineteen carry a contract doc under `docs/modules/` and seven do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 26 modules, four of them core. Twenty carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -646,7 +646,7 @@ The village's email in one place: reminders for the gatherings people said yes t
 | Capabilities it adds | `comms.manage` |
 | Variable keys it owns | `comms.quiet_start_hour`, `comms.quiet_end_hour`, `comms.daily_cap`, `comms.event_reminder_minutes`, `comms.host_nudge_minutes`, `comms.recap_window_days`, `comms.guests_default`, `comms.time_poll_freeze_hours`, `comms.time_poll_settle_minutes`, `comms.letters_per_day`, `comms.retention_months`, `comms.send_rate_per_second`, `comms.notice_expiry_minutes`, `comms.open_tracking`, `comms.click_tracking` |
 | API prefixes | `/api/admin/comms` |
-| Contract doc | none yet |
+| Contract doc | [comms.md](modules/comms.md) |
 
 ## What depends on what
 
@@ -1387,7 +1387,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "apiPrefixes": [
         "/api/admin/comms"
       ],
-      "contractDoc": null
+      "contractDoc": "docs/modules/comms.md"
     },
     {
       "id": "saberra",
