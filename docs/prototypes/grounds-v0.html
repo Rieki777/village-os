@@ -4874,7 +4874,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     ${doorBtns(s)}
     <p style="margin-top:8px;font-size:12px;color:#6b4d1e">⚑ ${q.length} quests · ⛨ ${st.filter(seatOpen).length} open seat${st.filter(seatOpen).length===1?'':'s'} · 💬 ${threadsAt(s.key).length} conversation${threadsAt(s.key).length===1?'':'s'}${s.event?' · ✦ '+escq(s.event):''}</p>
     ${threadsAt(s.key).length?`<div style="margin-top:8px">${head('what people are saying here')}
-      ${threadsAt(s.key).map(t=>`<button type="button" class="cvrow" data-item="${escq(itemAddr('talk',t))}" onclick="openDoor('forum',{at:'${escj(s.key)}'})"><span>💬</span><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago</small></span></button>`).join('')}
+      ${threadsAt(s.key).map(t=>`<button type="button" class="cvrow" data-item="${escq(itemAddr('talk',t))}" onclick="openDoor('forum',{at:'${escj(s.key)}'})"><span>💬</span><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago${t.src==='sample'?' · sample':''}</small></span></button>`).join('')}
       </div>`:''}
     <div style="margin-top:11px;border-top:1px dashed #c8ab6f;padding-top:8px">
       ${head('vitals at this address'+(facts.length?' · <span style="color:#a3703d">sample data</span>':''))}
@@ -7754,7 +7754,13 @@ const MODULES={
   forum:{name:'Forum',icon:'💬',route:'/forum',
     blurb:'The village conversation. Every thread pins to the places it talks about, and the map shows it where it lives.',
     sample:ctx=>{const at=ctx&&ctx.at;const th=at?threadsAt(at):SCENE.threads.slice(0,4);
-      return th.map(t=>`<div class="mrow"><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago</small></span></div>`).join('')||'<div class="lastv">no conversations pinned here yet</div>'}},
+      /* A sample thread says so on every surface that draws it, the way the
+         Loom and the event rows already do: these read as live conversation
+         ("Nia · 9 replies · 3h ago") and the forum the door opens has none of
+         them. */
+      return th.map(t=>`<div class="mrow"><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago${t.src==='sample'?' · sample':''}</small></span></div>`).join('')
+        +(th.some(t=>t.src==='sample')?'<div class="lastv">sample conversations. The forum on the site holds the real ones</div>':'')
+        ||'<div class="lastv">no conversations pinned here yet</div>'}},
   quests:{name:'Quests',icon:'⚑',route:'/quests',
     blurb:'Find somewhere to help. Hearts for the work, claimed with consent.',
     sample:ctx=>{const open=SCENE.quests.slice(0,3);
@@ -9952,7 +9958,7 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
         : '<button class="btn help-link" data-forum="1">open the forum →</button>';
       return '<div class="help-row" data-id="'+escq(t.id)+'">'
         +'<div class="help-t"><span>💬</span><span><b>'+escq(t.title)+'</b>'
-        +'<small class="help-m">'+escq(t.author)+' · '+escq(t.replies)+' replies · '+escq(t.last)+' ago · '+where+'</small></span></div>'
+        +'<small class="help-m">'+escq(t.author)+' · '+escq(t.replies)+' replies · '+escq(t.last)+' ago'+(t.src==='sample'?' · sample':'')+' · '+where+'</small></span></div>'
         +'<div class="help-ex">'+escq(t.ex||'')+'</div>'
         +'<div class="help-go">'+links+'</div></div>'}).join('');
     const work=(typeof attnItems==='function')?attnItems().length:0;
@@ -10004,11 +10010,16 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
 
   if($('pbAttn'))$('pbAttn').onclick=()=>{toggleHelp();hap(8)};
 
-  /* THE BADGE COUNTS WHAT THE SHEET LISTS. It mirrored #attnBadge, which counts
-     open seats and urgent quests, over a button that opened neither of them.
-     The same 3s tick, because a live thread feed is the point of the surface. */
+  /* THE BADGE COUNTS THE CONVERSATIONS THE SHEET LISTS. It mirrored #attnBadge,
+     which counts open seats and urgent quests, over a button that opened
+     neither of them. The same 3s tick, because a live thread feed is the
+     point of the surface.
+     AND ONLY THE REAL ONES, because a number on a badge is a claim of live
+     activity. It read 13 on arrival, every one of them a seed sample,
+     inviting a visitor in to conversations nobody had. The sheet still
+     lists the samples, each one labelled. */
   function helpBadge(){const b=$('pbBadge');if(!b)return;
-    const n=threads().length;b.textContent=String(n);b.style.display=n?'':'none'}
+    const n=threads().filter(t=>t.src!=='sample').length;b.textContent=String(n);b.style.display=n?'':'none'}
   helpBadge();setInterval(helpBadge,3000);
 
   window.openHelp=openHelp;window.closeHelp=closeHelp;window.toggleHelp=toggleHelp;

@@ -538,3 +538,75 @@ describe("the doors a published scene carries from before the census", () => {
     expect(seedDoors).toEqual(["/campaigns", "/campaigns", "/campaigns"]);
   });
 });
+
+/**
+ * A SAMPLE CONVERSATION SAYS SO WHEREVER IT IS DRAWN (F35).
+ *
+ * Every thread in the published scene is src 'sample', and three surfaces
+ * drew them as live conversation with no label: the place panel's "what
+ * people are saying here", the Forum door, and the phone's help sheet, whose
+ * badge read 13 on arrival. The Loom and the event rows already said
+ * "sample". One live thread is added here so the label is shown to be about
+ * the source, and the badge to count only what is real.
+ */
+describe("sample conversations, on the desk and in the pocket", () => {
+  const AT = "market";
+  const REAL = { id: "real-1", title: "A thread somebody wrote", author: "Ana", src: "forum" };
+  let scene: Scene;
+  let desk: Booted, pocket: Booted;
+  beforeAll(async () => {
+    scene = clone(SEED);
+    scene.forum_threads.push({
+      ...REAL,
+      structure_keys: [AT],
+      address_source: "creator",
+      audience: "public",
+      replies: 2,
+      last_activity: "1d",
+      excerpt: "",
+    });
+    desk = boot("#skipIntro", { shell: true });
+    pocket = boot("#hud=pocket&skipIntro", { shell: true, width: 390, height: 844 });
+    await settle(200);
+    desk.post(config(scene));
+    pocket.post(config(scene));
+    await settle(3200); // the help badge ticks every 3 s
+  }, 20_000);
+  afterAll(() => [desk, pocket].forEach((m) => m?.close()));
+
+  const smalls = (m: Booted, sel: string) =>
+    [...m.window.document.querySelectorAll(sel)].map((n) => (n.textContent ?? "").replace(/\s+/g, " ").trim());
+
+  it("is the case it says: every seed thread is a sample", () => {
+    expect(SEED.forum_threads.length).toBeGreaterThan(3);
+    expect(SEED.forum_threads.every((t) => t.src === "sample")).toBe(true);
+  });
+
+  it("labels each sample row in a place's panel, and leaves the real one bare", () => {
+    desk.run(`openPanel('${AT}',0)`);
+    const rows = desk.window.document.querySelectorAll<HTMLElement>("#panelBody .cvrow");
+    const read = [...rows].map((r) => ({ title: r.querySelector("b")?.textContent ?? "", small: r.querySelector("small")?.textContent ?? "" }));
+    expect(read.length).toBeGreaterThan(1);
+    for (const r of read) expect(r.small.endsWith(" · sample"), r.title).toBe(r.title !== REAL.title);
+  });
+
+  it("labels them in the Forum door, and says the forum holds the real ones", () => {
+    desk.run(`openDoor('forum',{at:'${AT}'})`);
+    const rows = smalls(desk, "#moduleCard .mrow small");
+    const foot = smalls(desk, "#moduleCard .lastv").join(" | ");
+    desk.run("closeDoor()");
+    expect(rows.filter((t) => t.endsWith(" · sample")).length).toBe(rows.length - 1);
+    expect(foot).toContain("sample conversations. The forum on the site holds the real ones");
+  });
+
+  it("labels them in the phone's help sheet", () => {
+    pocket.run("renderHelp()");
+    const rows = smalls(pocket, "#help .help-m");
+    expect(rows.length).toBe(scene.forum_threads.length);
+    expect(rows.filter((t) => t.includes(" · sample · ")).length).toBe(rows.length - 1);
+  });
+
+  it("counts only the real conversation on the help badge", () => {
+    expect(pocket.window.document.getElementById("pbBadge")?.textContent).toBe("1");
+  });
+});
