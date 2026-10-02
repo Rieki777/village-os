@@ -641,3 +641,196 @@ describe("a config push from the shell, under an open inspect card", () => {
     expect(againWithWork.join(" ")).not.toContain("The live map changed");
   });
 });
+
+describe("a save the village refuses", () => {
+  let m: Booted;
+  let refused: { bar: string; toasts: string[]; leaving: boolean };
+  beforeAll(async () => {
+    m = await framed();
+    press(m, "buildBtn");
+    rename(m, "gate", "Edit One");
+    await settle(SAVE_WAIT);
+    await answerLast(m, "draft-save", { ok: false, error: "auth_required" });
+    refused = { bar: bar(m), toasts: await toasts(m), leaving: asksBeforeLeaving(m) };
+  });
+  afterAll(() => m?.close());
+
+  it("says so on the bar, in words, where it used to go on counting changes", () => {
+    expect(refused.bar).toMatch(/^Not saved\. You are signed out\. Sign in again/);
+    expect(refused.bar).toContain("Your changes are still on this screen.");
+  });
+
+  it("says it once in a toast, and never that the work saved itself", () => {
+    expect(refused.toasts.filter((t) => t.startsWith("Not saved."))).toHaveLength(1);
+    expect(refused.toasts.join(" ")).not.toContain("saves itself");
+  });
+
+  it("asks before the page closes over the refused work", () => {
+    expect(refused.leaving).toBe(true);
+  });
+
+  it("tries again from the bar, listens only to the newest save's answer, and a save the village takes clears it", async () => {
+    const before = asks(m, "draft-save").length;
+    press(m, "saveRetry");
+    expect(asks(m, "draft-save")).toHaveLength(before + 1);
+    const retried = lastAsk(m, "draft-save");
+    expect(nameIn(retried.scene, "gate")).toBe("Edit One");
+    rename(m, "welcome", "Edit Two");
+    await settle(SAVE_WAIT);
+    await answerLast(m, "draft-save", { ok: true, baseVersion: 6 });
+    // The retry's answer arrives last, and late: it must not undo the newer yes.
+    await m.answer(retried, { ok: false, error: REACH });
+    expect(bar(m)).toMatch(/^2 unpublished changes\./);
+    expect(asksBeforeLeaving(m)).toBe(false);
+  });
+});
+
+
+describe("work the village refused, on the next visit", () => {
+  /** What the village took (the draft row), and what this browser kept. */
+  let took: Asked;
+  let kept: Record<string, string>;
+  beforeAll(async () => {
+    const m = await framed();
+    rename(m, "gate", "Edit One");
+    await settle(SAVE_WAIT);
+    took = await answerLast(m, "draft-save", { ok: true, baseVersion: 6 });
+    rename(m, "welcome", "Edit Two");
+    await settle(SAVE_WAIT);
+    await answerLast(m, "draft-save", { ok: false, error: REACH });
+    kept = storageOf(m);
+    m.close();
+  });
+
+  it("is offered over the older draft the village still holds, opens whole, and goes to the village", async () => {
+    const m = boot(null, { shell: true, storage: kept });
+    await settle(200);
+    m.post(config(live6(), 6));
+    m.post(hand(6, { scene: took.scene, baseVersion: 6 }));
+    const offer = offerText(m);
+    press(m, "restoreYes");
+    const opened = { gate: m.run<string>("BY.gate.name"), welcome: m.run<string>("BY.welcome.name") };
+    const resent = lastAsk(m, "draft-save");
+    m.close();
+    expect(offer).toContain("2 changes.");
+    expect(opened).toEqual({ gate: "Edit One", welcome: "Edit Two" });
+    expect(nameIn(resent?.scene, "welcome")).toBe("Edit Two");
+  });
+
+  it("opens on the version it forked from, so a publish over a colleague's newer one is refused", async () => {
+    const m = boot(null, { shell: true, storage: kept });
+    await settle(200);
+    m.post(config(live7(), 7));
+    m.post(hand(7, null));
+    press(m, "restoreYes");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    const published = lastAsk(m, "publish");
+    m.close();
+    expect(published?.baseVersion).toBe(6);
+  });
+
+  it("is not offered to whoever uses the browser next without a hand, and their page closes without asking", async () => {
+    const m = await framed({ storage: kept }, visitorHand(6));
+    const offered = restoreShown(m);
+    // The live map arrives with its own history, which used to count as unsaved.
+    rename(m, "gate", "A visitor's own local change");
+    const leaving = asksBeforeLeaving(m);
+    m.close();
+    expect(offered).toBe(false);
+    expect(leaving).toBe(false);
+  });
+});
+
+
+describe("an edit committed by the click on View as visitor", () => {
+  it("reaches the village before the live map is drawn, and nothing saves the live map in its place", async () => {
+    const m = await framed();
+    press(m, "buildBtn");
+    rename(m, "market", "Renamed then looked");
+    m.run("toggleVisitor()");
+    const atOnce = asks(m, "draft-save").map((q) => nameIn(q.scene, "market"));
+    await settle(SAVE_WAIT);
+    const later = asks(m, "draft-save").map((q) => nameIn(q.scene, "market"));
+    m.close();
+    expect(atOnce).toEqual(["Renamed then looked"]);
+    expect(later).toEqual(["Renamed then looked"]);
+  });
+});
+
+
+describe("publishing or discarding inside the 2.5 s save window", () => {
+  let saves: { afterPublish: number; afterDiscard: number; afterRefusal: (string | undefined)[] };
+  beforeAll(async () => {
+    const m = await framed();
+    rename(m, "gate", "Q1");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    await answerLast(m, "publish", { ok: true, version: 7, live: { version: 7, by: "me", previous: 6 } });
+    await settle(SAVE_WAIT);
+    const afterPublish = asks(m, "draft-save").length;
+    rename(m, "gate", "Q2");
+    m.run("openDiscard()");
+    press(m, "pubConfirm");
+    await answerLast(m, "draft-discard", { ok: true });
+    await settle(SAVE_WAIT);
+    const afterDiscard = asks(m, "draft-save").length;
+    rename(m, "gate", "Q3");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    await answerLast(m, "publish", { ok: false, error: "Publishing the map is a cartographer's work. Your draft is safe and still yours." });
+    await settle(SAVE_WAIT);
+    saves = { afterPublish, afterDiscard, afterRefusal: asks(m, "draft-save").slice(afterDiscard).map((q) => nameIn(q.scene, "gate")) };
+    m.close();
+  });
+
+  it("leaves no save behind a publish the village took", () => {
+    expect(saves.afterPublish).toBe(0);
+  });
+
+  it("leaves no save behind a discard the village took", () => {
+    expect(saves.afterDiscard).toBe(0);
+  });
+
+  // The guard on the guard: holding the save back for a publish must not
+  // lose it when the publish is refused. The old map passed this one too.
+  it("still saves the work when the village refuses the publish", () => {
+    expect(saves.afterRefusal).toEqual(["Q3"]);
+  });
+});
+
+
+describe("discarded work and this browser", () => {
+  it("is not offered back on the next visit", async () => {
+    const m = await framed();
+    rename(m, "market", "Work I threw away");
+    await settle(SAVE_WAIT);
+    // Refused, so this browser is holding a copy of it when the discard comes.
+    await answerLast(m, "draft-save", { ok: false, error: REACH });
+    m.run("openDiscard()");
+    press(m, "pubConfirm");
+    await answerLast(m, "draft-discard", { ok: true });
+    const kept = storageOf(m);
+    m.close();
+    const next = await framed({ storage: kept });
+    const offered = restoreShown(next);
+    next.close();
+    expect(offered).toBe(false);
+  });
+});
+
+
+describe("a saved draft with nothing of its own", () => {
+  // What a save landing after a publish used to leave on the server: the live
+  // land again, a timestamp apart, offered as "no changes" on every visit.
+  it("is not offered, and does not hold the build hand closed", async () => {
+    const m = await framed({}, hand(6, { scene: live6(), baseVersion: 6 }));
+    const offered = restoreShown(m);
+    press(m, "buildBtn");
+    const build = m.run<boolean>("buildMode");
+    m.close();
+    expect(offered).toBe(false);
+    expect(build).toBe(true);
+  });
+});
+
