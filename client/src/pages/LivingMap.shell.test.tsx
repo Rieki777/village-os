@@ -41,6 +41,8 @@ const json = (body: unknown, status = 200) =>
 let configAnswers = true;
 /** What /api/land says; by default a village that has not placed itself. */
 let landAnswer: unknown = { imageryUrl: null };
+/** The crown bar's chips as `GET /api/map/chips` answers them. */
+const CHIPS = [{ id: "members", label: "Members", icon: "people", state: "live", value: "41" }];
 
 function answer(url: string): Response {
   if (url.startsWith("/grounds/manifest.json")) return json({ present: true, url: "/grounds/grounds-abc.html" });
@@ -48,6 +50,7 @@ function answer(url: string): Response {
     return configAnswers ? json({ skin: null, walk: null, vocabulary: null, scene: null }) : json({ error: "down" }, 503);
   }
   if (url.startsWith("/api/land")) return json(landAnswer);
+  if (url.startsWith("/api/map/chips")) return json({ chips: CHIPS, refreshMs: 60_000 });
   return json({});
 }
 
@@ -159,6 +162,23 @@ describe("the cover over the land while it loads (F66, F47)", () => {
     await aMoment();
     const types = post.mock.calls.map(([m]) => (m as { type?: string }).type);
     expect(types).toContain("config");
+  });
+
+  /*
+   * F29, as Rye decided it (2026-10-02): the crown bar's chips are the
+   * village's, chosen in Village settings, and an unset one stays an example.
+   * The map draws whatever the shell hands it (shared/mapArtifactChips.test.ts),
+   * so the shell has to hand it over the moment the map can listen.
+   */
+  it("hands the map the village's chips the moment it has booted", async () => {
+    arrive("/map#/place/greenhouse");
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const post = vi.fn();
+    Object.defineProperty(frame()!.contentWindow!, "postMessage", { configurable: true, value: post });
+    fromMap({ type: "grounds-ready" });
+    await aMoment();
+    const chips = post.mock.calls.map(([m]) => m as { type?: string; chips?: unknown }).filter((m) => m.type === "chips");
+    expect(chips).toEqual([{ type: "chips", chips: CHIPS }]);
   });
 });
 

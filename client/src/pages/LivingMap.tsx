@@ -57,6 +57,7 @@ import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/m
 import { useMapHistory } from "@/components/map/mapHistory";
 import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
 import { fetchLandGround } from "@/components/map/landGround";
+import { pushChips, useChipsCadence } from "@/components/map/statChips";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -490,6 +491,10 @@ export default function LivingMap() {
     }
   }, []);
 
+  /* The crown bar's chips, and their refresh: components/map/statChips.ts. */
+  const pushChipsNow = useCallback(() => { void pushChips(frame.current?.contentWindow); }, []);
+  useChipsCadence(pushChipsNow, groundsReady);
+
   /**
    * The map asking the village to keep, publish, discard or roll back its
    * work. The relay itself, and why it answers on every path, is in
@@ -596,6 +601,7 @@ export default function LivingMap() {
         void pushConfig();
         pushHand();
         pushPhotos();
+        pushChipsNow();
         // Third and last, because it is the only one nothing waits on: the org
         // lens narrows what is drawn and never decides what may be done.
         pushLens();
@@ -631,7 +637,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushHand, pushPhotos, pushChipsNow, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
