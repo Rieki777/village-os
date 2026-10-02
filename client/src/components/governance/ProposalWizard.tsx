@@ -37,9 +37,9 @@ import DraftCards from "./DraftCards";
 import PracticeVote from "./PracticeVote";
 import TypeCards from "./TypeCards";
 import WizardField, { type MechanicsVariableLite } from "./WizardField";
-import WizardRolePreview, { usePermissionRoles } from "./WizardRolePreview";
+import WizardRolePreview from "./WizardRolePreview";
 import WizardStepper from "./WizardStepper";
-import { labelFor, roleOption } from "./pickSources";
+import { isSearchSource, labelFor, loadPickOptions, type PickOption } from "./pickSources";
 import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
@@ -78,11 +78,26 @@ export default function ProposalWizard() {
   const problems = problemsFor(type, answers);
   const stepProblems = problemsInStep(type, step, answers);
   // A type that picks a role with powers shows that role as a card once it is
-  // picked, and names it in the read-back. One `/api/roles` read serves the
-  // picker, the preview and the read-back alike (`loadPermissionRoles`).
+  // picked. One `/api/roles` read serves the picker and the preview
+  // (`loadPermissionRoles`), so the two cannot disagree about a role.
   const rolePick = walk.flatMap((s) => fieldsFor(type, s.key)).find((f) => f.kind === "pick" && f.source === "roles");
   const rolePreview = rolePick && String(answers[rolePick.key] ?? "") ? String(answers[rolePick.key]) : null;
-  const roleRows = usePermissionRoles(!!rolePick);
+  // The read-back names a picked value from the list its picker offered
+  // (`labelFor`), where it printed the id. A searched source (members) has no
+  // list to name from and still prints what was stored.
+  const [pickLists, setPickLists] = useState<Record<string, PickOption[]>>({});
+  useEffect(() => {
+    if (step !== "review" || !type) return;
+    const picks = walkFor(type).flatMap((s) => fieldsFor(type, s.key));
+    const sources = Array.from(new Set(picks.flatMap((f) => (f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : []))));
+    let alive = true;
+    void Promise.all(sources.map(async (src) => [src, await loadPickOptions(src)] as const)).then((lists) => {
+      if (alive) setPickLists(Object.fromEntries(lists));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [step, type]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -407,8 +422,8 @@ export default function ProposalWizard() {
                           String(v ?? "").trim()
                           ? `Until ${String(v).trim()}`
                           : "Until the season ends"
-                        : field.kind === "pick" && field.source === "roles" && v
-                          ? labelFor((roleRows ?? []).map(roleOption), v)
+                        : field.kind === "pick" && field.source && pickLists[field.source] && v
+                          ? labelFor(pickLists[field.source], v)
                           : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">

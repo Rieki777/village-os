@@ -11,7 +11,8 @@
  *   2. The picker, the preview and the read-back share ONE `/api/roles` read
  *      (`loadPermissionRoles`), so they cannot disagree about a role and
  *      picking costs no second request.
- *   3. The read-back names the role, where it used to print its id.
+ *   3. The read-back names the role (and every other value picked from a
+ *      list), where it used to print the id.
  *
  * Driven through the real `ProposalWizard` (its governance API stubbed), so
  * the test reads the wiring a member meets and never a harness's copy of it.
@@ -87,6 +88,8 @@ beforeEach(() => {
       asked.push(u);
       const reply = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
       if (u === "/api/roles") return reply(ROLES);
+      if (u === "/api/village/powers")
+        return reply({ powers: [{ capability: "exchange.manage", title: "Run the exchange", movable: true, heldBy: null }] });
       if (u === "/api/game/config")
         return reply({ stages: GAME_CONFIG.stages, project: { roleName: "Circle role" } });
       if (u === "/api/season") return reply({ current: { name: "Season of Foundations", endsOn: "2099-03-21" }, daysLeft: 171 });
@@ -98,12 +101,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const at = (step: string) => walkFor("role_seat").findIndex((s) => s.key === step);
-const draft = (payload: Record<string, unknown>, step: string) => ({
+const at = (step: string, type = "role_seat") => walkFor(type).findIndex((s) => s.key === step);
+const draft = (payload: Record<string, unknown>, step: string, type = "role_seat") => ({
   id: "d1",
-  wizardType: "role_seat",
+  wizardType: type,
   payload,
-  stepIndex: at(step),
+  stepIndex: at(step, type),
   createdAt: "2026-10-01T10:00:00.000Z",
   updatedAt: "2026-10-01T10:00:00.000Z",
 });
@@ -154,6 +157,16 @@ describe("the wizard's preview of the picked role", () => {
     // The phone's copy of the preview sits above the read-back on this step.
     const preview = screen.getAllByText("Live preview");
     expect(preview.length).toBeGreaterThan(0);
+  });
+
+  it("names every listed pick in the read-back, the power as well as the role", async () => {
+    drafts.list = [draft({ capability: "exchange.manage", roleId: "r-steward", reason: "The stewards run it already." }, "review", "power_grant")];
+    await continueDraft();
+    const power = (await screen.findByText("The power", { selector: "dt" })).parentElement!;
+    await waitFor(() => expect(within(power).getByText("Run the exchange")).toBeTruthy());
+    expect(within(power).queryByText("exchange.manage")).toBeNull();
+    const role = screen.getByText("Who would do it", { selector: "dt" }).parentElement!;
+    expect(within(role).getByText("Calendar Steward")).toBeTruthy();
   });
 });
 
