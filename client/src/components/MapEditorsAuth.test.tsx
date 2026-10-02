@@ -64,6 +64,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 import MapSkinPanel from "./MapSkinPanel";
 import WalkEditorPanel from "./WalkEditorPanel";
 import MapVocabularyPanel from "./admin/MapVocabularyPanel";
+import MapChipsPanel from "./admin/MapChipsPanel";
 // Imported, never retyped: gameApi's own comment says eight hand-written
 // copies of this literal is eight chances for a fork's rename to miss one.
 import { TOKEN_KEY } from "@/lib/gameApi";
@@ -78,6 +79,7 @@ const BODIES: Record<string, unknown> = {
   "/api/admin/map/structures": { structures: [] },
   "/api/admin/map/walk-log": { runs: 0 },
   "/api/map/vocabulary": { vocabulary: { road: [], water: [], zone: [], phases: {}, media: [] } },
+  "/api/admin/map/chips": { chips: [], preview: [], sources: [] },
 };
 
 let calls: Array<{ url: string; headers: Record<string, string> }>;
@@ -118,6 +120,7 @@ const PANELS: Array<[string, () => ReactElement]> = [
   ["MapSkinPanel", () => <MapSkinPanel />],
   ["WalkEditorPanel", () => <WalkEditorPanel />],
   ["MapVocabularyPanel", () => <MapVocabularyPanel />],
+  ["MapChipsPanel", () => <MapChipsPanel />],
 ];
 
 describe("the map editors, mounted where a member can reach them", () => {
