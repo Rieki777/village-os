@@ -225,6 +225,12 @@
     font-family:inherit;font-variant:small-caps;letter-spacing:.16em;font-size:12px;padding:7px 16px;cursor:pointer}
   #layers button+button{border-left:1px solid rgba(201,162,94,.3)}
   #layers button.on{background:linear-gradient(180deg,#7a5f33,#5a4423);color:#fff;text-shadow:0 1px 2px #000}
+  /* THE RING IS DRAWN INSIDE. #layers and #mapSel clip with overflow:hidden
+     for their rounded ends, and that cut the browser's own ring away.
+     MEASURED, share of pixels that changed just outside the control on
+     focus: Now and Living Map 0.000, Vision 0.039, Org 0.026, Flows 0.023,
+     Circles 0.038, against 0.10 to 0.14 for every standalone button. */
+  #layers button:focus-visible,#mapSel button:focus-visible{outline:2px solid #e8c877;outline-offset:-3px}
   #dayBtn{position:absolute;top:10px;right:302px;z-index:30;border:1px solid #6b5430;border-radius:8px;
     background:linear-gradient(180deg,#2c2114,#1c140b);color:var(--parch);font-size:15px;padding:5px 12px;cursor:pointer;
     box-shadow:0 3px 10px rgba(0,0,0,.5)}
@@ -429,6 +435,13 @@
   #maiaInput{display:flex;border-top:1px solid rgba(201,162,94,.3)}
   #maiaInput input{flex:1;background:transparent;border:none;outline:none;color:#fff;font-family:inherit;font-size:13px;padding:10px 12px;-webkit-user-select:text;user-select:text}
   #maiaInput input::placeholder{color:#9c8a63}
+  /* A FIELD SHOWS WHERE THE TYPING GOES. These were outline:none with
+     nothing in its place, so a keyboard visitor tabbing into Maia's box
+     found a caret and no ring. Inset, because #maia clips with
+     overflow:hidden and this box is its bottom edge. The theme words, the
+     resolver and the draw panel had the same rule and get the same ring. */
+  #maiaInput input:focus-visible,#aiTheme input:focus-visible,#resolver input:focus-visible,#resolver select:focus-visible,
+  #drawPanel select:focus-visible,#drawPanel input[type=text]:focus-visible{outline:2px solid #e8c877;outline-offset:-2px}
   #maiaInput button{appearance:none;border:none;background:transparent;color:var(--gold-b);font-size:16px;padding:0 14px;cursor:pointer}
   #maia.min #maiaLog,#maia.min #maiaActions,#maia.min #maiaInput{display:none}
   #maia.min{width:230px}
@@ -1420,12 +1433,29 @@
 <div id="badges"></div>
 <div id="vignette"></div>
 
-<div id="vitals"></div>
-<div id="layers">
-  <button id="lyNow" class="on">Now</button><button id="lyVision">Vision</button><button id="lyOrg">Org</button><button id="lyFlows">Flows</button>
+<!-- ONE ROW, and DOM order is what the reader sees (see #topNav).
+     Get Involved leads because it is a MENU: it opens a list of ways to
+     help. The two beside it are VIEWS of the same land, and the Loom is a
+     lens over it. A menu belongs at the edge, not wedged between two
+     projections of the map. -->
+<div id="topNav">
+ <button id="wallBtn">☰ Get Involved</button><!-- ids keep the historical wall name; user-facing copy says Get Involved -->
+ <div id="mapSel" title="what kind of map do you want to see?">
+  <button id="msLiving" class="on">🏞 Living Map</button>
+  <button id="msCircles">◎ Circles</button>
+ </div>
+ <button id="loomBtn" title="every connection, one snapshot (L)">⧉ The Loom</button>
 </div>
-<div id="roleKey"><span class="role-k role-open"></span>open<span class="role-k role-part"></span>part filled<span class="role-k role-full"></span>full</div>
-<button id="dayBtn" title="Time of day" aria-label="Time of day">☀</button>
+<!-- THE TAB ORDER IS THE ORDER ON THE SCREEN, left to right. Focus
+     follows the DOM and nothing else (these are absolutely placed, so CSS
+     order cannot change it), and it used to run Now, Vision, Org, Flows,
+     the hour, Your view, then jump back to Get Involved at the far left and
+     out to the dock again. MEASURED x positions at 1400 wide: Get Involved
+     14, Living Map 156, Circles 264, Loom 358, the vitals in the middle,
+     Your view 930, the hour 1059, Now 1104 to Flows 1309, the dock 1350. No
+     rule selects these by their order, and their stacking is set by
+     z-index, so moving them changes nothing a mouse sees. -->
+<div id="vitals"></div>
 <!-- ONE DOOR. It used to open #themePanel and only that; it opens the whole
      room now. The name changed with it: "Theme" described a third of what is
      behind it, and the panel behind it is about how the village looks to the
@@ -1455,19 +1485,11 @@
   <h4 style="margin-top:4px">Or describe your land</h4>
   <div id="aiTheme"><input id="aiWords" placeholder="e.g. high-desert mesa, adobe & sage"><button class="chip" id="aiGo">Weave it</button></div>
 </div>
-<!-- ONE ROW, and DOM order is what the reader sees (see #topNav).
-     Get Involved leads because it is a MENU: it opens a list of ways to
-     help. The two beside it are VIEWS of the same land, and the Loom is a
-     lens over it. A menu belongs at the edge, not wedged between two
-     projections of the map. -->
-<div id="topNav">
- <button id="wallBtn">☰ Get Involved</button><!-- ids keep the historical wall name; user-facing copy says Get Involved -->
- <div id="mapSel" title="what kind of map do you want to see?">
-  <button id="msLiving" class="on">🏞 Living Map</button>
-  <button id="msCircles">◎ Circles</button>
- </div>
- <button id="loomBtn" title="every connection, one snapshot (L)">⧉ The Loom</button>
+<button id="dayBtn" title="Time of day" aria-label="Time of day">☀</button>
+<div id="layers">
+  <button id="lyNow" class="on">Now</button><button id="lyVision">Vision</button><button id="lyOrg">Org</button><button id="lyFlows">Flows</button>
 </div>
+<div id="roleKey"><span class="role-k role-open"></span>open<span class="role-k role-part"></span>part filled<span class="role-k role-full"></span>full</div>
 <!-- EACH DOOR CARRIES ITS NAME. The icon is all a sighted person sees and
      the tooltip lives in data-tip, which no screen reader reads, so the seven
      doors were announced as "button" seven times. The label is the first

@@ -392,3 +392,46 @@ describe("every door on the right rail, and the hour, has a name", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F27. The segmented controls clip with overflow:hidden, which cut the
+   browser's focus ring away, Maia's box had outline:none with nothing in its
+   place, and the tab order ran right, left, right across the top bar. */
+describe("focus can be seen, and moves across the top bar the way it reads", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("puts the top bar in the DOM in the order it stands on the screen", () => {
+    const ids = ["topNav", "vitals", "themeBtn", "dayBtn", "layers", "dock"];
+    const els = ids.map((id) => b.doc.getElementById(id) as HTMLElement);
+    for (let i = 1; i < els.length; i++) {
+      const follows = !!(els[i - 1].compareDocumentPosition(els[i]) & b.window.Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows, `#${ids[i]} comes after #${ids[i - 1]}`).toBe(true);
+    }
+  });
+
+  it("draws the ring inside the segmented buttons and Maia's box, where no clip reaches it", () => {
+    // jsdom never matches :focus-visible, so this reads the rule the cascade
+    // would apply: a :focus-visible rule that selects the control once the
+    // pseudo-class is set aside, with a solid ring and a negative offset.
+    const rules: CSSStyleRule[] = [];
+    for (const sheet of [...b.doc.styleSheets]) {
+      for (const r of [...sheet.cssRules]) if ("selectorText" in r) rules.push(r as CSSStyleRule);
+    }
+    for (const id of ["lyNow", "lyVision", "msLiving", "msCircles", "maiaText"]) {
+      const el = b.doc.getElementById(id) as HTMLElement;
+      const ring = rules.filter((r) =>
+        r.selectorText
+          .split(",")
+          .some((sel) => sel.includes(":focus-visible") && el.matches(sel.replace(/:focus-visible/g, "").trim())),
+      );
+      expect(ring.length, `a :focus-visible rule reaches #${id}`).toBeGreaterThan(0);
+      const r = ring[ring.length - 1].style;
+      expect(r.outlineStyle || r.outline, `#${id}'s ring`).toMatch(/solid/);
+      expect(parseFloat(r.outlineOffset), `#${id}'s ring is inset`).toBeLessThan(0);
+    }
+  });
+});
