@@ -23,8 +23,9 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 5. **The fleet ledger, section 27, THE LANDING ORDER** — read it before you touch a
    contended resource, and append a row when you claim one. Since 2026-10-02 it lives in the
    maintainers' PRIVATE operations repository, `Rieki777/village-os-ops`, checked out beside the
-   worktrees: `../village-os-ops/SEASON2_FLEET_LEDGER.md`. Commit and push a claim there directly,
-   no pull request. Never copy it back into this public tree; `scripts/check-public-tree.mjs`
+   worktrees as a sibling folder named village-os-ops, in the file SEASON2_FLEET_LEDGER at its
+   root. Commit and push a claim there directly, no pull request, and read that repository's
+   README first: every lane shares one working tree there. Never copy it back into this public tree; `scripts/check-public-tree.mjs`
    fails CI on it, and on Railway hosts, local paths and session prompts. Several sessions run against this
    repository at once, and section 27 is where they stay out of each other's way: migration
    numbers, the six ratchet baselines, `server/index.ts`, `ci.yml`, the shared integration

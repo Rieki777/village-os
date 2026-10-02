@@ -14,7 +14,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Suspense } from "react";
+import { Suspense, type ReactElement } from "react";
 
 const config = { current: null as null | { brochurePages?: boolean } };
 vi.mock("@/lib/gameApi", () => ({
@@ -23,7 +23,7 @@ vi.mock("@/lib/gameApi", () => ({
 
 import { brochurePage, isBrochurePath } from "./brochure";
 
-function mount(loader: () => Promise<{ default: () => JSX.Element }>) {
+function mount(loader: () => Promise<{ default: () => ReactElement }>) {
   const Page = brochurePage(loader);
   return render(
     <Suspense fallback={<p>loading</p>}>
