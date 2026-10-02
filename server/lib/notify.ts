@@ -26,6 +26,7 @@
 import crypto from "node:crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { numberVar } from "./variables";
+import { wordsInAppOnly } from "../../shared/notificationKinds";
 
 /**
  * Fallback only — the live ceiling is the notify.daily_email_cap game
@@ -154,6 +155,29 @@ const CLEARS_DAILY_CAP: ReadonlySet<string> = new Set([...Array.from(STEWARD_WIN
 export function clearsDailyEmailCap(type: string): boolean {
   return CLEARS_DAILY_CAP.has(type);
 }
+
+/**
+ * KINDS WHOSE EMAIL IS THE TITLE ALONE.
+ *
+ * An email leaves the village. It lands in a mailbox the recipient may share,
+ * forward, or read on a lock screen. For most kinds the body is a line the
+ * village wrote. A restorative intake's body is a member's own words about a
+ * harm, often naming another member, and the rule for that flow (F12) is that
+ * the words reach only their recipients. So its email carries the title, which
+ * names no one (server/lib/restorativeIntake.ts), and the words stay in the
+ * in-app row, which only its recipient can read.
+ *
+ * The kinds are declared once, as `wordsInAppOnly` in
+ * shared/notificationKinds.ts, because the bell reads the same declaration:
+ * a body the email leaves out must be readable whole in the bell, or it is
+ * readable nowhere.
+ */
+export function emailCarriesBody(type: string): boolean {
+  return !wordsInAppOnly(type);
+}
+
+/** Where the email for such a kind tells its recipient to read the words. */
+export const READ_IN_THE_BELL = "Sign in and open the bell at the top of any page to read it.";
 
 /**
  * The refusal that keeps the pin honest lives beside the seat it is about:
@@ -375,7 +399,11 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
     html: emailShell(
       deps.projectName(),
       `<h2 style="margin:0 0 8px;font-size:17px">${escapeHtml(n.title)}</h2>` +
-        (n.body ? `<p style="margin:0 0 14px;color:#4b5563;border-left:3px solid #2D5A5A;padding-left:10px">${escapeHtml(n.body)}</p>` : "") +
+        (!emailCarriesBody(n.type)
+          ? `<p style="margin:0 0 14px;color:#4b5563">${escapeHtml(READ_IN_THE_BELL)}</p>`
+          : n.body
+            ? `<p style="margin:0 0 14px;color:#4b5563;border-left:3px solid #2D5A5A;padding-left:10px">${escapeHtml(n.body)}</p>`
+            : "") +
         `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#2D5A5A;color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">See it on your profile</a></p>` +
         `<p style="color:#9ca3af;font-size:12px;margin-top:18px">Choose which emails you get on your profile page.</p>`,
     ),
