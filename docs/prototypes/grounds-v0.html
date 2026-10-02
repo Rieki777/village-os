@@ -8511,7 +8511,10 @@ function orgSeat(){const p=[...OPTR.values()];ODRAG=null;OPINCH=null;
   if(p.length===1)ODRAG={x:p[0].x,y:p[0].y,vb:OVB.slice()};
   else if(p.length>1){const a=p[0],b=p[1];
     OPINCH={d:Math.hypot(a.x-b.x,a.y-b.y)||1,w:OVB[2],p:orgAt((a.x+b.x)/2,(a.y+b.y)/2)}}}
-$('orgSvg').addEventListener('pointerdown',e=>{if(!OPTR.size)oMoved=0;
+/* A PRIMARY pointer going down means no other is down, so any finger still
+   held here is one whose up never arrived (capture can fail, and is caught
+   below). Without this the next single touch would pinch against it. */
+$('orgSvg').addEventListener('pointerdown',e=>{if(e.isPrimary)OPTR.clear();if(!OPTR.size)oMoved=0;
   OPTR.set(e.pointerId,{x:e.clientX,y:e.clientY});orgSeat();
   try{$('orgSvg').setPointerCapture(e.pointerId)}catch(_){}});
 $('orgSvg').addEventListener('pointermove',e=>{if(!OPTR.has(e.pointerId))return;

@@ -398,6 +398,20 @@ describe("over the in-file circles on a phone, the pad and the fingers move the 
     pointer("pointerup", 6, mid[0] + 126, mid[1]);
   });
 
+  it("drags with the next finger after one whose up never arrived, never pinching against it", () => {
+    reset();
+    // A finger the browser stopped reporting: down, and no up or cancel.
+    pointer("pointerdown", 11, 100, 300);
+    // The next touch starts a new gesture, so the browser marks it primary.
+    b.window.document
+      .getElementById("orgSvg")
+      ?.dispatchEvent(new b.window.PointerEvent("pointerdown", { pointerId: 12, clientX: 195, clientY: 400, isPrimary: true, bubbles: true }));
+    pointer("pointermove", 12, 195, 450);
+    pointer("pointerup", 12, 195, 450);
+    expect(vb()[2], "the chart's width, untouched by a drag").toBe(1600);
+    expect(vb()[1], "moved by the drag, 50 px of a chart drawn at 390/1600").toBeCloseTo(-50 / (390 / 1600), 1);
+  });
+
   it("does not open a node when a pinch ends on one", () => {
     reset();
     b.run("window.__opened=null;window.__open=openPanel;openPanel=(k)=>{window.__opened=k}");
