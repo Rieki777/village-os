@@ -142,6 +142,10 @@ describe("the welcome-and-walk requirement", () => {
     expect(item!.group).toBe("brand");
   });
 
+  it("asks only a village that runs the map, which is where the walk is written and walked", () => {
+    expect(item!.appliesWhenModule).toBe("map");
+  });
+
   it("is a real check read from the walk's document, never a box a founder ticks", () => {
     expect(item!.checkKey).toBe("village:walk");
     expect(item!.checkKey.startsWith("manual:")).toBe(false);

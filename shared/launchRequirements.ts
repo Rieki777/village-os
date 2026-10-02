@@ -275,6 +275,9 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     checkKey: "village:walk",
     fixAt: "/map?settings=walk",
     fixLabel: "Write it on the map",
+    // The walk lives on the map, so a village that does not run the map has
+    // nothing to write it on, and the link would land on a module gate.
+    appliesWhenModule: "map",
   },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
