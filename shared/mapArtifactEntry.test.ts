@@ -402,7 +402,8 @@ describe("the painterly bake (F67)", () => {
       last = now;
     }, 5);
     try {
-      b.run("satPlate={};bakePainted()");
+      // Asked for, as the first opening of Your view asks (D31).
+      b.run("satPlate={};askPaint()");
       for (let waited = 0; waited < 30_000 && !b.run<boolean>("paintReady"); waited += 100) await settle(100);
     } finally {
       clearInterval(beat);
@@ -413,4 +414,34 @@ describe("the painterly bake (F67)", () => {
     expect(b.run<string>("document.getElementById('tmPaint').style.display"), "the Painted chip shows").toBe("");
     expect(b.uncaught).toEqual([]);
   }, 60_000);
+});
+
+/*
+ * D31. The bake above ran on every visit, worker or not: about 1.5 s of CPU on
+ * a desk and about 7 s on a phone at 4x, for a terrain behind a hidden chip in
+ * a sheet most visitors never open. It now waits for the first opening of
+ * Your view, where the terrain switch lives. The plate's arrival calls
+ * bakePainted() exactly as the seed's onload and a village's setGround do.
+ */
+describe("the painterly bake waits until somebody opens the terrain switch (D31)", () => {
+  it("bakes nothing when the plate arrives, and starts once, at the first Your view", async () => {
+    const s = boot("#skipIntro");
+    try {
+      await settle(600);
+      s.run("satPlate={};bakePainted()");
+      const atArrival = s.run<number>("BAKE_GEN");
+      s.run("openMask()");
+      const afterOpen = s.run<number>("BAKE_GEN");
+      s.run("closeMask();openMask()");
+      const afterReopen = s.run<number>("BAKE_GEN");
+      expect(atArrival, "bakes started by the plate arriving").toBe(0);
+      expect(afterOpen, "bakes started by the first Your view").toBe(1);
+      expect(afterReopen, "bakes started by opening it again").toBe(1);
+      expect(s.uncaught).toEqual([]);
+    } finally {
+      // Stops the fallback's slices, as the F67 block does.
+      s.run("BAKE_GEN++");
+      s.window.close();
+    }
+  });
 });
