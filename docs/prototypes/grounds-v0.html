@@ -1060,6 +1060,16 @@
      it was 40 px. Measured, not estimated. */
   #pdrawer .pcell{min-height:44px}
   body.pocket #skin .swb,body.pocket #skin .chip,body.pocket #skin .swatchbtn{min-height:44px}
+  /* GET INVOLVED IS A SHEET ON A PHONE, cut from the same cloth as #skin. The
+     desk card is pinned top:96px and bottom:224px, a fixed 320 px of vertical
+     cost, so a 390 px tall landscape phone had 70 px of card and a list whose
+     content box measured 0 px: not one of 37 rows was ever fully visible.
+     z-index 59 is the layer #skin and #pdrawer stand on. At the desk card's 32
+     the full-width sheet ran under the pan pad, the gesture hint and the walk
+     offer, which sample points across its rows measured. openWall() keeps it
+     one sheet at a time. */
+  body.pocket #wall{left:0;right:0;top:auto;bottom:calc(60px + env(safe-area-inset-bottom,0px));
+    width:auto;height:72%;z-index:59;border:none;border-top:2px solid #8a6a33;border-radius:16px 16px 0 0}
   body.pocket #skin select{min-height:44px}
   @media (prefers-reduced-motion:reduce){body.pocket #skin{transition:none}}
   body.pocket #vitals .vital small{display:none}
@@ -4793,7 +4803,25 @@ $('dayBtn').onclick=()=>{dayAuto=false;dayPhase=(dayPhase<0.5)?1.45:(dayPhase<1.
 $('wallBtn').onclick=e=>{$('wall').classList.toggle('show');buildWall();
   if(e&&e.detail===0&&$('wall').classList.contains('show')){const r=$('wallList').querySelector('button.wallrow');if(r)r.focus({preventScroll:true})}};
 if($('wallX'))$('wallX').onclick=e=>{$('wall').classList.remove('show');if(e&&e.detail===0)$('wallBtn').focus({preventScroll:true})};
-function wallGo(k,tab){if(!k||!BY[k])return;buildMode?openInspect(k):openPanel(k,tab)}
+/* ONE SHEET AT A TIME, the rule openHelp() and openMask() already keep. On a
+   phone the list is a sheet on the bar, and Maia's sheet, the drawer, the help
+   sheet and Your view all hang off the same bar. MEASURED at 390x844 before
+   this: asking Maia for a seat left her sheet up over the card, and 1479 of
+   5838 sample points across its rows landed on her instead. Every door into
+   the list comes through here, so none of them can forget. */
+function openWall(){
+  if(document.body.classList.contains('pocket')){
+    document.body.classList.remove('msheet');
+    const dr=$('pdrawer');if(dr)dr.classList.remove('open');
+    if(window.closeHelp)closeHelp();
+    if(window.closeMask)closeMask()}
+  $('wall').classList.add('show');buildWall()}
+window.openWall=openWall;
+/* On a phone the list covers the land, and the place a row names opens under
+   it, so the list steps aside for the door it just opened. */
+function wallGo(k,tab){if(!k||!BY[k])return;
+  if(document.body.classList.contains('pocket'))$('wall').classList.remove('show');
+  buildMode?openInspect(k):openPanel(k,tab)}
 function buildWall(){
   /* EVERY ROW THAT OPENS A PLACE IS A BUTTON. They were divs with an onclick,
      so the main "find somewhere to help" list opened for a keyboard and not
@@ -4861,7 +4889,7 @@ $('attnBtn').onclick=()=>{const items=attnItems();if(!items.length)return toast(
   const it=items[attnIdx++%items.length];const s=it.at?BY[it.at]:null;
   if(!s){ // board-bound work has no address to fly to — the card opens the Wall instead
     $('attnCard').innerHTML=`<h4>${escq(it.h)}</h4><p>${escq(it.p)}</p><p style="margin-top:4px;color:#6b4d1e;font-size:11.5px">at the Quest Board, waiting for a home</p>
-      <div class="go"><button class="btn" onclick="$('wall').classList.add('show');buildWall();$('attnCard').classList.remove('show')">Open the Wall</button>
+      <div class="go"><button class="btn" onclick="openWall();$('attnCard').classList.remove('show')">Open the Wall</button>
       <button class="btn ghostbtn" onclick="$('attnCard').classList.remove('show')">Later</button></div>`;
     $('attnCard').classList.add('show');return}
   travelTo(s.x,s.y,1.3);
@@ -5188,7 +5216,7 @@ const LEX=[
   {re:/vision|master ?plan|future|dream/i,fn:()=>{setMode('vision');$('lyVision').click&&null}},
   {re:/night|dark|moon/i,fn:()=>{dayAuto=false;dayPhase=1.85;showDayHeld();maiaSay(`Night on the land. Watch the windows: every lit one is a room where the game is real.`)}},
   {re:/quest/i,fn:()=>{openPanel('greenhouse',1);maiaSay(`The Greenhouse holds the friendliest first quests. The <b>seedling census</b> is a lovely way in.`)}},
-  {re:/seat|role|job/i,fn:()=>{$('wall').classList.add('show');buildWall();maiaSay(`Get Involved lists every open seat and quest in one place, the map's honest sibling. Click any row and I'll take you there.`)}},
+  {re:/seat|role|job/i,fn:()=>{openWall();maiaSay(`Get Involved lists every open seat and quest in one place, the map's honest sibling. Click any row and I'll take you there.`)}},
 ];
 window.CONCIERGE_LOG=window.CONCIERGE_LOG||[];
 function conciergeMatch(txt){const t=txt.toLowerCase();
@@ -9548,7 +9576,7 @@ if($('pbAsk'))$('pbAsk').onclick=()=>{document.body.classList.toggle('msheet');
       if(typeof openPanel==='function')openPanel(lk.dataset.at,0,lk.dataset.item);
       return}
     if(t.closest('.help-wall')){closeHelp();
-      const w=$('wall');if(w){w.classList.add('show');if(typeof buildWall==='function')buildWall()}return}
+      if($('wall')&&typeof openWall==='function')openWall();return}
     if(t.closest('.help-close')){closeHelp();return}
     const row=t.closest('.help-row');
     if(row){const was=row.classList.contains('open');
@@ -9588,7 +9616,7 @@ function renderDrawer(){const d=$('pdrawer');if(!d)return;
    <div style="font-size:10px;color:#8f855f;margin-top:10px">the look of the map is yours to set here. Building and rewiring live on the desktop map.</div>`;
   d.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{d.classList.remove('open');openDoor(b.dataset.pm,{});hap(8)});
   d.querySelectorAll('[data-pa]').forEach(b=>b.onclick=()=>{d.classList.remove('open');const a=b.dataset.pa;hap(8);
-    if(a==='wall'){$('wall').classList.add('show');buildWall()}
+    if(a==='wall')openWall()
     if(a==='loom')openLoom();
     if(a==='walk')startWalk(true);
     if(a==='mask')openMask();
