@@ -234,7 +234,7 @@ export default function LivingMap() {
     }, 600);
   }, []);
 
-  const { entered, preparing, setPreparing, onEnter, enterAt, startHash, pressed } = useMapEnterGate();
+  const { entered, preparing, setPreparing, onEnter, enterAt, startHash } = useMapEnterGate();
   /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts. */
   const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt });
   const enterTheLand = useCallback(() => {
@@ -746,8 +746,15 @@ export default function LivingMap() {
   const onLoad = () => {
     const win = frame.current?.contentWindow as any;
     if (!win) return;
-    // The pressed gate button took focus with it; give focus to the land it opened.
-    if (pressed.current) frame.current?.focus();
+    /*
+     * Hand the keyboard to the land when nobody else holds it. The pressed
+     * Enter button unmounts and drops focus on the page, and a deep link or a
+     * return by Back arrives with focus on the page too (measured: BODY, so
+     * Escape, L and the arrows answered nothing until a click). Asking where
+     * focus IS covers all three, and leaves a visitor who tabbed to Leave the
+     * map while the land loaded exactly where they are.
+     */
+    if (!document.activeElement || document.activeElement === document.body) frame.current?.focus();
 
     /*
      * The skin is NOT sent from here. `load` fires when the document is

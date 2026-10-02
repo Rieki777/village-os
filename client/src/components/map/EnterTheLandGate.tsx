@@ -80,15 +80,6 @@ export function useMapEnterGate() {
     return () => window.clearTimeout(t);
   }, [preparing]);
 
-  /**
-   * Whether the visitor pressed Enter the Land. The button held focus and
-   * unmounts on the press, so focus falls to the page and the map's own keys
-   * (Space, the arrows, T for the tour) answer nothing until somebody clicks
-   * the land. The shell reads this on load to hand focus to the land the
-   * button opened. A deep link never pressed anything and keeps its focus.
-   */
-  const pressed = useRef(false);
-
   /** Open the land at `hash`. A no-op once entered: see startHash. */
   const enteredNow = useRef(entered);
   enteredNow.current = entered;
@@ -100,12 +91,9 @@ export function useMapEnterGate() {
     setPreparing(true);
   }, []);
 
-  const onEnter = useCallback(() => {
-    pressed.current = true;
-    enterAt(window.location.hash);
-  }, [enterAt]);
+  const onEnter = useCallback(() => enterAt(window.location.hash), [enterAt]);
 
-  return { entered, preparing, setPreparing, onEnter, enterAt, startHash, pressed };
+  return { entered, preparing, setPreparing, onEnter, enterAt, startHash };
 }
 
 type EnterTheLandGateProps = {
