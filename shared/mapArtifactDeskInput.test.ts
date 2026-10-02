@@ -241,3 +241,70 @@ describe("a closed sheet is out of the tab order", () => {
     });
   });
 });
+
+/** A keydown sent from `target` the way a browser sends one: it bubbles to
+    the window and can be cancelled. Returns whether a handler cancelled it. */
+function press(b: Booted, target: EventTarget, key: string, mods: KeyboardEventInit = {}) {
+  const ev = new b.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
+  target.dispatchEvent(ev);
+  return ev.defaultPrevented;
+}
+
+/* F30. Every map shortcut tested e.key alone, so a browser shortcut fired it
+   too: Ctrl+V outside a field switched the lens to Vision, Ctrl+= and Ctrl+-
+   zoomed the map as well as the page, Ctrl+H flew home, Alt+Left panned and
+   Ctrl+L opened the Loom while the address bar took focus. The bare keys are
+   the positive control: each one still does its job. */
+describe("the map's shortcuts leave a key held with Ctrl, Cmd or Alt to the browser", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const cam = () => b.run<{ x: number; y: number; z: number }>("({x:cam.x,y:cam.y,z:cam.z})");
+  const home = () => b.run("travel=null;cam.x=1200;cam.y=600;cam.z=0.84;if(mode!=='now')setMode('now')");
+
+  it("ignores Ctrl+V, Cmd+V, Ctrl+=, Ctrl+-, Ctrl+H and Alt+Left", () => {
+    const body = b.doc.body;
+    for (const [key, mods] of [
+      ["v", { ctrlKey: true }],
+      ["v", { metaKey: true }],
+      ["=", { ctrlKey: true }],
+      ["-", { ctrlKey: true }],
+      ["h", { ctrlKey: true }],
+      ["ArrowLeft", { altKey: true }],
+    ] as [string, KeyboardEventInit][]) {
+      home();
+      const before = cam();
+      press(b, body, key, mods);
+      expect(b.run<string>("mode"), `the lens after ${JSON.stringify(mods)} ${key}`).toBe("now");
+      expect(cam(), `the camera after ${JSON.stringify(mods)} ${key}`).toEqual(before);
+      expect(b.run<unknown>("travel"), `no flight after ${JSON.stringify(mods)} ${key}`).toBeNull();
+    }
+  });
+
+  it("leaves Ctrl+L to the address bar, and the Loom shut", () => {
+    press(b, b.doc.body, "l", { ctrlKey: true });
+    expect(b.doc.body.classList.contains("loom")).toBe(false);
+  });
+
+  it("still answers the bare keys (the positive control)", () => {
+    home();
+    press(b, b.doc.body, "v");
+    expect(b.run<string>("mode")).toBe("vision");
+    home();
+    const z = cam().z;
+    press(b, b.doc.body, "=");
+    expect(cam().z).toBeGreaterThan(z);
+    home();
+    press(b, b.doc.body, "ArrowLeft");
+    expect(cam().x).toBeLessThan(1200);
+    press(b, b.doc.body, "l");
+    expect(b.doc.body.classList.contains("loom"), "l opens the Loom").toBe(true);
+    press(b, b.doc.body, "Escape");
+    expect(b.doc.body.classList.contains("loom"), "Escape closes it").toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});

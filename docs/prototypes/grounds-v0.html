@@ -5060,6 +5060,17 @@ setInterval(()=>{const p=SCENE.pulse[pulseI++%SCENE.pulse.length];const s=BY[p.a
 /* keyboard */
 addEventListener('keydown',e=>{
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
+  /* A KEY HELD WITH Ctrl, Cmd OR Alt BELONGS TO THE BROWSER. Every branch
+     below tests e.key alone, so Ctrl+V outside a field flipped the lens to
+     Vision, Ctrl+= and Ctrl+- zoomed the map AND the page, Ctrl+H flew home
+     while History opened and Alt+Left panned while going Back. MEASURED on
+     a desk before this line: Ctrl+V now to vision, Ctrl+- z 0.84 to 0.73,
+     Alt+Left x 1200 to 1150. Shift is left alone, because + needs it on
+     most layouts. AltGr arrives as Ctrl+Alt on Windows and types a
+     character on some layouts, so a key it produced still counts. Above
+     the GUIDE line, so a browser shortcut is not a person taking the
+     camera. */
+  if((e.ctrlKey||e.metaKey||e.altKey)&&!(e.getModifierState&&e.getModifierState('AltGraph')))return;
   const k=e.key;const pan=42/cam.z;
   /* The keys that MOVE the map, and only those. Typing into the dock never
      reaches this handler at all, and a key that opens a panel is not a
@@ -7111,6 +7122,10 @@ refreshWork();
 
 /* ---------- MODULE DOORS — the map as the primary point of interaction.
    Every module has two doors: the menu (site nav) and the land (this map). Same routes, same data — D9 holds. ---------- */
+  /* Ctrl+L is the address bar, and it opened the Loom as well. The same
+     modifier rule as the map's own keys, after the Escape branch so Escape
+     still closes the Loom. */
+  if((e.ctrlKey||e.metaKey||e.altKey)&&!(e.getModifierState&&e.getModifierState('AltGraph')))return;
 window.SITE_BASE='https://amora.regencivics.earth'; // forks set their own in Make This Yours
 window.BUILD_VERSION='v0.8-publish';
 const SITE_ROUTES={j1:'/first-walk',j2:'/resident',j3:'/steward',j4:'/investor'};
