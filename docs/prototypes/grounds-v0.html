@@ -2660,79 +2660,34 @@ function paintTerrain(){
 }
 paintTerrain();
 /* ---------- painterly bake: kuwahara + posterize + edge ink + canvas tooth (+ Reinhard toward the 6-float donor) ---------- */
+/* THE BAKE LEAVES THE MAIN THREAD. It used to run whole inside one timer, on
+   every boot, the moment the plate decoded: 1.4 to 1.9 s with the main thread
+   held, which is the shell's thread too (same origin), so the land, the
+   "Preparing the land" cover and the shell's Leave the map all froze for it
+   on every entry, cached or not (F67). On a phone at 4x it was one 5 to 7 s
+   task. The default terrain is the satellite, and the painted plate is only
+   for the Painted chip, which stays hidden until the bake is done anyway.
+
+   So the main thread now only reads the plate's pixels, once the document
+   has loaded, and the arithmetic (bakeSteps, unchanged, the same picture
+   pixel for pixel) runs in a worker made from its own source. Where no worker
+   can be made, the same steps run here in short slices. Idle time alone was
+   tried first and measured: the land's own frame loop leaves almost none, so
+   a desk took 18 s and a phone at 4x never finished. The end is unchanged:
+   paintReady, buildPaintMix, then the chip and the dials appear. A newer
+   ground (setGround) supersedes a bake still running, which used to run both
+   to the end. */
+let BAKE_GEN=0,BAKE_SRC=null;
+const BAKE_W=1200,BAKE_H=800;
 function bakePainted(){if(paintReady||!groundCore())return;
-  setTimeout(()=>{try{
-    const BW=1200,BH=800,r=4,k=r+1,PW=BW+2*r,PH=BH+2*r;
-    const c0=document.createElement('canvas');c0.width=BW;c0.height=BH;
-    const g0=c0.getContext('2d');g0.drawImage(groundCore(),0,0,BW,BH);
-    const px=g0.getImageData(0,0,BW,BH).data,N=BW*BH;
-    const ch=[new Float32Array(N),new Float32Array(N),new Float32Array(N)];
-    for(let i=0;i<N;i++){ch[0][i]=px[i*4];ch[1][i]=px[i*4+1];ch[2][i]=px[i*4+2]}
-    // padded planes (edge clamp)
-    const pad=a=>{const o=new Float32Array(PW*PH);
-      for(let y=0;y<PH;y++){const sy=Math.min(BH-1,Math.max(0,y-r));
-        for(let x=0;x<PW;x++){o[y*PW+x]=a[sy*BW+Math.min(BW-1,Math.max(0,x-r))]}}return o};
-    const pR=pad(ch[0]),pG=pad(ch[1]),pB=pad(ch[2]);
-    const pL=new Float32Array(PW*PH),pL2=new Float32Array(PW*PH);
-    for(let i=0;i<PW*PH;i++){const l=(pR[i]+pG[i]+pB[i])/3;pL[i]=l;pL2[i]=l*l}
-    const sat_=a=>{const S=new Float64Array((PW+1)*(PH+1));
-      for(let y=1;y<=PH;y++){let row=0;for(let x=1;x<=PW;x++){row+=a[(y-1)*PW+(x-1)];S[y*(PW+1)+x]=S[(y-1)*(PW+1)+x]+row}}return S};
-    const SL=sat_(pL),SL2=sat_(pL2),SR=sat_(pR),SG=sat_(pG),SB=sat_(pB);
-    const W1=PW+1,box=(S,y,x)=>S[(y+k)*W1+(x+k)]-S[y*W1+(x+k)]-S[(y+k)*W1+x]+S[y*W1+x];
-    const n2=k*k,offs=[[0,0],[0,r],[r,0],[r,r]];
-    const F={R:new Float32Array(N),G:new Float32Array(N),B:new Float32Array(N)};
-    for(let y=0;y<BH;y++)for(let x=0;x<BW;x++){
-      let bv=1e18,br=0,bg=0,bb=0;
-      for(const[a2,b2]of offs){const yy=y+a2,xx=x+b2;
-        const m=box(SL,yy,xx)/n2,m2=box(SL2,yy,xx)/n2,v=Math.max(m2-m*m,0);
-        if(v<bv){bv=v;br=box(SR,yy,xx)/n2;bg=box(SG,yy,xx)/n2;bb=box(SB,yy,xx)/n2}}
-      const i=y*BW+x;F.R[i]=br;F.G[i]=bg;F.B[i]=bb}
-    // posterize 22
-    for(let i=0;i<N;i++){F.R[i]=Math.round(F.R[i]/255*22)/22*255;F.G[i]=Math.round(F.G[i]/255*22)/22*255;F.B[i]=Math.round(F.B[i]/255*22)/22*255}
-    // edge ink (strength .5, 97th-percentile normalised, gamma .8)
-    const lum=new Float32Array(N);for(let i=0;i<N;i++)lum[i]=(F.R[i]+F.G[i]+F.B[i])/3;
-    const E=new Float32Array(N);
-    for(let y=0;y<BH;y++)for(let x=0;x<BW;x++){const i=y*BW+x;
-      const gx=(lum[y*BW+Math.min(BW-1,x+1)]-lum[y*BW+Math.max(0,x-1)])/2;
-      const gy=(lum[Math.min(BH-1,y+1)*BW+x]-lum[Math.max(0,y-1)*BW+x])/2;
-      E[i]=Math.hypot(gx,gy)}
-    const sortE=Float32Array.from(E).sort();const p97=sortE[Math.floor(N*0.97)]+1e-6;
-    for(let i=0;i<N;i++){const e=Math.pow(Math.min(1,E[i]/p97),0.8),f=1-0.5*e;
-      F.R[i]*=f;F.G[i]*=f;F.B[i]*=f}
-    // canvas tooth — deterministic (mulberry + Box-Muller), amount .045
-    const rng=mulberry(20260808);
-    for(let i=0;i<N;i++){const u1=Math.max(rng(),1e-9),u2=rng();
-      const g=Math.sqrt(-2*Math.log(u1))*Math.cos(6.2831853*u2);
-      const f=1+0.045*Math.max(-3,Math.min(3,g));
-      F.R[i]*=f;F.G[i]*=f;F.B[i]*=f}
-    const mk=Q=>{const c=document.createElement('canvas');c.width=BW;c.height=BH;
-      const g=c.getContext('2d'),id=g.createImageData(BW,BH),d=id.data;
-      for(let i=0;i<N;i++){d[i*4]=Math.max(0,Math.min(255,Q.R[i]));d[i*4+1]=Math.max(0,Math.min(255,Q.G[i]));d[i*4+2]=Math.max(0,Math.min(255,Q.B[i]));d[i*4+3]=255}
-      g.putImageData(id,0,0);return c};
-    paintF=mk(F);
-    // Reinhard toward the donor, in Ruderman lab (pixels never move)
-    const M=[[0.3811,0.5783,0.0402],[0.1967,0.7244,0.0782],[0.0241,0.1288,0.8444]];
-    const s3=Math.sqrt(3),s6=Math.sqrt(6),s2=Math.sqrt(2);
-    const la=new Float32Array(N),lb=new Float32Array(N),lc=new Float32Array(N);
-    for(let i=0;i<N;i++){
-      const rr=Math.max(F.R[i],1)/255,gg=Math.max(F.G[i],1)/255,bb2=Math.max(F.B[i],1)/255;
-      const L=Math.log10(Math.max(M[0][0]*rr+M[0][1]*gg+M[0][2]*bb2,1e-5));
-      const Mm=Math.log10(Math.max(M[1][0]*rr+M[1][1]*gg+M[1][2]*bb2,1e-5));
-      const S=Math.log10(Math.max(M[2][0]*rr+M[2][1]*gg+M[2][2]*bb2,1e-5));
-      la[i]=(L+Mm+S)/s3;lb[i]=(L+Mm-2*S)/s6;lc[i]=(L-Mm)/s2}
-    const mean=a=>{let s=0;for(let i=0;i<N;i++)s+=a[i];return s/N};
-    const std=(a,m)=>{let s=0;for(let i=0;i<N;i++){const d=a[i]-m;s+=d*d}return Math.sqrt(s/N)+1e-6};
-    const ma=mean(la),mb=mean(lb),mc=mean(lc),sa=std(la,ma),sb=std(lb,mb),sc=std(lc,mc);
-    const D=PALETTE_DONOR;
-    const T2={R:new Float32Array(N),G:new Float32Array(N),B:new Float32Array(N)};
-    for(let i=0;i<N;i++){
-      const A=(la[i]-ma)*(D.s[0]/sa)+D.m[0],B2=(lb[i]-mb)*(D.s[1]/sb)+D.m[1],C=(lc[i]-mc)*(D.s[2]/sc)+D.m[2];
-      const L=A/s3+B2/s6+C/s2,Mm=A/s3+B2/s6-C/s2,S=A/s3-2*B2/s6;
-      const l10=Math.pow(10,L),m10=Math.pow(10,Mm),s10=Math.pow(10,S);
-      T2.R[i]=Math.max(0,Math.min(1, 4.4679*l10-3.5873*m10+0.1193*s10))*255;
-      T2.G[i]=Math.max(0,Math.min(1,-1.2186*l10+2.3809*m10-0.1624*s10))*255;
-      T2.B[i]=Math.max(0,Math.min(1, 0.0497*l10-0.2439*m10+1.2045*s10))*255}
-    paintT=mk(T2);
+  const src=groundCore();if(BAKE_SRC===src)return;
+  const gen=++BAKE_GEN;BAKE_SRC=src;
+  const live=()=>gen===BAKE_GEN;
+  const fail=err=>{if(live())BAKE_SRC=null;console.warn('painterly bake failed',err)};
+  const finish=(f,t)=>{if(!live())return;BAKE_SRC=null;
+    const mk=d=>{const c=document.createElement('canvas');c.width=BAKE_W;c.height=BAKE_H;
+      const g=c.getContext('2d'),id=g.createImageData(BAKE_W,BAKE_H);id.data.set(d);g.putImageData(id,0,0);return c};
+    paintF=mk(f);paintT=mk(t);
     paintReady=true;buildPaintMix();
     /* The tools were revealed by the terrain click handler and nowhere else,
        so the answer was read once, at click time. A bake finishing after the
@@ -2741,8 +2696,136 @@ function bakePainted(){if(paintReady||!groundCore())return;
        through window and guarded; the terrain switch syncs anyway. */
     if(window.syncPaintTools)window.syncPaintTools();
     const cchip=document.getElementById('tmPaint');if(cchip)cchip.style.display='';
-    const ctl=document.getElementById('paintCtl');if(ctl&&terrainMode==='paint')ctl.style.display='flex';
-  }catch(err){console.warn('painterly bake failed',err)}},60)}
+    const ctl=document.getElementById('paintCtl');if(ctl&&terrainMode==='paint')ctl.style.display='flex'};
+  /* Here, a slice at a time, a frame's breath between slices. */
+  const here=px=>{const it=bakeSteps(px,PALETTE_DONOR);
+    const slice=()=>{if(!live())return;const until=performance.now()+12;let r;
+      try{do{r=it.next();if(r.done)return finish(r.value.f,r.value.t)}while(performance.now()<until)}
+      catch(err){return fail(err)}
+      setTimeout(slice,16)};
+    slice()};
+  const start=()=>{if(!live())return;let px;
+    try{const c0=document.createElement('canvas');c0.width=BAKE_W;c0.height=BAKE_H;
+      /* willReadFrequently keeps this canvas off the GPU, so the one read
+         is a copy and not a wait on a GPU readback. */
+      const g0=c0.getContext('2d',{willReadFrequently:true});g0.drawImage(src,0,0,BAKE_W,BAKE_H);
+      px=g0.getImageData(0,0,BAKE_W,BAKE_H).data}catch(err){return fail(err)}
+    let w=null,url=null;
+    try{url=URL.createObjectURL(new Blob([bakeWorkerSource()],{type:'text/javascript'}));
+      w=new Worker(url)}catch(_){w=null}
+    if(!w){if(url)URL.revokeObjectURL(url);return here(px)}
+    const done=()=>{try{w.terminate()}catch(_){}URL.revokeObjectURL(url)};
+    w.onmessage=e=>{done();finish(new Uint8ClampedArray(e.data.f),new Uint8ClampedArray(e.data.t))};
+    /* A worker that cannot run (a blocked blob: source, a throw inside) is
+       a reason to bake here, never a reason to have no paint. */
+    w.onerror=e=>{e.preventDefault&&e.preventDefault();done();if(live())here(px)};
+    /* A copy goes to the worker, so the fallback keeps its own pixels. */
+    const copy=px.slice();w.postMessage({px:copy.buffer,donor:{m:PALETTE_DONOR.m.slice(),s:PALETTE_DONOR.s.slice()}},[copy.buffer])};
+  if(document.readyState==='complete')setTimeout(start,0);
+  else addEventListener('load',()=>setTimeout(start,0),{once:true})}
+/* The worker is made from the steps' own source, so there is one copy of the
+   arithmetic. It gets the plate's pixels and the donor, and sends back the
+   two plates. */
+function bakeWorkerSource(){return'const mulberry='+mulberry+';const bakeSteps='+bakeSteps+
+  ';onmessage=e=>{const it=bakeSteps(new Uint8ClampedArray(e.data.px),e.data.donor);let r;do{r=it.next()}while(!r.done);'+
+  'postMessage({f:r.value.f.buffer,t:r.value.t.buffer},[r.value.f.buffer,r.value.t.buffer])}'}
+/* The arithmetic, unchanged, with a `yield` every few thousand pixels. It
+   reads nothing but its arguments and mulberry, because it also runs in the
+   worker: `px` is the plate's RGBA at BAKE_W by BAKE_H, and it returns the
+   two painted plates as RGBA, f (posterized and inked) and t (toned toward
+   the donor). */
+function*bakeSteps(px,donor){
+  const BW=1200,BH=800,r=4,k=r+1,PW=BW+2*r,PH=BH+2*r,N=BW*BH,ST=8192;
+  /* Over [0,n) in spans of ST, yielding between them. */
+  const spans=function*(n,f){for(let a=0;a<n;a+=ST){f(a,Math.min(n,a+ST));yield}};
+  /* Over the rows [0,h), a few at a time. */
+  const rowsOf=function*(h,w,f){const step=Math.max(1,Math.floor(ST/w));
+    for(let a=0;a<h;a+=step){f(a,Math.min(h,a+step));yield}};
+  const ch=[new Float32Array(N),new Float32Array(N),new Float32Array(N)];
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){ch[0][i]=px[i*4];ch[1][i]=px[i*4+1];ch[2][i]=px[i*4+2]}});
+  // padded planes (edge clamp)
+  const pad=function*(a,o){
+    yield*rowsOf(PH,PW,(y0,y1)=>{for(let y=y0;y<y1;y++){const sy=Math.min(BH-1,Math.max(0,y-r));
+      for(let x=0;x<PW;x++){o[y*PW+x]=a[sy*BW+Math.min(BW-1,Math.max(0,x-r))]}}})};
+  const pR=new Float32Array(PW*PH),pG=new Float32Array(PW*PH),pB=new Float32Array(PW*PH);
+  yield*pad(ch[0],pR);yield*pad(ch[1],pG);yield*pad(ch[2],pB);
+  const pL=new Float32Array(PW*PH),pL2=new Float32Array(PW*PH);
+  yield*spans(PW*PH,(a,b)=>{for(let i=a;i<b;i++){const l=(pR[i]+pG[i]+pB[i])/3;pL[i]=l;pL2[i]=l*l}});
+  const SZ=(PW+1)*(PH+1);
+  const sat_=function*(a){const S=new Float64Array(SZ);yield;
+    yield*rowsOf(PH+1,PW+1,(y0,y1)=>{for(let y=Math.max(1,y0);y<y1;y++){let row=0;
+      for(let x=1;x<=PW;x++){row+=a[(y-1)*PW+(x-1)];S[y*(PW+1)+x]=S[(y-1)*(PW+1)+x]+row}}});return S};
+  const SL=yield*sat_(pL),SL2=yield*sat_(pL2),SR=yield*sat_(pR),SG=yield*sat_(pG),SB=yield*sat_(pB);
+  const W1=PW+1,box=(S,y,x)=>S[(y+k)*W1+(x+k)]-S[y*W1+(x+k)]-S[(y+k)*W1+x]+S[y*W1+x];
+  const n2=k*k,offs=[[0,0],[0,r],[r,0],[r,r]];
+  const F={R:new Float32Array(N),G:new Float32Array(N),B:new Float32Array(N)};
+  yield*rowsOf(BH,BW,(y0,y1)=>{for(let y=y0;y<y1;y++)for(let x=0;x<BW;x++){
+    let bv=1e18,br=0,bg=0,bb=0;
+    for(const[a2,b2]of offs){const yy=y+a2,xx=x+b2;
+      const m=box(SL,yy,xx)/n2,m2=box(SL2,yy,xx)/n2,v=Math.max(m2-m*m,0);
+      if(v<bv){bv=v;br=box(SR,yy,xx)/n2;bg=box(SG,yy,xx)/n2;bb=box(SB,yy,xx)/n2}}
+    const i=y*BW+x;F.R[i]=br;F.G[i]=bg;F.B[i]=bb}});
+  // posterize 22
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){F.R[i]=Math.round(F.R[i]/255*22)/22*255;F.G[i]=Math.round(F.G[i]/255*22)/22*255;F.B[i]=Math.round(F.B[i]/255*22)/22*255}});
+  // edge ink (strength .5, 97th-percentile normalised, gamma .8)
+  const lum=new Float32Array(N);yield*spans(N,(a,b)=>{for(let i=a;i<b;i++)lum[i]=(F.R[i]+F.G[i]+F.B[i])/3});
+  const E=new Float32Array(N);
+  yield*rowsOf(BH,BW,(y0,y1)=>{for(let y=y0;y<y1;y++)for(let x=0;x<BW;x++){const i=y*BW+x;
+    const gx=(lum[y*BW+Math.min(BW-1,x+1)]-lum[y*BW+Math.max(0,x-1)])/2;
+    const gy=(lum[Math.min(BH-1,y+1)*BW+x]-lum[Math.max(0,y-1)*BW+x])/2;
+    E[i]=Math.hypot(gx,gy)}});
+  /* The 97th percentile, exactly the value a full sort puts at that rank,
+     without sorting 960,000 numbers in one go: count them into bins, find
+     the bin that holds the rank, and sort only that bin. */
+  const rank=Math.floor(N*0.97),NB=65536;let eMax=0;
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++)if(E[i]>eMax)eMax=E[i]});
+  const binOf=v=>eMax>0?Math.min(NB-1,Math.floor(v/eMax*NB)):0;
+  const hist=new Uint32Array(NB);
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++)hist[binOf(E[i])]++});
+  let hb=0,below=0;while(below+hist[hb]<=rank){below+=hist[hb];hb++}
+  const inBin=new Float32Array(hist[hb]);let nIn=0;
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++)if(binOf(E[i])===hb)inBin[nIn++]=E[i]});
+  inBin.sort();const p97=inBin[rank-below]+1e-6;
+  yield;
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){const e=Math.pow(Math.min(1,E[i]/p97),0.8),f=1-0.5*e;
+    F.R[i]*=f;F.G[i]*=f;F.B[i]*=f}});
+  // canvas tooth — deterministic (mulberry + Box-Muller), amount .045
+  const rng=mulberry(20260808);
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){const u1=Math.max(rng(),1e-9),u2=rng();
+    const g=Math.sqrt(-2*Math.log(u1))*Math.cos(6.2831853*u2);
+    const f=1+0.045*Math.max(-3,Math.min(3,g));
+    F.R[i]*=f;F.G[i]*=f;F.B[i]*=f}});
+  /* RGBA, clamped the way a canvas's own pixel array clamps. */
+  const rgba=function*(Q){const d=new Uint8ClampedArray(N*4);
+    yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){d[i*4]=Math.max(0,Math.min(255,Q.R[i]));d[i*4+1]=Math.max(0,Math.min(255,Q.G[i]));d[i*4+2]=Math.max(0,Math.min(255,Q.B[i]));d[i*4+3]=255}});
+    return d};
+  const outF=yield*rgba(F);
+  // Reinhard toward the donor, in Ruderman lab (pixels never move)
+  const M=[[0.3811,0.5783,0.0402],[0.1967,0.7244,0.0782],[0.0241,0.1288,0.8444]];
+  const s3=Math.sqrt(3),s6=Math.sqrt(6),s2=Math.sqrt(2);
+  const la=new Float32Array(N),lb=new Float32Array(N),lc=new Float32Array(N);
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){
+    const rr=Math.max(F.R[i],1)/255,gg=Math.max(F.G[i],1)/255,bb2=Math.max(F.B[i],1)/255;
+    const L=Math.log10(Math.max(M[0][0]*rr+M[0][1]*gg+M[0][2]*bb2,1e-5));
+    const Mm=Math.log10(Math.max(M[1][0]*rr+M[1][1]*gg+M[1][2]*bb2,1e-5));
+    const S=Math.log10(Math.max(M[2][0]*rr+M[2][1]*gg+M[2][2]*bb2,1e-5));
+    la[i]=(L+Mm+S)/s3;lb[i]=(L+Mm-2*S)/s6;lc[i]=(L-Mm)/s2}});
+  /* Sums kept in order across spans, so each is the number one loop gave. */
+  const mean=function*(a){let s=0;yield*spans(N,(x,y)=>{for(let i=x;i<y;i++)s+=a[i]});return s/N};
+  const std=function*(a,m){let s=0;yield*spans(N,(x,y)=>{for(let i=x;i<y;i++){const d=a[i]-m;s+=d*d}});return Math.sqrt(s/N)+1e-6};
+  const ma=yield*mean(la),mb=yield*mean(lb),mc=yield*mean(lc);
+  const sa=yield*std(la,ma),sb=yield*std(lb,mb),sc=yield*std(lc,mc);
+  const D=donor;
+  const T2={R:new Float32Array(N),G:new Float32Array(N),B:new Float32Array(N)};
+  yield*spans(N,(a,b)=>{for(let i=a;i<b;i++){
+    const A=(la[i]-ma)*(D.s[0]/sa)+D.m[0],B2=(lb[i]-mb)*(D.s[1]/sb)+D.m[1],C=(lc[i]-mc)*(D.s[2]/sc)+D.m[2];
+    const L=A/s3+B2/s6+C/s2,Mm=A/s3+B2/s6-C/s2,S=A/s3-2*B2/s6;
+    const l10=Math.pow(10,L),m10=Math.pow(10,Mm),s10=Math.pow(10,S);
+    T2.R[i]=Math.max(0,Math.min(1, 4.4679*l10-3.5873*m10+0.1193*s10))*255;
+    T2.G[i]=Math.max(0,Math.min(1,-1.2186*l10+2.3809*m10-0.1624*s10))*255;
+    T2.B[i]=Math.max(0,Math.min(1, 0.0497*l10-0.2439*m10+1.2045*s10))*255}});
+  const outT=yield*rgba(T2);
+  return{f:outF,t:outT}}
 function buildPaintMix(){if(!paintF)return;
   const c=document.createElement('canvas');c.width=paintF.width;c.height=paintF.height;
   const g=c.getContext('2d');g.drawImage(paintF,0,0);
