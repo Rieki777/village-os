@@ -204,7 +204,13 @@
     font-family:inherit;font-size:12px;padding:6px 9px;outline:none;-webkit-user-select:text;user-select:text}
 
   /* ---------- top vitals bar ---------- */
-  #vitals{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:0;
+  /* WHERE IT STANDS IS MEASURED (topFit, beside the band). Centred on the
+     window it ran under The Loom and Your view at every desk width up to
+     about 1630px, so --top-vx and --top-vy carry the centre of the free
+     span and the row it landed on, with the old centre as the fallback.
+     max-content because an absolute box shrinks to the room right of its
+     left edge, and the width topFit measures has to be the bar's own. */
+  #vitals{position:absolute;top:var(--top-vy,0);left:var(--top-vx,50%);transform:translateX(-50%);width:max-content;display:flex;align-items:stretch;gap:0;
     background:linear-gradient(180deg,#2c2114,#1c140b);border:1px solid #6b5430;border-top:none;
     border-radius:0 0 10px 10px;box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 1px 0 rgba(236,208,138,.25);z-index:30}
   .vital{display:flex;align-items:center;gap:8px;padding:8px 16px;color:var(--parch);cursor:pointer;position:relative;
@@ -970,9 +976,22 @@
   #vdrop .vfact{color:#d8cba2;font-size:11.5px}
   #vdrop .btn{font-size:11px;padding:4px 11px}
   .vital{cursor:pointer}
-  @media (max-width:1500px){ #vitals .vital small{display:none} }
-  @media (max-width:1290px){ #villageName small{display:none} #vitals .vital{padding:6px 8px} }
-  @media (max-width:1160px){ #villageName{display:none} }
+  /* THE BAR SHEDS IN STEPS, AND topFit PICKS THE STEP. These three widths
+     were a guess at when the bar fits between the buttons, and every one of
+     them was low: the free span is the window less about 940px of buttons,
+     so 1500 left a 618px bar a 562px gap. They stay as the fallback for a
+     page where the fit has not run, which is what :not([data-fit]) says.
+     The steps are the same three, in the same order: the small labels, then
+     the village name's second line with tighter cells, then the name. */
+  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} }
+  @media (max-width:1290px){ #vitals:not([data-fit]) #villageName small{display:none} #vitals:not([data-fit]) .vital{padding:6px 8px} }
+  @media (max-width:1160px){ #vitals:not([data-fit]) #villageName{display:none} }
+  #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital small{display:none}
+  #vitals:is([data-fit="2"],[data-fit="3"]) #villageName small{display:none}
+  #vitals:is([data-fit="2"],[data-fit="3"]) .vital{padding:6px 8px}
+  #vitals[data-fit="3"] #villageName{display:none}
+  /* On a row of its own it hangs from nothing, so it closes its top edge. */
+  #vitals[data-row="2"]{border-top:1px solid #6b5430;border-radius:10px}
 
 
   /* ---------- POCKET profile — the village in your hand ---------- */
@@ -8602,6 +8621,109 @@ window.bandBox=function(which){const b=BAND_BOX[which];return b?{top:b.top,botto
   addEventListener('transitionend',e=>{if(e.target&&ids.indexOf(e.target.id)>=0)bandSoon()},true);
   addEventListener('resize',bandSoon);addEventListener('orientationchange',bandSoon);
   bandLayout()})();
+
+/* ---------- THE TOP ROW: the stat bar fits between the buttons, or takes its own row ----------
+   The bar stood centred on the window while the buttons at each end of the
+   row stood where their own rules put them, and nothing made them avoid each
+   other. MEASURED through the shell at 1400x850: #vitals ran 391..1009 against
+   #topNav ending at 468 and #themeBtn starting at 930. The Loom covered the
+   village name, Your view covered the Hearts number, a real click on the moon
+   opened Your view, and 14 of the bar's 35 glyphs were under a button. Every
+   desk width from 1024 to 1536 hid something.
+
+   THE SPAN IS MEASURED, NEVER ARITHMETIC, for the reason the #topNav comment
+   gives: a button's width is a guess about how small-caps text renders, and a
+   village that renames one moves it. So this reads what stands at each end of
+   the row, finds the free span between them, and tries the bar's steps on in
+   order until one fits: the whole bar, then without the small labels, then
+   without the name's second line and with tighter cells, then without the
+   name. That is the order the old breakpoints already shed in.
+
+   WHEN NOTHING FITS, THE BAR TAKES A ROW OF ITS OWN, under the buttons, with
+   the name back. Its cells stay tight there because the panels that open at
+   96px (Get Involved, the build bar, Your view) start right under that row,
+   and a full-height bar would reach them. MEASURED at 1280x720: the smallest
+   bar with a name is 498px and the span is 326px.
+
+   IT PUBLISHES, LIKE THE BAND. --top-vx and --top-vy go on the root and the
+   CSS keeps the old centre as their fallback; data-fit and data-row name the
+   step. A page where this never runs keeps the old breakpoints, through
+   :not([data-fit]). The top band's floor is #vitals, so the draft bar, the
+   restore bar, the toasts and the vital dropdown follow the bar down a row
+   with no rule of their own, and the plates dodge it because syncBanners reads
+   its rect every frame. A pocket clears all of it: the bar is a full-width
+   strip there with rules of its own. */
+const TOP_ROW={gap:8,edge:14,
+  /* what stands at the two ends of the bar's own row */
+  row1:['topNav','themeBtn','dayBtn','layers'],
+  /* what stands in the strip under those, where a bar on its own row goes */
+  row2:['buildBtn','dock','roleKey'],
+  /* [row, step], richest first */
+  steps:[[1,0],[1,1],[1,2],[1,3],[2,2],[2,3]]};
+let TOP_SIG='';
+function topFit(){
+  const vit=$('vitals'),root=document.documentElement;if(!vit)return;
+  if(document.body.classList.contains('pocket')){
+    delete vit.dataset.fit;delete vit.dataset.row;
+    root.style.removeProperty('--top-vx');root.style.removeProperty('--top-vy');
+    if(TOP_SIG){TOP_SIG='';if(typeof bandSoon==='function')bandSoon()}
+    return}
+  /* Opacity does not count here, unlike bandShown: body.intro fades these
+     buttons to nothing while they still stand where they will be seen. */
+  const box=id=>{const e=document.getElementById(id);if(!e)return null;
+    const cs=getComputedStyle(e);if(cs.display==='none'||cs.visibility==='hidden')return null;
+    const r=e.getBoundingClientRect();return r.width>0&&r.height>0?r:null};
+  /* The free span across one strip of the screen. What stands in the strip
+     left of centre pushes the span's left end, and what stands right of
+     centre pulls its right end. */
+  const span=(ids,y0,y1)=>{let l=TOP_ROW.edge,r=innerWidth-TOP_ROW.edge;
+    for(const id of ids){const b=box(id);if(!b||b.bottom<=y0||b.top>=y1)continue;
+      if(b.left+b.width/2<innerWidth/2)l=Math.max(l,b.right+TOP_ROW.gap);else r=Math.min(r,b.left-TOP_ROW.gap)}
+    return {l,r}};
+  /* Each step's size, read by trying it on. Nothing paints in between: the
+     last write below lands before the frame does. */
+  const size={};
+  for(const f of [0,1,2,3]){vit.dataset.fit=f;const r=vit.getBoundingClientRect();size[f]={w:r.width,h:r.height}}
+  let under=0;for(const id of TOP_ROW.row1){const b=box(id);if(b)under=Math.max(under,b.bottom)}
+  const y2=Math.round(under+6);
+  /* Centred on the window wherever the span allows it, so the bar still
+     lines up with What needs hands below it, and pushed along only as far as
+     a button makes it. */
+  const at=(s,w)=>Math.round(Math.min(Math.max(innerWidth/2,s.l+w/2),s.r-w/2));
+  let pick=null;
+  for(const [row,f] of TOP_ROW.steps){
+    const y=row===1?0:y2;
+    const s=span(row===1?TOP_ROW.row1:TOP_ROW.row2,y,y+size[f].h);
+    if(size[f].w<=s.r-s.l){pick={row,f,x:at(s,size[f].w),y};break}}
+  /* Nothing fits anywhere: a window narrower than any desk this was measured
+     on. The smallest bar on its own row, centred in what there is. */
+  if(!pick){const s=span(TOP_ROW.row2,y2,y2+size[3].h);pick={row:2,f:3,x:Math.round((s.l+s.r)/2),y:y2}}
+  vit.dataset.fit=pick.f;
+  if(pick.row===2)vit.dataset.row='2';else delete vit.dataset.row;
+  /* ON CHANGE ONLY, the band's rule. A move with no change of size reaches
+     no ResizeObserver, so the band hears about it from here. */
+  const sig=[pick.f,pick.row,pick.x,pick.y].join(',');
+  if(sig===TOP_SIG)return;
+  TOP_SIG=sig;
+  root.style.setProperty('--top-vx',pick.x+'px');root.style.setProperty('--top-vy',pick.y+'px');
+  if(typeof bandSoon==='function')bandSoon()}
+let topQ=0;
+function topFitSoon(){if(topQ)return;topQ=requestAnimationFrame(()=>{topQ=0;topFit()})}
+window.topFit=topFit;
+(function topWatch(){
+  /* Size is what moves the span: a button renamed, the bar's numbers
+     rewritten by rebuildVitals, a web font arriving. The bar's own size
+     changes when this sets a step, and the pass that follows lands on the
+     same step and writes nothing, so it rests there. */
+  if(typeof ResizeObserver==='function'){const ro=new ResizeObserver(topFitSoon);
+    for(const id of [...TOP_ROW.row1,...TOP_ROW.row2,'vitals']){const el=document.getElementById(id);if(el)ro.observe(el)}}
+  /* CLASS ONLY, on BODY: pocket, circles, can-edit and the org lens each
+     change what stands in the row. This publishes on the root, so it never
+     wakes itself. */
+  new MutationObserver(topFitSoon).observe(document.body,{attributes:true,attributeFilter:['class']});
+  addEventListener('resize',topFitSoon);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(topFitSoon);
+  topFit()})();
 
 /* tooltips — one primitive, the house voice (A7) */
 (function tips(){const tp=document.createElement('div');tp.id='tip';document.body.appendChild(tp);let cur=null;
