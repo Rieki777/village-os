@@ -1079,6 +1079,18 @@
   body.pocket #wall{left:0;right:0;top:auto;bottom:calc(60px + env(safe-area-inset-bottom,0px));
     width:auto;height:72%;z-index:59;border:none;border-top:2px solid #8a6a33;border-radius:16px 16px 0 0}
   body.pocket #skin select{min-height:44px}
+  /* NO FIELD ZOOMS THE PAGE WHEN IT TAKES FOCUS. iOS magnifies the whole page
+     for any text field under 16 px, and the shell's 16 px floor
+     (client/src/index.css) stops at this iframe. MEASURED: 16 text-entry
+     controls in here computed 11 to 13 px on a touch phone, Maia's box among
+     them at 13, and a page zoom pushes the vitals and the bottom bar off the
+     glass. The same rule, keyed on the device the same way, so a landscape
+     tablet that is not pocket still gets it and a touchscreen laptop does not.
+     The two selects in a Your view row grew 21 px past the screen at 16 px, so
+     they share the row's width instead of insisting on their text. */
+  @media (pointer:coarse) and (hover:none){
+    input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),textarea,select{font-size:16px!important}
+    #skin .srow select{min-width:0;flex:1 1 0}}
   @media (prefers-reduced-motion:reduce){body.pocket #skin{transition:none}}
   body.pocket #vitals .vital small{display:none}
   /* A pinch that lands a few pixels high, on the strip instead of the land,
