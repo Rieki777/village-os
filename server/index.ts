@@ -142,6 +142,10 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
+import { register as registerCommsWebhook } from "./routes/commsWebhook";
+import { register as registerCommsRoutes } from "./routes/comms";
+import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
+import { register as registerCommsEventRoutes } from "./routes/commsEvents";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -6568,6 +6572,7 @@ async function startServer() {
     }
     res.json({ ok: true, refunded: out.refunded });
   });
+  registerCommsWebhook(app, { getPool, clientIp });
 
   /*
    * A scene is legitimately bigger than a form post, so the two routes that
@@ -10989,6 +10994,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
   app.use("/api/events", requireModule("events"));
   app.use("/api/admin/events", requireModule("events"));
+  registerCommsEventRoutes(app, { authedUser, overLimit, clientIp });
 
   /** The window the calendar looks through, from the two wired variables. */
   const eventWindow = () => ({
@@ -17602,6 +17608,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({ success: true });
   });
+  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice });
+  registerCommsPublicRoutes(app, { overLimit, clientIp });
 
   // ── S63: Integrations — every third-party key, write-only ────────────────
   // Reads return {configured, source, last4, setBy, setAt}; a value NEVER

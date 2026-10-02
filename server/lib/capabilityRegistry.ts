@@ -230,6 +230,14 @@ export const POWERS: readonly PowerEntry[] = [
     ],
   },
   {
+    capability: "comms.manage",
+    title: "The village's email",
+    surface: "Which automations run, what they say, and letters to the people who agreed to get them",
+    // The two routes the foundation built. The lanes adding the Comms screens
+    // add their routes here as they land.
+    routes: ["/api/admin/comms/status", "/api/admin/comms/run"],
+  },
+  {
     capability: "ballot.vote",
     title: "The vote itself",
     surface: "Who is on the roll when this village holds a ballot",
@@ -261,9 +269,6 @@ export const NOT_YET_WIRED: Readonly<Record<string, string>> = {
    * Anything added here is a promise that the key gates nothing, and it has to
    * be deleted by whoever makes it gate something.
    */
-  "comms.manage":
-    "The Comms screens that turn automations on, change their words and send letters are being " +
-    "built. This line comes out when the first route asks for the key.",
 };
 
 /**

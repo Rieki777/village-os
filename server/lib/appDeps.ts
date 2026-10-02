@@ -41,6 +41,7 @@ import type express from "express";
 import type { Pool } from "mysql2/promise";
 import type { Capability, CapabilityCtx } from "../../shared/capabilities";
 import type { SubjectCloser } from "./applyDue";
+import type { PostOfficeDeps } from "./comms/postOffice";
 import type { CrewsRepo } from "./crews";
 import type { WeightModeSnapshot } from "./governanceWeights";
 import type { NotifyDeps, NotifyInput, NotifyResult } from "./notify";
@@ -443,6 +444,13 @@ export interface AppDeps {
 
   /** Escape a string for HTML. Every value interpolated into an email body. */
   escapeHtml(s: string): string;
+
+  /**
+   * The post office every email passes through (server/lib/comms/postOffice.ts),
+   * built once by the mailer at boot so a route that runs the drain and the
+   * mailer that writes the ledger are reading the same provider and sender.
+   */
+  commsPostOffice: PostOfficeDeps;
 
   /** The configured inboxes for one pathway, falling back to all of them. */
   recipientsForType(type: string): string[];
