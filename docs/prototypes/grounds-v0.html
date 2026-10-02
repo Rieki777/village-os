@@ -7439,8 +7439,8 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   if(typeof refreshEventBadges==='function')refreshEventBadges();
   if(typeof renderVocab==='function')renderVocab();
   if(typeof renderMediaVocab==='function'){renderMediaVocab();renderPhaseVocab()}
-  if(document.body.classList.contains('loom'))renderLoom();
   if(typeof refreshPanel==='function')refreshPanel();
+  if(document.body.classList.contains('loom'))renderLoom();
   if(!quiet)toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
   return true}catch(err){console.warn('restore failed',err);
     toast(quiet?'The live map could not be drawn.':'Could not restore the saved session.');return false}}
