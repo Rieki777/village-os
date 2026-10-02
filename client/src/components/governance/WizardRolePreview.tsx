@@ -25,11 +25,10 @@ import { fromPermissionRole } from "@shared/roleSheetInputs";
 import PermissionRoleCard from "@/components/power/PermissionRoleCard";
 import { loadPermissionRoles } from "./pickSources";
 
-/** `/api/roles` through the shared loader. Null while unread, when it cannot be had, or while `enabled` is false. */
-export function usePermissionRoles(enabled = true): any[] | null {
+/** `/api/roles` through the shared loader. Null while unread, or when it cannot be had. */
+function usePermissionRoles(): any[] | null {
   const [roles, setRoles] = useState<any[] | null>(null);
   useEffect(() => {
-    if (!enabled) return;
     let alive = true;
     void loadPermissionRoles().then((list) => {
       if (alive) setRoles(list);
@@ -37,8 +36,8 @@ export function usePermissionRoles(enabled = true): any[] | null {
     return () => {
       alive = false;
     };
-  }, [enabled]);
-  return enabled ? roles : null;
+  }, []);
+  return roles;
 }
 
 export default function WizardRolePreview({

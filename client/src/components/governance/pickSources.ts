@@ -74,8 +74,8 @@ export function loadPermissionRoles(): Promise<any[] | null> {
   return rolesRead.list;
 }
 
-/** A role as the picker offers it, and as the review step names it. */
-export const roleOption = (r: any): PickOption => ({
+/** A role as the picker offers it, and so as the review step names it. */
+const roleOption = (r: any): PickOption => ({
   value: String(r.id),
   label: String(r.name ?? r.id),
   hint: r.description ? String(r.description).slice(0, 120) : undefined,
