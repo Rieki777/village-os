@@ -34,6 +34,7 @@
  */
 import { motion } from "framer-motion";
 
+import Figure from "@/components/sheet/Figure";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 
@@ -52,23 +53,6 @@ export interface Standing {
   powersOpen: number | null;
   pathsWalked: number | null;
   questsDone: number | null;
-}
-
-function Figure({ value, label, tone }: { value: string; label: string; tone?: "gold" | "living" }) {
-  return (
-    <div className="border-border pr-6 last:border-0 last:pr-0 sm:border-r sm:pr-8">
-      <span
-        className={`block font-display text-3xl font-bold tabular-nums sm:text-4xl ${
-          tone === "gold" ? "text-notice" : tone === "living" ? "text-open" : "text-card-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="mt-1 block text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
-    </div>
-  );
 }
 
 export default function StandingRow({ standing }: { standing: Standing }) {

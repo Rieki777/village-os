@@ -16,7 +16,7 @@ import { ExampleChip } from "@/components/ExamplesBanner";
 import SeatHistory from "./SeatHistory";
 import SeatTermField from "./SeatTermField";
 import type { PowerCircle, PowerData, PowerHolder, PowerSeat } from "./types";
-import { daysUntil } from "./types";
+import { termWords } from "@shared/roleSheet";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -59,32 +59,6 @@ export function unwrittenLine(seat: {
       ? missing[0]
       : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
   return `Still to be written down: ${list}.`;
-}
-
-/**
- * WHAT A TERM'S DATE SAYS ONCE IT HAS PASSED.
- *
- * Two words used to live here and on the holder chip further down: one that
- * put a term in the past tense as a thing that had failed, and one that
- * called the person holding the seat late. They were the only public deficit
- * language in the whole succession model, they sat on a shared surface with a
- * named person attached, and they described something the code does not do.
- * `isLapsed` revokes nothing and writes nothing, by design, and its own note
- * in `server/lib/orgChart.ts` says so: a lapsed holding is still a holding.
- *
- * A term reaching its date is the village's own agreement asking to be made
- * again. The seat has not slipped and its holder has taken nothing away from
- * anyone. The date arrived, which is what dates do.
- *
- * `seatLapse.test.ts` and `succession.copy.test.ts` hold the words to this.
- */
-function termWords(iso: string | null | undefined): string | null {
-  const d = daysUntil(iso);
-  if (d === null) return null;
-  if (d < 0) return "ready to be re-chosen";
-  if (d === 0) return "term ends today";
-  if (d <= 30) return `term ends in ${d} day${d === 1 ? "" : "s"}`;
-  return `term ends ${new Date(iso!).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`;
 }
 
 export default function HolderCard({
