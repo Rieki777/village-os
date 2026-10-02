@@ -442,3 +442,42 @@ describe("work this browser saved, restored over a live map that has moved", () 
     expect(seen.unpublished).toEqual([{ seq: 4, target: "structure:gate" }]);
   });
 });
+
+describe("a vital number held in the draft", () => {
+  let seen: { liveCopy: string; held: string; visitor: string; back: string; discarded: string; noHolds: string };
+  beforeAll(async () => {
+    const m = boot();
+    await settle(200);
+    m.post(config(live6(), 6));
+    m.run("buildMode=true;openVitalDrop('people',document.body);document.getElementById('vOvr').value='99';vitalSet('people')");
+    const src = () => m.run<string>("vitalsData().people.src");
+    const liveCopy = m.run<string>("JSON.stringify(LIVE_SCENE.vital_overrides||{})");
+    const held = src();
+    m.run("toggleVisitor()");
+    const visitor = src();
+    m.run("toggleVisitor()");
+    const back = src();
+    m.run("restoreScene(LIVE_SCENE)"); // what Discard draft puts back
+    const discarded = src();
+    // A scene that carries no holds at all, the shape every scene published
+    // before holds existed has.
+    m.run("vitalSet('people');const s=JSON.parse(JSON.stringify(LIVE_SCENE));delete s.vital_overrides;restoreScene(s)");
+    seen = { liveCopy, held, visitor, back, discarded, noHolds: src() };
+    m.close();
+  });
+
+  it("never reaches the live map's copy", () => {
+    expect(seen.liveCopy).toBe("{}");
+  });
+
+  it("is the draft's: held there, absent from the visitor's view, back with the draft, gone on discard", () => {
+    expect(seen.held).toBe("founder-set");
+    expect(seen.visitor).not.toBe("founder-set");
+    expect(seen.back).toBe("founder-set");
+    expect(seen.discarded).not.toBe("founder-set");
+  });
+
+  it("is cleared by a scene that holds nothing, where it used to stay on screen", () => {
+    expect(seen.noHolds).not.toBe("founder-set");
+  });
+});

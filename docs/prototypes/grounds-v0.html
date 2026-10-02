@@ -5954,7 +5954,10 @@ function buildExportJSON(status){
     housing:housingExport(),
     stays_occupancy:{lots:window.LOTS||null,rooms:window.ROOMS||null,note:'sample until the Stays module feeds it — one source, every surface reads it'},
     concierge_queries:(window.CONCIERGE_LOG||[]).map(c=>({...c})),
-    vital_overrides:window.VITAL_OVR||{},
+    /* A copy, the same rule map_edits follows. Handing out the live object
+       made the published scene and the draft share it, so holding a number
+       wrote it into the live map's copy too. */
+    vital_overrides:JSON.parse(JSON.stringify(window.VITAL_OVR||{})),
     walk:{steps:(window.WALK||window.WALK_SEED||[]),log:(window.WALK_LOG||[]).slice(),note:'walk steps are village data — the seed is Amora’s voice; overrides come from /api/map/config'},
     counts:'computed on read, never stored — recompute, never increment (§5.2 scaling contract)'};
   return out}
@@ -7543,7 +7546,13 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   applyVocabulary(J.map_scene&&J.map_scene.vocabulary);
   const vb=J.map_scene&&J.map_scene.vision_bound;
   SCENE.vision_bound=(Array.isArray(vb)&&vb.length>2)?vb.map(p=>[p[0],p[1]]):null;
-  if(J.vital_overrides)window.VITAL_OVR=J.vital_overrides;
+  /* Every time, and a copy. Bound by reference, the live scene's object
+     became the draft's: a number held in the draft showed in View as visitor,
+     survived Discard, and went live with the next publish without a line on
+     its card. Kept only when present, a scene with no holds left the last
+     scene's on screen. */
+  const vo=J.vital_overrides;
+  window.VITAL_OVR=(vo&&typeof vo==='object'&&!Array.isArray(vo))?JSON.parse(JSON.stringify(vo)):{};
   housingImport(J); /* L3, by coordinator ruling: the one line that restores SCENE.housing */
   SCENE.flows=(J.map_flows||[]).map(r=>({from:r.from_key,to:r.to_key,medium:mediaKey(r.medium),note:r.note,
     phase:r.phase,via:r.via_feature||undefined}));
