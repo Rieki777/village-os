@@ -6845,7 +6845,10 @@ function restoreScene(J){try{
   const J=JSON.parse(raw);if(!J||!Array.isArray(J.map_structures))return;
   $('restoreMsg').textContent=`Saved work found in this browser: ${J.map_structures.length} buildings, ${(J.map_edits||[]).length} edits.`;
   $('restoreBar').style.display='flex';
-  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';restoreScene(J)};
+  /* draftOpened measures this journal against the live one. Left alone, the
+     mark stayed at the live map's newest seq, and a save from before a
+     colleague's publish had its own changes counted as already live. */
+  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';if(restoreScene(J))draftOpened()};
   $('restoreNo').onclick=()=>{$('restoreBar').style.display='none'}
 }catch(e){}})();
 
@@ -8504,13 +8507,17 @@ renderMediaVocab();renderPhaseVocab();
    PUBLISH_MARK is the honest definition of "unpublished": the edit sequence
    as it stood the last time this draft was made live. Counting EDITS.length
    would call a restored draft's whole history unpublished work every time,
-   and counting nothing would call a real change nothing. */
+   and counting nothing would call a real change nothing. A journal that comes
+   back from a saved draft has no such moment of its own, so its mark is
+   measured against the live journal instead; see sharedMark. */
 let HAND={canEdit:false,canPublish:false};
 let LIVE=null;            /* {version,by,at} as the village last reported it */
 let LIVE_SCENE=null;      /* the published land, kept for View as visitor */
 let BASE_VERSION=0;       /* the published version THIS draft forked from */
-let PUBLISH_MARK=0;       /* editSeq at the last successful publish */
+let PUBLISH_MARK=0;       /* the newest edit on screen that the live map already has */
 let SCENE_APPLIED=false;  /* has a pushed scene ever landed */
+let DRAFT_OPENED=false;   /* has a saved draft been put on screen in place of the live land */
+let OFFERED=null;         /* the server's draft, while the bar is offering it */
 let VISITOR_VIEW=false;
 let DRAFT_HOLD=null;      /* my work, stashed while I look at the live map */
 let PUB_SEQ=0;
@@ -8537,7 +8544,34 @@ function shellAsk(type,extra){
 function sceneResult(d){const fn=PUB_PENDING[d.nonce];if(!fn)return;delete PUB_PENDING[d.nonce];fn(d)}
 window.sceneResult=sceneResult;
 
-function unpublished(){return EDITS.filter(e=>(e.seq||0)>PUBLISH_MARK)}
+/* The work, wherever it is. Viewing as a visitor puts the live map on screen
+   and the work in DRAFT_HOLD, and the mark belongs to the work: measuring the
+   screen against it told Discard draft that a colleague's live edits were
+   yours to throw away. */
+function workEdits(){return (VISITOR_VIEW&&DRAFT_HOLD&&DRAFT_HOLD.map_edits)||EDITS}
+function unpublished(){return workEdits().filter(e=>(e.seq||0)>PUBLISH_MARK)}
+
+/* THE MARK FOR A JOURNAL THAT DID NOT COME FROM THE LIVE MAP.
+   A saved draft is the live history it forked from with its own changes on
+   the end, so the newest edit it shares with the published journal is where
+   its own work starts. Setting the mark to 0 here counted the whole history:
+   one change of your own read "54 unpublished changes", and the publish card
+   listed 53 edits that were already live.
+   An edit is the same edit on both sides only when its seq AND its time
+   agree. The highest live seq would be shorter and wrong: a draft forked from
+   version 6 numbers its own changes from where 6 stopped, a colleague who
+   published 7 from the same fork used the same numbers, and that rule hides
+   the draft's work under theirs. Nothing published means nothing shared, so
+   every change in the draft is the person's own. */
+function editKey(e){return (e&&e.seq||0)+'|'+(e&&e.at||'')}
+function sharedMark(edits,live){
+  const pub=new Set(((live&&live.map_edits)||[]).map(editKey));
+  return (edits||[]).reduce((m,e)=>pub.has(editKey(e))?Math.max(m,e.seq||0):m,0)}
+/* A saved draft is on screen now, the server's or this browser's own. The
+   flag is what stops a live scene that lands afterwards from painting over
+   it: the shell asks for the hand and the scene at the same moment, and the
+   hand, which carries the draft, can win. */
+function draftOpened(){DRAFT_OPENED=true;PUBLISH_MARK=sharedMark(EDITS,LIVE_SCENE);renderDraftBar()}
 
 /* The village telling this browser what its holder may do. */
 function applyHand(d){
@@ -8557,14 +8591,22 @@ function applyHand(d){
    session already uses. The server's copy wins when both exist: it is the one
    that followed you here from another machine. */
 function offerDraft(draft){
-  const n=(draft.scene.map_edits||[]).length,b=(draft.scene.map_structures||[]).length;
-  $('restoreMsg').textContent=`You have an unpublished draft of the map: ${b} buildings, ${n} changes.`;
+  OFFERED=draft;sayOffer();
   $('restoreYes').textContent='Open my draft';
   $('restoreNo').textContent='Start from the live map';
   $('restoreBar').style.display='flex';
-  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';
-    if(restoreScene(draft.scene)){BASE_VERSION=+draft.baseVersion||0;PUBLISH_MARK=0;renderDraftBar()}};
-  $('restoreNo').onclick=()=>{$('restoreBar').style.display='none'};
+  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null;
+    if(restoreScene(draft.scene)){BASE_VERSION=+draft.baseVersion||0;draftOpened()}};
+  $('restoreNo').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null};
+}
+/* The count is the changes the live map does not have, the same number the
+   draft bar shows once it is open. Said again when the live scene lands,
+   because until then nothing here can tell which edits are live. */
+function sayOffer(){
+  if(!OFFERED)return;
+  const sc=OFFERED.scene,ed=sc.map_edits||[],mark=sharedMark(ed,LIVE_SCENE);
+  const n=ed.filter(e=>(e.seq||0)>mark).length,b=(sc.map_structures||[]).length;
+  $('restoreMsg').textContent=`You have an unpublished draft of the map: ${b} buildings, ${n||'no'} change${n===1?'':'s'}.`;
 }
 
 /* The published land arriving over the bridge.
@@ -8575,9 +8617,21 @@ function offerDraft(draft){
    overwrite of the person who just published. */
 function applyScene(scene,version){
   LIVE_SCENE=scene;
+  sayOffer();
+  /* VIEWING AS A VISITOR, the land on screen is the live map and the draft
+     waits in DRAFT_HOLD. Counting unpublished() here measured the live
+     journal against the draft's mark, found nothing, and rebased the held
+     draft onto the new version: back in the draft, its own change counted as
+     published and its next publish went through over the colleague's. So
+     the visitor sees the new land, and the draft's mark and base stay put. */
+  if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene))SCENE_APPLIED=true;renderDraftBar();return true}
   const mine=unpublished().length;
-  if(SCENE_APPLIED&&mine){
-    toast('The live map changed. Your draft is untouched.');
+  if((SCENE_APPLIED||DRAFT_OPENED)&&mine){
+    /* Measured again against the land that just arrived. A draft opened
+       before any scene landed was measured against nothing, and an undo
+       since can have taken one of its changes back off the live map. */
+    PUBLISH_MARK=sharedMark(EDITS,scene);
+    if(SCENE_APPLIED)toast('The live map changed. Your draft is untouched.');
     renderDraftBar();return false}
   if(restoreScene(scene)){SCENE_APPLIED=true;BASE_VERSION=+version||0;
     /* Published scene's edits are the live baseline; 0 made every historical
@@ -8635,6 +8689,9 @@ function openPublish(){
     ?'Publishing the map is a cartographer\'s work.'
     :'This map is running on its own, with no village to publish to. ⤓ Export scene hands you the file.');
   if(!changes.length)return toast('Nothing to publish: the live map already matches this one.');
+  /* A publish sends the land on screen, and while visiting that is the live
+     map. The card would list the draft's changes over a scene without them. */
+  if(VISITOR_VIEW)return toast('You are looking at the live map. Go back to your draft to publish it.');
   const card=$('pubCard');card.classList.remove('conflict');
   $('pubTitle').textContent='Publish to the live map';
   $('pubBlast').innerHTML=`<b>${changes.length} change${changes.length===1?'':'s'}</b> will become the map every visitor sees, straight away. `+
