@@ -264,7 +264,7 @@ const EDIT_VERBS: Record<string, string> = {
   "sprite-reroll": "asked for new artwork for",
   skin: "restyled the map",
   vocab: "renamed the village's words",
-  undo: "undid a change",
+  undo: "undid a change to",
   "housing-total": "set the homes at",
   "housing-taken": "set the homes taken at",
   "housing-label": "named the hamlet at",

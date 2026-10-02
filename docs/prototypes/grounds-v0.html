@@ -3658,6 +3658,10 @@ function paintPoiArt(s,el){
   el.querySelector('.rm').onclick=e=>{e.stopPropagation();removeStructure(s)};
   el.style.setProperty('--pring',s.circle?(CIRCLE_COL[s.circle]||'#9aa08f'):'#9aa08f')}
 function makePoi(s){
+  /* One element per key. A second call used to append a second element and
+     overwrite pEls, so the first was orphaned on the land and survived every
+     later restore, which only removes what pEls knows about. */
+  if(pEls[s.key])pEls[s.key].remove();
   const el=document.createElement('div');el.className='poi st-'+s.state;el.dataset.k=s.key;
   paintPoiArt(s,el);
   el.onclick=e=>{e.stopPropagation();if(dragMoved)return;buildMode?openInspect(s.key):openPanel(s.key)};
@@ -4649,7 +4653,8 @@ GEO.forEach((g,i)=>{const el=document.createElement('div');el.className='banner 
   bWrap.appendChild(el);bEls['g_'+i]=el});
 function bannerHTML(s){return `<span class="dot" style="background:${s.circle?(CIRCLE_COL[s.circle]||'#9aa08f'):'#9aa08f'}"></span>${escq(s.name)}<span class="cnt"></span>`}
 function refreshBanner(s){const el=bEls[s.key];if(el)el.innerHTML=bannerHTML(s)}
-function makeBanner(s){const el=document.createElement('div');el.className='banner';
+function makeBanner(s){if(bEls[s.key])bEls[s.key].remove(); // one per key, as makePoi
+  const el=document.createElement('div');el.className='banner';
   el.innerHTML=bannerHTML(s);
   el.onclick=()=>buildMode?openInspect(s.key):openPanel(s.key);
   el.addEventListener('pointerenter',e=>{if(e.pointerType!=='touch')showHover(s,el)}); // a finger's tap is no hover, as on the plates
@@ -5761,6 +5766,18 @@ let buildMode=false,placing=null,dragS=null,dragMoved=false,iconMode='painted'; 
    footprint and its flows in build mode always saw build mode as off. */
 window.buildModeOn=()=>buildMode;
 const UNDO=[];
+/* AN UNDO RECORD KNOWS WHICH LINE OF THE JOURNAL IT TAKES BACK. Every caller
+   makes it straight after the logEdit it pairs with, so its seq is that
+   line's. The publish card uses the pair to leave a change and its undo off
+   the list together (netChanges), and Undo names the change it took back. */
+function undoable(u){u.seq=editSeq;UNDO.push(u)}
+/* A record belongs to the land it was made on. Discarding a draft, opening a
+   saved one, or taking in a newer live map replaces that land wholesale, and
+   a record kept across it acts on a scene it was never part of: Undo after
+   Discard put a removed building back beside the live copy, two of it, and
+   autosaved both. View as visitor is NOT one of these. The draft comes back
+   from it exactly as it was, so its undo history comes back with it. */
+function forgetUndo(){UNDO.length=0}
 /* REG block relocated above (boot-order: pois need ARCHMAP) */
 function inBound(x,y){const p=SCENE.bound;let inside=false;
   for(let i=0,j=p.length-1;i<p.length;j=i++){if(((p[i][1]>y)!==(p[j][1]>y))&&(x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0]))inside=!inside}return inside}
@@ -5801,8 +5818,8 @@ cv.addEventListener('click',e=>{if(!placing)return;const[wx,wy]=screenToWorld(e.
   const s={key:slug,name:'New '+ARCHNAME[a],archetype:a,district:nearestDistrict(wx,wy),x:wx,y:wy,
     phase:2,state:'funding',fund:0,circle:null,modules:[],
     blurb:'Placed by the founder in build mode. Staked on the land, waiting for its story.'};
-  SCENE.structures.push(s);BY[s.key]=s;makePoi(s);makeBanner(s);UNDO.push({t:'add',key:s.key});
-  logEdit('place','structure:'+s.key,{archetype:a,x:Math.round(wx),y:Math.round(wy)});
+  SCENE.structures.push(s);BY[s.key]=s;makePoi(s);makeBanner(s);
+  logEdit('place','structure:'+s.key,{archetype:a,x:Math.round(wx),y:Math.round(wy)});undoable({t:'add',key:s.key});
   placing=null;document.body.classList.remove('placing');$('ghostPoi').style.display='none';mmDirty=true;refreshWork();openInspect(s.key);
   toast(`⚒ ${s.name} staked. Set it up right here: name, circle, roles, doors, flows.`)},true);
 function startDrag(e,s){if(placing)return;e.stopPropagation();e.preventDefault();dragS=s;dragMoved=false;
@@ -5815,8 +5832,8 @@ function startDrag(e,s){if(placing)return;e.stopPropagation();e.preventDefault()
         if(owned.length){featPrev=JSON.parse(JSON.stringify(SCENE.features));
           const dx=s.x-from[0],dy=s.y-from[1];
           owned.forEach(f=>f.points=f.points.map(pt=>[pt[0]+dx,pt[1]+dy]));paintTerrain()}
-        UNDO.push({t:'move',key:s.key,from,featPrev:featPrev?featPrev:undefined});
-        logEdit('move','structure:'+s.key,{from:[Math.round(from[0]),Math.round(from[1])],to:[Math.round(s.x),Math.round(s.y)]})}}
+        logEdit('move','structure:'+s.key,{from:[Math.round(from[0]),Math.round(from[1])],to:[Math.round(s.x),Math.round(s.y)]});
+        undoable({t:'move',key:s.key,from,featPrev:featPrev?featPrev:undefined})}}
     mmDirty=true;dragS=null;setTimeout(()=>dragMoved=false,80)};
   addEventListener('pointermove',mv);addEventListener('pointerup',up)}
 function removeStructure(s){const i=SCENE.structures.indexOf(s);if(i<0)return;
@@ -5831,9 +5848,20 @@ function removeStructure(s){const i=SCENE.structures.indexOf(s);if(i<0)return;
   if(panelKey===s.key){$('panel').classList.remove('open');panelKey=null}
   if(typeof inspKey!=='undefined'&&inspKey===s.key)closeInspect();
   if($('resolver').classList.contains('show'))renderResolver();
-  UNDO.push({t:'remove',s,at:i,seats,quests,featPrev});logEdit('remove','structure:'+s.key,{name:s.name,seats:seats.length,quests:quests.length});
+  logEdit('remove','structure:'+s.key,{name:s.name,seats:seats.length,quests:quests.length});undoable({t:'remove',s,at:i,seats,quests,featPrev});
   refreshWork();mmDirty=true;toast(`Removed ${s.name}. ↩ Undo brings it home.`)}
-$('undoBtn').onclick=()=>{const u=UNDO.pop();if(!u)return toast('Nothing to undo.');logEdit('undo','undo:'+u.t,{target:u.key||(u.s&&u.s.key)||''});
+$('undoBtn').onclick=()=>{const u=UNDO.pop();if(!u)return toast('Nothing to undo.');
+  const k=u.key||(u.s&&u.s.key)||'';
+  /* A place is never put down twice. Records from before a wholesale
+     replacement of the scene (a discard, an opened draft) are cleared with
+     it, and this is the second line: the remove branch below would lay a
+     second copy over the one already on the land, and autosave both. */
+  if(u.t==='remove'&&BY[k])return toast(`${BY[k].name} is already on the land, so there is nothing to bring back.`);
+  /* The undo names what it took back, in the journal and on screen. The
+     journal line carries the seq it reverses, which is how the publish card
+     knows the two cancel out (netChanges). */
+  const was=EDITS.find(e=>e.seq===u.seq);
+  logEdit('undo',was?was.target:'undo:'+u.t,{kind:u.t,target:k,reverses:u.seq||0});
   if(u.t==='add'&&typeof inspKey!=='undefined'&&inspKey===u.key)closeInspect();
   if(u.t==='move'){const s=BY[u.key];if(s){[s.x,s.y]=u.from};if(u.featPrev){SCENE.features=u.featPrev;paintTerrain()}}
   if(u.t==='add'){const s=BY[u.key];if(s){const i=SCENE.structures.indexOf(s);if(i>=0)SCENE.structures.splice(i,1);
@@ -5858,7 +5886,12 @@ $('undoBtn').onclick=()=>{const u=UNDO.pop();if(!u)return toast('Nothing to undo
     (u.seats||[]).forEach(([j,x])=>SCENE.seats.splice(Math.min(j,SCENE.seats.length),0,x));
     (u.quests||[]).forEach(([j,x])=>SCENE.quests.splice(Math.min(j,SCENE.quests.length),0,x));
     if(u.featPrev){SCENE.features=u.featPrev;paintTerrain()}refreshWork()}
-  mmDirty=true};
+  if(u.t==='place')undoPlace(u);
+  if(u.t==='row'||u.t==='rowAdd'||u.t==='rowDel'||u.t==='housing')undoRow(u);
+  mmDirty=true;
+  /* Said every time. A silent undo let a person who meant to take back a
+     typo lose a placement instead, and never know which one went. */
+  toast(was?`Undid: ${editLine(was)}.`:'Undid the last change.')};
 function zonesExport(){ // the geometry layer IS map_zones now — real phases, real measurements
   const zs=SCENE.features.map(f=>{const row={id:f.id,kind:f.kind,geom:f.geom,subtype:f.subtype,phase:f.phase,
       owner_structure_key:f.owner||null,name:f.name||'',public:!!f.public};
@@ -6042,7 +6075,7 @@ function applyAlt(wx,wy){ // 15° constraint from the previous vertex
 addEventListener('keydown',e=>{if(e.key==='Shift')shiftHeld=true;if(e.key==='Alt'){altHeld=true;if(drawMode)e.preventDefault()}});
 addEventListener('keyup',e=>{if(e.key==='Shift')shiftHeld=false;if(e.key==='Alt')altHeld=false});
 function featSnapshot(){return JSON.parse(JSON.stringify(SCENE.features))}
-function commitFeatures(prev,action,detail){UNDO.push({t:'feature',prev});logEdit(action,'feature',detail||{});
+function commitFeatures(prev,action,detail){logEdit(action,'feature',detail||{});undoable({t:'feature',prev});
   paintTerrain();mmDirty=true}
 function startDraft(){const sub=$('dSub').value;
   const geom=AREA_SUBS.has(sub)?'area':'line';
@@ -6229,9 +6262,9 @@ addEventListener('pointermove',e=>{if(!boundDrag)return;
   if(B&&B[boundDrag.i]){B[boundDrag.i][0]=wx;B[boundDrag.i][1]=wy}boundDrag.moved=true});
 addEventListener('pointerup',()=>{if(!boundDrag)return;
   if(boundDrag.moved){const vis=boundDrag.vis;
-    UNDO.push({t:'bound',prev:boundPrev,vis});
     logEdit(vis?'vision-boundary-edit':'boundary-edit',vis?'vision_bound':'boundary',
       {vertices:(vis?SCENE.vision_bound:SCENE.bound).length});
+    undoable({t:'bound',prev:boundPrev,vis});
     /* the dream never strands anybody: the deed decides who is outside */
     if(!vis)strandedCheck(true);
     paintTerrain();mmDirty=true}
@@ -6240,8 +6273,9 @@ cv.addEventListener('contextmenu',e=>{if(!buildMode||!boundaryMode)return;e.prev
   const h=boundHit(e.clientX,e.clientY);
   const B=boundTarget(),vis=editingVision();
   if(h&&h.t==='v'){if(B.length<=3)return toast('A boundary needs at least three corners.');
-    UNDO.push({t:'bound',prev:B.map(pt=>[pt[0],pt[1]]),vis});
+    const prev=B.map(pt=>[pt[0],pt[1]]);
     B.splice(h.i,1);logEdit(vis?'vision-boundary-delete-vertex':'boundary-delete-vertex',vis?'vision_bound':'boundary',{vertices:B.length});
+    undoable({t:'bound',prev,vis});
     if(!vis)strandedCheck(true);
     paintTerrain();mmDirty=true}});
 window.drawBoundaryEditor=function(t){
@@ -7351,39 +7385,74 @@ function renderInspect(){const s=BY[inspKey];if(!s){closeInspect();return}
    <button class="chip" id="iRemove" style="border-color:#a33d2a;color:#e8a090">✕ remove from the map</button>
    <div style="height:14px"></div>`;
   bindInspect(s)}
+/* ---------- UNDO REACHES THE INSPECT CARD ----------
+   Only the land's own gestures (place, move, remove, draw) used to leave an
+   undo record, so Undo after a rename skipped the rename and quietly took
+   back an older move instead. Every edit on the card now leaves one, made
+   straight after its logEdit. Three shapes:
+   - 'place': the place as it stood, put back whole. Name, kind, words,
+     circle, phase, activity, funding, size, doors and marks all live on it.
+   - 'row', 'rowAdd', 'rowDel': a seat, quest or flow the card changed, added
+     or removed. Matched by the object itself, so a row the scene has since
+     rebuilt is left alone and never guessed at.
+   - 'housing': the homes row for the place, which lives beside it. */
+function placeSnap(s){return JSON.parse(JSON.stringify(s))}
+function undoPlace(u){const s=BY[u.key];if(!s)return;
+  for(const f of Object.keys(s))if(!(f in u.before))delete s[f];
+  Object.assign(s,u.before);
+  paintPoiArt(s,pEls[s.key]);refreshBanner(s);setDerived(s);
+  window.refreshBadges&&refreshBadges();refreshWork();
+  if(typeof inspKey!=='undefined'&&inspKey===s.key)renderInspect()}
+function undoRow(u){
+  if(u.t==='housing'){const H=housingRows();if(u.before)H[u.key]=u.before;else delete H[u.key]}
+  else{const L=SCENE[u.coll]||[],i=L.indexOf(u.obj);
+    if(u.t==='row'&&i>=0){for(const f of Object.keys(u.obj))if(!(f in u.before))delete u.obj[f];Object.assign(u.obj,u.before)}
+    if(u.t==='rowAdd'&&i>=0)L.splice(i,1);
+    if(u.t==='rowDel'&&i<0)L.splice(Math.min(u.at,L.length),0,u.obj)}
+  window.refreshBadges&&refreshBadges();refreshWork();
+  if(typeof inspKey!=='undefined'&&inspKey&&BY[inspKey])renderInspect()}
 function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
-  H.querySelector('#iName').oninput=e=>{s.name=e.target.value;refreshBanner(s)};
-  H.querySelector('#iName').onchange=()=>logEdit('rename','structure:'+s.key,{to:s.name});
-  B.querySelector('#iArch').onchange=e=>{s.archetype=e.target.value;paintPoiArt(s,pEls[s.key]);
-    logEdit('archetype','structure:'+s.key,{to:s.archetype});renderInspect()};
-  B.querySelector('#iBlurb').oninput=e=>{s.blurb=e.target.value};
-  B.querySelector('#iBlurb').onchange=()=>logEdit('blurb','structure:'+s.key,{len:(s.blurb||'').length});
-  B.querySelector('#iOrigin').oninput=e=>{s.origin=e.target.value};
-  B.querySelector('#iOrigin').onchange=()=>logEdit('origin','structure:'+s.key,{len:(s.origin||'').length});
-  B.querySelector('#iCircle').onchange=e=>{s.circle=e.target.value||null;paintPoiArt(s,pEls[s.key]);refreshBanner(s);
-    logEdit('circle','structure:'+s.key,{to:s.circle});refreshWork();renderInspect();
+  /* The text boxes and sliders write the place on every keystroke, so the
+     place as it stood is caught on the first one, the way #iScale has always
+     caught its `from`, and handed to the record on change. */
+  const holdPlace=el=>{if(!el._was)el._was=placeSnap(s)};
+  const recordHeld=el=>{const b=el._was||placeSnap(s);el._was=null;undoable({t:'place',key:s.key,before:b})};
+  const placeRec=b=>undoable({t:'place',key:s.key,before:b});
+  const rowSnap=x=>JSON.parse(JSON.stringify(x));
+  H.querySelector('#iName').oninput=e=>{holdPlace(e.target);s.name=e.target.value;refreshBanner(s)};
+  H.querySelector('#iName').onchange=e=>{logEdit('rename','structure:'+s.key,{to:s.name});recordHeld(e.target)};
+  B.querySelector('#iArch').onchange=e=>{const b=placeSnap(s);s.archetype=e.target.value;paintPoiArt(s,pEls[s.key]);
+    logEdit('archetype','structure:'+s.key,{to:s.archetype});placeRec(b);renderInspect()};
+  B.querySelector('#iBlurb').oninput=e=>{holdPlace(e.target);s.blurb=e.target.value};
+  B.querySelector('#iBlurb').onchange=e=>{logEdit('blurb','structure:'+s.key,{len:(s.blurb||'').length});recordHeld(e.target)};
+  B.querySelector('#iOrigin').oninput=e=>{holdPlace(e.target);s.origin=e.target.value};
+  B.querySelector('#iOrigin').onchange=e=>{logEdit('origin','structure:'+s.key,{len:(s.origin||'').length});recordHeld(e.target)};
+  B.querySelector('#iCircle').onchange=e=>{const b=placeSnap(s);s.circle=e.target.value||null;paintPoiArt(s,pEls[s.key]);refreshBanner(s);
+    logEdit('circle','structure:'+s.key,{to:s.circle});placeRec(b);refreshWork();renderInspect();
     toast(s.circle?`${s.name} now stewarded by the ${s.circle} circle.`:`${s.name} released. It needs a steward.`)};
-  B.querySelectorAll('[name=iPhase]').forEach(r=>r.onchange=e=>{s.phase=+e.target.value;setDerived(s);
-    logEdit('phase','structure:'+s.key,{to:s.phase});renderInspect()});
-  B.querySelector('#iAct').onchange=e=>{s.act=e.target.value;setDerived(s);logEdit('activity','structure:'+s.key,{to:s.act});renderInspect()};
+  B.querySelectorAll('[name=iPhase]').forEach(r=>r.onchange=e=>{const b=placeSnap(s);s.phase=+e.target.value;setDerived(s);
+    logEdit('phase','structure:'+s.key,{to:s.phase});placeRec(b);renderInspect()});
+  B.querySelector('#iAct').onchange=e=>{const b=placeSnap(s);s.act=e.target.value;setDerived(s);logEdit('activity','structure:'+s.key,{to:s.act});placeRec(b);renderInspect()};
   const fr=B.querySelector('#iFund');
-  fr.oninput=e=>{s.fund=+e.target.value/100;setDerived(s);B.querySelector('#iFundV').textContent=e.target.value+'%';
+  fr.oninput=e=>{holdPlace(fr);s.fund=+e.target.value/100;setDerived(s);B.querySelector('#iFundV').textContent=e.target.value+'%';
     H.querySelector('#iState').textContent=(STATE_LABEL[s.state]||s.state)+((s.fund!=null&&s.fund<1)?` · pool ${e.target.value}%`:'')};
-  fr.onchange=()=>{logEdit('fund','structure:'+s.key,{to:s.fund});renderInspect()};
-  B.querySelectorAll('.dchip').forEach(b=>{b.onclick=()=>{const k=b.dataset.dk;s.doors=s.doors||{};
+  fr.onchange=()=>{logEdit('fund','structure:'+s.key,{to:s.fund});recordHeld(fr);renderInspect()};
+  B.querySelectorAll('.dchip').forEach(b=>{b.onclick=()=>{const k=b.dataset.dk,was=placeSnap(s);s.doors=s.doors||{};
     const cur=s.doors[k];const nxt=(cur===1||cur===true)?'future':(cur==='future'?undefined:1);
     if(nxt===undefined)delete s.doors[k];else s.doors[k]=nxt;
     if(!Object.keys(s.doors).length)delete s.doors;
-    logEdit('doors','structure:'+s.key,{door:k,to:nxt||'off'});
+    logEdit('doors','structure:'+s.key,{door:k,to:nxt||'off'});placeRec(was);
     openInspect(s.key);toast(nxt===1?`${DOOR_DEFS[k].icon} Door open. The ${k} button now lives on this card.`:(nxt==='future'?'Door marked “when built”. Visible, not yet passable.':'Door removed.'))}});
   const sr=B.querySelector('#iScale');
-  sr.oninput=e=>{if(sr._from==null)sr._from=s.scale||1;s.scale=+e.target.value/100;B.querySelector('#iScaleV').textContent=e.target.value+'%'};
-  sr.onchange=e=>{const from=sr._from==null?1:sr._from;sr._from=null;if(from===s.scale)return;
-    logEdit('scale','structure:'+s.key,{from,to:s.scale||1});};
+  sr.oninput=e=>{holdPlace(sr);if(sr._from==null)sr._from=s.scale||1;s.scale=+e.target.value/100;B.querySelector('#iScaleV').textContent=e.target.value+'%'};
+  sr.onchange=e=>{const from=sr._from==null?1:sr._from;sr._from=null;if(from===s.scale){sr._was=null;return}
+    logEdit('scale','structure:'+s.key,{from,to:s.scale||1});recordHeld(sr)};
   B.querySelectorAll('[data-seat]').forEach(cb=>cb.onchange=()=>{const x=SCENE.seats[+cb.dataset.seat];if(!x)return;
+    const before=rowSnap(x);
     if(cb.checked){logEdit('seat-address','seat:'+x.s,{from:x.at,to:s.key});x.at=s.key;toast(`⛨ ${x.s} now lives at ${s.name}.`)}
     else{const home=circleHome(x.c);logEdit('seat-address','seat:'+x.s,{from:x.at,to:home});x.at=home;
       toast(`⛨ ${x.s} returned to the ${x.c} circle's home: ${BY[home]?BY[home].name:home}.`)}
+    undoable({t:'row',coll:'seats',obj:x,before});
     refreshWork();renderInspect()});
   /* A combobox over the roles the village already has. Picking one is the
      creator saying where it lives, which outranks whatever guessed before. */
@@ -7408,8 +7477,10 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
       dd.classList.add('show');
       dd.querySelectorAll('[data-seat-i]').forEach(o=>o.onmousedown=ev=>{ev.preventDefault();
         const x=SCENE.seats[+o.dataset.seatI];if(!x)return;
+        const before=rowSnap(x);
         x.at=s.key;x.addr='creator';x.address_source='creator';x._why='';
         logEdit('address-override','seat:'+x.s,{to:s.key,via:'inspect combobox'});
+        undoable({t:'row',coll:'seats',obj:x,before});
         dd.classList.remove('show');inp.value='';
         refreshWork();renderInspect();
         toast('⛨ '+x.s+' now lives at '+s.name+'.')});
@@ -7432,30 +7503,34 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
     if(row.total!=null&&row.storedTaken!=null&&row.storedTaken>row.total){row[field]=prev;
       toast('Homes taken cannot pass homes total.');renderInspect();return false}
     row.takenSource=row.takenSource||'founder';return true};
+  const homesWas=()=>{const h=housingGet(s.key);return h?JSON.parse(JSON.stringify(h)):null};
   (()=>{const el=B.querySelector('#iHomesTotal');if(!el)return;housingWatch(el);
     el.onchange=()=>{const v=homesRead(el);if(v===undefined)return;
-      if(!homesPut('total',v))return;
-      logEdit('housing-total','structure:'+s.key,{to:v});
+      const before=homesWas();if(!homesPut('total',v))return;
+      logEdit('housing-total','structure:'+s.key,{to:v});undoable({t:'housing',key:s.key,before});
       housingClean(s.key);renderInspect()}})();
   (()=>{const el=B.querySelector('#iHomesTaken');if(!el)return;housingWatch(el);
     el.onchange=()=>{const v=homesRead(el);if(v===undefined)return;
-      if(!homesPut('storedTaken',v))return;
-      logEdit('housing-taken','structure:'+s.key,{to:v});
+      const before=homesWas();if(!homesPut('storedTaken',v))return;
+      logEdit('housing-taken','structure:'+s.key,{to:v});undoable({t:'housing',key:s.key,before});
       housingClean(s.key);renderInspect()}})();
   (()=>{const el=B.querySelector('#iHomesLabel');if(!el)return;
-    el.onchange=()=>{const t=el.value.trim(),row=housingRow(s.key,!!t);
-      if(row){row.label=t||null;logEdit('housing-label','structure:'+s.key,{to:row.label})}
+    el.onchange=()=>{const before=homesWas(),t=el.value.trim(),row=housingRow(s.key,!!t);
+      if(row){row.label=t||null;logEdit('housing-label','structure:'+s.key,{to:row.label});undoable({t:'housing',key:s.key,before})}
       housingClean(s.key);renderInspect()}})();
   B.querySelector('#iSeatAdd').onclick=()=>{const n=B.querySelector('#iSeatName').value.trim();if(!n)return;
-    SCENE.seats.push({s:n,at:s.key,c:s.circle||'Community',note:B.querySelector('#iSeatNote').value.trim()||'a new seat, waiting for its steward'});
-    logEdit('seat-add','seat:'+n,{at:s.key});refreshWork();renderInspect()};
+    const x={s:n,at:s.key,c:s.circle||'Community',note:B.querySelector('#iSeatNote').value.trim()||'a new seat, waiting for its steward'};
+    SCENE.seats.push(x);
+    logEdit('seat-add','seat:'+n,{at:s.key});undoable({t:'rowAdd',coll:'seats',obj:x});refreshWork();renderInspect()};
   B.querySelectorAll('[data-qaddr]').forEach(sel=>sel.onchange=()=>{const q=SCENE.quests[+sel.dataset.qaddr];if(!q)return;
-    logEdit('quest-address','quest:'+q.q,{from:q.at,to:sel.value||null});q.at=sel.value||null;
+    const before=rowSnap(q);
+    logEdit('quest-address','quest:'+q.q,{from:q.at,to:sel.value||null});q.at=sel.value||null;undoable({t:'row',coll:'quests',obj:q,before});
     toast(q.at?`⚑ “${q.q}” now lives at ${BY[q.at].name}.`:`⚑ “${q.q}” sent to the Quest Board. Unplaced work waits there.`);
     refreshWork();renderInspect()});
   B.querySelector('#iQAdd').onclick=()=>{const t=B.querySelector('#iQTitle').value.trim();if(!t)return;
-    SCENE.quests.push({q:t,at:s.key,r:B.querySelector('#iQReward').value.trim()||'20 ♥',need:B.querySelector('#iQNeed').value.trim()||'hands welcome'});
-    logEdit('quest-add','quest:'+t,{at:s.key});refreshWork();renderInspect()};
+    const q={q:t,at:s.key,r:B.querySelector('#iQReward').value.trim()||'20 ♥',need:B.querySelector('#iQNeed').value.trim()||'hands welcome'};
+    SCENE.quests.push(q);
+    logEdit('quest-add','quest:'+t,{at:s.key});undoable({t:'rowAdd',coll:'quests',obj:q});refreshWork();renderInspect()};
   /* A RENAME CANNOT UNBIND A DOOR. Both of these used to write the typed text
      straight into s.modules[i] with no bindDoor, which is the hole #iDAdd had:
      a founder who improved `stay` to `Guest rooms` was left with a door that
@@ -7468,8 +7543,8 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
   B.querySelectorAll('[data-dlab],[data-drt]').forEach(inp=>{
     const lab=inp.dataset.dlab!==undefined,i=+(lab?inp.dataset.dlab:inp.dataset.drt);
     const was=(s.modules[i]||[]).slice();
-    inp.oninput=()=>{const m=s.modules[i];if(m)m[lab?0:1]=inp.value};
-    inp.onchange=()=>{const m=s.modules[i];if(!m)return;
+    inp.oninput=()=>{const m=s.modules[i];if(m){holdPlace(inp);m[lab?0:1]=inp.value}};
+    inp.onchange=()=>{const m=s.modules[i];if(!m){inp._was=null;return}
       const d=bindDoor(m[0],m[1]);
       /* A door bound to a room wears the room's name, so a founder's own word
          for it has nowhere to live: slot 0 IS the key. Say so rather than
@@ -7478,21 +7553,22 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
       s.modules[i]=d||was.slice();
       const row=inp.parentElement,L=row&&row.querySelector('[data-dlab]'),R=row&&row.querySelector('[data-drt]');
       if(L)L.value=doorLabel(s.modules[i]);if(R)R.value=doorRoute(s.modules[i]);
-      if(!d)return toast('That door would open nothing, so it is back as it was. Name a room ('+Object.keys(MODULES).join(', ')+') or a page the site serves, like /gratitude.');
-      logEdit('door','structure:'+s.key,{doors:s.modules.map(m2=>doorLabel(m2))});
+      if(!d){inp._was=null;return toast('That door would open nothing, so it is back as it was. Name a room ('+Object.keys(MODULES).join(', ')+') or a page the site serves, like /gratitude.')}
+      logEdit('door','structure:'+s.key,{doors:s.modules.map(m2=>doorLabel(m2))});recordHeld(inp);
       if(kept)toast('That door opens the '+D.name+' room, so it keeps the name of the room.')}});
-  B.querySelectorAll('[data-ddel]').forEach(b=>b.onclick=()=>{const d=s.modules.splice(+b.dataset.ddel,1)[0];
-    logEdit('door-remove','structure:'+s.key,{label:d&&d[0]});renderInspect()});
+  B.querySelectorAll('[data-ddel]').forEach(b=>b.onclick=()=>{const was=placeSnap(s),d=s.modules.splice(+b.dataset.ddel,1)[0];
+    logEdit('door-remove','structure:'+s.key,{label:d&&d[0]});placeRec(was);renderInspect()});
   B.querySelectorAll('[data-qw]').forEach(sel=>sel.onchange=()=>{const q=SCENE.quests[+sel.dataset.qw];if(!q)return;
+    const before=rowSnap(q);
     if(sel.value)q.weight=+sel.value;else delete q.weight; // empty means the words decide again
-    logEdit('quest-weight','quest:'+q.q,{weight:q.weight||'from the words'});
+    logEdit('quest-weight','quest:'+q.q,{weight:q.weight||'from the words'});undoable({t:'row',coll:'quests',obj:q,before});
     refreshBadges();renderInspect()});
-  B.querySelectorAll('[data-bkt]').forEach(b=>b.onclick=()=>{const k=b.dataset.bkt;
+  B.querySelectorAll('[data-bkt]').forEach(b=>b.onclick=()=>{const k=b.dataset.bkt,was=placeSnap(s);
     s.badges=s.badges||{};s.badges[k]=badgeOn(s,k)?0:1;
     /* All four back on is the default again, so the map stops carrying a
        record of a decision that no longer says anything. */
     if(BADGE_KINDS.every(x=>s.badges[x]!==0))delete s.badges;
-    logEdit('badges','structure:'+s.key,{show:BADGE_KINDS.filter(x=>badgeOn(s,x)).join(',')||'none'});
+    logEdit('badges','structure:'+s.key,{show:BADGE_KINDS.filter(x=>badgeOn(s,x)).join(',')||'none'});placeRec(was);
     refreshBadges();renderInspect()});
   B.querySelector('#iDAdd').onclick=()=>{const l=B.querySelector('#iDLabel').value.trim();if(!l)return;
     /* Born bound, or not born. This used to push free text with '/forum' as a
@@ -7500,22 +7576,25 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
        nothing, and the census re-rotted the first time anyone used it. */
     const d=bindDoor(l,B.querySelector('#iDRoute').value.trim());
     if(!d){toast('No door added. Name a room ('+Object.keys(MODULES).join(', ')+') or a page the site serves, like /gratitude.');return}
-    (s.modules=s.modules||[]).push(d);
-    logEdit('door-add','structure:'+s.key,{label:d[0],route:d[1]});renderInspect()};
-  B.querySelector('#iFInAdd').onclick=()=>{SCENE.flows.push({from:null,to:s.key,medium:'water',note:'',phase:s.phase});
-    logEdit('flow-add','flow→'+s.key,{});renderInspect()};
+    const was=placeSnap(s);(s.modules=s.modules||[]).push(d);
+    logEdit('door-add','structure:'+s.key,{label:d[0],route:d[1]});placeRec(was);renderInspect()};
+  B.querySelector('#iFInAdd').onclick=()=>{const f={from:null,to:s.key,medium:'water',note:'',phase:s.phase};SCENE.flows.push(f);
+    logEdit('flow-add','flow→'+s.key,{});undoable({t:'rowAdd',coll:'flows',obj:f});renderInspect()};
   B.querySelector('#iFOutAdd').onclick=()=>{const other=SCENE.structures.find(x=>x.key!==s.key);
-    SCENE.flows.push({from:s.key,to:other?other.key:null,medium:'food-raw',note:'',phase:s.phase});
-    logEdit('flow-add','flow←'+s.key,{});renderInspect()};
+    const f={from:s.key,to:other?other.key:null,medium:'food-raw',note:'',phase:s.phase};SCENE.flows.push(f);
+    logEdit('flow-add','flow←'+s.key,{});undoable({t:'rowAdd',coll:'flows',obj:f});renderInspect()};
   B.querySelectorAll('[data-fmed]').forEach(sel=>sel.onchange=()=>{const f=SCENE.flows[+sel.dataset.fmed];if(!f)return;
-    f.medium=sel.value;logEdit('flow-medium','flow',{to:f.medium});renderInspect()});
+    const before=rowSnap(f);
+    f.medium=sel.value;logEdit('flow-medium','flow',{to:f.medium});undoable({t:'row',coll:'flows',obj:f,before});renderInspect()});
   B.querySelectorAll('[data-foth]').forEach(sel=>sel.onchange=()=>{const f=SCENE.flows[+sel.dataset.foth];if(!f)return;
+    const before=rowSnap(f);
     if(sel.dataset.dir==='in')f.from=sel.value||null;else f.to=sel.value||null;
-    logEdit('flow-endpoint','flow',{from:f.from,to:f.to});renderInspect()});
-  B.querySelectorAll('[data-fdel]').forEach(b=>b.onclick=()=>{SCENE.flows.splice(+b.dataset.fdel,1);
-    logEdit('flow-remove','flow',{});renderInspect()});
+    logEdit('flow-endpoint','flow',{from:f.from,to:f.to});undoable({t:'row',coll:'flows',obj:f,before});renderInspect()});
+  B.querySelectorAll('[data-fdel]').forEach(b=>b.onclick=()=>{const at=+b.dataset.fdel,f=SCENE.flows.splice(at,1)[0];
+    logEdit('flow-remove','flow',{});if(f)undoable({t:'rowDel',coll:'flows',obj:f,at});renderInspect()});
   B.querySelectorAll('[data-fvia]').forEach(sel=>sel.onchange=()=>{const f=SCENE.flows[+sel.dataset.fvia];if(!f)return;
-    f.via=sel.value||undefined;logEdit('flow-via','flow',{via:f.via||null});renderInspect()});
+    const before=rowSnap(f);
+    f.via=sel.value||undefined;logEdit('flow-via','flow',{via:f.via||null});undoable({t:'row',coll:'flows',obj:f,before});renderInspect()});
   B.querySelector('#iDup').onclick=()=>duplicateStructure(s.key);
   B.querySelector('#iRemove').onclick=()=>removeStructure(s);
   /* LAST, so every DOM0 onchange above is already bound. Count-independent by
@@ -7543,8 +7622,8 @@ function duplicateStructure(key){
   for(const x of SCENE.seats)if(x.at===key)x2.push({...x,s:x.s+' '+sfx.replace('-',''),at:slug,addr:'creator',address_source:'creator',_why:''});
   SCENE.structures.push(c);BY[slug]=c;makePoi(c);makeBanner(c);
   q2.forEach(q=>SCENE.quests.push(q));x2.forEach(x=>SCENE.seats.push(x));
-  UNDO.push({t:'dup',key:slug,quests:q2.length,seats:x2.length});
   logEdit('duplicate','structure:'+slug,{from:key,quests:q2.length,seats:x2.length});
+  undoable({t:'dup',key:slug,quests:q2.length,seats:x2.length});
   refreshWork();closeInspect();
   /* Straight into placing, so the next click is where it goes. */
   placing={dup:slug};document.body.classList.add('placing');
@@ -7676,7 +7755,7 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   /* draftOpened measures this journal against the live one. Left alone, the
      mark stayed at the live map's newest seq, and a save from before a
      colleague's publish had its own changes counted as already live. */
-  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';if(restoreScene(J))draftOpened()};
+  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';if(restoreScene(J)){forgetUndo();draftOpened()}};
   $('restoreNo').onclick=()=>{$('restoreBar').style.display='none';try{localStorage.removeItem('amora-grounds-scene')}catch(_){}}
 }catch(e){}})();
 
@@ -9859,6 +9938,25 @@ window.sceneResult=sceneResult;
    yours to throw away. */
 function workEdits(){return (VISITOR_VIEW&&DRAFT_HOLD&&DRAFT_HOLD.map_edits)||EDITS}
 function unpublished(){return workEdits().filter(e=>(e.seq||0)>PUBLISH_MARK)}
+/* THE CHANGES A PUBLISH WOULD MAKE, which is what the bar counts and the card
+   lists. The journal keeps every line, undos included, because the story is
+   kept either way, and unpublished() still guards a repaint with all of it.
+   But a change taken back before it was ever published changes nothing on
+   the live map. Listing it told a cartographer the Gate would be removed for
+   every visitor while the Gate stood on the land, and one move then Undo
+   offered to publish a map identical to the live one.
+   A pair cancels only when BOTH halves are unpublished: taking back an edit
+   the live map already has is a real change and stays on the list. Taking
+   back a new or duplicated place takes every later line about that place with
+   it, its placing and naming included, because the place itself is gone. */
+function netChanges(){
+  const ed=unpublished(),gone=new Set();
+  for(const e of ed){const d=e.action==='undo'&&e.diff;
+    if(!d||!((d.reverses||0)>PUBLISH_MARK))continue;
+    gone.add(e.seq);gone.add(d.reverses);
+    if((d.kind==='add'||d.kind==='dup')&&d.target){const t='structure:'+d.target;
+      for(const x of ed)if(x.seq>d.reverses&&x.seq<e.seq&&x.target===t)gone.add(x.seq)}}
+  return ed.filter(e=>!gone.has(e.seq))}
 
 /* THE MARK FOR A JOURNAL THAT DID NOT COME FROM THE LIVE MAP.
    A saved draft is the live history it forked from with its own changes on
@@ -9923,7 +10021,7 @@ function offerDraft(draft){
   $('restoreNo').textContent='Start over from the live map';
   $('restoreBar').style.display='flex';
   $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null;SAVE_HELD=false;
-    if(restoreScene(draft.scene)){BASE_VERSION=+draft.baseVersion||0;draftOpened();
+    if(restoreScene(draft.scene)){forgetUndo();BASE_VERSION=+draft.baseVersion||0;draftOpened();
       /* Work only this browser had goes to the village now. */
       if(draft.local)saveNow()}};
   $('restoreNo').onclick=openDiscard;
@@ -9987,7 +10085,7 @@ function applyScene(scene,version){
     PUBLISH_MARK=sharedMark(EDITS,scene);
     if(SCENE_APPLIED)toast('The live map changed. Your draft is untouched.');
     renderDraftBar();return false}
-  if(restoreScene(scene,{quiet:true})){SCENE_APPLIED=true;BASE_VERSION=+version||0;
+  if(restoreScene(scene,{quiet:true})){SCENE_APPLIED=true;forgetUndo();BASE_VERSION=+version||0;
     /* Published scene's edits are the live baseline; 0 made every historical
        edit look unpublished and blocked later live updates. editSeq is set
        inside restoreScene from map_edits. */
@@ -10013,7 +10111,7 @@ function renderDraftBar(){
     lv.textContent=LIVE?`Version ${LIVE.version}`:'Nothing published yet';
     go.style.display='none';$('dropBtn').style.display='none';$('visitBtn').textContent='Back to my draft';return}
   go.style.display='';$('visitBtn').textContent='View as visitor';
-  const n=unpublished().length;
+  const n=netChanges().length;
   st.innerHTML=SAVE_FAIL?`<b>Not saved.</b> ${escq(notSavedWhy())}`
     :SAVE_HELD?'<b>Not saved yet.</b> Your saved draft is waiting: open it, or start over from the live map.'
     :n?`<b>${n}</b> unpublished change${n===1?'':'s'}. The live map is unchanged.`
@@ -10059,7 +10157,7 @@ function toggleVisitor(){
 
 /* ---------- publish ---------- */
 function openPublish(){
-  const changes=unpublished();
+  const changes=netChanges();
   if(!HAND.canPublish)return toast(inShell()
     ?'Publishing the map is a cartographer\'s work.'
     :'This map is running on its own, with no village to publish to. ⤓ Export scene hands you the file.');
@@ -10105,7 +10203,7 @@ const EDIT_VERBS={
   'public-unlock':'opened to the public','vision-boundary-seed':'drew the vision boundary',
   'vital-override':'set a village vital','sprite-approve':'approved artwork for',
   'sprite-reroll':'asked for new artwork for',skin:'restyled the map',
-  vocab:"renamed the village's words",undo:'undid a change'};
+  vocab:"renamed the village's words",undo:'undid a change to'};
 function editLine(e){
   const t=String(e.target||''),name=t.indexOf(':')>=0?t.slice(t.indexOf(':')+1):t;
   const verb=EDIT_VERBS[e.action]||e.action;
@@ -10191,13 +10289,16 @@ function openDiscard(){
      held. The same answer Publish gives there. */
   if(VISITOR_VIEW)return toast('You are looking at the live map. Go back to your draft to throw it away.');
   /* A draft still waiting to be opened is counted from itself: nothing of it
-     is on screen yet. */
-  const waiting=OFFERED,n=waiting?offeredChanges(waiting):unpublished().length;
-  if(!n&&!waiting)return toast('There is no unpublished work to throw away.');
+     is on screen yet. Otherwise it is guarded by the whole journal and counted
+     by what would change, the same two numbers the bar and the publish card
+     use: a draft whose every change was taken back still has a journal to
+     throw away. */
+  const waiting=OFFERED,n=waiting?offeredChanges(waiting):netChanges().length;
+  if(!waiting&&!unpublished().length)return toast('There is no unpublished work to throw away.');
   if(!inShell())return toast('This map is running on its own. Reload the page to start over.');
   const card=$('pubCard');card.classList.add('conflict');
   $('pubTitle').textContent='Throw away my draft';
-  $('pubBlast').innerHTML=(n?`Your <b>${n}</b> unpublished change${n===1?'':'s'} will be gone. `:'Your saved draft will be gone. ')+
+  $('pubBlast').innerHTML=(n?`Your <b>${n}</b> unpublished change${n===1?'':'s'} will be gone. `:waiting?'Your saved draft will be gone. ':'Your draft will be gone. ')+
     `The live map does not move, and nobody else's draft is touched.`;
   $('pubList').innerHTML=waiting?'<li>You start from the version everyone sees.</li>':'<li>The map goes back to the version everyone sees.</li>';
   $('pubNote').style.display='none';
@@ -10231,7 +10332,7 @@ async function doDiscard(){
      The base is the version of the land put back on screen. It stayed on the
      version the draft forked from, so after a refused publish every publish
      from here was refused again, however much was thrown away. */
-  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;BASE_VERSION=LIVE_SCENE_VERSION||BASE_VERSION;DRAFT_HOLD=null;renderDraftBar();
+  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;BASE_VERSION=LIVE_SCENE_VERSION||BASE_VERSION;DRAFT_HOLD=null;forgetUndo();renderDraftBar();
     return toast('Draft thrown away. You are looking at the live map.')}
   toast('Draft thrown away.');
 }
