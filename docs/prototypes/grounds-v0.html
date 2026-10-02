@@ -721,6 +721,9 @@
   body.can-edit #skin .srow[data-village],body.can-edit #skin [data-village]{display:flex}
   #skin #skSave,#skin #skReset{display:none}
   body.can-edit #skin #skSave,body.can-edit #skin #skReset{display:inline-block}
+  /* Inside the village Reset lets go of the person's own view (D11), which
+     every visitor has, so every visitor gets it. */
+  body.view-reset #skin #skReset{display:inline-block}
   #skin .vhead{flex-direction:column;gap:2px;margin-top:6px;padding-top:9px;
     border-top:1px solid rgba(201,162,94,.3)}
   #skin .vhead b{font-variant:small-caps;letter-spacing:.14em;font-weight:normal;
@@ -3461,7 +3464,7 @@ function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=
   for(const b of birds){b.p+=b.sp*dt*60/16;if(b.p>1.15)b.p=-.15;const bx=b.p*W,by=b.y+Math.sin(b.p*9)*b.amp;
     const f=Math.sin(t*9+b.y);cx.beginPath();cx.moveTo(bx-5,by-2*f);cx.quadraticCurveTo(bx,by+2*f,bx+5,by-2*f);cx.stroke()}
   // dream-mist over phase 3 (Now mode) — OFF by default for a clean site map; founders flip it in the skin step
-  if(mode==='now'&&window.SKIN&&window.SKIN.mist){for(const m of mistSeeds){const mx=m.x+Math.sin(t*.14+m.ph)*22,my=m.y+Math.cos(t*.1+m.ph)*12;
+  if(mode==='now'&&(window.lookOf?lookOf('mist'):(window.SKIN&&window.SKIN.mist))){for(const m of mistSeeds){const mx=m.x+Math.sin(t*.14+m.ph)*22,my=m.y+Math.cos(t*.1+m.ph)*12;
     const fg=cx.createRadialGradient(mx,my,4,mx,my,m.r);fg.addColorStop(0,'rgba(214,228,214,.5)');fg.addColorStop(1,'rgba(214,228,214,0)');
     cx.fillStyle=fg;cx.beginPath();cx.arc(mx,my,m.r,0,7);cx.fill()}}
   else{ // vision: blueprint sheen
@@ -3581,6 +3584,10 @@ function themeFromWords(s){
   return{label:'Your Land',sub:s,wash:`hsla(${hue},40%,25%,.16)`,
     v:{'--t-surface':hslv(hue,30,17),'--t-ring':hslv((hue+38)%360,44,64),'--t-icon':hslv(hue,22,92),
        '--t-accent':hslv((hue+85)%360,58,54),'--gold':hslv((hue+38)%360,40,58),'--gold-b':hslv((hue+38)%360,52,74),'--parch':hslv((hue+40)%360,36,89)}}}
+/* A person's own palette, mixed on the theme under it: surface, ring and
+   accent are theirs, and gold follows the ring. */
+function paletteTheme(base,p){return{label:'Your Land',sub:'custom palette',wash:base.wash,
+  v:{...base.v,'--t-surface':p.surface,'--t-ring':p.ring,'--t-accent':p.accent,'--gold':p.ring}}}
 
 /* ---------- the emblem set: hand-drawn-stroke SVG icons, ReGen lineage ---------- */
 const ICONS={
@@ -5224,14 +5231,21 @@ document.querySelectorAll('[data-tm]').forEach(b=>b.onclick=()=>{terrainMode=b.d
        'Vector floor. The drawn land every village gets on day one.')});
 $('pBrush').oninput=e=>{brushVal=+e.target.value/100;$('pBrushV').textContent=e.target.value+'%';mmDirty=true};
 $('pPal').oninput=e=>{palVal=+e.target.value/100;$('pPalV').textContent=e.target.value+'%';buildPaintMix()};
-document.querySelectorAll('[data-im]').forEach(b=>b.onclick=()=>{iconMode=b.dataset.im;
+document.querySelectorAll('[data-im]').forEach(b=>b.onclick=()=>{
+  /* The person's own (D11): kept in their browser through pickIcon. */
+  if(!(window.pickIcon&&pickIcon(b.dataset.im)))iconMode=b.dataset.im;
   document.querySelectorAll('[data-im]').forEach(x=>x.classList.toggle('on',x===b));
   maiaSay(b.dataset.im==='painted'?'Painted sprites: the village in oils. Families without an approved sprite keep their emblem, honestly.':b.dataset.im==='iso'?'Isometric everywhere: the village in the round.':b.dataset.im==='flat'?'Emblems everywhere: the cartographer\'s view.':'Auto: emblems from afar, buildings up close.')});
-$('cApply').onclick=()=>{applyTheme({label:'Your Land',sub:'custom palette',wash:THEME.wash,
-  v:{...THEME.v,'--t-surface':$('cSurface').value,'--t-ring':$('cRing').value,'--t-accent':$('cAccent').value,'--gold':$('cRing').value}},
-  `Custom palette applied. Surface, ring, and accent are yours; I tuned the rest to match. Upload a full brand kit on the site and the whole map wears it.`)};
+/* The custom palette is the person's own (D11) and was kept nowhere: it was
+   gone on the next reload. It goes in the mask, over the theme it was mixed
+   on, and a palette's accent replaces any accent chosen before it. */
+$('cApply').onclick=()=>{const p={surface:$('cSurface').value,ring:$('cRing').value,accent:$('cAccent').value};
+  if(window.keepLook)keepLook({palette:p,accent:null});
+  applyTheme(paletteTheme(THEME,p),
+  `Custom palette applied. Surface, ring, and accent are yours; I tuned the rest to match. Upload a full brand kit on the site and the whole map wears it.`);
+  if(window.applySkinOverrides)applySkinOverrides();if(window.syncLookControls)syncLookControls()};
 $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
-  keepLook({words:w,theme:null});
+  keepLook({words:w,theme:null,palette:null});
   applyTheme(themeFromWords(w),`I read “${w}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
   $('themePanel').classList.remove('show')};
 
@@ -8844,7 +8858,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape'||!JWALK)return;
   maiaSay('The walk ends here. Wander wherever you like.')},true);
 /* ---------- the skin step: Make This Yours, for the land ---------- */
 const SKIN={theme:'Emerald Atlas',words:'',accent:null,parch:null,lbl:100,mist:false,glow:true,
-  flow_style:'glyph',label_style:'ribbon'};window.SKIN=SKIN; // 'glyph'|'gold'|'medium' · 'ribbon'|'tablet'
+  flow_style:'glyph',label_style:'ribbon',icon:iconMode};window.SKIN=SKIN; // 'glyph'|'gold'|'medium' · 'ribbon'|'tablet'
 /* THE ONE PLACE THE PAINT DIALS ARE ANSWERED. Called from the terrain
    switch, from the moment a bake completes, and once at boot, so the
    question is asked wherever either half of the answer can change.
@@ -8876,13 +8890,19 @@ window.maskRead=maskRead;window.maskWrite=maskWrite;
    house look before one arrives. A person who picks the village's own
    value again has no preference left to keep, and keeping one would hide
    whatever the village wears next. */
-const VILLAGE_LOOK={theme:SKIN.theme,words:'',label_style:SKIN.label_style,flow_style:SKIN.flow_style,scale:100};
+const VILLAGE_LOOK={theme:SKIN.theme,words:'',label_style:SKIN.label_style,flow_style:SKIN.flow_style,scale:100,
+  accent:null,parch:null,lbl:100,icon:SKIN.icon,mist:false,glow:true,palette:null};
 /* Who may dress SKIN itself, the village's record that Save map skin and
-   the scene export carry: the map running on its own, or a hand inside the
-   village that can edit. A visitor's choices are their view and nothing
-   else. */
-function dressesTheVillage(){return !inShell()||HAND.canEdit}
-function keepLook(p){const q={};for(const k in p)q[k]=(p[k]==null||p[k]===VILLAGE_LOOK[k])?null:p[k];maskWrite(q)}
+   the scene export carry: the map running on its own, where the file IS
+   the village and its export the outlet, and nobody else.
+   INSIDE THE VILLAGE EVERY CHOICE IN THIS SHEET IS THE PERSON'S OWN, the
+   founder's included (D12). The village's look has one home, Village
+   Settings, and the shell pushes it over SKIN after every scene anyway. An
+   editor who restyled here used to dress SKIN as well, so the scene export a
+   publish carries took one person's view along as the village's look. */
+function dressesTheVillage(){return !inShell()}
+const sameLook=(a,b)=>a===b||(!!a&&!!b&&typeof a==='object'&&JSON.stringify(a)===JSON.stringify(b));
+function keepLook(p){const q={};for(const k in p)q[k]=(p[k]==null||sameLook(p[k],VILLAGE_LOOK[k]))?null:p[k];maskWrite(q)}
 window.keepLook=keepLook;
 const DRESS_OK={label_style:['ribbon','tablet'],flow_style:['glyph','gold','medium']};
 /* The dress on screen: this person's own choice if they made one, else the
@@ -8890,6 +8910,49 @@ const DRESS_OK={label_style:['ribbon','tablet'],flow_style:['glyph','gold','medi
    map skin carry SKIN, and one person's view is not the village's look. */
 function dressOf(k){const v=MASK[k];return (v&&DRESS_OK[k].includes(v))?v:(SKIN[k]||DRESS_OK[k][0])}
 window.dressOf=dressOf;
+/* EVERY OTHER DIAL IN THE SHEET IS THE PERSON'S TOO (D11). The sheet opens
+   by promising that everything in it changes the map "to you, and to nobody
+   else", and the accent, the parchment, the label size, the icon style, the
+   dream mist, the village pulse and the custom palette broke that promise:
+   they wrote SKIN, the village's record, for every visitor, and went back to
+   the village's on the next reload, and the palette was kept nowhere at all.
+   They live in the mask now beside the theme and the dress, each held to the
+   range its own control can produce, so a hand-edited or stale value falls
+   back to the village's instead of drawing something no control can undo. */
+const HEX6=/^#[0-9a-f]{6}$/i;
+const LOOK_OK={accent:v=>typeof v==='string'&&HEX6.test(v),parch:v=>typeof v==='string'&&HEX6.test(v),
+  lbl:v=>typeof v==='number'&&v>=80&&v<=130,icon:v=>['auto','painted','iso','flat'].includes(v),
+  mist:v=>typeof v==='boolean',glow:v=>typeof v==='boolean',
+  palette:v=>!!v&&typeof v==='object'&&['surface','ring','accent'].every(k=>typeof v[k]==='string'&&HEX6.test(v[k]))};
+/* One of those on screen: the person's own, else the village's. */
+function lookOf(k){const v=MASK[k];if(v!=null&&LOOK_OK[k](v))return v;return k==='palette'?null:SKIN[k]}
+window.lookOf=lookOf;
+/* A palette brings its own accent; a separately chosen accent still wins. */
+function accentOn(){const a=MASK.accent;if(a!=null&&LOOK_OK.accent(a))return a;
+  const p=lookOf('palette');return p?p.accent:(SKIN.accent||null)}
+/* The theme under the person's palette: their own, else the village's. */
+function lookTheme(){
+  const t=MASK.theme&&Object.values(THEMES).find(x=>x.label===MASK.theme);if(t)return t;
+  const w=typeof MASK.words==='string'&&MASK.words.trim();if(w)return themeFromWords(w);
+  return Object.values(THEMES).find(x=>x.label===SKIN.theme)||(SKIN.words?themeFromWords(SKIN.words):THEME)}
+/* The controls read back what is on screen, so a person who comes back
+   finds the dial where they left it and not at the village's value. */
+function syncLookControls(){
+  const set=(id,f)=>{const el=$(id);if(el)f(el)};
+  set('skMist',el=>{el.checked=!!lookOf('mist')});
+  set('skGlow',el=>{el.checked=lookOf('glow')!==false});
+  const a=accentOn()||THEME.v['--t-accent'],pa=lookOf('parch')||THEME.v['--parch'],l=lookOf('lbl')||100;
+  set('skAccent',el=>{if(HEX6.test(a))el.value=a});
+  set('skParch',el=>{if(HEX6.test(pa))el.value=pa});
+  set('skLbl',el=>{el.value=l});set('skLblV',el=>{el.textContent=l+'%'});
+  set('skIcon',el=>{if([...el.options].some(o=>o.value===iconMode))el.value=iconMode});
+  document.querySelectorAll('[data-im]').forEach(x=>x.classList.toggle('on',x.dataset.im===iconMode));
+  const p=lookOf('palette');
+  if(p){set('cSurface',el=>{el.value=p.surface});set('cRing',el=>{el.value=p.ring});set('cAccent',el=>{el.value=p.accent})}}
+/* The icon style, from the sheet's select or the chips above it. */
+function pickIcon(v){if(!LOOK_OK.icon(v))return false;
+  iconMode=v;if(dressesTheVillage())SKIN.icon=v;keepLook({icon:v});syncLookControls();return true}
+window.pickIcon=pickIcon;
 /* THE MASK GOES ON LAST. The village's look arrives after boot, from the
    shell's config push, a restored scene and Village Settings, and each runs
    applySkinExport, which puts the village's theme and building size back.
@@ -8898,14 +8961,18 @@ window.dressOf=dressOf;
    config push set global_scale over it. So a person's own choices are laid
    over the village's here, at the end of every applySkinExport and once at
    boot, and never written into SKIN. The village's accent and parchment
-   still apply over a chosen theme, as they do when the swatch is pressed. */
+   still apply over a chosen theme, as they do when the swatch is pressed,
+   unless the person chose their own. The theme is resolved every time, the
+   village's when the person holds none, so letting every choice go (Reset)
+   puts the village's own look back. */
 function maskApply(){
-  const t=MASK.theme&&Object.values(THEMES).find(x=>x.label===MASK.theme);
-  const w=!t&&typeof MASK.words==='string'&&MASK.words.trim();
-  if(t)applyTheme(t);else if(w)applyTheme(themeFromWords(w));
-  if(t||w)applySkinOverrides();
+  const base=lookTheme(),p=lookOf('palette');
+  applyTheme(p?paletteTheme(base,p):base);
+  applySkinOverrides();
+  iconMode=lookOf('icon')||iconMode;
   applyDress();
   const v=Math.round(+MASK.scale);if(v>=50&&v<=300)setGScale(v,true);
+  syncLookControls();
   if($('skin').classList.contains('show'))renderSkinThemes()}
 window.maskApply=maskApply;
 /* ONE ROOM. The move is a single appendChild and it is what makes merging a
@@ -8959,15 +9026,19 @@ function renderSkinThemes(){const h=$('skTheme');if(!h)return;
   `<i style="background:${t.v['--t-accent']}"></i></span>`+
   `<span><b>${t.label}</b><small>${t.sub}</small></span></button>`).join('');
   $('skTheme').querySelectorAll('.swb').forEach(b=>b.onclick=()=>{const t=Object.values(THEMES).find(x=>x.label===b.dataset.t);
-    if(t){if(dressesTheVillage()){SKIN.theme=t.label;SKIN.words=''}$('skWords').value='';applyTheme(t);applySkinOverrides();renderSkinThemes();
-      keepLook({theme:t.label,words:null})}})}
-function applySkinOverrides(){
-  if(SKIN.accent){document.documentElement.style.setProperty('--t-accent',SKIN.accent)}
-  if(SKIN.parch){document.documentElement.style.setProperty('--parch',SKIN.parch)}
-  document.documentElement.style.setProperty('--lblScale',(SKIN.lbl||100)/100);
+    if(t){if(dressesTheVillage()){SKIN.theme=t.label;SKIN.words=''}$('skWords').value='';
+      keepLook({theme:t.label,words:null,palette:null});applyTheme(t);applySkinOverrides();renderSkinThemes();syncLookControls()}})}
+/* The accent, parchment and label size on screen: the person's, else the
+   village's, else the theme's own, so letting one go puts the theme's back
+   instead of leaving the last override standing. */
+function applySkinOverrides(){const de=document.documentElement.style;
+  const a=accentOn(),pa=lookOf('parch');
+  de.setProperty('--t-accent',a||THEME.v['--t-accent']);
+  de.setProperty('--parch',pa||THEME.v['--parch']);
+  de.setProperty('--lblScale',(lookOf('lbl')||100)/100);
   mmDirty=true}
 function skinExport(){return{theme:SKIN.theme||THEME.label,words:SKIN.words||null,mist:!!SKIN.mist,glow:SKIN.glow!==false,global_scale:window.GSCALE||1,accent:SKIN.accent||null,
-  parchment:SKIN.parch||null,label_scale:(SKIN.lbl||100)/100,icon_mode:iconMode,
+  parchment:SKIN.parch||null,label_scale:(SKIN.lbl||100)/100,icon_mode:SKIN.icon||iconMode,
   flow_style:SKIN.flow_style||'glyph',label_style:SKIN.label_style||'ribbon',
   painterly:{brush:(typeof brushVal!=='undefined')?brushVal:null,palette:(typeof palVal!=='undefined')?palVal:null},
   note:'production home: Admin → Make This Yours (/admin?tab=setup), one styling story for site and land'}}
@@ -8994,7 +9065,7 @@ function applySkinExport(sk){if(!sk)return;
     if($('skPal')&&sk.painterly.palette!=null){$('skPal').value=Math.round(sk.painterly.palette*100);$('skPalV').textContent=Math.round(sk.painterly.palette*100)+'%'}}
   const t=Object.values(THEMES).find(x=>x.label===SKIN.theme);
   if(t)applyTheme(t);else if(SKIN.words)applyTheme(themeFromWords(SKIN.words));
-  if(sk.icon_mode&&['auto','painted','iso'].includes(sk.icon_mode))iconMode=sk.icon_mode;
+  if(sk.icon_mode&&['auto','painted','iso'].includes(sk.icon_mode))SKIN.icon=iconMode=sk.icon_mode;
   if(sk.flow_style&&['glyph','gold','medium'].includes(sk.flow_style))SKIN.flow_style=sk.flow_style;
   if(sk.label_style&&['ribbon','tablet'].includes(sk.label_style))SKIN.label_style=sk.label_style;
   applyDress();
@@ -9009,6 +9080,9 @@ function applySkinExport(sk){if(!sk)return;
   VILLAGE_LOOK.theme=sk.theme||VILLAGE_LOOK.theme;VILLAGE_LOOK.words=sk.words||'';
   for(const k of ['label_style','flow_style'])if(DRESS_OK[k].includes(sk[k]))VILLAGE_LOOK[k]=sk[k];
   if(sk.global_scale)VILLAGE_LOOK.scale=Math.round(sk.global_scale*100);
+  VILLAGE_LOOK.accent=sk.accent||null;VILLAGE_LOOK.parch=sk.parchment||null;
+  VILLAGE_LOOK.lbl=Math.round((sk.label_scale||1)*100);VILLAGE_LOOK.mist=!!sk.mist;VILLAGE_LOOK.glow=sk.glow!==false;
+  if(LOOK_OK.icon(sk.icon_mode))VILLAGE_LOOK.icon=sk.icon_mode;
   maskApply()}
 window.applySkinExport=applySkinExport;
 /* YOUR VIEW, AND INSIDE THE VILLAGE NOTHING MORE. These two wrote an entry
@@ -9050,28 +9124,40 @@ $('skinBtn').onclick=()=>toggleMask();
 $('skClose').onclick=()=>closeMask();
 if($('skX'))$('skX').onclick=()=>closeMask();
 $('skWords').addEventListener('change',()=>{const v=$('skWords').value.trim();if(!v)return;
-  if(dressesTheVillage()){SKIN.words=v;SKIN.theme=null}applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();keepLook({words:v,theme:null});
-  toast('A theme grown from your words. Save makes it yours.')});
-$('skAccent').oninput=()=>{SKIN.accent=$('skAccent').value;applySkinOverrides()};
-$('skParch').oninput=()=>{SKIN.parch=$('skParch').value;applySkinOverrides()};
-$('skLbl').oninput=()=>{SKIN.lbl=+$('skLbl').value;$('skLblV').textContent=SKIN.lbl+'%';applySkinOverrides()};
-$('skIcon').onchange=()=>{iconMode=$('skIcon').value;toast('Icon style: '+$('skIcon').value)};
-$('skMist').onchange=()=>{SKIN.mist=$('skMist').checked;toast(SKIN.mist?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
+  if(dressesTheVillage()){SKIN.words=v;SKIN.theme=null}keepLook({words:v,theme:null,palette:null});applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();syncLookControls();
+  toast(inShell()?'A theme grown from your words, kept on your screen.':'A theme grown from your words. Save makes it yours.')});
+/* D11: each of these is the person's own (the mask), and dresses SKIN only
+   where the map runs on its own. An editor inside the village is told where
+   the village's own look is set, as the label and flow toasts tell them. */
+const viewToast=said=>toast(inShell()&&HAND.canEdit?said+' '+SKIN_HERE:said);
+$('skAccent').oninput=()=>{const v=$('skAccent').value;if(dressesTheVillage())SKIN.accent=v;keepLook({accent:v});applySkinOverrides()};
+$('skParch').oninput=()=>{const v=$('skParch').value;if(dressesTheVillage())SKIN.parch=v;keepLook({parch:v});applySkinOverrides()};
+$('skLbl').oninput=()=>{const v=+$('skLbl').value;$('skLblV').textContent=v+'%';if(dressesTheVillage())SKIN.lbl=v;keepLook({lbl:v});applySkinOverrides()};
+$('skIcon').onchange=()=>{if(pickIcon($('skIcon').value))viewToast('Icon style: '+$('skIcon').value+'.')};
+$('skMist').onchange=()=>{const v=$('skMist').checked;if(dressesTheVillage())SKIN.mist=v;keepLook({mist:v});
+  viewToast(v?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
 /* Save and Reset keep the rule written above the label and flow controls:
    in the shell the look stays on this screen and goes on no publish list. */
 $('skSave').onclick=()=>{
   if(inShell())return toast('✂ '+SKIN_HERE);
   logEdit('skin','map',skinExport());
   toast('✂ Skin saved. The land remembers it, and every export carries it.')};
-$('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100;
-  document.documentElement.style.removeProperty('--t-accent');document.documentElement.style.removeProperty('--lblScale');
-  applyTheme(THEMES.emerald);applySkinOverrides();maskWrite({theme:null,words:null});
-  $('skAccent').value='#e8a13c';$('skParch').value='#f3e6c8';$('skLbl').value=100;$('skLblV').textContent='100%';$('skWords').value='';
-  renderSkinThemes();
-  /* The same rule: in the shell this resets the look on this screen, and the
-     village's own look is untouched. */
-  if(inShell())return toast('Back to the house look on your screen. '+SKIN_HOME);
+/* RESET LETS GO OF EVERY CHOICE THIS PERSON MADE (D11), and inside the
+   village that puts the village's own look back: SKIN is the village's and
+   is not touched. It used to put the house theme on screen over the
+   village's, and let go of the theme and the words only, so the size, the
+   dress and every dial below them stayed. On its own the map is the
+   village, so there it also puts SKIN back to the house look. */
+const MASK_ALL={theme:null,words:null,palette:null,accent:null,parch:null,lbl:null,icon:null,mist:null,glow:null,
+  label_style:null,flow_style:null,scale:null};
+$('skReset').onclick=()=>{maskWrite(MASK_ALL);$('skWords').value='';
+  if(!inShell()){SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100}
+  setGScale(VILLAGE_LOOK.scale||100,true);maskApply();renderSkinThemes();
+  if(inShell())return toast(HAND.canEdit?'Back to the village\'s look on your screen. '+SKIN_HOME:'Back to the village\'s look.');
   logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
+/* Inside the village the button is about the person's own view, which
+   everyone has, so everyone gets it and it says what it does there. */
+if(inShell()&&$('skReset')){$('skReset').textContent='Back to the village\'s look';document.body.classList.add('view-reset')}
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
 /* ---------- hash router: every place, module, the Loom, the Circles and a journey has an address ----------
@@ -9474,7 +9560,7 @@ window.PULSE={};
 (function pulseBoot(){const rng=mulberry(4242);
   setInterval(()=>{if(document.body.classList.contains('intro'))return;
     if(typeof buildMode!=='undefined'&&buildMode)return;
-    if(window.SKIN&&SKIN.glow===false)return;
+    if((window.lookOf?lookOf('glow'):(window.SKIN&&SKIN.glow))===false)return;
     const withHome=SCENE.threads.filter(t2=>t2.structures&&t2.structures.length);
     const t2=withHome[Math.floor(rng()*withHome.length)];if(!t2)return;
     t2.structures.forEach(k2=>PULSE[k2]=performance.now()+8500)},31000)})();
@@ -9513,8 +9599,8 @@ $('skTerr').onchange=()=>{/* matched, not compiled (g6.05) — the fourth and la
   const v=$('skTerr').value;let b=null;
   document.querySelectorAll('[data-tm]').forEach(x=>{if(!b&&x.dataset.tm===v)b=x});
   if(b)b.click()};
-$('skGlow').onchange=()=>{SKIN.glow=$('skGlow').checked;
-  toast(SKIN.glow?'The pulse is on. The village shimmers where it talks.':'Pulse off. A still land.')};
+$('skGlow').onchange=()=>{const v=$('skGlow').checked;if(dressesTheVillage())SKIN.glow=v;keepLook({glow:v});
+  viewToast(v?'The pulse is on. The village shimmers where it talks.':'Pulse off. A still land.')};
 /* vocabulary — the founder's words for the land (Q1d) */
 function renderVocab(){const host=$('skVocab');if(!host)return;
   host.innerHTML=SUBTYPES.zone.map((z,i)=>`<button class="chip" data-vz="${i}" data-tip="Click to rename. Your land, your words; every drawn zone follows.">${escq(z)}</button>`).join('')

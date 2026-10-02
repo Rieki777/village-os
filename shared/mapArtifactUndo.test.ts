@@ -717,13 +717,16 @@ describe("Save map skin inside the village (F78)", () => {
     pick(m, "#skFlow", "gold");
     const seen = {
       edits: m.run<number>("EDITS.length"),
-      onScreen: m.run<[string, string, boolean]>("[SKIN.label_style,SKIN.flow_style,document.body.classList.contains('lbl-tablet')]"),
+      onScreen: m.run<[string, string, boolean]>("[dressOf('label_style'),dressOf('flow_style'),document.body.classList.contains('lbl-tablet')]"),
+      // D12: the founder's choice is their own view, and the village's record keeps the village's dress.
+      record: m.run<[string, string]>("[SKIN.label_style,SKIN.flow_style]"),
       labelToast,
       flowToast: lastToast(m),
       card: card(m),
     };
     m.close();
     expect(seen.onScreen).toEqual(["tablet", "gold", true]);
+    expect(seen.record).toEqual(["ribbon", "glyph"]);
     expect(seen.edits).toBe(edits);
     expect(seen.labelToast).toContain("Village Settings");
     expect(seen.flowToast).toContain("Village Settings");
