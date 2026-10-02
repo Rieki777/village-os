@@ -381,7 +381,7 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     // above wrote Ana a zero-token row too, and `created_at` has second
     // precision, so two rows inside one second let ORDER BY pick either (CI
     // did, on 731a180).
-    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' AND path <> 'deterministic' ORDER BY created_at DESC LIMIT 1", [ana.id]);
+    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' AND path <> 'deterministic' ORDER BY created_at DESC LIMIT 1", [ana.id]); // module-review-ok: reading back the scratch schema this suite booted the server on
     expect(usage.key_source).toBe("member");
     expect(usage.user_id).toBe(ana.id);
     const after = await pool.query<any[]>("SELECT COUNT(*) n FROM rate_hits WHERE bucket LIKE 'assistant-day:member%'");
