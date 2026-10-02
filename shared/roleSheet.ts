@@ -529,7 +529,7 @@ function clockFor(input: SeatInput, lapse: { read: boolean; lapsed: number }, ct
     const date = formatDay(term.iso);
     const days = daysUntil(term.iso, ctx.now);
     if (date && days !== null) {
-      return { key: "termDays", label: "Days left in term", value: days, tone: null, source: term.source, sub: `Term ends ${date}` };
+      return { key: "termDays", label: countLabel(days, "Day left in term", "Days left in term"), value: days, tone: null, source: term.source, sub: `Term ends ${date}` };
     }
   }
   const s = ctx.season;
@@ -541,7 +541,7 @@ function clockFor(input: SeatInput, lapse: { read: boolean; lapsed: number }, ct
       const name = s.name && s.name.trim() ? s.name.trim() : null;
       return {
         key: "seasonDays",
-        label: "Days left in the season",
+        label: countLabel(days, "Day left in the season", "Days left in the season"),
         value: days,
         tone: null,
         source: "season.endsOn",
@@ -552,8 +552,16 @@ function clockFor(input: SeatInput, lapse: { read: boolean; lapsed: number }, ct
   return null;
 }
 
+/**
+ * A figure label that agrees with its number. The commonest live seat has one
+ * place, and "1 PLACES" under it read as a typo on every one of them.
+ */
+export function countLabel(n: number, one: string, many: string): string {
+  return n === 1 ? one : many;
+}
+
 function figuresFor(input: SeatInput, lapse: { read: boolean; lapsed: number }): SheetFigure[] {
-  const out: SheetFigure[] = [{ key: "places", label: "Places", value: input.seats, tone: null, source: "seats" }];
+  const out: SheetFigure[] = [{ key: "places", label: countLabel(input.seats, "Place", "Places"), value: input.seats, tone: null, source: "seats" }];
   const hc = input.holderCount;
   if (input.mode === "seat" && hc !== null) {
     if (lapse.read) {
@@ -565,7 +573,7 @@ function figuresFor(input: SeatInput, lapse: { read: boolean; lapsed: number }):
     const open = Math.max(0, input.seats - hc);
     out.push({
       key: "open",
-      label: "Open places",
+      label: countLabel(open, "Open place", "Open places"),
       value: open,
       // A forming place is not an open call, so it never reads as one.
       tone: open > 0 && input.state !== "forming" ? "living" : null,

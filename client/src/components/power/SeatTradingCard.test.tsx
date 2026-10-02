@@ -206,7 +206,9 @@ describe("the brief's sample at the member tier", () => {
 describe("the empty seat, the way every fork starts", () => {
   it("shows an open place, a hand, the season clock and what is still to be written", () => {
     show(EMPTY_SEAT);
-    expect(screen.getByText("Open place")).toBeTruthy();
+    // The roster spot, scoped: with one open place the figure label says "Open place" too.
+    expect(within(screen.getByRole("region", { name: "Holding it now" })).getByText("Open place")).toBeTruthy();
+    expect(screen.getAllByText("Open place").length).toBeGreaterThan(1);
     expect(screen.getByText("Nobody holds this yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" })).toBeTruthy();
     expect(screen.getAllByText("Days left in the season").length).toBeGreaterThan(0);
