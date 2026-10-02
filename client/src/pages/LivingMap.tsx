@@ -239,7 +239,7 @@ export default function LivingMap() {
     typeof window === "undefined" ? "" : window.location.hash,
   );
 
-  const { entered, preparing, setPreparing, onEnter } = useMapEnterGate();
+  const { entered, preparing, setPreparing, onEnter, pressed } = useMapEnterGate();
 
   useEffect(() => {
     let live = true;
@@ -785,6 +785,8 @@ export default function LivingMap() {
   const onLoad = () => {
     const win = frame.current?.contentWindow as any;
     if (!win) return;
+    // The pressed gate button took focus with it; give focus to the land it opened.
+    if (pressed.current) frame.current?.focus();
 
     /*
      * The skin is NOT sent from here. `load` fires when the document is
@@ -868,7 +870,8 @@ export default function LivingMap() {
        * SO IT MOVED TO THE BOTTOM, which clears the top-left corner outright
        * and puts an escape in the half of a phone a thumb can reach. On the
        * pocket profile the artifact now carries the door itself, as a cell in
-       * its own bottom bar, so this one stands down entirely rather than
+       * its own bottom bar, so this one stands down once that bar exists (at
+       * the Enter gate it does not yet, and a phone needs a way out) rather than
        * shipping two doors with one name. On a desk the artifact makes room:
        * `body.embed` lifts `#minimapWrap` and the build bar's floor out of the
        * bottom-left corner, because the artifact is the only thing that knows
@@ -893,7 +896,7 @@ export default function LivingMap() {
         }}
       />
 
-      {presence !== "absent" && !pocket && (
+      {presence !== "absent" && (!pocket || !entered) && (
         <button
           type="button"
           onClick={exitApp}
@@ -991,7 +994,6 @@ export default function LivingMap() {
           allow="fullscreen"
         />
       )}
-
     </div>
   );
 }

@@ -1717,6 +1717,11 @@
   <p style="opacity:.55;margin-top:4px;letter-spacing:.14em">9°13′55″N · 83°50′04″W · the hills above playa dominicalito</p>
   <button class="btn" id="enterBtn">Enter the Land</button>
 </div></div>
+<script>/* The shell already asked (its Enter the Land gate adds skipIntro). Hide
+   this card the moment it is parsed, so the visitor is not asked twice, by a
+   button that cannot answer yet, while the rest of this file downloads. The
+   boot's last lines remove it. Declares nothing global. */
+(function(){if(/skipIntro/i.test(location.hash)){var c=document.getElementById('introCard');if(c)c.style.display='none'}})()</script>
 
 <script>
 /* ================= SCENE DATA — authored from AMORA MASTER PLAN V7 ================= */
@@ -5161,7 +5166,11 @@ function buildExportJSON(status){
     map_structures:structures,
     map_flows:flows,
     map_structure_facts:facts,
-    map_edits:EDITS,
+    /* A COPY, never EDITS itself. View as visitor stashes this export and
+       restores it later, and restoreScene empties EDITS before it reads
+       map_edits: handed the same array, it read back nothing, editSeq fell to
+       0 and every edit after the round trip counted as already published. */
+    map_edits:EDITS.slice(),
     boundary:{scene_units:SCENE.bound.map(pt=>[Math.round(pt[0]),Math.round(pt[1])]),
       masterplan_px:SCENE.bound.map(pt=>{const[mx,my]=IAF(pt[0],pt[1]);return[Math.round(mx),Math.round(my)]}),
       geojson:{type:'Feature',properties:{name:'Amora property boundary',source:'founder build mode'},
