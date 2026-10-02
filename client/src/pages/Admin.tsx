@@ -63,6 +63,9 @@ import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
 import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
+import { ConflictDoorFields } from "@/components/admin/ConflictDoorFields";
+import { RestorativeInAgreement } from "@/components/admin/RestorativeInAgreement";
+import ClosingPolicyEditor from "@/components/admin/ClosingPolicyEditor";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
 import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
@@ -4350,13 +4353,13 @@ function VillageBrainTab({ password }: { password: string }) {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h3 className="font-semibold text-gray-900">What this village is for</h3>
         <p className="text-sm text-gray-600 mt-1">
-          Your guide reads this before she suggests anything. She ranks it above the shipped
-          literature and below what is live in the game, and she names which section she drew on.
-          None of it leaves this village.
+          The guide reads this before it suggests anything. It ranks it above the shipped
+          literature and below what is live in the game, and it names which section it drew on.
+          When the guide answers in its own words, what it reads here goes to its model provider with the question.
         </p>
         {blanks.length > 0 && (
           <p className="text-sm text-gray-600 mt-2">
-            Still blank: {blanks.map((s) => s.id).join(", ")}. She will ask about these when a
+            Still blank: {blanks.map((s) => s.id).join(", ")}. The guide will ask about these when a
             conversation touches them, one at a time.
           </p>
         )}
@@ -6890,7 +6893,7 @@ function HealthAdminTab({ password }: { password: string }) {
  * named domains until clean), and the policy editor.
  */
 
-function ExitsAdminTab({ password }: { password: string }) {
+export function ExitsAdminTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -7089,8 +7092,8 @@ function ExitsAdminTab({ password }: { password: string }) {
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
           <p className="text-xs text-gray-500 mb-4">
-            Every field here is printed at /exit-policy for anyone to read,
-            signed in or not. This is the highest-stakes copy on the site: it
+            Every field here is printed at /exit-policy, signed in or not, except the outside
+            contact's name and how to reach them, which only members see. This is the highest-stakes copy on the site: it
             says what happens to a person, and to what they built, when they
             leave{policyDraft.placeholder ? ". The banner above it says these are still the platform's starting terms" : ""}.
           </p>
@@ -7100,14 +7103,6 @@ function ExitsAdminTab({ password }: { password: string }) {
               <input type="number" min={0} value={policyDraft.voluntary?.noticePeriodDays ?? 0}
                 onChange={(e) => setVol({ noticePeriodDays: Number(e.target.value) })}
                 className={`${inputCls} w-full mt-1 min-h-[44px]`} />
-            </label>
-            <label className="text-xs text-gray-500">Restorative intake role
-              <select value={policyDraft.restorative?.intakeContactRole ?? ""}
-                onChange={(e) => setRes({ intakeContactRole: e.target.value })}
-                className={`${inputCls} w-full mt-1 min-h-[44px]`}>
-                <option value="">none configured</option>
-                {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-              </select>
             </label>
           </div>
 
@@ -7189,6 +7184,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             </label>
           </div>
 
+          {data?.conflictAgreementStored || data?.gameStarted ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} byVote={!!data?.gameStarted} /> : (<>
           <StepListEditor
             label="The restorative path"
             hint="Printed under Repair before departure. Its content reaches only the people in the room; these are the steps, never the content."
@@ -7196,6 +7192,8 @@ function ExitsAdminTab({ password }: { password: string }) {
             onChange={(next) => setRes({ steps: next })}
           />
           <p className="text-[11px] mb-4 -mt-2">{mark(stale.includes("The restorative path"))}</p>
+          <ConflictDoorFields restorative={policyDraft.restorative} roles={roles} onChange={setRes} inputCls={inputCls} />
+          </>)}
 
           {/*
             THE ACKNOWLEDGEMENT.
@@ -7225,6 +7223,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         </div>
         );
       })()}
+      {data && <ClosingPolicyEditor password={password} closing={data.policy?.closing} onSaved={(closing) => setData((d: any) => (d ? { ...d, policy: { ...d.policy, closing } } : d))} />}
     </div>
   );
 }
@@ -8471,7 +8470,6 @@ export function SeasonTab({ password }: { password: string }) {
   );
 }
 
-
 // ── One hero image: upload (compressed for you) or point at your own URL ──────
 
 function BrandImageField({
@@ -9013,7 +9011,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             <p className="font-medium text-gray-900">3. Set environment variables</p>
             <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`railway variables \\
   --set "ADMIN_PASSWORD=<pick-a-strong-one>" \\
-  --set "JOURNEY_PASSWORD=<pick-a-strong-one>" \\
+  --set "AUTH_TOKEN_SECRET=<a-long-random-string>" \\
   --set "FRONTEND_URL=https://your-domain"`}</pre>
             <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under {CONNECTIONS_GROUP_TITLE}.</p>
           </li>
@@ -9194,7 +9192,6 @@ function SettingsTab({ password }: { password: string }) {
     </div>
   );
 }
-
 
 /**
  * S69: payment products — define what the village asks money for, watch
@@ -9462,17 +9459,16 @@ function LaunchBanner({ password }: { password: string }) {
   }, [password]);
 
   if (!status || status.launchedAt) return null;
-  const total = (status.items ?? []).length;
-  const done = (status.items ?? []).filter((i: any) => i.state === "ok").length;
+  // What is left, as the journey page says it. A "done of total" count here was a score (R55).
+  const recommended = Number(status.recommendedOpen ?? 0);
   return (
     <a
       href="/journey-to-launch"
       className="block bg-amber-400 text-teal-950 px-6 py-2.5 text-sm font-medium hover:bg-amber-300 transition-colors"
     >
       <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
-      {done} of {total} done
-      {status.blockingOpen > 0 && ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open`}
-      {status.blockingOpen === 0 && " · ready when a founder says so"}
+      {status.blockingOpen > 0 ? `${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open` : "nothing blocking, ready when a founder asks the village"}
+      {` · ${recommended} recommended remaining`}
       <span className="float-right">→</span>
     </a>
   );

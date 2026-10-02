@@ -12,7 +12,7 @@ Provenance: platform
 > the badge and role tables and the quest claims, all of which are older than this module and none of
 > which it owns. Its logic lives in `server/lib/profile.ts`, `server/routes/profile.ts`,
 > `server/lib/characters.ts` and `server/lib/characterPortraits.ts`, its
-> remaining handlers sit in `server/index.ts`, and its five screens are `client/src/pages/Profile.tsx`,
+> remaining handlers sit in `server/index.ts` (the exit request in `server/routes/exits.ts`), and its five screens are `client/src/pages/Profile.tsx`,
 > `client/src/pages/PublicProfile.tsx`, `client/src/pages/Characters.tsx`,
 > `client/src/components/ProfileSheet.tsx` and `client/src/components/ProfileHero.tsx`.
 
@@ -31,7 +31,8 @@ the builders decide that reading the code cold will not tell me".
 
 The one sentence to carry out of this document: **the module's declared API prefix covers eight of
 its handlers and none of its public ones.** `/api/profile` really does cover all eight: the three in
-`server/routes/profile.ts` and the five in `server/index.ts`, export, exit and delete among them, so
+`server/routes/profile.ts`, the four in `server/index.ts` (export and delete among them) and the exit
+request in `server/routes/exits.ts`, so
 a gate mounted on the prefix reaches every one of them. What it does not reach is
 `/api/profiles/:handle`, the only endpoint on the platform that serves one NAMED member's record to
 an unauthenticated stranger, keyed by their handle. Express matches `/api/profile` at a segment
@@ -142,8 +143,9 @@ EVERYTHING". All four were missing until #233, and this paragraph went on saying
 not, which is how a data-rights review came to report the gap against code that had already closed
 it. [Sharp edges](#sharp-edges) describes the fix.
 
-Every one of these refuses a stranger with `401 {"error": "auth_required"}`. The `prefs`, export,
-exit and delete handlers live in `server/index.ts` rather than in the routes file. One of the three
+Every one of these refuses a stranger with `401 {"error": "auth_required"}`. The `prefs`, export
+and delete handlers live in `server/index.ts` rather than in the routes file, and the exit request
+lives in `server/routes/exits.ts` with the rest of the departure routes. One of the three
 routes in `server/routes/profile.ts` reads beyond its own member: `PUT /api/profile` runs
 `(await members.all()).some(...)` for the handle-clash scan, which is a read of every member row on
 the deployment, and that is exactly why the slice is `members` and not a single-row getter. The

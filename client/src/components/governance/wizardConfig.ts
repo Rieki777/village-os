@@ -392,7 +392,9 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
     title: "Write an agreement",
     description: "Put a shared understanding into words the village can adopt, review and amend.",
     consequence:
-      "Publishing enters this into sensing. Adopted by consent, it becomes an active agreement with its own review date.",
+      "Publishing puts this to the village's vote. If it carries, it becomes an active agreement, exactly as written, with its own review date.",
+    // The route opens the vote itself (server/routes/governanceAgreements.ts), so there is no sensing step to describe.
+    opensVote: true,
     publish: {
       path: "/api/governance/agreements",
       body: (a) => ({
@@ -917,6 +919,8 @@ export const SUBJECT_NOUN: Record<string, string> = {
    * what happened is that a village changed what it is for.
    */
   gps_change: "Change of purpose",
+  // Opened from the conflict agreement itself once the Game has started, never from the wizard.
+  conflict_agreement: "Change to the conflict agreement",
   /*
    * NOT a wizard type, and here because `ballots.subject_type` carries it.
    * Without this entry an advisory vote fell through to "Decision", which is

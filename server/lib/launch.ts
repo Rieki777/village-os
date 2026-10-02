@@ -41,6 +41,7 @@ import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
 import { governingPurpose } from "./governingPurpose";
+import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -51,6 +52,7 @@ import { governingPurpose } from "./governingPurpose";
 const GPS_CHECK_KEY = "gps-written";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { normalizeSeasonConfig } from "./seasonCalendar";
+import { governanceRowFor } from "./launchGovernance";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -249,6 +251,14 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
+    // WHAT CLOSING MEANS (Rye, 2026-09-25), read off the exit policy document
+    // the same way the statement above is read: a pool, no cache, nothing in
+    // server/index.ts. server/lib/closingPolicy.ts.
+    if (req.checkKey === CLOSING_CHECK_KEY) {
+      items.push({ ...req, ...(await closingLaunchCheck(pool)) });
+      continue;
+    }
+
     /*
      * WHERE THE VILLAGE IS, resolved HERE for the reason the `decide:` branch
      * above gives: `server/index.ts` sits at exactly its line baseline, and
@@ -263,6 +273,27 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
     if (req.checkKey.startsWith("village:")) {
       const read = await villageFactFor(pool, req.checkKey.slice("village:".length));
       items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
+    /*
+     * THE GOVERNANCE ROWS (2026-09-27): every canvas block on record, a door
+     * for a conflict with a promised reply, and governance open to members.
+     * Resolved in server/lib/launchGovernance.ts for the reason the `village:`
+     * branch gives: none of them needs a boot cache, and server/index.ts only
+     * ever gets smaller. The module lifecycle is the one fact from outside,
+     * and it arrives through `deps`, which already carries it.
+     *
+     * A read that throws fails THIS row visibly, the same way a wired check's
+     * throw does below, and never the whole checklist.
+     */
+    if (req.checkKey.startsWith("canvas:") || req.checkKey.startsWith("governance:")) {
+      try {
+        const read = await governanceRowFor(pool, deps, req.checkKey);
+        items.push({ ...req, state: read.state, detail: read.detail });
+      } catch (e: any) {
+        items.push({ ...req, state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` });
+      }
       continue;
     }
 

@@ -36,6 +36,7 @@ import {
   WIZARD_TYPES as SERVER_WIZARD_TYPES,
 } from "../../../../server/lib/proposalDrafts";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "../../../../shared/ballotSubjects";
+import { AGREEMENT_DOMAINS, AGREEMENT_LIMITS, parseAgreement } from "../../../../shared/agreements";
 
 /** Answers that satisfy every validator a type declares, built from the config
  *  itself so a new required field fails this suite instead of shipping. */
@@ -258,5 +259,49 @@ describe("the seat vote", () => {
   it("asks for the reason the route asks for, at the length it asks for", () => {
     const short = problemsFor("role_seat", { ...base, reason: "x".repeat(39) });
     expect(short.map((p) => p.field)).toEqual(["reason"]);
+  });
+});
+
+/**
+ * DEFECT 9: "Write an agreement" posted to a route nothing answered, so the
+ * type could only ever be a practice vote. It now opens the village's vote
+ * (server/routes/governanceAgreements.ts), and the contract between what the
+ * wizard sends and what the route accepts is pinned here, against the route's
+ * own validator.
+ */
+describe("the agreement", () => {
+  const cfg = typeConfig("agreement")!;
+  const answers = {
+    title: "Quiet hours in the common house",
+    body: "Between ten at night and seven in the morning the common house is quiet. Anyone can name an exception at the weekly circle.",
+    domain: "space_land",
+    circleId: "hearth",
+    reviewAt: "2099-01-01",
+  };
+
+  it("publishes to the route that opens the vote, and the server can conduct it", () => {
+    expect(cfg.publish.path).toBe("/api/governance/agreements");
+    expect(SERVER_CONDUCTABLE_TYPES).toContain("agreement");
+    expect(cfg.opensVote).toBe(true);
+    expect(cfg.consequence).not.toMatch(/sensing/i);
+  });
+
+  it("sends a body the route's own validator accepts, the blanks as nulls", () => {
+    expect(parseAgreement(cfg.publish.body(answers), { today: "2026-10-01", circleIds: ["hearth"] })).toEqual({
+      ok: true,
+      agreement: { ...answers },
+    });
+    const blank = cfg.publish.body({ ...answers, domain: "", circleId: "", reviewAt: "" });
+    expect(parseAgreement(blank, { today: "2026-10-01", circleIds: ["hearth"] })).toMatchObject({
+      ok: true,
+      agreement: { domain: null, circleId: null, reviewAt: null },
+    });
+  });
+
+  it("offers exactly the domains the route accepts, and holds the title and body to the route's floors", () => {
+    const domain = fieldsFor("agreement", "terms").find((f) => f.key === "domain")!;
+    expect(domain.options!.map((o) => o.value).filter(Boolean)).toEqual([...AGREEMENT_DOMAINS]);
+    const short = problemsFor("agreement", { ...answers, title: "x".repeat(AGREEMENT_LIMITS.titleMin - 1), body: "y".repeat(AGREEMENT_LIMITS.bodyMin - 1) });
+    expect(short.map((p) => p.field).sort()).toEqual(["body", "title"]);
   });
 });

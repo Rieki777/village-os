@@ -1,0 +1,147 @@
+/**
+ * THE CANVAS VIEW on /journey-to-launch: the season's week map above the
+ * canvas baseline, with the baseline's cards ordered by the week's focus
+ * (2026-09-26).
+ *
+ * The network for the season lives here, as the canvas's lives in
+ * CanvasBaseline: the panel and its form are handed functions and hold no
+ * fetch of their own. A season that cannot be read, or none at all, leaves
+ * the baseline exactly as it was, in canvas order, so a village without a
+ * season file (a self-hosted one, or one a release behind) loses nothing.
+ *
+ * A read that failed for a reason worth retrying (the network, a 5xx) offers
+ * "Try again", which reads the season again; a refusal (401 sign in, 403 not
+ * admitted yet) prints the server's own sentence and offers nothing, because
+ * asking again gets the same answer.
+ *
+ * THE COMPANION (Wave 4, plan 5.4): the view holds the companion's panel, and
+ * its header, every block card and each block's Learn frame carry an Ask door
+ * (client/src/components/companion/Companion.tsx).
+ */
+import { useCallback, useEffect, useState } from "react";
+import { authToken } from "@/lib/gameApi";
+import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
+import type { CanvasMoonPayload } from "@shared/canvasRevisit";
+import { CanvasBaseline } from "./CanvasBaseline";
+import { CanvasMoon, type MoonOfferAnswer } from "./CanvasMoon";
+import { CanvasSeason } from "./CanvasSeason";
+import { AskButton, CompanionProvider } from "@/components/companion/Companion";
+
+const headers = (): Record<string, string> => {
+  const t = authToken();
+  return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+};
+
+/** Why a read of the season failed, in words, and whether asking again could help. */
+function seasonReadFailure(status: number | null, error: unknown): { message: string; retry: boolean } {
+  if (status === 401 || error === "auth_required") return { message: "Sign in to read the season.", retry: false };
+  if (status === 403 && typeof error === "string" && error) return { message: error, retry: false };
+  return { message: "The season could not be read just now.", retry: true };
+}
+
+export function CanvasView() {
+  const [payload, setPayload] = useState<CanvasSeasonPayload | null>(null);
+  const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
+
+  const load = useCallback(() => {
+    setFailed(null);
+    fetch("/api/canvas/season", { headers: headers() })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          setFailed(seasonReadFailure(r.status, d?.error));
+          return;
+        }
+        setPayload(d as CanvasSeasonPayload);
+      })
+      .catch(() => setFailed(seasonReadFailure(null, null)));
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // The canvas moon (plan 4.4). A read that fails leaves the card off the
+  // page and the rest of the view as it was: the moon is a courtesy.
+  const [moon, setMoon] = useState<CanvasMoonPayload | null>(null);
+  const loadMoon = useCallback(() => {
+    fetch("/api/canvas/moon", { headers: headers() })
+      .then(async (r) => {
+        if (!r.ok) return;
+        setMoon((await r.json().catch(() => null)) as CanvasMoonPayload | null);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadMoon();
+  }, [loadMoon]);
+
+  const offerMoon = async (): Promise<MoonOfferAnswer> => {
+    try {
+      const r = await fetch("/api/canvas/moon/gathering", { method: "POST", headers: headers() });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: String(d?.error ?? "The gathering was not offered.") };
+      loadMoon();
+      return { ok: true, message: String(d?.message ?? "The canvas moon is on the calendar's list as a draft.") };
+    } catch {
+      return { ok: false, error: "That did not reach the server." };
+    }
+  };
+
+  const save = async (season: Season): Promise<string | null> => {
+    try {
+      const r = await fetch("/api/canvas/season", { method: "PUT", headers: headers(), body: JSON.stringify(season) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return String(d?.error ?? "That season was not saved.");
+      load();
+      return null;
+    } catch {
+      return "That season did not reach the server.";
+    }
+  };
+
+  const remove = async (): Promise<string | null> => {
+    try {
+      const r = await fetch("/api/canvas/season", { method: "DELETE", headers: headers() });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return String(d?.error ?? "The season was not taken off.");
+      load();
+      return null;
+    } catch {
+      return "That did not reach the server.";
+    }
+  };
+
+  const now = new Date();
+  const season = payload?.season ?? null;
+  const focus = seasonFocus(season, now);
+  const phase = season ? seasonMoment(season, now).phase : null;
+
+  // `wrap-anywhere` (overflow-wrap: anywhere, inherited): the season file and
+  // the readings are words people type, and a pasted Sheet or Drive id is one
+  // 44-character word with nowhere to break. Without it that one word widened
+  // the whole page on a phone, and every member scrolled sideways for as long
+  // as it stayed. `break-words` is NOT enough, measured live at 375px: it
+  // fixed the season panel and left the page 310px wide, because the reading
+  // cards sit in a grid, a grid item is as wide as its longest word, and
+  // break-word does not change that width; anywhere does. On ordinary text
+  // the two lay out identically (the lane's live QA compares every element).
+  return (
+    <CompanionProvider>
+      <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
+        <div className="flex justify-end">
+          <AskButton block={null} label="Ask about the canvas" />
+        </div>
+        <CanvasSeason
+          payload={payload}
+          failed={failed?.message ?? null}
+          onRetry={failed?.retry ? load : undefined}
+          now={now}
+          onSave={save}
+          onRemove={remove}
+        />
+        <CanvasMoon payload={moon} onOffer={offerMoon} />
+        <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+      </div>
+    </CompanionProvider>
+  );
+}

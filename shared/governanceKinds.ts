@@ -244,6 +244,26 @@ export function isSeatSubject(subjectType: string): boolean {
 }
 
 /**
+ * THE SUBJECTS A BALLOT CARRIES A CHANGE SET FOR: a mechanics proposal row,
+ * whose elements each carry a size.
+ *
+ * The landing loop reads the size of a decision off these elements when it
+ * asks whether a steward may stop it (`outOfStewardTierReach` in
+ * server/lib/applyDue.ts), and every other subject has no elements, so it is
+ * judged at `routine` whatever its bar to pass. That makes this list part of
+ * the steward's reach, which is why it lives here where the Decision Matrix
+ * (shared/decisionMatrix.ts) can read the same list the landing loop reads.
+ * It was spelled inline in applyDue.ts as two string compares; that function
+ * now reads this set.
+ */
+export const CHANGE_SET_SUBJECTS: ReadonlySet<string> = new Set(["mechanics", "mint_rule"]);
+
+/** Is this subject's ballot backed by a mechanics proposal row and its change set? */
+export function carriesChangeSet(subjectType: string): boolean {
+  return CHANGE_SET_SUBJECTS.has(String(subjectType));
+}
+
+/**
  * DOES THIS PAYOUT WAIT? (Rye, 2026-09-04.)
  *
  * "they go the moment they pass all conditions ... And then also another

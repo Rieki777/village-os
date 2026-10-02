@@ -134,6 +134,17 @@ export interface AppDeps {
   faqsRepo: DbDocument<Row>;
 
   /**
+   * The village's page content, one key per section, read and written WHOLE.
+   *
+   * `get()` hands back the cache itself (and the shared fallback object when
+   * no row exists), so a writer copies before it changes anything and hands
+   * the whole document to `put()`. Taken by server/routes/canvasPublic.ts for
+   * the one key it owns, `canvas`; the generic section doors stay in
+   * server/index.ts and refuse that key.
+   */
+  contentRepo: DbDocument<any>;
+
+  /**
    * The brand overlay document: identity, the nine image slots, theme, skin.
    *
    * TAKEN FOR TWO CALLS ONLY, and the distinction is the whole reason the

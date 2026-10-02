@@ -188,6 +188,23 @@ describe("the content editor never offers a failed read as content", () => {
       expect(screen.getAllByText(/a claim about your jurisdiction/i).length).toBeGreaterThan(0);
     });
 
+    it("tells a founder what the Love Letter prints when the legal entity is left blank", async () => {
+      /*
+       * The help under the entity box describes the empty state, and the
+       * Love Letter changed it: a blank entity used to print the village's bare
+       * name where the entity goes, and now the letter says the signer joins
+       * the village's community with no legal entity published yet. Help that
+       * still called the blank state broken pushed a founder to type the
+       * village's name into a legal claim, which is the defect back again.
+       */
+      stubFetch({ legal: 404 }, writes);
+      render(<ContentEditorTab password="secret" sectionKey="legal" sectionLabel="Legal & Jurisdiction Notices" />);
+
+      await waitFor(() => expect(screen.getByText(/The legal entity a member joins/i)).toBeTruthy());
+      expect(screen.getByText(/no legal entity is published yet/i)).toBeTruthy();
+      expect(screen.queryByText(/NAME is printed in its place/)).toBeNull();
+    });
+
     it("keeps keys the spec has never heard of", async () => {
       /*
        * THE PROPERTY THAT MAKES THIS SAFE. The editor edits the PARSED

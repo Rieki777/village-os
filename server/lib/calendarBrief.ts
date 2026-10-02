@@ -20,7 +20,7 @@
  * section is empty and therefore omitted, never filler.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { civilParts, zonedTimeToUtc } from "../../shared/lunar";
+import { civilParts, newMoonsBetween, zonedTimeToUtc } from "../../shared/lunar";
 import { listCalendarItems } from "./calendar";
 import { attachWaitlistInfo, whoIsHere, type WhoIsHere } from "./calendarCommunity";
 import { listOrgAssignments, listOrgRoles, peopleOnly } from "./orgChart";
@@ -37,6 +37,40 @@ let opportunitiesProvider: OpportunitiesProvider | null = null;
  */
 export function setOpportunitiesProvider(fn: OpportunitiesProvider | null): void {
   opportunitiesProvider = fn;
+}
+
+// ── The canvas moon seam (plan 4.4) ─────────────────────────────────────────
+
+/**
+ * The block TITLES a new moon's canvas question names, in canvas order.
+ * `server/routes/canvasRevisit.ts` hands this over at boot, built on
+ * `canvasMoonQuestion` (./canvasMoon.ts). Titles only: never a level, a
+ * reading, a sentence or a name.
+ */
+export type CanvasMoonProvider = (pool: Pool, newMoonAt: Date) => Promise<string[]>;
+
+let canvasMoonProvider: CanvasMoonProvider | null = null;
+
+/** Hand over the canvas moon's reader once, at boot. Until then no brief or digest names a canvas moon. */
+export function setCanvasMoonProvider(fn: CanvasMoonProvider | null): void {
+  canvasMoonProvider = fn;
+}
+
+/**
+ * The titles for one new moon, or null when no reader is registered or it
+ * failed. Read by the weekly brief below and by the moon digest
+ * (./moonDigest.ts), so the two carry the same moon the same way. Never
+ * throws: a brief without its canvas line still says what the week holds.
+ */
+export async function canvasMoonTitles(pool: Pool, newMoonAt: Date): Promise<string[] | null> {
+  if (!canvasMoonProvider) return null;
+  try {
+    const titles = await canvasMoonProvider(pool, newMoonAt);
+    return Array.isArray(titles) ? titles.map((t) => String(t ?? "").trim()).filter((t) => t.length > 0) : null;
+  } catch (e) {
+    console.error("[brief] canvas moon provider failed", e);
+    return null;
+  }
 }
 
 // ── The gathered shape ───────────────────────────────────────────────────────
@@ -63,6 +97,12 @@ export interface WeeklyBriefData {
   openSeats: { count: number; names: string[] } | null;
   newQuests: { count: number; titles: string[] } | null;
   opportunities: string[];
+  /**
+   * The canvas moon, when a new moon falls inside the brief's week: its
+   * village date and the block titles its question names. Null otherwise, and
+   * null when no reader is registered.
+   */
+  canvasMoon: { date: string; blocks: string[] } | null;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -195,6 +235,17 @@ export async function gatherWeeklyBrief(
     }
   }
 
+  // The canvas moon: only in the week a new moon falls in, block titles only.
+  let canvasMoon: WeeklyBriefData["canvasMoon"] = null;
+  const newMoon = newMoonsBetween(start, to)[0];
+  if (newMoon) {
+    const blocks = await canvasMoonTitles(pool, newMoon);
+    if (blocks && blocks.length) {
+      const p = civilParts(newMoon, opts.timezone);
+      canvasMoon = { date: `${p.year}-${pad(p.month)}-${pad(p.day)}`, blocks };
+    }
+  }
+
   return {
     weekKey,
     timezone: opts.timezone,
@@ -205,5 +256,6 @@ export async function gatherWeeklyBrief(
     openSeats,
     newQuests,
     opportunities,
+    canvasMoon,
   };
 }

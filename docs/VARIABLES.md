@@ -294,7 +294,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Rung a need aims for when nobody said otherwise | `needs.default_depth_target` | Needs | choice | `satisfied` | the whole village |
 | Share of members a need aims to reach when nobody said otherwise | `needs.default_breadth_pct` | Needs | integer | `100` | the whole village |
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
-| Whether saying what the village is for is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+| Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 
 ## Membership
 
@@ -3852,9 +3852,9 @@ The smallest number of answers on one need that may appear as a count anywhere i
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Whether saying what the village is for is asked before launch
+### Whether naming the village's needs target is asked before launch
 
-Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not said what it is for may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village is for. Nothing reads this until the launch check names it.
+Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not named a needs target may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village needs. What the village is for is a separate question, and it does block: the governing purpose statement is its own row on the launch checklist, and the vote waits for it. Nothing reads this dial until the launch check names it.
 
 | Fact | Value |
 | --- | --- |
@@ -3877,6 +3877,7 @@ The generator reads these and fails loudly if any of them moves:
 
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
+- `shared/conflictAgreement.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

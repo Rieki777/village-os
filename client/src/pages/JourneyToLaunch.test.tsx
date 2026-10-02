@@ -32,14 +32,22 @@ import type { ReactNode } from "react";
 const auth = vi.hoisted(() => ({
   current: { user: null as any, loading: false },
 }));
+/** What /api/game/me says about the signed-in member: admitted by default, as a member of the village is. */
+const me = vi.hoisted(() => ({ current: { membership: true } as { membership: boolean } | null, asked: 0 }));
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/MicButton", () => ({ default: () => null }));
-vi.mock("@/pages/ProjectHistory", () => ({ EconomicsView: () => null }));
+vi.mock("@/components/journey/EconomicsView", () => ({ EconomicsView: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
+vi.mock("@/lib/gameApi", () => ({
+  authToken: () => "a-token",
+  fetchGameMe: async () => {
+    me.asked += 1;
+    return me.current;
+  },
+}));
 
 import JourneyToLaunch from "./JourneyToLaunch";
 
@@ -126,6 +134,10 @@ const draw = () =>
 
 beforeEach(() => {
   auth.current = { user: null, loading: false };
+  me.current = { membership: true };
+  me.asked = 0;
+  // The open view is read from the address, so every test starts on the page's own.
+  window.history.replaceState({}, "", "/journey-to-launch");
   answer({});
 });
 
@@ -164,6 +176,50 @@ describe("who reaches the test run", () => {
     await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
     expect(screen.getByRole("button", { name: /run the test/i })).toBeTruthy();
     expect(calls[0].url).toBe("/api/admin/launch");
+  });
+
+  /*
+   * DEFECT 10 (Wave 4): the guide's only door hid once the village launched,
+   * so the organizing counsel a live village needs most was unreachable, and
+   * the Brain tab's promise about it was a promise about a closed door.
+   */
+  it("keeps the guide after launch, and opens it on organizing with no launch tab", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, launchedAt: "2026-10-31T12:00:00.000Z" } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/admin/assistant/organize": {
+        status: 200,
+        body: { reply: "Start with the decisions section.", consulted: { ownRecord: [], references: [], readers: [], brief: ["decisions"] }, path: "loop" },
+      },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText("This village is live")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /ask the guide/i }));
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Launch" })).toBeNull();
+    // And a question goes to the organizing door, which reads the brief, and
+    // the answer names the brief section it read.
+    fireEvent.change(screen.getByPlaceholderText(/Ask about any step/), { target: { value: "where do we start" } });
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask about any step/), { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("Start with the decisions section.")).toBeTruthy());
+    expect(calls.map((c) => c.url)).toContain("/api/admin/assistant/organize");
+    expect(calls.map((c) => c.url)).not.toContain("/api/admin/assistant/launch");
+    expect(screen.getByText(/Your brief: decisions\./)).toBeTruthy();
+  });
+
+  it("keeps both tabs before launch, opening on the launch", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /ask the guide/i }));
+    expect(screen.getByRole("button", { name: "Launch" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    expect(screen.getByText(/I can see exactly where your launch stands/)).toBeTruthy();
   });
 });
 
@@ -227,5 +283,163 @@ describe("what the member's run does", () => {
     await waitFor(() => expect(screen.getByText(/Nothing refused across the whole run/i)).toBeTruthy());
     expect(screen.getByText(/Every rule this run reached would pay what it says it pays/i)).toBeTruthy();
     expect(screen.queryByRole("alert"), "an empty result is not an error").toBeNull();
+  });
+});
+
+/*
+ * THE CANVAS VIEW (0222). Members read the canvas as well as admins, so the
+ * tab has to be on the member's copy of this page too, and it must not ask
+ * the server for anything until somebody opens it.
+ */
+describe("the canvas view", () => {
+  const EMPTY_CANVAS = { mayRecord: false, blocks: [] };
+  /** No season loaded: the season panel says so and the cards stay in canvas order. */
+  const NO_SEASON = { season: null, savedBy: null, savedAt: null, problem: null, mayEdit: false };
+  /** No next new moon to show: the canvas moon card stays off the page. */
+  const NO_MOON = { next: null, gathering: null, calendarOn: false, mayOffer: false };
+
+  it("is a tab a signed-in member can open, and it reads the members' doors", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    answer({
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+      "/api/canvas/moon": { status: 200, body: NO_MOON },
+    });
+    draw();
+    expect(calls, "nothing is asked until the tab is opened").toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/No season is loaded/)).toBeTruthy());
+    expect(calls.map((c) => c.url).sort()).toEqual(["/api/canvas", "/api/canvas/moon", "/api/canvas/season"]);
+    for (const c of calls) expect(c.init.headers.Authorization, c.url).toBe("Bearer a-token");
+    expect(screen.getByText("How this village governs itself")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /run the test/i }), "the test run steps aside").toBeNull();
+  });
+
+  it("keeps the open tab in the address, so Back from the workbook or a reload lands on it again", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    answer({
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+      "/api/canvas/moon": { status: 200, body: NO_MOON },
+    });
+    const first = draw();
+    const depth = window.history.length;
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(window.location.pathname + window.location.search).toBe("/journey-to-launch?view=canvas");
+    expect(window.history.length, "a tab is not a page in the history").toBe(depth);
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    first.unmount();
+
+    // What Back and a reload do: the page mounts again at the same address.
+    draw();
+    expect(screen.getByText("How this village governs itself")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Test run" }));
+    expect(window.location.search, "the page's own view needs no parameter").toBe("");
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+  });
+
+  it("opens on the page's own view when the address names no view it has", () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    window.history.replaceState({}, "", "/journey-to-launch?view=nonsense");
+    draw();
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+    expect(calls, "the canvas is not asked for").toEqual([]);
+  });
+
+  it("is not offered to a signed-in account the village has not admitted, which gets the test run alone", async () => {
+    auth.current = { user: { id: "u3", name: "Rook", role: "member" }, loading: false };
+    me.current = { membership: false };
+    draw();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Canvas" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Test run" }), "no tab row with one tab in it").toBeNull();
+    expect(screen.getByText("See what these settings would do")).toBeTruthy();
+    expect(calls.map((c) => c.url), "the canvas is never asked for").not.toContain("/api/canvas");
+  });
+
+  it("stays offered when the profile cannot be read, since the server still decides", async () => {
+    auth.current = { user: { id: "u2", name: "Wren", role: "member" }, loading: false };
+    me.current = null;
+    draw();
+    await waitFor(() => expect(me.asked).toBe(1));
+    // Let the answer land before reading the page, so this reads the state AFTER it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: "Canvas" })).toBeTruthy();
+  });
+
+  it("sits beside the admin's other views and takes the counts off the screen", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+      "/api/canvas/moon": { status: 200, body: NO_MOON },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    expect(screen.getByTestId("journey-remaining").className).not.toContain("hidden");
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(screen.getByTestId("journey-remaining").className).toContain("hidden");
+    expect(screen.queryByText(/Take one backup/i)).toBeNull();
+  });
+
+  /*
+   * THE CANVAS ROW'S LINK IS THIS PAGE. The view is read from the address on
+   * arrival, so a plain link to `?view=canvas` from the launch view would move
+   * the address and leave the screen where it was. The row switches the view.
+   */
+  it("opens the Canvas view in place from the canvas row on the checklist", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    const canvasRow = {
+      id: "canvas-on-record",
+      group: "governance",
+      title: "Put every canvas block on record",
+      why: "Each block carries a reading.",
+      detail: "No block has a reading yet",
+      severity: "blocking",
+      state: "missing",
+      fixAt: "/journey-to-launch?view=canvas",
+      fixLabel: "Open the Canvas",
+      checkKey: "canvas:on-record",
+    };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, items: [...STATUS.items, canvasRow], blockingOpen: 2 } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+      "/api/canvas/moon": { status: 200, body: NO_MOON },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText("Put every canvas block on record")).toBeTruthy());
+    // Its own section, named for what it asks.
+    expect(screen.getByText("How the village decides and cares")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Open the Canvas/ }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+    expect(window.location.search).toBe("?view=canvas");
+    expect(screen.queryByText("Put every canvas block on record")).toBeNull();
+  });
+});
+
+/*
+ * R55: NO READINESS SCORE. The header carried a percentage and a bar, a
+ * composite number over rows of different weight. What is left is two counts,
+ * and nothing on the admin's page reads as a grade.
+ */
+describe("what is left, said without a score", () => {
+  it("shows the two counts and no percentage, bar or readiness figure", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: { ...STATUS, recommendedOpen: 3 } },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+    });
+    const { container } = draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    expect(screen.getByTestId("journey-remaining").textContent).toBe("1 blocking · 3 recommended remaining");
+    expect(screen.queryByText(/Readiness/)).toBeNull();
+    expect(container.textContent ?? "").not.toMatch(/\d+\s*%/);
+    expect(container.querySelector("[style*='width']"), "no bar drawn to a width").toBeNull();
   });
 });
