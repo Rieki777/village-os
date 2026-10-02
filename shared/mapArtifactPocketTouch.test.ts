@@ -376,3 +376,38 @@ describe("the hover card and a finger", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* THE PUBLISHED SCENE ARRIVES WITHOUT A WORD. The shell pushes it to every
+   visitor on arrival, and the first thing a phone visitor read was "Restored:
+   23 buildings, 25 features, 53 edits.", builder words over the pan pad and its
+   seed for six seconds. A restore a person asked for still says so. */
+describe("the shell's published scene, arriving", () => {
+  let b: Booted;
+  let pushed: string[];
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    const scene = JSON.parse(JSON.stringify(b.run("buildExportJSON()")));
+    b.doc.getElementById("toasts")?.replaceChildren();
+    b.post({ type: "config", scene, sceneVersion: 6 });
+    await settle(100);
+    pushed = [...b.doc.querySelectorAll("#toasts .toast")].map((t) => t.textContent ?? "");
+  });
+  afterAll(() => b?.close());
+
+  it("is applied (the control: the push really landed)", () => {
+    expect(b.run<boolean>("SCENE_APPLIED")).toBe(true);
+  });
+
+  it("says nothing about restoring to a visitor who restored nothing", () => {
+    expect(pushed.join(" | ")).not.toMatch(/Restored/);
+  });
+
+  it("still says what came back when a person asks for a restore", () => {
+    b.doc.getElementById("toasts")?.replaceChildren();
+    b.run("restoreScene(buildExportJSON())");
+    const said = [...b.doc.querySelectorAll("#toasts .toast")].map((t) => t.textContent ?? "").join(" | ");
+    expect(said).toMatch(/^Restored: \d+ buildings/);
+    expect(b.uncaught).toEqual([]);
+  });
+});

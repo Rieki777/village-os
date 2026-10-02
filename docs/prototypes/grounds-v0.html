@@ -7095,8 +7095,16 @@ $('inspClose').onclick=closeInspect;
 $('inspect').addEventListener('keydown',e=>{if(e.key==='Escape'){closeInspect();return}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
 
-/* ---------- persistence: restore the autosaved scene (same JSON the export writes) ---------- */
-function restoreScene(J){try{
+/* ---------- persistence: restore the autosaved scene (same JSON the export writes) ----------
+   QUIET IS FOR A RESTORE NOBODY ASKED FOR. The shell pushes the published
+   scene to every visitor on arrival, and this used to announce it: the first
+   thing a phone visitor read was "Restored: 23 buildings, 25 features, 53
+   edits.", builder words in the bottom strip over the pan pad and its seed for
+   six seconds. The push, and the two paths that follow a restore with their
+   own line, pass {quiet:true}. A restore a person asked for (Restore, Open my
+   draft) still says what came back. A failure always speaks, and on the quiet
+   path in words that are true for somebody who never saved anything. */
+function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   for(const s of SCENE.structures){pEls[s.key]&&pEls[s.key].remove();bEls[s.key]&&bEls[s.key].remove();
     delete pEls[s.key];delete bEls[s.key];delete BY[s.key]}
   SCENE.structures=J.map_structures.map(r=>{const s={key:r.key,name:r.name,archetype:r.archetype,
@@ -7169,8 +7177,9 @@ function restoreScene(J){try{
   if(typeof renderVocab==='function')renderVocab();
   if(typeof renderMediaVocab==='function'){renderMediaVocab();renderPhaseVocab()}
   if(document.body.classList.contains('loom'))renderLoom();
-  toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
-  return true}catch(err){console.warn('restore failed',err);toast('Could not restore the saved session.');return false}}
+  if(!quiet)toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
+  return true}catch(err){console.warn('restore failed',err);
+    toast(quiet?'The live map could not be drawn.':'Could not restore the saved session.');return false}}
 /* A SAVE IN THIS BROWSER IS OFFERED ONLY TO A HAND THAT CAN USE IT. Inside
    the village the offer waits for the hand (applyHand). A person who cannot
    edit has nothing of their own to restore, and the copy their browser held
@@ -9144,7 +9153,7 @@ function applyScene(scene,version){
      draft onto the new version: back in the draft, its own change counted as
      published and its next publish went through over the colleague's. So
      the visitor sees the new land, and the draft's mark and base stay put. */
-  if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene))SCENE_APPLIED=true;renderDraftBar();return true}
+  if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene,{quiet:true}))SCENE_APPLIED=true;renderDraftBar();return true}
   const mine=unpublished().length;
   if((SCENE_APPLIED||DRAFT_OPENED)&&mine){
     /* Measured again against the land that just arrived. A draft opened
@@ -9153,7 +9162,7 @@ function applyScene(scene,version){
     PUBLISH_MARK=sharedMark(EDITS,scene);
     if(SCENE_APPLIED)toast('The live map changed. Your draft is untouched.');
     renderDraftBar();return false}
-  if(restoreScene(scene)){SCENE_APPLIED=true;BASE_VERSION=+version||0;
+  if(restoreScene(scene,{quiet:true})){SCENE_APPLIED=true;BASE_VERSION=+version||0;
     /* Published scene's edits are the live baseline; 0 made every historical
        edit look unpublished and blocked later live updates. editSeq is set
        inside restoreScene from map_edits. */
@@ -9193,7 +9202,7 @@ function toggleVisitor(){
     if(!LIVE_SCENE)return toast('Nothing has been published yet, so this already is what a visitor sees.');
     DRAFT_HOLD=buildExportJSON();
     VISITOR_VIEW=true;document.body.classList.add('visiting');
-    restoreScene(LIVE_SCENE);
+    restoreScene(LIVE_SCENE,{quiet:true});
     toast('This is the live map. Your draft is waiting.');
   }else{
     VISITOR_VIEW=false;document.body.classList.remove('visiting');
@@ -9317,7 +9326,7 @@ async function doDiscard(){
   /* Back to the live land. Falling back to a reload rather than leaving the
      discarded work on screen: the row is gone, and a map still showing it
      would be the one lie this whole round exists to stop telling. */
-  if(LIVE_SCENE&&restoreScene(LIVE_SCENE)){PUBLISH_MARK=editSeq;DRAFT_HOLD=null;renderDraftBar();
+  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;DRAFT_HOLD=null;renderDraftBar();
     return toast('Draft thrown away. You are looking at the live map.')}
   toast('Draft thrown away.');
 }
