@@ -102,7 +102,7 @@ beforeAll(async () => {
       DATA_DIR: dataDir,
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
-      AUTH_TOKEN_SECRET: "comms-foundation-secret",
+      AUTH_TOKEN_SECRET: "comms-secret",
       // The fake provider stands in for the real one. Nothing here can reach it.
       RESEND_API_BASE: fake.url,
       RESEND_API_KEY: PROVIDER_KEY,

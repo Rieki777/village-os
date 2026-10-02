@@ -120,7 +120,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string> = {
   stripe_secret_key: "STRIPE_SECRET_KEY",
   stripe_webhook_secret: "STRIPE_WEBHOOK_SECRET",
   resend_api_key: "RESEND_API_KEY",
-  resend_webhook_secret: "RESEND_WEBHOOK_SECRET",
+  resend_webhook_secret: "RESEND_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   assistant_api_key: "ANTHROPIC_API_KEY",
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",
