@@ -453,3 +453,78 @@ describe("Maia's phone welcome", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* A JOURNEY ON A SHORT SCREEN KEEPS A STRIP OF LAND. Measured at 844x390: at
+   every one of the Resident Journey's 11 stops the place landed under Maia's
+   sheet, with 16 px of land left in view, and at 1024x600 it landed under the
+   sheet's head with 226 px of land above it. The shorter sheet is a media
+   query, which jsdom does not apply, so that half was measured in Playwright
+   (after: 0 of 11 stops under the sheet, 100 px of land). What a DOM can see is
+   the class the query keys on, which has to come off on every ending, and the
+   aim panelInset() hands the camera once her sheet is up. */
+describe("a journey with Maia's sheet up", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const walking = () => b.doc.body.classList.contains("jwalk");
+  const stub = (id: string, r: Partial<DOMRect>) => {
+    const el = b.doc.getElementById(id) as HTMLElement;
+    el.getBoundingClientRect = () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, ...r }) as DOMRect;
+  };
+
+  it("marks the walk while it runs, and every ending takes the mark off", () => {
+    b.run("playJourney('j2')");
+    expect(walking(), "walking").toBe(true);
+    expect(msheet(b), "her sheet is up for it").toBe(true);
+    b.run("jEnd()");
+    expect(walking(), "after stay here").toBe(false);
+    expect(msheet(b), "her sheet went with it").toBe(false);
+
+    b.run("playJourney('j2')");
+    b.doc.dispatchEvent(new b.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(walking(), "after Escape").toBe(false);
+
+    b.run("playJourney('j2')");
+    b.run("GUIDE.hand('pan')");
+    expect(walking(), "after a finger took the map back").toBe(false);
+
+    b.run("playJourney('j2')");
+    for (let i = 0; i < 20 && walking(); i++) b.run("jNext()");
+    expect(walking(), "after the last stop").toBe(false);
+  });
+
+  it("leaves a sheet the visitor opened herself open, without the mark", () => {
+    // From a still map with her sheet down, whatever the case above left.
+    b.run("jHalt(false)");
+    b.doc.body.classList.remove("msheet");
+    tap(b, b.doc.getElementById("pbAsk"));
+    expect(msheet(b), "she asked for it").toBe(true);
+    b.run("playJourney('j2')");
+    expect(walking()).toBe(true);
+    b.run("jEnd()");
+    expect(walking()).toBe(false);
+    expect(msheet(b), "still up, because she opened it").toBe(true);
+  });
+
+  it("aims the camera at the land between the vitals and her sheet", () => {
+    // Her sheet as Playwright measured it at 390x844, under a 35 px vitals bar.
+    stub("maia", { top: 495, bottom: 774 });
+    stub("vitals", { bottom: 35 });
+    b.run("playJourney('j2')");
+    expect(msheet(b)).toBe(true);
+    // The middle of 35..495 is 265, and the window's middle is 422.
+    expect(b.run<number[]>("panelInset()")).toEqual([0, 422 - 265]);
+    b.doc.getElementById("maia")?.classList.add("min");
+    expect(b.run<number[]>("panelInset()"), "a minimised sheet covers nothing").toEqual([0, 0]);
+    b.doc.getElementById("maia")?.classList.remove("min");
+    b.run("jEnd()");
+    tap(b, b.doc.getElementById("pbAsk"));
+    expect(msheet(b), "her sheet is down").toBe(false);
+    expect(b.run<number[]>("panelInset()"), "no sheet, no offset (the control)").toEqual([0, 0]);
+    expect(b.uncaught).toEqual([]);
+  });
+});

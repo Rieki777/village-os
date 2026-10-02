@@ -1099,6 +1099,17 @@
   body.pocket #vitals{top:0;left:0;right:0;transform:none;width:100%;justify-content:center;touch-action:none}
   body.pocket #maia{display:none}
   body.pocket.msheet #maia{display:block;left:0;right:0;bottom:var(--band-b-maia,64px);width:auto;border-radius:14px 14px 0 0;z-index:56}
+  /* A JOURNEY ON A SHORT SCREEN KEEPS A STRIP OF LAND. Her sheet is about
+     280 px whatever the screen, and on a 390 px landscape phone that is the
+     whole of it between the vitals bar and the bottom bar: MEASURED at 844x390,
+     16 px of land left in view at every stop of the Resident Journey. While a
+     journey walks, the sheet is capped and her log takes what is left of it;
+     the two chips step aside for the walk's own buttons, which ride in the
+     log. Her input stays, because asking her something mid-walk is the point. */
+  @media (max-height:500px){
+    body.pocket.msheet.jwalk #maia{display:flex;flex-direction:column;max-height:50vh}
+    body.pocket.msheet.jwalk #maiaLog{height:auto;flex:1 1 auto;min-height:0}
+    body.pocket.msheet.jwalk #maiaActions{display:none}}
   #pbar{display:none}
   body.pocket #pbar{position:fixed;left:0;right:0;bottom:0;height:60px;z-index:60;display:flex;align-items:stretch;touch-action:none;
     background:linear-gradient(180deg,rgba(28,20,12,.97),rgba(18,13,7,.99));border-top:1px solid #8a6a33;
@@ -2778,6 +2789,18 @@ function panelInset(){const pocket=document.body.classList.contains('pocket');le
   /* On desk the module card sits in the middle of the map with strips on both
      sides, so there is nothing to aim at; on pocket it is a bottom sheet. */
   if(pocket&&m&&m.classList.contains('show')&&c)dy=Math.max(dy,c.offsetHeight/2);
+  /* MAIA'S SHEET IS A DRAWER TOO, and a journey flies the camera with it up.
+     Left out, every stop of a journey landed at the middle of the window and
+     so under the sheet: MEASURED at 844x390, all 11 stops of the Resident
+     Journey under #maia, and at 1024x600, with 226 px of land above the sheet,
+     the stop still landed under its head. Aimed at the middle of the strip
+     that shows, between the vitals bar and the sheet's top edge, because the
+     sheet stands on the bottom band and offsetHeight/2 ignores both bars. */
+  const mi=document.getElementById('maia');
+  if(pocket&&mi&&document.body.classList.contains('msheet')&&!mi.classList.contains('min')){
+    const top=mi.getBoundingClientRect().top,vt=document.getElementById('vitals');
+    const above=vt?vt.getBoundingClientRect().bottom:0;
+    if(top>above)dy=Math.max(dy,innerHeight/2-(above+top)/2)}
   return[dx,dy]}
 window.panelInset=panelInset;
 /* How far past the edge of the land the reader may travel, as a fraction of
@@ -7870,10 +7893,16 @@ function jRow(n,total,more){
    1.5 second stop was a slideshow; this is a walk. */
 const JDWELL=6500;
 let JWALK=null,JTMR=null,JSHEET=false;
+/* body.jwalk marks a journey walking with her sheet up, whoever opened the
+   sheet, so a short screen can give the walk a shorter sheet (the CSS at
+   #maia's pocket rules). It comes off with the walk, on every ending. */
 function jSheetOn(){
-  if(document.body.classList.contains('pocket')&&!document.body.classList.contains('msheet')){
+  if(!document.body.classList.contains('pocket'))return;
+  document.body.classList.add('jwalk');
+  if(!document.body.classList.contains('msheet')){
     document.body.classList.add('msheet');JSHEET=true}}
-function jSheetOff(){if(JSHEET){document.body.classList.remove('msheet');JSHEET=false}}
+function jSheetOff(){document.body.classList.remove('jwalk');
+  if(JSHEET){document.body.classList.remove('msheet');JSHEET=false}}
 /* THE ONE ENDER, so the consent gate has something to call that does not
    live inside one run's closure. jEnd and the Escape key each built their
    own copy of this and neither could be reached from a touch handler.
@@ -7888,6 +7917,7 @@ function jHalt(keepSheet){
   clearTimeout(JTMR);
   if(!JWALK)return false;
   const w=JWALK;JWALK=null;tourI=-1;setHash('');
+  document.body.classList.remove('jwalk');
   if(!keepSheet)jSheetOff();
   if(w.log&&typeof endWalk==='function')endWalk(false,w.i);
   return true}
