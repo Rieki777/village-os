@@ -821,6 +821,12 @@
      showing terrain while the reader was looking at governance. */
   body.circles :is(#layers,#roleKey,#minimapWrap,#buildBtn){display:none}
   body.pocket #roleKey{display:none}
+  /* The phone reaches the Org lens from its drawer now, and a lens drawn in
+     three inks needs the key that names them. The desk's corner is the lens
+     bar's, which the pocket hides, so the key sits centred under the vitals
+     strip and below the two lines of the gesture hint (top 52, 31 tall). */
+  body.pocket.org-lens:not(.circles) #roleKey{display:flex;top:88px;right:auto;left:50%;
+    transform:translateX(-50%);white-space:nowrap}
 
 
   /* ---------- round C: living-land systems ---------- */
@@ -1295,6 +1301,13 @@
   #pdrawer .pcell{border:1px solid #6b5430;border-radius:10px;background:rgba(44,33,20,.6);color:var(--parch);
     font-family:inherit;font-size:12px;padding:11px 10px;display:flex;align-items:center;gap:8px;text-align:left}
   #pdrawer .pcell svg{width:18px;height:18px;flex:0 0 18px}
+  /* A lens that is on wears the desk lens bar's own "on" (#layers button.on). */
+  #pdrawer .pcell[aria-pressed="true"]{background:linear-gradient(180deg,#7a5f33,#5a4423);color:#fff;
+    border-color:#c9a25e;text-shadow:0 1px 2px #000}
+  /* Four short names in one row, the way the desk bar sets them side by side. */
+  #pdrawer .pgrid.plens{grid-template-columns:repeat(4,1fr)}
+  #pdrawer .plens .pcell{justify-content:center;padding:11px 4px;text-align:center}
+  #pdrawer .pcell.pwide{grid-column:1/-1}
   body.pocket #panel{top:auto;left:0;right:0;bottom:-102%;width:100%;height:74%;border-left:none;
     border-top:2px solid #8a6a33;border-radius:16px 16px 0 0;transition:bottom .3s cubic-bezier(.2,.8,.3,1),visibility 0s linear .3s}
   body.pocket #panel.open{bottom:0;right:0;transition-delay:0s}
@@ -4856,7 +4869,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
         :`<div style="font-size:11.5px;color:#8a7347">No flows declared yet. In build mode you can say what comes in and what goes out.</div>`}
     </div>
     <div style="margin-top:12px">${(s.modules||[]).map((m,mi)=>`<button class="btn" style="margin:0 6px 6px 0" onclick="openDoorHere(${mi})">${escq(doorLabel(m))} ➤</button>`).join('')}</div>
-    ${s.state==='blueprint'?`<p style="margin-top:10px;font-size:12.5px">This one lives in the <b>Vision</b>. Toggle the Vision layer to see the full masterplan build-out, and what it would take to make it real.</p>`:''}
+    ${s.state==='blueprint'?`<p style="margin-top:10px;font-size:12.5px">This one lives in the <b>Vision</b>. ${document.body.classList.contains('pocket')?'Turn on Vision under <b>More</b>':'Toggle the Vision layer'} to see the full masterplan build-out, and what it would take to make it real.</p>`:''}
     <div class="lastv">last verified 2 days ago · Amora stewards</div>`}
   if(i===1)body.innerHTML=q.length?q.map(x=>`<div class="qcard" data-item="${escq(itemAddr('quest',x))}"><h4>⚑ ${escq(x.q)}</h4><div class="meta">${escq(x.r)} · ${escq(x.need)}</div>
     <div class="claim"><button class="btn" onclick="claimQuest('${escj(x.q)}','${escj(s.name)}')">${claimed(x)?'✔ Yours · tap to release':'Claim this quest'}</button></div>
@@ -9876,7 +9889,18 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
   window.openHelp=openHelp;window.closeHelp=closeHelp;window.toggleHelp=toggleHelp;
   window.renderHelp=renderHelp;
 })();
+/* THE LENSES AND THE HOUR, ON THE PHONE TOO. The pocket hides the desk's lens
+   bar and the sun button (display:none, so nothing reaches them), and nothing
+   took their place: MEASURED at 390x844 and on touch tablets up to 819 px on
+   the short side, no control anywhere reached Vision, Org, Flows or the time of
+   day, and a blueprint place's sheet told the reader to toggle a layer they
+   could not find. Each cell clicks the desk's own hidden button, so the toasts,
+   the first-time words and the on states stay written once. The drawer is
+   rebuilt on every open, so the pressed state is read fresh each time. */
+const PLENS=[['now','lyNow','Now'],['vision','lyVision','Vision'],['org','lyOrg','Org'],['flows','lyFlows','Flows']];
+function lensOn(k){return k==='org'?orgOn:k==='flows'?flowsOn:mode===k}
 function renderDrawer(){const d=$('pdrawer');if(!d)return;
+  const hour=dayPhase>1.7?'☾':(dayPhase>1.3?'🌇':'☀');
   d.innerHTML=`<h4>the village</h4><div class="pgrid">`+
    Object.keys(MODULES).map(k=>`<button class="pcell" data-pm="${k}">${MODULES[k].icon}<span>${MODULES[k].name.split(' · ')[0]}</span></button>`).join('')+
    `</div><h4>ways in</h4><div class="pgrid">
@@ -9885,7 +9909,12 @@ function renderDrawer(){const d=$('pdrawer');if(!d)return;
     ${WELCOME_WALK_ON?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
     <button class="pcell" data-pa="mask">✦ <span>Your view</span></button>
     <button class="pcell" data-pa="exit">⏏ <span>Leave the map</span></button></div>
+   <h4>lenses on the land</h4><div class="pgrid plens">`+
+   PLENS.map(([k,,name])=>`<button class="pcell" data-pl="${k}" aria-pressed="${lensOn(k)}">${name}</button>`).join('')+
+   `<button class="pcell pwide" data-pl="day">${hour} <span>Time of day</span></button></div>
    <div style="font-size:10px;color:#8f855f;margin-top:10px">the look of the map is yours to set here. Building and rewiring live on the desktop map.</div>`;
+  d.querySelectorAll('[data-pl]').forEach(b=>b.onclick=()=>{d.classList.remove('open');hap(8);
+    const k=b.dataset.pl,ly=PLENS.find(x=>x[0]===k);$(ly?ly[1]:'dayBtn').click()});
   d.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{d.classList.remove('open');openDoor(b.dataset.pm,{});hap(8)});
   d.querySelectorAll('[data-pa]').forEach(b=>b.onclick=()=>{d.classList.remove('open');const a=b.dataset.pa;hap(8);
     if(a==='wall')openWall()

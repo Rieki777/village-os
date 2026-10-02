@@ -415,3 +415,61 @@ describe("over the in-file circles on a phone, the pad and the fingers move the 
     expect(b.uncaught).toEqual([]);
   });
 });
+
+describe("the phone's drawer reaches the lenses and the time of day (F58)", () => {
+  let b: Booted;
+  const state = () =>
+    b.run<{ mode: string; orgOn: boolean; flowsOn: boolean; dayAuto: boolean; dayPhase: number }>(
+      "({mode,orgOn,flowsOn,dayAuto,dayPhase})",
+    );
+  const open = () => {
+    b.run("renderDrawer();$('pdrawer').classList.add('open')");
+  };
+  const cell = (k: string) => `#pdrawer [data-pl="${k}"]`;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("offers Now, Vision, Org, Flows and the time of day", () => {
+    open();
+    const cells = [...b.window.document.querySelectorAll<HTMLElement>("#pdrawer [data-pl]")].map((c) => c.dataset.pl);
+    expect(cells).toEqual(["now", "vision", "org", "flows", "day"]);
+    expect(b.window.document.querySelector(cell("now"))?.getAttribute("aria-pressed"), "Now is the lens on").toBe("true");
+  });
+
+  it("turns the Vision on, closing the drawer so the land shows", () => {
+    open();
+    click(b, cell("vision"));
+    expect(state().mode).toBe("vision");
+    expect(b.window.document.getElementById("pdrawer")?.classList.contains("open")).toBe(false);
+    open();
+    expect(b.window.document.querySelector(cell("vision"))?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("turns the Org lens on, with its key's class, and Flows", () => {
+    open();
+    click(b, cell("org"));
+    open();
+    click(b, cell("flows"));
+    expect(state()).toMatchObject({ orgOn: true, flowsOn: true });
+    expect(body(b).contains("org-lens")).toBe(true);
+  });
+
+  it("steps the time of day the way the desk's sun button does", () => {
+    const before = state().dayPhase;
+    open();
+    click(b, cell("day"));
+    const after = state();
+    expect(after.dayAuto, "the hour is the reader's now").toBe(false);
+    expect(after.dayPhase).not.toBe(before);
+  });
+
+  it("comes back to Now, the one way back from the Vision a phone had none of", () => {
+    open();
+    click(b, cell("now"));
+    expect(state().mode).toBe("now");
+    expect(b.uncaught).toEqual([]);
+  });
+});
