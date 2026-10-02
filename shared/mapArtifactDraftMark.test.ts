@@ -834,3 +834,62 @@ describe("a saved draft with nothing of its own", () => {
   });
 });
 
+
+describe("View as visitor", () => {
+  let m: Booted;
+  let visiting: {
+    build: boolean;
+    bodyBuild: boolean;
+    discardShown: boolean;
+    buildAfterPress: boolean;
+    discardCard: boolean;
+    toasts: string[];
+  };
+  beforeAll(async () => {
+    m = await framed();
+    press(m, "buildBtn");
+    rename(m, "gate", "Held while visiting");
+    m.run("toggleVisitor()");
+    const doc = m.window.document;
+    const build = m.run<boolean>("buildMode");
+    const bodyBuild = doc.body.classList.contains("build");
+    const discardShown = (doc.getElementById("dropBtn") as HTMLElement).style.display !== "none";
+    press(m, "buildBtn");
+    const buildAfterPress = m.run<boolean>("buildMode");
+    m.run("openDiscard()");
+    // A change that still reaches the land while visiting, such as a sheet
+    // left open: twice, to hear the note once.
+    rename(m, "market", "Made while visiting");
+    rename(m, "market", "Made while visiting again");
+    visiting = { build, bodyBuild, discardShown, buildAfterPress, discardCard: cardOpen(m), toasts: await toasts(m) };
+    m.run("closePublish();toggleVisitor()");
+  });
+  afterAll(() => m?.close());
+
+  it("puts the editor's hand down: no build mode, and no Discard draft on the bar", () => {
+    expect(visiting.build).toBe(false);
+    expect(visiting.bodyBuild).toBe(false);
+    expect(visiting.discardShown).toBe(false);
+  });
+
+  it("keeps it down, and says why", () => {
+    expect(visiting.buildAfterPress).toBe(false);
+    expect(visiting.toasts).toContain("You are looking at the live map. Go back to your draft to build.");
+  });
+
+  it("will not throw away a draft it is not showing", () => {
+    expect(visiting.discardCard).toBe(false);
+    expect(visiting.toasts).toContain("You are looking at the live map. Go back to your draft to throw it away.");
+  });
+
+  it("says once that a change made on the live map does not stay", () => {
+    expect(visiting.toasts.filter((t) => t.startsWith("That change is on the live map you are looking at"))).toHaveLength(1);
+  });
+
+  it("gives the hand back with the draft, as the draft was", () => {
+    expect(m.run<boolean>("buildMode")).toBe(true);
+    expect(m.run<string>("BY.gate.name")).toBe("Held while visiting");
+    expect(m.run<string>("BY.market.name")).not.toContain("Made while visiting");
+    expect(unpublished(m)).toHaveLength(1);
+  });
+});

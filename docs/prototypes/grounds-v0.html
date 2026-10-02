@@ -5769,7 +5769,10 @@ function inBound(x,y){const p=SCENE.bound;let inside=false;
       b.onclick=()=>{placing={archetype:key};document.body.classList.add('placing');$('ghostPoi').innerHTML=`<svg viewBox="0 0 64 64"><path class="plate" d="M32 3 C49 5 61 17 61 32 C61 49 48 61 32 61 C16 61 3 49 3 32 C3 16 15 6 32 3 Z" fill="var(--t-surface)" opacity=".7"/><circle class="ring" cx="32" cy="32" r="27" fill="none" stroke="var(--t-ring)" stroke-width="2.4" stroke-dasharray="6 5"/><g class="ic" stroke="var(--t-icon)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">${ic}</g></svg>`;
         $('ghostPoi').style.display='block';maiaSay(`Placing a <b>${name}</b>. Click the land to set it down. The dashed line is the property; I won't let it land outside. Esc to change your mind.`)};
       pal.appendChild(b)}}})();
-$('buildBtn').onclick=()=>{buildMode=!buildMode;document.body.classList.toggle('build',buildMode);
+$('buildBtn').onclick=()=>{
+  /* When the hand stays closed, buildRefusal says why. */
+  if(!buildMode&&typeof buildRefusal==='function'){const no=buildRefusal();if(no)return toast(no)}
+  buildMode=!buildMode;document.body.classList.toggle('build',buildMode);
   if(typeof renderDraftBar==='function')renderDraftBar();
   if(buildMode){$('panel').classList.remove('open');panelKey=null;hideHover();
     maiaSay(`<b>Build mode.</b> Drag any building to its true position, ✕ removes, the palette adds, ↩ undoes. `+
@@ -6363,7 +6366,7 @@ const EDITS=[];let editSeq=0;
    state is declared near the end of this script and an edit logged before
    that line would throw. */
 function logEdit(action,target,diff){EDITS.push({seq:++editSeq,actor:'founder',action,target,diff:diff||{},at:new Date().toISOString()});scheduleAutosave();window.rebuildVitals&&rebuildVitals();
-  try{renderDraftBar()}catch(_){}}
+  try{renderDraftBar();if(VISITOR_VIEW)visitorEditNote()}catch(_){}}
 let autosaveT=null,saveNudged=false;
 function scheduleAutosave(){clearTimeout(autosaveT);autosaveT=setTimeout(saveNow,2500);
   if(!inShell()&&!saveNudged&&EDITS.length>=5){saveNudged=true;
@@ -9816,6 +9819,8 @@ let DRAFT_OPENED=false;   /* has a saved draft been put on screen in place of th
 let OFFERED=null;         /* the server's draft, while the bar is offering it */
 let VISITOR_VIEW=false;
 let DRAFT_HOLD=null;      /* my work, stashed while I look at the live map */
+let VISIT_BUILD=false;    /* build mode was on when the visitor view opened */
+let VISIT_NOTED=false;    /* the visitor view has said that its edits do not stay */
 let PUB_SEQ=0;
 const PUB_PENDING={};
 
@@ -9928,6 +9933,14 @@ function sayOffer(){
     ?'This browser kept work the village never confirmed: '
     :'You have an unpublished draft of the map: ')+`${b} buildings, ${n||'no'} change${n===1?'':'s'}.`;
 }
+/* Why the Build button stays closed, or nothing. */
+function buildRefusal(){
+  if(VISITOR_VIEW)return 'You are looking at the live map. Go back to your draft to build.';
+  return ''}
+/* An edit made while visiting lands on the live map's copy on screen, and
+   going back to the draft puts the draft back. Said once per visit. */
+function visitorEditNote(){if(VISIT_NOTED)return;VISIT_NOTED=true;
+  toast('That change is on the live map you are looking at, and it goes when you go back to your draft. Make it there to keep it.')}
 
 /* The published land arriving over the bridge.
    NOTHING REPAINTS OVER UNPUBLISHED WORK. A colleague publishing while you
@@ -9984,7 +9997,7 @@ function renderDraftBar(){
   if(VISITOR_VIEW){
     st.innerHTML='<b>Seeing what a visitor sees.</b> This is the live map.';
     lv.textContent=LIVE?`Version ${LIVE.version}`:'Nothing published yet';
-    go.style.display='none';$('visitBtn').textContent='Back to my draft';return}
+    go.style.display='none';$('dropBtn').style.display='none';$('visitBtn').textContent='Back to my draft';return}
   go.style.display='';$('visitBtn').textContent='View as visitor';
   const n=unpublished().length;
   st.innerHTML=SAVE_FAIL?`<b>Not saved.</b> ${escq(notSavedWhy())}`
@@ -10008,13 +10021,23 @@ function toggleVisitor(){
        to fire inside the visitor view, where it skipped the village and wrote
        the live map into this browser's copy. */
     if(autosaveT)saveNow();
+    /* A visitor has no hand. Left in build mode, the live map on screen took
+       drags, renames and the palette, and all of it vanished on the way back;
+       blueprint places a visitor never sees were drawn too. The same switch
+       the Build button turns, and it comes back on with the draft. */
+    VISIT_BUILD=buildMode;if(buildMode)$('buildBtn').click();
     DRAFT_HOLD=buildExportJSON();
-    VISITOR_VIEW=true;document.body.classList.add('visiting');
+    VISITOR_VIEW=true;VISIT_NOTED=false;document.body.classList.add('visiting');
     restoreScene(LIVE_SCENE,{quiet:true});
     toast('This is the live map. Your draft is waiting.');
   }else{
     VISITOR_VIEW=false;document.body.classList.remove('visiting');
     if(DRAFT_HOLD){restoreScene(DRAFT_HOLD);DRAFT_HOLD=null}
+    /* Back on as the Build button turns it on, less the greeting: a place
+       panel opened while visiting would otherwise sit over the work. */
+    if(VISIT_BUILD&&!buildMode){buildMode=true;document.body.classList.add('build');
+      $('panel').classList.remove('open');panelKey=null;hideHover()}
+    VISIT_BUILD=false;
   }
   renderDraftBar();
 }
@@ -10125,6 +10148,9 @@ function showConflict(r){
    to explain itself. The two facts a person needs before pressing it lead the
    card: the live map does not move, and nobody else's draft is touched. */
 function openDiscard(){
+  /* While visiting, the land on screen is the live map, and the draft is
+     held. The same answer Publish gives there. */
+  if(VISITOR_VIEW)return toast('You are looking at the live map. Go back to your draft to throw it away.');
   const n=unpublished().length;
   if(!n)return toast('There is no unpublished work to throw away.');
   if(!inShell())return toast('This map is running on its own. Reload the page to start over.');
