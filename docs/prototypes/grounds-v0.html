@@ -476,6 +476,14 @@
      else sits between 30 and 36 down here; the build bar's 32 is on the left
      and ends 224px up. */
   body:has(#panel.open) #attention,body:has(#inspect.open) #attention{left:calc(50% - 207px);z-index:36}
+  /* AND IT STOPS SHORT OF THE SHELL'S DOOR. Moving left on a narrow desk walks
+     the button into Leave the map at the bottom left, which belongs to the
+     page above this frame, so no z-index here reaches it. MEASURED with a
+     place open: 40 of 1060 points of the button under the door at 960x1040
+     (a 1920 screen split in half), 190 at 900x900. 300px is the door's right
+     edge at 176, 12px of air, and half the 212px button with room for a
+     wider badge. It only binds under about 1014px, so a laptop never sees it. */
+  body.embed:has(#panel.open) #attention,body.embed:has(#inspect.open) #attention{left:max(calc(50% - 207px),300px)}
   /* ---------- toasts / ripples ---------- */
   #toasts{position:absolute;top:var(--band-t-toasts,64px);left:50%;transform:translateX(-50%);z-index:65;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
     width:min(92vw,420px)}
