@@ -50,6 +50,7 @@ import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
+import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -237,6 +238,8 @@ export default function LivingMap() {
   const [initialHash] = useState(() =>
     typeof window === "undefined" ? "" : window.location.hash,
   );
+
+  const { entered, preparing, setPreparing, onEnter } = useMapEnterGate();
 
   useEffect(() => {
     let live = true;
@@ -700,7 +703,8 @@ export default function LivingMap() {
         // means a signed-out visitor still gets the published land and the
         // village's own photograph under it, even though their hand request
         // tells them they may do nothing.
-        pushConfig();
+        // Preparing clears once the published scene has been asked for.
+        void pushConfig().finally(() => setPreparing(false));
         pushGround();
         pushHand();
         pushPhotos();
@@ -973,10 +977,12 @@ export default function LivingMap() {
         </div>
       )}
 
-      {presence === "present" && (
+      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={onEnter} />
+
+      {presence === "present" && entered && (
         <iframe
           ref={frame}
-          src={`${groundsUrl}${initialHash}`}
+          src={`${groundsUrl}${withSkipIntro(initialHash)}`}
           onLoad={onLoad}
           title="Living map of the village"
           className="block h-full w-full border-0"
@@ -985,6 +991,7 @@ export default function LivingMap() {
           allow="fullscreen"
         />
       )}
+
     </div>
   );
 }
