@@ -123,17 +123,39 @@ interface Scene {
   [k: string]: unknown;
 }
 
+/** A message the map posted to its shell. */
+interface Asked {
+  type: string;
+  nonce?: string;
+  scene?: Scene;
+  baseVersion?: number;
+  [k: string]: unknown;
+}
+
 interface Booted {
   window: ArtifactWindow;
   uncaught: unknown[];
+  /** Everything the map posted to its parent, in order. Empty standalone. */
+  asked: Asked[];
   run<T>(src: string): T;
   /** A message from the shell, in the shape LivingMap.tsx posts it. */
   post(data: Record<string, unknown>): void;
+  /** The shell's answer to one of the map's questions, as relayScene sends it. */
+  answer(q: Asked, result: Record<string, unknown>): Promise<void>;
   close(): void;
 }
 
-function boot(localSave?: Scene): Booted {
+interface BootOptions {
+  /** Run inside a shell: `window.parent` is not the window, and what the map
+      posts to it is kept in `asked`. Standalone otherwise, as in every QA suite. */
+  shell?: boolean;
+  /** This browser's storage as a previous visit left it. */
+  storage?: Record<string, string>;
+}
+
+function boot(localSave?: Scene | null, opts: BootOptions = {}): Booted {
   const uncaught: unknown[] = [];
+  const asked: Asked[] = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (e) => {
     if (e.type === "unhandled-exception") uncaught.push(e.cause ?? e);
@@ -147,18 +169,31 @@ function boot(localSave?: Scene): Booted {
       w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
       Object.assign(w, { innerWidth: 1440, innerHeight: 900 });
       stubTheMissingPlatform(w);
+      if (opts.shell) {
+        // The one thing that makes the map believe it is framed. Its
+        // inShell() asks exactly this, and shellPost writes to it.
+        const shell = { postMessage: (m: Asked) => asked.push(m) };
+        Object.defineProperty(w, "parent", { configurable: true, get: () => shell });
+      }
+      for (const [k, v] of Object.entries(opts.storage ?? {})) w.localStorage.setItem(k, v);
       if (localSave) w.localStorage.setItem(SAVE_KEY, JSON.stringify(localSave));
     },
   });
+  const post = (data: Record<string, unknown>) => {
+    // Through the window's own JSON, so the artifact holds objects of its
+    // own realm, the way a structured clone arrives.
+    const own = window.eval("JSON").parse(JSON.stringify(data));
+    window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
+  };
   return {
     window,
     uncaught,
+    asked,
     run: <T>(src: string) => window.eval(src) as T,
-    post(data) {
-      // Through the window's own JSON, so the artifact holds objects of its
-      // own realm, the way a structured clone arrives.
-      const own = window.eval("JSON").parse(JSON.stringify(data));
-      window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
+    post,
+    async answer(q, result) {
+      post({ type: "scene-result", of: q.type, nonce: q.nonce, ...result });
+      await settle(0);
     },
     close: () => window.close(),
   };
@@ -479,5 +514,91 @@ describe("a vital number held in the draft", () => {
 
   it("is cleared by a scene that holds nothing, where it used to stay on screen", () => {
     expect(seen.noHolds).not.toBe("founder-set");
+  });
+});
+
+/*
+ * INSIDE A SHELL: THE SAVE, THE VISITOR VIEW, AND THE WAY BACK FROM A REFUSAL.
+ *
+ * Everything below runs the map framed, the way /map runs it: `window.parent`
+ * is a stand-in that keeps what the map posts, and each answer is posted back
+ * in the shape relayScene sends. Where a sentence on screen, a message to the
+ * shell, or the next visit can say what happened, that is what is read,
+ * because those are what a cartographer meets.
+ *
+ * The 2.5 s autosave is waited out for real. The jsdom window owns its own
+ * timers, so a fake clock in this process would not reach them. Each boot of
+ * the artifact costs about two seconds, so a case shares one where it can.
+ */
+const SAVE_WAIT = 2700;
+const asks = (m: Booted, type: string) => m.asked.filter((q) => q.type === type);
+const lastAsk = (m: Booted, type: string) => {
+  const all = asks(m, type);
+  return all[all.length - 1];
+};
+const nameIn = (s: Scene | undefined, key: string) => s?.map_structures.find((r) => r.key === key)?.name;
+const bar = (m: Booted) => m.window.document.getElementById("draftState")?.textContent ?? "";
+const cardOpen = (m: Booted) => !!m.window.document.getElementById("pubWrap")?.classList.contains("show");
+const restoreShown = (m: Booted) => (m.window.document.getElementById("restoreBar") as HTMLElement | null)?.style.display !== "none";
+const publishDisabled = (m: Booted) => (m.window.document.getElementById("pubGo") as HTMLButtonElement).disabled;
+/** The inspect card's own two steps: the name changes, then the edit is logged. */
+const rename = (m: Booted, key: string, to: string) =>
+  m.run(`BY[${JSON.stringify(key)}].name=${JSON.stringify(to)};logEdit('rename','structure:'+${JSON.stringify(key)},{to:${JSON.stringify(to)}})`);
+/** Whether closing the page now would ask first. */
+const asksBeforeLeaving = (m: Booted) =>
+  m.run<boolean>("(()=>{const e=new Event('beforeunload',{cancelable:true});dispatchEvent(e);return e.defaultPrevented})()");
+/** Answer the newest question of a kind, after checking it was asked at all. */
+async function answerLast(m: Booted, type: string, result: Record<string, unknown>) {
+  const q = lastAsk(m, type);
+  expect(q, `the map asked the village for a ${type}`).toBeDefined();
+  await m.answer(q, result);
+  return q;
+}
+function storageOf(m: Booted): Record<string, string> {
+  const s = m.window.localStorage;
+  const out: Record<string, string> = {};
+  for (let i = 0; i < s.length; i++) {
+    const k = s.key(i);
+    if (k) out[k] = s.getItem(k) ?? "";
+  }
+  return out;
+}
+function recordToasts(m: Booted) {
+  m.run(
+    "window.__toasts=[];new MutationObserver(ms=>ms.forEach(x=>x.addedNodes.forEach(n=>__toasts.push(n.textContent))))" +
+      ".observe(document.getElementById('toasts'),{childList:true})",
+  );
+}
+async function toasts(m: Booted) {
+  await settle(0);
+  return m.run<string[]>("__toasts.slice()");
+}
+const visitorHand = (liveVersion: number) => ({ ...hand(liveVersion, null), canEdit: false, canPublish: false });
+const REACH = "The village could not be reached. Your work is still here.";
+
+/** On /map, version 6 live and nothing waiting: a cartographer unless a hand is given. */
+async function framed(opts: BootOptions = {}, theHand: Record<string, unknown> = hand(6, null)) {
+  const m = boot(null, { shell: true, ...opts });
+  await settle(200);
+  recordToasts(m);
+  m.post(config(live6(), 6));
+  m.post(theHand);
+  return m;
+}
+
+describe("an edit, on the draft bar", () => {
+  it("counts the moment it is made, and Publish opens for it, with no wait for the save", async () => {
+    const m = await framed();
+    press(m, "buildBtn");
+    const before = { bar: bar(m), publishDisabled: publishDisabled(m) };
+    rename(m, "gate", "Edit One");
+    const after = { bar: bar(m), publishDisabled: publishDisabled(m) };
+    rename(m, "welcome", "Edit Two");
+    const second = bar(m);
+    m.close();
+    expect(before).toEqual({ bar: "Editing a draft. The live map is unchanged.", publishDisabled: true });
+    expect(after.bar).toMatch(/^1 unpublished change\./);
+    expect(after.publishDisabled).toBe(false);
+    expect(second).toMatch(/^2 unpublished changes\./);
   });
 });

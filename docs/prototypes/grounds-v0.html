@@ -6353,7 +6353,13 @@ function resolverCreate(){const{q,r}=window._rq||{};if(!q||!q.text.trim())return
 
 /* ---------- inspect card: the founder edits EVERYTHING in place (mirror of PATCH /api/map/structure/:key) ---------- */
 const EDITS=[];let editSeq=0;
-function logEdit(action,target,diff){EDITS.push({seq:++editSeq,actor:'founder',action,target,diff:diff||{},at:new Date().toISOString()});scheduleAutosave();window.rebuildVitals&&rebuildVitals()}
+/* The draft bar is redrawn with the edit itself. Leaving it to the autosave
+   timer kept the count and the Publish button an edit behind for as long as
+   edits kept coming less than 2.5 s apart. Inside a try, because the bar's
+   state is declared near the end of this script and an edit logged before
+   that line would throw. */
+function logEdit(action,target,diff){EDITS.push({seq:++editSeq,actor:'founder',action,target,diff:diff||{},at:new Date().toISOString()});scheduleAutosave();window.rebuildVitals&&rebuildVitals();
+  try{renderDraftBar()}catch(_){}}
 let autosaveT=null,saveNudged=false;
 /* WORK NOT YET SAVED ANYWHERE, which is the only thing a reload can lose.
    Set by every edit, cleared when the save that edit is waiting for has
