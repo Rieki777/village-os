@@ -247,6 +247,32 @@ describe("Where can I help? in Maia's phone sheet", () => {
   });
 });
 
+/* AN ASK SHE CANNOT MATCH, ON A PHONE. Her reply to an unmatched ask now
+   points the way to what needs hands, and on a desk that way is the Space
+   key. A phone has no Space key and hides the banner it cycles, the reason
+   the help answer above opens Get Involved, so on a phone the reply names
+   Get Involved too. */
+describe("an ask Maia cannot match, in her phone sheet", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    tap(b, b.doc.getElementById("pbAsk"));
+    b.run("$('maiaText').value='xyzzy plover';$('maiaSend').click()");
+    await settle(500);
+  });
+  afterAll(() => b?.close());
+
+  it("answers that nothing matches, and never tells a phone to press a key", () => {
+    const lines = [...b.doc.querySelectorAll("#maiaLog .mline")].map((n) => n.textContent ?? "");
+    const reply = lines.find((l) => l.includes("Nothing on the land matches that yet")) ?? "";
+    expect(reply, "her reply (the positive control)").not.toBe("");
+    expect(reply).toContain("Get Involved");
+    expect(reply).not.toMatch(/Space/);
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
 /* A FINGER THAT STARTS ON A BUILDING STILL MOVES THE LAND. The plates, the
    place names and the seals are their own layers over #scene, and the gesture
    code listened on #scene alone: measured at 390x844 in the village, a drag

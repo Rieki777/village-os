@@ -5659,7 +5659,10 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   /* It used to end "unmatched asks teach the village which role or place is
      missing, so yours is saved". Nothing was sent: CONCIERGE_LOG lives in this
      tab and reaches a founder only in their own export. Said plainly now. */
-  maiaSay(`Nothing on the land matches that yet. ${WELCOME_WALK_ON?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or press <b>Space</b> to see what needs hands.`)}
+  /* A phone has no Space key and hides the banner it cycles, so there the
+     way to what needs hands is Get Involved, as in What's alive? above. */
+  const hands=document.body.classList.contains('pocket')?'open <b>Get Involved</b>':'press <b>Space</b>';
+  maiaSay(`Nothing on the land matches that yet. ${WELCOME_WALK_ON?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
