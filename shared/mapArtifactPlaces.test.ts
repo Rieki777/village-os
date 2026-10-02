@@ -239,7 +239,7 @@ it("the seed and the published land differ the way this file claims (the positiv
   expect(LIVE.map_structures.some((s) => s.key === ADDED.key)).toBe(true);
   expect(Math.hypot(movedTo.x - seedAt.x, movedTo.y - seedAt.y)).toBeGreaterThan(200);
   expect(retitledFrom.key, "the seed's quest key is another key").not.toBe(RETITLED.key);
-  expect(html).toContain("function routeHash(");
+  expect(html.includes("function routeHash("), "the router this file drives").toBe(true);
 });
 
 describe("a deep link inside the shell, with the published land arriving after the boot", () => {
@@ -355,5 +355,119 @@ describe("a publish landing while a place's door is open", () => {
     expect(open).toBe(false);
     expect(key).toBeNull();
     expect(m.toasts.some((t) => NOT_THERE.test(t))).toBe(true);
+  });
+});
+
+/**
+ * THE SEATS ON THE MAP ARE THE VILLAGE'S OWN, OR SAY THEY ARE NOT (F03).
+ *
+ * On 2026-10-01 none of the 16 seats the published scene draws matched any
+ * of the 25 roles /api/map serves, What needs hands offered all 16 as "Seat
+ * open", and every Raise a hand showed "Intro drafted. The Land circle will
+ * hear from you." while sending nothing. A seat the village reported filled
+ * was still offered. Here the shell's `lens` message carries a filled seat,
+ * an open one, and a role the map does not draw; every other seed seat is
+ * drawn and matches nothing.
+ */
+describe("the seats, once the village has said which roles it keeps", () => {
+  const HELD = "Greenhouse Steward";
+  const OPEN = "Nursery Keeper";
+  const AT = "greenhouse";
+  const UNLISTED = "Site Guide";
+  let m: Booted;
+  let before: { seatItems: string[] };
+  let after: {
+    seatItems: string[];
+    rows: { name: string; why: string; held: boolean; href: string | null; onclick: string | null }[];
+    footer: string;
+    overview: string;
+    wall: string;
+  };
+  let maiaTab: number;
+  const seatItems = () => m.run<{ h: string }[]>("attnItems()").map((x) => x.h).filter((h) => h.includes("Seat"));
+  beforeAll(async () => {
+    m = boot("#skipIntro", { shell: true });
+    await settle(200);
+    m.post(config(SEED));
+    before = { seatItems: seatItems() };
+    m.post({
+      type: "lens",
+      party: [],
+      roles: [
+        { name: HELD, state: "filled", archetypes: [] },
+        { name: OPEN, state: "open", archetypes: [] },
+        { name: "Board of Directors", state: "open", archetypes: [] },
+      ],
+    });
+    const doc = m.window.document;
+    m.run(`openPanel('${AT}',2)`);
+    const rows = [...doc.querySelectorAll<HTMLElement>("#panelBody .seatrow")].map((r) => {
+      const a = r.querySelector("a, button");
+      return {
+        name: r.querySelector("b")?.textContent ?? "",
+        why: r.querySelector(".why")?.textContent ?? "",
+        held: !!r.querySelector(".held"),
+        href: a?.getAttribute("href") ?? null,
+        onclick: a?.getAttribute("onclick") ?? null,
+      };
+    });
+    const footer = doc.querySelector("#panelBody .lastv")?.textContent ?? "";
+    m.run("renderTab(0)");
+    const overview = doc.getElementById("panelBody")?.textContent ?? "";
+    m.run("buildWall()");
+    const wall = doc.getElementById("wallList")?.textContent ?? "";
+    after = { seatItems: seatItems(), rows, footer, overview, wall };
+    m.run("conciergeMatch('nursery')");
+    maiaTab = [...(doc.getElementById("tabs")?.children ?? [])].findIndex((b) => b.classList.contains("on"));
+  });
+  afterAll(() => m?.close());
+
+  it("offered every drawn seat before the village answered (the control: the scene's own word)", () => {
+    expect(before.seatItems.length).toBeGreaterThan(2);
+    expect(before.seatItems.some((h) => h.includes(UNLISTED))).toBe(true);
+  });
+
+  it("offers only the open seat the village keeps in What needs hands", () => {
+    expect(after.seatItems).toEqual([`⛨ Seat open: ${OPEN}`]);
+  });
+
+  it("shows a held seat as held, with no hand to raise", () => {
+    const row = after.rows.find((r) => r.name === HELD);
+    expect(row?.held).toBe(true);
+    expect(row?.href).toBeNull();
+  });
+
+  it("sends Raise a hand to the circles view, through the shell's own navigation", () => {
+    const row = after.rows.find((r) => r.name === OPEN);
+    expect(row?.href).toMatch(/\/map\/circles$/);
+    expect(row?.onclick).toBe("return siteNav(event,'/map/circles')");
+    expect(after.footer).toContain("Raise a hand opens the circles view");
+  });
+
+  it("raises no toast in place of an action, on any seat", () => {
+    // The old button was onclick="toast('Intro drafted. ...')" and sent nothing.
+    expect(after.rows.map((r) => r.onclick ?? "").filter((c) => c.includes("toast("))).toEqual([]);
+    expect(after.rows.length, "the rows were read").toBeGreaterThanOrEqual(2);
+  });
+
+  it("says a drawn seat the village does not keep is not one of its roles, and offers it to nobody", () => {
+    m.run(`openPanel('gate',2)`);
+    const row = m.window.document.querySelector<HTMLElement>("#panelBody .seatrow");
+    expect(row?.querySelector("b")?.textContent).toBe(UNLISTED);
+    expect(row?.querySelector(".why")?.textContent).toBe("Drawn on this map. Not one of the village's roles yet.");
+    expect(row?.querySelector("a, button")).toBeNull();
+    expect(after.wall).toContain("seats on the map, not the village's roles yet");
+  });
+
+  it("counts only the open seat on the place's overview", () => {
+    expect(after.overview).toContain("⛨ 1 open seat ·");
+  });
+
+  it("opens Maia's seat answer on the Seats tab", () => {
+    expect(maiaTab).toBe(2);
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
   });
 });

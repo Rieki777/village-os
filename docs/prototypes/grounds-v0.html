@@ -339,6 +339,8 @@
   .seatrow:last-child{border-bottom:none}
   .seatrow .nm b{display:block;font-size:13px;color:#3a2b12;font-weight:bold}
   .seatrow .nm span{font-size:11px;color:#6b4d1e}
+  .seatrow .nm .why{display:block;font-style:italic;color:#8a7347;margin-top:2px}
+  .seatrow .held{font-size:11px;letter-spacing:.09em;font-variant:small-caps;color:#4d7c2a;border:1px solid #9cb27a;border-radius:11px;padding:2px 10px;white-space:nowrap}
   .doorbtn{display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:9px;text-align:left;
     padding:11px 14px;border-radius:7px;border:1px solid #8a6a33;cursor:pointer;font-family:inherit;
     background:linear-gradient(180deg,#f2e2b8,#e2c88e)}
@@ -4804,7 +4806,7 @@ function syncBanners(){
 
 /* hover card */
 const hc=$('hovercard');let hoverPin=null;
-function showHover(s,anchor){const q=questsAt(s.key).length,st=seatsAt(s.key).length;
+function showHover(s,anchor){const q=questsAt(s.key).length,st=seatsAt(s.key).filter(seatOpen).length;
   hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(s.circle)+' circle':'needs a steward'} · ${escq(s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name)}</div>
   <div class="state">${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
   <div class="row"><span>⚑ <b>${q}</b> quest${q===1?'':'s'}</span><span>⛨ <b>${st}</b> seat${st===1?'':'s'} open</span></div>
@@ -4870,7 +4872,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     ${(window.LOTS&&LOTS[s.key])?`<p style="margin-top:6px;font-size:12px;color:#6b4d1e">⌂ <b>${LOTS[s.key].sold} of ${LOTS[s.key].total}</b> lots spoken for · ${LOTS[s.key].total-LOTS[s.key].sold} open${housingSet(s.key)?' · reserve through the door below':''}</p>${housingSet(s.key)?'':`<p style="margin:3px 0 0;font-size:11.5px;color:#a3703d">${housingNote(s.key)}</p>`}`:''}
     ${window.eventCard?eventCard(s):''}
     ${doorBtns(s)}
-    <p style="margin-top:8px;font-size:12px;color:#6b4d1e">⚑ ${q.length} quests · ⛨ ${st.length} open seats · 💬 ${threadsAt(s.key).length} conversation${threadsAt(s.key).length===1?'':'s'}${s.event?' · ✦ '+escq(s.event):''}</p>
+    <p style="margin-top:8px;font-size:12px;color:#6b4d1e">⚑ ${q.length} quests · ⛨ ${st.filter(seatOpen).length} open seat${st.filter(seatOpen).length===1?'':'s'} · 💬 ${threadsAt(s.key).length} conversation${threadsAt(s.key).length===1?'':'s'}${s.event?' · ✦ '+escq(s.event):''}</p>
     ${threadsAt(s.key).length?`<div style="margin-top:8px">${head('what people are saying here')}
       ${threadsAt(s.key).map(t=>`<button type="button" class="cvrow" data-item="${escq(itemAddr('talk',t))}" onclick="openDoor('forum',{at:'${escj(s.key)}'})"><span>💬</span><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago</small></span></button>`).join('')}
       </div>`:''}
@@ -4895,9 +4897,18 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     ${claimed(x)&&x.how_to?`<div class="firststep"><b>Your first step</b>${escq(x.how_to)}</div>`:''}
     <div class="promise">${PROMISE_CLAIM}</div></div>`).join('')
     :`<p>No open quests here right now. The greenhouse and the food forest are calling, though.</p>`;
-  if(i===2)body.innerHTML=st.length?st.map(x=>`<div class="seatrow" data-item="${escq(itemAddr('seat',x))}"><div class="nm"><b>${escq(x.s)}</b><span>${escq(x.c)} circle · ${escq(x.note)}</span></div>
-    <button class="btn" onclick="toast('Intro drafted. The ${escj(x.c)} circle will hear from you. (Prototype; the real form lives at /roles.)')">Raise a hand</button></div>`).join('')
-    :`<p>All seats filled here. Beautiful problem.</p>`;
+  /* Raise a hand GOES SOMEWHERE NOW. It used to be a toast claiming an
+     intro was drafted, with nothing sent. A hand is raised on the circles
+     view, where the village keeps its roles and a signed-in member's hand
+     is posted to the seat, so the button takes the reader there, through
+     siteNav like every other door to the site. See seatOpen for which
+     seats carry it. */
+  if(i===2){const circ='/map/circles',any=st.some(x=>!seatUnlisted(x)&&roleState(x)!=='full');
+    body.innerHTML=st.length?st.map(x=>{const full=roleState(x)==='full',unl=seatUnlisted(x);
+      return `<div class="seatrow" data-item="${escq(itemAddr('seat',x))}"><div class="nm"><b>${escq(x.s)}</b><span>${escq(x.c)} circle · ${escq(x.note)}</span>${unl?`<span class="why">Drawn on this map. Not one of the village's roles yet.</span>`:''}</div>
+      ${full?`<span class="held">held</span>`:unl?'':`<a class="btn" href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">Raise a hand ↗</a>`}</div>`}).join('')+
+      `<div class="lastv">${any?'Raise a hand opens':'The village keeps its roles on'} <a href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">the circles view</a>${any?'. That is where the village keeps its roles, and where a member\'s raised hand reaches the seat.':'.'}</div>`
+    :`<p>No seats are drawn at this place.</p>`}
   if(i===3){const ph=(window.PLACE_PHOTOS||{})[s.key]||[];
     /* Member-authored text reaching HTML for the first time in this file:
        alt, caption and the contributor's name all go through escq. */
@@ -5016,8 +5027,13 @@ function buildWall(){
     stranded.map(s=>`<button type="button" class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⚠ ${escq(s.name)}</b><span>outside the property line. Move it or redraw the line; nothing is removed for you</span></button>`).join(''):'')+
   (unowned.length?`<div class="wallhead">needs a steward</div>`+
     unowned.map(s=>`<button type="button" class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⌂ ${escq(s.name)}</b><span>no circle holds this place yet</span></button>`).join(''):'')+
+  /* The same predicate the Seats tab and What needs hands ask. A held seat is
+     not listed here, and a drawn seat the village does not keep is listed
+     under its own heading, so the founder can still find it to fix it. */
   `<div class="wallhead">open seats</div>`+
-  SCENE.seats.map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · ${escq(x.c)} circle</span></button>`).join('')+
+  SCENE.seats.filter(seatOpen).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · ${escq(x.c)} circle</span></button>`).join('')+
+  (SCENE.seats.some(seatUnlisted)?`<div class="wallhead">seats on the map, not the village's roles yet</div>`+
+    SCENE.seats.filter(seatUnlisted).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · drawn here, matched to no role</span></button>`).join(''):'')+
   `<div class="wallhead">open quests</div>`+
   SCENE.quests.map(x=>{const go=!!(x.at&&BY[x.at]),tag=go?'button':'div';
     return `<${tag} class="wallrow"${go?` type="button" onclick="wallGo('${escj(x.at)}',1)"`:''}><b>⚑ ${escq(x.q)}</b><span>${go?escq(BY[x.at].name)+' · ':'Quest Board · not yet placed · '}${escq(x.r)}</span></${tag}>`}).join('')}
@@ -5060,7 +5076,7 @@ $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
 /* attention cycle */
 let attnIdx=0;
 const attnItems=()=>[
-  ...SCENE.seats.filter(x=>x.at&&BY[x.at]).map(x=>({k:'seat',at:x.at,h:`⛨ Seat open: ${x.s}`,p:`${x.c} circle needs a steady hand. ${x.note}.`,tab:2})),
+  ...SCENE.seats.filter(x=>x.at&&BY[x.at]&&seatOpen(x)).map(x=>({k:'seat',at:x.at,h:`⛨ Seat open: ${x.s}`,p:`${x.c} circle needs a steady hand. ${x.note}.`,tab:2})),
   ...SCENE.quests.filter(q=>/Saturday|tonight|Thu/.test(q.r+q.need)).filter(q=>!q.at||BY[q.at]).map(x=>({k:'quest',at:(x.at&&BY[x.at])?x.at:null,h:`⚑ ${x.q}`,p:`${x.r} · ${x.need}. Real hands, real soil.`,tab:1})),
 ];
 $('attnBadge').textContent=attnItems().length;
@@ -5369,7 +5385,7 @@ function maiaSay(html,from,say){const d=document.createElement('div');d.classNam
   while(mlog.children.length>40)mlog.firstChild.remove();
   if(from!=='me')mvSpeak(say==null?mvStrip(html):say);
   return d}
-function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key);
+function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key).filter(seatOpen);
   const bits=[];if(q.length)bits.push(`<b>${q.length}</b> quest${q.length>1?'s':''}`);if(st.length)bits.push(`<b>${st.length}</b> open seat${st.length>1?'s':''}`);
   if(s.event)bits.push(`<b>${escq(s.event)}</b>`);
   maiaSay(`${escq(s.name)}: ${escq(s.blurb.split('.')[0].toLowerCase())}. ${bits.length?('Right now: '+bits.join(' · ')+'.'):''} ${s.state==='funding'?`The pool is at <b>${Math.round(s.fund*100)}%</b>, and every pledge raises real walls.`:''}`)}
@@ -5434,8 +5450,12 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
     for(const w of words)if(t.includes(w)){openPanel(s.key);done('structure',s.key);return maiaSay(`Walking you to the <b>${escq(s.name)}</b> now.`)}}
   {const qb=questBest();if(qb.best&&qb.bs>=2)return sayQuest(qb)}
   const seat=SCENE.seats.find(x=>{const first=x.s.toLowerCase().split(' ')[0];return first.length>4&&t.includes(first)});
-  if(seat&&seat.at){done('role',seat.s);openPanel(seat.at,1);
-    return maiaSay(`The <b>${escq(seat.s)}</b> seat is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`)}
+  /* Tab 2 is Seats; 1 is Quests, which is where this used to open. And the
+     seat is called open only when seatOpen says it is. */
+  if(seat&&seat.at){done('role',seat.s);openPanel(seat.at,2);
+    return maiaSay(seatOpen(seat)?`The <b>${escq(seat.s)}</b> seat is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`
+      :seatUnlisted(seat)?`The <b>${escq(seat.s)}</b> seat is drawn at the <b>${escq(nameOf(seat.at))}</b>, and it is not one of the village's roles yet. The circles view holds the roles the village keeps.`
+      :`The <b>${escq(seat.s)}</b> seat at the <b>${escq(nameOf(seat.at))}</b> is held.`)}
   for(const l of LEX)if(l.re.test(txt)){done('lex',null);return l.fn()}
   done('none',null);
   maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: ${WELCOME_WALK_ON?'<button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'name'} any building.`)}
@@ -6297,9 +6317,14 @@ function roleApplyLive(rows){
   let n=0;
   for(const x of SCENE.seats){
     const r=by[String(x.s||'').trim().toLowerCase()];
-    if(!r){delete x._state;delete x._tags;continue}
-    x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);n++}
+    if(!r){delete x._state;delete x._tags;delete x._live;continue}
+    x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);x._live=true;n++}
+  /* Whether the village has said anything about its roles at all. An empty
+     list is no answer: the shell sends one both for a village with no roles
+     and for a reader /api/map refused, and those two must not read alike. */
+  window.ROLE_HEARD=Array.isArray(rows)&&rows.length>0;
   if(typeof refreshBadges==='function')refreshBadges();
+  if(typeof refreshWork==='function')refreshWork();
   return n}
 window.roleApplyLive=roleApplyLive;
 /* An untagged row belongs to everyone, and "tagged for nobody" has to read
@@ -6354,6 +6379,25 @@ function roleDefaulted(x){const h=roleHome(x);return !!(h&&h!==x.at)}
    waiting for the village to reassign it", which is an opening. */
 function roleState(x){const v=String((x&&(x._state||x.state))||'open');
   return v==='filled'?'full':(v==='partial'?'partial':'open')}
+/* A SEAT IS OPEN WHEN THE VILLAGE SAYS SO, AND NOT BECAUSE IT IS DRAWN.
+   The seats on this map are the scene's org_roles, typed by whoever drew the
+   land, and the village keeps its real roles elsewhere (/api/map, the
+   circles view). On 2026-10-01 none of the 16 drawn seats matched any of
+   the village's 25 roles, and What needs hands offered all 16 as "Seat
+   open", each with a Raise a hand that said "Intro drafted. The Land circle
+   will hear from you." and sent nothing anywhere. A held seat was offered
+   too: the Seats tab, the counts and the list never asked roleState.
+   So, once the village has answered (seatHeard), a drawn seat that matches
+   none of its roles is said to be exactly that and is offered to nobody,
+   and a held one is shown as held. Before it answers, and in a standalone
+   file, the scene's own word stands, which is all there is to go on.
+   Declared as functions, and reading a window flag, because attnItems
+   first asks while this file is still being read, before the let that
+   holds ROLE_LIVE has run: touching it then throws. */
+function seatHeard(){return window.ROLE_HEARD===true}
+function seatUnlisted(x){return seatHeard()&&!(x&&x._live)}
+function seatOpen(x){return !!x&&roleState(x)!=='full'&&!seatUnlisted(x)}
+window.seatOpen=seatOpen;window.seatUnlisted=seatUnlisted;
 /* The curated homes that resolve, each with a radius that CANNOT overlap a
    neighbour's. Half the distance to the nearest other home, capped at MAX:
    for any pair r_a <= d/2 and r_b <= d/2, so r_a + r_b <= d. Measured on the
@@ -6506,7 +6550,7 @@ function roleLens(cx,mode,t,scx){
       if(live)ROLE_LAST_SATS.push({seat:x.s,circle:x.c,home:k,at:x.at||null,
         x:px,y:py,st:st,surface:sx2.canvas.id});
       roleSat(sx2,px,py,
-        CIRCLE_COL[x.c]||'#9aa08f',st,st==='open'&&roleRelevant(x._tags||x.archetypes),t||0)})}
+        CIRCLE_COL[x.c]||'#9aa08f',st,st==='open'&&!seatUnlisted(x)&&roleRelevant(x._tags||x.archetypes),t||0)})}
   cx.restore()}
 window.roleLens=roleLens;
 /* ONE CALL A FRAME, AND IT OWNS THE LENS PLANE.
