@@ -24,7 +24,20 @@ vi.mock("../lib/identity", () => ({ instanceIdentity: () => ({ instanceId: "vill
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { wireAssistant } from "../lib/assistant";
-import { exportMemberJournal, forgetMemberJournal } from "../lib/journal";
+import {
+  cleanEntryInput,
+  exportMemberJournal,
+  feedbackDeliverAfter,
+  forgetEntry,
+  forgetMemberJournal,
+  queueFeedback,
+  readOwnPulse,
+  receivedFeedback,
+  saveEntry,
+  savePrefs,
+  sentFeedback,
+  withdrawFeedback,
+} from "../lib/journal";
 import { loadVariables } from "../lib/variables";
 import { guideSystemPrompt, register, shapeSystemPrompt } from "./journal";
 
@@ -355,8 +368,12 @@ describe.skipIf(!configured)("the journal against a real schema", () => {
   });
 
   it("writes a retried save once, and answers the retry with the first row", async () => {
-    const first = await call(handlers, "POST /api/journal/entries", { body: pulse("c-retry", { load: 4 }) });
-    const again = await call(handlers, "POST /api/journal/entries", { body: pulse("c-retry", { load: 1 }) });
+    // A retry is the same body sent again, so it carries the same `writtenAt`.
+    // Different numbers under the SAME instant are a stale copy, never a newer
+    // version, and change nothing.
+    const writtenAt = new Date().toISOString();
+    const first = await call(handlers, "POST /api/journal/entries", { body: { ...pulse("c-retry", { load: 4 }), writtenAt } });
+    const again = await call(handlers, "POST /api/journal/entries", { body: { ...pulse("c-retry", { load: 1 }), writtenAt } });
     expect(again.status).toBe(200);
     expect(again.body.id).toBe(first.body.id);
     expect(again.body.scores).toEqual({ load: 4 });
@@ -420,6 +437,160 @@ describe.skipIf(!configured)("the journal against a real schema", () => {
     const gone = await call(handlers, "DELETE /api/journal/entries/:id", { params: { id } });
     expect(gone.status).toBe(200);
     expect(await q("SELECT COUNT(*) AS n FROM `journal_pulse`")).toEqual([{ n: 0 }]);
+  });
+
+  it("refuses an entry dated before 2020 with a sentence, so a broken clock is never retried as a 500", async () => {
+    const out = await call(handlers, "POST /api/journal/entries", {
+      body: entry("c-1969", "the moon", { writtenAt: "1969-07-20T20:17:00.000Z" }),
+    });
+    expect(out.status).toBe(400);
+    expect(out.body.error).toContain("Check this device's clock");
+    expect(await q("SELECT COUNT(*) AS n FROM `journal_entries`")).toEqual([{ n: 0 }]);
+  });
+
+  /*
+   * THE SAME SITTING SENT AGAIN WITH NEW WORDS. A save whose answer was lost
+   * keeps its id on the device, and the member may edit before saving again.
+   * The later save carries a later `writtenAt`, and its words are the ones
+   * kept. A stale copy of the first version, arriving after, takes nothing back.
+   */
+  it("keeps the newer words when a save is sent again with the same id and different content", async () => {
+    const t1 = "2026-09-30T10:00:00.000Z";
+    const t2 = "2026-09-30T10:05:00.000Z";
+    const first = await call(handlers, "POST /api/journal/entries", { body: entry("c-same", "first words", { writtenAt: t1 }) });
+    const second = await call(handlers, "POST /api/journal/entries", {
+      body: entry("c-same", "second words", { writtenAt: t2 }),
+    });
+    expect(second.status).toBe(200);
+    expect(second.body.id).toBe(first.body.id);
+    expect(second.body.answers[0].text).toBe("second words");
+    expect(second.body.writtenAt).toBe(t2);
+    const stale = await call(handlers, "POST /api/journal/entries", { body: entry("c-same", "first words", { writtenAt: t1 }) });
+    expect(stale.status).toBe(200);
+    expect(stale.body.answers[0].text).toBe("second words");
+    const rows = await q("SELECT `answers` FROM `journal_entries`");
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].answers)).toContain("second words");
+  });
+
+  // ── Pulse order, one transaction, and forgetting ─────────────────────────
+
+  const pulseAt = (clientId: string, scores: Record<string, number>, writtenAt: string) => ({
+    ...pulse(clientId, scores),
+    writtenAt,
+  });
+  const pulseRows = async () =>
+    q("SELECT `metric`, `value`, `entry_id` FROM `journal_pulse` WHERE `user_id` = 'm-ana' ORDER BY `metric`");
+
+  it("moves the numbers too when a re-sent pulse carries new ones", async () => {
+    const first = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-re", { load: 4, space: 2 }, "2026-09-30T10:00:00.000Z"),
+    });
+    const again = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-re", { load: 2, energy: 1 }, "2026-09-30T10:05:00.000Z"),
+    });
+    expect(again.body.scores).toEqual({ load: 2, energy: 1 });
+    expect(await pulseRows()).toEqual([
+      { metric: "energy", value: 1, entry_id: first.body.id },
+      { metric: "load", value: 2, entry_id: first.body.id },
+    ]);
+  });
+
+  /*
+   * LAST WRITTEN WINS, NOT LAST ARRIVED. Week 2026-W40 in UTC runs Monday 28
+   * September to Sunday 4 October. The Monday pulse waited in a phone's outbox
+   * and reaches the server after the Wednesday one, for the first time, with a
+   * client id the server has never seen.
+   */
+  it("keeps the newest-written pulse when an older one arrives late for the first time", async () => {
+    const wed = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-wed", { load: 2 }, "2026-09-30T10:00:00.000Z"),
+    });
+    const mon = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-mon", { load: 5 }, "2026-09-28T08:00:00.000Z"),
+    });
+    expect(mon.status).toBe(200);
+    expect(await pulseRows()).toEqual([{ metric: "load", value: 2, entry_id: wed.body.id }]);
+    expect((await call(handlers, "GET /api/journal/pulse")).body).toEqual([{ weekId: "2026-W40", scores: { load: 2 } }]);
+    // Forgetting the older entry takes nothing, because it holds nothing.
+    expect((await call(handlers, "DELETE /api/journal/entries/:id", { params: { id: mon.body.id } })).status).toBe(200);
+    expect(await pulseRows()).toEqual([{ metric: "load", value: 2, entry_id: wed.body.id }]);
+  });
+
+  it("lets two devices save the same week at once, and the later-written number stands", async () => {
+    const [mon, wed] = await Promise.all([
+      call(handlers, "POST /api/journal/entries", { body: pulseAt("c-dev-1", { load: 5, space: 1 }, "2026-09-28T08:00:00.000Z") }),
+      call(handlers, "POST /api/journal/entries", { body: pulseAt("c-dev-2", { load: 2, space: 4 }, "2026-09-30T10:00:00.000Z") }),
+    ]);
+    expect([mon.status, wed.status]).toEqual([200, 200]);
+    expect(await pulseRows()).toEqual([
+      { metric: "load", value: 2, entry_id: wed.body.id },
+      { metric: "space", value: 4, entry_id: wed.body.id },
+    ]);
+  });
+
+  it("gives a week its older answer back when the newer pulse is forgotten", async () => {
+    const a = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-a", { energy: -2, load: 4 }, "2026-09-28T08:00:00.000Z"),
+    });
+    const b = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-b", { energy: 1 }, "2026-09-30T10:00:00.000Z"),
+    });
+    expect(await pulseRows()).toEqual([
+      { metric: "energy", value: 1, entry_id: b.body.id },
+      { metric: "load", value: 4, entry_id: a.body.id },
+    ]);
+    expect(await forgetEntry(pool, "m-ana", b.body.id, "UTC")).toBe(true);
+    expect(await pulseRows()).toEqual([
+      { metric: "energy", value: -2, entry_id: a.body.id },
+      { metric: "load", value: 4, entry_id: a.body.id },
+    ]);
+  });
+
+  it("sweeps the numbers of an entry that is already gone", async () => {
+    const p = await call(handlers, "POST /api/journal/entries", {
+      body: pulseAt("c-p", { load: 3 }, "2026-09-30T10:00:00.000Z"),
+    });
+    await q("DELETE FROM `journal_entries` WHERE `id` = ?", [p.body.id]);
+    expect(await forgetEntry(pool, "m-ana", p.body.id, "UTC")).toBe(false);
+    expect(await pulseRows()).toEqual([]);
+  });
+
+  /*
+   * ONE TRANSACTION. The third number's insert fails as a dropped connection
+   * would. Nothing of the save may stay behind, so the outbox's retry with the
+   * same client id writes the entry and all five numbers together.
+   */
+  it("writes a pulse entry and all its numbers together, or none of them", async () => {
+    let pulseInserts = 0;
+    const wrapQuery = (target: any) => async (sql: any, params?: any) => {
+      if (/^INSERT INTO `journal_pulse`/.test(String(sql))) {
+        pulseInserts += 1;
+        if (pulseInserts === 3) {
+          throw Object.assign(new Error("Connection lost: The server closed the connection."), {
+            code: "PROTOCOL_CONNECTION_LOST",
+          });
+        }
+      }
+      return target.query(sql, params);
+    };
+    const failing: any = {
+      query: wrapQuery(pool),
+      getConnection: async () => {
+        const conn: any = await pool.getConnection();
+        return new Proxy(conn, {
+          get: (t: any, k) => (k === "query" ? wrapQuery(t) : typeof t[k] === "function" ? t[k].bind(t) : t[k]),
+        });
+      },
+    };
+    const five = { energy: 1, load: 3, confidence: 4, coherence: 4, space: 2 };
+    const input = cleanEntryInput(pulseAt("c-five", five, "2026-09-30T10:00:00.000Z"));
+    if (!input.ok) throw new Error(input.problem);
+    await expect(saveEntry(failing, "m-ana", input.value, "UTC")).rejects.toThrow(/Connection lost/);
+    const again = await saveEntry(pool, "m-ana", input.value, "UTC");
+    expect(again.entry.scores).toEqual(five);
+    expect(await readOwnPulse(pool, "m-ana")).toEqual([{ weekId: "2026-W40", scores: five }]);
+    expect(await q("SELECT COUNT(*) AS n FROM `journal_entries`")).toEqual([{ n: 1 }]);
   });
 
   // ── The pulse ────────────────────────────────────────────────────────────
@@ -574,6 +745,114 @@ describe.skipIf(!configured)("the journal against a real schema", () => {
     expect((await call(handlers, "GET /api/journal/feedback/received")).body).toHaveLength(1);
     as("m-ben");
     expect((await call(handlers, "GET /api/journal/feedback/received")).body).toEqual([]);
+  });
+
+  const parts = (recipientId: string) => ({ recipientId, observation: "o", feeling: "f", need: "n", request: "r" });
+  const nameOf = async () => "Ben Ortiz";
+  const HOUR = 60 * 60 * 1000;
+
+  /*
+   * ONE PER AUTHOR PER RECIPIENT PER MONDAY BATCH. Late Sunday and just after
+   * midnight are two ISO weeks, and both land in the same batch, so a cap
+   * keyed on the queue week alone let one recipient open two messages from the
+   * same author ninety minutes apart in one Monday.
+   */
+  it("holds one message per author per recipient per Monday batch, across a week boundary", async () => {
+    await savePrefs(pool, "m-ben", { open: true, style: "gentle", note: "" }, new Date("2026-09-01T00:00:00Z"));
+    const opts = (iso: string) => ({ timeZone: "UTC", now: new Date(iso), recipientName: "Ben Ortiz" });
+    const sunday = "2026-10-04T23:00:00.000Z";
+    const monday = "2026-10-05T00:30:00.000Z";
+    expect(feedbackDeliverAfter(new Date(sunday), "UTC").toISOString()).toBe("2026-10-12T09:00:00.000Z");
+    expect(feedbackDeliverAfter(new Date(monday), "UTC").toISOString()).toBe("2026-10-12T09:00:00.000Z");
+    expect((await queueFeedback(pool, "m-ana", parts("m-ben"), "First.", opts(sunday))).ok).toBe(true);
+    const second = await queueFeedback(pool, "m-ana", parts("m-ben"), "Second.", opts(monday));
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.status).toBe(409);
+      expect(second.problem).toContain("Monday");
+    }
+    // The batch after is open to them again.
+    expect((await queueFeedback(pool, "m-ana", parts("m-ben"), "Next.", opts("2026-10-12T00:30:00.000Z"))).ok).toBe(true);
+  });
+
+  /*
+   * A NO HOLDS WHAT HAS NOT ARRIVED. Ben says yes, three messages are queued,
+   * and he says no before the Monday they were due. What reached him while he
+   * was open stays; the rest waits, and arrives if he says yes again. The
+   * author is told it is waiting and may still take it back.
+   */
+  it("holds what has not arrived while the recipient says no, and lets it arrive when they say yes again", async () => {
+    const T0 = new Date("2026-10-07T12:00:00Z");
+    const at = (ms: number) => new Date(ms);
+    const yes = { open: true, style: "gentle" as const, note: "" };
+    const no = { open: false, style: "gentle" as const, note: "" };
+    const opts = (now: Date) => ({ timeZone: "UTC", now, recipientName: "Ben Ortiz" });
+    const tenDaysBefore = at(T0.getTime() - 240 * HOUR);
+    await savePrefs(pool, "m-ben", yes, tenDaysBefore);
+    const early = await queueFeedback(pool, "m-cai", parts("m-ben"), "From before the no.", opts(tenDaysBefore));
+    const held = await queueFeedback(pool, "m-ana", parts("m-ben"), "Queued before the no.", opts(T0));
+    const taken = await queueFeedback(pool, "m-dee", parts("m-ben"), "Taken back while held.", opts(T0));
+    if (!early.ok || !held.ok || !taken.ok) throw new Error("a queue was refused");
+    const monday = new Date(held.sent.deliverAfter!);
+    expect(monday.toISOString()).toBe("2026-10-12T09:00:00.000Z");
+    await savePrefs(pool, "m-ben", no, at(T0.getTime() + HOUR));
+
+    const after = at(monday.getTime() + HOUR);
+    expect((await receivedFeedback(pool, "m-ben", after)).map((f) => f.message)).toEqual(["From before the no."]);
+    expect((await sentFeedback(pool, "m-ana", nameOf, after))[0]).toMatchObject({ delivered: false, held: true });
+    expect((await sentFeedback(pool, "m-cai", nameOf, after))[0]).toMatchObject({ delivered: true, held: false });
+    expect((await withdrawFeedback(pool, "m-dee", taken.sent.id, nameOf, after)).ok).toBe(true);
+
+    // A new note while still closed lets nothing through.
+    await savePrefs(pool, "m-ben", { ...no, note: "not now" }, at(monday.getTime() + 2 * HOUR));
+    expect((await receivedFeedback(pool, "m-ben", at(monday.getTime() + 3 * HOUR))).map((f) => f.message)).toEqual([
+      "From before the no.",
+    ]);
+
+    // Yes again: the held message arrives. It was held, never thrown away.
+    await savePrefs(pool, "m-ben", yes, at(monday.getTime() + 4 * HOUR));
+    const later = at(monday.getTime() + 5 * HOUR);
+    expect((await receivedFeedback(pool, "m-ben", later)).map((f) => f.message).sort()).toEqual([
+      "From before the no.",
+      "Queued before the no.",
+    ]);
+    expect((await sentFeedback(pool, "m-ana", nameOf, later))[0]).toMatchObject({ delivered: true, held: false });
+  });
+
+  /*
+   * AN AUTHOR WHO LEAVES TAKES NOTHING THE RECIPIENT ALREADY READ. Deleting a
+   * delivered message would make it vanish from Ben's list at the moment Ana
+   * becomes "a departed member", which names her. It stays, unsigned, with
+   * Ben's own answer; her four parts and everything nobody saw go with her.
+   */
+  it("leaves a delivered message with its recipient, unsigned, when its author leaves", async () => {
+    for (const who of ["m-ana", "m-ben", "m-cai"]) {
+      as(who);
+      await call(handlers, "PUT /api/journal/feedback/prefs", { body: { open: true, style: "gentle" } });
+    }
+    as("m-ana");
+    const toBen = await call(handlers, "POST /api/journal/feedback", { body: draft("m-ben") });
+    const toCai = await call(handlers, "POST /api/journal/feedback", { body: draft("m-cai", "Still held.") });
+    as("m-ben");
+    const toAna = await call(handlers, "POST /api/journal/feedback", { body: draft("m-ana", "For Ana.") });
+    await backdate(toBen.body.id);
+    await backdate(toAna.body.id);
+    await call(handlers, "POST /api/journal/feedback/:id/respond", { params: { id: toBen.body.id }, body: { response: "thanks" } });
+    const before = (await call(handlers, "GET /api/journal/feedback/received")).body;
+    expect(before).toHaveLength(1);
+
+    await forgetMemberJournal(pool, "m-ana");
+
+    expect((await call(handlers, "GET /api/journal/feedback/received")).body).toEqual(before);
+    expect(
+      await q("SELECT COUNT(*) AS n FROM `journal_feedback` WHERE `author_id` = 'm-ana' OR `recipient_id` = 'm-ana'"),
+    ).toEqual([{ n: 0 }]);
+    expect(
+      await q("SELECT `observation`, `feeling`, `need`, `request` FROM `journal_feedback` WHERE `id` = ?", [toBen.body.id]),
+    ).toEqual([{ observation: "", feeling: "", need: "", request: "" }]);
+    expect(await q("SELECT COUNT(*) AS n FROM `journal_feedback` WHERE `id` IN (?, ?)", [toCai.body.id, toAna.body.id])).toEqual([
+      { n: 0 },
+    ]);
   });
 
   // ── The guide ────────────────────────────────────────────────────────────

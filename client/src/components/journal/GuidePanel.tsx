@@ -19,6 +19,27 @@ import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "./ui";
 
 export const GUIDE_RESTING = "The guide is resting. Your journal works without it.";
 
+/**
+ * The most messages one ask may carry. The server refuses a conversation
+ * longer than its MAX_TURNS (server/lib/assistant.ts, 40) outright, so the
+ * 21st ask of a long sitting used to fail, and every ask after it, reloads
+ * included. Keep in step with that number.
+ */
+export const GUIDE_MAX_MESSAGES = 40;
+
+/**
+ * What one ask sends: the newest messages that fit, starting on one of the
+ * member's own turns and ending on the one just typed. Only the request is
+ * trimmed; the whole conversation stays on the page and in the sitting. Every
+ * ask carries the sitting's answers as well, so the oldest turns are what the
+ * guide can best do without.
+ */
+export function guideWindow(messages: GuideMessage[], turn: GuideMessage): GuideMessage[] {
+  let tail = [...messages, turn].slice(-GUIDE_MAX_MESSAGES);
+  while (tail.length > 1 && tail[0]!.role !== "user") tail = tail.slice(1);
+  return tail;
+}
+
 export default function GuidePanel({
   open,
   onClose,
@@ -69,7 +90,7 @@ export default function GuidePanel({
     setBusy(true);
     setProblem(null);
     try {
-      const reply = await askGuide({ ...request(), messages: [...messages, turn] });
+      const reply = await askGuide({ ...request(), messages: guideWindow(messages, turn) });
       onMessages([...messages, turn, { role: "assistant", content: reply.reply }]);
       setLatest(reply);
       setEditing(null);
@@ -103,6 +124,9 @@ export default function GuidePanel({
         role="dialog"
         aria-label="The guide"
         data-scroll-contain
+        // It holds the bottom-right corner on every width, so the shortcuts
+        // button steps out (index.css) instead of sitting reachable under it.
+        data-hides-fab
         className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-card text-card-foreground shadow-2xl md:inset-y-0 md:left-auto md:right-0 md:max-h-none md:w-[26rem] md:rounded-none md:border-l md:border-t-0"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-2">

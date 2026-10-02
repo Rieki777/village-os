@@ -30,7 +30,9 @@
  * zones and across a daylight change without touching a global.
  *
  * THE POOL IS PASSED IN, never imported, so every function here is testable
- * against a scratch schema and none of them owns a connection.
+ * against a scratch schema and none of them owns a connection. A save and a
+ * forget each run in one transaction, which the repo's `inTransaction` opens
+ * and hands back as a connection.
  */
 import { randomUUID } from "node:crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
@@ -43,20 +45,26 @@ import {
   entryRowById,
   entryRowsForUser,
   gratitudeReceivedRows,
+  inTransaction,
   insertEntryRow,
   insertQueuedFeedbackUnderCap,
   openPrefsRows,
   prefsRow,
   pulseAggregateRows,
+  pulseEntryRowsForUser,
+  pulseHoldersForWeek,
+  pulseRowsForEntry,
   pulseRowsForUser,
   receivedFeedbackRows,
   respondFeedbackRow,
+  rewriteEntryRow,
   sentFeedbackRowById,
   sentFeedbackRows,
   updateEntryRow,
   upsertPrefsRow,
   upsertPulseRow,
   withdrawFeedbackRow,
+  type Queryable,
 } from "../repos/journal";
 import { numberVar } from "./variables";
 import { civilDateKey, civilParts, zonedTimeToUtc } from "../../shared/lunar";
@@ -122,6 +130,21 @@ export const JOURNAL_PAGE_MAX = 50;
 export const PULSE_AGGREGATE_WEEKS = 8;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The earliest `writtenAt` a save may carry: the first instant of 2000, UTC.
+ *
+ * A device whose clock reset reports 1970 or thereabouts. `written_at` is a
+ * TIMESTAMP, which refuses anything before 1970-01-01 00:00:01 UTC, so such a
+ * save used to fail as a 500 the outbox retried forever; one that fitted
+ * landed its pulse in a week the aggregate never reads. Refused here, with a
+ * sentence about the clock, both become a 400 the member can act on.
+ *
+ * 2020 and not 2000: a clock reset to 2000-01-01 in a zone west of UTC still
+ * passed a 2000 floor and filed its pulse in 1999-W52, a week the aggregate
+ * never reads. No journal entry can honestly predate this module.
+ */
+export const JOURNAL_EARLIEST_WRITTEN_AT = Date.UTC(2020, 0, 1);
 
 /* -------------------------------------------------------------------------- *
  * Pure helpers. Each is a decision about inputs, testable with no database.
@@ -296,6 +319,7 @@ export function cleanMeta(raw: unknown): DebriefMeta | null {
  * `now` bounds `writtenAt` from above: an offline save arrives late, which is
  * ordinary, and one dated more than a day ahead is a broken clock, which a
  * member should hear about before it sorts above everything they write.
+ * `JOURNAL_EARLIEST_WRITTEN_AT` bounds it from below, for the same reason.
  */
 export function cleanEntryInput(raw: unknown, now: Date = new Date()): Checked<JournalEntryInput> {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -325,6 +349,9 @@ export function cleanEntryInput(raw: unknown, now: Date = new Date()): Checked<J
   if (Number.isNaN(writtenAt.getTime())) return { ok: false, problem: "That date could not be read." };
   if (writtenAt.getTime() > now.getTime() + DAY_MS) {
     return { ok: false, problem: "That entry is dated more than a day ahead. Check this device's clock." };
+  }
+  if (writtenAt.getTime() < JOURNAL_EARLIEST_WRITTEN_AT) {
+    return { ok: false, problem: "That entry is dated before 2020. Check this device's clock." };
   }
   let localHour: number | undefined;
   if (b.localHour !== undefined && b.localHour !== null) {
@@ -627,9 +654,23 @@ function toEntry(r: RowDataPacket): JournalEntry {
   };
 }
 
+/**
+ * The author's view. `delivered` and `held` read the recipient's current
+ * answer the way the repo's `VISIBLE_TO_RECIPIENT` does: their yes covers a
+ * message when they are open, or when its Monday came before they last said
+ * no. A queued message their answer does not cover is HELD: they are not
+ * taking feedback right now, and it waits until they are.
+ */
 function toSent(r: RowDataPacket, recipientName: string, now: Date): FeedbackSent {
   const deliverAfter = r.deliver_after ? new Date(r.deliver_after) : null;
   const status = String(r.status) as FeedbackStatus;
+  const answered = r.recipient_open !== null && r.recipient_open !== undefined;
+  const answeredAt = r.recipient_answered_at ? new Date(r.recipient_answered_at) : null;
+  const covered =
+    answered &&
+    (Number(r.recipient_open) === 1 ||
+      (!!deliverAfter && !!answeredAt && deliverAfter.getTime() <= answeredAt.getTime()));
+  const queued = status === "queued";
   return {
     id: String(r.id),
     recipientId: String(r.recipient_id),
@@ -641,7 +682,8 @@ function toSent(r: RowDataPacket, recipientName: string, now: Date): FeedbackSen
     message: String(r.message ?? ""),
     status,
     deliverAfter: deliverAfter ? deliverAfter.toISOString() : null,
-    delivered: status === "queued" && !!deliverAfter && deliverAfter.getTime() <= now.getTime(),
+    delivered: queued && covered && !!deliverAfter && deliverAfter.getTime() <= now.getTime(),
+    held: queued && !covered,
     createdAt: iso(r.created_at),
   };
 }
@@ -664,13 +706,154 @@ function toReceived(r: RowDataPacket): FeedbackReceived {
  * Entries.
  * -------------------------------------------------------------------------- */
 
+/** JSON with every object's keys sorted, so two equal values compare equal however they were built. */
+function stableJson(value: unknown): string {
+  const sort = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sort);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as object).sort()) out[k] = sort((v as Record<string, unknown>)[k]);
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sort(value ?? null));
+}
+
+/** The columns one save writes, from its cleaned input. */
+function entryColumns(input: JournalEntryInput) {
+  const reflection = input.reflection ? clipText(input.reflection, JOURNAL_REFLECTION_MAX) : null;
+  return {
+    practice: input.practice,
+    depth: input.depth,
+    answers: JSON.stringify(input.answers),
+    scores: input.scores && Object.keys(input.scores).length ? JSON.stringify(input.scores) : null,
+    localHour: input.localHour ?? null,
+    meta: input.meta ? JSON.stringify(input.meta) : null,
+    reflection,
+    confirmed: (reflection ? 1 : 0) as 0 | 1,
+  };
+}
+
+/** True when a stored entry already holds exactly what this save carries. Privacy is an edit's, never a save's. */
+function sameSitting(entry: JournalEntry, input: JournalEntryInput): boolean {
+  const c = entryColumns(input);
+  return (
+    entry.practice === c.practice &&
+    entry.depth === c.depth &&
+    stableJson(entry.answers) === stableJson(input.answers) &&
+    stableJson(entry.scores) === stableJson(c.scores === null ? null : input.scores) &&
+    stableJson(entry.meta) === stableJson(c.meta === null ? null : input.meta) &&
+    (entry.reflection ?? null) === c.reflection &&
+    (entry.localHour ?? null) === c.localHour
+  );
+}
+
 /**
- * Save one entry, IDEMPOTENT ON THE CLIENT'S ID.
+ * A save that changed the words is one at least a second after the stored
+ * version. `written_at` is a whole-second TIMESTAMP, which MySQL rounds and
+ * MariaDB truncates, so a margin of one second keeps a byte-identical resend
+ * of the stored version from reading as newer on either engine.
+ */
+const NEWER_VERSION_MS = 1000;
+
+/** Which of two pulse entries was written later; arrival breaks a tie, then the id. */
+function writtenLater(
+  a: { writtenAt: number; createdAt: number; id: string },
+  b: { writtenAt: number; createdAt: number; id: string },
+): boolean {
+  if (a.writtenAt !== b.writtenAt) return a.writtenAt > b.writtenAt;
+  if (a.createdAt !== b.createdAt) return a.createdAt > b.createdAt;
+  return a.id > b.id;
+}
+
+/**
+ * Write one pulse entry's numbers into its week, under the lock
+ * `pulseHoldersForWeek` takes. LAST WRITTEN WINS: a number stays with the
+ * entry written latest, so a Monday pulse that sat in an outbox and arrives
+ * after Wednesday's moves nothing. An equal instant goes to this, the later
+ * arrival. A number whose entry is gone is anybody's.
+ */
+async function applyPulse(db: Queryable, userId: string, entry: JournalEntry, timeZone: string): Promise<void> {
+  if (entry.practice !== "pulse" || !entry.scores) return;
+  const scores = Object.entries(entry.scores);
+  if (scores.length === 0) return;
+  const weekId = isoWeekId(new Date(entry.writtenAt), timeZone);
+  const holders = new Map<string, RowDataPacket>();
+  for (const h of await pulseHoldersForWeek(db, userId, weekId)) holders.set(String(h.metric), h);
+  const mine = new Date(entry.writtenAt).getTime();
+  for (const [metric, value] of scores) {
+    const h = holders.get(metric);
+    const theirs = h && h.holder_written_at ? new Date(h.holder_written_at).getTime() : null;
+    if (h && String(h.entry_id) !== entry.id && theirs !== null && theirs > mine) continue;
+    await upsertPulseRow(db, { id: `jp-${randomUUID()}`, userId, entryId: entry.id, weekId, metric, value });
+  }
+}
+
+/**
+ * Take back the numbers one entry holds, and give each week the answer that
+ * entry had replaced: for every (week, metric) it held, the latest-written of
+ * this member's OTHER pulse entries in that week that answered the metric.
+ * With no `timeZone` the numbers go and nothing is given back, because a week
+ * cannot be named without the village's clock.
+ */
+async function releasePulse(db: Queryable, userId: string, entryId: string, timeZone: string | null): Promise<void> {
+  const held = await pulseRowsForEntry(db, userId, entryId);
+  await deletePulseRowsForEntry(db, userId, entryId);
+  if (!timeZone || held.length === 0) return;
+  const others = (await pulseEntryRowsForUser(db, userId))
+    .filter((r) => String(r.id) !== entryId)
+    .map((r) => ({
+      id: String(r.id),
+      writtenAt: new Date(r.written_at).getTime(),
+      createdAt: new Date(r.created_at).getTime(),
+      weekId: isoWeekId(new Date(r.written_at), timeZone),
+      scores: parseJson<PulseScores | null>(r.scores, null) ?? {},
+    }));
+  for (const h of held) {
+    const weekId = String(h.week_id);
+    const metric = String(h.metric);
+    let best: (typeof others)[number] | null = null;
+    for (const o of others) {
+      if (o.weekId !== weekId || typeof o.scores[metric] !== "number") continue;
+      if (!best || writtenLater(o, best)) best = o;
+    }
+    if (best) {
+      await upsertPulseRow(db, {
+        id: `jp-${randomUUID()}`,
+        userId,
+        entryId: best.id,
+        weekId,
+        metric,
+        value: best.scores[metric],
+      });
+    }
+  }
+}
+
+/**
+ * Save one entry, IDEMPOTENT ON THE CLIENT'S ID, in ONE TRANSACTION.
  *
- * A retry with the same (member, client id) changes nothing and answers with
- * the row the first save wrote, `created: false`. The pulse numbers are written
- * only on the first save, so a retried pulse cannot move a number the member
- * has since changed in a later entry.
+ * THE TRANSACTION. The entry, its read-back and every pulse number commit
+ * together or not at all. A save that fails part-way leaves nothing, so the
+ * outbox's retry with the same client id writes the entry and all its numbers
+ * again; it never finds a half-saved entry it can only answer "already saved"
+ * to. A transaction that loses a race is run again whole (`inTransaction`).
+ *
+ * THE SAME CLIENT ID AGAIN, three ways:
+ *   - the same content: a retry. Nothing changes, and the answer is the row
+ *     already there, `created: false`.
+ *   - new content, `writtenAt` a second or more after the stored version: the
+ *     same sitting saved again after an edit, because a save whose answer was
+ *     lost keeps its id on the device. The newer version replaces the stored
+ *     one, numbers included, and is the answer. Answering with the old row
+ *     would tell the member "Saved" over words the server dropped.
+ *   - new content, not newer: a stale copy, sent after the stored version was
+ *     changed (an edit in History, or a later save). The stored row is the
+ *     member's latest word and stands, and is the answer.
+ *
+ * THE PULSE: the newest-WRITTEN answer in a week stands (`applyPulse`), so an
+ * older pulse arriving late, for the first time or as a retry, moves nothing.
  */
 export async function saveEntry(
   pool: Pool,
@@ -680,38 +863,37 @@ export async function saveEntry(
 ): Promise<{ entry: JournalEntry; created: boolean }> {
   const uid = String(userId).slice(0, 64);
   const writtenAt = new Date(input.writtenAt);
-  const reflection = input.reflection ? clipText(input.reflection, JOURNAL_REFLECTION_MAX) : null;
-  const minted = `je-${randomUUID()}`;
-  await insertEntryRow(pool, {
-    id: minted,
-    userId: uid,
-    clientId: input.clientId,
-    practice: input.practice,
-    depth: input.depth,
-    answers: JSON.stringify(input.answers),
-    scores: input.scores && Object.keys(input.scores).length ? JSON.stringify(input.scores) : null,
-    writtenAt,
-    localHour: input.localHour ?? null,
-    privacy: input.privacy ?? "private",
-    meta: input.meta ? JSON.stringify(input.meta) : null,
-    reflection,
-    confirmed: reflection ? 1 : 0,
-  });
-  const rows = await entryRowByClientId(pool, uid, input.clientId);
-  if (!rows[0]) throw new Error("journal entry did not save");
-  const entry = toEntry(rows[0]);
-  // CREATED MEANS THE ROW CARRIES THE ID THIS CALL MINTED. `affectedRows` is
-  // no witness here: the driver connects with CLIENT_FOUND_ROWS, under which a
-  // duplicate set to its own values reports 1, the same as a fresh insert, and
-  // a late retry would then rewrite numbers a later entry already replaced.
-  const created = entry.id === minted;
-  if (created && entry.practice === "pulse" && entry.scores) {
-    const weekId = isoWeekId(writtenAt, timeZone);
-    for (const [metric, value] of Object.entries(entry.scores)) {
-      await upsertPulseRow(pool, { id: `jp-${randomUUID()}`, userId: uid, entryId: entry.id, weekId, metric, value });
+  const columns = entryColumns(input);
+  return inTransaction(pool, async (conn) => {
+    const minted = `je-${randomUUID()}`;
+    await insertEntryRow(conn, {
+      id: minted,
+      userId: uid,
+      clientId: input.clientId,
+      ...columns,
+      writtenAt,
+      privacy: input.privacy ?? "private",
+    });
+    const rows = await entryRowByClientId(conn, uid, input.clientId);
+    if (!rows[0]) throw new Error("journal entry did not save");
+    const entry = toEntry(rows[0]);
+    // CREATED MEANS THE ROW CARRIES THE ID THIS CALL MINTED. `affectedRows` is
+    // no witness here: the driver connects with CLIENT_FOUND_ROWS, under which a
+    // duplicate set to its own values reports 1, the same as a fresh insert.
+    if (entry.id === minted) {
+      await applyPulse(conn, uid, entry, timeZone);
+      return { entry, created: true };
     }
-  }
-  return { entry, created };
+    if (sameSitting(entry, input)) return { entry, created: false };
+    if (writtenAt.getTime() < new Date(entry.writtenAt).getTime() + NEWER_VERSION_MS) return { entry, created: false };
+    await releasePulse(conn, uid, entry.id, timeZone);
+    await rewriteEntryRow(conn, uid, entry.id, { ...columns, writtenAt });
+    const after = await entryRowById(conn, uid, entry.id);
+    if (!after[0]) throw new Error("journal entry did not save");
+    const rewritten = toEntry(after[0]);
+    await applyPulse(conn, uid, rewritten, timeZone);
+    return { entry: rewritten, created: false };
+  });
 }
 
 /** Where one page of the member's own list stops: an instant, and the row id when known. */
@@ -784,14 +966,30 @@ export async function editEntry(pool: Pool, userId: string, id: string, patch: E
 }
 
 /**
- * Forget one entry, and the numbers it carried. A number a later entry
- * already replaced belongs to that later entry and stays.
+ * Forget one entry, and the numbers it carried, in ONE TRANSACTION.
+ *
+ * A number a later-written entry already holds belongs to that entry and
+ * stays. A number THIS entry held goes, and its week gets back the answer this
+ * entry had replaced, from the latest-written of the member's other pulse
+ * entries that week (`releasePulse`). That needs the village's clock to name
+ * the week, so it happens when `timeZone` is passed; without it the numbers
+ * still go and nothing is given back.
+ *
+ * The pulse rows are swept even when the entry is already gone, so a forget
+ * that once died between its two deletes is finished by the next one. The
+ * answer is still false then: there was no such entry to forget.
  */
-export async function forgetEntry(pool: Pool, userId: string, id: string): Promise<boolean> {
-  const r = await deleteEntryRow(pool, userId, id);
-  if (Number(r?.affectedRows ?? 0) === 0) return false;
-  await deletePulseRowsForEntry(pool, userId, id);
-  return true;
+export async function forgetEntry(
+  pool: Pool,
+  userId: string,
+  id: string,
+  timeZone: string | null = null,
+): Promise<boolean> {
+  return inTransaction(pool, async (conn) => {
+    const r = await deleteEntryRow(conn, userId, id);
+    await releasePulse(conn, userId, id, timeZone);
+    return Number(r?.affectedRows ?? 0) > 0;
+  });
 }
 
 /** Every entry, oldest first, for the markdown export. */
@@ -854,12 +1052,27 @@ export async function readPrefs(pool: Pool, userId: string): Promise<FeedbackPre
   };
 }
 
-export async function savePrefs(pool: Pool, userId: string, prefs: FeedbackPrefs): Promise<FeedbackPrefs> {
+/**
+ * A member's own word on receiving feedback.
+ *
+ * A NO HOLDS WHAT HAS NOT ARRIVED. From the moment they say no, nothing whose
+ * Monday is still to come reaches them, including messages queued while they
+ * were open: those wait, and arrive if they say yes again. What already
+ * arrived stays theirs. The repo keeps the instant the answer last changed,
+ * on `now` (Node's clock, as every delivery comparison here is).
+ */
+export async function savePrefs(
+  pool: Pool,
+  userId: string,
+  prefs: FeedbackPrefs,
+  now: Date = new Date(),
+): Promise<FeedbackPrefs> {
   await upsertPrefsRow(pool, {
     userId: String(userId).slice(0, 64),
     open: prefs.open ? 1 : 0,
     style: prefs.style,
     note: clipText(prefs.note, FEEDBACK_NOTE_MAX),
+    answeredAt: now,
   });
   return (await readPrefs(pool, userId)) ?? prefs;
 }
@@ -885,9 +1098,11 @@ export type QueueOutcome =
  * Queue one approved message for the next batch.
  *
  * THE REFUSALS, in the order a member meets them: to themselves, to somebody
- * who has not said yes, and past the weekly cap. The cap is held by the
- * insert itself (`insertQueuedFeedbackUnderCap`), so two sends racing from two
- * tabs cannot both slip under it.
+ * who has not said yes, and past the weekly cap. The cap is one per author per
+ * recipient per queue week AND per Monday batch, because near a week boundary
+ * those are different weeks. It is held by the insert itself
+ * (`insertQueuedFeedbackUnderCap`), so two sends racing from two tabs cannot
+ * both slip under it.
  *
  * NO NOTIFICATION IS SENT, now or at delivery. A notice that something
  * arrived would mark the moment, and the moment is the tell the batch exists
@@ -930,7 +1145,8 @@ export async function queueFeedback(
     return {
       ok: false,
       status: 409,
-      problem: "You have already sent them feedback this week. It can wait for next week.",
+      problem:
+        "You have already sent them feedback this week, or one from you already arrives in the same Monday batch. It can wait for next week.",
     };
   }
   const rows = await sentFeedbackRowById(pool, authorId, id);
@@ -1042,26 +1258,32 @@ export async function gratitudeForGuide(
  * -------------------------------------------------------------------------- */
 
 /**
- * Every journal row this member's name is on, gone. What the tombstone calls.
+ * No journal row names this member afterwards. What the tombstone calls.
  *
- * DELETED AND NOT ANONYMIZED. The journal holds no value and settles nothing:
- * it is one person's words about their own life, and there is no accounting
- * reason to keep a single one of them.
+ * THEIR OWN WORDS ARE DELETED, NEVER ANONYMIZED. The journal holds no value
+ * and settles nothing: entries, pulse numbers and their feedback yes are one
+ * person's words about their own life, and there is no accounting reason to
+ * keep a single one of them.
  *
- * FEEDBACK GOES IN BOTH DIRECTIONS. What they wrote leaves with them, delivered
- * or not, because unsigned words can still carry the writer; what they
- * received leaves with them because it is about them. A recipient who stays
- * loses a delivered message from somebody who left, and that is the price of
- * the leaver's erasure being whole.
+ * FEEDBACK, BY DIRECTION. What they received leaves with them, because it is
+ * about them. What they wrote that nobody has read yet (withdrawn, still
+ * before its Monday, or held by the recipient's no) leaves with them too.
+ * What they wrote that its recipient has already read STAYS WITH THE
+ * RECIPIENT, unsigned: the author id is replaced and the four parts the
+ * author wrote are blanked, and the approved message and the recipient's
+ * answer remain. Deleting it would make a message vanish from the recipient's
+ * list at the moment its author became "a departed member", and in a small
+ * team that names the author of an unsigned message.
  *
+
  * WHERE THIS IS CALLED FROM. The `journal-after-tombstone` step of the sweep in
  * server/lib/erasure.ts, after the tombstone, where the member's sessions die,
  * so no entry saved through a still-live session can land behind the deletion.
  */
-export async function forgetMemberJournal(pool: Pool, userId: string): Promise<number> {
+export async function forgetMemberJournal(pool: Pool, userId: string, now: Date = new Date()): Promise<number> {
   const uid = String(userId ?? "").trim();
   if (!uid) return 0;
-  const gone = await deleteJournalForUser(pool, uid);
+  const gone = await deleteJournalForUser(pool, uid, now);
   return gone.entries + gone.pulse + gone.prefs + gone.feedback;
 }
 

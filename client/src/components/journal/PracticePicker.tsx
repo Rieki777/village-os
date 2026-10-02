@@ -1,7 +1,8 @@
 /**
  * Where a sitting starts: how deep today, and which practice.
  *
- * The time of day suggests one (morning before noon, evening from six) and
+ * The time of day suggests one (morning from five until noon, evening from
+ * six until five, see `suggestedPractice`) and
  * the suggestion only moves it to the top with a word beside it. Every
  * practice stays one tap away.
  */

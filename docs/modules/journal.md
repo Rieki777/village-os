@@ -33,8 +33,22 @@ practices and the questions are platform copy, and the one dial has a working de
 
 ## Saving and paging
 
-`POST /api/journal/entries` is idempotent on the client's `clientId`: a retry answers with the row
-the first save wrote and changes nothing, including a pulse number a later entry has since replaced.
+`POST /api/journal/entries` is idempotent on the client's `clientId`, and one save is one
+transaction: the entry and every pulse number commit together or not at all, so a save that fails
+part-way leaves nothing and its retry writes it whole. The same `clientId` again is one of three
+things. The same content is a retry: nothing changes and the answer is the stored row. New content
+with a `writtenAt` at least a second after the stored one is the same sitting saved again after an
+edit: it replaces the stored version, numbers included, and is the answer. New content that is not
+newer is a stale copy of something since changed: the stored row stands and is the answer. Privacy
+is never touched by a save, only by an edit. A `writtenAt` more than a day ahead, or before 2020,
+is refused with a sentence about the device's clock.
+
+A pulse number belongs to the week's latest-WRITTEN answer, never the latest to arrive: a Monday
+pulse that sat in an outbox and lands after Wednesday's moves nothing. Forgetting an entry takes
+its numbers, and gives each week back the answer that entry had replaced, from the latest-written
+of the member's other pulse entries that week (when the village's zone is passed, which names the
+week). A forget also sweeps the numbers of an entry already gone.
+
 `GET /api/journal/entries` pages newest first in (`writtenAt`, `id`) order; `before` is
 `<writtenAt>|<id>` of the previous page's last entry, so two entries written in the same second on
 a page boundary are both seen. A bare ISO `writtenAt` still works and pages strictly before it.
@@ -61,10 +75,18 @@ that mean is at most 2.5. Each is a gentle sentence that names a pattern, never 
 4. The author approves the exact words, which are refused past 2000 characters and never clipped,
    because a clipped message is one nobody approved.
 5. `POST /api/journal/feedback` queues it. Refused to oneself, to anybody who has not said yes, and
-   past one message per author per recipient per week (the count and the insert are one
-   statement). It becomes visible on the first Monday 09:00, village time, at least 48 hours later.
-6. The author may withdraw it until then, and not after. The recipient may answer thanks or not
-   useful.
+   past one message per author per recipient per week, counted both by the week it was queued in
+   and by the Monday batch it lands in, because late Sunday and just after midnight are two weeks
+   and one batch (the count and the insert are one statement). It becomes visible on the first
+   Monday 09:00, village time, at least 48 hours later.
+6. The author may withdraw it until the recipient can read it, and not after. The recipient may
+   answer thanks or not useful.
+7. A recipient who says no holds what has not reached them yet. Nothing whose Monday comes after
+   the no arrives while they stay closed, and the author's view marks it `held`: they are not
+   taking feedback right now. It is held, never thrown away: a yes again lets it arrive, and the
+   author may still withdraw it meanwhile. What arrived while they were open stays theirs. A
+   changed note or style while closed releases nothing, because the prefs row's `updated_at` moves
+   only when the yes or no changes.
 
 ## The guide
 
@@ -89,8 +111,13 @@ never discusses other members. With no key configured both guide doors answer 50
 ## Leaving
 
 `forgetMemberJournal` runs in the `journal-after-tombstone` step of `anonymizeMember`
-(`server/lib/erasure.ts`), after the tombstone where the member's sessions die. It deletes every row
-naming the member in all four tables, feedback in both directions. `GET /api/profile/export` carries
+(`server/lib/erasure.ts`), after the tombstone where the member's sessions die. Afterwards no row
+in the four tables names the member. Their entries, pulse numbers and prefs are deleted, and so is
+feedback they received. Feedback they wrote that nobody has read yet (withdrawn, before its Monday,
+or held by a no) is deleted. Feedback they wrote that its recipient has already read stays with the
+recipient, unsigned: the author id is emptied and the four parts blanked, and the approved message
+and the recipient's answer remain. Deleting it would make it vanish at the moment its author became
+a departed member, which names the author of an unsigned message. `GET /api/profile/export` carries
 a `journal` key from `exportMemberJournal`: entries, the member's own pulse, their prefs, what they
 sent, and what they received as message, delivery time and response only.
 

@@ -13,22 +13,25 @@
  *
  * OFFLINE FIRST. Saves land in the device outbox before they are sent
  * (lib/journalOutbox.ts). This page flushes it when it opens, when the browser
- * says it is back online, and when the member taps "Sync now".
+ * says it is back online, and when the member taps "Sync now". A page the
+ * journal turned down is listed above the tabs with the journal's own
+ * sentence, to be tried again or removed from the device.
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { JOURNAL_PRACTICE_DEFS } from "@shared/journal";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { useVillageName } from "@/hooks/useVillageName";
-import { flushOutbox } from "@/lib/journalOutbox";
+import { flushOutbox, removeFromOutbox, retryEntry, type OutboxItem } from "@/lib/journalOutbox";
 import TodayTab from "@/components/journal/TodayTab";
 import HistoryTab from "@/components/journal/HistoryTab";
 import PulseTab from "@/components/journal/PulseTab";
 import FeedbackTab from "@/components/journal/FeedbackTab";
-import { usePendingEntries, useRememberedChoice } from "@/components/journal/hooks";
-import { BTN_SECONDARY } from "@/components/journal/ui";
+import { usePendingEntries, useRememberedChoice, useSignOutForgetsDraft } from "@/components/journal/hooks";
+import { BTN_QUIET, BTN_SECONDARY, dayLabel, timeLabel } from "@/components/journal/ui";
 
 const TABS = ["today", "history", "pulse", "feedback"] as const;
 type Tab = (typeof TABS)[number];
@@ -40,6 +43,59 @@ const TAB_LABEL: Record<Tab, string> = {
   feedback: "Feedback",
 };
 
+/**
+ * One page the journal turned down, with its sentence. "Try again" sends it
+ * once more (a date stamped by a clock that has since been put right is
+ * stamped again first); removing it asks first, because it is not in the
+ * journal and nothing else holds it.
+ */
+function RefusedPage({ owner, item }: { owner: string; item: OutboxItem }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const e = item.entry;
+  const label = `${JOURNAL_PRACTICE_DEFS[e.practice].label}, ${dayLabel(e.writtenAt)} ${timeLabel(e.writtenAt)}`.trim();
+
+  const retry = async () => {
+    setBusy(true);
+    try {
+      await retryEntry(owner, e.clientId);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="rounded-xl bg-card px-3 py-3">
+      <p className="text-sm font-semibold text-foreground">{label}</p>
+      <p className="mt-1 text-sm text-foreground">{item.lastError ?? "The journal did not take this page."}</p>
+      {confirming ? (
+        <div role="group" aria-label="Confirm removing this page" className="mt-2">
+          <p className="text-sm font-semibold text-destructive">
+            Remove this page from this device? It is not in your journal, so it cannot be brought back.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className={BTN_SECONDARY} onClick={() => removeFromOutbox(e.clientId)}>
+              Yes, remove it
+            </button>
+            <button type="button" className={BTN_QUIET} onClick={() => setConfirming(false)}>
+              Keep it
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className={BTN_SECONDARY} onClick={() => void retry()} disabled={busy}>
+            {busy ? "Sending..." : "Try again"}
+          </button>
+          <button type="button" className={BTN_QUIET} onClick={() => setConfirming(true)} disabled={busy}>
+            Remove from this device
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function Journal() {
   const { user } = useAuth();
   const modules = useModules();
@@ -48,6 +104,9 @@ export default function Journal() {
   const journalOn = (modules.modules ?? []).some((m) => m.id === "journal" && m.lifecycle !== "off");
   const [tab, setTab] = useRememberedChoice<Tab>("village.journal.tab", TABS, "today");
   const pending = usePendingEntries(owner);
+  const waiting = pending.filter((p) => !p.refused);
+  const refused = pending.filter((p) => p.refused);
+  const changedElsewhere = useSignOutForgetsDraft(owner);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState(0);
@@ -61,7 +120,9 @@ export default function Journal() {
       setSyncing(false);
       if (!byHand) return;
       if (result.offline) setSyncNote("Still offline. Your pages are safe on this device.");
+      else if (result.sessionEnded) setSyncNote("Your session has ended. Sign in again and your pages go to your journal.");
       else if (result.kept.length) setSyncNote("Some pages could not be sent yet. They stay on this device.");
+      else if (result.refused.length) setSyncNote("The journal did not take every page. Each one says why, above.");
       else setSyncNote(result.sent.length ? "Everything is in your journal." : "Nothing was waiting.");
     },
     [owner],
@@ -114,10 +175,26 @@ export default function Journal() {
       </section>
 
       <div className="container max-w-3xl pb-16">
-        {pending.length > 0 && (
+        {refused.length > 0 && (
+          <section
+            aria-label="Pages the journal did not take"
+            className="mb-5 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3"
+          >
+            <p className="text-sm font-medium text-foreground">
+              The journal did not take {refused.length === 1 ? "1 page" : `${refused.length} pages`}. Each is still on this
+              device.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {refused.map((item) => (
+                <RefusedPage key={item.entry.clientId} owner={user.id} item={item} />
+              ))}
+            </ul>
+          </section>
+        )}
+        {waiting.length > 0 && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber/60 bg-amber-light px-4 py-3">
             <p className="text-sm font-medium text-foreground">
-              {pending.length === 1 ? "1 page is" : `${pending.length} pages are`} saved on this device and not yet in your
+              {waiting.length === 1 ? "1 page is" : `${waiting.length} pages are`} saved on this device and not yet in your
               journal.
             </p>
             <button type="button" className={BTN_SECONDARY} onClick={() => void sync(true)} disabled={syncing}>
@@ -131,38 +208,48 @@ export default function Journal() {
           </p>
         )}
 
-        <div role="tablist" aria-label="Journal" className="mb-6 grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              ref={(el) => {
-                tabRefs.current[t] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`journal-tab-${t}`}
-              aria-selected={tab === t}
-              aria-controls={`journal-panel-${t}`}
-              tabIndex={tab === t ? 0 : -1}
-              onClick={() => setTab(t)}
-              onKeyDown={onTabKey}
-              className={`min-h-11 rounded-xl px-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${
-                tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {TAB_LABEL[t]}
-            </button>
-          ))}
-        </div>
+        {changedElsewhere ? (
+          // Another tab signed out or signed in as somebody else. The open page
+          // closes here, so it cannot write itself back to the device.
+          <p role="status" className="rounded-xl bg-muted px-4 py-3 text-sm text-foreground">
+            The account on this device changed in another tab, so this page has closed. Reload it to carry on.
+          </p>
+        ) : (
+          <>
+            <div role="tablist" aria-label="Journal" className="mb-6 grid grid-cols-4 gap-1 rounded-2xl bg-muted p-1">
+              {TABS.map((t) => (
+                <button
+                  key={t}
+                  ref={(el) => {
+                    tabRefs.current[t] = el;
+                  }}
+                  type="button"
+                  role="tab"
+                  id={`journal-tab-${t}`}
+                  aria-selected={tab === t}
+                  aria-controls={`journal-panel-${t}`}
+                  tabIndex={tab === t ? 0 : -1}
+                  onClick={() => setTab(t)}
+                  onKeyDown={onTabKey}
+                  className={`min-h-11 rounded-xl px-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep ${
+                    tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {TAB_LABEL[t]}
+                </button>
+              ))}
+            </div>
 
-        <div role="tabpanel" id={`journal-panel-${tab}`} aria-labelledby={`journal-tab-${tab}`}>
-          {tab === "today" && (
-            <TodayTab key={user.id} owner={user.id} village={village} onSaved={() => setSavedCount((n) => n + 1)} />
-          )}
-          {tab === "history" && <HistoryTab key={user.id} owner={user.id} refreshKey={savedCount} />}
-          {tab === "pulse" && <PulseTab village={village} />}
-          {tab === "feedback" && <FeedbackTab />}
-        </div>
+            <div role="tabpanel" id={`journal-panel-${tab}`} aria-labelledby={`journal-tab-${tab}`}>
+              {tab === "today" && (
+                <TodayTab key={user.id} owner={user.id} village={village} onSaved={() => setSavedCount((n) => n + 1)} />
+              )}
+              {tab === "history" && <HistoryTab key={user.id} owner={user.id} refreshKey={savedCount} />}
+              {tab === "pulse" && <PulseTab village={village} />}
+              {tab === "feedback" && <FeedbackTab />}
+            </div>
+          </>
+        )}
       </div>
     </Layout>
   );

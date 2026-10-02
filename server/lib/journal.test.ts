@@ -249,6 +249,15 @@ describe("what a save may carry", () => {
     [{ answers: [{ questionKey: "x", text: "   " }] }, "Write something"],
     [{ writtenAt: "not a date" }, "could not be read"],
     [{ writtenAt: "2026-10-04T12:00:01Z" }, "more than a day ahead"],
+    // A clock reset to the epoch, or a date the TIMESTAMP column cannot hold,
+    // is a sentence and a 400, never a 500 the outbox retries forever.
+    [{ writtenAt: "2019-12-31T23:59:59Z" }, "dated before 2020"],
+    // The case a 2000 floor let through: a reset to 2000-01-01 seen from
+    // west of UTC, which filed its pulse in 1999-W52.
+    [{ writtenAt: "2000-01-01T05:00:00Z" }, "dated before 2020"],
+    [{ writtenAt: "1970-01-01T00:00:00Z" }, "dated before 2020"],
+    [{ writtenAt: "1969-12-31T23:59:59Z" }, "dated before 2020"],
+    [{ writtenAt: "0001-01-01T00:00:00Z" }, "dated before 2020"],
     [{ localHour: 24 }, "0 to 23"],
     [{ privacy: "public" }, "private, internal or clear"],
     [{ answers: Array.from({ length: JOURNAL_ANSWERS_MAX + 1 }, (_, i) => ({ questionKey: `q${i}`, text: "a" })) }, "at most"],
@@ -256,6 +265,10 @@ describe("what a save may carry", () => {
     const r = cleanEntryInput({ ...base, ...patch }, NOW);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.problem).toContain(words);
+  });
+
+  it("accepts the first instant of 2020, the floor itself", () => {
+    expect(cleanEntryInput({ ...base, writtenAt: "2020-01-01T00:00:00Z" }, NOW).ok).toBe(true);
   });
 
   it("checks every pulse number against the contract's own range", () => {

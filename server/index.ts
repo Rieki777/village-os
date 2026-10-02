@@ -6596,11 +6596,11 @@ async function startServer() {
    * throughout, so any script-src or style-src worth writing would blank the
    * map. frame-ancestors stands on its own and needs no allowlist to maintain.
    *
-   * Permissions-Policy denies all three of camera, microphone and geolocation:
-   * grep across client/, server/, shared/ and the map prototype finds no
-   * getCurrentPosition, no watchPosition and no navigator.geolocation, so
-   * nothing in this build asks for any of them. A page that starts needing one
-   * removes it from this list, which is a deliberate act rather than a default.
+   * Permissions-Policy denies camera and geolocation outright. The microphone
+   * is allowed for THIS origin only, `microphone=(self)`, because MicButton's
+   * speech input (the journal, every guide chat) needs it, and `microphone=()`
+   * made every mic fail silently with `not-allowed`. Frames from elsewhere stay
+   * denied. Widening a list here is a deliberate act and never a default.
    *
    * NO Strict-Transport-Security. It is set once and believed for its whole
    * max-age, so it can only be sent when EVERY hostname this app answers on
@@ -6614,7 +6614,7 @@ async function startServer() {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
     next();
   });
 

@@ -25,8 +25,12 @@
 -- NO FOREIGN KEYS, the same as every table in this schema. `user_id`,
 -- `author_id` and `recipient_id` are reconciled by the tombstone path:
 -- `anonymizeMember` (server/lib/erasure.ts) runs `forgetMemberJournal`
--- (server/lib/journal.ts) after the tombstone, where the member's sessions die,
--- and that deletes every row in all four tables that names them.
+-- (server/lib/journal.ts) after the tombstone, where the member's sessions die.
+-- It deletes the member's entries, pulse numbers and preferences, what they
+-- received, and what they wrote that never reached anyone. Feedback they wrote
+-- that a recipient already read stays with that recipient, unsigned: the
+-- author id is blanked and their four parts emptied, because a message
+-- vanishing from an inbox the day someone leaves would name its writer.
 --
 -- EVERY DEDUPE COLUMN IS NOT NULL. A MySQL unique index exempts NULLs, so a
 -- nullable column in one admits unlimited duplicates.
@@ -88,9 +92,9 @@ CREATE TABLE IF NOT EXISTS `journal_pulse` (
   `value` tinyint NOT NULL,
   `recorded_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  -- ONE NUMBER PER MEMBER PER METRIC PER WEEK, and the last answer wins. A
-  -- member who answers twice in a week moves their own number, and the
-  -- aggregate never counts one person twice.
+  -- ONE NUMBER PER MEMBER PER METRIC PER WEEK, and the newest-WRITTEN answer
+  -- wins (an older offline save that syncs late never overwrites a newer
+  -- one). The aggregate never counts one person twice.
   UNIQUE KEY `journal_pulse_uq` (`user_id`, `week_id`, `metric`),
   -- The aggregate's own question, covering, so the count never reads a row.
   -- No `user_id` in it on purpose: the aggregate's SELECT names none.

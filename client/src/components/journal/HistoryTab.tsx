@@ -4,7 +4,7 @@
  * page written offline is never missing from the member's own view of it.
  * Export downloads the whole journal, or only the debriefs, as markdown.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import type { JournalEntry, JournalPractice } from "@shared/journal";
 import { downloadExport, listEntries, problemText } from "@/lib/journalApi";
@@ -22,14 +22,30 @@ export default function HistoryTab({ owner, refreshKey = 0 }: { owner: string; r
   const [loadingMore, setLoadingMore] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"all" | JournalPractice | null>(null);
+  /**
+   * Which read of the first page is current. A refresh (a finished sync, or
+   * the parent's key) replaces the list with page 1, so anything still in
+   * flight from before it describes a list that no longer exists: an older
+   * first page must not overwrite a newer one, and an older page fetched
+   * from page 2's cursor must not be appended to a fresh page 1, which left
+   * page 2's entries silently missing between them.
+   */
+  const gen = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++gen.current;
     setProblem(null);
     try {
       const page = await listEntries({ limit: PAGE });
+      if (mine !== gen.current) return;
+      // Applying a fresh first page retires any "Show older" read already in
+      // flight: its page was cut from the list this one replaces, and
+      // appending it would leave a silent gap.
+      gen.current += 1;
       setEntries(page);
       setMore(page.length >= PAGE);
     } catch (err) {
+      if (mine !== gen.current) return;
       setEntries((was) => was ?? []);
       setProblem(problemText(err, "Your journal could not be read just now. Anything saved on this device is still shown."));
     }
@@ -41,20 +57,31 @@ export default function HistoryTab({ owner, refreshKey = 0 }: { owner: string; r
     void load();
   }, [load, refreshKey, pendingCount]);
 
+  // Nothing that lands after the tab has gone may write to it.
+  useEffect(
+    () => () => {
+      gen.current += 1;
+    },
+    [],
+  );
+
   const loadOlder = async () => {
     const oldest = entries?.[entries.length - 1];
     if (!oldest) return;
+    const at = gen.current;
     setLoadingMore(true);
     try {
       // The cursor carries the id too, so two entries written in the same
       // instant on a page boundary are both read.
       const page = await listEntries({ limit: PAGE, before: `${oldest.writtenAt}|${oldest.id}` });
+      if (at !== gen.current) return;
       setEntries((was) => {
         const seen = new Set((was ?? []).map((e) => e.id));
         return [...(was ?? []), ...page.filter((e) => !seen.has(e.id))];
       });
       setMore(page.length >= PAGE);
     } catch (err) {
+      if (at !== gen.current) return;
       setProblem(problemText(err, "Older entries could not be read just now."));
     } finally {
       setLoadingMore(false);

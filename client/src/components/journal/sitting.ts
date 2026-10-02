@@ -100,10 +100,15 @@ export function stepsFor(s: Pick<Sitting, "practice" | "depth" | "extras">, vill
   return out;
 }
 
-/** Morning before noon, evening from six. Between the two, no suggestion. */
+/**
+ * Morning from five until noon, evening from six until five. Between noon and
+ * six, no suggestion. The small hours belong to the evening: somebody writing
+ * at half past one is closing a long day, the same line the guide draws when
+ * it treats 22:00 to 04:59 as writing late (server/routes/journal.ts).
+ */
 export function suggestedPractice(hour: number): JournalPractice | null {
-  if (hour < 12) return "morning";
-  if (hour >= 18) return "evening";
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 18 || hour < 5) return "evening";
   return null;
 }
 

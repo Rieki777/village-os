@@ -77,7 +77,8 @@ function VillageCell({
     <p className="text-foreground">
       <span className="text-2xl font-bold">{signed(latest.cell.mean, centred)}</span>
       <span className="ml-2 text-sm text-muted-foreground">
-        {latest.cell.n !== null ? `average from ${people(latest.cell.n)}, ` : "average, "}week {latest.weekId}
+        {latest.cell.n !== null ? `average from ${people(latest.cell.n)}, ` : "average, "}
+        <span className="whitespace-nowrap">week {latest.weekId}</span>
       </span>
     </p>
   );

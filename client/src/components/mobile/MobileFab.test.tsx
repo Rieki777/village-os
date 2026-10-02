@@ -152,4 +152,71 @@ describe("the menu at every width", () => {
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     expect(document.activeElement).toBe(row("Quests"));
   });
+
+  /*
+   * The Escape that closes the menu is spent there. BreakGlass listens on
+   * `window`, and the same press used to reach it and decline the override
+   * the member was being asked about. The second press, with the menu shut,
+   * proves the listener is live, so the first zero is a zero.
+   */
+  it("keeps the Escape that closes it from reaching a listener on window", () => {
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      renderAt();
+      openMenu();
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.getByRole("button", { name: "Open shortcuts" })).toHaveAttribute("aria-expanded", "false");
+      expect(onWindowKey).not.toHaveBeenCalled();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(onWindowKey).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
+  });
+});
+
+/*
+ * A row for the page already showing (Profile on /profile; Roles and Work with
+ * us likewise) keeps the button mounted, because the route does not change.
+ * Focus used to stay on that row after the menu shut: invisible, aria-hidden,
+ * and still inside the menu's key handler, so ArrowDown and End walked hidden
+ * links instead of scrolling the page.
+ */
+describe("after a shortcut to the page already showing", () => {
+  beforeEach(() => {
+    session.user = { id: "u-wren", name: "Wren" };
+    session.modules = JOURNAL_ON;
+  });
+
+  it("hands focus back to the trigger, and the arrow keys belong to the page again", () => {
+    renderAt("/profile");
+    const trigger = screen.getByRole("button", { name: "Open shortcuts" });
+    fireEvent.click(trigger, { detail: 0 });
+    const profile = row("Profile")!;
+    profile.focus();
+    // Enter on a link arrives as a click.
+    fireEvent.click(profile, { detail: 0 });
+
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(document.activeElement).toBe(trigger);
+    // fireEvent answers false when a handler called preventDefault.
+    expect(fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" })).toBe(true);
+  });
+
+  it("leaves the arrow keys alone on a shut menu, even with focus still on a row", () => {
+    renderAt("/profile");
+    const trigger = screen.getByRole("button", { name: "Open shortcuts" });
+    fireEvent.click(trigger, { detail: 0 });
+    const quests = row("Quests")!;
+    expect(document.activeElement).toBe(quests);
+    // A tap elsewhere shuts the menu without moving focus.
+    fireEvent.click(document.body);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    expect(fireEvent.keyDown(quests, { key: "ArrowDown" })).toBe(true);
+    expect(fireEvent.keyDown(quests, { key: "End" })).toBe(true);
+    expect(document.activeElement).toBe(quests);
+  });
 });

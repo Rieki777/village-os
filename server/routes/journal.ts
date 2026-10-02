@@ -48,7 +48,9 @@
  *
  * THE GUIDE IS THE ONE ASSISTANT ENGINE (server/lib/assistant.ts), in its own
  * `journal` mode with its own day budget, so a long journalling evening cannot
- * spend the concierge's allowance. It is handed the member's OWN data as
+ * spend the concierge's allowance, and each member has a day's share of that
+ * budget (JOURNAL_MEMBER_DAILY), so one member cannot spend everybody's
+ * journal day either. It is handed the member's OWN data as
  * prefetched, fenced reads and no tools, so it can ask about what is really
  * there and cannot reach for anything else.
  */
@@ -58,7 +60,7 @@ import type { AppDeps } from "../lib/appDeps";
 import {
   DEFAULT_ASSISTANT_MODEL,
   callAssistant,
-  parseJsonReply,
+  readReplyFields,
   sanitizeMessages,
   type AssistantResult,
   type ChatMessage,
@@ -151,11 +153,117 @@ const HOUR_MS = 60 * 60 * 1000;
 const GUIDE_PER_HOUR = 60;
 /** Feedback shapings one member may ask for in an hour. */
 const SHAPE_PER_HOUR = 20;
+/**
+ * Guide turns and shapings together that one member may spend of the
+ * village's own (or borrowed) key in a day, one allowance for both doors.
+ *
+ * The journal mode's day budget (server/lib/assistant.ts) is ONE bucket for
+ * the whole village, and the hourly caps above allow eighty calls an hour, so
+ * without this one member could spend everybody's journal day in two busy
+ * hours. Forty is two long sittings and some drafting, a little over a
+ * quarter of the village's day. A member who brought their own key pays for
+ * their own calls and skips it.
+ */
+const JOURNAL_MEMBER_DAILY = 40;
+/**
+ * How much of the member's own writing one guide turn carries, in
+ * characters of JSON.
+ *
+ * Every turn resends all of it, and the day budgets count calls, never
+ * tokens, so with no ceiling a sitting of twenty long answers plus ten long
+ * recent entries and forty long turns made one call cost about thirty
+ * ordinary ones. This sitting comes first, then recent entries, newest
+ * first; the conversation has its own ceiling, newest turns kept.
+ */
+const GUIDE_WRITING_CHARS = 20_000;
+/** Of GUIDE_WRITING_CHARS, the most this sitting's answers may take. */
+const GUIDE_SITTING_CHARS = 12_000;
+/** One answer in this sitting, at most, when there are only a few. */
+const GUIDE_SITTING_ANSWER_CHARS = 2000;
+/** A question's own words, as the guide reads them. */
+const GUIDE_QUESTION_CHARS = 200;
+/** The conversation with the guide, newest turns first. */
+const GUIDE_CONVERSATION_CHARS = 24_000;
 /** The reply caps the guide's answer is clipped to before it reaches the page. */
 const REPLY_MAX = 2000;
 const QUESTION_MAX = 500;
 
 const FALLBACK_REPLY = "I lost my words for a moment. Take your time, and say a little more when you are ready.";
+
+/**
+ * The leading rows that fit in `maxChars` of JSON, in order. A row that does
+ * not fit ends the list, so an older row never stands in for a newer one.
+ */
+function withinChars<T>(rows: readonly T[], maxChars: number): T[] {
+  const kept: T[] = [];
+  let used = 2;
+  for (const row of rows) {
+    const size = JSON.stringify(row).length + 1;
+    if (used + size > maxChars) break;
+    kept.push(row);
+    used += size;
+  }
+  return kept;
+}
+
+/**
+ * The newest turns that fit in `maxChars`, starting on the member's own turn.
+ * The last turn is always kept: it is the member's question, and the
+ * validator has already capped it.
+ */
+function recentTurns(turns: ChatMessage[], maxChars: number): ChatMessage[] {
+  let start = turns.length - 1;
+  let used = turns[start].content.length;
+  while (start > 0 && used + turns[start - 1].content.length <= maxChars) {
+    start -= 1;
+    used += turns[start].content.length;
+  }
+  while (start < turns.length - 1 && turns[start].role !== "user") start += 1;
+  return turns.slice(start);
+}
+
+/**
+ * The member's recent entries, newest first, within `maxChars` of JSON.
+ *
+ * Each question is clipped first: the stored prompt is the client's own
+ * words for it, up to 500 characters, and the guide needs only enough to know
+ * what was asked. The first entry that does not fit whole keeps the answers
+ * that do, and ends the list, so the newest entry is the last to go and an
+ * older one never stands in for it.
+ */
+function recentWithin(entries: unknown[], maxChars: number): unknown[] {
+  const kept: unknown[] = [];
+  let used = 2;
+  for (const e of entries) {
+    const row = e as Record<string, unknown>;
+    const answers = row && typeof row === "object" && Array.isArray(row.answers) ? row.answers : null;
+    const clipped = answers
+      ? { ...row, answers: answers.map((a: any) => ({ ...a, question: clipText(a?.question, GUIDE_QUESTION_CHARS) })) }
+      : e;
+    const size = JSON.stringify(clipped).length + 1;
+    if (used + size <= maxChars) {
+      kept.push(clipped);
+      used += size;
+      continue;
+    }
+    if (answers) {
+      const head = { ...(clipped as Record<string, unknown>), answers: [] as unknown[] };
+      let partial = JSON.stringify(head).length + 1;
+      for (const a of (clipped as { answers: unknown[] }).answers) {
+        const s = JSON.stringify(a).length + 1;
+        if (used + partial + s > maxChars) break;
+        head.answers.push(a);
+        partial += s;
+      }
+      if (used + partial <= maxChars) kept.push(head);
+    }
+    break;
+  }
+  return kept;
+}
+
+/** The day's bucket for one member's journal calls on the village's key. */
+const memberDayBucket = (uid: string): string => `journal-member-day:${uid}:${new Date().toISOString().slice(0, 10)}`;
 
 /**
  * The guide's rules, in the system prompt. Platform copy: the village's name
@@ -318,7 +426,8 @@ export function register(app: Express, deps: Deps): void {
   app.delete("/api/journal/entries/:id", async (req, res) => {
     const me = await authedUser(req);
     if (!me) return res.status(401).json({ error: "auth_required" });
-    const gone = await forgetEntry(getPool(), String(me.id), String(req.params.id));
+    // The zone names the week, so the week gets its older pulse answer back.
+    const gone = await forgetEntry(getPool(), String(me.id), String(req.params.id), zone());
     if (!gone) return res.status(404).json({ error: "You have no entry with that id." });
     res.json({ success: true });
   });
@@ -351,14 +460,38 @@ export function register(app: Express, deps: Deps): void {
     if (!hour.ok) return res.status(400).json({ error: "An hour runs from 0 to 23." });
     const clean = sanitizeMessages(b.messages);
     if (!clean.ok) return res.status(400).json({ error: clean.error });
+    // A blank turn is dropped before it travels. A page that once kept an
+    // empty guide reply in its saved sitting would otherwise send it on every
+    // later ask, and the provider refuses a conversation holding one, so the
+    // rest of that sitting failed.
+    const turns = clean.messages.filter((m) => m.content.trim());
+    if (!turns.length || turns[turns.length - 1].role !== "user") {
+      return res.status(400).json({ error: "Write something to the guide first." });
+    }
 
     const pool = getPool();
+    const memberKey = await resolveMemberKey(pool, uid);
+    if (!memberKey && (await overLimit(memberDayBucket(uid), JOURNAL_MEMBER_DAILY, 24 * HOUR_MS))) {
+      return res.status(429).json({ error: "You have asked the guide a lot today. It rests until tomorrow, and your journal works without it." });
+    }
     const tz = zone();
     const now = new Date();
     const season = seasonState();
     const current: any = season?.current ?? null;
     const claims = await claimsRepo.forUser(uid);
     const brief = await briefForPublicPrompt(pool, 300).catch(() => "");
+    // Every answer in this sitting gets an even share of its ceiling, so a
+    // long sitting is read shorter and none of it is dropped.
+    const written = answers.value.filter((a) => a.text);
+    const share = Math.max(
+      200,
+      Math.min(GUIDE_SITTING_ANSWER_CHARS, Math.floor(GUIDE_SITTING_CHARS / Math.max(1, written.length)) - GUIDE_QUESTION_CHARS - 40),
+    );
+    const sitting = withinChars(
+      written.map((a) => ({ question: clipText(a.prompt, GUIDE_QUESTION_CHARS), answer: a.text.slice(0, share) })),
+      GUIDE_SITTING_CHARS,
+    );
+    const recent = recentWithin(await recentForGuide(pool, uid, tz), GUIDE_WRITING_CHARS - JSON.stringify(sitting).length);
     const prefetch: { key: string; data: unknown }[] = [
       {
         key: "journal.sitting",
@@ -366,10 +499,10 @@ export function register(app: Express, deps: Deps): void {
           practice,
           depth,
           localHour: hour.value ?? null,
-          answers: answers.value.filter((a) => a.text).map((a) => ({ question: a.prompt, answer: a.text })),
+          answers: sitting,
         },
       },
-      { key: "journal.recent", data: await recentForGuide(pool, uid, tz) },
+      { key: "journal.recent", data: recent },
       {
         key: "village.now",
         data: {
@@ -392,28 +525,36 @@ export function register(app: Express, deps: Deps): void {
     const call = await callAssistant({
       mode: "journal",
       system: guideSystemPrompt(projectName(), practice, depth, hour.value),
-      messages: clean.messages,
+      messages: recentTurns(turns, GUIDE_CONVERSATION_CHARS),
       model: DEFAULT_ASSISTANT_MODEL,
       clientIp: clientIp(req),
+      // The burst guard counts this member, never the network: a team
+      // often shares one house router.
+      burstKey: `assist-journal:${uid}`,
+      burstPerHour: GUIDE_PER_HOUR + SHAPE_PER_HOUR,
       userId: uid,
       prefetch,
-      memberKey: await resolveMemberKey(pool, uid),
+      memberKey,
     });
     await noteUsage(pool, call, uid);
     // No key anywhere answers 503 `assistant-unavailable`, and the page
     // carries on with the plain questions.
     if (!call.ok) return res.status(call.status).json({ error: call.error });
 
-    const parsed = parseJsonReply<any>(call.text, null);
-    const reply: GuideReply =
-      parsed && typeof parsed === "object"
-        ? {
-            reply: clipText(parsed.reply, REPLY_MAX),
-            nextQuestion: clipText(parsed.nextQuestion, QUESTION_MAX),
-            reflection: clipText(parsed.reflection, JOURNAL_REFLECTION_MAX),
-          }
-        : { reply: clipText(call.text, REPLY_MAX), nextQuestion: "", reflection: "" };
-    if (!reply.reply && !reply.nextQuestion) reply.reply = FALLBACK_REPLY;
+    // What could not be read as the guide's own words becomes the fallback
+    // sentence, never a fragment of the raw reply.
+    const read = readReplyFields(call.text, ["reply", "nextQuestion", "reflection"] as const, {
+      stopReason: call.stopReason,
+      proseField: "reply",
+    });
+    const reply: GuideReply = {
+      reply: clipText(read?.reply, REPLY_MAX),
+      nextQuestion: clipText(read?.nextQuestion, QUESTION_MAX),
+      reflection: clipText(read?.reflection, JOURNAL_REFLECTION_MAX),
+    };
+    // Never an empty reply: the page keeps it in the sitting's conversation
+    // and sends it back on every later ask.
+    if (!reply.reply) reply.reply = reply.nextQuestion || FALLBACK_REPLY;
     res.json(reply);
   });
 
@@ -480,6 +621,10 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const prefs = await readPrefs(pool, draft.value.recipientId);
     if (!prefs?.open) return res.status(409).json({ error: "They have not said yes to receiving feedback." });
+    const memberKey = await resolveMemberKey(pool, uid);
+    if (!memberKey && (await overLimit(memberDayBucket(uid), JOURNAL_MEMBER_DAILY, 24 * HOUR_MS))) {
+      return res.status(429).json({ error: "You have asked for a lot of drafts today. The guide rests until tomorrow, and you can write the message yourself." });
+    }
 
     const { observation, feeling, need, request } = draft.value;
     const prefetch: { key: string; data: unknown }[] = [
@@ -493,14 +638,18 @@ export function register(app: Express, deps: Deps): void {
       messages,
       model: DEFAULT_ASSISTANT_MODEL,
       clientIp: clientIp(req),
+      burstKey: `assist-journal:${uid}`,
+      burstPerHour: GUIDE_PER_HOUR + SHAPE_PER_HOUR,
       userId: uid,
       prefetch,
-      memberKey: await resolveMemberKey(pool, uid),
+      memberKey,
     });
     await noteUsage(pool, call, uid);
     if (!call.ok) return res.status(call.status).json({ error: call.error });
-    const parsed = parseJsonReply<any>(call.text, null);
-    const message = clipText(parsed && typeof parsed === "object" ? parsed.message : call.text, FEEDBACK_MESSAGE_MAX);
+    // A fragment of the raw reply would fill the author's message box and
+    // could be sent as it stands, so what cannot be read is no draft at all.
+    const read = readReplyFields(call.text, ["message"] as const, { stopReason: call.stopReason, proseField: "message" });
+    const message = clipText(read?.message, FEEDBACK_MESSAGE_MAX);
     if (!message) {
       return res.status(502).json({ error: "The guide could not shape that just now. You can write the message yourself." });
     }

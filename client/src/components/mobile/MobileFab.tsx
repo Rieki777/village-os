@@ -32,6 +32,11 @@
  *     The scrim has to sit between the FAB and the bar, not over both — and a
  *     modal has to clear all three, or the tab bar sits on top of the sheet's
  *     own buttons (the village map's node card shipped that way at z-50).
+ *     Since the button shows at every width, the z-50 dialogs (shadcn's
+ *     overlays, the hand-rolled aria-modal ones) would sit UNDER it on a desk,
+ *     clickable through the backdrop. index.css hides the button while any
+ *     modal is up, and a panel that owns this corner while open opts in with
+ *     `data-hides-fab` (the launch guide on /journey-to-launch).
  *  4. Plain tap rows rather than a gesture-driven radial. The gesture version
  *     did not survive iOS Safari.
  */
@@ -124,11 +129,15 @@ export default function MobileFab() {
   }, [open]);
 
   // Escape to close. Focus goes back to the trigger when it was inside the
-  // menu, because the rows leave the tab order as the menu shuts.
+  // menu, because the rows leave the tab order as the menu shuts. The open
+  // menu is the top layer, so the key it spent closing itself goes no
+  // further: BreakGlass listens on `window` and read the same press as
+  // "decline the override".
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
       const inside = !!menuRef.current?.contains(document.activeElement);
       setOpen(false);
       if (inside) triggerRef.current?.focus();
@@ -146,8 +155,11 @@ export default function MobileFab() {
     items[items.length - 1]?.focus();
   }, [open]);
 
-  // Arrow keys walk the rows; Home and End jump to either end.
+  // Arrow keys walk the rows; Home and End jump to either end. Only while the
+  // menu is open: a shut menu's rows are invisible, and these keys belong to
+  // the page again (they scroll it).
   const onMenuKey = (e: React.KeyboardEvent) => {
+    if (!open) return;
     const items = menuItems();
     if (!items.length) return;
     const at = items.indexOf(document.activeElement as HTMLElement);
@@ -253,6 +265,11 @@ export default function MobileFab() {
             const closeThenRun = () => {
               // "tick" is 6ms, the number this line used to spell out.
               haptic("tick");
+              // A row for the page already showing (Profile on /profile) keeps
+              // this component mounted, and focus would stay on a row that is
+              // now invisible and aria-hidden. Hand it back to the trigger
+              // first, the way Escape does.
+              if (menuRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
               setOpen(false);
               if (a.event) window.dispatchEvent(new CustomEvent(a.event));
             };

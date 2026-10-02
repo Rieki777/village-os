@@ -915,7 +915,10 @@ button, a, [role="button"], input, textarea, select, summary {
 :root {
   --tabbar-h: calc(4rem + 1px + env(safe-area-inset-bottom, 0px));
 }
-@media (min-width: 768px) {
+/* Tailwind's own `md` (48rem), in its own unit: the bar is `md:hidden`, and a
+   rem in a media query reads the browser's default font size, so a px bound
+   here split from the bar for anybody who enlarged that default. */
+@media (width >= 48rem) {
   :root { --tabbar-h: 0px; }
 }
 
@@ -941,10 +944,49 @@ button, a, [role="button"], input, textarea, select, summary {
 }
 /* Phones only, like the peek. The peek is `md:hidden` but stays in the DOM,
    so without this bound `:has()` still matched on a desk and lifted the
-   shortcuts button (which now shows at every width) over empty space. */
-@media (max-width: 767px) {
+   shortcuts button (which now shows at every width) over empty space. The
+   bound is the exact complement of `md` (48rem), never a px figure: with a
+   20px default font, `md` starts at 960px, and a 767px bound left a 900px
+   window showing the peek with the button sat on its "Details". */
+@media (width < 48rem) {
   :root:has([data-circle-peek]) [data-mobile-fab] {
     translate: 0 calc(-1 * (var(--circle-peek-h) + 0.5rem));
+  }
+}
+
+/*
+ * The shortcuts button steps out while something else owns the screen.
+ *
+ * It is z-[60] so it clears page content and the tab bar (z-50), which also
+ * puts it over every z-50 modal backdrop: shadcn's dialog, alert dialog,
+ * sheet and drawer overlays, and the hand-rolled aria-modal ones. On a phone
+ * that was rare; at every width it meant a click on the lotus through an open
+ * dialog's backdrop dismissed the dialog. No z-index answers it, since the
+ * bar and those backdrops share z-50, so the button is hidden while one is
+ * up. `visibility` also takes it out of the tab order and the reading order.
+ *
+ * `data-hides-fab` is the opt-in for a panel with no backdrop that holds this
+ * corner while it is open (the launch guide's Send button sits under it).
+ *
+ * `:has()` also matches inside a `display: none` parent. The village map
+ * mounts its SeatSheet (aria-modal) inside an `md:hidden` wrapper whenever a
+ * seat is selected, desktop included, so an unscoped rule hid the button on
+ * desktop for as long as a seat was picked. A modal under `.md:hidden` counts
+ * only below md, where that wrapper actually shows.
+ */
+:root:has(
+  [aria-modal="true"]:not(.md\:hidden *),
+  [data-slot="dialog-overlay"],
+  [data-slot="alert-dialog-overlay"],
+  [data-slot="sheet-overlay"],
+  [data-slot="drawer-overlay"],
+  [data-hides-fab]
+) [data-mobile-fab] {
+  visibility: hidden;
+}
+@media (width < 48rem) {
+  :root:has(.md\:hidden [aria-modal="true"]) [data-mobile-fab] {
+    visibility: hidden;
   }
 }
 @media (prefers-reduced-motion: no-preference) {

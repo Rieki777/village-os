@@ -99,8 +99,14 @@ function LaunchGuide({ open, onClose }: { open: boolean; onClose: () => void }) 
     );
 
   if (!open) return null;
+  // The panel holds the bottom-right corner while it is open, which is where
+  // the shortcuts button lives at every width. Its Send button sat under that
+  // button's z-[60] trigger, so a click on Send opened the shortcuts. The
+  // modal tier (z-[70], MobileFab's ladder) puts the panel over the button and
+  // over the phone tab bar, and `data-hides-fab` hides the covered button
+  // (index.css) so a keyboard never lands on a control nobody can see.
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
+    <div data-hides-fab className="fixed bottom-4 right-4 z-[70] w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh]">
       <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">
         <div className="flex gap-1">
           <button onClick={() => setMode("launch")}

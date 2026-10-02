@@ -389,8 +389,14 @@ export interface FeedbackSent extends FeedbackDraft {
   status: FeedbackStatus;
   /** When it becomes visible to the recipient. */
   deliverAfter: string | null;
-  /** True once the delivery time has passed. */
+  /** True once the recipient can read it: its Monday has come and their yes covers it. */
   delivered: boolean;
+  /**
+   * True while the recipient is not taking feedback and this has not reached
+   * them: it waits, and arrives if they say yes again. The author may still
+   * withdraw it. Optional only so a page built before it reads as "not held".
+   */
+  held?: boolean;
   createdAt: string;
 }
 
