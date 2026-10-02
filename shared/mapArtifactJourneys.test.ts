@@ -351,3 +351,76 @@ describe("a row from a stop already passed does nothing (F43)", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F37. Every journey narrated the Welcome Walk's monologue at its stops,
+   because the stop's words were looked up by PLACE. The Steward Journey said
+   it at all 8 stops, and "Where shall we start?" came word for word three
+   times in the middle of the Resident Journey. */
+describe("each journey says its own steps (F37)", () => {
+  const JOURNEYS = ["j2", "j3", "j4"] as const;
+  const walked = new Map<string, { title: string; said: string; more: boolean }[]>();
+  let walkLines: string[] = [];
+  let control: { gate: string; council: string; mine: string } = { gate: "", council: "", mine: "" };
+
+  beforeAll(async () => {
+    await Promise.all(
+      JOURNEYS.map(async (id) => {
+        const b = boot("#skipIntro", DESK);
+        await settle(200);
+        walkLines = b.run<string[]>("Object.values(MAIA_STOPS)");
+        control = b.run("({gate:MAIA_STOPS.gate,council:MAIA_STOPS.council,mine:jLine({at:'council'},BY.council)})");
+        const total = b.run<number>(`jById('${id}').steps.filter(st=>st.at&&BY[st.at]).length`);
+        b.run(`playJourney('${id}')`);
+        const stops: { title: string; said: string; more: boolean }[] = [];
+        for (let n = 1; n <= total; n++) {
+          const line = await landed(b, n);
+          stops.push({
+            title: line.querySelector("b")?.textContent ?? "",
+            said: narration(line),
+            more: !!line.querySelector('.jrow button[onclick="jMore()"]'),
+          });
+          if (n < total) b.run("jNext()");
+        }
+        walked.set(id, stops);
+        expect(b.uncaught).toEqual([]);
+        b.run("jEnd()");
+        b.close();
+      }),
+    );
+  });
+
+  it.each(JOURNEYS)("%s walks every placed step", (id) => {
+    expect(walked.get(id)?.length, `stops of ${id}`).toBeGreaterThan(3);
+  });
+
+  it.each(JOURNEYS)("%s never says the Welcome Walk's monologue at a stop", (id) => {
+    expect(walkLines.length, "the monologue, read off the page").toBe(8);
+    const heard = (walked.get(id) ?? []).filter((s) => walkLines.some((w) => s.said.includes(w))).map((s) => s.title);
+    expect(heard, "stops that said a Welcome Walk line").toEqual([]);
+  });
+
+  it.each(JOURNEYS)("%s never says the same thing at two stops", (id) => {
+    const said = (walked.get(id) ?? []).map((s) => s.said);
+    const twice = said.filter((s, i) => said.indexOf(s) !== i);
+    expect(twice, "narration repeated word for word").toEqual([]);
+  });
+
+  it.each(JOURNEYS)("%s offers `tell me more` only where the stop has not just said it", (id) => {
+    for (const s of walked.get(id) ?? []) {
+      // A stop that has just described its place is what jMore would say again.
+      const described = !/^We stood here at stop \d+ as well\.$/.test(s.said);
+      expect(s.more, `${s.title}: ${s.said}`).toBe(!described);
+    }
+  });
+
+  it("counts seats in agreement with the verb", () => {
+    const all = [...walked.values()].flat().map((s) => s.said);
+    expect(all.filter((s) => /open seats belongs/.test(s)), "plural seats with a singular verb").toEqual([]);
+    expect(all.some((s) => /\d+ open seats belong to this place/.test(s)), "the plural form is said somewhere").toBe(true);
+  });
+
+  it("still gives the Welcome Walk its own words (the control: the monologue is kept, for its walk)", () => {
+    expect(control.gate).toMatch(/^I am Maia\./);
+    expect(control.mine, "jLine at the council fire").toBe(control.council);
+  });
+});

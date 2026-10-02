@@ -8154,7 +8154,7 @@ function jDeep(s){
     add('The pool sits at <b>'+pc+'%</b>, and every pledge here turns into wall.',
         'The pool sits at '+pc+' percent, and every pledge here turns into wall.')}
   if(q.length){const t=q.length+' quest'+(q.length>1?'s':'')+' waiting at this door';add(escq(t)+'.',t+'.')}
-  if(se.length){const t=se.length+' open seat'+(se.length>1?'s':'')+' belongs to this place';add(escq(t)+'.',t+'.')}
+  if(se.length){const t=se.length+' open seat'+(se.length>1?'s belong':' belongs')+' to this place';add(escq(t)+'.',t+'.')}
   if(s.event)add('Coming up: <b>'+escq(s.event)+'</b>.','Coming up: '+s.event+'.');
   if(!html.length){const t='I have nothing else recorded here yet. Ask me and I will go and find out.';add(escq(t),t)}
   return{html:html.join(' '),say:say.join(' ')}}
@@ -8247,7 +8247,10 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
      answering `show me around`, an address someone followed, and the
      affordance below. The one caller that was NOT a person was the pocket
      boot, and it is gone. */
-  JWALK={id,i:Math.max(0,o.at|0),paused:false,log:!!o.log};setHash('#/journey/'+id);
+  /* `told` is each place this run has already described, by the latest stop
+     it was at, so a route that comes back to the council fire says so and
+     does not read the same paragraph out again. */
+  JWALK={id,i:Math.max(0,o.at|0),paused:false,log:!!o.log,told:{}};setHash('#/journey/'+id);
   GUIDE.start(id,JWALK.i,!!o.log);
   const back=JWALK.i>0;
   const lead=back?('Picking it up at stop '+(JWALK.i+1)+' of '+stops.length+'. ')
@@ -8292,14 +8295,37 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
          restore, and on a site import, so a step title reaches innerHTML from
          three directions. A village loses the ability to bold a word inside a
          step body. That is the right price. */
-      const title=escq((x.st.stage?x.st.stage+': ':'')+(x.st.t||''));
-      const line=jLine(x.st,s),deep=line?null:jDeep(s);
+      const head=(x.st.stage?x.st.stage+': ':'')+(x.st.t||'');
+      const title=escq(head);
       const body=x.st.body?('<div style="margin-top:3px">'+escq(x.st.body)+'</div>'):'';
+      /* WHOSE WORDS AT THIS STOP. jLine is Maia's Welcome Walk monologue and
+         the village's walk copy behind it, keyed by PLACE, so every other
+         journey that stopped at the gate or the council fire used to say her
+         welcome story in place of its own step. MEASURED on this scene: the
+         Resident Journey said "That is my village ... Where shall we start?"
+         word for word at three of its eleven stops, 8 of its 11 stops were
+         the monologue, and the Steward Journey was the monologue at all 8.
+         So jLine speaks for the Welcome Walk only. Any other journey says
+         its step's own words when the journey carries them, and what is true
+         at the place the first time the route reaches it. A later stop at a
+         place already described says which stop that was, and `tell me
+         more` reads the place out again for anyone who wants it. */
+      const own=isWelcomeWalk(id);
+      const line=own?jLine(x.st,s):'';
+      const was=own?0:(JWALK.told[s.key]|0);
+      const deep=(line||(!own&&(x.st.body||was)))?null:jDeep(s);
+      if(!own&&!x.st.body)JWALK.told[s.key]=JWALK.i+1;   // the latest stop here, so a third visit points at the second
+      const again=was?'We stood here at stop '+was+' as well.':'';
+      const text=line?escq(line):deep?deep.html:x.st.body?'':escq(again);
+      const said=own?((line||deep.say)+(x.st.body?' '+x.st.body:''))
+        :(head+' at '+s.name+'. '+(x.st.body||(deep?deep.say:again)));
       jRowsOff();
       maiaSay('<b>'+title+'</b> at '+escq(s.name)
-        +'<div style="margin-top:3px">'+(line?escq(line):deep.html)+'</div>'
-        +body+jRow(JWALK.i+1,stops.length,true),
-        null,(line||deep.say)+(x.st.body?' '+x.st.body:''));
+        +(text?'<div style="margin-top:3px">'+text+'</div>':'')
+        /* `tell me more` IS jDeep, so it is not offered under a stop that
+           has just said exactly that. */
+        +body+jRow(JWALK.i+1,stops.length,own||!deep),
+        null,said);
       hold()})};
   window.jNext=()=>{clearTimeout(JTMR);if(!JWALK||JWALK.id!==id)return;
     JWALK.paused=false;JWALK.i++;step()};
