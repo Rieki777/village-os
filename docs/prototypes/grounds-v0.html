@@ -1115,8 +1115,15 @@
      pocket sheet above it, so a drawer the reader opened covers these instead
      of leaving them floating on top of it. */
   #pnav{display:none}
+  /* THE SEED STAYS UNDER THE THUMB. The column is as wide as its widest child,
+     112 px of pad while it is open and the 44 px seed alone once it folds, and
+     it is anchored on the right. Centred, the seed slid 34 px sideways when it
+     folded, so the second tap of fold-then-unfold landed on the land: MEASURED
+     at 390x844, the seed at x 304-348 open and 338-382 folded, #scene under the
+     first tap's point. Aligned to the right edge it sits at 338-382 both ways,
+     where the folded dot always was, and the pad itself does not move. */
   body.pocket #pnav{position:fixed;right:8px;bottom:calc(72px + env(safe-area-inset-bottom,0px));
-    z-index:44;display:flex;flex-direction:column;align-items:center;gap:6px}
+    z-index:44;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
   #pnav .pnbody{display:flex;flex-direction:column;align-items:center;gap:6px}
   #pnav .pnrow{display:flex;gap:6px}
   #pnav .pnpad{display:grid;grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:2px}
