@@ -542,16 +542,26 @@ describe("the Get Involved rows and the vital chips take the keyboard", () => {
    arrives with the published journal in EDITS, so everyone who touched the
    map was told "Changes you made may not be saved" on reload, close or a
    typed address, having changed nothing. jsdom shows no dialog; it does run
-   the listener, and a cancelled beforeunload event is the prompt. */
+   the listener, and a cancelled beforeunload event is the prompt. The
+   visitor is played inside a stand-in for the shell's frame, which is where
+   a visitor is; the edit is played standalone (file://), where this
+   browser's copy is the only save there is. */
 describe("the leave prompt guards unsaved work, and nothing else", () => {
-  let b: Booted;
+  let visitor: Booted;
+  let alone: Booted;
   beforeAll(async () => {
-    b = boot("#skipIntro", DESK);
+    visitor = boot("#skipIntro", DESK, (w) =>
+      Object.defineProperty(w, "parent", { configurable: true, get: () => ({ postMessage() {} }) }),
+    );
+    alone = boot("#skipIntro", DESK);
     await settle(SETTLE_MS);
   });
-  afterAll(() => b?.close());
+  afterAll(() => {
+    visitor?.close();
+    alone?.close();
+  });
 
-  const prompts = () => {
+  const prompts = (b: Booted) => {
     const ev = new b.window.Event("beforeunload", { cancelable: true });
     b.window.dispatchEvent(ev);
     return ev.defaultPrevented;
@@ -566,20 +576,24 @@ describe("the leave prompt guards unsaved work, and nothing else", () => {
   });
 
   it("stays quiet for a visitor who arrives with the published journal and changes nothing", () => {
+    const b = visitor;
+    expect(b.run<boolean>("inShell()"), "inside the village").toBe(true);
     const scene = b.run<{ map_edits: unknown[] }>("JSON.parse(JSON.stringify(buildExportJSON()))");
     scene.map_edits = [edit(1), edit(2), edit(3)];
     b.post({ type: "config", scene, sceneVersion: 6 });
     b.post({ type: "hand", canEdit: false, canPublish: false, liveVersion: 6, live: { version: 6, by: "the founder" } });
     expect(b.run<number>("EDITS.length"), "the published journal arrived (the positive control)").toBe(3);
-    expect(prompts(), "a prompt for a visitor who changed nothing").toBe(false);
+    expect(prompts(b), "a prompt for a visitor who changed nothing").toBe(false);
+    expect(b.uncaught).toEqual([]);
   });
 
   it("prompts while an edit waits for its save, and stops once it has saved", async () => {
+    const b = alone;
     b.run("logEdit('rename','structure:gate',{to:'Probe'})");
-    expect(prompts(), "an edit not yet saved").toBe(true);
+    expect(prompts(b), "an edit not yet saved").toBe(true);
     await settle(2800); // the autosave waits 2.5 s, then writes this browser's copy
     expect(b.window.localStorage.getItem(SCENE_KEY), "the save landed").not.toBeNull();
-    expect(prompts(), "a prompt after the save").toBe(false);
+    expect(prompts(b), "a prompt after the save").toBe(false);
     expect(b.uncaught).toEqual([]);
   });
 });
