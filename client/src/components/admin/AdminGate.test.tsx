@@ -5,9 +5,9 @@
  *
  *   1. The move kept the S1 behaviour: an admin's token reaches `onAuth`, and a
  *      signed-in member without the role gets the refusal, not the form.
- *   2. "Forgot your password?" and the Google button both carry the admin's
- *      own deep link, so the reset and the round trip come back to the same
- *      screen. The Google button is drawn only on a village that has Google.
+ *   2. "Forgot your password?" tells the reset page it came from the admin,
+ *      and the Google button carries the admin's own deep link so the round
+ *      trip comes back to the same screen. Google is drawn only where it exists.
  *   3. A refused sign-in says what the server said. The card used to answer
  *      every failure "Wrong email or password.", including the 429 that the
  *      right password also gets once the account's budget is spent.
@@ -84,12 +84,10 @@ describe("AdminGate", () => {
     expect(screen.getByRole("heading", { name: "Not an admin" })).toBeInTheDocument();
   });
 
-  it("links the forgotten password to the reset page, carrying the deep link", () => {
+  it("links the forgotten password to the reset page, saying it came from the admin", () => {
     render(<AdminGate onAuth={vi.fn()} />);
     const link = screen.getByRole("link", { name: "Forgot your password?" });
-    const href = new URL(link.getAttribute("href")!, "https://village.test");
-    expect(href.pathname).toBe("/forgot-password");
-    expect(href.searchParams.get("next")).toBe(DEEP_LINK);
+    expect(link).toHaveAttribute("href", "/forgot-password?from=admin");
   });
 
   it("offers Google on a village that has it, returning to the deep link", async () => {

@@ -14,11 +14,12 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
-  // The admin sign-in links here with `?next=/admin…`, and "Back to sign in"
-  // should return to the door they came from. Internal paths only, the same
-  // rule Login.tsx applies, so a crafted link cannot send anyone offsite.
-  const next = new URLSearchParams(window.location.search).get("next");
-  const signIn = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/login";
+  // "Back to sign in" returns to the door the member came from. The admin card
+  // links here with `?from=admin`, and the page picks between two fixed paths,
+  // so nothing from the URL ever becomes the link. Taking a `next` path here
+  // was refused by CodeQL, rightly: a browser drops tabs and newlines from a
+  // URL, so `/<tab>/evil.example` passes a startsWith check and lands offsite.
+  const signIn = new URLSearchParams(window.location.search).get("from") === "admin" ? "/admin" : "/login";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -61,7 +61,8 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
 
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
   // Where this admin was headed, deep link included (`?tab=modules&module=…`),
-  // so the reset and the Google round trip both come back to the same screen.
+  // so the Google round trip comes back to the same screen. The server's
+  // normalizeNext checks it before it is signed into the state.
   const here = `${window.location.pathname}${window.location.search}`;
 
   useEffect(() => {
@@ -187,8 +188,8 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
         {/*
           * The member reset, which is the admin reset: the letter's link opens
           * /set-password, and that page already sends an admin or founder to
-          * /admin once the new password is set. `next` only steers the reset
-          * page's "Back to sign in" here instead of to the member sign-in.
+          * /admin once the new password is set. `from=admin` only steers the
+          * reset page's "Back to sign in" here instead of to the member sign-in.
           *
           * The Google button renders nothing on a village with no Google
           * credentials, and `space-y` spaces only what renders, so that
@@ -198,7 +199,7 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
         <div className="mt-4 space-y-4">
           <p className="text-center">
             <a
-              href={`/forgot-password?${new URLSearchParams({ next: here })}`}
+              href="/forgot-password?from=admin"
               className="text-sm text-teal-deep hover:underline"
             >
               Forgot your password?

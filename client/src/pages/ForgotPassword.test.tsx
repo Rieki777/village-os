@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * "Back to sign in" goes back to the door the member came from. The admin
- * sign-in card links here with `?next=/admin…`; anything that is not an
- * internal path falls back to /login, so a crafted link cannot send anyone
- * offsite from a page about their password.
+ * "Back to sign in" goes back to the door the member came from, chosen from
+ * two fixed paths. The admin sign-in card links here with `?from=admin`.
+ * Nothing from the URL becomes the link: a `next` path was tried first and
+ * CodeQL refused it, because a browser drops a tab from a URL and
+ * `/<tab>/evil.example` passes every startsWith check while landing offsite.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -30,13 +31,14 @@ describe("ForgotPassword", () => {
     expect(backLink("")).toBe("/login");
   });
 
-  it("returns to the admin deep link it was sent from", () => {
-    expect(backLink(`?${new URLSearchParams({ next: "/admin?tab=modules&module=saberra" })}`)).toBe(
-      "/admin?tab=modules&module=saberra",
-    );
+  it("returns to the admin card when it came from there", () => {
+    expect(backLink("?from=admin")).toBe("/admin");
   });
 
-  it.each(["//evil.example", "/\\evil.example", "https://evil.example"])("refuses %s as a destination", (next) => {
-    expect(backLink(`?${new URLSearchParams({ next })}`)).toBe("/login");
-  });
+  it.each(["?from=elsewhere", "?next=%2Fadmin", "?next=%2F%09%2Fevil.example", "?from=%2F%2Fevil.example"])(
+    "never takes a destination from %s",
+    (search) => {
+      expect(backLink(search)).toBe("/login");
+    },
+  );
 });
