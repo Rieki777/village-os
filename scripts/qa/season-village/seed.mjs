@@ -143,6 +143,24 @@ const DECLINED_SUGGESTION = "Every decision waits for a full moon, so nobody dec
 const DECLINE_NOTE = "A month is too long for small things; we keep the Saturday circle.";
 
 /** The season template the platform ships (docs/FORK_RUNBOOK.md), loaded as a founder would load it. */
+/*
+ * Wave 4 (2026-10-01). The key moments: two of this seed's own acts are moments,
+ * the bootstrap (collaboration, all twelve blocks) and governance reaching members
+ * (funding, the four blocks below), and before the handover the administrators
+ * hear them. The titles are revisitTitle's in shared/canvasRevisit.ts, word for word.
+ */
+const FUNDING_BLOCKS = ["power", "resourcing", "legal", "impact"];
+const FUNDING_TITLE = "Before you raise: look at Power again.";
+const CLAIMED_TITLE = "Something new is starting. Does our Power answer still hold?";
+/*
+ * The companion. Resourcing's one brief section, written at the administrators'
+ * audience, which is the default an answer adopted on the canvas keeps: the shape
+ * that once made the companion tell members the village had adopted nothing.
+ */
+const KEPT_SECTION = { id: "economy", title: "How value moves", block: "resourcing", blockName: "Resourcing" };
+const KEPT_WORDS = "Each cycle the treasury pays every circle its agreed share first, and the Saturday circle decides the rest.";
+const KEPT_QUESTION = "What did we adopt for Resourcing?";
+
 const SEASON_TEMPLATE = "docs/seasons/season-two-2026.json";
 const LEVEL_WORD = { 1: "Absent", 2: "Forming", 3: "Emerging", 4: "Growing", 5: "Thriving" };
 
@@ -227,6 +245,10 @@ let seasonLoaded = null;
 let conflictDoor = false;
 /** Set when the canvas suggestion is open and reads back: { body, by }. */
 let canvasSuggested = null;
+/** Set when the key moments reach the bell and the canvas moon names their blocks (Wave 4). */
+let keyMoments = null;
+/** Set when the companion answers both askers truthfully about a section closed to members (Wave 4). */
+let companionAsked = null;
 
 try {
   console.log(`\nseeding ${VILLAGE} on ${BASE} (build ${h.build})`);
@@ -428,6 +450,91 @@ try {
     log(`${byKey.founder.name} declined a second suggestion with a note; ${byKey.member.name} reads it under Decided lately, and ${by.name} was told`);
   }
 
+  // 12d. The key moments and the canvas moon, if this build has them (Wave 4,
+  // triggers-agreements). Nothing is written here: the moments were raised by step 1
+  // (the bootstrap claims the instance) and step 9 (governance reaches members). A
+  // moment is delivered after the act that raised it has answered, so the founder's
+  // bell is read until the funding notice is there, for ten seconds at most.
+  const moonFirst = await api(BASE, "GET", "/api/canvas/moon", undefined, byKey.member.token);
+  if (moonFirst.status === 404) {
+    skipped.push("key moments and the canvas moon: GET /api/canvas/moon is 404 on this build");
+    log("SKIPPED key moments and the canvas moon: the routes do not exist on this build");
+  } else {
+    if (moonFirst.status !== 200) throw new Error(`the walk's member reads GET /api/canvas/moon as ${moonFirst.status}: ${moonFirst.text.slice(0, 300)}`);
+    const revisits = async (p) => {
+      const bell = await must(`${p.name}'s notifications`, "GET", "/api/notifications", undefined, p.token);
+      const rows = Array.isArray(bell.json) ? bell.json : bell.json?.notifications ?? [];
+      return rows.filter((n) => n.type === "canvas_revisit").map((n) => String(n.title ?? ""));
+    };
+    let heard = [];
+    for (let i = 0; i < 20; i++) {
+      heard = await revisits(founder);
+      if (heard.includes(FUNDING_TITLE)) break;
+      await sleep(500);
+    }
+    if (!heard.includes(FUNDING_TITLE)) {
+      throw new Error(`governance reaching members raised no funding notice for ${founder.name}: ${JSON.stringify(heard).slice(0, 300)}`);
+    }
+    if (!heard.includes(CLAIMED_TITLE)) {
+      throw new Error(`the bootstrap raised no collaboration notice for ${founder.name}: ${JSON.stringify(heard).slice(0, 300)}`);
+    }
+    const memberHeard = await revisits(byKey.member);
+    const moon = await must("re-read the canvas moon", "GET", "/api/canvas/moon", undefined, byKey.member.token);
+    const next = moon.json?.next;
+    const named = (next?.blocks ?? []).map((b) => b.id);
+    const unnamed = FUNDING_BLOCKS.filter((b) => !named.includes(b));
+    if (!next || unnamed.length) {
+      throw new Error(`the canvas moon does not name the blocks this moon's moments flagged (${unnamed.join(", ")}): ${JSON.stringify(moon.json).slice(0, 300)}`);
+    }
+    if (moon.json.mayOffer !== false) throw new Error("the walk's member is offered the canvas moon gathering");
+    keyMoments = { founderNotices: heard.length, memberNotices: memberHeard.length, newMoonAt: String(next.newMoonAt ?? ""), blocks: next.blocks.map((b) => b.name) };
+    log(`key moments: ${founder.name}'s bell holds ${heard.length} canvas notices (the claim and governance reaching members), ${byKey.member.name}'s holds ${memberHeard.length}; the canvas moon of ${keyMoments.newMoonAt.slice(0, 10)} names ${keyMoments.blocks.join(", ")}`);
+  }
+
+  // 12e. The companion, if this build has it (Wave 4). The founder writes Resourcing's
+  // one brief section at the administrators' audience, then the walk's member and the
+  // founder each ask about Resourcing from its card, with no model connected. The member
+  // is told the section is written and closed to members, the founder that it is adopted,
+  // neither that the village adopted nothing, and neither reads its words.
+  const companionRead = await api(BASE, "GET", "/api/agent/companion", undefined, byKey.member.token);
+  if (companionRead.status === 404) {
+    skipped.push("the companion: GET /api/agent/companion is 404 on this build");
+    log("SKIPPED the companion: its routes do not exist on this build");
+  } else {
+    if (companionRead.status !== 200) throw new Error(`the walk's member reads GET /api/agent/companion as ${companionRead.status}: ${companionRead.text.slice(0, 300)}`);
+    await must(`write the ${KEPT_SECTION.blockName} section`, "PUT", `/api/admin/brain/${KEPT_SECTION.id}`, { body: KEPT_WORDS, audience: "admin" }, founder.token);
+    const ask = async (p) =>
+      (await must(`${p.name} asks about ${KEPT_SECTION.blockName}`, "POST", "/api/agent/ask", {
+        messages: [{ role: "user", content: KEPT_QUESTION }], block: KEPT_SECTION.block,
+      }, p.token)).json ?? {};
+    const falseLine = `has not adopted an answer for ${KEPT_SECTION.blockName}`;
+    const told = { member: await ask(byKey.member), founder: await ask(founder) };
+    for (const [who, a] of Object.entries(told)) {
+      const reply = String(a.reply ?? "");
+      if (a.path !== "deterministic") throw new Error(`the ${who}'s question took the ${a.path} path with no model connected`);
+      if (reply.includes(falseLine)) throw new Error(`the ${who} was told the village ${falseLine}, and it has: ${reply.slice(0, 300)}`);
+      if (reply.includes(KEPT_WORDS)) throw new Error(`the ${who} was read words written at the administrators' audience: ${reply.slice(0, 300)}`);
+    }
+    const memberLine = `"${KEPT_SECTION.title}" is written, and not opened to members`;
+    const founderLine = `"${KEPT_SECTION.title}" is adopted, and its words stay with the administrators`;
+    if (!String(told.member.reply).includes(memberLine)) throw new Error(`the member was not told ${memberLine}: ${String(told.member.reply).slice(0, 300)}`);
+    if (!String(told.founder.reply).includes(founderLine)) throw new Error(`the founder was not told ${founderLine}: ${String(told.founder.reply).slice(0, 300)}`);
+    companionAsked = { block: KEPT_SECTION.blockName, member: memberLine, founder: founderLine };
+    log(`the companion, with no model: ${byKey.member.name} is told ${memberLine}; ${founder.name} is told ${founderLine}; neither reads the words`);
+  }
+
+  // 12f. The village agreements read, if this build has it (Wave 4, defect 9): any
+  // admitted member may list them, and a fresh village has none.
+  const agreements = await api(BASE, "GET", "/api/governance/agreements", undefined, byKey.member.token);
+  if (agreements.status === 404) {
+    skipped.push("village agreements: GET /api/governance/agreements is 404 on this build");
+    log("SKIPPED village agreements: the route does not exist on this build");
+  } else if (agreements.status !== 200 || !Array.isArray(agreements.json?.agreements)) {
+    throw new Error(`the walk's member reads GET /api/governance/agreements as ${agreements.status}: ${agreements.text.slice(0, 300)}`);
+  } else {
+    log(`village agreements: ${byKey.member.name} reads the list (${agreements.json.agreements.length} on a fresh village)`);
+  }
+
   // 13. Every session works, and says who it is.
   for (const p of people) {
     const r = await must(`profile of ${p.name}`, "GET", "/api/profile", undefined, p.token);
@@ -468,6 +575,9 @@ try {
     },
     // Which person the walk signs in as, per walk role.
     walkAs: { member: "member", founder: "founder" },
+    // Wave 4, for the record: what the bells held and what the companion said (the seed checked both).
+    keyMoments,
+    companion: companionAsked,
     readings: canvasRecorded ? READINGS.map((r) => ({ blockId: r.blockId, level: r.level, moment: r.moment })) : [],
     emptyBlocks: canvasRecorded ? EMPTY_BLOCKS : [],
     skipped,
@@ -496,6 +606,8 @@ function printSummary(s) {
   if (s.facts.conflictReplyTime) console.log(`  conflict door: a reply within ${s.facts.conflictReplyTime}; outside contact ${s.facts.outsideContactName}`);
   if (s.facts.seasonName) console.log(`  season: ${s.facts.seasonName} (last week: ${s.facts.seasonWeekTitle})`);
   if (s.facts.canvasSuggestion) console.log(`  canvas suggestion on Power, open, by ${s.facts.canvasSuggester}`);
+  if (s.keyMoments) console.log(`  canvas moon ${s.keyMoments.newMoonAt.slice(0, 10)}: ${s.keyMoments.blocks.join(", ")}`);
+  if (s.companion) console.log(`  companion on ${s.companion.block}: told the truth to the member and the founder`);
   console.log(`  skipped: ${s.skipped.length ? s.skipped.join("; ") : "nothing"}`);
   console.log(`  tokens and passwords (test values, outside the repository): ${tokensFile()}`);
 }

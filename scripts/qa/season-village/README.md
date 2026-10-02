@@ -116,7 +116,22 @@ writes nothing except through HTTP routes:
   through `POST /api/canvas/proposals`, and the walk's member reads it back
   holding no pen for it), and a second one from the same member that the
   walk's founder declines with a note, which the walk's member reads back
-  under "Decided lately" and whose author finds the decline in the bell.
+  under "Decided lately" and whose author finds the decline in the bell;
+- the key moments when `/api/canvas/moon` exists (Wave 4): nothing is written,
+  because two of the seed's own acts are moments. The bootstrap claims the
+  instance and governance reaches members, so before the handover founder 1's
+  bell holds the canvas notices for both, and the canvas moon, read as a member,
+  names Power, Resourcing, Legal and Impact, with no gathering offered while the
+  events module is off;
+- the companion when `/api/agent/companion` exists (Wave 4): the founder writes
+  Resourcing's brief section at the administrators' audience, the default an
+  answer adopted on the canvas keeps, and the walk's member and the founder each
+  ask about Resourcing from its card with no model connected. The member must
+  be told the section is written and not opened to members, the founder that it
+  is adopted, neither that the village adopted nothing, and neither reads the
+  words. The walk cannot type a question, so this is checked here;
+- the village agreements list, read by a member, when
+  `/api/governance/agreements` exists (Wave 4).
 
 Tokens and the generated passwords go to `QA_OUT_DIR/state/tokens.json` with the
 facts the walk checks for. Run twice on the same village (a plain restart keeps
