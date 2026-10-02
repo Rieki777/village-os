@@ -58,7 +58,7 @@ export interface SeatSeating {
 /**
  * ONE REQUEST WHEN TWO CARDS ASK AT ONCE.
  *
- * `VillageMap` renders HolderCard TWICE, on purpose: the standing panel is
+ * `VillageMap` renders MapSeatCard TWICE, on purpose: the standing panel is
  * `hidden md:block` and the bottom sheet is `md:hidden`, so which one a
  * person sees is CSS and both are mounted. Two mounts firing the same read in
  * the same commit is two requests for one answer on every seat somebody taps.

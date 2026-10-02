@@ -1544,3 +1544,16 @@ button, a, [role="button"], input, textarea, select, summary {
 .sheet-night .shadow-sm {
   box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
 }
+
+/* The foil around a seat card. Read off the night tokens on the same element,
+   so it only means anything on a `.sheet-night` root, and a village that
+   re-tints its earned gold re-tints the foil with it. The shadow lives here
+   because `.sheet-night .shadow-sm` is a descendant selector, and it never
+   reaches the root that carries `sheet-night` itself. */
+.seat-card-foil {
+  background: linear-gradient(150deg,
+    var(--sheet-earned-lit) 0%, var(--sheet-notice) 15%, var(--sheet-earned-deep) 36%,
+    var(--sheet-notice) 56%, var(--sheet-earned-lit) 72%, var(--sheet-notice) 86%,
+    var(--sheet-earned-deep) 100%);
+  box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
+}
