@@ -823,7 +823,7 @@ describe("Your view is kept for the person, and stays out of the village's recor
     expect(first.uncaught).toEqual([]);
   });
 
-  it("offers a copy this browser already holds only to a hand that can edit, and Start fresh lets it go", async () => {
+  it("offers a copy of the land this browser holds only where it is the save, and Start fresh lets it go", async () => {
     const copy = JSON.stringify(first.run("buildExportJSON()"));
     const visitor = boot("#skipIntro", DESK, inTheVillage({ [SCENE_KEY]: copy }));
     await settle(SETTLE_MS);
@@ -831,15 +831,27 @@ describe("Your view is kept for the person, and stays out of the village's recor
     expect(look(visitor).bar, "the bar for someone who cannot edit").toBe("none");
     visitor.close();
 
+    /* Inside the village an editor's own work comes back from the village's
+       draft, or from the copy of an unconfirmed save that offerWaiting reads
+       (RESCUE_KEY, with the version it forked from), and
+       mapArtifactDraftMark.test.ts plays both. This older copy of the whole
+       land carries no version: restored over a newer live map, a publish from
+       it replaced a colleague's work (F75). So inside the village it is
+       offered to nobody, the editor included. */
     const editor = boot("#skipIntro", DESK, inTheVillage({ [SCENE_KEY]: copy }));
     await settle(SETTLE_MS);
-    expect(look(editor).bar, "nothing offered before the hand says who this is").toBe("none");
     arrive(editor, true);
-    expect(look(editor).bar, "the bar for an editor").toBe("flex");
-    expect(editor.doc.getElementById("restoreMsg")?.textContent).toContain("Saved work found in this browser");
-    (editor.doc.getElementById("restoreNo") as HTMLElement).click();
-    expect(editor.window.localStorage.getItem(SCENE_KEY), "Start fresh").toBeNull();
+    expect(look(editor).bar, "the old copy, for an editor inside the village").toBe("none");
     editor.close();
+
+    // On its own the copy is the only save there is, so it is offered at boot.
+    const alone = boot("#skipIntro", DESK, (w) => w.localStorage.setItem(SCENE_KEY, copy));
+    await settle(SETTLE_MS);
+    expect(look(alone).bar, "the bar when the map runs on its own").toBe("flex");
+    expect(alone.doc.getElementById("restoreMsg")?.textContent).toContain("Saved work found in this browser");
+    (alone.doc.getElementById("restoreNo") as HTMLElement).click();
+    expect(alone.window.localStorage.getItem(SCENE_KEY), "Start fresh").toBeNull();
+    alone.close();
   });
 
   it("still dresses and logs the scene when the map runs on its own (file://, the export is the outlet)", async () => {
