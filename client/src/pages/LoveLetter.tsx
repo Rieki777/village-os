@@ -20,7 +20,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
  *
  * `legal.membership` (GET /api/content/legal, same section WhyCostaRica.tsx
  * and ResidentRights.tsx read) carries Amora's real entity name and its own
- * wording, preserved as data in server/seeds/brochure-legal-seed.json, not
+ * wording, preserved as data in server/seeds/amora/brochure-legal-seed.json, not
  * deleted. Where a village has not published its own, this renders no tax
  * claim at all. Never a hedge, never an invented "ask a lawyer" caveat that
  * itself implies deductibility might apply. Absence, not a guess.
@@ -44,7 +44,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
  *
  * Unset falls back to the same sentence with the geography and the number
  * taken out, never to a hedge and never to an invented fact. Amora's own
- * wording is preserved as data in server/seeds/pages-covenant-seed.json and
+ * wording is preserved as data in server/seeds/amora/pages-covenant-seed.json and
  * needs one authenticated admin PUT to /api/admin/content/covenant, exactly
  * as the brochure lane's legal seed does.
  */

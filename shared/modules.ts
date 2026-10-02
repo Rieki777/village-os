@@ -126,8 +126,7 @@ export const MANAGED_LISTING_CAP = 2;
  * moment they need an answer, so it is the tier; who BUILT something is a
  * credit line and never a badge.
  *
- *   included   the platform bills (it is in the platform price) and supports
- *              it end to end. Credential is none, or the village's own
+ *   included   the platform supports it end to end. Credential is none, or the village's own
  *              upstream account where the village is the merchant of record.
  *              No pill in the catalog: included is the absence of a badge,
  *              the same way everything that is not core is silent today.

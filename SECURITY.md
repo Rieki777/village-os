@@ -102,8 +102,9 @@ in the private channel, not in a pull request against that page.
 
 The platform reports what it is running. `/health` carries the build marker, and it answers 503
 rather than 200 when its database is unreachable, so a probe that says ok is a probe that asked.
-`docs/FORK_RUNBOOK.md` is the operational reference: every environment variable, every seed, every
-provisioning step, and the traps in the order they were learned.
+`.env.example` is the reference for every environment variable, what it does and what breaks
+without it. `docs/FORK_RUNBOOK.md` is the operational reference behind it: every environment
+variable, every seed, every provisioning step, and the traps in the order they were learned.
 
 Two things worth checking on your own instance today, whatever else is going on:
 

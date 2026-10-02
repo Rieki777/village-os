@@ -19,8 +19,8 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${MUT_ROOT:?set MUT_ROOT to a real C:/ path}"
 JOBS="${JOBS:-4}"
-export PW_EXE="${PW_EXE:-C:/Users/taren/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe}"
-export NODE_PATH="${NODE_PATH:-C:/Users/taren/Downloads/regen-civics-clean/node_modules}"
+export PW_EXE="${PW_EXE:-${USERPROFILE//\\//}/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe}"
+export NODE_PATH="${NODE_PATH:-${USERPROFILE//\\//}/Downloads/regen-civics-clean/node_modules}"
 mkdir -p "$ROOT"
 
 # Run the gate once against one artifact URL. Echoes 'label|exit|checks|fails'.

@@ -23,37 +23,40 @@ would add token rotation for thirteen villages with nothing gained.
 The image bakes in no secrets. Every secret arrives as an environment
 variable at run time, which is what makes publishing it safe.
 
-### One human step, once
+The repository, `github.com/Rieki777/village-os`, is public too, under the
+MIT licence. Nobody needs an account, an access token or access to the
+repository to pull and run a release.
+
+### History: the one human step, done once
 
 A package created by CI inherits the visibility of the repository that
-published it, and this repository is private, so the FIRST publish creates a
-private package. There is no API for changing that: `PATCH
+published it, and when 1.1.0 was first published the repository was private,
+so that publish created a private package (measured 2026-08-31: HTTP 401 for
+an anonymous pull). There is no API for changing that: `PATCH
 user/packages/container/village-os` answers 404, and the packages REST API
-offers list, get, delete and restore only. It is a web page:
+offers list, get, delete and restore only. It was a web page, and only the
+account holder could use it:
 
 > `https://github.com/users/Rieki777/packages/container/village-os/settings`
 > then Danger Zone, Change visibility, Public.
 
-Only the account holder can do it, and it only has to be done once. Every
-later release publishes into the package that already exists and keeps
-whatever visibility it has.
-
-Check it from any machine, with no account and no Docker:
+Every later release publishes into the package that already exists and keeps
+its visibility. To check it from any machine, with no account and no Docker:
 
 ```
 curl -s "https://ghcr.io/token?scope=repository:rieki777/village-os:pull&service=ghcr.io"
 ```
 
 A JSON body carrying a `token` means the package is public and a stranger can
-pull it. `{"errors":[{"code":"UNAUTHORIZED"...}]}` with HTTP 401 means it is
-still private. Measured 2026-08-31, immediately after publishing 1.1.0: 401.
+pull it. `{"errors":[{"code":"UNAUTHORIZED"...}]}` with HTTP 401 would mean it
+had gone private again.
 
 ## The three channels
 
 | Tag | What it points at | Who should use it |
 |---|---|---|
-| `:1.1.0` and every other `:<version>` | One exact release, forever | Any village that wants to know what it is running |
-| `:stable` | The newest full release | A village that wants the current release without naming it |
+| `:1.2.0` and every other `:<version>` | One exact release, forever | Every village. Pin one |
+| `:stable` | The newest full release | Trying the current release without naming it. A village pins a version instead |
 | `:edge` | The newest commit on `main` that passed the full test suite | The platform team. Never a village. |
 
 A prerelease (`:1.2.0-rc1`) publishes its own version tag and does not move
@@ -61,32 +64,49 @@ A prerelease (`:1.2.0-rc1`) publishes its own version tag and does not move
 
 ## Running a release, if you host your own village
 
-You need Docker and a MySQL database. Nothing else, and no account anywhere.
+You need Docker, and Node 22 for the one setup script. No account anywhere.
+
+**On one machine, the shortest path is `docker-compose.yml`**, which runs the
+app, MySQL 8.4 and a volume at `/app/data` together, pinned to `1.2.0`:
 
 ```
-docker pull ghcr.io/rieki777/village-os:1.1.0
+node scripts/fork-init.mjs --compose --village-name "Your Village" --admin-email you@example.org
+docker compose up -d
+```
+
+`START_HERE.md`, part A, walks through it, including backups.
+
+**With your own MySQL database**, write `.env` without `--compose`, set
+`DATABASE_URL` in it to your database, and hand the whole file to the
+container:
+
+```
+node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org
+docker pull ghcr.io/rieki777/village-os:1.2.0
 
 docker run -d --name village -p 3000:3000 \
-  -e DATABASE_URL='mysql://user:password@your-database-host:3306/village' \
-  -e AUTH_TOKEN_SECRET="$(openssl rand -hex 32)" \
+  --env-file .env \
   -v village-data:/app/data \
-  ghcr.io/rieki777/village-os:1.1.0
+  ghcr.io/rieki777/village-os:1.2.0
 ```
 
 `DATABASE_URL` is the only variable the server refuses to start without. It
 applies every pending migration itself on the way up, so an empty database is
-a fine starting point. `AUTH_TOKEN_SECRET` is optional and should be set
-anyway: without it the server picks a random secret each time it starts,
-which logs everyone out on every restart. The volume is where uploaded files
-live, and without it they disappear with the container.
+a fine starting point and there is no migrate step. A usable village also
+needs `AUTH_TOKEN_SECRET` (without it every restart logs everyone out),
+`ADMIN_PASSWORD` (which `/claim` asks for) and `FRONTEND_URL`; `fork-init`
+writes all of them, and every other secret, into `.env` without printing
+them. `.env.example` explains every variable. The volume is where uploaded
+files live, and without it they disappear with the container.
 
 The first start is slow, because it runs every migration before it begins
 serving. Measured against an empty database on a cold server: 228 seconds.
 Give it fifteen minutes before deciding something is wrong, and read
-`docker logs village` while you wait.
+`docker logs village` while you wait. Then open `<address>/claim` and claim
+the village with the `ADMIN_PASSWORD` from `.env`.
 
-`docs/PROVISIONING.md` is the full walkthrough for standing up a village,
-including the domain, email, and the parts only you can do.
+On a hosting provider such as Railway, `docs/PROVISIONING.md` is the full
+walkthrough, including the domain, email, and the parts only you can do.
 
 ## Asking a village what it is running
 
@@ -132,15 +152,16 @@ keep that jump small. `ops/README.md` has the unpinning procedure.
 Name the version in your own deploy and leave it there:
 
 ```
-ghcr.io/rieki777/village-os:1.1.0
+ghcr.io/rieki777/village-os:1.2.0
 ```
 
-That is the whole pin. Nothing moves it until you change that line. Using
-`:stable` instead means you move whenever a new release is published, which
-is the right default for a village that does not want to think about it.
+That is the whole pin, and every village should have one. Nothing moves it
+until you change that line (`VILLAGE_OS_IMAGE` in `.env` on the compose path).
+`:stable` instead moves you whenever a new release is published, with no
+backup taken and nothing read first, so a village pins a version.
 
-Read `CHANGELOG.md` before you move, and move one version at a time where you
-can. `docs/SECURITY_ADVISORIES.md` is where anything urgent is posted, and it
+Read `docs/UPGRADING.md` and `CHANGELOG.md` before you move, take a backup,
+and move one version at a time where you can. `docs/SECURITY_ADVISORIES.md` is where anything urgent is posted, and it
 stays readable to a village that has left the fleet.
 
 ## Cutting a release, for the platform team
@@ -153,8 +174,8 @@ stays readable to a village that has left the fleet.
 4. Tag and push:
 
    ```
-   git tag -a v1.1.0 -m "village-os 1.1.0"
-   git push origin v1.1.0
+   git tag -a v1.2.0 -m "village-os 1.2.0"
+   git push origin v1.2.0
    ```
 
 5. Watch `.github/workflows/release.yml`. It builds the image, starts it

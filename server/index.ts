@@ -518,7 +518,8 @@ import {
   sweepContactBodies,
   type Candidate,
 } from "./lib/map";
-import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION } from "./lib/identity";
+import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION, PRODUCT_NAME } from "./lib/identity";
+import { brochurePagesOn, isBrochurePath, loadBrochurePages } from "./lib/brochurePages";
 import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
 import { noteSeen, readSeen } from "./lib/sheetSeen"; import { displayCurrencyProblem } from "../shared/money";
@@ -1518,6 +1519,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
+    loadBrochurePages(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -4609,7 +4611,7 @@ async function nextActionFor(user: any): Promise<{ id: string; label: string; hr
   for (const rule of GAME_CONFIG.nextActions) {
     switch (rule.when) {
       case "no-training": if (!trainingDoneHere(trained)) return rule; break;
-      case "no-membership": if (!hasMembership(user)) return rule; break;
+      case "no-membership": if (brochurePagesOn() && !hasMembership(user)) return rule; break;
       case "no-quest-claimed": if (claims.length === 0) return rule; break;
       case "quest-in-progress": if (claims.some((c) => c.status === "claimed" || c.status === "submitted")) return rule; break;
       case "gratitude-unspent": if (budget.remaining > 0 && budget.total > 0) return rule; break;
@@ -12435,6 +12437,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       tagline: cfg.project.tagline ?? null,
       location: cfg.project.location ?? null,
       platform: "custom-game-foundation",
+      product: PRODUCT_NAME,
       // S62: the handshake finally answers WHO (a permanent uuid, minted at
       // first boot) and WHICH CONTRACT (semver), not just what was deployed.
       // Peers compare `version`; humans read `build`.
@@ -19211,6 +19214,7 @@ ${inner}
       paths: GAME_CONFIG.paths,
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
+      brochurePages: brochurePagesOn(),
     });
   });
 
@@ -26857,7 +26861,7 @@ ${inner}
   app.get("/sitemap.xml", (req, res) => {
     const origin = requestOrigin(req);
     const paths = [
-      ...PUBLIC_PATHS,
+      ...PUBLIC_PATHS.filter((p) => brochurePagesOn() || !isBrochurePath(p)),
       ...GATED_PATHS.filter(([, id]) => effectiveLifecycle(id) === "public").map(([p]) => p),
     ];
     const urls = paths

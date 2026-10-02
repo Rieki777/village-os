@@ -1,70 +1,20 @@
-# WATCH THE FIRST DEPLOY AFTER THIS LANDS, AND READ ITS BUILD LOG.
+# Railway's build and deploy settings, for a village hosted on Railway that
+# deploys from this repository. A village running the published image, or
+# docker-compose.yml on its own machine, never reads this file.
 #
-# A `Dockerfile` now exists at the repo root, and it is not settled whether
-# that changes how Railway builds this service. Here is exactly what is known,
-# separated into what was measured and what was only read.
+# THE DOCKERFILE BUILDS IT. When a Dockerfile is present Railway builds with
+# it, whatever `builder` says, which was confirmed by deploying on 2026-08-31.
+# So the line below states what happens rather than asking for something else.
+# The same image is what .github/workflows/release.yml publishes to GHCR, so a
+# village on Railway and a village on its own server run identical bytes.
 #
-# MEASURED, 2026-08-31, deployment 0eaaf3fa-30a2-4860-ab00-f77e10ba6fc9 of
-# service "Amora Game" in project "Amora Game", environment production, at
-# commit 6de6629 with NO Dockerfile in the tree. First lines of its build log:
-#
-#     scheduling build on Metal builder "builder-bovfov"
-#     using build driver nixpacks-v1.41.0
-#
-# So `builder = "nixpacks"` is live and honoured TODAY. The worry that the
-# line had already gone inert is false, and this file is not lying about the
-# build that currently runs. (The nixpacks driver generates its own Dockerfile
-# internally, which is why the same log later says "load build definition from
-# Dockerfile" while no Dockerfile existed in the repo. That line is not
-# evidence of root-Dockerfile detection.)
-#
-# READ, not measured, from Railway's config-as-code reference on the same day:
-# "Railway will always build with a Dockerfile if it finds one", and the only
-# documented values for `builder` are RAILPACK and DOCKERFILE. Taken at face
-# value that means the first build after this lands is the image.
-#
-# NOT DETERMINED: whether the presence of the file actually overrides the line
-# below. The intended experiment was a throwaway service carrying both a
-# Dockerfile and this builder setting, read back from its build log. The
-# Railway CLI session token expired part way through the investigation, and
-# re-authenticating is a browser sign-in that only the account holder can do.
-# So the question stands where the previous lane left it, with one worry
-# removed and none added.
-#
-# WHY IT IS SAFE TO FIND OUT BY DEPLOYING. The health check below is the
-# reason. Railway's healthchecks reference: it queries the endpoint until it
-# gets a 200, and "only then will the new deployment be made active and the
-# previous deployment inactive". A first Dockerfile build that fails to build,
-# or builds and cannot serve /health, is marked failed and the deployment that
-# is already serving keeps serving. The image is also built and booted end to
-# end by .github/workflows/release.yml before any of this, so an image that
-# cannot start has already been caught somewhere cheaper.
-#
-# THE START COMMAND BELOW SURVIVES EITHER ANSWER. Railway's start command
-# replaces the image's CMD. The Dockerfile sets WORKDIR /app, USER node, and
-# ships the bundle at /app/dist/index.js, which is the path the line below
-# names and the same relative path nixpacks produces. It also sets
-# NODE_ENV=production itself, so the prefix is redundant rather than wrong.
-# The one thing an override costs is the tini ENTRYPOINT if Railway replaces
-# that too, which would leave production where it already is today: no SIGTERM
-# handler, so a deploy waits out the grace period and is SIGKILLed. That is
-# the current behaviour, so it is not a regression either way.
-#
-# WHAT TO DO ON THAT FIRST DEPLOY: read the first two lines of the build log
-# (`railway logs --build <deploymentId>`). If they name a driver other than
-# nixpacks, the Dockerfile won: set `builder = "DOCKERFILE"` here so the file
-# states what actually happens, and delete this comment. If they still say
-# nixpacks, the line below won: leave it, and delete this comment too.
+# No deployment, project or volume identifiers belong in this file. It is in a
+# public repository, and scripts/check-public-tree.mjs refuses them.
 [build]
-# ANSWERED 2026-08-31, by deploying: THE DOCKERFILE WINS. Adding the file
-# switched the builder even with `builder = "nixpacks"` set, exactly as
-# Railway's reference says and as this file warned. Build succeeded in 58s;
-# the deploy then failed on `Deploy > Create container` with "The executable
-# `node_env=production` could not be found". Nixpacks ran startCommand
-# through a shell, so the NODE_ENV prefix was an env assignment. Docker runs
-# it in exec form with no shell, so it looked for a binary of that name.
-# Production never went down: Railway kept the previous deployment serving
-# because the new one never passed its healthcheck.
+# The first Dockerfile deploy (2026-08-31) failed on a start command that
+# nixpacks had run through a shell and Docker runs in exec form, which is why
+# there is no startCommand below. Production kept serving throughout, because
+# the new deployment never passed its healthcheck.
 builder = "DOCKERFILE"
 buildCommand = "pnpm run build"
 
