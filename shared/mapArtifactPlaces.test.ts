@@ -268,6 +268,8 @@ describe("a deep link inside the shell, with the published land arriving after t
     await settle(400);
     return m;
   }
+  /* No timeout of its own: these boots ran past 30 s on a machine busy with
+     other lanes, and vitest.config.ts already gives a hook its room. */
   beforeAll(async () => {
     added = await arrive(`#/place/${ADDED.key}&skipIntro`, LIVE, LATE);
     moved = await arrive(`#/place/${MOVED}&skipIntro`, LIVE, LATE);
@@ -280,7 +282,7 @@ describe("a deep link inside the shell, with the published land arriving after t
     slow.post(config(LIVE));
     slowMoved.post(config(LIVE));
     await settle(400);
-  }, 30_000);
+  });
   afterAll(() => [added, moved, item, never, slow, slowMoved].forEach((m) => m?.close()));
 
   it("is the shell's case: the map announced itself to a parent", () => {
@@ -563,6 +565,8 @@ describe("sample conversations, on the desk and in the pocket", () => {
   const REAL = { id: "real-1", title: "A thread somebody wrote", author: "Ana", src: "forum" };
   let scene: Scene;
   let desk: Booted, pocket: Booted;
+  /* No timeout of its own: these boots ran past 30 s on a machine busy with
+     other lanes, and vitest.config.ts already gives a hook its room. */
   beforeAll(async () => {
     scene = clone(SEED);
     scene.forum_threads.push({
@@ -580,7 +584,7 @@ describe("sample conversations, on the desk and in the pocket", () => {
     desk.post(config(scene));
     pocket.post(config(scene));
     await settle(3200); // the help badge ticks every 3 s
-  }, 20_000);
+  });
   afterAll(() => [desk, pocket].forEach((m) => m?.close()));
 
   const smalls = (m: Booted, sel: string) =>
