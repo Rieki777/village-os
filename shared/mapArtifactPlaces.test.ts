@@ -654,6 +654,17 @@ describe("Maia, on what is alive and on what she keeps", () => {
     expect(said).toContain("No live feed of the village's day reaches this map yet");
     expect(said).toContain(`${quests} open quest`);
     expect(said).not.toMatch(/Sol|fourteen kilos|Today so far/);
+    expect(said, "the desk has a Space key and the banner it cycles").toContain("Press Space to see what needs them most.");
+  });
+
+  it("points a phone at Get Involved, since it has no Space key", () => {
+    const body = m.window.document.body;
+    body.classList.add("pocket");
+    m.run("conciergeMatch('what happened today')");
+    const said = lastLine();
+    body.classList.remove("pocket");
+    expect(said).toContain("Get Involved lists them all.");
+    expect(said).not.toContain("Space");
   });
 
   it("plays none of the seed's sample pulse, as a toast or as Maia's news", async () => {

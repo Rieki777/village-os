@@ -5488,7 +5488,10 @@ function aliveNow(){
     .map(s=>`a pool at <b>${Math.round(s.fund*100)}%</b> for ${escq(the(s.name))}`);
   const q=SCENE.quests.filter(x=>x.at&&BY[x.at]).length,st=SCENE.seats.filter(x=>x.at&&BY[x.at]&&seatOpen(x)).length;
   const bits=[...on,...pools];
-  return maiaSay(`No live feed of the village's day reaches this map yet, so I can tell you what the map holds right now. ${bits.length?'On the land: '+bits.join(', ')+'. ':''}<b>${q}</b> open quest${q===1?'':'s'} and <b>${st}</b> open seat${st===1?'':'s'} wait for hands. Press <b>Space</b> to see what needs them most.`)}
+  /* A phone has no Space key, and body.pocket hides the banner it would cycle,
+     so there the way in is Get Involved, which its More drawer carries. */
+  const next=document.body.classList.contains('pocket')?'<b>Get Involved</b> lists them all.':'Press <b>Space</b> to see what needs them most.';
+  return maiaSay(`No live feed of the village's day reaches this map yet, so I can tell you what the map holds right now. ${bits.length?'On the land: '+bits.join(', ')+'. ':''}<b>${q}</b> open quest${q===1?'':'s'} and <b>${st}</b> open seat${st===1?'':'s'} wait for hands. ${next}`)}
 window.aliveNow=aliveNow;
 window.CONCIERGE_LOG=window.CONCIERGE_LOG||[];
 function conciergeMatch(txt){const t=txt.toLowerCase();
