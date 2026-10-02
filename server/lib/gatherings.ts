@@ -46,6 +46,10 @@ import {
 } from "./calendar";
 import { firePromotionSink, promoteForCapacityChange, promoteWaitlist } from "./calendarCommunity";
 import { chargeForPlace, heldSeatValue, refundAllPlaces, refundPlace } from "./eventSeats";
+// Village Comms: the one door to the email system. Every call fires after the
+// change it reports is written, and never throws (server/lib/commsSink.ts).
+import { commsSink } from "./commsSink";
+import { gatheringTriggers } from "../../shared/comms/contracts";
 
 const newId = () => `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -234,6 +238,7 @@ export async function createGathering(
       seat.token,
     ],
   );
+  if (cleanStatus(input.status, "draft") === "scheduled") commsSink.fire({ type: "gathering_published", eventId: id });
   return (await getGathering(pool, id))!;
 }
 
@@ -289,6 +294,9 @@ export async function updateGathering(
 
   if (!sets.length) return getGathering(pool, id);
   params.push(id);
+  // What it was, so the comms trigger below reports what CHANGED and never
+  // what the editor happened to resend (gatheringTriggers says why).
+  const before = await getGathering(pool, id);
   await pool.query(`UPDATE events SET ${sets.join(", ")} WHERE id = ?`, params);
   /*
    * 0092: A GATHERING THAT STOPS HAPPENING GIVES THE SEAT FEES BACK.
@@ -329,7 +337,9 @@ export async function updateGathering(
       console.error("[waitlist] capacity-change promotion failed (edit saved)", e);
     }
   }
-  return getGathering(pool, id);
+  const after = await getGathering(pool, id);
+  for (const t of gatheringTriggers(id, before, after)) commsSink.fire(t);
+  return after;
 }
 
 export async function deleteGathering(pool: Pool, id: string): Promise<boolean> {
@@ -355,7 +365,11 @@ export async function deleteGathering(pool: Pool, id: string): Promise<boolean> 
   await pool.query("DELETE ss FROM event_slot_signups ss JOIN event_slots s ON s.id = ss.slot_id WHERE s.event_id = ?", [id]);
   await pool.query("DELETE FROM event_slots WHERE event_id = ?", [id]);
   const [res] = await pool.query<any>("DELETE FROM events WHERE id = ?", [id]);
-  return Number(res?.affectedRows ?? 0) > 0;
+  const deleted = Number(res?.affectedRows ?? 0) > 0;
+  // Its answers are gone by now, so its journey enrollments are what is left
+  // of its audience (the CommsTrigger union says so beside this trigger).
+  if (deleted) commsSink.fire({ type: "gathering_cancelled", eventId: id });
+  return deleted;
 }
 
 export type RsvpOutcome =
@@ -508,6 +522,8 @@ export async function rsvp(
       await withdrawRsvp(pool, eventId, userId, occ);
       return { ok: false, reason: "unpaid", message: charge.error };
     }
+    // Only now that the place is paid for: a refused fee hands the seat back above.
+    commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey: occ, personKey: userId, status: wanted });
     return {
       ok: true, status: wanted, goingCount, duplicate,
       charged: charge.duplicate ? 0 : charge.charged, tokenType: charge.tokenType,
@@ -521,6 +537,7 @@ export async function rsvp(
   if (freedSeat) {
     await refundPlace(pool, eventId, userId, occ, "You changed your answer");
   }
+  commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey: occ, personKey: userId, status: wanted });
   return { ok: true, status: wanted, goingCount, duplicate };
 }
 
@@ -614,6 +631,7 @@ export async function withdrawRsvp(pool: Pool, eventId: string, userId: string, 
   if (gaveUpPlace) {
     await refundPlace(pool, eventId, userId, occurrenceKey, "You took your answer back");
   }
+  commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey, personKey: userId, status: "withdrawn" });
   return true;
 }
 

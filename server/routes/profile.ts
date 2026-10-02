@@ -33,6 +33,8 @@
 import type { Express } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "../lib/commsSink";
 
 type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser">;
 
@@ -69,6 +71,8 @@ export function register(app: Express, deps: Deps): void {
     }
     const claimed = claimPaths(paths, authed.paths ?? []);
     if (!claimed.ok) return res.status(400).json({ error: claimed.error });
+    // Copied BEFORE the update: the cached record can be the very object it mutates.
+    const pathsBefore = new Set<string>(Array.isArray(authed.paths) ? authed.paths : []);
     const updated = await members.update(authed.id, (u: any) => {
       if (name) u.name = name;
       if (bio !== undefined) u.bio = bio;
@@ -77,6 +81,9 @@ export function register(app: Express, deps: Deps): void {
       if (wanted !== undefined) u.handle = wanted;
     });
     if (!updated) return res.status(404).json({ error: "User not found" });
+    const pathsAfter = new Set<string>(Array.isArray(updated.paths) ? updated.paths : []);
+    for (const pathId of Array.from(pathsAfter)) if (!pathsBefore.has(pathId)) commsSink.fire({ type: "path_joined", personKey: authed.id, userId: authed.id, pathId, source: "profile" });
+    for (const pathId of Array.from(pathsBefore)) if (!pathsAfter.has(pathId)) commsSink.fire({ type: "path_left", personKey: authed.id, userId: authed.id, pathId, source: "profile" });
     res.json(publicUser(updated));
   });
 

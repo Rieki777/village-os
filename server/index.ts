@@ -619,6 +619,9 @@ import {
   type SecretKey,
 } from "./lib/secrets";
 import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from "./lib/comms/mailer";
+import { commsSink } from "./lib/commsSink";
+import { createCommsDispatcher } from "./lib/comms/dispatch";
+import { formSubmittedTrigger } from "../shared/comms/contracts";
 /**
  * The second line of the two refusals that stop a founder saving a key.
  *
@@ -1301,7 +1304,8 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
-const { getEmailConfig, sendResendEmail, buildSubmissionEmailHtml, recipientsForType } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin });
+const { getEmailConfig, sendResendEmail, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin });
+commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice }));
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
 /**
@@ -2949,6 +2953,7 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     reason,
     at: new Date().toISOString(),
   });
+  commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
   await addActivity("stage", `${firstName(user.name)} advanced to ${getStage(to).name}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
   await notify({
     userId: user.id,
@@ -7624,6 +7629,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
     // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
     await landPublicSubmission(submissionsRepo, getPool(), entry);
+    commsSink.fire(formSubmittedTrigger(type, entry.id, data));
 
     /*
      * The origin comes from OUR configuration, never from the request.
@@ -7749,6 +7755,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
     if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
+    if (before !== status) commsSink.fire({ type: "submission_status", submissionId: String(submissions[idx].id), formType: String(submissions[idx].type ?? ""), status });
+    if (admitted) commsSink.fire({ type: "member_admitted", userId: String(submissions[idx].userId) });
 
     /*
      * SWEEP (the incomplete loop). This route moves an application, an offer
@@ -18537,6 +18545,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       submittedAt: new Date().toISOString(),
     };
     await submissionsRepo.insert(entry);
+    commsSink.fire(formSubmittedTrigger("investor-doc-request", entry.id, entry.data));
 
     /*
      * The origin comes from OUR configuration, never from the request.

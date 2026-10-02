@@ -138,6 +138,64 @@ export function formSubmittedTrigger(formType: string, submissionId: string, dat
   };
 }
 
+/** The parts of a gathering whose change somebody who said yes is told about. */
+export interface GatheringShape {
+  status: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  recurrence: unknown;
+  locationText: string | null;
+  structureKeys: string[];
+  onlineUrl: string | null;
+  attendanceMode: string;
+}
+
+/**
+ * What one saved edit to a gathering tells comms, read by comparing the
+ * gathering before the save with the gathering after it.
+ *
+ * COMPARED, NEVER READ OFF THE PATCH. The editor sends every field on every
+ * save, so "the patch named the time" is true of a save that only fixed a
+ * typo in the description, and reading it that way would tell everybody
+ * going that their gathering had moved.
+ *
+ *   cancelled   it became `cancelled`. Nothing else is said in the same
+ *               breath: a cancelled gathering's new time is news to nobody.
+ *   published   it became `scheduled` from a draft or from cancelled. The
+ *               fields are all new to everyone, so no change is reported.
+ *   changed     it is live (scheduled or postponed) and the time, the place,
+ *               the online room or the title differs. A move between
+ *               scheduled and postponed counts as a change of time, because
+ *               the time a person agreed to is no longer the time.
+ *
+ * A draft edited and left a draft says nothing: nobody has been told it
+ * exists.
+ */
+export function gatheringTriggers(eventId: string, before: GatheringShape | null, after: GatheringShape | null): CommsTrigger[] {
+  if (!before || !after) return [];
+  const live = (s: string) => s === "scheduled" || s === "postponed";
+  if (after.status === "cancelled" && before.status !== "cancelled") return [{ type: "gathering_cancelled", eventId }];
+  if (after.status === "scheduled" && !live(before.status)) return [{ type: "gathering_published", eventId }];
+  if (!live(after.status) || !live(before.status)) return [];
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const fields: Array<"time" | "place" | "online" | "title"> = [];
+  if (
+    !same(before.startsAt, after.startsAt) ||
+    !same(before.endsAt, after.endsAt) ||
+    !same(before.recurrence, after.recurrence) ||
+    before.status !== after.status
+  ) {
+    fields.push("time");
+  }
+  if (!same(before.locationText, after.locationText) || !same([...before.structureKeys].sort(), [...after.structureKeys].sort())) {
+    fields.push("place");
+  }
+  if (!same(before.onlineUrl, after.onlineUrl) || before.attendanceMode !== after.attendanceMode) fields.push("online");
+  if (before.title !== after.title) fields.push("title");
+  return fields.length ? [{ type: "gathering_changed", eventId, fields }] : [];
+}
+
 // ── Journeys ────────────────────────────────────────────────────────────────
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FORM_CONSENT_FIELD, formSubmittedTrigger, subjectRef } from "./contracts";
+import { FORM_CONSENT_FIELD, formSubmittedTrigger, gatheringTriggers, subjectRef, type GatheringShape } from "./contracts";
 import {
   EMAIL_KINDS,
   LINK_PURPOSES,
@@ -65,6 +65,55 @@ describe("a submitted form's trigger", () => {
   it("reads a first name when there is no full name, and survives data that is not an object", () => {
     expect((formSubmittedTrigger("contact", "sub-3", { firstName: "Bo" }) as any).name).toBe("Bo");
     expect(formSubmittedTrigger("contact", "sub-4", "garbage")).toMatchObject({ email: null, name: null, consentPaths: false });
+  });
+});
+
+describe("what a saved gathering edit tells comms", () => {
+  const base: GatheringShape = {
+    status: "scheduled",
+    title: "Seed swap",
+    startsAt: "2026-10-09T17:00:00.000Z",
+    endsAt: "2026-10-09T19:00:00.000Z",
+    recurrence: null,
+    locationText: "The barn",
+    structureKeys: ["barn", "orchard"],
+    onlineUrl: null,
+    attendanceMode: "offline",
+  };
+  const edit = (over: Partial<GatheringShape>, from: Partial<GatheringShape> = {}) =>
+    gatheringTriggers("ev-1", { ...base, ...from }, { ...base, ...from, ...over });
+
+  it("says nothing when nothing a person relies on moved, even when every field was resent", () => {
+    expect(edit({})).toEqual([]);
+    expect(edit({ structureKeys: ["orchard", "barn"] }), "the same places in another order").toEqual([]);
+  });
+
+  it("names each kind of change, together", () => {
+    expect(edit({ startsAt: "2026-10-10T17:00:00.000Z" })).toEqual([{ type: "gathering_changed", eventId: "ev-1", fields: ["time"] }]);
+    expect(edit({ recurrence: { freq: "weekly" } })[0]).toMatchObject({ fields: ["time"] });
+    expect(edit({ structureKeys: ["barn"] })[0]).toMatchObject({ fields: ["place"] });
+    expect(edit({ attendanceMode: "online", onlineUrl: "https://meet.example.test/x" })[0]).toMatchObject({ fields: ["online"] });
+    expect(edit({ title: "Seed and plant swap", locationText: "The orchard", endsAt: null })[0]).toMatchObject({
+      fields: ["time", "place", "title"],
+    });
+  });
+
+  it("calls a move into or out of postponed a change of time", () => {
+    expect(edit({ status: "postponed" })).toEqual([{ type: "gathering_changed", eventId: "ev-1", fields: ["time"] }]);
+    expect(edit({ status: "scheduled" }, { status: "postponed" })[0]).toMatchObject({ fields: ["time"] });
+  });
+
+  it("reports a cancellation alone, and a publication alone", () => {
+    expect(edit({ status: "cancelled", title: "Renamed" })).toEqual([{ type: "gathering_cancelled", eventId: "ev-1" }]);
+    expect(edit({ status: "scheduled", title: "Renamed" }, { status: "draft" })).toEqual([{ type: "gathering_published", eventId: "ev-1" }]);
+    expect(edit({ status: "scheduled" }, { status: "cancelled" })).toEqual([{ type: "gathering_published", eventId: "ev-1" }]);
+  });
+
+  it("says nothing of a draft, of a gathering already off, or of one it could not read", () => {
+    expect(edit({ title: "Renamed" }, { status: "draft" })).toEqual([]);
+    expect(edit({ title: "Renamed" }, { status: "cancelled" })).toEqual([]);
+    expect(gatheringTriggers("ev-1", null, base)).toEqual([]);
+    expect(gatheringTriggers("ev-1", base, null)).toEqual([]);
   });
 });
 
