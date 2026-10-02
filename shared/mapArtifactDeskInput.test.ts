@@ -23,6 +23,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
+/** The artifact's own storage key for a saved scene, read from it so this file names no village. */
+const SCENE_KEY = /localStorage\.getItem\('([\w-]+-grounds-scene)'\)/.exec(html)?.[1] ?? "";
 
 type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
@@ -162,6 +164,7 @@ it("the artifact is the file the shell mounts (the positive control)", () => {
   for (const id of ["panel", "panelClose", "inspect", "inspClose", "skin", "pdrawer", "attnBtn", "lyVision", "wallBtn"]) {
     expect(html, `#${id} in the markup`).toContain(`id="${id}"`);
   }
+  expect(SCENE_KEY, "the saved scene's storage key").toMatch(/-grounds-scene$/);
 });
 
 /* F01. A sheet parked past the edge took keyboard focus. Tab 20 and 21 of
@@ -572,7 +575,7 @@ describe("the leave prompt guards unsaved work, and nothing else", () => {
     b.run("logEdit('rename','structure:gate',{to:'Probe'})");
     expect(prompts(), "an edit not yet saved").toBe(true);
     await settle(2800); // the autosave waits 2.5 s, then writes this browser's copy
-    expect(b.window.localStorage.getItem("amora-grounds-scene"), "the save landed").not.toBeNull();
+    expect(b.window.localStorage.getItem(SCENE_KEY), "the save landed").not.toBeNull();
     expect(prompts(), "a prompt after the save").toBe(false);
     expect(b.uncaught).toEqual([]);
   });
