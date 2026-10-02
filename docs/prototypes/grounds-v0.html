@@ -8941,13 +8941,29 @@ $('skParch').oninput=()=>{SKIN.parch=$('skParch').value;applySkinOverrides()};
 $('skLbl').oninput=()=>{SKIN.lbl=+$('skLbl').value;$('skLblV').textContent=SKIN.lbl+'%';applySkinOverrides()};
 $('skIcon').onchange=()=>{iconMode=$('skIcon').value;toast('Icon style: '+$('skIcon').value)};
 $('skMist').onchange=()=>{SKIN.mist=$('skMist').checked;toast(SKIN.mist?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
-$('skSave').onclick=()=>{logEdit('skin','map',skinExport());
+/* INSIDE THE VILLAGE THE LOOK HAS ONE HOME, AND IT IS NOT THIS BUTTON. The
+   shell pushes the village's skin from Village Settings after every scene it
+   hands the map, published scenes included, so a skin saved here and then
+   published reached no visitor at all, while this toast said the land
+   remembers it and the publish card listed "restyled the map" as a change
+   every visitor would see. In the shell the look stays on this screen, the
+   button says where the village's look is set, and nothing goes on the
+   publish list. Standalone, where the export is the real outlet, it saves
+   into the scene as it always has. */
+const SKIN_HOME='The look every visitor sees is set in Village Settings, under Make This Yours.';
+$('skSave').onclick=()=>{
+  if(inShell())return toast('✂ This look stays on your screen. '+SKIN_HOME);
+  logEdit('skin','map',skinExport());
   toast('✂ Skin saved. The land remembers it, and every export carries it.')};
 $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100;
   document.documentElement.style.removeProperty('--t-accent');document.documentElement.style.removeProperty('--lblScale');
   applyTheme(THEMES.emerald);applySkinOverrides();maskWrite({theme:null,words:null});
   $('skAccent').value='#e8a13c';$('skParch').value='#f3e6c8';$('skLbl').value=100;$('skLblV').textContent='100%';$('skWords').value='';
-  renderSkinThemes();logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
+  renderSkinThemes();
+  /* The same rule as Save above: in the shell this resets the look on this
+     screen, and the village's own look is untouched. */
+  if(inShell())return toast('Back to the house look on your screen. '+SKIN_HOME);
+  logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
 /* ---------- hash router: every place, module, the Loom, the Circles and a journey has an address ----------

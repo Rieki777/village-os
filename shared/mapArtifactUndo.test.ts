@@ -16,6 +16,9 @@
  *        copy: two of it, both autosaved.
  *   F76  Undo skipped renames and every other inspect-card edit, took back an
  *        older move instead, and said nothing about which.
+ *   F78  In the village, Save map skin promised a look the village's own skin
+ *        overrides on every load, and listed it as a change every visitor
+ *        would see.
  *
  * Runs the real artifact in jsdom and plays the village around it: the
  * map's posts to its shell are caught at shellPost, and a small in-memory
@@ -636,3 +639,25 @@ describe("Undo and the inspect card (F76)", () => {
   });
 });
 
+describe("Save map skin inside the village (F78)", () => {
+  it("keeps the look on screen, says where the village's look is set, and lists nothing to publish", async () => {
+    const m = await boot();
+    build(m);
+    const edits = m.run<number>("EDITS.length");
+    m.el("#skSave").click();
+    const seen = { edits: m.run<number>("EDITS.length"), toast: lastToast(m), card: card(m) };
+    m.close();
+    expect(seen.edits).toBe(edits);
+    expect(seen.toast).toContain("Village Settings");
+    expect(seen.toast).not.toContain("remembers");
+    expect(seen.card.bar.publishDisabled).toBe(true);
+  });
+
+  it("still saves into the scene when the map runs on its own, where the export is the outlet", async () => {
+    const m = await boot({ shell: false });
+    m.el("#skSave").click();
+    const last = m.run<string>("EDITS[EDITS.length-1].action");
+    m.close();
+    expect(last).toBe("skin");
+  });
+});
