@@ -105,8 +105,7 @@ in by hand once you do. This writes a local `.env` file and prints:
 - The name of every value it generated for you (real random secrets; it
   never reuses one across villages), without the value itself.
 - Where your one-time founder password is: the `ADMIN_PASSWORD` line of
-  `.env`. It is not printed unless you pass `--show-password`; open the file
-  yourself to read it.
+  `.env`. It is never printed; open the file yourself to read it.
 - A list of every variable it could not fill in, each with the one-line
   reason from `.env.example`. That list is not a failure. It is the rest of
   this walkthrough.

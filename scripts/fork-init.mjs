@@ -57,10 +57,10 @@
  *                    reads, points DATABASE_URL at its `db` service, and sets
  *                    FRONTEND_URL to http://localhost:<port> when no --domain
  *                    is given (--port, default 3000, sets VILLAGE_PORT too).
- *   --show-password  print the one-time ADMIN_PASSWORD. Off by default: it is
- *                    in the file this writes, and a founder's AI assistant
- *                    running this command has no need to see it. Open the
- *                    file yourself and read the ADMIN_PASSWORD line.
+ *
+ * The one-time ADMIN_PASSWORD is never printed. It is in the file this writes;
+ * the founder opens that file and reads it, and a founder's AI assistant
+ * running this command never sees it.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -122,7 +122,6 @@ const fromEmailOverride = typeof args["from-email"] === "string" ? args["from-em
 const supportEmailOverride = typeof args["support-email"] === "string" ? args["support-email"].trim() : "";
 const adminPasswordOverride = typeof args["admin-password"] === "string" ? args["admin-password"].trim() : "";
 const COMPOSE = !!args.compose;
-const SHOW_PASSWORD = !!args["show-password"];
 const portInput = typeof args.port === "string" ? args.port.trim() : "3000";
 if (!/^\d{2,5}$/.test(portInput)) {
   console.error(`fork-init: --port "${portInput}" is not a port number.`);
@@ -202,16 +201,15 @@ const databaseUrl = COMPOSE ? `mysql://village:${mysqlPassword}@db:3306/village`
  * has it (usually blank) and reported as needing a human step.
  *
  * `secret: true` means the VALUE is never printed back in the report, only
- * the fact that it was generated. ADMIN_PASSWORD is printed only with
- * --show-password: the founder needs it once, on the /claim page, and reads it
- * from the file; an assistant running this script for them should never be
- * handed it.
+ * the fact that it was generated. ADMIN_PASSWORD is one of them: the founder
+ * needs it once, on the /claim page, and reads it from the file; an assistant
+ * running this script for them is never handed it.
  */
 const RESOLVED = {
   AUTH_TOKEN_SECRET: { value: authTokenSecret, secret: true, note: "generated" },
   MEMBER_SECRETS_KEY: { value: memberSecretsKey, secret: true, note: "generated" },
   VILLAGE_SECRETS_KEY: { value: villageSecretsKey, secret: true, note: "generated" },
-  ADMIN_PASSWORD: { value: adminPassword, secret: !SHOW_PASSWORD, note: "generated, one-time" },
+  ADMIN_PASSWORD: { value: adminPassword, secret: true, note: "generated, one-time" },
   FRONTEND_URL: { value: frontendUrl, secret: false, note: domain ? "from --domain" : "" },
   EMAIL_FROM: { value: emailFrom, secret: false, note: domain ? "from --village-name and --domain" : "" },
   BREAK_GLASS_ADMIN_EMAIL: { value: adminEmail, secret: false, note: "from --admin-email" },
@@ -324,15 +322,10 @@ for (const f of filledKeys) {
 }
 
 console.log("");
-if (SHOW_PASSWORD) {
-  console.log("Your one-time founder password (used once on the /claim page, then it stops working):");
-  console.log(`  ${adminPassword}`);
-} else {
-  console.log("Your one-time founder password is the ADMIN_PASSWORD line in");
-  console.log(`  ${path.relative(ROOT, outPath)}`);
-  console.log("Open that file yourself to read it, and keep it to yourself. You type it");
-  console.log("once, on your village's /claim page, and then it stops working.");
-}
+console.log("Your one-time founder password is the ADMIN_PASSWORD line in");
+console.log(`  ${path.relative(ROOT, outPath)}`);
+console.log("Open that file yourself to read it, and keep it to yourself. You type it");
+console.log("once, on your village's /claim page, and then it stops working.");
 
 if (defaultedKeys.length) {
   console.log("");

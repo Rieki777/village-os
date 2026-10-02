@@ -478,8 +478,7 @@ founder pastes into their own assistant. Read them before advising on any of
 it. The things worth carrying in your head:
 
 - `scripts/fork-init.mjs` generates every secret and writes it to `.env`. It
-  does not print `ADMIN_PASSWORD` unless `--show-password` is passed; do not
-  pass it, and do not open `.env`. The founder reads the file themselves. Two
+  never prints `ADMIN_PASSWORD`, and you do not open `.env`. The founder reads the file themselves. Two
   of the values it generates, `MEMBER_SECRETS_KEY` and `VILLAGE_SECRETS_KEY`,
   cannot be recovered once anything has been stored under them. Set once,
   leave alone.
