@@ -131,12 +131,16 @@ function ArtWindowPicture({ view }: { view: SeatSheetView }) {
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const p = view.portrait;
   if (p.kind === "class" && brokenSrc !== p.src) {
+    // A drawing painted on a paper margin (`FRAMED_PORTRAITS`) is zoomed a
+    // quarter about a point just above the window's middle, which puts its
+    // margin, 8.5% of the width at most, outside every window this card draws,
+    // from 272px wide to 650.
     return (
       <img
         src={p.src}
         alt={p.alt}
         onError={() => setBrokenSrc(p.src)}
-        className="absolute inset-0 h-full w-full object-cover object-[50%_5%]"
+        className={`absolute inset-0 h-full w-full object-cover object-[50%_5%] ${p.framed ? "origin-[50%_45%] scale-125" : ""}`}
       />
     );
   }
@@ -225,8 +229,13 @@ export default function SeatCardFront({
             <StateBadge badge={view.badge} seats={view.figures.find((f) => f.key === "places")?.value ?? 0} />
           </div>
         )}
-        {/* The plate carries its own scrim, so a long name lifts the scrim with it. */}
-        <div className="relative z-[2] bg-gradient-to-t from-card via-card/90 via-55% to-transparent px-3 pb-3 pt-12">
+        {/* The plate carries its own scrim, so a long name lifts the scrim with
+            it. The scrim fades out across the top padding ONLY: its 90% stop
+            sits 3rem below the plate's top, which is `pt-12`, so every line
+            of the name and the chips sits on 90% card or more. A stop at a
+            percentage of the plate's height put the first line of a
+            three-line name over 39 to 62% card, under 4.5:1 on light art. */}
+        <div className="relative z-[2] bg-[linear-gradient(to_top,var(--card)_0%,color-mix(in_srgb,var(--card)_90%,transparent)_calc(100%_-_3rem),transparent_100%)] px-3 pb-3 pt-12">
           {embedded ? (
             <p aria-hidden="true" className={nameClass}>
               {nameBody}

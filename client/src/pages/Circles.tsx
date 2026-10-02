@@ -33,7 +33,7 @@ import SeatSheet from "@/components/power/SeatSheet";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
-import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
+import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 
 interface CircleEntry {
   id: string;
@@ -239,8 +239,10 @@ export default function Circles() {
         setCircles(
           (data.circles as any[]).map((c: any, i: number) => {
             const seats = seatsByCircle.get(c.id) ?? [];
+            // An agent's member row carries a vendor's name, so it is listed
+            // as "An agent", the words the card and the public tier use.
             const heldBy = seats
-              .flatMap((s: any) => (s.holders ?? []).map((h: any) => h.name))
+              .flatMap((s: any) => (s.holders ?? []).map(orgHolderName))
               .filter(Boolean);
             /*
              * A LIE THIS PAGE HAS BEEN TELLING SINCE THE NAMES WERE TIERED.
@@ -435,7 +437,7 @@ export default function Circles() {
                   />
                   {!openRow.isExample && (
                     <div className="mt-4 border-t border-border pt-3">
-                      <SeatHistory roleId={String(openRow.id)} canSeePeople={!!people?.visible} />
+                      <SeatHistory roleId={String(openRow.id)} canSeePeople={seatHistoryShown(people, raw.seats)} />
                     </div>
                   )}
                 </div>

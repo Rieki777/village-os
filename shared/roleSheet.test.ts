@@ -14,12 +14,14 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG } from "./gameConfig";
 import { CAPABILITY_LABELS } from "./capabilities";
 import { normaliseProposedSeat } from "./proposedSeats";
 import {
   COMMITMENT_LABELS,
+  FRAMED_PORTRAITS,
   SEAT_STATES,
   SHEET_WORDS,
   STATE_WORDS,
@@ -157,6 +159,30 @@ const sheet = (input: SeatInput, ctx: SheetContext = CTX) => seatSheet(input, ct
 const figure = (v: SeatSheetView, key: string) => v.figures.find((f) => f.key === key) ?? null;
 const labels = (v: SeatSheetView) => v.figures.map((f) => f.label);
 
+/**
+ * The widest near-white band along a drawing's top or either side, in pixels:
+ * a row (or column) counts while most of it is paper white. The bottom is
+ * left out, since the name plate always covers it.
+ */
+async function paperMargin(file: string): Promise<number> {
+  const { data, info } = await sharp(file).removeAlpha().greyscale().raw().toBuffer({ resolveWithObject: true });
+  const { width: W, height: H, channels: C } = info;
+  const light = (x: number, y: number) => data[(y * W + x) * C] >= 235;
+  const share = (n: number, at: (i: number) => boolean) => {
+    let hits = 0;
+    for (let i = 0; i < n; i += 4) if (at(i)) hits++;
+    return hits / Math.ceil(n / 4);
+  };
+  const row = (y: number) => share(W, (x) => light(x, y));
+  const col = (x: number) => share(H, (y) => light(x, y));
+  const band = (at: (k: number) => number, max: number) => {
+    let k = 0;
+    while (k < max && at(k) >= 0.6) k++;
+    return k;
+  };
+  return Math.max(band(row, H / 2), band(col, W / 2), band((k) => col(W - 1 - k), W / 2));
+}
+
 /** Every string value in a view, keys excluded. */
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);
@@ -234,11 +260,14 @@ describe("figures: every number names its field, and unread is never 0", () => {
     "holderCount - holders[].lapsed": (i) => i.holderCount! - i.holders.filter((h) => h.lapsed).length,
     "seats - holderCount": (i) => Math.max(0, i.seats - i.holderCount!),
     "accountabilities.length": (i) => i.accountabilities.length,
-    "season.daysLeft": (_i, c) => c.season!.daysLeft!,
+    // The ring on the map counts the same date with the same function.
+    "season.endsOn": (_i, c) => daysUntil(c.season!.endsOn, c.now)!,
     termEnds: (i, c) => daysUntil(i.termEnds!, c.now)!,
+    // Only a seating that still holds runs the clock.
     "holders[].termEndsAt": (i, c) =>
       Math.min(
         ...i.holders
+          .filter((h) => h.lapsed !== true)
           .map((h) => daysUntil(h.termEndsAt ?? null, c.now))
           .filter((d): d is number => d !== null && d >= 0),
       ),
@@ -287,7 +316,9 @@ describe("figures: every number names its field, and unread is never 0", () => {
     const v = sheet(input);
     expect(figure(v, "heldNow")!.value).toBe(0);
     expect(figure(v, "open")!.value).toBe(1);
-    expect(v.clock).toMatchObject({ key: "seasonDays", value: 171, label: "Days left in the season", sub: "Season of Foundations ends 21 Mar 2027" });
+    // 170 and a half days from noon on 1 Oct to the start of 21 Mar, floored,
+    // the way the map's season ring counts it.
+    expect(v.clock).toMatchObject({ key: "seasonDays", value: 170, label: "Days left in the season", sub: "Season of Foundations ends 21 Mar 2027" });
     expect(sheet(input, { ...CTX, season: { ...SEASON, name: null } }).clock!.sub).toBe("The season ends 21 Mar 2027");
   });
 
@@ -310,7 +341,9 @@ describe("figures: every number names its field, and unread is never 0", () => {
   it("never prints a past term as a clock, and picks the earliest member term still ahead", () => {
     const expired = sheet(fromMap(EXPIRED));
     expect(expired.clock!.key).toBe("seasonDays");
-    expect(expired.facts.term).toMatchObject({ value: "Reached its date on 20 Sep 2026", sub: "Ready to be re-chosen." });
+    // The fact says the date and whose date it is; the state line says who is ready.
+    expect(expired.facts.term).toMatchObject({ value: "Reached its date on 20 Sep 2026", sub: "The earliest term among its holders." });
+    expect(expired.stateLine).toBe("Everyone seated here is ready to be re-chosen.");
     // Holders not served: the seat's own past term still never becomes a clock.
     expect(sheet(fromMap(EXPIRED, false, false)).clock!.key).toBe("seasonDays");
     const twoTerms = fromMap({
@@ -331,6 +364,85 @@ describe("figures: every number names its field, and unread is never 0", () => {
     for (const v of [expired, sheet(twoTerms), fromSeat]) {
       for (const f of [...v.figures, ...(v.clock ? [v.clock] : [])]) expect(f.value).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  /*
+   * §3c RULE 3, WITH LAPSE. A seating ready to be re-chosen never runs the
+   * clock, so the card cannot count a term down beside a line saying the seat
+   * is ready to be re-chosen. Two ways that happened: a term years ahead on a
+   * seating lapsed when the season turned (the default cadence), and staggered
+   * terms where the earliest date belongs to the lapsed holder.
+   */
+  it("runs no term clock over a seating lapsed by the season, though its term is ahead", () => {
+    const AHEAD = "2027-05-31T12:00:00.000Z";
+    const lapsedRow = { ...EXPIRED.holders[0], termEndsAt: AHEAD };
+    const seasonLapsed = { ...EXPIRED, termEnds: AHEAD, holders: [lapsedRow] };
+    const orgRow = (holders: object[]) => ({ ...seasonLapsed, aim: seasonLapsed.description, holders });
+    const tiers: Array<[string, SeatInput]> = [
+      ["map member", fromMap(seasonLapsed)],
+      ["map stranger", fromMap(seasonLapsed, false, false)],
+      ["org member", fromOrgSeat(orgRow([{ userId: "u-ana", name: "Ana Lima", kind: "member", isAgent: false, focus: null, lapsed: true, note: null, lapsedReason: "season" }]), CIRCLES, PEOPLE_MEMBER, VILLAGE)],
+      ["org public", fromOrgSeat(orgRow([{ name: "Ana" }]), CIRCLES, PEOPLE_PUBLIC, VILLAGE)],
+    ];
+    for (const [tier, input] of tiers) {
+      const v = sheet(input);
+      expect(v.stateLine, tier).toBe("Everyone seated here is ready to be re-chosen.");
+      expect(v.clock, tier).toMatchObject({ key: "seasonDays" });
+      // The date is still a true fact about the seat, and says only that.
+      expect(v.facts.term, tier).toMatchObject({ value: "Ends 31 May 2027", sub: "The earliest term among its holders." });
+    }
+    // Control: the same seat with its holder still holding counts the term down, at both map tiers.
+    const holding = { ...seasonLapsed, state: "filled", holders: [{ ...lapsedRow, lapsed: false }] };
+    expect(sheet(fromMap(holding)).clock).toMatchObject({ key: "termDays", source: "holders[].termEndsAt", sub: "Term ends 31 May 2027" });
+    expect(sheet(fromMap(holding, false, false)).clock).toMatchObject({ key: "termDays", source: "termEnds" });
+  });
+
+  it("counts down the term of the holder still holding when terms are staggered, and the Term fact agrees", () => {
+    const staggered = {
+      ...SAMPLE_DECLARED,
+      stateSource: "derived",
+      termEnds: "2026-09-01T12:00:00.000Z",
+      holders: [
+        { ...SAMPLE_DECLARED.holders[0], lapsed: true, termEndsAt: "2026-09-01T12:00:00.000Z" },
+        { ...SAMPLE_DECLARED.holders[1], lapsed: false, termEndsAt: "2026-12-01T12:00:00.000Z" },
+      ],
+    };
+    const v = sheet(fromMap(staggered));
+    expect(v.stateLine).toBe("1 of 2 seated is ready to be re-chosen.");
+    expect(v.clock).toMatchObject({ key: "termDays", value: 61, sub: "Term ends 1 Dec 2026", source: "holders[].termEndsAt" });
+    // The earliest date reached its date, and the fact says whose date it is.
+    expect(v.facts.term).toMatchObject({ value: "Reached its date on 1 Sep 2026", sub: "The earliest term among its holders." });
+    // Without per-holder terms (/api/org's member rows) the seat's earliest
+    // term may be the lapsed one, so it runs no clock while anyone is lapsed.
+    const orgHolders = (lapsed: [boolean, boolean]) => [
+      { userId: "u-mara", name: "Mara Quill", kind: "member", isAgent: false, focus: null, lapsed: lapsed[0], note: null, lapsedReason: lapsed[0] ? "term" : null },
+      { userId: "u-tomas", name: "Tomas Reed", kind: "member", isAgent: false, focus: "mornings only", lapsed: lapsed[1], note: null, lapsedReason: null },
+    ];
+    const orgRow = { ...staggered, aim: staggered.description, termEnds: "2026-11-01T12:00:00.000Z" };
+    const org = sheet(fromOrgSeat({ ...orgRow, holders: orgHolders([true, false]) }, CIRCLES, PEOPLE_MEMBER, VILLAGE));
+    expect(org.clock).toMatchObject({ key: "seasonDays" });
+    // Control: nobody lapsed, the same row runs its term clock.
+    const fresh = sheet(fromOrgSeat({ ...orgRow, holders: orgHolders([false, false]) }, CIRCLES, PEOPLE_MEMBER, VILLAGE));
+    expect(fresh.clock).toMatchObject({ key: "termDays", source: "termEnds", value: 31 });
+  });
+
+  it("counts the season the way the map's ring does, at every hour of the day", () => {
+    // SeasonRing prints `daysUntil(season.nextRollAt)`, and `/api/map` sends
+    // the current season's `endsOn` as `nextRollAt`. One screen, one number.
+    // `/api/season`'s `daysLeft` is a calendar count (server `daysBetween`),
+    // given here exactly as that route would for the same instant.
+    const calendarDays = (now: Date) =>
+      Math.round((Date.parse(`${SEASON.endsOn}T00:00:00Z`) - Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`)) / 86400000);
+    let differed = 0;
+    for (const hour of ["00:00:00", "00:00:01", "06:30:00", "12:00:00", "23:59:59"]) {
+      const now = new Date(`2026-10-02T${hour}.000Z`);
+      const v = sheet(fromMap(EMPTY_SEAT), { ...CTX, now, season: { ...SEASON, daysLeft: calendarDays(now) } });
+      expect(v.clock!.value, hour).toBe(mapDaysUntil(SEASON.endsOn, now));
+      if (calendarDays(now) !== v.clock!.value) differed++;
+    }
+    // Control: the calendar count disagrees with the ring for most of the day,
+    // so the equality above would fail if the card printed `daysLeft`.
+    expect(differed).toBeGreaterThan(0);
   });
 
   /*
@@ -432,6 +544,17 @@ describe("the one action a seat offers", () => {
     expect(act({ ...FULL, recruiting: true }).kind).toBe("raise");
     // Control: the same full seat, not recruiting, offers no hand.
     expect(act(FULL).kind).toBe("unreachable");
+  });
+
+  it("invites a hand on a seat the village declared Open over places that are all seated", () => {
+    // The raise-hand route checks no vacancy, so an Open badge with no door is a wall.
+    const declaredOpen = { ...FULL, state: "open", stateSource: "declared" };
+    expect(act(declaredOpen).kind).toBe("raise");
+    expect(act(declaredOpen, { viewPeople: false, signedIn: false })).toMatchObject({ kind: "signIn", label: "Sign in to raise your hand" });
+    expect(sheet(fromMap(declaredOpen)).badge).toMatchObject({ word: "open", label: "Open" });
+    // Control: the same full seat, held, offers no hand, and an example declared Open offers nothing.
+    expect(act(FULL).kind).toBe("unreachable");
+    expect(act({ ...declaredOpen, isExample: true }).kind).toBe("none");
   });
 
   it("offers nothing on a forming seat unless it is recruiting, on an example, or on a proposal", () => {
@@ -603,6 +726,26 @@ describe("the commitments: seven, one look each", () => {
     expect(sheet(fromMap({ ...EMPTY_SEAT, circleId: null })).facts.wayOfDeciding!.sub).toBe("The village's way.");
   });
 
+  it("prints the circle's or the village's own line for a way called Other, never the bare word", () => {
+    const circleLine = "The circle sits until it agrees";
+    const villageLine = "The village meets at the new moon";
+    const hearth = { id: "hearth", name: "Hearth", decidesBy: "other", decidesByGloss: circleLine, color: null };
+    const circleOther = fromMapSeat({ ...EMPTY_SEAT, circleId: "hearth" }, { ...mapData(true), circles: [...CIRCLES, hearth] }, { signedIn: true });
+    expect(sheet(circleOther).facts.wayOfDeciding).toMatchObject({ value: circleLine, sub: "Hearth's own way." });
+    expect(sheet(fromOrgSeat({ ...EMPTY_SEAT, circleId: "hearth", aim: "Tend." }, [...CIRCLES, hearth], PEOPLE_MEMBER, VILLAGE)).facts.wayOfDeciding!.value).toBe(circleLine);
+
+    const villageOther = { decidesBy: "other", decidesByGloss: villageLine };
+    const onMap = fromMapSeat(EMPTY_SEAT, { ...mapData(true), power: villageOther }, { signedIn: true });
+    expect(sheet(onMap).facts.wayOfDeciding).toMatchObject({ value: villageLine, sub: "The village's way. Land & Water has not set one of its own." });
+    expect(sheet(fromOrgSeat({ ...EMPTY_SEAT, aim: "Tend." }, CIRCLES, PEOPLE_MEMBER, villageOther)).facts.wayOfDeciding!.value).toBe(villageLine);
+
+    // Controls: a named way prints its label though a line rides along, and an
+    // Other whose line this payload did not carry prints the label it has.
+    const consent = fromMapSeat(EMPTY_SEAT, { ...mapData(true), power: { decidesBy: "consent", decidesByGloss: villageLine } }, { signedIn: true });
+    expect(sheet(consent).facts.wayOfDeciding!.value).toBe("Consent");
+    expect(sheet(fromOrgSeat({ ...EMPTY_SEAT, aim: "Tend." }, CIRCLES, PEOPLE_MEMBER, { decidesBy: "other" })).facts.wayOfDeciding!.value).toBe("Other");
+  });
+
   it("dashes Next holder when it is not written, and leaves it out when it is not read", () => {
     expect(chip(sheet(fromMap(SAMPLE_MAP)), "nextHolder")!.look).toBe("gilded");
     expect(sheet(fromMap(SAMPLE_MAP)).facts.nextHolder).toMatchObject({ value: "Elected by the circle" });
@@ -667,6 +810,39 @@ describe("the portrait and the chips", () => {
     expect(seen.size).toBe(6);
     expect(fnv1a("water-keeper")).toBe(fnv1a("water-keeper"));
   });
+
+  /*
+   * A PAPER MARGIN IS READ OFF THE PIXELS, NOT TRUSTED TO A LIST. Every file
+   * the portrait can pick is decoded, and the widest near-white band along
+   * its top or either side is measured. The list the card zooms must be
+   * exactly the files with such a band, so a new bordered drawing fails here
+   * until it is listed, and a listed one that was trimmed fails until it is
+   * taken off.
+   */
+  it("zooms exactly the drawings painted on a paper margin", async () => {
+    const dir = path.join(ROOT, "client/public/images/avatars");
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".webp"));
+    expect(files).toHaveLength(30);
+    const measured: Record<string, number> = {};
+    for (const f of files) measured[f.replace(/\.webp$/, "")] = await paperMargin(path.join(dir, f));
+    const framed = Object.keys(measured).filter((k) => measured[k] >= 10).sort();
+    expect(framed).toEqual([...FRAMED_PORTRAITS].sort());
+    // Control: the measure finds a margin where one is (the widest is 65px)
+    // and none on a drawing painted to its edge.
+    expect(measured["facilitating-m-olive"]).toBeGreaterThan(50);
+    expect(measured["researching-f-deep"]).toBe(0);
+
+    // The view model carries the mark for the file it picked, framed or not.
+    const seen = new Set<boolean>();
+    for (let i = 0; i < 60; i++) {
+      const p = portraitFor({ id: `seat-${i}`, name: "Seat" }, ["researching"]);
+      if (p.kind !== "class") throw new Error("expected class art");
+      const file = p.src.replace(/^\/images\/avatars\//, "").replace(/\.webp$/, "");
+      expect(p.framed, file).toBe(FRAMED_PORTRAITS.has(file));
+      seen.add(p.framed);
+    }
+    expect([...seen].sort()).toEqual([false, true]);
+  }, 30000);
 
   it("draws the sigil for no tag or a key that is not a class", () => {
     expect(portraitFor({ id: "x", name: "bridge keeper" }, [])).toEqual({ kind: "sigil", letter: "B" });
@@ -840,7 +1016,7 @@ describe("helpers moved here", () => {
       openEnded: false,
     };
     expect(seasonForSheet(served)).toEqual(SEASON);
-    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: seasonForSheet(served) }).clock).toMatchObject({ key: "seasonDays", value: 171 });
+    expect(sheet(fromMap(EMPTY_SEAT), { ...CTX, season: seasonForSheet(served) }).clock).toMatchObject({ key: "seasonDays", value: 170 });
     // Not landed, or failed: unread, so no clock and never a 0.
     expect(seasonForSheet(null)).toBeNull();
     expect(seasonForSheet(undefined)).toBeNull();

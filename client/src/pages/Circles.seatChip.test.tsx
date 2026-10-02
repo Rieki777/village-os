@@ -135,6 +135,28 @@ async function openCircle() {
   fireEvent.click(header);
 }
 
+describe("an agent on /circles", () => {
+  it("is listed as An agent among who is in the circle, never by the vendor's name its member row carries", async () => {
+    const VENDOR = "Fieldnotes Assistant";
+    const agentRow = { userId: null, name: VENDOR, kind: "documented", focus: null, lapsed: false, isAgent: true };
+    const withAgent = { ...ORG, roles: [ORG.roles[0], { ...ORG.roles[1], holders: [...ORG.roles[1].holders, agentRow], holderCount: 2, seats: 2 }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        const body = String(url) === "/api/org" ? withAgent : [];
+        return { ok: true, status: 200, json: async () => body };
+      }),
+    );
+    await openCircle();
+    // Control: the vendor's name is in what the route served.
+    expect(JSON.stringify(withAgent)).toContain(VENDOR);
+    expect(screen.getByText("Ines, Oto, An agent")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tank Warden" }));
+    expect(within(screen.getByRole("dialog", { name: "Tank Warden" })).getByText("An agent")).toBeTruthy();
+    expect(document.body.textContent).not.toContain(VENDOR);
+  });
+});
+
 describe("a seat chip on /circles", () => {
   it("is a button that opens a dialog named after the seat, with the role card inside", async () => {
     await openCircle();

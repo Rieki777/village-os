@@ -18,13 +18,18 @@
  *                             reads worst on the lighter end: `bg-muted`.
  *   the sigil's glow          gold at 14% fading out, over the art window:
  *                             taken as the art window's own `bg-muted`.
- *   the name plate's scrim    card, card at 90%, then clear. The name and the
- *                             plate's chips sit in the opaque lower part; the
- *                             thinnest ground under them is card at 90%, over
- *                             a picture that can be anything. So a picture is
- *                             a black and then a white stand-in, as the hero
- *                             copy tests do for a photograph. A sigil has no
- *                             picture under it, only the window's own muted.
+ *   the name plate's scrim    card, card at 90%, then clear. The clear part is
+ *                             the plate's top padding and nothing else: the
+ *                             90% stop sits exactly that far below the top
+ *                             (held by "the name plate's scrim" below, since
+ *                             a stop at a percentage of the plate's height
+ *                             once left a long name's first line on 39 to 62%
+ *                             card). So the thinnest ground under the name and
+ *                             the chips is card at 90%, over a picture that
+ *                             can be anything. A picture is a black and then a
+ *                             white stand-in, as the hero copy tests do for a
+ *                             photograph. A sigil has no picture under it,
+ *                             only the window's own muted.
  *   the gold button           earned-lit at the top to the gold at the
  *                             bottom, under dark ink. Dark ink reads worst on
  *                             the darker end: `bg-notice`.
@@ -110,6 +115,23 @@ const CASES: Array<[string, object, boolean]> = [
   ["a stranger", BASE, false],
 ];
 
+/** How the plate's scrim class begins; `stopUnderPadding` reads the rest of it. */
+const PLATE_SCRIM = "bg-[linear-gradient(to_top,";
+
+/**
+ * Where the plate's scrim reaches 90% card, as rem below the plate's top, and
+ * how deep the plate's top padding is. Null when the scrim does not put its
+ * 90% stop a fixed distance below the top, which is the shape that left a
+ * long name on a thinner ground than the stand-in claims.
+ */
+function stopUnderPadding(cls: string[]): { stopRem: number; padRem: number } | null {
+  const scrim = cls.find((c) => c.startsWith(PLATE_SCRIM));
+  const pad = cls.map((c) => /^pt-(\d+(?:\.\d+)?)$/.exec(c)).find(Boolean);
+  if (!scrim || !pad) return null;
+  const stop = /color-mix\(in_srgb,var\(--card\)_90%,transparent\)_calc\(100%_-_(\d+(?:\.\d+)?)rem\)/.exec(scrim);
+  return stop ? { stopRem: Number(stop[1]), padRem: Number(pad[1]) / 4 } : null;
+}
+
 /** Each gradient the resolver cannot read, replaced by its worst solid, counted. */
 function flatten(root: Element, art: "bg-black" | "bg-white"): Record<string, number> {
   const done: Record<string, number> = { inner: 0, sigil: 0, plate: 0, gold: 0, art: 0 };
@@ -125,8 +147,8 @@ function flatten(root: Element, art: "bg-black" | "bg-white"): Record<string, nu
       next = next.filter((c) => !c.startsWith("bg-[radial-gradient(80%"));
       done.sigil++;
     }
-    if (cls.includes("bg-gradient-to-t")) {
-      next = next.map((c) => (c === "bg-gradient-to-t" ? "bg-card/90" : c));
+    if (cls.some((c) => c.startsWith(PLATE_SCRIM))) {
+      next = next.map((c) => (c.startsWith(PLATE_SCRIM) ? "bg-card/90" : c));
       done.plate++;
     }
     if (cls.includes("bg-gradient-to-b")) {
@@ -193,6 +215,30 @@ describe("the seat card on the night ground", () => {
     render(<SeatTradingCard input={fromMapSeat(EMPTY, DATA(true), { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" />} />);
     fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Water Keeper" }));
     expect(describeFailures(measure("bg-black").results)).toEqual([]);
+  });
+});
+
+describe("the name plate's scrim", () => {
+  it("reaches 90% card at the top of the name: a fixed distance below the plate's top, never a share of its height", () => {
+    // The live longest name, three lines at a phone's width, which is where a
+    // stop at a share of the height left the first line on thin ground.
+    const long = { ...BASE, name: "Regenerative Agriculture and Permaculture Circle Lead" };
+    render(<SeatTradingCard input={fromMapSeat(long, DATA(true), { signedIn: true })} ctx={CTX} />);
+    const plate = screen.getByRole("heading", { level: 3 }).parentElement!;
+    const reading = stopUnderPadding((plate.getAttribute("class") ?? "").split(/\s+/));
+    expect(reading, "the plate's scrim names its 90% stop as a distance below the top").not.toBeNull();
+    // The clear part of the scrim lies inside the top padding, so the name's
+    // first line starts on 90% card and every line below it on more.
+    expect(reading!.stopRem).toBeLessThanOrEqual(reading!.padRem);
+    // Controls: the scrim this replaced, its 90% stop at 55% of the plate's
+    // height, is refused by the same reading, written either way; and a stop
+    // further down than the padding reads as one the name would start above.
+    expect(stopUnderPadding("bg-gradient-to-t from-card via-card/90 via-55% to-transparent px-3 pb-3 pt-12".split(" "))).toBeNull();
+    const asShare = "bg-[linear-gradient(to_top,var(--card)_0%,color-mix(in_srgb,var(--card)_90%,transparent)_55%,transparent_100%)] pt-12";
+    expect(stopUnderPadding(asShare.split(" "))).toBeNull();
+    const tooLow = "bg-[linear-gradient(to_top,var(--card)_0%,color-mix(in_srgb,var(--card)_90%,transparent)_calc(100%_-_4rem),transparent_100%)] pt-12";
+    const low = stopUnderPadding(tooLow.split(" "))!;
+    expect(low.stopRem).toBeGreaterThan(low.padRem);
   });
 });
 

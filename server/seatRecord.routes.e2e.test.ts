@@ -326,7 +326,10 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
     expect(onOrg.termEnds, "the term date is the map's").toBeTruthy();
     expect(onMap.criticality, "the map gained criticality").toBe(onOrg.criticality);
     expect(onMap.recruiting, "and recruiting").toBe(onOrg.recruiting);
-    expect(org.json.village, "the village's way, as the map's power block says it").toEqual({ decidesBy: map.json.power.decidesBy });
+    expect(org.json.village, "the village's way and its line, as the map's power block says them").toEqual({
+      decidesBy: map.json.power.decidesBy,
+      decidesByGloss: map.json.power.decidesByGloss,
+    });
     expect(onOrg.holders.length, "the member tier has a holder row").toBeGreaterThan(0);
     for (const h of onOrg.holders) expect(typeof h.isAgent, "the member row says whether it is an agent").toBe("boolean");
 

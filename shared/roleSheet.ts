@@ -94,7 +94,8 @@ export interface SeatInput {
   id: string;
   name: string;
   isExample: boolean;
-  circle: { id: string; name: string; decidesBy: string | null; color: string | null } | null;
+  /** `decidesByGloss` is the circle's own line for a way called "Other". */
+  circle: { id: string; name: string; decidesBy: string | null; decidesByGloss?: string | null; color: string | null } | null;
   /** A proposal that names a circle not yet placed. */
   circleNameOnly: string | null;
   aim: string | null;
@@ -114,6 +115,8 @@ export interface SeatInput {
   termEnds: Read<string | null>;
   archetypes: Read<string[]>;
   villageDecidesBy: Read<string | null>;
+  /** The village's own line for a way of deciding called "Other". */
+  villageDecidesByGloss: Read<string | null>;
   /** Exactly as served; never fetched wider. */
   holders: SeatHolderIn[];
   /** This tier carried holder rows at all. */
@@ -220,8 +223,31 @@ export function fnv1a(s: string): number {
 const PRESENTATIONS = ["f", "m"] as const;
 const TONES = ["olive", "deep", "light"] as const;
 
+/**
+ * THE STOCK DRAWINGS PAINTED ON A PAPER MARGIN.
+ *
+ * Nine of the thirty files carry a near-white border, 19 to 65 pixels wide on
+ * a 765 by 1024 drawing, along the top and usually both sides. On a night card
+ * that border reads as a cream frame inside the art window. The card zooms
+ * these nine inside the window so the margin falls outside it, and leaves the
+ * others untouched. `roleSheet.test.ts` reads the edges of every file in
+ * `client/public/images/avatars` and holds this list to exactly the files
+ * that have a margin, so a new bordered drawing cannot arrive unlisted.
+ */
+export const FRAMED_PORTRAITS: ReadonlySet<string> = new Set([
+  "catalyzing-f-light",
+  "facilitating-f-olive",
+  "facilitating-m-deep",
+  "facilitating-m-olive",
+  "researching-f-olive",
+  "researching-m-deep",
+  "researching-m-light",
+  "researching-m-olive",
+  "storytelling-m-olive",
+]);
+
 export type Portrait =
-  | { kind: "class"; src: string; alt: string; key: string }
+  | { kind: "class"; src: string; alt: string; key: string; framed: boolean }
   | { kind: "sigil"; letter: string };
 
 /**
@@ -244,10 +270,12 @@ export function portraitFor(
     const presentation = PRESENTATIONS[h & 1];
     const tone = TONES[(h >>> 1) % 3];
     const className = classNames && Object.prototype.hasOwnProperty.call(classNames, key) ? classNames[key] : null;
+    const file = `${key}-${presentation}-${tone}`;
     return {
       kind: "class",
       key,
-      src: `/images/avatars/${key}-${presentation}-${tone}.webp`,
+      src: `/images/avatars/${file}.webp`,
+      framed: FRAMED_PORTRAITS.has(file),
       alt: className
         ? `Stock art for ${className}, a class suggested for this seat`
         : "Stock art for a class suggested for this seat",
@@ -454,23 +482,49 @@ function lapseReading(input: SeatInput): { read: boolean; lapsed: number } {
   return { read, lapsed: read ? input.holders.filter((h) => h.lapsed).length : 0 };
 }
 
-function clockFor(input: SeatInput, ctx: SheetContext): SheetClock | null {
-  if (input.mode === "proposal") return null;
-  // The member rows' own terms when served (the earliest one still ahead),
-  // else the seat's earliest term. A term already past is never a clock: it
-  // would print a negative number, and the Term fact says it instead.
-  const rowTerms = input.holders
-    .map((h) => h.termEndsAt)
-    .filter((t): t is string => typeof t === "string" && t.trim() !== "");
-  let term: { iso: string; source: string } | null = null;
-  if (rowTerms.length) {
-    const ahead = rowTerms
-      .filter((t) => (daysUntil(t, ctx.now) ?? -1) >= 0)
+/**
+ * THE TERM THE CLOCK COUNTS DOWN, or null.
+ *
+ * Only a seating that still holds may run it, so the card never counts down a
+ * term beside a line saying the seat is ready to be re-chosen. Where every
+ * holder row arrived with its lapse flag, the rows ready to be re-chosen are
+ * left out. Where the rows carry their own terms (the map's member tier) the
+ * earliest one still ahead wins. Otherwise the seat's earliest term
+ * (`termEnds`) runs it, and only while nothing seated is ready to be re-chosen,
+ * because that date counts lapsed seatings too: a seating lapsed by the season
+ * turning can still hold a term years ahead. With no lapse flags, a derived
+ * state that says everyone seated is ready to be re-chosen runs no term clock
+ * either. A term already past is never a clock: it would print a negative
+ * number, and the Term fact says it instead.
+ */
+function termForClock(input: SeatInput, lapse: { read: boolean; lapsed: number }, now: Date): { iso: string; source: string } | null {
+  const ahead = (t: string | null | undefined): t is string => typeof t === "string" && t.trim() !== "" && (daysUntil(t, now) ?? -1) >= 0;
+  const rowsCarryTerms = input.holders.some((h) => typeof h.termEndsAt === "string" && h.termEndsAt.trim() !== "");
+  if (rowsCarryTerms) {
+    const holding = lapse.read ? input.holders.filter((h) => h.lapsed === false) : input.holders;
+    const terms = holding
+      .map((h) => h.termEndsAt)
+      .filter(ahead)
       .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-    if (ahead.length) term = { iso: ahead[0], source: "holders[].termEndsAt" };
-  } else if (typeof input.termEnds === "string" && (daysUntil(input.termEnds, ctx.now) ?? -1) >= 0) {
-    term = { iso: input.termEnds, source: "termEnds" };
+    return terms.length ? { iso: terms[0], source: "holders[].termEndsAt" } : null;
   }
+  if (!ahead(input.termEnds)) return null;
+  const someoneReady = lapse.read ? lapse.lapsed > 0 : input.stateSource === "derived" && input.state === "expired";
+  return someoneReady ? null : { iso: input.termEnds, source: "termEnds" };
+}
+
+/**
+ * The card's one countdown: the term, else the season.
+ *
+ * Both count with `daysUntil`, the function the map's season ring and term
+ * arc count with, so the card and the ring on the same screen print the same
+ * number for the same date. `/api/season`'s `daysLeft` counts calendar days in
+ * the village's zone and differs from the ring by one for most of every day;
+ * the card reads it only as the season's own word that it has an end.
+ */
+function clockFor(input: SeatInput, lapse: { read: boolean; lapsed: number }, ctx: SheetContext): SheetClock | null {
+  if (input.mode === "proposal") return null;
+  const term = termForClock(input, lapse, ctx.now);
   if (term) {
     const date = formatDay(term.iso);
     const days = daysUntil(term.iso, ctx.now);
@@ -479,16 +533,18 @@ function clockFor(input: SeatInput, ctx: SheetContext): SheetClock | null {
     }
   }
   const s = ctx.season;
-  if (s && typeof s.daysLeft === "number" && Number.isFinite(s.daysLeft) && s.daysLeft >= 0) {
+  // `daysLeft` null is an open-ended season, which has no countdown at all.
+  if (s && typeof s.daysLeft === "number" && Number.isFinite(s.daysLeft)) {
     const date = formatDay(s.endsOn);
-    if (date) {
+    const days = daysUntil(s.endsOn, ctx.now);
+    if (date && days !== null && days >= 0) {
       const name = s.name && s.name.trim() ? s.name.trim() : null;
       return {
         key: "seasonDays",
         label: "Days left in the season",
-        value: s.daysLeft,
+        value: days,
         tone: null,
-        source: "season.daysLeft",
+        source: "season.endsOn",
         sub: name ? `${name} ends ${date}` : `The season ends ${date}`,
       };
     }
@@ -618,9 +674,10 @@ export function rosterFor(
 /**
  * The one action a seat offers, first match wins.
  *
- * `invite` covers a place ready to be re-chosen and a seat recruiting while
- * full, because the raise-hand route does not check vacancy: a seat that says
- * "Recruiting" and offers no way in is a door drawn on a wall.
+ * `invite` covers a place ready to be re-chosen, a seat recruiting while
+ * full, and a seat the village declared Open over places that are all seated,
+ * because the raise-hand route does not check vacancy: a seat that says
+ * "Recruiting" or "Open" and offers no way in is a door drawn on a wall.
  */
 function actionFor(input: SeatInput): SeatActionView {
   const none: SeatActionView = { kind: "none", seatName: input.name, label: null, ariaLabel: null, consequence: null };
@@ -629,6 +686,7 @@ function actionFor(input: SeatInput): SeatActionView {
   const open = Math.max(0, input.seats - hc);
   const invite =
     (open > 0 && input.state !== "forming") ||
+    input.state === "open" ||
     input.state === "partial" ||
     input.state === "expired" ||
     input.recruiting === true;
@@ -663,7 +721,23 @@ function actionFor(input: SeatInput): SeatActionView {
   return none;
 }
 
+/**
+ * A way of deciding's label, or for "Other" the village's or the circle's own
+ * line, which `shared/power.ts` requires of every "Other" because the bare
+ * word on its own is a shrug. The label stands in only where the line was not
+ * served. Null for an id this page cannot name.
+ */
+function wayWords(id: string, gloss: string | null | undefined): string | null {
+  const def = decidesByById(id);
+  if (!def) return null;
+  return id === "other" ? (textOrNull(gloss) ?? def.label) : def.label;
+}
+
 function factsFor(input: SeatInput, now: Date): SeatSheetView["facts"] {
+  // The date is the earliest term on the seat, lapsed seatings included. It
+  // says only that: whether anyone is ready to be re-chosen is the state
+  // line's to say, from the holders themselves, so a fact about one date can
+  // never contradict a clock counting down another holder's term.
   let term: Fact | null = null;
   if (typeof input.termEnds === "string" && input.termEnds.trim()) {
     const date = formatDay(input.termEnds);
@@ -671,8 +745,8 @@ function factsFor(input: SeatInput, now: Date): SeatSheetView["facts"] {
     if (date && d !== null) {
       term =
         d >= 0
-          ? { label: "Term", value: `Ends ${date}`, sub: SHEET_WORDS.termFutureSub, isDate: true }
-          : { label: "Term", value: `Reached its date on ${date}`, sub: SHEET_WORDS.termPastSub, isDate: true };
+          ? { label: "Term", value: `Ends ${date}`, sub: SHEET_WORDS.termSub, isDate: true }
+          : { label: "Term", value: `Reached its date on ${date}`, sub: SHEET_WORDS.termSub, isDate: true };
     }
   } else if (input.termEnds === null && input.holderCount === 0) {
     term = { label: "Term", value: SHEET_WORDS.termAtSeating, sub: SHEET_WORDS.termAtSeatingSub, isDate: false };
@@ -690,14 +764,14 @@ function factsFor(input: SeatInput, now: Date): SeatSheetView["facts"] {
   if (input.circle && input.circle.decidesBy && input.circle.decidesBy.trim()) {
     // The circle's own way, even when this page cannot name it: falling back
     // to the village's here would say the circle has none of its own.
-    const own = decidesByById(input.circle.decidesBy);
-    if (own) wayOfDeciding = { label: "Way of deciding", value: own.label, sub: `${input.circle.name}'s own way.`, isDate: false };
+    const own = wayWords(input.circle.decidesBy, input.circle.decidesByGloss);
+    if (own) wayOfDeciding = { label: "Way of deciding", value: own, sub: `${input.circle.name}'s own way.`, isDate: false };
   } else if (input.villageDecidesBy) {
-    const village = decidesByById(input.villageDecidesBy);
+    const village = wayWords(input.villageDecidesBy, input.villageDecidesByGloss);
     if (village) {
       wayOfDeciding = {
         label: "Way of deciding",
-        value: village.label,
+        value: village,
         sub: input.circle
           ? `${SHEET_WORDS.villagesWay} ${input.circle.name} has not set one of its own.`
           : SHEET_WORDS.villagesWay,
@@ -776,7 +850,7 @@ export function seatSheet(input: SeatInput, ctx: SheetContext): SeatSheetView {
     portrait: portraitFor({ id: input.id, name: input.name }, input.archetypes, ctx.classNames),
     aim: textOrNull(input.aim),
     figures: figuresFor(input, lapse),
-    clock: clockFor(input, ctx),
+    clock: clockFor(input, lapse, ctx),
     stateLine: stateLineFor(input, lapse),
     spots: roster.spots,
     moreOpen: roster.moreOpen,
