@@ -5211,7 +5211,16 @@ function offeredJourneys(){return SCENE.journeys.filter(j=>WELCOME_WALK_ON||!isW
 const LEX=[
   {re:/tour|show me around|walk me around/i,fn:()=>WELCOME_WALK_ON?startTour()
     :maiaSay(`The guided walk is being made again. Until it is back, tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
-  {re:/help|contribute|hands|volunteer|do something/i,fn:()=>{$('attnBtn').click();maiaSay(`Here's what needs hands. I'll cycle you through; press <b>Space</b> or the banner button for the next one. Claim something small; the land loves small and steady.`)}},
+  /* ON A PHONE THE ANSWER IS THE LIST. The desk answer cycles the attention
+     banner, and body.pocket hides that banner outright: MEASURED at 390x844,
+     the chip flew the camera to the Greenhouse, the card it filled measured
+     0x0, and she told a phone to press Space. #pbAttn left this path for the
+     same reason. Get Involved is the list of every open seat and quest, the
+     same answer the drawer's cell gives. */
+  {re:/help|contribute|hands|volunteer|do something/i,fn:()=>{
+    if(document.body.classList.contains('pocket')){openWall();
+      maiaSay(`Get Involved lists every open seat and quest. Tap any row and I will take you there. Claim something small; the land loves small and steady.`);return}
+    $('attnBtn').click();maiaSay(`Here's what needs hands. I'll cycle you through; press <b>Space</b> or the banner button for the next one. Claim something small; the land loves small and steady.`)}},
   {re:/happen|alive|news|today|pulse/i,fn:()=>{maiaSay(`Today so far: Sol finished the seedling census, the Ridge crowdpool crossed <b>72%</b>, fourteen kilos came out of the beds, and the Hearth is prepping the <b>full-moon feast</b>. It's a good day on the land.`)}},
   {re:/vision|master ?plan|future|dream/i,fn:()=>{setMode('vision');$('lyVision').click&&null}},
   {re:/night|dark|moon/i,fn:()=>{dayAuto=false;dayPhase=1.85;showDayHeld();maiaSay(`Night on the land. Watch the windows: every lit one is a room where the game is real.`)}},

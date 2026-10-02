@@ -211,3 +211,38 @@ describe("Get Involved on a phone", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* "WHERE CAN I HELP?" ON A PHONE ANSWERS WITH THE LIST. The desk answer cycles
+   the attention banner, which the pocket profile hides: measured at 390x844 the
+   chip flew the camera to the Greenhouse, filled a card that measured 0x0, and
+   Maia told a phone to press Space. */
+describe("Where can I help? in Maia's phone sheet", () => {
+  let b: Booted;
+  let cam0: number[];
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    tap(b, b.doc.getElementById("pbAsk"));
+    cam0 = b.run<number[]>("[cam.x,cam.y,cam.z]");
+    tap(b, b.doc.querySelector('#maiaActions .chip[data-say="where can I help"]'));
+    await settle(500);
+  });
+  afterAll(() => b?.close());
+
+  it("opens Get Involved, the list of every open seat and quest", () => {
+    expect(shown(b, "wall"), "the list is up").toBe(true);
+    expect(b.doc.querySelectorAll("#wallList .wallrow").length, "rows to choose from").toBeGreaterThan(0);
+  });
+
+  it("does not fill the attention card the phone hides, or fly the camera to it", () => {
+    expect(shown(b, "attnCard"), "the hidden attention card").toBe(false);
+    expect(b.run<number[]>("[cam.x,cam.y,cam.z]"), "the camera stayed put").toEqual(cam0);
+  });
+
+  it("never tells a phone to press a key", () => {
+    const lines = [...b.doc.querySelectorAll("#maiaLog .mline")].map((n) => n.textContent ?? "");
+    expect(lines.join(" ")).toContain("Get Involved lists every open seat and quest");
+    expect(lines.join(" ")).not.toMatch(/Space/);
+    expect(b.uncaught).toEqual([]);
+  });
+});
