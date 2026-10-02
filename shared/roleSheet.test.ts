@@ -25,6 +25,7 @@ import {
   SEAT_STATES,
   SHEET_WORDS,
   STATE_WORDS,
+  countLabel,
   daysUntil,
   fnv1a,
   formatDay,
@@ -1042,5 +1043,27 @@ describe("helpers moved here", () => {
     // Control: the reader reached the words it is meant to hold.
     expect(files[0]).toContain("ready to be re-chosen");
     for (const src of files) for (const word of ["overdue", "term ran out"]) expect(src.toLowerCase()).not.toContain(word);
+  });
+});
+
+describe("a figure's label agrees with its number", () => {
+  it("says one place, one open place and one power, never 1 PLACES", () => {
+    expect(countLabel(1, "Place", "Places")).toBe("Place");
+    expect(countLabel(0, "Place", "Places")).toBe("Places");
+    expect(countLabel(2, "Place", "Places")).toBe("Places");
+
+    const one = seatSheet(fromMapSeat({ ...EMPTY_SEAT, seats: 1, holderCount: 0, holders: [], state: "open" }, mapData(true), { signedIn: true }), CTX);
+    const labels = one.figures.map((f) => [f.key, f.value, f.label]);
+    expect(labels).toContainEqual(["places", 1, "Place"]);
+    expect(labels).toContainEqual(["open", 1, "Open place"]);
+    // Control: the same seat with two places reads in the plural.
+    const two = seatSheet(fromMapSeat({ ...EMPTY_SEAT, seats: 2, holderCount: 0, holders: [], state: "open" }, mapData(true), { signedIn: true }), CTX);
+    expect(two.figures.map((f) => [f.key, f.label])).toContainEqual(["places", "Places"]);
+
+    const role = permissionSheet(
+      fromPermissionRole({ id: "r1", name: "Keeper", description: "Keeps it.", capabilities: ["exchange.manage"], minStage: null, isExample: false, circleId: null, seats: 1, holderCount: 0, holders: [] }),
+      { stages: null, roleWord: "role", now: NOW },
+    );
+    expect(role.figures.map((f) => f.label)).toEqual(["Place", "Seated", "Open place", "Power"]);
   });
 });

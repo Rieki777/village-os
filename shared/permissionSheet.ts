@@ -12,7 +12,7 @@
  * Pure and node-tested, beside `shared/roleSheet.ts`.
  */
 import { CAPABILITY_LABELS } from "./capabilities";
-import { nameScaleFor, rosterFor, textOrNull, type SheetFigure, type Spot } from "./roleSheet";
+import { countLabel, nameScaleFor, rosterFor, textOrNull, type SheetFigure, type Spot } from "./roleSheet";
 import { SHEET_WORDS, moreOpenLine, rungLine } from "./roleSheetWords";
 
 /** A permission role as `/api/roles` serves it. */
@@ -79,11 +79,11 @@ export function permissionSheet(
     { now: ctx.now, forming: false, openSub: () => SHEET_WORDS.aVoteFillsThis },
   );
   const figures: SheetFigure[] = [
-    { key: "places", label: "Places", value: input.seats, tone: null, source: "seats" },
+    { key: "places", label: countLabel(input.seats, "Place", "Places"), value: input.seats, tone: null, source: "seats" },
     // `holderCount` here counts rows whose term has passed, so it is never "Held now".
     { key: "seated", label: "Seated", value: hc, tone: hc > 0 ? "gold" : null, source: "holderCount" },
-    { key: "open", label: "Open places", value: open, tone: open > 0 ? "living" : null, source: "seats - holderCount" },
-    { key: "powers", label: "Powers", value: input.capabilities.length, tone: null, source: "capabilities.length" },
+    { key: "open", label: countLabel(open, "Open place", "Open places"), value: open, tone: open > 0 ? "living" : null, source: "seats - holderCount" },
+    { key: "powers", label: countLabel(input.capabilities.length, "Power", "Powers"), value: input.capabilities.length, tone: null, source: "capabilities.length" },
   ];
 
   let rungs: Rung[] | null = null;
