@@ -2641,7 +2641,8 @@ let vilCore=null,vilSur=null,vilSurRect=null;
    floor shows instead. A village on the seed's own rectangle keeps the seed
    until its own picture lands, because there the seed is true. */
 let GROUND_ELSEWHERE=false,VIL_CORE_URL=null;
-const groundCore=()=>vilCore||(GROUND_ELSEWHERE?null:satPlate);
+/* The seed's own plate only where the seed's geography is true; see below. */
+const groundCore=()=>vilCore||(seedGeography()?satPlate:null);
 /* THE SEED'S GEOGRAPHY BELONGS TO THE SEED'S RECTANGLE. Its surround, its
    place names and its coordinate caption describe one piece of the Earth.
    Under a village standing on that same piece they are true and they stay,
@@ -2657,7 +2658,20 @@ const SEED_GEOREF=Object.freeze({lat:GEOREF.lat,lon:GEOREF.lon,z:GEOREF.z,
   pinW:Object.freeze(GEOREF.pinW.slice()),mPerUnit:GEOREF.mPerUnit});
 const SEED_M_PER_UNIT=M_PER_UNIT;
 let vilFrame=null;
-const seedGeography=()=>vilCore?!!(vilFrame&&vilFrame.seed):!GROUND_ELSEWHERE;
+/* WHERE THE VILLAGE STANDS, WHEN IT HAS NO PICTURE OF ITS OWN. The answer
+   above came only with a village's own plate, so a village without one was
+   drawn on the seed's satellite, coast, place names and district names,
+   which is the seed's land presented as its own. The shell now says, in
+   every config, whether this village stands on the seed's rectangle
+   (`seedGround`, the server's `seedFrame`). False takes all of it down and
+   the vector floor shows, with the seed's own coast left off that too. Null
+   is "nobody said", which is a standalone open and every file:// QA run, and
+   it keeps the seed exactly as before. */
+let SEED_HERE=null;
+const seedGeography=()=>vilCore?!!(vilFrame&&vilFrame.seed):(!GROUND_ELSEWHERE&&SEED_HERE!==false);
+function seedVerdict(v){if(typeof v!=='boolean'||v===SEED_HERE)return;
+  SEED_HERE=v;paintReady=false;mmDirty=true;paintTerrain();applySeedGeography();
+  if(v&&window.bakePainted)bakePainted()}
 /* Whether the map knows where its own ground is, so it may print coordinates.
    The seed always does. A village elsewhere does only when its visibility
    let the centre cross the wire. */
@@ -2756,6 +2770,10 @@ function paintTerrain(){
     tx.fillStyle=rand()<.5?'rgba(160,190,90,.5)':'rgba(120,150,60,.45)';tx.fillRect(x,y,2.2,1.2)}
   // ---- the world beyond the boundary (real geography: 9.2320°N 83.8343°W, hills above Dominicalito) ----
   tx.lineCap='round';tx.lineJoin='round';
+  /* The seed's coast, beach, highway, houses and falls are the seed's
+     geography, drawn only where it is true (seedGeography). */
+  const seedCoast=seedGeography();
+  if(seedCoast){
   const shoreX=y=>150+Math.sin(y*.006)*18+Math.sin(y*.017)*8;
   const og=tx.createLinearGradient(0,0,200,0);og.addColorStop(0,'#16455e');og.addColorStop(.6,'#2e7d99');og.addColorStop(1,'#63b3c9');
   tx.beginPath();tx.moveTo(0,0);for(let y=0;y<=H;y+=80)tx.lineTo(shoreX(y),y);tx.lineTo(0,H);tx.closePath();tx.fillStyle=og;tx.fill();
@@ -2774,6 +2792,7 @@ function paintTerrain(){
     tx.fillStyle='rgba(10,20,10,.25)';tx.beginPath();tx.ellipse(1,6,10,3.4,0,0,7);tx.fill();
     tx.fillStyle='#9c8d78';tx.fillRect(-8,-5,16,10);
     tx.fillStyle='#b0492f';tx.beginPath();tx.moveTo(-10,-5);tx.lineTo(0,-12);tx.lineTo(10,-5);tx.closePath();tx.fill();tx.restore()}
+  }
   // water areas + roads + water lines — one renderer, phase-honest (Fix 12 retired here)
   drawFeatures(tx,{target:'bake',layer:'water-areas'});
   drawFeatures(tx,{target:'bake',layer:'roads'});
@@ -2782,7 +2801,7 @@ function paintTerrain(){
   // forest stamps — only PHASE-1 land clears forest; planned land stays wild under its ghost outline
   const carveR=SCENE.features.filter(f=>(f.kind==='road'||(f.kind==='water'&&f.geom==='line'))&&f.phase<=1).map(f=>f.points);
   for(let i=0;i<5200;i++){const x=rand()*W,y=rand()*H;
-    if(x<235||zoneCarves(x,y)||nearPath(x,y,carveR,16))continue;
+    if((seedCoast&&x<235)||zoneCarves(x,y)||nearPath(x,y,carveR,16))continue;
     const r=2.6+rand()*7,sh=.16+rand()*.2;
     tx.fillStyle=`rgba(8,22,12,${sh})`;tx.beginPath();tx.arc(x+r*.45,y+r*.5,r,0,7);tx.fill();
     const t=rand();const col=t<.55?'#2f6b3d':(t<.85?'#3a7a46':'#57945a');
@@ -2793,11 +2812,11 @@ function paintTerrain(){
   tx.setLineDash([14,10]);tx.strokeStyle='rgba(236,208,138,.45)';tx.lineWidth=3;
   tx.beginPath();BOUND.forEach((p,i)=>i?tx.lineTo(p[0],p[1]):tx.moveTo(p[0],p[1]));tx.closePath();tx.stroke();tx.setLineDash([]);
   // Poza Azul falls — the real waterfall NW of the land, feeding the west creek to the sea
-  tx.fillStyle='#5a6b5a';tx.beginPath();tx.ellipse(302,242,16,9,-.4,0,7);tx.fill();
+  if(seedCoast){tx.fillStyle='#5a6b5a';tx.beginPath();tx.ellipse(302,242,16,9,-.4,0,7);tx.fill();
   tx.strokeStyle='rgba(230,246,252,.9)';tx.lineWidth=2;
   for(let i=-1;i<=1;i++){tx.beginPath();tx.moveTo(298+i*4,232);tx.quadraticCurveTo(300+i*4,242,302+i*5,250);tx.stroke()}
   tx.fillStyle='rgba(180,225,240,.85)';tx.beginPath();tx.ellipse(303,254,10,5,0,0,7);tx.fill();
-  tx.fillStyle='rgba(255,255,255,.5)';tx.beginPath();tx.ellipse(303,252,5,2.4,0,0,7);tx.fill();
+  tx.fillStyle='rgba(255,255,255,.5)';tx.beginPath();tx.ellipse(303,252,5,2.4,0,0,7);tx.fill()}
   mmDirty=true;
 }
 paintTerrain();
@@ -3562,7 +3581,7 @@ function paintLand(ts){
     drawFeatures(cx,{target:'live',mode})}
   // water shimmer
   cx.fillStyle='rgba(220,245,255,.5)';
-  for(let i=0;i<40;i++){const c=SCENE.water.creeks[i%SCENE.water.creeks.length];const pt=c[(i*7)%c.length];
+  if(seedGeography())for(let i=0;i<40;i++){const c=SCENE.water.creeks[i%SCENE.water.creeks.length];const pt=c[(i*7)%c.length];
     if(Math.sin(t*3+i*2.7)>0.55)cx.fillRect(pt[0]+Math.sin(i*9)*6,pt[1]+Math.cos(i*5)*6,2.4,1.4)}
   // surf breathing on the shore
   cx.fillStyle='rgba(255,255,255,.5)';
@@ -4991,7 +5010,7 @@ function syncBanners(){
      delete names for districts with a building plainly on the screen. */
   const KIN_R=k*43;
   for(const d of SCENE.districts){const el=bEls['d_'+d.id];const[sx,sy]=worldToScreen(d.x,d.y-46);
-    const hideD=(zoomed||!roomy);el.style.display=hideD?'none':'block';if(hideD)continue;
+    const hideD=(zoomed||!roomy||!seedGeography());el.style.display=hideD?'none':'block';if(hideD)continue; // the seed's district names are seed geography
     const dw=el.offsetWidth||140,dh=el.offsetHeight||22;
     /* Never silent at this zoom, because the district names are the only
        words on the land, so it takes the cheapest spot in its table rather
@@ -5235,8 +5254,12 @@ function syncBanners(){
 
 /* hover card */
 const hc=$('hovercard');let hoverPin=null;
+/* Where a building stands, in words. The seed's district names are seed
+   geography, so they are only said where the seed's geography is true. */
+function districtWord(s){if(!seedGeography())return 'the land';
+  return s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name}
 function showHover(s,anchor){const q=questsAt(s.key).length,st=seatsAt(s.key).filter(seatOpen).length;
-  hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(circleWords(s.circle)):'needs a steward'} · ${escq(s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name)}</div>
+  hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(circleWords(s.circle)):'needs a steward'} · ${escq(districtWord(s))}</div>
   <div class="state">${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
   <div class="row"><span>⚑ <b>${q}</b> quest${q===1?'':'s'}</span><span>⛨ <b>${st}</b> seat${st===1?'':'s'} open</span></div>
   ${s.event?`<div class="row"><span>✦ ${escq(s.event)}</span></div>`:''}
@@ -5290,7 +5313,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     const fin=SCENE.flows.filter(f=>f.to===s.key),fout=SCENE.flows.filter(f=>f.from===s.key);
     const onland=fin.filter(f=>f.from).length,loop=fin.length?Math.round(onland/fin.length*100):null;
     const facts=(window.FACTS||[]).filter(f=>f.at===s.key);
-    const dn=s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name;
+    const dn=districtWord(s);
     const fchip=(f,dir)=>{const o=dir==='in'?(f.from?BY[f.from]:null):(f.to?BY[f.to]:null);
       return `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 5px 5px 0;padding:2px 9px;border:1px solid #c8ab6f;border-radius:11px;font-size:11px;background:#fdf6e0"><i style="width:8px;height:8px;border-radius:50%;background:${escq(mediaColor(f.medium))};display:inline-block"></i>${o?escq(o.name):(dir==='in'?'imported ⚠':'off-land')}</span>`};
     const vchip=f2=>`<span style="display:inline-block;margin:0 5px 5px 0;padding:2px 9px;border:1px solid #c8ab6f;border-radius:11px;font-size:11px;background:#fdf6e0">${escq(f2.payload.label)}: <b>${escq(f2.payload.value)}</b></span>`;
@@ -5395,7 +5418,7 @@ function toast(msg){const box=$('toasts');
 const mm=$('minimap'),mmx=mm.getContext('2d');let mmBase=null;
 function drawMinimap(){if(mmDirty){mmBase=document.createElement('canvas');mmBase.width=240;mmBase.height=160;
     const b=mmBase.getContext('2d');b.drawImage(activePlate()||terrain,0,0,240,160);
-    if(terrainMode==='paint'&&paintPlate&&brushVal>0){b.globalAlpha=brushVal;b.drawImage(paintPlate,0,0,240,160);b.globalAlpha=1}
+    if(terrainMode==='paint'&&paintPlate&&brushVal>0&&groundCore()){b.globalAlpha=brushVal;b.drawImage(paintPlate,0,0,240,160);b.globalAlpha=1}
     b.fillStyle='rgba(10,16,10,.25)';b.fillRect(0,0,240,160);mmDirty=false}
   mmx.drawImage(mmBase,0,0);
   for(const s of SCENE.structures){if(mode==='now'&&s.state==='blueprint')continue;
@@ -11793,6 +11816,9 @@ addEventListener('message',e=>{
      anyway, onto the honest vector floor (GROUND_ELSEWHERE). */
   let handOver=landHandedOver;
   try{
+  /* Where the village stands goes before the land, so the land is painted
+     once, on the right ground. Absent says nothing and changes nothing. */
+  if(typeof d.seedGround==='boolean')seedVerdict(d.seedGround);
   if(d.ground&&typeof d.ground==='object'){
     if(LAND_HANDED)setGround(d.ground);else handOver=holdForGround(d.ground)}
   /* The land first: everything below dresses what the scene puts down, and
