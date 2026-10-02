@@ -9427,9 +9427,17 @@ function buildOrgMap(){
   $('orgSvg').innerHTML=`<g id="orgRoot">${edges}${orbits}${nodes}</g>`;
   orgApplyVB()}
 window.buildOrgMap=buildOrgMap;
+/* THE NODE THE POINTER CAME DOWN ON (N12). The pointerdown below takes
+   pointer capture so a drag keeps the chart, and a captured mouse's click
+   goes to the common ancestor of where it went down and where it came up,
+   which is the svg: e.target.closest('.onode') found nothing and a click on
+   a node did nothing on a desk, every time (a finger's tap was retargeted
+   to the node and worked). So a click that did not move takes the node it
+   went down on. */
+let ODOWN=null;
 $('orgSvg').addEventListener('click',e=>{
   if(oMoved>6)return;
-  const g=e.target.closest('.onode');if(!g)return;
+  const g=e.target.closest('.onode')||ODOWN;ODOWN=null;if(!g)return;
   const go=g.dataset.go;
   if(!go||!BY[go]){toast(g.dataset.kind==='quest'?'⚑ Not placed yet. This quest lives at the Quest Board.':'No home on the land yet. The Loom awaits.');return}
   setMapType('living',true);
@@ -9473,6 +9481,7 @@ function orgSeat(){const p=[...OPTR.values()];ODRAG=null;OPINCH=null;
    held here is one whose up never arrived (capture can fail, and is caught
    below). Without this the next single touch would pinch against it. */
 $('orgSvg').addEventListener('pointerdown',e=>{if(e.isPrimary)OPTR.clear();if(!OPTR.size)oMoved=0;
+  ODOWN=OPTR.size?null:(e.target.closest&&e.target.closest('.onode'));
   OPTR.set(e.pointerId,{x:e.clientX,y:e.clientY});orgSeat();
   try{$('orgSvg').setPointerCapture(e.pointerId)}catch(_){}});
 $('orgSvg').addEventListener('pointermove',e=>{if(!OPTR.has(e.pointerId))return;

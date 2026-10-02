@@ -501,3 +501,53 @@ describe("the phone's drawer reaches the lenses and the time of day (F58)", () =
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* N12. The chart takes pointer capture on every pointerdown so a drag keeps
+   it, and a captured mouse's click goes to the svg, the common ancestor of
+   where it went down and where it came up. So on a desk a click on a node
+   opened nothing, ever; a finger's tap is retargeted and worked. This plays
+   the event order Chromium gives a captured mouse: down on the node, up and
+   click on the chart. */
+describe("a mouse click on a node of the in-file circles opens its place (N12)", () => {
+  let b: Booted;
+  let key: string;
+  const ptr = (el: Element, type: string, x: number) =>
+    el.dispatchEvent(new b.window.PointerEvent(type, { pointerId: 1, isPrimary: true, pointerType: "mouse", clientX: x, clientY: 300, bubbles: true }));
+  const click = (el: Element, x: number) => el.dispatchEvent(new b.window.MouseEvent("click", { clientX: x, clientY: 300, bubbles: true }));
+  beforeAll(async () => {
+    b = boot("#skipIntro");
+    await settle(SETTLE_MS);
+    b.run("setMapType('circles',true)"); // draws the chart
+    key = b.run<string>("([...document.querySelectorAll('#orgSvg .onode')].find(g=>BY[g.dataset.go])||{dataset:{}}).dataset.go||''");
+  });
+  afterAll(() => b?.close());
+  const svg = () => b.window.document.getElementById("orgSvg") as Element;
+  const node = () => b.window.document.querySelector(`#orgSvg .onode[data-go="${key}"]`) as Element;
+
+  it("has a node with a place behind it (the case is the one it says)", () => {
+    b.run("setMapType('circles',true)");
+    expect(key, "a node that opens a place").toBeTruthy();
+    expect(node()).not.toBeNull();
+  });
+
+  it("does not open anything when the pointer dragged the chart from a node", () => {
+    b.run("setMapType('circles',true)");
+    ptr(node(), "pointerdown", 300);
+    ptr(svg(), "pointermove", 340);
+    ptr(svg(), "pointerup", 340);
+    click(svg(), 340);
+    expect(b.run<string | null>("panelKey"), "a drag is not a click").toBeNull();
+    expect(body(b).contains("circles")).toBe(true);
+  });
+
+  it("opens the place a still click went down on", async () => {
+    await settle(80); // the drag's movement count clears 50 ms after the lift
+    b.run("setMapType('circles',true)");
+    ptr(node(), "pointerdown", 300);
+    ptr(svg(), "pointerup", 300);
+    click(svg(), 300);
+    expect(b.run<string | null>("panelKey")).toBe(key);
+    expect(body(b).contains("circles"), "back on the land, at its door").toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});
