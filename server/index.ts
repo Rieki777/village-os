@@ -618,6 +618,7 @@ import {
   villageSecretsConfigured,
   type SecretKey,
 } from "./lib/secrets";
+import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from "./lib/comms/mailer";
 /**
  * The second line of the two refusals that stop a founder saving a key.
  *
@@ -976,29 +977,6 @@ if (!process.env.AUTH_TOKEN_SECRET) {
       "logins will not survive a restart, and auth will break if this service runs more than one replica.",
   );
 }
-const DEFAULT_EMAIL_CONFIG = {
-  investor: "",
-  steward: "",
-  resident: "",
-  prosperity: "",
-  resend_api_key: "",
-  // Anthropic API key for the "Work With Us" guide. Blank = the AI persona is
-  // dormant and the site shows the plain form instead. No key, no cost.
-  assistant_api_key: "",
-  // The From: address every village email leaves under. Blank inherits
-  // EMAIL_FROM, then the platform's last-resort literal — so an existing
-  // deployment changes nothing, and a fork can set its own sender from Admin
-  // without a deploy. Must be `addr@dom.tld` or `Name <addr@dom.tld>`.
-  sender: "",
-};
-
-/** `addr@dom.tld` or `Name <addr@dom.tld>` — anything else is not sendable. */
-function validEmailSender(v: string): boolean {
-  const s = v.trim();
-  if (!s) return false;
-  return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(s) || /^[^<>]+<[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>$/.test(s);
-}
-
 // FAQ_PATHWAYS and FaqPathway now live with the domain that defines them, in
 // server/routes/faqs.ts, and are imported above. Still needed here for the
 // seed document's type.
@@ -1108,19 +1086,6 @@ const DEFAULT_SETTINGS = {
 /** The starter training list, read with this village's name. See server/lib/trainingStarter.ts. */
 const defaultTrainingModules = () => starterTrainingModules(mergedConfig().project.name);
 
-const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" | "prosperity"> = {
-  investor: "investor",
-  "investor-pack": "investor",
-  "investor-call": "investor",
-  "investor-doc-request": "investor",
-  steward: "steward",
-  resident: "resident",
-  prosperity: "prosperity",
-  contact: "prosperity",
-  "work-with-us": "prosperity",
-  "quest-proposal": "steward",
-};
-
 /**
  * THE FORM TYPES THE PUBLIC DOOR COLLECTS. Nothing else gets through it.
  *
@@ -1142,7 +1107,7 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  *     (InvestorJourney), `steward-interest` (StewardJourney), `visit-inquiry`
  *     (Visit), `quest-proposal` (ProposeQuest and GuideChat), `work-with-us`
  *     (WorkWithUs and GuideChat);
- *   - what `FORM_TYPE_TO_PATHWAY` above already knows how to route to an
+ *   - what `FORM_TYPE_TO_PATHWAY` (server/lib/comms/mailer.ts) routes to an
  *     inbox: `investor`, `investor-pack`, `resident`, `prosperity`, `contact`;
  *   - what `Admin.tsx` lists in its own filter, which is the same set again.
  *
@@ -1336,6 +1301,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
+const { getEmailConfig, sendResendEmail, buildSubmissionEmailHtml, recipientsForType } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
 /**
@@ -4632,25 +4598,6 @@ async function servedNextAction(user: any): Promise<{ id: string; label: string;
   return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
-/**
- * Integration config. Keys resolve in this order:
- *   1. What an admin typed in the UI (per-project override, stored on the volume)
- *   2. The environment (RESEND_API_KEY / ANTHROPIC_API_KEY on the host)
- * Env vars are the better home for a shared key — they're not sitting in a JSON
- * file on a data volume, and one Railway service can run the integrations for a
- * project hosted under it. The admin UI still wins if a project sets its own.
- */
-function getEmailConfig() {
-  const merged = { ...DEFAULT_EMAIL_CONFIG, ...emailConfigRepo.get() };
-  return {
-    ...merged,
-    // S63: keys live in the write-only secrets store now (admin-first,
-    // env-fallback). Legacy values are migrated out of this doc at boot.
-    resend_api_key: secretValue("resend_api_key"),
-    assistant_api_key: secretValue("assistant_api_key"),
-  };
-}
-
 function getWorkWithUs() {
   return { ...DEFAULT_WORK_WITH_US, ...workWithUsRepo.get() };
 }
@@ -4748,168 +4695,6 @@ async function applyAcceptReward(
   if (!updated) return { rewarded: false };
   await addActivity("proposal", `${firstName(updated.name)}'s proposal was welcomed into the village`, { actorUserId: updated.id, entityType: "submission", entityRef: entry.id });
   return { rewarded: true };
-}
-
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/**
- * The heading was the literal word "Amora", so every village that installed
- * this platform emailed its own stewards under another village's name. Same
- * rule as every other identity string: the name comes from the merged config,
- * which is a brand override over the gameConfig default, and is escaped
- * because a village types its own name.
- */
-function buildSubmissionEmailHtml(type: string, data: Record<string, unknown>, adminUrl: string): string {
-  const rows = Object.entries(data)
-    .map(
-      ([k, v]) =>
-        `<tr><td style="padding:6px 12px;font-weight:600;color:#2D5A5A;background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
-    )
-    .join("");
-  return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(mergedConfig().project.name)}</div></div>
-  <div style="padding:20px 24px">
-    <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}</table>
-    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:#2D5A5A;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
-  </div>
-</div></body></html>`;
-}
-
-/**
- * The From: address, resolved across the config planes: admin-typed sender
- * (Admin → Email config) beats EMAIL_FROM, which beats the platform's
- * last-resort literal. An admin value that is not a sendable address is
- * skipped loudly rather than used — Resend accepts a malformed From: and
- * delivers nothing, which is the silent email death this whole path exists
- * to avoid.
- */
-function resolvedEmailSender(): string {
-  const typed = String(getEmailConfig().sender ?? "").trim();
-  if (typed) {
-    if (validEmailSender(typed)) return typed;
-    console.error(`[RESEND] configured sender "${typed}" is not a valid address, falling back`);
-  }
-  const env = String(process.env.EMAIL_FROM ?? "").trim();
-  if (env) {
-    if (validEmailSender(env)) return env;
-    console.error(`[RESEND] EMAIL_FROM "${env}" is not a valid address, falling back`);
-  }
-  /*
-   * NO LAST-RESORT SENDER ANY MORE, and that is the honest answer.
-   *
-   * This used to return one specific village's address. Two things followed.
-   * Every fork's mail went out claiming a domain it does not own, which Resend
-   * accepts with a 200 and then delivers nowhere, because the send fails the
-   * receiving domain's SPF and DKIM checks. And the runbook already records
-   * that this very domain is unverified, so the fallback was not even
-   * delivering for the village it named.
-   *
-   * An empty string means "this deployment has not said who its mail comes
-   * from", `sendResendEmail` declines rather than sending into a hole, and the
-   * caller is told. A refusal a founder can read beats a 200 nobody receives.
-   */
-  return "";
-}
-
-/**
- * WHAT THIS RETURNS, and why it did not used to return anything.
- *
- * Every path out of this function used to be indistinguishable from every
- * other: no API key, no recipients, a 4xx from the provider and a clean
- * accepted send all returned the same `undefined`, and none of them threw. So
- * a caller that wanted to know whether mail had actually gone had exactly one
- * signal available, "it did not throw", which was true in all four cases.
- *
- * `POST /api/admin/bootstrap` was that caller. It set `emailed = true` after
- * the await and reported it to the operator who had just created the founder
- * account, on a deployment with no email provider configured, which is the
- * state every fork boots in. The server log on the same request read
- * "[RESEND] API key not set, skipping email".
- *
- * `sent` is now only true when the provider accepted the message, and `reason`
- * names which door it left by otherwise. Note the ceiling on that word:
- * ACCEPTED is not DELIVERED. A provider returns 200 for a domain whose SPF and
- * DKIM records were never published and then delivers nothing, so `sent: true`
- * means the message was handed over, never that it arrived.
- *
- * Callers that do not care may keep ignoring the result.
- */
-type MailResult = { sent: boolean; reason?: "no_api_key" | "no_sender" | "no_recipients" | "rejected" | "failed" };
-
-async function sendResendEmail(opts: { to: string[]; subject: string; html: string; from?: string; replyTo?: string }): Promise<MailResult> {
-  const cfg = getEmailConfig();
-  if (!cfg.resend_api_key) {
-    console.log("[RESEND] API key not set, skipping email");
-    return { sent: false, reason: "no_api_key" };
-  }
-  const from = opts.from ?? resolvedEmailSender();
-  if (!from) {
-    console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
-    return { sent: false, reason: "no_sender" };
-  }
-  // Every configured inbox may hold a comma-separated LIST — several people
-  // receiving updates is the norm for a village, not an edge case. Split,
-  // trim, drop non-addresses, dedupe; every caller gets this for free.
-  const to = Array.from(new Set(
-    opts.to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
-  ));
-  if (!to.length) {
-    console.log("[RESEND] No recipients, skipping email");
-    return { sent: false, reason: "no_recipients" };
-  }
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.resend_api_key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        // Admin-typed sender first, then the env var. A malformed admin value
-        // is IGNORED rather than sent (a bad From: kills every email silently),
-        // and says so in the log so the founder can find it. Resolved above,
-        // because no sender at all is a refusal rather than a send.
-        from,
-        to,
-        subject: opts.subject,
-        html: opts.html,
-        // The contact relay (S22) sets this to the SENDER's address so a
-        // plain reply works — always with compose-screen disclosure.
-        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[RESEND ERROR]", res.status, errText);
-      return { sent: false, reason: "rejected" };
-    }
-    return { sent: true };
-  } catch (err) {
-    console.error("[RESEND ERROR]", err);
-    return { sent: false, reason: "failed" };
-  }
-}
-
-function recipientsForType(type: string): string[] {
-  const cfg = getEmailConfig();
-  const pathway = FORM_TYPE_TO_PATHWAY[type];
-  if (pathway && cfg[pathway]) return [cfg[pathway]];
-  // Fallback: send to all configured pathway inboxes
-  return Array.from(
-    new Set(
-      ["investor", "steward", "resident", "prosperity"]
-        .map((k) => cfg[k as keyof typeof cfg])
-        .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    )
-  );
 }
 
 // â”€â”€ Abuse guards (S12: MySQL-backed — a redeploy is no longer an amnesty) â”€â”€
