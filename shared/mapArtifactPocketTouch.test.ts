@@ -528,3 +528,65 @@ describe("a journey with Maia's sheet up", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* EVERY CLOSE AND EVERY BUTTON IN A PHONE SHEET IS A THUMB TARGET. Measured at
+   390x844 with CDP touch: help's ✕ 16x15 and Get Involved 22 tall, Maia's read
+   toggle 58x18 and input row 40, Your view's ✕ 38x27 and its mist and pulse
+   labels 13 tall inside 44 px rows, the Loom's ✕ 32x28. The sizes themselves
+   are layout and were measured in Playwright (after: each of these 44 tall,
+   and a finger at the top edge of the mist row toggles it). What jsdom does
+   compute is the cascade, so this pins that the phone rules reach each control
+   and that the desk keeps the sizes it draws. Help's footer row is the phone's
+   Get Involved control, so a tap on its count opens the list too. */
+describe("the phone sheets' thumb targets", () => {
+  let phone: Booted;
+  let desk: Booted;
+  beforeAll(async () => {
+    phone = boot();
+    desk = boot("#hud=desk&skipIntro");
+    await settle(SETTLE_MS);
+    for (const b of [phone, desk]) b.run("openHelp()");
+  });
+  afterAll(() => {
+    phone?.close();
+    desk?.close();
+  });
+
+  const style = (b: Booted, sel: string) => {
+    const el = b.doc.querySelector(sel);
+    expect(el, sel).not.toBeNull();
+    return b.window.getComputedStyle(el as Element);
+  };
+  const TARGETS = ["#help .help-close", "#help .help-work", "#maiaVoice", "#maiaInput", "#skClose", "#loomClose"];
+
+  it("are 44 px tall on the phone", () => {
+    expect(phone.doc.body.classList.contains("pocket")).toBe(true);
+    for (const sel of TARGETS) expect(style(phone, sel).minHeight, sel).toBe("44px");
+    expect(style(phone, "#help .help-close").minWidth, "help's ✕ is as wide as it is tall").toBe("44px");
+  });
+
+  it("make the whole mist and pulse rows the checkbox's label", () => {
+    for (const id of ["skMist", "skGlow"]) {
+      const label = phone.doc.getElementById(id)?.closest("label");
+      expect(label, id).not.toBeNull();
+      expect(phone.window.getComputedStyle(label as Element).alignSelf, id).toBe("stretch");
+    }
+  });
+
+  it("open Get Involved from anywhere on help's footer row on the phone", () => {
+    const count = phone.doc.querySelector("#help .help-work span");
+    expect(count?.textContent, "the count beside the button").toMatch(/need/);
+    tap(phone, count);
+    expect(shown(phone, "wall"), "the list is up").toBe(true);
+    expect(shown(phone, "help"), "help stepped aside").toBe(false);
+  });
+
+  it("leave the desk as it is drawn (the control: the rules are the phone's)", () => {
+    tap(desk, desk.doc.querySelector("#help .help-work span"));
+    expect(shown(desk, "wall"), "the desk's count is only words").toBe(false);
+    expect(desk.doc.body.classList.contains("pocket")).toBe(false);
+    for (const sel of TARGETS) expect(style(desk, sel).minHeight, sel).not.toBe("44px");
+    expect(phone.uncaught).toEqual([]);
+    expect(desk.uncaught).toEqual([]);
+  });
+});
