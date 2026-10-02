@@ -551,8 +551,12 @@ export default function ProposalWizard() {
       {/* Desktop right rail. */}
       <aside className="hidden lg:block">
         {/* The stepper and a role card are taller than a laptop screen, so the
-            sticky rail scrolls inside itself instead of running off the page. */}
-        <div className="sticky top-24 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain">
+            sticky rail scrolls inside itself instead of running off the page.
+            A scroll box clips whatever is drawn outside it, focus rings
+            included, so 4px of padding gives the stepper's ring (2px) and a
+            card control's outline (2px out, 2px offset) room inside it, and
+            the matching negative margin keeps the rail where it was. */}
+        <div className="sticky top-24 -mx-1 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain p-1">
           <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
           {dirty && (
             <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>

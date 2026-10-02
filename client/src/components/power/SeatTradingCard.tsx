@@ -117,10 +117,13 @@ export default function SeatTradingCard({
   const focusNext = useRef<"flip" | "back" | null>(null);
   const turning = useRef(false);
 
-  // A different seat starts on its front with every gloss shut.
+  // A different seat starts on its front with every gloss shut, and with an
+  // empty live region: the map keeps one card across selections, and the last
+  // seat's "Hand raised" left in it would be read inside the next seat's card.
   const closeGloss = gloss.close;
   useEffect(() => {
     setFace("front");
+    setLive("");
     closeGloss();
   }, [view.id, closeGloss]);
 

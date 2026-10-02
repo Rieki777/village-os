@@ -166,6 +166,37 @@ describe("the /roles row header", () => {
   });
 });
 
+describe("an agent on /roles", () => {
+  it("reads An agent in the row header, as the card under it does, and never the vendor's name its member row carries", async () => {
+    const VENDOR = "Fieldnotes Assistant";
+    const withAgent = {
+      ...ORG.roles[1],
+      holders: [
+        ...ORG.roles[1].holders,
+        { userId: null, name: VENDOR, kind: "documented", focus: null, lapsed: false, isAgent: true, note: null },
+      ],
+      holderCount: 2,
+      state: "filled",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        const body = String(url) === "/api/org" ? { ...ORG, roles: [withAgent] } : [];
+        return { ok: true, status: 200, json: async () => body };
+      }),
+    );
+    renderRoles();
+    const row = await header("Seed Keeper");
+    // Control: the vendor's name is in what the route served.
+    expect(JSON.stringify(withAgent)).toContain(VENDOR);
+    expect(row.textContent).toContain("Ines, An agent");
+    fireEvent.click(row);
+    const card = document.querySelector("article[data-power-card]") as HTMLElement;
+    expect(within(card).getByText("An agent")).toBeTruthy();
+    expect(document.body.textContent).not.toContain(VENDOR);
+  });
+});
+
 describe("an opened /roles row", () => {
   it("shows the role card, named by its header, with the history, the needs and the vendor drawer below it", async () => {
     catalog.modules = [MAP_ON, VENDOR_ON];

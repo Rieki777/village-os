@@ -35,6 +35,7 @@ import {
   projectSeat,
   projectSeats,
   stateSource,
+  villageWay,
   type SeatProjectionCtx,
   type SeatTier,
 } from "./seatProjection";
@@ -418,5 +419,21 @@ describe("both handlers send the projection and write no seat of their own", () 
     const at = src.indexOf("const orgExportLive = () =>");
     expect(at, "orgExportLive exists").toBeGreaterThan(-1);
     expect(src.slice(at, at + 300)).toContain("mapShowsStructureTo(");
+  });
+});
+
+describe("the village's way on /api/org", () => {
+  it("carries the method and the village's own line for Other, as /api/map's power block does", () => {
+    const line = "The village sits until it agrees";
+    expect(villageWay({ decidesBy: "other", decidesByGloss: line })).toEqual({ decidesBy: "other", decidesByGloss: line });
+    // Nothing declared reads as nothing declared, never as a guess.
+    expect(villageWay(null)).toEqual({ decidesBy: null, decidesByGloss: null });
+  });
+
+  it("is sent through villageWay, and only at the structure tier", () => {
+    const body = handler("get", "/api/org");
+    expect(body).toMatch(/tier\.structure \? \{ village: villageWay\(villagePowerDeclared\(\)\) \}/);
+    // Control: the map sends the same declared block, whole, in `power`.
+    expect(handler("get", "/api/map")).toContain("villagePowerDeclared()");
   });
 });

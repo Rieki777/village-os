@@ -52,19 +52,65 @@ const bool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : 
 /** A circle as either payload serves it (both go through `circleView`). */
 function circleIn(c: any): SeatInput["circle"] {
   if (!c || typeof c !== "object") return null;
-  return { id: String(c.id ?? ""), name: String(c.name ?? ""), decidesBy: str(c.decidesBy), color: str(c.color) };
+  return {
+    id: String(c.id ?? ""),
+    name: String(c.name ?? ""),
+    decidesBy: str(c.decidesBy),
+    // The circle's own line for a way of deciding called "Other".
+    decidesByGloss: str(c.decidesByGloss),
+    color: str(c.color),
+  };
+}
+
+/**
+ * WHETHER AN `/api/org` HOLDER ROW IS AN AGENT, at either tier.
+ *
+ * The member row says so (`isAgent`). The public row is a name and nothing
+ * else, and there the server writes the literal in place of an agent's vendor
+ * name, so the literal is how it says so. A row before the projection carries
+ * neither and reads as a person, which is what that payload claimed.
+ */
+export function orgRowIsAgent(h: any): boolean {
+  if (typeof h?.isAgent === "boolean") return h.isAgent;
+  return !has(h, "kind") && !has(h, "userId") && str(h?.name) === PUBLIC_AGENT_NAME;
+}
+
+/**
+ * The name a page may print for one `/api/org` holder row, in a list of who
+ * holds what. An agent's row carries a vendor's product name at the member
+ * tier, so an agent reads "An agent" here exactly as it does on the card and
+ * on the public tier. Null for a row with no name.
+ */
+export function orgHolderName(h: any): string | null {
+  return orgRowIsAgent(h) ? SHEET_WORDS.agent : str(h?.name);
+}
+
+/**
+ * WHETHER A PAGE MAY SHOW A SEAT'S HISTORY, from its own `/api/org` payload.
+ *
+ * `people.visible` is true at the public tier too, where a stranger reads
+ * first names. The history route asks for the member tier itself
+ * (`map.viewPeople`), so a signed-in reader is asked for it only where the
+ * rows prove that tier: a member row carries `kind`, a public row is a name
+ * and nothing else. With no holder row anywhere there is nothing to tell by,
+ * and the page asks, as it always has. A signed-out reader at a tier with
+ * names gets `SeatHistory`'s offer to sign in, which it renders without
+ * asking the route anything.
+ */
+export function seatHistoryShown(people: any, roles: unknown): boolean {
+  if (!people?.visible) return false;
+  if (!people.signedIn) return true;
+  const rows = (Array.isArray(roles) ? roles : []).flatMap((r: any) => (Array.isArray(r?.holders) ? r.holders : []));
+  return rows.length === 0 || rows.some((h: any) => has(h, "kind"));
 }
 
 function holderIn(h: any, opts: { literalAgent: boolean }): SeatHolderIn {
   const name = str(h?.name);
-  // A row that carries nothing but a name is `/api/org`'s public tier. There
-  // the server writes the literal in place of an agent's vendor name.
-  const publicRow = opts.literalAgent && !has(h, "kind") && !has(h, "userId");
   return {
     name,
     userId: typeof h?.userId === "string" && h.userId ? h.userId : null,
     kind: h?.kind === "member" || h?.kind === "documented" ? h.kind : undefined,
-    isAgent: bool(h?.isAgent) ?? (publicRow && name === PUBLIC_AGENT_NAME ? true : undefined),
+    isAgent: bool(h?.isAgent) ?? (opts.literalAgent && orgRowIsAgent(h) ? true : undefined),
     focus: has(h, "focus") ? str(h.focus) : undefined,
     lapsed: bool(h?.lapsed),
     avatar: typeof h?.avatar === "string" && h.avatar ? h.avatar : null,
@@ -131,6 +177,7 @@ export function fromMapSeat(seat: any, data: any, opts: { signedIn: boolean }): 
     aim: str(seat?.description),
     holderCount: whole(seat?.holderCount, holders.length),
     villageDecidesBy: has(data?.power, "decidesBy") ? str(data.power.decidesBy) : undefined,
+    villageDecidesByGloss: has(data?.power, "decidesByGloss") ? str(data.power.decidesByGloss) : undefined,
     holders: holders.map((h) => holderIn(h, { literalAgent: false })),
     namesServed: !!data?.viewer?.viewPeople,
     signedIn: opts.signedIn,
@@ -164,6 +211,7 @@ export function fromOrgSeat(
     aim: str(row?.aim),
     holderCount: whole(row?.holderCount, holders.length),
     villageDecidesBy: has(village, "decidesBy") ? str(village.decidesBy) : undefined,
+    villageDecidesByGloss: has(village, "decidesByGloss") ? str(village.decidesByGloss) : undefined,
     holders: holders.map((h) => holderIn(h, { literalAgent: true })),
     namesServed: !!people?.visible,
     signedIn: !!people?.signedIn,
@@ -247,6 +295,7 @@ export function fromProposedSeat(norm: any, opts: { circles?: any[] } = {}): Sea
     termEnds: undefined,
     archetypes: undefined,
     villageDecidesBy: undefined,
+    villageDecidesByGloss: undefined,
     holders: [],
     namesServed: false,
     signedIn: true,

@@ -24,7 +24,8 @@
  *   - `/api/org`: `representsCircle`, `howChosen`, `howChosenGloss`,
  *     `termEnds`, `archetypes` and `stateSource` (`SeatStructure`), and
  *     `isAgent` on a member-tier holder row. The route adds
- *     `village: { decidesBy }` beside `people` under the same rule.
+ *     `village: { decidesBy, decidesByGloss }` (`villageWay`) beside
+ *     `people` under the same rule.
  *
  * ── THE PRIVACY RULE FOR WHAT `/api/org` GAINED ────────────────────────────
  *
@@ -155,6 +156,22 @@ export function orgSeatTier(v: {
     people: v.viewPeople ? "member" : v.peopleArePublic ? "public" : "none",
     editing: v.editing,
   };
+}
+
+/**
+ * `/api/org`'s `village` block: how the village decides where a circle has not
+ * said, read from the same declared block `/api/map` sends as `power`.
+ *
+ * The line comes with the method because "Other" is required to carry one
+ * (`shared/power.ts`), and a card that printed the bare word would print a
+ * shrug where the village wrote its own way. The route sends this only at the
+ * structure tier, the tier `/api/map` sends `power` at, so neither field is
+ * ever more public here than there.
+ */
+export function villageWay(
+  declared: { decidesBy: string | null; decidesByGloss: string | null } | null,
+): { decidesBy: string | null; decidesByGloss: string | null } {
+  return { decidesBy: declared?.decidesBy ?? null, decidesByGloss: declared?.decidesByGloss ?? null };
 }
 
 /** Where the seat's state came from, read by the same rule `seatState` applies. */

@@ -22,6 +22,12 @@ vi.mock("@/components/natural/useReducedMotion", () => ({
   useReducedMotion: () => true,
   prefersReducedMotion: () => true,
 }));
+// The session, the one seam the card and the history read it through.
+const session = vi.hoisted(() => ({ token: null as string | null }));
+vi.mock("@/lib/gameApi", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  authToken: () => session.token,
+}));
 
 const asked: string[] = [];
 const ARCHETYPES = [
@@ -31,6 +37,7 @@ const ARCHETYPES = [
 
 beforeEach(() => {
   asked.length = 0;
+  session.token = null;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: unknown) => {
@@ -106,6 +113,9 @@ describe("MapSeatCard", () => {
   });
 
   it("tells the seat's story below a real seat, and not below an example", async () => {
+    // A reader the map shows people to has an account, and the history route
+    // needs one: with no session the history asks nothing at all.
+    session.token = "a-token";
     render(<MapSeatCard seat={SEAT} circle={CIRCLE} data={data(true)} />);
     await waitFor(() => expect(historyAsks()).toEqual(["/api/org/roles/water-keeper/history"]));
     // The history sits outside the night card, in the lens's own ink.

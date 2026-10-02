@@ -347,6 +347,31 @@ describe("turning the card over", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Back to the card" })));
   });
 
+  it("empties its live region when the same card is handed another seat", async () => {
+    // The map keeps one card across selections (VillageMap passes no key), so
+    // what the region last said would otherwise be read inside the next seat.
+    const cardFor = (seat: object) => (
+      <SeatTradingCard input={fromMapSeat(seat, DATA(true), { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" />} />
+    );
+    const live = () => card().querySelector("[aria-live]")!;
+    const { rerender } = render(cardFor(EMPTY_SEAT));
+    fireEvent.click(screen.getByRole("button", { name: "Raise your hand for Seed Keeper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
+    // Known positive: the region said it, for this seat.
+    await waitFor(() => expect(live().textContent).toBe("Hand raised. The founding team will be in touch."));
+
+    rerender(cardFor(FILLED));
+    expect(screen.getByRole("heading", { level: 3, name: "Bridge Keeper" })).toBeTruthy();
+    expect(live().textContent).toBe("");
+
+    // The same for the turn: "Showing what it does." does not follow the reader to the next seat.
+    fireEvent.click(screen.getByRole("button", { name: /What it does/ }));
+    expect(live().textContent).toBe("Showing what it does.");
+    rerender(cardFor(EMPTY_SEAT));
+    expect(card().getAttribute("data-face")).toBe("front");
+    expect(live().textContent).toBe("");
+  });
+
   it("turns back to the front from the back footer and opens the hand there", async () => {
     show(SAMPLE);
     fireEvent.click(screen.getByRole("button", { name: /What it does/ }));

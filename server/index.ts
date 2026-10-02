@@ -719,7 +719,7 @@ import {
   type LapseContext,
   type OrgRole,
 } from "./lib/orgChart";
-import { mapSeatTier, mapShowsStructureTo, orgSeatTier, projectSeats } from "./lib/seatProjection";
+import { mapSeatTier, mapShowsStructureTo, orgSeatTier, projectSeats, villageWay } from "./lib/seatProjection";
 // ── Lane L3: how resources flow — declarations, never movements ─────────────
 import {
   answerFourQuestions,
@@ -25561,9 +25561,9 @@ ${inner}
         membersOnly: !peopleArePublic,
         signedIn: !!viewer,
       },
-      // How the village decides where a circle has not said: the declared
-      // block `/api/map` sends in `power`, at the same tier as the seats.
-      ...(tier.structure ? { village: { decidesBy: villagePowerDeclared()?.decidesBy ?? null } } : {}),
+      // How the village decides where a circle has not said, and its line for
+      // "Other": the block `/api/map` sends in `power`, at the seats' tier.
+      ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
       roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName }),

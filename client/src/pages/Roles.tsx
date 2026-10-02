@@ -36,7 +36,7 @@ import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
-import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
+import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 
 interface RoleEntry {
   id: string;
@@ -62,6 +62,8 @@ interface SheetSource {
   ctx: SheetContext;
   /** The raise-hand route lives under `/api/map`, so the door follows that module. */
   raiseHand: boolean;
+  /** Whether the seat's history is shown to this reader (`seatHistoryShown`). */
+  historyShown: boolean;
 }
 
 /** Icon names a card may reference; anything unknown falls back to CircleDot. */
@@ -183,7 +185,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleC
                   a reader opens the card. */}
               {!role.isExample && (
                 <div className="pt-4 border-t border-border">
-                  <SeatHistory roleId={role.id} canSeePeople={!!sheet.people?.visible} />
+                  <SeatHistory roleId={role.id} canSeePeople={sheet.historyShown} />
                 </div>
               )}
               {/* Which of the village's needs this seat carries (R18). A
@@ -220,6 +222,7 @@ export default function Roles() {
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
   const [village, setVillage] = useState<unknown>(undefined);
+  const [historyShown, setHistoryShown] = useState(false);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
@@ -255,6 +258,7 @@ export default function Roles() {
         setCircles(data.circles ?? []);
         setPeople(data.people ?? null);
         setVillage(data.village);
+        setHistoryShown(seatHistoryShown(data.people, data.roles));
         setSeatCounts({
           seats: (data.roles as any[]).reduce((n, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles as any[]).reduce((n, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -266,7 +270,9 @@ export default function Roles() {
             circleId: r.circleId ?? null,
             group: String(circleById.get(r.circleId)?.name ?? "Unplaced roles"),
             status: normalizeStatus(r.state),
-            holders: (r.holders ?? []).map((h: any) => h.name).filter(Boolean),
+            // An agent's member row carries a vendor's name; the header says
+            // "An agent", as the card under it and the public tier do.
+            holders: (r.holders ?? []).map(orgHolderName).filter((n: string | null): n is string => !!n),
             icon: r.icon ?? undefined,
             color: r.color ?? undefined,
             isExample: !!r.isExample,
@@ -285,6 +291,7 @@ export default function Roles() {
     village,
     ctx: { now: new Date(), season: seasonForSheet(season), classNames },
     raiseHand,
+    historyShown,
   };
 
   // Grouped by circle, in the order the village sorted its circles, with a
