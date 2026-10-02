@@ -1,5 +1,5 @@
 /**
- * A DESK-LAYOUT DECISION THE LIVING MAP MAKES, PLAYED WITH THE GEOMETRY A BROWSER MEASURED.
+ * TWO DESK-LAYOUT DECISIONS THE LIVING MAP MAKES, PLAYED WITH THE GEOMETRY A BROWSER MEASURED.
  *
  * 1. THE TOP ROW. The stat bar stood centred on the window while the buttons
  *    at each end of the row stood where their own rules put them. At every
@@ -9,13 +9,21 @@
  *    at each end of the row, tries the bar's steps on until one fits, and puts
  *    the bar on a row of its own when none does.
  *
+ * 2. A DISTRICT PLATE OVER A BUILDING. At the arrival camera four district
+ *    plates sat on a building's own click box, so a click on the Welcome
+ *    Lodge, the Ponds, the Kitchen or Ridge Hamlet North flew the camera and
+ *    opened nothing. A plate now hands the click to a building under it.
+ *
  * WHAT THIS CAN SEE AND WHAT IT CANNOT. jsdom lays nothing out: every box
- * measures zero. So these cases hand the artifact the rects Chromium measured
- * at each window size (scratchpad rects.cjs, read through the real page), and
- * assert what the artifact DECIDES from them. Whether the CSS then draws
- * the bar at those widths, and whether every glyph in it is really on top,
- * was measured in Playwright through the shell at 1280x720, 1366x768,
- * 1400x850, 1536x864 and 1920x1080.
+ * measures zero and elementsFromPoint does not exist. So these cases hand the
+ * artifact the rects Chromium measured at each window size (scratchpad
+ * rects.cjs, read through the real page) and the stack a real click lands in,
+ * and assert what the artifact DECIDES from them. Whether the CSS then draws
+ * the bar at those widths, and whether the button in question is really on
+ * top, was measured in Playwright through the shell at 1280x720, 1366x768,
+ * 1400x850, 1536x864 and 1920x1080. A third fix in the same change, What
+ * needs hands stepping aside with Maia while a panel is open, is pure CSS
+ * geometry and has no decision for jsdom to see, so it is not here.
  *
  * The platform stubs mirror mapArtifactBoot.test.ts, which says why each one
  * exists.
@@ -220,5 +228,49 @@ describe("the top row on a desk: the stat bar fits between the buttons, or takes
     expect(doc.documentElement.style.getPropertyValue("--top-vx")).toBe("");
     expect(doc.documentElement.style.getPropertyValue("--top-vy")).toBe("");
     doc.body.classList.remove("pocket");
+  });
+});
+
+describe("a district plate over a building hands the click to the building", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot({ width: 1440, height: 900 });
+    await settle(300);
+  });
+  afterAll(() => b?.close());
+
+  /** The Kitchen, under its own district's plate, as it is at the arrival camera. */
+  const KEY = "kitchen";
+  const plateOf = () => b.run<HTMLElement>(`bEls['d_'+BY['${KEY}'].district]`);
+  const poi = () => b.window.document.querySelector<HTMLElement>(`.poi[data-k="${KEY}"]`) as HTMLElement;
+  const reset = () => b.run("if(panelKey)document.getElementById('panelClose').click();travel=null;panelKey=null");
+  /** A real click on the plate, landing in the stack a browser would report there. */
+  const clickPlate = (stack: Element[]) => {
+    const plate = plateOf();
+    Object.assign(b.window.document, { elementsFromPoint: () => [plate, ...stack] });
+    plate.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true, clientX: 602, clientY: 338 }));
+  };
+
+  it("is clicking a plate whose district names the building (the positive control)", () => {
+    const plate = plateOf();
+    expect(plate?.classList.contains("district"), "a district plate").toBe(true);
+    expect(poi(), "the building's own click box").not.toBeNull();
+  });
+
+  it("opens the building when its click box is under the plate", () => {
+    reset();
+    const art = poi().firstElementChild ?? poi();
+    clickPlate([art, poi(), b.window.document.getElementById("scene") as Element]);
+    expect(b.run<string | null>("panelKey"), "the panel that opened").toBe(KEY);
+    expect(b.window.location.hash).toBe(`#/place/${KEY}`);
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("still flies to the district when only the land is under the plate", () => {
+    reset();
+    clickPlate([b.window.document.getElementById("scene") as Element]);
+    expect(b.run<string | null>("panelKey"), "no panel").toBeNull();
+    expect(b.run<number | null>("travel&&travel.tz"), "the flight in to the district").toBe(1.05);
+    expect(b.uncaught).toEqual([]);
   });
 });

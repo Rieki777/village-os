@@ -4296,8 +4296,26 @@ window.rebuildVitals=rebuildVitals;rebuildVitals();
 
 /* banners */
 const bWrap=$('banners');const bEls={};
+/* A DISTRICT PLATE PASSES A CLICK ON TO THE BUILDING UNDER IT. The plates
+   are placed to touch a building they name (plateSlots' aim sort), and at the
+   arrival camera that put four of them over a building's own click box, at
+   z 11 against the buildings' 10. MEASURED at 1400x850: a real click on the
+   Welcome Lodge, the Ponds, the Kitchen or Ridge Hamlet North flew the camera
+   to the district and opened nothing, while Maia was saying "click any
+   building to open its door". The placement is left alone, because its
+   ceilings were measured against readable names. The click asks what it
+   would have hit with the plate out of the way, and a building there gets
+   the click itself, through its own handler, so build mode, a drag and the
+   pocket's fan all behave as they do on the building. Anywhere else on the
+   plate still flies to the district. */
+function plateClick(e,d,el){
+  const under=document.elementsFromPoint?document.elementsFromPoint(e.clientX,e.clientY):[];
+  const next=under.find(n=>n!==el&&!el.contains(n));
+  const poi=next&&next.closest&&next.closest('.poi');
+  if(poi){e.stopPropagation();poi.click();return}
+  travelTo(d.x,d.y,1.05)}
 for(const d of SCENE.districts){const el=document.createElement('div');el.className='banner district';el.textContent=d.name;
-  el.onclick=()=>travelTo(d.x,d.y,1.05);bWrap.appendChild(el);bEls['d_'+d.id]=el}
+  el.onclick=e=>plateClick(e,d,el);bWrap.appendChild(el);bEls['d_'+d.id]=el}
 const GEO=[{t:'Pacific Ocean',x:200,y:840,cls:' ocean'},{t:'Dominicalito',x:610,y:430,cls:''},{t:'Poza Azul falls',x:1160,y:168,cls:''},{t:'Costanera Sur',x:560,y:1120,cls:''}];
 GEO.forEach((g,i)=>{const el=document.createElement('div');el.className='banner geo'+g.cls;el.textContent=g.t;
   bWrap.appendChild(el);bEls['g_'+i]=el});
