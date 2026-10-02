@@ -877,6 +877,9 @@
   .promise{font-size:10px;line-height:1.45;color:#8a7347;margin-top:5px}
   #maia .jrow{display:flex;gap:7px;align-items:center;margin-top:6px}
   #maia .jrow .btn{font-size:10.5px;padding:3px 10px}
+  /* A row from a stop already passed. jRowsOff switches it off, and this is
+     what says so: without it a dead button looks exactly like a live one. */
+  #maia .jrow .btn:disabled{opacity:.45;cursor:default;filter:none}
   #maia .jn{margin-left:auto;font-size:10px;color:#8f855f}
   .firststep{margin-top:6px;padding:7px 9px;border-left:2px solid var(--gold);
     background:rgba(201,162,94,.12);border-radius:0 6px 6px 0;font-size:11.5px;color:#4a3a26}
@@ -8165,6 +8168,17 @@ function jRow(n,total,more){
     +'<button class="btn ghostbtn" onclick="jEnd()">✕ stay here</button>'
     +'<span class="jn">'+n+' of '+total+'</span></div>'}
 
+/* ONE LIVE ROW. Every row of answers calls the same three globals, and those
+   belong to the newest walk, so a row scrolled back into view from a stop
+   already passed still acted on whatever was running now. MEASURED in the
+   QA sweep and again here: with no walk running, an old `stay here` under an
+   open Ponds panel cleared #/place/ponds and printed "The walk ends here",
+   and a `stay here` left by the Resident Journey ended the Steward Journey
+   three stops in. So the rows already in the log are switched off before a
+   new one is written, and all of them when a walk ends. */
+function jRowsOff(){document.querySelectorAll('#maiaLog .jrow button').forEach(b=>{b.disabled=true})}
+window.jRowsOff=jRowsOff;
+
 /* Long enough to read a line at, and it never runs while she is paused. A
    1.5 second stop was a slideshow; this is a walk. */
 const JDWELL=6500;
@@ -8192,7 +8206,7 @@ function jSheetOff(){document.body.classList.remove('jwalk');
 function jHalt(keepSheet){
   clearTimeout(JTMR);
   if(!JWALK)return false;
-  const w=JWALK;JWALK=null;tourI=-1;setHash('');
+  const w=JWALK;JWALK=null;tourI=-1;setHash('');jRowsOff();
   document.body.classList.remove('jwalk');
   if(!keepSheet)jSheetOff();
   if(w.log&&typeof endWalk==='function')endWalk(false,w.i);
@@ -8205,6 +8219,7 @@ function jPause(){if(!JWALK)return false;JWALK.paused=true;clearTimeout(JTMR);re
 window.jPause=jPause;
 function jOffer(){if(!JWALK||!JWALK.paused)return;
   const say='Say the word and we walk on.';
+  jRowsOff();
   maiaSay(escq(say)+'<div class="jrow"><button class="btn" onclick="jNext()">▸ walk on</button>'
     +'<button class="btn ghostbtn" onclick="jEnd()">✕ stay here</button></div>',null,say)}
 
@@ -8251,7 +8266,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
     JTMR=setTimeout(()=>{if(JWALK&&JWALK.id===id&&!JWALK.paused&&GUIDE.on){JWALK.i++;step()}},JDWELL);
     tourTimer=JTMR};
   const step=()=>{if(!JWALK||JWALK.id!==id)return;
-    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jSheetOff();
+    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jSheetOff();jRowsOff();
       GUIDE.finish();   // it ran to the end, so there is nothing to resume
       if(logged&&typeof endWalk==='function')endWalk(true,at);
       const route=SITE_ROUTES[id]||'/';
@@ -8280,6 +8295,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
       const title=escq((x.st.stage?x.st.stage+': ':'')+(x.st.t||''));
       const line=jLine(x.st,s),deep=line?null:jDeep(s);
       const body=x.st.body?('<div style="margin-top:3px">'+escq(x.st.body)+'</div>'):'';
+      jRowsOff();
       maiaSay('<b>'+title+'</b> at '+escq(s.name)
         +'<div style="margin-top:3px">'+(line?escq(line):deep.html)+'</div>'
         +body+jRow(JWALK.i+1,stops.length,true),
@@ -8291,11 +8307,14 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
   window.jMore=()=>{clearTimeout(JTMR);if(!JWALK||JWALK.id!==id)return;
     JWALK.paused=true;
     const x=stops[Math.min(JWALK.i,stops.length-1)],s=x&&BY[x.st.at];if(!s)return;
-    const d=jDeep(s);
+    const d=jDeep(s);jRowsOff();
     maiaSay(d.html+jRow(JWALK.i+1,stops.length,false),null,d.say)};
-  window.jEnd=()=>{clearTimeout(JTMR);GUIDE.stop('end');
+  /* Ends the walk that is running and nothing else. With no walk it used to
+     clear the address of whatever place was open and announce an ending
+     nobody had asked for, so it returns before touching either. */
+  window.jEnd=()=>{clearTimeout(JTMR);if(!JWALK)return;GUIDE.stop('end');
     const logged=!!(JWALK&&JWALK.log),at=JWALK?JWALK.i:-1;
-    JWALK=null;tourI=-1;setHash('');jSheetOff();mvStop();
+    JWALK=null;tourI=-1;setHash('');jSheetOff();jRowsOff();mvStop();
     if(logged&&typeof endWalk==='function')endWalk(false,at);
     maiaSay('The walk ends here. Wander wherever you like, and say my name when you want me.')};
   JWALK.hold=hold;step()}
