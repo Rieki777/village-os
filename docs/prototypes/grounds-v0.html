@@ -26,6 +26,14 @@
      It must live in the stylesheet. Setting it inside pointerdown is too
      late, because a gesture already under way ignores the change. */
   #scene{position:absolute;inset:0;cursor:grab;touch-action:none}
+  /* THE MARKS OVER THE LAND ARE LAND TOO. The building plates, the place names
+     and the seals are their own elements above #scene, so a finger that starts
+     on one is not on the canvas, and the browser took the gesture: a pinch
+     with both fingers on the Village Heart label zoomed the whole page to
+     1.12 and put the bottom bar off the glass while the map stayed still.
+     Named on every element and not left to inheritance, because each layer is
+     an overflow:hidden box and a browser may stop the walk up at one. */
+  #icons *,#banners *,#badges *{touch-action:none}
   #scene.dragging{cursor:grabbing}
   #banners{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:11}
   /* Badges sit above the labels, which sit above the buildings: the order
@@ -2992,8 +3000,9 @@ cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=
    THE ANCHOR NOW TRACKS THE FINGERS. It was frozen at gesturestart, so a
    pinch that drifted zoomed about where the hand STARTED. Carrying the live
    midpoint forward gives two-finger pan out of the same arithmetic.
-   WIDENED TO #vitals, #pbar AND #pnav ONLY. A pinch that lands a few pixels
-   off the canvas, on the strip or on the bar, is still a pinch at the map.
+   WIDENED TO #vitals, #pbar, #pnav AND THE MARKS ON THE LAND ONLY. A pinch
+   that lands a few pixels off the canvas, on the strip, on the bar or on a
+   building's plate, is still a pinch at the map.
    It is NOT widened to the document: the reading sheets in here keep their
    pinch, because on a phone pinch-zoom is the mechanism SC 1.4.4 leans on to
    resize text, and taking it from a panel of prose would be the accessibility
@@ -3011,7 +3020,9 @@ cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=
     el.addEventListener('gesturestart',start,{passive:false});el.addEventListener('gesturechange',change,{passive:false});
     if(el!==cv)el.addEventListener('gestureend',e=>e.preventDefault(),{passive:false})}
   cv.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
-  for(const id of ['vitals','pbar','pnav']){const s=document.getElementById(id);if(!s)continue;
+  /* The mark layers join them: a pinch begun on a building's plate is a pinch
+     at the map, and touchNav already applies it, so these only refuse. */
+  for(const id of ['vitals','pbar','pnav','icons','banners','badges']){const s=document.getElementById(id);if(!s)continue;
     for(const t of ['gesturestart','gesturechange','gestureend'])
       s.addEventListener(t,e=>{if(e.cancelable)e.preventDefault()},{passive:false})}})();
 /* THE BUILDING A FINGER IS AIMING AT, which is not the same box as the one
@@ -3024,10 +3035,11 @@ cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=
    hitStruct measures a radius around the ANCHOR in world space and does not
    know the art stands above it.
    THE SPRITE STAYS TRANSPARENT TO POINTERS, deliberately. Turning it on was
-   one CSS word and would have cost the map its pan: touchNav is bound to
-   #scene, so a finger landing on a building would never reach it and a drag
-   begun on a roof would move nothing. Testing the rendered art HERE, on the
-   click that already falls through, keeps the pan and opens the door.
+   one CSS word and would have cost the map its pan when touchNav listened on
+   #scene alone. It now listens on the mark layers as well, so a turned-on
+   sprite would pan, but testing the rendered art HERE, on the click that
+   already falls through, opens the door without a second hit box to keep in
+   step with the art.
    RECTS, NOT ARITHMETIC: the sprite's box is height, a bottom offset, a
    translate and the camera's own transform, and asking the browser is the
    only reading that cannot drift from what was painted. It runs on a click
@@ -9431,6 +9443,20 @@ window.hap=hap;
    moved until the whole hand left the glass. touchcancel had no listener at
    all, which is the event the browser sends when it takes the gesture. */
 (function touchNav(){const el=$('scene');if(!el)return; // id is 'scene'; $('cv') was null and this block never ran
+  /* THE LAND IS FOUR LAYERS, AND A FINGER CAN START ON ANY OF THEM. The
+     building plates, the place names and the seals sit in #icons, #banners and
+     #badges, siblings of #scene and not its children, so a drag that began on
+     a roof or a name never reached this block. MEASURED at 390x844 in the
+     village: a drag from the Village Heart label moved the camera 0,0 where
+     the same drag on bare land moved it 80,-53.33, and 22.9% of the land
+     surface answered that way. Touch events bubble through those layers even
+     though they are pointer-events:none, which only governs hit testing, so
+     each layer carries the same four listeners and the one state below.
+     A TAP STILL OPENS THE DOOR. touchstart and touchend stay passive and only
+     touchmove calls preventDefault, which leaves the browser's tap and its
+     click alone; a finger that moved past the tap slop never clicks. */
+  const LAND=[el,...['icons','banners','badges'].map(id=>$(id)).filter(Boolean)];
+  const listen=(type,fn,opts)=>{for(const l of LAND)l.addEventListener(type,fn,opts)};
   let T=null,pend=null,raf=0,samp=[];
   const CALM=()=>{try{return matchMedia('(prefers-reduced-motion:reduce)').matches}catch(_){return false}};
   const snap=e=>{const a=[];for(let i=0;i<e.touches.length&&i<2;i++)a.push([e.touches[i].clientX,e.touches[i].clientY]);return a};
@@ -9456,7 +9482,7 @@ window.hap=hap;
     seat(p)}
   function flush(){raf=0;const p=pend;pend=null;if(p)apply(p)}
   function nowFlush(){if(raf){cancelAnimationFrame(raf);raf=0}flush()}
-  el.addEventListener('touchstart',e=>{
+  listen('touchstart',e=>{
     /* THE SAME CANCEL PATH THE MOUSE USES, at the entry point this lane
        already owns. A finger on the glass is a person taking the map. */
     window.GUIDE&&GUIDE.hand();
@@ -9466,7 +9492,7 @@ window.hap=hap;
       if(travel){const d=travel.done;travel=null;d&&d()}}
     else nowFlush();
     seat(snap(e))},{passive:true});
-  el.addEventListener('touchmove',e=>{if(!T)return;
+  listen('touchmove',e=>{if(!T)return;
     /* cancelable goes false once the browser has taken the gesture for itself,
        and preventDefault then is a no-op with a console warning attached. */
     if(e.cancelable)e.preventDefault();
@@ -9499,8 +9525,8 @@ window.hap=hap;
         if(sp>cap){vx=vx*cap/sp;vy=vy*cap/sp}
         cam.vx=vx;cam.vy=vy}}
     samp=[]}
-  el.addEventListener('touchend',e=>close(e,false),{passive:true});
-  el.addEventListener('touchcancel',e=>close(e,true),{passive:true})})();
+  listen('touchend',e=>close(e,false),{passive:true});
+  listen('touchcancel',e=>close(e,true),{passive:true})})();
 /* bottom bar */
 if($('pbMap'))$('pbMap').onclick=()=>{const c=document.body.classList.contains('circles');setMapType(c?'living':'circles');
   $('pbMap').firstElementChild.textContent=c?'🏞':'◎';hap(8);window.WGATE&&(WGATE.toggle=true)};

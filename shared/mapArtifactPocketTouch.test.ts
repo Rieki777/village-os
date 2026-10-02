@@ -246,3 +246,89 @@ describe("Where can I help? in Maia's phone sheet", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* A FINGER THAT STARTS ON A BUILDING STILL MOVES THE LAND. The plates, the
+   place names and the seals are their own layers over #scene, and the gesture
+   code listened on #scene alone: measured at 390x844 in the village, a drag
+   from the Village Heart label moved the camera 0,0 where the same drag on
+   bare land moved it 80,-53.33. jsdom has no Touch constructor, so each event
+   carries its touch list the way a browser's does, as a property. What jsdom
+   cannot show is the page zoom the browser took instead (touch-action), which
+   was measured in Playwright: a pinch on the label set visualViewport.scale to
+   1.12 before and left it at 1 after. */
+describe("a drag or a pinch that starts on a mark over the land", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const fire = (target: Element, type: string, pts: [number, number][]) => {
+    const ev = new b.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "touches", { value: pts.map(([clientX, clientY]) => ({ clientX, clientY })) });
+    target.dispatchEvent(ev);
+  };
+  const cam = () => b.run<{ x: number; y: number; z: number }>("({x:cam.x,y:cam.y,z:cam.z})");
+  const village = () => b.run("travel=null;cam.vx=cam.vy=0;cam.x=1400;cam.y=640;cam.z=0.9;clampCam()");
+  /** One finger from (200,300), 72 px left and 48 px down, in twelve moves. */
+  async function drag(target: Element) {
+    village();
+    const c0 = cam();
+    fire(target, "touchstart", [[200, 300]]);
+    for (let i = 1; i <= 12; i++) {
+      fire(target, "touchmove", [[200 - 6 * i, 300 + 4 * i]]);
+      await settle(20);
+    }
+    await settle(40);
+    fire(target, "touchend", []);
+    b.run("cam.vx=cam.vy=0");
+    const c1 = cam();
+    return { dx: +(c1.x - c0.x).toFixed(2), dy: +(c1.y - c0.y).toFixed(2) };
+  }
+  /** Two fingers 40 px apart about (200,300), spread to 160. */
+  async function pinch(target: Element) {
+    village();
+    const z0 = cam().z;
+    const pts = (d: number): [number, number][] => [
+      [200 - d / 2, 300],
+      [200 + d / 2, 300],
+    ];
+    fire(target, "touchstart", pts(40));
+    for (let i = 1; i <= 12; i++) {
+      fire(target, "touchmove", pts(40 + 10 * i));
+      await settle(20);
+    }
+    await settle(40);
+    fire(target, "touchend", []);
+    return { z0, z1: +cam().z.toFixed(3) };
+  }
+  const poi = () => b.doc.querySelector("#icons .poi") as Element;
+  const label = () => b.doc.querySelector("#banners .banner:not(.geo)") as Element;
+  const seal = () => b.doc.querySelector("#badges .bseal") as Element;
+
+  it("moves the camera by the finger on bare land (the positive control)", async () => {
+    expect(await drag(b.doc.getElementById("scene") as Element)).toEqual({ dx: 80, dy: -53.33 });
+  });
+
+  it("moves it the same when the drag starts on a building, a place name or a seal", async () => {
+    expect(poi(), "a building plate").not.toBeNull();
+    expect(label(), "a place name").not.toBeNull();
+    expect(seal(), "a seal").not.toBeNull();
+    expect(await drag(poi()), "from a building").toEqual({ dx: 80, dy: -53.33 });
+    expect(await drag(label()), "from a place name").toEqual({ dx: 80, dy: -53.33 });
+    expect(await drag(seal()), "from a seal").toEqual({ dx: 80, dy: -53.33 });
+  });
+
+  it("zooms the map when both fingers of a pinch start on a place name", async () => {
+    const r = await pinch(label());
+    expect(r.z1, "the map's zoom after a 4x spread").toBeGreaterThan(r.z0 * 2);
+  });
+
+  it("threw nothing", () => {
+    // That a plain tap still opens the door is a browser fact: jsdom never
+    // turns touch events into a click. Measured in Playwright with CDP touch:
+    // a tap on a plate and on a seal each opened its place after the change.
+    expect(b.uncaught).toEqual([]);
+  });
+});
