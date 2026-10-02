@@ -11,7 +11,7 @@
  * a shell, not a second monolith — the file-lines ratchet refuses any client
  * file that crosses 1000 lines without a baseline entry.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useVillageName, useVillageLocation } from "@/hooks/useVillageName";
 
 /**
@@ -60,12 +60,22 @@ export function useMapEnterGate() {
     return () => window.clearTimeout(t);
   }, [preparing]);
 
+  /**
+   * Whether the visitor pressed Enter the Land. The button held focus and
+   * unmounts on the press, so focus falls to the page and the map's own keys
+   * (Space, the arrows, T for the tour) answer nothing until somebody clicks
+   * the land. The shell reads this on load to hand focus to the land the
+   * button opened. A deep link never pressed anything and keeps its focus.
+   */
+  const pressed = useRef(false);
+
   const onEnter = useCallback(() => {
+    pressed.current = true;
     setEntered(true);
     setPreparing(true);
   }, []);
 
-  return { entered, preparing, setPreparing, onEnter };
+  return { entered, preparing, setPreparing, onEnter, pressed };
 }
 
 type EnterTheLandGateProps = {
