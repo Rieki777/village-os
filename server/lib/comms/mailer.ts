@@ -19,7 +19,17 @@
  * the brand overlay are booted by server/index.ts. Passing their readers in
  * keeps this file free of that boot order, and keeps every name it touches in
  * one visible list (`MailerDeps`).
+ *
+ * `sendResendEmail` IS NOW A THIN CALL TO THE POST OFFICE. Each recipient is
+ * posted as its own `essential`, `urgent` email, so every send is a ledger row
+ * a founder can read, and the answer keeps the exact `{ sent, reason }` shape
+ * every existing caller was written against.
  */
+import { randomUUID } from "node:crypto";
+import type { Pool } from "mysql2/promise";
+import type { PostResult } from "../../../shared/comms/contracts";
+import { post, type PostOfficeDeps } from "./postOffice";
+import { resendTransport, type Transport } from "./transport";
 
 /**
  * The email-config document's defaults. The four inboxes are where form
@@ -109,6 +119,32 @@ export interface MailerDeps {
   secretValue(key: "resend_api_key" | "assistant_api_key"): string;
   /** This village's own name, for the heading of a submission email. */
   projectName(): string;
+  /** The pool the post office writes its ledger through. */
+  getPool(): Pool;
+  /** This village's absolute origin, for the one-click links in an email's headers. */
+  origin(): string;
+  /** The provider. Resend unless a test hands in its own. */
+  transport?: Transport;
+}
+
+/**
+ * The same recipient rule the mailer has always applied: every configured
+ * inbox may hold a comma-separated LIST, because several people receiving
+ * updates is the norm for a village. Split, trim, drop non-addresses, dedupe.
+ */
+export function normalizeRecipients(to: string[]): string[] {
+  return Array.from(new Set(
+    to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
+  ));
+}
+
+/** The post office's answer, in the words the old mailer's callers read. */
+export function mailResultOf(r: PostResult): MailResult {
+  if (r.status === "sent") return { sent: true };
+  if (r.reason === "no_api_key" || r.reason === "no_sender") return { sent: false, reason: r.reason };
+  if (r.status === "skipped" && r.reason === "bad_address") return { sent: false, reason: "no_recipients" };
+  if (r.reason === "rejected") return { sent: false, reason: "rejected" };
+  return { sent: false, reason: "failed" };
 }
 
 export function createMailer(deps: MailerDeps) {
@@ -191,58 +227,72 @@ export function createMailer(deps: MailerDeps) {
     return "";
   }
 
-  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; from?: string; replyTo?: string }): Promise<MailResult> {
-    const cfg = getEmailConfig();
-    if (!cfg.resend_api_key) {
-      console.log("[RESEND] API key not set, skipping email");
-      return { sent: false, reason: "no_api_key" };
-    }
-    const from = opts.from ?? resolvedEmailSender();
-    if (!from) {
-      console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
-      return { sent: false, reason: "no_sender" };
-    }
-    // Every configured inbox may hold a comma-separated LIST: several people
-    // receiving updates is the norm for a village, not an edge case. Split,
-    // trim, drop non-addresses, dedupe; every caller gets this for free.
-    const to = Array.from(new Set(
-      opts.to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
-    ));
+  /**
+   * The post office this mailer posts through, built once. The comms admin
+   * routes read the same object, so "run now" drains exactly the ledger
+   * `sendResendEmail` writes to.
+   */
+  const postOffice: PostOfficeDeps = {
+    getPool: deps.getPool,
+    transport: deps.transport ?? resendTransport({ apiKey: () => deps.secretValue("resend_api_key") }),
+    // Admin-typed sender first, then the env var. A malformed admin value is
+    // IGNORED and never sent (a bad From: kills every email silently), and
+    // says so in the log so the founder can find it.
+    sender: resolvedEmailSender,
+    hasApiKey: () => Boolean(deps.secretValue("resend_api_key")),
+    origin: deps.origin,
+  };
+
+  /**
+   * Send one email to each recipient, now. The old name and the old answer,
+   * through the post office.
+   *
+   * WHAT EACH ANSWER MEANS, unchanged for every caller. `no_api_key` and
+   * `no_sender` say which half of the setup is missing, and they still come
+   * BEFORE `no_recipients`, so a fork with nothing configured hears the
+   * thing it can fix. `sent` is true only when the provider accepted every
+   * recipient's copy, and the first refusal names the answer otherwise.
+   *
+   * The `from` override this used to accept was passed by no caller and is
+   * gone: every email leaves under the one configured sender.
+   */
+  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; replyTo?: string; origin?: string }): Promise<MailResult> {
+    const to = normalizeRecipients(opts.to);
     if (!to.length) {
+      if (!postOffice.hasApiKey()) {
+        console.log("[RESEND] API key not set, skipping email");
+        return { sent: false, reason: "no_api_key" };
+      }
+      if (!postOffice.sender()) {
+        console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
+        return { sent: false, reason: "no_sender" };
+      }
       console.log("[RESEND] No recipients, skipping email");
       return { sent: false, reason: "no_recipients" };
     }
-    try {
-      const res = await fetch("https://api.resend.com/emails", { // module-review-ok: the existing mailer, moved unchanged; the post office replaces this call in the next commit
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${cfg.resend_api_key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          // Admin-typed sender first, then the env var. A malformed admin value
-          // is IGNORED and never sent (a bad From: kills every email silently),
-          // and says so in the log so the founder can find it. Resolved above,
-          // because no sender at all is a refusal and never a send.
-          from,
-          to,
+    let first: MailResult | null = null;
+    for (const address of to) {
+      const answer = mailResultOf(
+        await post(postOffice, {
+          // Every call is its own email, exactly as before: the old mailer
+          // never deduplicated, and the callers that need a stable key will
+          // post through the post office directly with their own.
+          idempotencyKey: `essential:${randomUUID()}`,
+          kind: "essential",
+          origin: opts.origin ?? "mail.direct",
+          to: { email: address },
           subject: opts.subject,
           html: opts.html,
+          text: "",
           // The contact relay (S22) sets this to the SENDER's address so a
           // plain reply works, always with compose-screen disclosure.
-          ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+          replyTo: opts.replyTo ?? null,
+          urgent: true,
         }),
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error("[RESEND ERROR]", res.status, errText);
-        return { sent: false, reason: "rejected" };
-      }
-      return { sent: true };
-    } catch (err) {
-      console.error("[RESEND ERROR]", err);
-      return { sent: false, reason: "failed" };
+      );
+      if (!answer.sent && !first) first = answer;
     }
+    return first ?? { sent: true };
   }
 
   /** The configured inboxes for one form type's pathway, falling back to all of them. */
@@ -260,5 +310,5 @@ export function createMailer(deps: MailerDeps) {
     );
   }
 
-  return { getEmailConfig, buildSubmissionEmailHtml, resolvedEmailSender, sendResendEmail, recipientsForType };
+  return { getEmailConfig, buildSubmissionEmailHtml, resolvedEmailSender, sendResendEmail, recipientsForType, postOffice };
 }
