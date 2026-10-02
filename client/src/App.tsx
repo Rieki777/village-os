@@ -6,6 +6,7 @@ import { Route, Switch, useLocation } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
@@ -45,25 +46,6 @@ function LandingRoute() {
     if (landing === "map") navigate("/map", { replace: true });
   }, [landing, navigate]);
   return landing === "home" ? <Home /> : null;
-}
-
-function ScrollToTop() {
-  const [location] = useLocation();
-  useEffect(() => {
-    // If the URL carries an anchor (e.g. /#choose-path from another page),
-    // scroll to it once the new page has rendered instead of forcing the top.
-    const hash = window.location.hash;
-    if (hash) {
-      const t = setTimeout(() => {
-        const el = document.querySelector(hash);
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-        else window.scrollTo({ top: 0, behavior: "instant" });
-      }, 100);
-      return () => clearTimeout(t);
-    }
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, [location]);
-  return null;
 }
 
 /**
