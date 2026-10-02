@@ -602,3 +602,42 @@ describe("an edit, on the draft bar", () => {
     expect(second).toMatch(/^2 unpublished changes\./);
   });
 });
+
+describe("a config push from the shell, under an open inspect card", () => {
+  let m: Booted;
+  let sameVersion: { card: boolean };
+  let newVersion: { onMap: string; saved: string };
+  let againWithWork: string[];
+  beforeAll(async () => {
+    m = await framed();
+    m.run("openInspect('market');window.__card=BY.market");
+    // A skin saved in Village Settings re-pushes the config, scene and all.
+    m.post(config(live6(), 6));
+    sameVersion = { card: m.run<boolean>("BY.market===window.__card") };
+    m.post(config(live7(), 7));
+    m.run(
+      "(()=>{const i=document.getElementById('iName');i.value='Typed after the push';" +
+        "i.dispatchEvent(new Event('input'));i.dispatchEvent(new Event('change'))})()",
+    );
+    newVersion = {
+      onMap: m.run<string>("BY.market.name"),
+      saved: m.run<string>("buildExportJSON().map_structures.find(r=>r.key==='market').name"),
+    };
+    m.run("__toasts.length=0");
+    m.post(config(live7(), 7));
+    againWithWork = await toasts(m);
+  });
+  afterAll(() => m?.close());
+
+  it("of the version already on screen leaves the card bound to the place it is editing", () => {
+    expect(sameVersion.card).toBe(true);
+  });
+
+  it("of a new version binds the card to the new place, so what is typed is what is saved", () => {
+    expect(newVersion).toEqual({ onMap: "Typed after the push", saved: "Typed after the push" });
+  });
+
+  it("of the version already on screen is not news to a draft", () => {
+    expect(againWithWork.join(" ")).not.toContain("The live map changed");
+  });
+});

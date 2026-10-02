@@ -7586,6 +7586,10 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   if(typeof renderMediaVocab==='function'){renderMediaVocab();renderPhaseVocab()}
   if(typeof refreshPanel==='function')refreshPanel();
   if(document.body.classList.contains('loom'))renderLoom();
+  /* An open inspect card holds the structure object it was opened on, and
+     every structure above is a new one. Typing into the old card counted an
+     edit that no save or publish could see. */
+  if(typeof inspKey!=='undefined'&&inspKey){if(BY[inspKey])renderInspect();else closeInspect()}
   if(!quiet)toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
   return true}catch(err){console.warn('restore failed',err);
     toast(quiet?'The live map could not be drawn.':'Could not restore the saved session.');return false}}
@@ -9752,6 +9756,7 @@ renderMediaVocab();renderPhaseVocab();
 let HAND={canEdit:false,canPublish:false};
 let LIVE=null;            /* {version,by,at} as the village last reported it */
 let LIVE_SCENE=null;      /* the published land, kept for View as visitor */
+let LIVE_SCENE_VERSION=0; /* the version LIVE_SCENE is, which LIVE can run ahead of */
 let BASE_VERSION=0;       /* the published version THIS draft forked from */
 let PUBLISH_MARK=0;       /* the newest edit on screen that the live map already has */
 let SCENE_APPLIED=false;  /* has a pushed scene ever landed */
@@ -9856,9 +9861,16 @@ function sayOffer(){
    are mid-drag must not move the ground under your hands, and your base
    version deliberately stays where it was so your next publish is refused and
    explains itself. Rebasing you here would turn that refusal into a silent
-   overwrite of the person who just published. */
+   overwrite of the person who just published.
+   THE SAME VERSION IS THE SAME LAND, because a published version never
+   changes. The shell pushes the config again whenever Village Settings saves
+   a skin, and that push carries the scene. Taking it as news said "The live
+   map changed" to a draft when nothing had, and rebuilt every place under an
+   open inspect card. */
 function applyScene(scene,version){
-  LIVE_SCENE=scene;
+  const v=+version||0;
+  if(SCENE_APPLIED&&v&&v===LIVE_SCENE_VERSION)return false;
+  LIVE_SCENE=scene;LIVE_SCENE_VERSION=v;
   sayOffer();
   /* VIEWING AS A VISITOR, the land on screen is the live map and the draft
      waits in DRAFT_HOLD. Counting unpublished() here measured the live
@@ -9986,7 +9998,7 @@ async function doPublish(){
     closePublish();
     BASE_VERSION=+r.version||BASE_VERSION;PUBLISH_MARK=editSeq;
     LIVE=(r.live&&r.live.version)?r.live:{version:r.version};
-    LIVE_SCENE=buildExportJSON('published');
+    LIVE_SCENE=buildExportJSON('published');LIVE_SCENE_VERSION=+r.version||LIVE_SCENE_VERSION;
     $('pubNote').value='';
     renderDraftBar();liveSince(r.version);
     return}
