@@ -14,6 +14,11 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  // The admin sign-in links here with `?next=/admin…`, and "Back to sign in"
+  // should return to the door they came from. Internal paths only, the same
+  // rule Login.tsx applies, so a crafted link cannot send anyone offsite.
+  const next = new URLSearchParams(window.location.search).get("next");
+  const signIn = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/login";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +56,7 @@ export default function ForgotPassword() {
                   If an account exists for that address, a link to set a new password is on its
                   way. It expires in an hour and works once.
                 </p>
-                <a href="/login" className="inline-block mt-6 text-teal-deep font-semibold hover:underline">
+                <a href={signIn} className="inline-block mt-6 text-teal-deep font-semibold hover:underline">
                   Back to sign in
                 </a>
               </div>
@@ -97,7 +102,7 @@ export default function ForgotPassword() {
                   </button>
                 </form>
                 <div className="mt-6 text-center">
-                  <a href="/login" className="text-sm text-teal-deep hover:underline">
+                  <a href={signIn} className="text-sm text-teal-deep hover:underline">
                     Back to sign in
                   </a>
                 </div>
