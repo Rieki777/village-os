@@ -411,3 +411,45 @@ describe("the shell's published scene, arriving", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* HER WELCOME IS FLAGGED, NOT LOST. On a phone her sheet is display:none until
+   it is asked for, and the pocket boot wrote its welcome there: one line in the
+   log, never rendered, for as long as the visitor did not tap ask maia. */
+describe("Maia's phone welcome", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const badge = () => (b.doc.getElementById("pbAskBadge") as HTMLElement | null)?.style.display;
+  const ask = () => b.doc.getElementById("pbAsk") as HTMLElement;
+
+  it("is written into her log (the control: the line exists to be flagged)", () => {
+    expect(b.doc.getElementById("maiaLog")?.textContent).toContain("Welcome to the living map");
+    expect(msheet(b), "her sheet is shut").toBe(false);
+  });
+
+  it("raises a badge on ask maia, and says so to a screen reader", () => {
+    expect(badge(), "the badge is showing").toBe("");
+    expect(ask().getAttribute("aria-label")).toBe("ask maia, 1 new message");
+  });
+
+  it("lowers it the moment her sheet opens", async () => {
+    tap(b, ask());
+    // The badge watches the class, and a MutationObserver answers a microtask later.
+    await settle(10);
+    expect(msheet(b)).toBe(true);
+    expect(badge()).toBe("none");
+    expect(ask().getAttribute("aria-label")).toBeNull();
+  });
+
+  it("is not raised again by the village pulse writing to her shut log", () => {
+    tap(b, ask());
+    expect(msheet(b), "her sheet is shut again").toBe(false);
+    b.run("maiaSay('Sol completed the seedling census.')");
+    expect(badge()).toBe("none");
+    expect(b.uncaught).toEqual([]);
+  });
+});

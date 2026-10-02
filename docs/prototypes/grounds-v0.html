@@ -1610,7 +1610,7 @@
 <div id="vdrop"></div>
 <div id="pbar">
  <button id="pbMap"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="sol" d="M2.2 19c2.6-4.2 4.6-7 6.6-7 2.1 0 3.4 2.3 4.9 4.5 1.2-1.8 2.2-3 3.5-3 1.7 0 3.1 2 4.8 5.5z"/><circle class="sol" cx="16.8" cy="6.4" r="2.7"/></svg></b>map</button>
- <button id="pbAsk"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M12 4.7c-4.3 0-7.9 2.8-7.9 6.3 0 2 1.2 3.8 3 5-.3 1.3-1 2.4-2.1 3.4 2.1-.4 3.9-1.2 5-2.3.6.1 1.3.2 2 .2 4.3 0 7.9-2.8 7.9-6.3s-3.6-6.3-7.9-6.3z"/><circle class="sol" cx="8.7" cy="11" r="1.15"/><circle class="sol" cx="12" cy="11" r="1.15"/><circle class="sol" cx="15.3" cy="11" r="1.15"/></svg></b>ask maia</button>
+ <button id="pbAsk"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M12 4.7c-4.3 0-7.9 2.8-7.9 6.3 0 2 1.2 3.8 3 5-.3 1.3-1 2.4-2.1 3.4 2.1-.4 3.9-1.2 5-2.3.6.1 1.3.2 2 .2 4.3 0 7.9-2.8 7.9-6.3s-3.6-6.3-7.9-6.3z"/><circle class="sol" cx="8.7" cy="11" r="1.15"/><circle class="sol" cx="12" cy="11" r="1.15"/><circle class="sol" cx="15.3" cy="11" r="1.15"/></svg></b>ask maia<span class="pbadge" id="pbAskBadge" aria-hidden="true" style="display:none">1</span></button>
  <button id="pbAttn"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M6.3 3.9v16.4"/><path class="sol" d="M6.3 5.1h11.6l-3.1 3.5 3.1 3.5H6.3z"/></svg></b>help<span class="pbadge" id="pbBadge">0</span></button>
  <button id="pbMore"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M4.4 7.3q7.6-1 15.2 0M4.4 12q7.6-1 15.2 0M4.4 16.7q7.6-1 15.2 0"/></svg></b>more</button>
  <button id="pbExit" aria-label="Leave the map"><b><svg viewBox="0 0 24 24" aria-hidden="true"><path class="ln" d="M13.4 4.3H5.7v15.4h7.7"/><path class="ln" d="M11.3 12h8.3M16.3 8.7 19.6 12l-3.3 3.3"/></svg></b>leave</button>
@@ -9569,6 +9569,21 @@ if($('pbMap'))$('pbMap').onclick=()=>{const c=document.body.classList.contains('
   $('pbMap').firstElementChild.textContent=c?'🏞':'◎';hap(8);window.WGATE&&(WGATE.toggle=true)};
 if($('pbAsk'))$('pbAsk').onclick=()=>{document.body.classList.toggle('msheet');
   if(document.body.classList.contains('msheet')){$('maia').classList.remove('min');setTimeout(()=>$('maiaText').focus(),250)}hap(8)};
+/* A LINE SHE WROTE FOR YOU WHILE HER SHEET WAS SHUT. On a phone her sheet is
+   display:none until it is asked for, so the pocket welcome went into a log
+   nobody could see: MEASURED at 390x844 and 360x640, 1 line in #maiaLog,
+   never rendered, for as long as the visitor did not tap ask maia, and her
+   voice is off by default. The badge says a line is waiting, the way HELP's
+   says threads are. It is raised only for a line addressed to the visitor,
+   never by the village pulse, which writes to her log every 42 s and would
+   keep it lit forever. It goes down the moment her sheet shows, whoever
+   opened it, which is why it watches the class and not the button. */
+function maiaUnread(on){const b=$('pbAskBadge'),a=$('pbAsk');if(!b||!a)return;
+  b.style.display=on?'':'none';
+  if(on)a.setAttribute('aria-label','ask maia, 1 new message');else a.removeAttribute('aria-label')}
+window.maiaUnread=maiaUnread;
+try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maiaUnread(false)})
+  .observe(document.body,{attributes:true,attributeFilter:['class']})}catch(_){}
 /* ---------- HELP — the village's conversations, and the way to each one (R14) ----------
    WHAT THIS REPLACED, measured through the real handler at 390x844: #pbAttn
    ran $('attnBtn').click(), the attention card filled with 442 chars of HTML,
@@ -9921,8 +9936,9 @@ if($('gresumeX'))$('gresumeX').onclick=()=>{
    under a visitor who had not touched it either way. MEASURED before the
    change, five reps at 390x844 with nobody touching the screen: 396.55 world
    px of x, 63.72 of y and 0.7419 of zoom, away from the first painted frame.
-   Her welcome still arrives, still speaks, and the walk is one tap away on a
-   button that says what it does. */
+   Her welcome is written into her sheet, which a phone keeps shut, so it
+   raises the badge on ask maia; her voice reads it aloud only when the
+   visitor has chosen to hear her. */
 if(document.body.classList.contains('pocket')){
   setTimeout(()=>{leaveIntro();
     if(!location.hash||location.hash.length<3||/hud=/.test(location.hash)){
@@ -9933,7 +9949,8 @@ if(document.body.classList.contains('pocket')){
            offer for its whole six seconds, which is to say it hid the very
            button it was pointing at. #ghint above already teaches the two
            gestures and this button already says what it does. */
-        maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door.'+(WELCOME_WALK_ON?' Tap <b>Take the walk</b> and I will show you around.':''))}},700)}
+        {maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door.'+(WELCOME_WALK_ON?' Tap <b>Take the walk</b> and I will show you around.':''));
+          if(!document.body.classList.contains('msheet'))maiaUnread(true)}}},700)}
 
 
 /* intro
