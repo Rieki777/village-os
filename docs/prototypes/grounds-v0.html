@@ -4828,12 +4828,31 @@ function openPanel(key,tab,item){const s=BY[key];if(!s){toast('That place is no 
   $('panel').classList.add('open'); // opened before the flight so travelTo can measure the strip that stays visible
   travelTo(s.x,s.y,Math.max(cam.z,1.25));
   if(item)setHash('#/place/'+key+'?item='+item); // the badge you tapped, in the address bar
-  $('panelHead').innerHTML=`<h2>${escq(s.name)}</h2><div class="sub">${s.circle?escq(s.circle)+' circle':'needs a steward'} · ${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
-    <span class="statepill">${s.event?('✦ '+escq(s.event)):escq(phaseName(s.phase))}</span>`;
+  panelHead(s);
   const tabs=['Overview','Quests here','Seats here','Photos','Enter →'];
   $('tabs').innerHTML=tabs.map((t,i)=>`<button data-i="${i}">${t}</button>`).join('');
   [...$('tabs').children].forEach(b=>b.onclick=()=>renderTab(+b.dataset.i));
   renderTab(tab||0);maiaContext(s);if(item)focusItem(item)}
+function panelHead(s){
+  $('panelHead').innerHTML=`<h2>${escq(s.name)}</h2><div class="sub">${s.circle?escq(s.circle)+' circle':'needs a steward'} · ${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
+    <span class="statepill">${s.event?('✦ '+escq(s.event)):escq(phaseName(s.phase))}</span>`}
+/* THE LAND CHANGED UNDER AN OPEN DOOR. restoreScene rebuilds every place,
+   quest and seat from the scene it is handed, and the panel is DOM that
+   nothing redrew: a publish that landed while it was open, or a scene that
+   landed after a deep link had already opened it, left the old title on the
+   tab and the old quest names on the buttons, and Claim posted a key the
+   village does not have. Redrawn in place, on the tab the reader is on, with
+   no flight: the reader may have moved the camera since. A place the new
+   land does not hold is closed and said so. */
+function refreshPanel(){
+  if(!panelKey||!$('panel').classList.contains('open'))return;
+  const s=BY[panelKey];
+  if(!s){$('panel').classList.remove('open');panelKey=null;setHash('');toast('That place is no longer on the map.');return}
+  panelHead(s);
+  const on=[...$('tabs').children].findIndex(b=>b.classList.contains('on'));
+  renderTab(on<0?0:on);
+  const it=(location.hash||'').match(/\?item=([A-Za-z0-9_:-]+)/);if(it)focusItem(it[1])}
+window.refreshPanel=refreshPanel;
 function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].forEach((b,j)=>b.classList.toggle('on',i===j));
   const q=questsAt(s.key),st=seatsAt(s.key),body=$('panelBody');
   if(i===0){
@@ -7299,6 +7318,7 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   if(typeof renderVocab==='function')renderVocab();
   if(typeof renderMediaVocab==='function'){renderMediaVocab();renderPhaseVocab()}
   if(document.body.classList.contains('loom'))renderLoom();
+  if(typeof refreshPanel==='function')refreshPanel();
   if(!quiet)toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
   return true}catch(err){console.warn('restore failed',err);
     toast(quiet?'The live map could not be drawn.':'Could not restore the saved session.');return false}}
@@ -8360,7 +8380,7 @@ window.setHash=setHash;
 function leaveIntro(){if(!document.body.classList.contains('intro'))return;
   document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove();
   shellPost({type:'intro-done'})}
-function routeHash(){if(HASHMUTE)return;
+function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
   /* Shell appends &skipIntro when it already showed its own gate; strip it so
      #/circles and friends still match exactly. */
   const h=(location.hash||'').replace(/[&?]skipIntro\b/ig,'').replace(/[?&]$/,'');
@@ -8374,7 +8394,7 @@ function routeHash(){if(HASHMUTE)return;
   if(m[1]==='place'){if(BY[m[2]]){if(document.body.classList.contains('loom'))closeLoom();
       if(document.body.classList.contains('circles'))setMapType('living',true);
       openPanel(m[2],m[3]?ITAB[m[3].split(':')[0]]||0:0,m[3]||null)}
-    else{toast('That place is no longer on the map.');setHash('')}}
+    else if(SHELL_LANDED){toast('That place is no longer on the map.');setHash('')}}
   else if(m[1]==='module'&&moduleAt(m[2]))openDoor(m[2],{});
   else if(m[1]==='journey')setTimeout(()=>playJourney(m[2]),500)}
 /* THE SHELL'S ENTER TOKEN. LivingMap shows its own Enter the Land gate and
@@ -8389,7 +8409,37 @@ const SKIP_INTRO=(()=>{const h=location.hash||'';if(!/skipIntro/i.test(h))return
   try{history.replaceState(null,'',rest.length>1?rest:location.pathname+location.search)}catch(_){}
   return true})();
 addEventListener('hashchange',routeHash);
-if(location.hash&&location.hash.length>2)setTimeout(routeHash,400);
+/* AN ADDRESS WAITS FOR THE LAND IT NAMES. Inside the shell the land on screen
+   at boot is this file's own seed, and the village's published scene arrives
+   later, over the bridge, as a `config` the shell sends only after hearing
+   grounds-ready. The router used to run 400 ms into the boot regardless, so a
+   shared link was answered by the seed: a place the founder added said "That
+   place is no longer on the map" and cleared the address, a place the founder
+   moved opened its panel over empty ground where the seed had it, and a quest
+   the founder retitled showed the old title with nothing lit. Measured with
+   the published scene on 2026-10-01: new-food-forest toasted and never
+   opened, the Sanctuary aimed at the seed's 1537,908 against a live 1292,992.
+   So in the shell every address is held until the first config lands, with
+   or without a scene in it (a village that never published sends none, and
+   its seed IS its land). The shell sends nothing at all when its fetch
+   fails, so the hold also gives up after ROUTE_WAIT_MS and routes against
+   what is here. Until a config has landed, a place that is missing is not
+   called gone, because the land that holds it may still be on its way: the
+   address is kept and tried again when the config arrives. Standalone,
+   there is no bridge and nothing to wait for. */
+const ROUTE_WAIT_MS=4000;
+let ROUTE_HELD=inShell();       /* every address waits */
+let SHELL_LANDED=!inShell();    /* has the shell's first config landed */
+function landArrived(){if(SHELL_LANDED)return;SHELL_LANDED=true;
+  const held=ROUTE_HELD;ROUTE_HELD=false;
+  /* Routed already, against the seed, when the wait ran out: a place address
+     is answered again by the land that just arrived, so a place that was
+     missing opens and a place that moved is aimed at where it now stands.
+     Only a place: a journey started twice would walk twice. */
+  if(held||/^#\/place\//.test(location.hash||''))routeHash()}
+window.landArrived=landArrived;
+if(ROUTE_HELD)setTimeout(()=>{if(!ROUTE_HELD)return;ROUTE_HELD=false;routeHash()},ROUTE_WAIT_MS);
+else if(location.hash&&location.hash.length>2)setTimeout(routeHash,400);
 
 
 /* ---------- THE CIRCLES — sociocratic org map. Deterministic radial orbit (village-map.md):
@@ -10033,6 +10083,9 @@ addEventListener('message',e=>{try{
     if(typeof renderPhaseVocab==='function')renderPhaseVocab();
     if(typeof renderInspect==='function'&&typeof inspKey!=='undefined'&&inspKey)renderInspect();
     if(typeof panelKey!=='undefined'&&panelKey)openPanel(panelKey)}
+  /* Last, so an address held for the land is answered by the land that just
+     arrived. See ROUTE_WAIT_MS. */
+  landArrived();
 }catch(_){}});
 /* THE SINGLE-POINTER PATH TO THE SAME TWO THINGS. One tap is one step, with
    no press-and-hold, because a step big enough to be worth pressing is better
