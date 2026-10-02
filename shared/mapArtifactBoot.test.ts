@@ -43,6 +43,18 @@
  * (Playwright counting distinct canvas colours is how the 2026-10-01 fix was
  * verified). It also loads the artifact standalone, outside the shell, so the
  * shell's side of the handshake is out of its sight.
+ *
+ * AND IT CANNOT SEE A SCROLL. jsdom lays nothing out: every box measures zero,
+ * and nothing ever scrolls unless a script sets scrollLeft by hand. So the
+ * 400 px slide of the whole map that an item link caused on a desk (focusItem
+ * called scrollIntoView while #panel was still parked off the edge, and the
+ * browser scrolled the document to reach the row) is invisible here. What this
+ * file CAN see is the two ends of it, and that is all the item case and the
+ * last block claim: the call that walked up to the document, which jsdom does
+ * not implement and this file records, and the backstop that puts a scrolled
+ * document back, driven by the scroll event a browser would have fired. That
+ * the row still comes into view inside the panel, and that the map stays put,
+ * were measured in Playwright at 1400 by 850, 1280 by 560 and 390 by 844.
  */
 import fs from "fs";
 import path from "path";
@@ -83,6 +95,8 @@ const PHONE = { width: 390, height: 844 };
     panel really opened, so a renamed place fails here by name. A missing key
     would otherwise only raise the artifact's "no longer on the map" toast. */
 const PLACE = "greenhouse";
+/** A quest the scene puts at PLACE, addressed the way itemAddr() builds it. */
+const ITEM = "quest:plant-the-dry-season-beds";
 /** Long enough for every boot timer to fire: the deep-link router waits
     400ms and the pocket welcome 700ms. */
 const SETTLE_MS = 1000;
@@ -181,6 +195,8 @@ interface Booted {
   missing: string[];
   /** The name of every function handed to requestAnimationFrame, in order. */
   scheduled: string[];
+  /** Every element handed to scrollIntoView, by its data-item or id. */
+  scrolledIntoView: string[];
   /** State read the moment the scripts finished, before any timer fired. */
   atLoad: { scheduledFrame: boolean; introCard: boolean; enterBtn: boolean; onclick: string; hash: string };
 }
@@ -198,6 +214,7 @@ function boot(hash: string, viewport: { width: number; height: number }): Booted
   const thrown = new Set<unknown>();
   const missing: string[] = [];
   const scheduled: string[] = [];
+  const scrolledIntoView: string[] = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (e) => {
     if (e.type === "not-implemented") missing.push(e.message);
@@ -218,6 +235,11 @@ function boot(hash: string, viewport: { width: number; height: number }): Booted
         scheduled.push(cb.name);
         return raf(cb);
       };
+      // jsdom has no scrollIntoView. Recorded, so a call is a fact this file
+      // can assert on, and not a TypeError that would fail it for jsdom's sake.
+      w.Element.prototype.scrollIntoView = function (this: Element) {
+        scrolledIntoView.push((this as HTMLElement).dataset?.item || this.id || this.tagName);
+      };
     },
   });
 
@@ -229,6 +251,7 @@ function boot(hash: string, viewport: { width: number; height: number }): Booted
     },
     missing,
     scheduled,
+    scrolledIntoView,
     atLoad: {
       scheduledFrame: scheduled.includes("frame"),
       introCard: !!window.document.getElementById("introCard"),
@@ -261,6 +284,13 @@ const CASES: Case[] = [
     viewport: DESK,
     pocket: false,
     skipsTo: `#/place/${PLACE}`,
+  },
+  {
+    name: `an item link through the gate, #/place/${PLACE}?item=${ITEM}&skipIntro`,
+    hash: `#/place/${PLACE}?item=${ITEM}&skipIntro`,
+    viewport: DESK,
+    pocket: false,
+    skipsTo: `#/place/${PLACE}?item=${ITEM}`,
   },
   {
     name: "the gate on a phone, #hud=pocket&skipIntro",
@@ -351,6 +381,65 @@ describe.each(CASES)("the living map artifact, booted as $name", (c) => {
       );
     });
   }
+
+  if (c.hash.includes("?item=")) {
+    it("lights the row the link names, and hands no element to scrollIntoView", () => {
+      const doc = b.window.document;
+      const lit = [...doc.querySelectorAll<HTMLElement>("#panelBody .itemfocus")].map((n) => n.dataset.item);
+      expect(lit, "the rows lit in the panel").toEqual([ITEM]);
+      // scrollIntoView walks every scrollable ancestor up to the document, and
+      // it runs while #panel is still sliding in from off the edge, so on a
+      // desk it slid the whole map 400 px left and kept it there.
+      expect(b.scrolledIntoView, "elements handed to scrollIntoView while the panel opened").toEqual([]);
+    });
+  }
+});
+
+/* THE BACKSTOP. The artifact's document is pinned at 0,0, because closed
+   panels hang past the edges and anything that brings one of their elements
+   into view (keyboard focus among them) can scroll the page that a person
+   cannot. jsdom never scrolls on its own and never fires the event, so these
+   set the offsets by hand and send the scroll event a browser would send. */
+describe("the living map artifact's document stays at 0,0", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.window.close());
+
+  const offsets = (el: Element) => [el.scrollLeft, el.scrollTop];
+  const scrollAndFire = (el: Element, left: number, top: number) => {
+    el.scrollLeft = left;
+    el.scrollTop = top;
+    const doc = b.window.document;
+    (el === doc.documentElement ? doc : el).dispatchEvent(new b.window.Event("scroll"));
+  };
+
+  it("puts a scrolled document and a scrolled body straight back", () => {
+    const doc = b.window.document;
+    // The positive control: offsets set here stick unless something answers them.
+    doc.documentElement.scrollLeft = 1;
+    expect(doc.documentElement.scrollLeft, "jsdom keeps a scroll offset set by hand").toBe(1);
+    scrollAndFire(doc.documentElement, 400, 120);
+    expect(offsets(doc.documentElement), "the document after a scroll event").toEqual([0, 0]);
+    scrollAndFire(doc.body, 420, 692);
+    expect(offsets(doc.body), "the body after a scroll event").toEqual([0, 0]);
+    expect(b.uncaught, `uncaught errors${missingNote(b)}`).toEqual([]);
+  });
+
+  it("lets a text field keep the page lifted while it has focus, and brings it down after", async () => {
+    const doc = b.window.document;
+    const field = doc.getElementById("maiaText") as HTMLInputElement | null;
+    expect(field, "#maiaText to focus").not.toBeNull();
+    field?.focus();
+    expect(doc.activeElement, "the field has focus").toBe(field);
+    scrollAndFire(doc.documentElement, 400, 120);
+    expect(offsets(doc.documentElement), "sideways goes back, the lift stays for the keyboard").toEqual([0, 120]);
+    field?.blur();
+    await settle(20);
+    expect(offsets(doc.documentElement), "the page comes down once the field lets go").toEqual([0, 0]);
+  });
 });
 
 /**

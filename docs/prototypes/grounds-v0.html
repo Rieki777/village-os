@@ -3582,11 +3582,58 @@ function focusItem(addr){
   if(!el)return false;
   document.querySelectorAll('.itemfocus').forEach(e=>e.classList.remove('itemfocus'));
   el.classList.add('itemfocus');
-  try{el.scrollIntoView({block:'nearest',behavior:'smooth'})}catch(_){el.scrollIntoView()}
+  /* THE LIST SCROLLS AND THE DOCUMENT NEVER DOES. This was scrollIntoView(),
+     which walks every scrollable ancestor up to the viewport. openPanel calls
+     it in the same task that adds .open, so #panel is still parked off the
+     edge (right:-420px, or bottom:-102% in the pocket) and the row is off the
+     screen with it. The browser brought the row in by scrolling the document:
+     html and body are overflow:hidden, which stops a hand and not a script.
+     MEASURED at 1400 by 850: scrollLeft 400, Get Involved and the minimap at
+     x -386, a dead strip down the right, and closing the panel kept all of
+     it, because the closed panel still hangs past the edge. In the pocket the
+     land jumped up by as much as 67 px and fell back. So the sum is done
+     here, on #panelBody alone. Both boxes slide together, which makes their
+     difference the row's place in the list at any point in the slide. The
+     arithmetic is the 'nearest' rule: move only if the row is cut off, and
+     only as far as it takes. */
+  const hb=host.getBoundingClientRect(),eb=el.getBoundingClientRect();
+  const top=eb.top-hb.top-host.clientTop+host.scrollTop,view=host.clientHeight;
+  let to=null;
+  if(top<host.scrollTop)to=top;
+  else if(top+eb.height>host.scrollTop+view)to=eb.height>view?top:top+eb.height-view;
+  if(to!==null){try{host.scrollTo({top:to,behavior:'smooth'})}catch(_){host.scrollTop=to}}
   clearTimeout(ITEM_TMR);ITEM_TMR=setTimeout(()=>el.classList.remove('itemfocus'),2600);
   return true;
 }
 window.focusItem=focusItem;
+/* THE DOCUMENT IS PINNED AT 0,0. Nothing here is meant to scroll the page:
+   the land pans on a canvas and every list scrolls inside its own box. But
+   html and body being overflow:hidden only stops a person, and the closed
+   #panel and #inspect still hang a panel's width past the right edge (the
+   pocket sheets hang below the bottom), so anything that brings an element
+   into view can still slide the whole map. focusItem above was one such
+   call. Keyboard focus is another, and no fix to a single call reaches it:
+   MEASURED, the 19th Tab on a desk lands on the closed panel's close button
+   and the map moves 420 px left for good; in the pocket the 47th Tab lifts
+   it 692 px. So any scroll of the document itself is put back here.
+   It is a backstop and it cannot hide a smooth scroll: with focusItem left
+   as it was, the map still slid up to 400 px for a few frames before this
+   put it back. That is why focusItem does its own sum as well.
+   Sideways is always put back. Up and down waits while a text field has
+   focus, because a phone keyboard may lift the page to keep the field above
+   it, and the page comes back down when the field lets go. A page someone
+   has pinch-zoomed is theirs to pan, so nothing is put back while it is. */
+(function(){
+  const D=document;
+  const typing=()=>{const a=D.activeElement;return !!a&&(a.isContentEditable||/^(INPUT|TEXTAREA)$/.test(a.tagName))};
+  const pin=()=>{if(window.visualViewport&&visualViewport.scale>1.01)return;
+    const kb=typing();
+    for(const n of [D.scrollingElement||D.documentElement,D.body]){if(!n)continue;
+      if(n.scrollLeft)n.scrollLeft=0;
+      if(n.scrollTop&&!kb)n.scrollTop=0}};
+  addEventListener('scroll',e=>{const t=e.target;if(t===D||t===D.documentElement||t===D.body)pin()},true);
+  addEventListener('focusout',()=>setTimeout(pin,0),true);
+})();
 /* Delegated, because the seals are rebuilt whenever the projections move.
    stopPropagation keeps the building's own click from firing underneath: the
    badge is the more specific answer to the same tap. */
@@ -3643,7 +3690,10 @@ function inviteHere(key){
   window._rqHome=key;
   $('resolver').classList.add('show');
   renderResolver();
-  const t=$('rqText');if(t){t.focus();t.select&&t.select()}
+  /* preventScroll, because the resolver stands at left:246px and is 344
+     wide. MEASURED in a desk window 560 wide: a plain focus() moved the
+     document 15 px left to reach the field, and it stayed there. */
+  const t=$('rqText');if(t){t.focus({preventScroll:true});t.select&&t.select()}
   toast('⚑ '+s.name+' has room for work. Write it and it lands here.');
 }
 window.inviteHere=inviteHere;
