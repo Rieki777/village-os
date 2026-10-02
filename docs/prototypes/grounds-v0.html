@@ -410,7 +410,9 @@
   #maiaHead canvas{border-radius:50%;border:1.5px solid var(--gold);flex:none;box-shadow:0 0 10px rgba(143,208,106,.25)}
   #maiaHead .who b{display:block;font-variant:small-caps;letter-spacing:.18em;font-size:14px;color:var(--gold-b);font-weight:normal}
   #maiaHead .who span{font-size:10px;color:#b9cf9a;letter-spacing:.06em}
-  #maiaHead .min{margin-left:auto;color:var(--gold);font-size:13px;padding:2px 6px}
+  #maiaHead .min{margin-left:auto;color:var(--gold);font-size:13px;padding:2px 6px;
+    appearance:none;-webkit-appearance:none;background:none;border:0;font-family:inherit;line-height:inherit;cursor:pointer}
+  #maiaHead .min:focus-visible{outline:2px solid #e8c877;outline-offset:1px;border-radius:4px}
   /* The read-instead toggle. It lives in her header because it is a fact
      about Maia and not about the page, and it is a real <button> so a
      keyboard and a screen reader both find it. The `+ .min` rule beats the
@@ -428,6 +430,12 @@
   .mline.me{color:#cfe3f5;text-align:right}
   .mline .from{display:block;font-size:9.5px;letter-spacing:.2em;font-variant:small-caps;color:var(--gold);opacity:.8}
   .mline a{color:var(--teal);cursor:pointer;text-decoration:underline dotted}
+  /* A link that runs something is a button that looks like a link. An <a>
+     with no href takes no focus, so Claim it and the tour could not be
+     reached from a keyboard at all. */
+  .mline .linkish{appearance:none;-webkit-appearance:none;background:none;border:0;padding:0;margin:0;
+    font:inherit;color:var(--teal);cursor:pointer;text-decoration:underline dotted}
+  .mline .linkish:focus-visible{outline:2px solid #e8c877;outline-offset:1px;border-radius:2px}
   #maiaActions{display:flex;gap:6px;padding:0 12px 8px;flex-wrap:wrap}
   .chip{appearance:none;font-family:inherit;cursor:pointer;font-size:10.5px;letter-spacing:.08em;font-variant:small-caps;
     color:var(--parch);background:rgba(236,208,138,.1);border:1px solid rgba(201,162,94,.5);border-radius:12px;padding:3px 11px}
@@ -1736,7 +1744,9 @@
     <div class="who"><b>Maia</b><span id="maiaSub">village guide · advisor dock</span></div>
     <button class="mvb" id="maiaVoice" type="button" aria-pressed="false"
       data-tip="Maia can say this out loud, or stay written down. Your choice, remembered.">◍ read</button>
-    <span class="min" id="maiaMin">—</span>
+    <!-- A BUTTON, so the keyboard reaches it. It has no handler of its own:
+         its click bubbles to #maiaHead, which is the one toggle. -->
+    <button class="min" id="maiaMin" type="button" aria-controls="maiaLog maiaActions maiaInput" aria-expanded="true" aria-label="Minimise Maia">—</button>
   </div>
   <div id="maiaLog"></div>
   <div id="maiaActions">
@@ -5054,7 +5064,7 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
       if(sc>bs){bs=sc;best=q}}
     return{best,bs}};
   const sayQuest=({best,bs})=>{done('quest',best.q);const nm=best.at?nameOf(best.at):'the Board';if(best.at)openPanel(best.at);
-    return maiaSay(`That sounds like <b>${escq(best.q)}</b>: ${escq(best.r||'hearts')}, and it lives at <b>${escq(nm)}</b>. <a onclick="claimQuest('${escj(best.q)}','${escj(nm)}')">Claim it</a> and the land will remember your name.`)};
+    return maiaSay(`That sounds like <b>${escq(best.q)}</b>: ${escq(best.r||'hearts')}, and it lives at <b>${escq(nm)}</b>. <button type="button" class="linkish" onclick="claimQuest('${escj(best.q)}','${escj(nm)}')">Claim it</button> and the land will remember your name.`)};
   const helping=/help|work\b|volunteer|contribute|hands|assist|do something/.test(t);
   if(helping){const qb=questBest();if(qb.best&&qb.bs>=2)return sayQuest(qb)}
   for(const s of SCENE.structures){const words=[s.key,...s.name.toLowerCase().split(/[^a-z]+/)].filter(w=>w.length>3);
@@ -5065,12 +5075,20 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
     return maiaSay(`The <b>${escq(seat.s)}</b> seat is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`)}
   for(const l of LEX)if(l.re.test(txt)){done('lex',null);return l.fn()}
   done('none',null);
-  maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: ${WELCOME_WALK_ON?'<a onclick="startTour()">the tour</a>, or name':'name'} any building.`)}
+  maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: ${WELCOME_WALK_ON?'<button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'name'} any building.`)}
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
 if(!WELCOME_WALK_ON)document.querySelectorAll('#maiaActions .chip[data-say="tour"]').forEach(c=>c.remove());
 $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
+/* The minimise button says what it will do, and whether Maia is open, from
+   one place. .min is set and cleared at four sites (the header, a question
+   asked about a place, a journey starting, the pocket sheet), so this
+   watches the class instead of chasing each of them. */
+(function(){const m=$('maia'),b=$('maiaMin');if(!m||!b)return;
+  const sync=()=>{const min=m.classList.contains('min');b.setAttribute('aria-expanded',String(!min));
+    b.setAttribute('aria-label',min?'Show Maia':'Minimise Maia')};
+  sync();new MutationObserver(sync).observe(m,{attributes:true,attributeFilter:['class']})})();
 
 /* The tour was a second script about the same eight places. It is the journey
    now, so this is the one line of it that is left: the name every caller
@@ -9472,7 +9490,7 @@ if(document.body.classList.contains('pocket')){
 function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
     maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
-    setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
+    setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
 const enterBtn=$('enterBtn');
 if(enterBtn)enterBtn.onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
   shellPost({type:'intro-done'});arriveOnLand()};

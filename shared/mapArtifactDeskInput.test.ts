@@ -435,3 +435,48 @@ describe("focus can be seen, and moves across the top bar the way it reads", () 
     }
   });
 });
+
+/* F44. Maia's minimise control was a span and her inline links were <a> with
+   no href, so neither could take focus. */
+describe("Maia's minimise control and her inline links take the keyboard", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("minimises from a button that says what it will do", async () => {
+    const min = b.doc.getElementById("maiaMin") as HTMLElement;
+    const maia = b.doc.getElementById("maia") as HTMLElement;
+    expect(min.tagName).toBe("BUTTON");
+    min.focus();
+    expect(b.doc.activeElement, "the control takes focus").toBe(min);
+    expect(min.getAttribute("aria-expanded")).toBe("true");
+    min.click();
+    await settle(0);
+    expect(maia.classList.contains("min"), "one press minimises, once").toBe(true);
+    expect(min.getAttribute("aria-expanded")).toBe("false");
+    expect(min.getAttribute("aria-label")).toBe("Show Maia");
+    // .min is also cleared by code that never touches the button.
+    maia.classList.remove("min");
+    await settle(0);
+    expect(min.getAttribute("aria-label")).toBe("Minimise Maia");
+  });
+
+  it("writes Claim it as a button the keyboard can reach, with its handler kept", async () => {
+    const q = b.run<{ q: string }>("SCENE.quests.find(q=>q.at&&BY[q.at])");
+    (b.doc.getElementById("maiaText") as HTMLInputElement).value = q.q;
+    (b.doc.getElementById("maiaSend") as HTMLElement).click();
+    await settle(500); // she answers 350ms after the question
+    const lines = b.doc.querySelectorAll("#maiaLog .mline");
+    const link = lines[lines.length - 1]?.querySelector<HTMLElement>("[onclick]");
+    expect(link?.textContent).toBe("Claim it");
+    expect(link?.tagName).toBe("BUTTON");
+    expect(link?.getAttribute("onclick"), "maiaClean kept the handler").toMatch(/^claimQuest\(/);
+    link?.focus();
+    expect(b.doc.activeElement).toBe(link);
+    expect(b.run<string[]>("MSAY_STRIPPED"), "nothing was stripped").toEqual([]);
+    expect(b.uncaught).toEqual([]);
+  });
+});
