@@ -207,6 +207,28 @@ function withinChars<T>(rows: readonly T[], maxChars: number): T[] {
 }
 
 /**
+ * One sitting answer, shortened until its row fits `budget` as `withinChars`
+ * counts it (the row's JSON plus its comma). Escapes are what made a raw
+ * character count lie: a quote or a newline is two characters on the wire.
+ */
+function fitRow(question: string, answer: string, budget: number): { question: string; answer: string } {
+  const text = answer.slice(0, GUIDE_SITTING_ANSWER_CHARS);
+  const fits = (n: number) => JSON.stringify({ question, answer: text.slice(0, n) }).length + 1 <= budget;
+  if (fits(text.length)) return { question, answer: text };
+  // The longest prefix that fits. Escapes make the JSON length grow faster
+  // than the raw one, so the cut is searched for, never computed from the
+  // overflow: cutting by the overflow overshot to an empty answer.
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(mid)) lo = mid;
+    else hi = mid - 1;
+  }
+  return { question, answer: text.slice(0, lo) };
+}
+
+/**
  * The newest turns that fit in `maxChars`, starting on the member's own turn.
  * The last turn is always kept: it is the member's question, and the
  * validator has already capped it.
@@ -481,14 +503,15 @@ export function register(app: Express, deps: Deps): void {
     const claims = await claimsRepo.forUser(uid);
     const brief = await briefForPublicPrompt(pool, 300).catch(() => "");
     // Every answer in this sitting gets an even share of its ceiling, so a
-    // long sitting is read shorter and none of it is dropped.
+    // long sitting is read shorter and none of it is dropped. The share is
+    // measured as the row's JSON, the form the ceiling counts: quotes and
+    // newlines cost extra there, and a share counted in raw characters let a
+    // quote-heavy sitting overflow and lose its last answers.
     const written = answers.value.filter((a) => a.text);
-    const share = Math.max(
-      200,
-      Math.min(GUIDE_SITTING_ANSWER_CHARS, Math.floor(GUIDE_SITTING_CHARS / Math.max(1, written.length)) - GUIDE_QUESTION_CHARS - 40),
-    );
+    // `withinChars` spends 2 on the brackets before any row.
+    const rowBudget = Math.floor((GUIDE_SITTING_CHARS - 2) / Math.max(1, written.length));
     const sitting = withinChars(
-      written.map((a) => ({ question: clipText(a.prompt, GUIDE_QUESTION_CHARS), answer: a.text.slice(0, share) })),
+      written.map((a) => fitRow(clipText(a.prompt, GUIDE_QUESTION_CHARS), a.text, rowBudget)),
       GUIDE_SITTING_CHARS,
     );
     const recent = recentWithin(await recentForGuide(pool, uid, tz), GUIDE_WRITING_CHARS - JSON.stringify(sitting).length);

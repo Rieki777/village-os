@@ -25,7 +25,8 @@ vi.mock("../lib/journal", async (importOriginal) => ({
   recentForGuide: async () => hooks.recent,
 }));
 
-import { wireAssistant } from "../lib/assistant";
+import { GUIDE_MAX_MESSAGES } from "../../shared/journal";
+import { MAX_TURNS, wireAssistant } from "../lib/assistant";
 import { register } from "./journal";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
@@ -235,6 +236,14 @@ describe("one member cannot spend the village's journal day", () => {
   });
 });
 
+describe("the client's window and the engine's limit agree", () => {
+  // The client trims each ask to GUIDE_MAX_MESSAGES. If it ever exceeded the
+  // engine's MAX_TURNS, every ask past that length would be refused again.
+  it("keeps the contract's window inside the engine's turn limit", () => {
+    expect(GUIDE_MAX_MESSAGES).toBeLessThanOrEqual(MAX_TURNS);
+  });
+});
+
 describe("what one guide turn carries has a ceiling", () => {
   it("bounds the sitting, the recent entries and the conversation, keeping every question and the newest entry", async () => {
     const { bodies } = provider(guideJson("I am here."));
@@ -263,6 +272,27 @@ describe("what one guide turn carries has a ceiling", () => {
     expect(sent.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(24_000);
     expect(sent[0].role).toBe("user");
     expect(sent[sent.length - 1].content.startsWith("LATEST")).toBe(true);
+  });
+
+  /*
+   * Quotes and newlines are two characters each in JSON. A share counted in
+   * raw characters let a sitting like this overflow its ceiling and lose its
+   * last answers (13 of 20 kept, measured by the fix round's verifier).
+   */
+  it("keeps every answer of a sitting full of quotes and line breaks", async () => {
+    const { bodies } = provider(guideJson("I am here."));
+    const answers = Array.from({ length: 20 }, (_, i) => ({
+      questionKey: `q${i}`,
+      prompt: `QQ${String(i).padStart(2, "0")} "${"w".repeat(180)}"`,
+      text: `ANS${String(i).padStart(2, "0")} ` + '"she said"\n'.repeat(700),
+    }));
+    const out = await handlersFor()(GUIDE, ask(undefined, answers));
+    expect(out.status).toBe(200);
+    const system: string = bodies[0].system;
+    for (let i = 0; i < 20; i++) {
+      expect(system).toContain(`QQ${String(i).padStart(2, "0")}`);
+      expect(system).toContain(`ANS${String(i).padStart(2, "0")}`);
+    }
   });
 });
 

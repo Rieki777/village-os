@@ -323,6 +323,13 @@ export interface GuideRequest {
   localHour?: number;
 }
 
+/**
+ * The most messages one guide ask may carry. The client trims each request to
+ * this; the assistant engine refuses anything over its own MAX_TURNS, and
+ * server/routes/journal.guide.test.ts fails the build if this ever exceeds it.
+ */
+export const GUIDE_MAX_MESSAGES = 40;
+
 export interface GuideReply {
   /** What the guide says. */
   reply: string;

@@ -12,7 +12,13 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Send, X } from "lucide-react";
-import { JOURNAL_REFLECTION_MAX, type GuideMessage, type GuideReply, type GuideRequest } from "@shared/journal";
+import {
+  GUIDE_MAX_MESSAGES,
+  JOURNAL_REFLECTION_MAX,
+  type GuideMessage,
+  type GuideReply,
+  type GuideRequest,
+} from "@shared/journal";
 import { askGuide, isAssistantUnavailable, problemText } from "@/lib/journalApi";
 import GrowingTextarea from "./GrowingTextarea";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "./ui";
@@ -20,12 +26,12 @@ import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "./ui";
 export const GUIDE_RESTING = "The guide is resting. Your journal works without it.";
 
 /**
- * The most messages one ask may carry. The server refuses a conversation
- * longer than its MAX_TURNS (server/lib/assistant.ts, 40) outright, so the
- * 21st ask of a long sitting used to fail, and every ask after it, reloads
- * included. Keep in step with that number.
+ * The most messages one ask may carry, from the contract. The server refuses a
+ * conversation longer than its MAX_TURNS outright, so the 21st ask of a long
+ * sitting used to fail, and every ask after it, reloads included.
+ * server/routes/journal.guide.test.ts holds the contract's number to MAX_TURNS.
  */
-export const GUIDE_MAX_MESSAGES = 40;
+export { GUIDE_MAX_MESSAGES };
 
 /**
  * What one ask sends: the newest messages that fit, starting on one of the

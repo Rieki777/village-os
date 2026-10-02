@@ -102,7 +102,7 @@ export default function FeedbackGive({ onSent }: { onSent: () => void }) {
     setProblem(null);
     try {
       await sendFeedback({ ...draft(), message: message.trim() });
-      setDone(`Queued for ${person?.name ?? "them"}. It arrives in the next Monday batch, unsigned.`);
+      setDone(`Queued for ${person?.name ?? "them"}. It arrives in the next Monday batch, village time, unsigned.`);
       setParts(EMPTY);
       setMessage(null);
       setRecipient("");
@@ -211,8 +211,8 @@ export default function FeedbackGive({ onSent }: { onSent: () => void }) {
             maxLength={FEEDBACK_MESSAGE_MAX}
           />
           <p className="rounded-xl bg-amber-light px-3 py-2 text-sm text-foreground">
-            In a small team, people may still guess who wrote this. It arrives without your name, in the next Monday batch,
-            and you can withdraw it until then.
+            In a small team, people may still guess who wrote this. It arrives without your name, in the next Monday batch
+            (village time), and you can withdraw it until then.
           </p>
           <button type="button" className={BTN_PRIMARY} onClick={() => void send()} disabled={!message.trim() || busy !== null}>
             {busy === "send" ? "Queueing..." : "Send in the next batch"}
