@@ -352,3 +352,103 @@ describe.each(CASES)("the living map artifact, booted as $name", (c) => {
     });
   }
 });
+
+/**
+ * THE WELCOME WALK IS OFF, AND STAYS OFF UNTIL SOMEBODY TURNS IT BACK ON.
+ *
+ * Rye, 2026-10-01: "Get rid of the maia walkthrough for now, it's not great,
+ * we'll have to make one." The artifact holds that as one switch,
+ * WELCOME_WALK_ON, read by every door into the walk. This pins the decision
+ * the same way mapArtifactHandoff.test.ts pins its own: the artifact is
+ * regenerated as one enormous file, and a regeneration that quietly put the
+ * walk back would otherwise ship with nobody noticing.
+ *
+ * The other journeys walk on the same engine, so the control below plays one
+ * of them. A guard that switched the whole engine off would pass every check
+ * about the walk and fail that one.
+ */
+describe("the Welcome Walk, switched off (Rye, 2026-10-01)", () => {
+  const read = <T,>(b: Booted, js: string): T => (b.window as unknown as { eval(s: string): T }).eval(js);
+
+  describe("on a desk", () => {
+    let b: Booted;
+    beforeAll(async () => {
+      b = boot("#skipIntro", DESK);
+      await settle(SETTLE_MS);
+    });
+    afterAll(() => b?.window.close());
+
+    it("is switched off, and the scene still carries it as data", () => {
+      expect(read<boolean>(b, "WELCOME_WALK_ON")).toBe(false);
+      expect(read<string | null>(b, "welcomeJourney()"), "the walk is still in the scene").toBe("j1");
+    });
+
+    it("leaves Maia's dock without the tour chip, and keeps her other two", () => {
+      const doc = b.window.document;
+      expect(doc.querySelector('#maiaActions .chip[data-say="tour"]')).toBeNull();
+      expect(doc.querySelectorAll("#maiaActions .chip").length, "Where can I help? and What's alive?").toBe(2);
+    });
+
+    it("does not start from startTour(), the t key, or a request to be shown around", async () => {
+      read(b, "startTour()");
+      b.window.document.dispatchEvent(new b.window.KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      read(b, "conciergeMatch('show me around')");
+      await settle(300);
+      expect(read<unknown>(b, "JWALK"), "no walk is running").toBeNull();
+      expect(b.uncaught).toEqual([]);
+    });
+
+    it("is not offered by the Journeys door, which still offers the other journeys", () => {
+      const door = read<string>(b, "MODULES.journeys.sample({})");
+      expect(door).not.toContain("The Welcome Walk");
+      expect(door).toContain("Resident Journey");
+    });
+
+    it("still plays the other journeys (the control: the engine itself is on)", async () => {
+      read(b, "playJourney('j2')");
+      await settle(200);
+      expect(read<{ id: string } | null>(b, "JWALK")?.id, "the Resident Journey is walking").toBe("j2");
+      read(b, "jEnd()");
+      expect(read<unknown>(b, "JWALK")).toBeNull();
+    });
+  });
+
+  describe("from an old #/journey/ address", () => {
+    let b: Booted;
+    beforeAll(async () => {
+      b = boot("#/journey/j1&skipIntro", DESK);
+      // The router waits 400ms and then hands a journey another 500ms.
+      await settle(SETTLE_MS + 600);
+    });
+    afterAll(() => b?.window.close());
+
+    it("lands on the map with no walk running and the address cleared", () => {
+      expect(read<unknown>(b, "JWALK")).toBeNull();
+      expect(b.window.location.hash).toBe("");
+      expect(b.uncaught).toEqual([]);
+    });
+  });
+
+  describe("on a phone", () => {
+    let b: Booted;
+    beforeAll(async () => {
+      b = boot("#hud=pocket&skipIntro", PHONE);
+      await settle(SETTLE_MS);
+    });
+    afterAll(() => b?.window.close());
+
+    it("shows no Take the walk offer and no drawer cell for it", () => {
+      const doc = b.window.document;
+      expect(doc.getElementById("gresume")?.classList.contains("on"), "the walk offer").toBe(false);
+      read(b, "renderDrawer()");
+      expect(doc.querySelector('#pdrawer [data-pa="walk"]'), "Take the walk again").toBeNull();
+      expect(doc.querySelector('#pdrawer [data-pa="exit"]'), "the drawer still renders its other cells").not.toBeNull();
+    });
+
+    it("welcomes the visitor without offering the walk", () => {
+      const log = b.window.document.getElementById("maiaLog")?.textContent ?? "";
+      expect(log).toContain("Welcome to the living map");
+      expect(log).not.toContain("Take the walk");
+    });
+  });
+});
