@@ -308,3 +308,110 @@ describe("switching to the in-file circles with a sheet or a door open (F60)", (
     expect(b.uncaught).toEqual([]);
   });
 });
+
+describe("over the in-file circles on a phone, the pad and the fingers move the chart (F08, F59)", () => {
+  let b: Booted;
+  type VB = [number, number, number, number];
+  const vb = () => b.run<VB>("OVB.slice()");
+  const cam = () => b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+  /** The meet transform: scale, and the screen point of the viewBox origin. */
+  const meet = () => {
+    const [x, y, w, h] = vb();
+    const r = MEASURED.orgSvg;
+    const s = Math.min(r.width / w, r.height / h);
+    return { s, ox: r.left + (r.width - w * s) / 2 - x * s, oy: r.top + (r.height - h * s) / 2 - y * s };
+  };
+  /** Where a chart point lands on screen, by preserveAspectRatio meet. */
+  const onScreen = (px: number, py: number) => {
+    const m = meet();
+    return [m.ox + px * m.s, m.oy + py * m.s];
+  };
+  /** The chart point under a screen point. */
+  const underScreen = (sx: number, sy: number) => {
+    const m = meet();
+    return [(sx - m.ox) / m.s, (sy - m.oy) / m.s];
+  };
+  const reset = () => b.run("OVB=[0,0,1600,1050];orgApplyVB()");
+  const pointer = (type: string, id: number, x: number, y: number) =>
+    b.window.document
+      .getElementById("orgSvg")
+      ?.dispatchEvent(new b.window.PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+  /** The hub, the village's own node, at the chart's 800,540. */
+  const HUB: [number, number] = [800, 540];
+
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    b.run("setMapType('circles',true)");
+  });
+  afterAll(() => b?.close());
+
+  it("zooms the chart with the pad's + and leaves the land where it was", () => {
+    reset();
+    const land = cam();
+    click(b, "#pnIn");
+    expect(vb()[2], "the chart's width after +").toBeLessThan(1600);
+    expect(cam(), "the land's camera").toEqual(land);
+  });
+
+  it("pans the chart with the pad's arrows and leaves the land where it was", () => {
+    reset();
+    const land = cam();
+    click(b, "#pnRight");
+    click(b, "#pnDown");
+    const [x, y] = vb();
+    expect(x, "moved right").toBeGreaterThan(0);
+    expect(y, "moved down").toBeGreaterThan(0);
+    expect(cam()).toEqual(land);
+  });
+
+  it("drags the chart as far as the finger went, down as well as across", () => {
+    reset();
+    const [x0, y0] = onScreen(...HUB);
+    pointer("pointerdown", 1, 195, 400);
+    pointer("pointermove", 1, 195, 500);
+    pointer("pointerup", 1, 195, 500);
+    const [x1, y1] = onScreen(...HUB);
+    expect(y1 - y0, "screen px the hub moved for a 100 px drag down").toBeCloseTo(100, 1);
+    expect(x1 - x0).toBeCloseTo(0, 1);
+  });
+
+  it("zooms about the two fingers when they spread, holding the point between them", () => {
+    reset();
+    const mid: [number, number] = [195, 480];
+    const held = underScreen(...mid);
+    pointer("pointerdown", 5, mid[0] - 30, mid[1]);
+    pointer("pointerdown", 6, mid[0] + 30, mid[1]);
+    // The two fingers report in turns, as a phone sends them.
+    for (let d = 38; d <= 126; d += 8) {
+      pointer("pointermove", 5, mid[0] - d, mid[1]);
+      pointer("pointermove", 6, mid[0] + d, mid[1]);
+    }
+    const [x, , w] = vb();
+    expect(w, "the chart's width after a 60 to 252 px spread").toBeCloseTo(1600 * (60 / 252), 0);
+    // The chart point that was under the midpoint is under it still.
+    const [sx, sy] = onScreen(held[0], held[1]);
+    expect(sx).toBeCloseTo(mid[0], 0);
+    expect(sy).toBeCloseTo(mid[1], 0);
+    expect(x, "and did not swing off to one side").toBeGreaterThan(0);
+    pointer("pointerup", 5, mid[0] - 126, mid[1]);
+    pointer("pointerup", 6, mid[0] + 126, mid[1]);
+  });
+
+  it("does not open a node when a pinch ends on one", () => {
+    reset();
+    b.run("window.__opened=null;window.__open=openPanel;openPanel=(k)=>{window.__opened=k}");
+    pointer("pointerdown", 7, 150, 480);
+    pointer("pointerdown", 8, 240, 480);
+    pointer("pointermove", 7, 120, 480);
+    pointer("pointermove", 8, 270, 480);
+    pointer("pointerup", 7, 120, 480);
+    pointer("pointerup", 8, 270, 480);
+    const hub = b.window.document.querySelector('#orgSvg .onode[data-kind="village"]');
+    hub?.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true }));
+    expect(b.run<unknown>("window.__opened")).toBeNull();
+    expect(body(b).contains("circles"), "still on the chart").toBe(true);
+    b.run("openPanel=window.__open");
+    expect(b.uncaught).toEqual([]);
+  });
+});

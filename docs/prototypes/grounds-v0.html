@@ -1277,6 +1277,14 @@
   #ghint #ghintX{pointer-events:auto;position:absolute;right:-10px;top:4px;width:44px;height:44px;
     appearance:none;-webkit-appearance:none;background:none;border:none;color:#f3e6c8;font-size:18px;
     font-family:inherit;line-height:1;opacity:.7}
+  /* OVER THE CIRCLES, THE LAND'S WORDS STEP ASIDE. The hint teaches the land
+     and printed itself across "The Circles" heading (MEASURED, 390x844: the
+     hint at 14,52 362x31 over the heading at 34,52 143x19), and the walk offer
+     sat on the chart. Both come back with the land, with their state as it
+     was. AFTER the pocket rules and one class heavier, because at equal weight
+     body.pocket #ghint{display:flex} above wins on order: adding #ghint to the
+     body.circles rule near #orgmap was tried in the frame and left it showing. */
+  body.pocket.circles #ghint,body.circles #gresume.on{display:none}
   #pdrawer{position:fixed;left:0;right:0;bottom:-90%;height:78%;z-index:59;display:flex;flex-direction:column;
     background:linear-gradient(180deg,rgba(26,19,11,.99),rgba(16,11,6,.99));border-top:2px solid #8a6a33;
     border-radius:16px 16px 0 0;transition:bottom .3s cubic-bezier(.2,.8,.3,1),visibility 0s linear .3s;color:var(--parch);
@@ -1704,7 +1712,7 @@
 <div id="walkCard"></div>
 <div id="orgmap">
  <div id="orgHead"><h3>◎ The Circles</h3>
-  <span class="sub">the same village, drawn as its circles. Click any node to walk to its door · scroll zooms, drag pans · open seats pulse as open calls</span></div>
+  <span class="sub">the same village, drawn as its circles. Tap any node to walk to its door · drag to move, pinch or scroll to zoom · open seats pulse as open calls</span></div>
  <svg id="orgSvg" viewBox="0 0 1600 1050" preserveAspectRatio="xMidYMid meet"></svg>
 </div>
 <div id="skin">
@@ -8455,19 +8463,64 @@ $('orgSvg').addEventListener('click',e=>{
   if(!go||!BY[go]){toast(g.dataset.kind==='quest'?'⚑ Not placed yet. This quest lives at the Quest Board.':'No home on the land yet. The Loom awaits.');return}
   setMapType('living',true);
   openPanel(go)});
+/* SCREEN TO CHART THE WAY THE BROWSER DRAWS IT. preserveAspectRatio "meet"
+   scales both axes by the SMALLER of the two ratios and centres the rest. The
+   old arithmetic divided x by the box's width and y by its HEIGHT, which agree
+   only when the box has the chart's own shape. On a phone the box is 390x729
+   and the chart is fitted to its width, so MEASURED a finger dragged 100 px
+   down moved the chart 35.1 px, and the wheel zoomed about a point that was
+   not under the pointer. */
+function orgMeet(){const r=$('orgSvg').getBoundingClientRect();
+  const s=Math.min(r.width/OVB[2],r.height/OVB[3])||1;
+  return{r,s,ox:r.left+(r.width-OVB[2]*s)/2,oy:r.top+(r.height-OVB[3]*s)/2}}
+function orgAt(cx,cy){const m=orgMeet();return[OVB[0]+(cx-m.ox)/m.s,OVB[1]+(cy-m.oy)/m.s]}
+/* The narrowest the chart may be drawn. 400 units on a desk as before, and
+   closer on a phone: 400 units across 390 px can never draw a role's 7.4 unit
+   name above 7 px. 2.4 px a unit puts it near 18 px. */
+function orgMinW(){const w=$('orgSvg').getBoundingClientRect().width;return Math.min(400,(w||960)/2.4)}
+/* Draw the chart w units wide with the chart point p under the screen point
+   cx,cy. The wheel, the pinch and the pad all zoom through this one line. */
+function orgZoomTo(w,p,cx,cy){w=Math.max(orgMinW(),Math.min(3200,w));
+  OVB[2]=w;OVB[3]=w*1050/1600;
+  const m=orgMeet();OVB[0]=p[0]-(cx-m.ox)/m.s;OVB[1]=p[1]-(cy-m.oy)/m.s;orgApplyVB()}
 $('orgSvg').addEventListener('wheel',e=>{e.preventDefault();
-  const sv=$('orgSvg');const r=sv.getBoundingClientRect();
-  const mx=OVB[0]+(e.clientX-r.left)/r.width*OVB[2],my=OVB[1]+(e.clientY-r.top)/r.height*OVB[3];
-  const f=e.deltaY>0?1.12:1/1.12;
-  let w=Math.max(400,Math.min(3200,OVB[2]*f));const h=w*1050/1600;
-  OVB=[mx-(mx-OVB[0])*(w/OVB[2]),my-(my-OVB[1])*(h/OVB[3]),w,h];orgApplyVB()},{passive:false});
-$('orgSvg').addEventListener('pointerdown',e=>{ODRAG={x:e.clientX,y:e.clientY,vb:OVB.slice()};oMoved=0;
+  orgZoomTo(OVB[2]*(e.deltaY>0?1.12:1/1.12),orgAt(e.clientX,e.clientY),e.clientX,e.clientY)},{passive:false});
+/* FINGERS ARE TRACKED BY ID. The old handler took ONE origin and every
+   pointerdown reset it, so two fingers took turns being the origin and the
+   chart swung about 200 px side to side on every move. MEASURED at 390x844: a
+   pinch spread from 60 to 252 px left the width at 1600 and moved x by 640.
+   One finger drags. Two pinch about their midpoint, holding the chart point
+   that was under it, which also pans. A finger lifted out of a pinch leaves
+   the other one dragging from where it is, and a pinch never ends as a tap on
+   a node. */
+const OPTR=new Map();let OPINCH=null;
+function orgSeat(){const p=[...OPTR.values()];ODRAG=null;OPINCH=null;
+  if(p.length===1)ODRAG={x:p[0].x,y:p[0].y,vb:OVB.slice()};
+  else if(p.length>1){const a=p[0],b=p[1];
+    OPINCH={d:Math.hypot(a.x-b.x,a.y-b.y)||1,w:OVB[2],p:orgAt((a.x+b.x)/2,(a.y+b.y)/2)}}}
+$('orgSvg').addEventListener('pointerdown',e=>{if(!OPTR.size)oMoved=0;
+  OPTR.set(e.pointerId,{x:e.clientX,y:e.clientY});orgSeat();
   try{$('orgSvg').setPointerCapture(e.pointerId)}catch(_){}});
-$('orgSvg').addEventListener('pointermove',e=>{if(!ODRAG)return;
-  const r=$('orgSvg').getBoundingClientRect();
+$('orgSvg').addEventListener('pointermove',e=>{if(!OPTR.has(e.pointerId))return;
+  OPTR.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(OPINCH){const[a,b]=[...OPTR.values()];oMoved=99;
+    orgZoomTo(OPINCH.w*OPINCH.d/(Math.hypot(a.x-b.x,a.y-b.y)||1),OPINCH.p,(a.x+b.x)/2,(a.y+b.y)/2);return}
+  if(!ODRAG)return;
   const dx=(e.clientX-ODRAG.x),dy=(e.clientY-ODRAG.y);oMoved=Math.max(oMoved,Math.abs(dx)+Math.abs(dy));
-  OVB[0]=ODRAG.vb[0]-dx/r.width*OVB[2];OVB[1]=ODRAG.vb[1]-dy/r.height*OVB[3];orgApplyVB()});
-$('orgSvg').addEventListener('pointerup',()=>{ODRAG=null;setTimeout(()=>{oMoved=0},50)});
+  const s=orgMeet().s;OVB[0]=ODRAG.vb[0]-dx/s;OVB[1]=ODRAG.vb[1]-dy/s;orgApplyVB()});
+const orgLift=e=>{OPTR.delete(e.pointerId);orgSeat();
+  if(!OPTR.size)setTimeout(()=>{if(!OPTR.size)oMoved=0},50)};
+$('orgSvg').addEventListener('pointerup',orgLift);
+$('orgSvg').addEventListener('pointercancel',orgLift);
+/* THE POCKET PAD, WHILE THE CHART IS UP. Its buttons moved the land hidden
+   under the chart: MEASURED, two zooms and two pans left the viewBox as it was
+   and took the land's zoom from 0.72 to 1.31, waiting for the reader when they
+   came back. The pad
+   keeps one meaning, the picture in front of you, and the same step sizes. */
+window.orgNav={
+  zoom(k){const r=$('orgSvg').getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+    orgZoomTo(OVB[2]/k,orgAt(cx,cy),cx,cy)},
+  pan(dx,dy){const s=orgMeet().s;OVB[0]+=dx/s;OVB[1]+=dy/s;orgApplyVB()}};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('circles')&&!document.body.classList.contains('loom'))setMapType('living',true)},true);
 
 
@@ -9953,8 +10006,13 @@ addEventListener('message',e=>{try{
   /* These end a walk too, and they pass NO kind: pressing a button is not a
      demonstration that this person navigates with their fingers, so it must
      never be what folds the buttons away. */
-  const zoom=k=>{window.GUIDE&&GUIDE.hand();travel=null;cam.z=Math.max(minZoom(),Math.min(ZMAX,cam.z*k));clampCam();hap(6)};
-  const pan=(dx,dy)=>{window.GUIDE&&GUIDE.hand();travel=null;const s=140/cam.z;cam.x+=dx*s;cam.y+=dy*s;clampCam();hap(6)};
+  /* While the circles are up the pad drives the chart (orgNav), never the
+     land hidden under it. */
+  const chart=()=>document.body.classList.contains('circles')&&window.orgNav;
+  const zoom=k=>{if(chart()){orgNav.zoom(k);hap(6);return}
+    window.GUIDE&&GUIDE.hand();travel=null;cam.z=Math.max(minZoom(),Math.min(ZMAX,cam.z*k));clampCam();hap(6)};
+  const pan=(dx,dy)=>{if(chart()){orgNav.pan(dx*140,dy*140);hap(6);return}
+    window.GUIDE&&GUIDE.hand();travel=null;const s=140/cam.z;cam.x+=dx*s;cam.y+=dy*s;clampCam();hap(6)};
   const on=(id,fn)=>{const b=$(id);if(b)b.onclick=fn};
   on('pnIn',()=>zoom(1.35));on('pnOut',()=>zoom(1/1.35));
   on('pnUp',()=>pan(0,-1));on('pnDown',()=>pan(0,1));
