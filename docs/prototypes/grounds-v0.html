@@ -207,7 +207,9 @@
   #vitals{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:0;
     background:linear-gradient(180deg,#2c2114,#1c140b);border:1px solid #6b5430;border-top:none;
     border-radius:0 0 10px 10px;box-shadow:0 4px 14px rgba(0,0,0,.55), inset 0 1px 0 rgba(236,208,138,.25);z-index:30}
-  .vital{display:flex;align-items:center;gap:8px;padding:8px 16px;color:var(--parch);cursor:pointer;position:relative}
+  .vital{display:flex;align-items:center;gap:8px;padding:8px 16px;color:var(--parch);cursor:pointer;position:relative;
+    appearance:none;-webkit-appearance:none;background:none;border:0;margin:0;font:inherit;text-align:left}
+  .vital:focus-visible{outline:2px solid #e8c877;outline-offset:-3px}
   .vital+.vital{border-left:1px solid rgba(201,162,94,.28)}
   .vital svg{width:19px;height:19px;filter:drop-shadow(0 1px 1px #000)}
   .vital b{font-size:15px;color:#fff;font-weight:normal}
@@ -482,6 +484,9 @@
   #wall h3{font-variant:small-caps;font-weight:normal;letter-spacing:.2em;color:var(--gold-b);font-size:13px;padding:11px 14px;border-bottom:1px solid rgba(201,162,94,.3)}
   #wallList{flex:1;overflow-y:auto;padding:8px 10px;font-size:12px;scrollbar-width:thin}
   .wallrow{padding:7px 8px;border-radius:6px;cursor:pointer;line-height:1.35}
+  button.wallrow{display:block;width:100%;margin:0;text-align:left;background:none;border:0;font:inherit;line-height:1.35;color:inherit}
+  div.wallrow{cursor:default}
+  .wallrow:focus-visible{outline:2px solid #e8c877;outline-offset:-2px}
   .wallrow:hover{background:rgba(236,208,138,.1)}
   .wallrow b{color:#fff;font-weight:normal}
   .wallrow span{color:#b9cf9a;display:block;font-size:10.5px}
@@ -4191,9 +4196,21 @@ function rebuildVitals(){const w=$('vitals');
   const D=(typeof vitalsData==='function')?vitalsData():null;
   w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+SCENE.vitals.map(v=>{
     const d=(D&&D[v.k])||{v:v.v,sub:v.sub,src:v.src,how:v.sub};
-    return `<div class="vital" data-k="${escq(v.k)}" data-tip="${escq(d.how)} · ${escq(d.src)}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7"><path d="${VICON[v.k]}"/></svg><span><b>${escq(d.v)}</b><small>${escq(v.label)}</small></span></div>`}).join('')
-   +`<div class="vital" data-k="moon" data-tip="${escq(SCENE.moonName)}"><span id="moon">${escq(SCENE.moon)}</span></div>`;
-  w.querySelectorAll('.vital').forEach(el=>el.onclick=e=>{e.stopPropagation();window.openVitalDrop&&openVitalDrop(el.dataset.k,el)})}
+    return `<button type="button" class="vital" data-k="${escq(v.k)}" aria-label="${escq(v.label)}: ${escq(d.v)}, ${escq(vitalProv(d.src))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(d.how)} · ${escq(d.src)}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${VICON[v.k]}"/></svg><span><b>${escq(d.v)}</b><small>${escq(v.label)}</small></span></button>`}).join('')
+   +`<button type="button" class="vital" data-k="moon" aria-label="The Moon: ${escq(SCENE.moonName)}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(SCENE.moonName)}"><span id="moon">${escq(SCENE.moon)}</span></button>`;
+  /* A KEY CAN OPEN A READING. The chips were divs with an onclick, so the
+     drop-downs, and the doors inside them, were mouse only. A click that
+     comes from a key has detail 0, and then focus goes into what opened,
+     so the next Tab lands on its first door. Escape closes it and hands
+     focus back to the chip (the keyboard handler). */
+  w.querySelectorAll('.vital').forEach(el=>el.onclick=e=>{e.stopPropagation();window.VDROP_FROM=el;
+    window.openVitalDrop&&openVitalDrop(el.dataset.k,el);
+    if(e.detail===0){const f=$('vdrop').querySelector('button,a[href],input');if(f)f.focus({preventScroll:true})}})}
+/* What a chip says its number is, in the words its own drop-down uses. The
+   small label is hidden below 1500 px wide, so the chip's name is the only
+   place a screen reader learns which reading it is, and that it is sample. */
+function vitalProv(src){src=String(src||'');
+  return src==='founder-set'?'set by the founder':(src==='drawn land'?'measured from the drawn land':'sample reading')}
 window.rebuildVitals=rebuildVitals;rebuildVitals();
 
 /* banners */
@@ -4653,21 +4670,31 @@ function showDayHeld(){const night=dayPhase>1.7,dusk=!night&&dayPhase>1.3;
 $('dayBtn').onclick=()=>{dayAuto=false;dayPhase=(dayPhase<0.5)?1.45:(dayPhase<1.7?1.85:0.3);showDayHeld()};
 
 /* wall */
-$('wallBtn').onclick=()=>{$('wall').classList.toggle('show');buildWall()};
-if($('wallX'))$('wallX').onclick=()=>$('wall').classList.remove('show');
+/* Opened from a key (a click from a key has detail 0), focus goes to the
+   first row, because the list sits far down the tab order, after the dock and
+   Maia. Closed from a key, focus goes back to Get Involved. */
+$('wallBtn').onclick=e=>{$('wall').classList.toggle('show');buildWall();
+  if(e&&e.detail===0&&$('wall').classList.contains('show')){const r=$('wallList').querySelector('button.wallrow');if(r)r.focus({preventScroll:true})}};
+if($('wallX'))$('wallX').onclick=e=>{$('wall').classList.remove('show');if(e&&e.detail===0)$('wallBtn').focus({preventScroll:true})};
 function wallGo(k,tab){if(!k||!BY[k])return;buildMode?openInspect(k):openPanel(k,tab)}
 function buildWall(){
+  /* EVERY ROW THAT OPENS A PLACE IS A BUTTON. They were divs with an onclick,
+     so the main "find somewhere to help" list opened for a keyboard and not
+     one of its 37 rows could be chosen: Tab went from the close cross to the
+     list box and out. A quest with no place yet opens nothing, so it stays
+     a plain row and the keyboard does not stop on it. */
   const stranded=SCENE.structures.filter(s=>s.stranded);
   const unowned=SCENE.structures.filter(s=>!s.circle);
   $('wallList').innerHTML=
   (stranded.length?`<div class="wallhead" style="color:#e08a7a">stranded outside the line</div>`+
-    stranded.map(s=>`<div class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⚠ ${escq(s.name)}</b><span>outside the property line. Move it or redraw the line; nothing is removed for you</span></div>`).join(''):'')+
+    stranded.map(s=>`<button type="button" class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⚠ ${escq(s.name)}</b><span>outside the property line. Move it or redraw the line; nothing is removed for you</span></button>`).join(''):'')+
   (unowned.length?`<div class="wallhead">needs a steward</div>`+
-    unowned.map(s=>`<div class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⌂ ${escq(s.name)}</b><span>no circle holds this place yet</span></div>`).join(''):'')+
+    unowned.map(s=>`<button type="button" class="wallrow" onclick="wallGo('${escj(s.key)}',0)"><b>⌂ ${escq(s.name)}</b><span>no circle holds this place yet</span></button>`).join(''):'')+
   `<div class="wallhead">open seats</div>`+
-  SCENE.seats.map(x=>`<div class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · ${escq(x.c)} circle</span></div>`).join('')+
+  SCENE.seats.map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · ${escq(x.c)} circle</span></button>`).join('')+
   `<div class="wallhead">open quests</div>`+
-  SCENE.quests.map(x=>`<div class="wallrow" ${x.at&&BY[x.at]?`onclick="wallGo('${escj(x.at)}',1)"`:''}><b>⚑ ${escq(x.q)}</b><span>${x.at&&BY[x.at]?escq(BY[x.at].name)+' · ':'Quest Board · not yet placed · '}${escq(x.r)}</span></div>`).join('')}
+  SCENE.quests.map(x=>{const go=!!(x.at&&BY[x.at]),tag=go?'button':'div';
+    return `<${tag} class="wallrow"${go?` type="button" onclick="wallGo('${escj(x.at)}',1)"`:''}><b>⚑ ${escq(x.q)}</b><span>${go?escq(BY[x.at].name)+' · ':'Quest Board · not yet placed · '}${escq(x.r)}</span></${tag}>`}).join('')}
 
 /* theme panel */
 /* The rich swatches this built now come out of renderSkinThemes(), into the
@@ -5147,7 +5174,16 @@ addEventListener('keydown',e=>{
      theme panel had no close control of any kind. This handler returns
      early on INPUT, TEXTAREA and SELECT twenty lines up, so Escape while
      somebody is typing a theme into the panel never reaches here. */
+  /* Escape from inside a vital's drop-down or the Get Involved list hands
+     focus back to the control that opened it, so a keyboard visitor is not
+     dropped at the top of the page. Read before the line below closes them,
+     and focused after it, because closeInspect() there blurs whatever has
+     focus. */
+  const inside=id=>$(id)&&$(id).classList.contains('show')&&$(id).contains(document.activeElement);
+  const back=k!=='Escape'?null:inside('vdrop')?window.VDROP_FROM:inside('wall')?$('wallBtn'):null;
+  if(k==='Escape')$('vdrop').classList.remove('show');
   if(k==='Escape'){$('panel').classList.remove('open');panelKey=null;$('module').classList.remove('show');$('attnCard').classList.remove('show');closeInspect();$('resolver')&&$('resolver').classList.remove('show');window.closeMask&&closeMask();$('wall')&&$('wall').classList.remove('show')}
+  if(back&&back.isConnected)back.focus({preventScroll:true});
   clampCam()});
 
 /* ---------- build mode: the founder's hand (layout editor) ---------- */
@@ -8105,6 +8141,11 @@ window.vitalSet=vitalSet;
 function vitalClear(k){delete VITAL_OVR[k];logEdit('vital-override','vital:'+k,{to:'computed'});rebuildVitals();$('vdrop').classList.remove('show')}
 window.vitalClear=vitalClear;
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('#vdrop')&&!e.target.closest('.vital'))$('vdrop').classList.remove('show')});
+/* The chip says whether its reading is open. #vdrop is shown at one site and
+   hidden at nine, so this watches the class. */
+new MutationObserver(()=>{const open=$('vdrop').classList.contains('show');
+  document.querySelectorAll('#vitals .vital').forEach(c=>c.setAttribute('aria-expanded',String(open&&c===window.VDROP_FROM)))})
+  .observe($('vdrop'),{attributes:true,attributeFilter:['class']});
 /* village pulse — conversations glow where they live (sample feed, deterministic) */
 window.PULSE={};
 (function pulseBoot(){const rng=mulberry(4242);

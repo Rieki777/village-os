@@ -480,3 +480,54 @@ describe("Maia's minimise control and her inline links take the keyboard", () =>
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F25. The Get Involved rows and the vital chips were divs with an onclick:
+   the list opened for a keyboard and none of its rows could be chosen, and
+   the chips and the doors inside their drop-downs were mouse only. */
+describe("the Get Involved rows and the vital chips take the keyboard", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("makes every row that opens a place a button, and leaves a row with no place plain", () => {
+    b.run("$('wall').classList.add('show');buildWall()");
+    const rows = [...b.doc.querySelectorAll<HTMLElement>("#wallList .wallrow")];
+    expect(rows.length, "the wall has rows").toBeGreaterThan(10);
+    const acting = rows.filter((r) => r.hasAttribute("onclick"));
+    expect(acting.length, "rows that open a place").toBeGreaterThan(10);
+    expect(
+      acting.filter((r) => r.tagName !== "BUTTON").map((r) => r.textContent?.slice(0, 30)),
+      "rows that open a place but are not buttons",
+    ).toEqual([]);
+    expect(rows.filter((r) => r.tagName === "BUTTON" && !r.hasAttribute("onclick")).length, "buttons that do nothing").toBe(0);
+    acting[0].focus();
+    expect(b.doc.activeElement, "a row takes focus").toBe(acting[0]);
+    acting[0].click();
+    expect(b.doc.getElementById("panel")?.classList.contains("open"), "and opens its place").toBe(true);
+    b.run("$('panel').classList.remove('open');panelKey=null;$('wall').classList.remove('show')");
+  });
+
+  it("makes each vital chip a named button that opens its reading and gives focus back on Escape", async () => {
+    const chips = [...b.doc.querySelectorAll<HTMLElement>("#vitals .vital")];
+    expect(chips.length, "the chips").toBeGreaterThan(4);
+    expect(chips.filter((c) => c.tagName !== "BUTTON").length, "chips that are not buttons").toBe(0);
+    const people = chips.find((c) => c.dataset.k === "people") as HTMLElement;
+    expect(people.getAttribute("aria-label"), "the reading, and that it is a sample").toMatch(/^People: .+, sample reading$/);
+    people.focus();
+    people.click(); // jsdom's click() carries detail 0, the mark of a key
+    await settle(0);
+    const drop = b.doc.getElementById("vdrop") as HTMLElement;
+    expect(drop.classList.contains("show"), "the reading opens").toBe(true);
+    expect(drop.contains(b.doc.activeElement), "focus goes into it").toBe(true);
+    expect(people.getAttribute("aria-expanded")).toBe("true");
+    press(b, b.doc.activeElement as HTMLElement, "Escape");
+    await settle(0);
+    expect(drop.classList.contains("show"), "Escape closes it").toBe(false);
+    expect(b.doc.activeElement, "and hands focus back to the chip").toBe(people);
+    expect(people.getAttribute("aria-expanded")).toBe("false");
+    expect(b.uncaught).toEqual([]);
+  });
+});
