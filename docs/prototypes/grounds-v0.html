@@ -7751,6 +7751,17 @@ function routeHash(){if(HASHMUTE)return;
     else{toast('That place is no longer on the map.');setHash('')}}
   else if(m[1]==='module'&&moduleAt(m[2]))openDoor(m[2],{});
   else if(m[1]==='journey')setTimeout(()=>playJourney(m[2]),500)}
+/* THE SHELL'S ENTER TOKEN. LivingMap shows its own Enter the Land gate and
+   appends skipIntro to the hash so the land does not ask twice. Read it ONCE,
+   here, and take it back out of the address before anything else reads
+   location.hash: the pocket welcome, closeLoom and the circles toggle compare
+   the raw hash, and the token made each of them see a deep link that was not
+   there. The intro itself is left at the bottom of this file, after the Enter
+   button is wired, because leaving it removes the card that button lives in. */
+const SKIP_INTRO=(()=>{const h=location.hash||'';if(!/skipIntro/i.test(h))return false;
+  const rest=h.replace(/[&?]?skipIntro\b/ig,'').replace(/[?&]$/,'');
+  try{history.replaceState(null,'',rest.length>1?rest:location.pathname+location.search)}catch(_){}
+  return true})();
 addEventListener('hashchange',routeHash);
 if(location.hash&&location.hash.length>2)setTimeout(routeHash,400);
 
@@ -9248,16 +9259,24 @@ if(document.body.classList.contains('pocket')){
 
 
 /* intro
-   The shell may already have gated on Enter the Land and appended #skipIntro
-   so this file does not ask twice. Still wire enterBtn for standalone loads. */
-if(/skipIntro/i.test(location.hash)){
-  leaveIntro();
-}
-$('enterBtn').onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
-  shellPost({type:'intro-done'});
+   The shell may already have gated on Enter the Land (SKIP_INTRO, read and
+   stripped by the hash router). The button is wired FIRST and the intro left
+   SECOND, in that order on purpose: leaving it removes #introCard, the button
+   lives inside the card, and wiring a removed button threw a TypeError here,
+   above requestAnimationFrame(frame). The HUD stood over a land that never
+   painted, on every /map visit (2026-10-01, #399). */
+function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
     maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door. Want the short walk?`);
-    setTimeout(()=>{if(!JWALK)maiaSay(`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`)},9000)})};
+    setTimeout(()=>{if(!JWALK)maiaSay(`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`)},9000)})}
+const enterBtn=$('enterBtn');
+if(enterBtn)enterBtn.onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
+  shellPost({type:'intro-done'});arriveOnLand()};
+if(SKIP_INTRO){leaveIntro();
+  /* The shell's button stands in for this one, so pressing it earns the same
+     arrival: the glide in and her welcome. Not on a deep link, which never had
+     either, and not in the pocket, whose boot above keeps the camera still. */
+  if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket'))arriveOnLand()}
 
 applyTheme(THEMES.emerald); // boot theme (sets every --t-* var before first paint)
 requestAnimationFrame(frame); // start the loop only after the whole HUD exists
