@@ -52,29 +52,26 @@ export interface LandGround {
   };
 }
 
-/** The village's own ground, or null to keep the seed. Never throws. */
-export async function fetchLandGround(): Promise<LandGround | null> {
-  try {
-    const res = await fetch("/api/land");
-    if (!res.ok) return null;
-    const body = await res.json();
-    const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
-    if (!url) return null;
-    const spanM = Number(body?.spanM);
-    const c = body?.centre;
-    return {
-      core: { url },
-      frame: {
-        spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
-        seed: body?.seedFrame === true,
-        centre:
-          c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
-            ? { lat: Number(c.lat), lon: Number(c.lon) }
-            : null,
-      },
-    };
-  } catch {
-    /* The map keeps the ground it is already standing on. */
-    return null;
-  }
+/**
+ * The village's own ground from its land record, or null to keep the seed.
+ * Pure: the shell reads `GET /api/land` once per boot (configPush.ts
+ * `readLand`) and the same answer gives this ground and the seed verdict, so
+ * a null record (a read that failed) keeps the seed too.
+ */
+export function landGroundOf(body: Record<string, any> | null | undefined): LandGround | null {
+  const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
+  if (!url) return null;
+  const spanM = Number(body?.spanM);
+  const c = body?.centre;
+  return {
+    core: { url },
+    frame: {
+      spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
+      seed: body?.seedFrame === true,
+      centre:
+        c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
+          ? { lat: Number(c.lat), lon: Number(c.lon) }
+          : null,
+    },
+  };
 }

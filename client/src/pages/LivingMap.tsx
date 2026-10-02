@@ -56,9 +56,11 @@ import VillageSettingsDoor, { settingsAsked, takeSettingsDoor, useMayStyleLand }
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 import { useMapHistory } from "@/components/map/mapHistory";
 import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
-import { fetchLandGround } from "@/components/map/landGround";
+import { landGroundOf } from "@/components/map/landGround";
 import { pushChips, useChipsCadence } from "@/components/map/statChips";
 import { useOrgFollow } from "@/components/map/orgFollow";
+import BlankSlate, { useMapSlate } from "@/components/map/MapSlate";
+import { configScene, readLand, seedGroundOf, type LandAnswer } from "@/components/map/configPush";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -258,6 +260,12 @@ export default function LivingMap() {
     markEntered();
     onEnter();
   }, [markEntered, onEnter]);
+  /* A village with nothing published shows its blank slate until someone who
+     may draft the land opens the map from it (components/map/MapSlate.tsx).
+     `blankSent` is per frame: the blank scene goes once (configPush.ts). */
+  const slate = useMapSlate();
+  const [board, setBoard] = useState(false);
+  const blankSent = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -293,7 +301,7 @@ export default function LivingMap() {
    * the artifact now offers a real inbound contract and a message is the part
    * of it that survives the artifact being rewritten.
    */
-  const pushConfig = useCallback(async () => {
+  const pushConfig = useCallback(async (land?: Promise<LandAnswer>) => {
     const win = frame.current?.contentWindow;
     if (!win) return;
     /*
@@ -307,18 +315,24 @@ export default function LivingMap() {
     // its cover until that ground has drawn (N19). It is also sent on its own
     // the moment it is known, so the picture downloads while the config is
     // still on its way; the map loads it once either way.
-    const ground = fetchLandGround().then((land) => {
-      if (land) {
+    // The boot hands in its land read, which also carries the seed verdict
+    // below; a later push (a saved skin) reads the land again for the ground.
+    const ground = (land ?? readLand()).then((body) => {
+      const g = landGroundOf(body);
+      if (g) {
         try {
-          win.postMessage({ type: "ground", ...land }, window.location.origin);
+          win.postMessage({ type: "ground", ...g }, window.location.origin);
         } catch {
           /* The frame went away: nobody is waiting. */
         }
       }
-      return land;
+      return g;
     });
     try {
-      const res = await fetch("/api/map/config");
+      // Where the village stands rides the boot push only (configPush.ts).
+      const [res, landBody] = await Promise.all([fetch("/api/map/config"), land ?? Promise.resolve(null)]);
+      const seedGround = seedGroundOf(landBody);
+      if (seedGround !== null) payload.seedGround = seedGround;
       if (!res.ok) return;
       const body = await res.json();
       /*
@@ -334,29 +348,22 @@ export default function LivingMap() {
       Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
       /*
-       * The published land (0063). Same "absent means keep your own" rule as
-       * the walk: a village that has never published sends null and the map
-       * draws its own seed, which is the ordinary state of a fresh fork.
-       *
-       * The scene crosses the wire as JSON TEXT so the server stores the
-       * bytes the map wrote. This is the one place it becomes an object
-       * again, and a scene that will not parse is dropped rather than pushed:
-       * the map keeps drawing the land it already has, which is a strictly
-       * better failure than a half-applied scene.
+       * The published land (0063), or the blank one when nothing is published:
+       * the map's own seed is another village's land. The scene crosses the
+       * wire as JSON TEXT so the server stores the bytes the map wrote; the
+       * rule for each case is in configPush.ts.
        */
-      if (typeof body?.scene === "string" && body.scene) {
-        try {
-          payload.scene = JSON.parse(body.scene);
-          payload.sceneVersion = Number(body.sceneVersion) || 0;
-        } catch {
-          /* Unparseable: the map keeps the land it is already drawing. */
-        }
+      const told = configScene(body, blankSent.current);
+      if (told) {
+        payload.scene = told.scene;
+        payload.sceneVersion = told.sceneVersion;
+        if (told.blank) blankSent.current = true;
       }
     } catch {
       /* The map keeps whatever it is already wearing. */
     } finally {
-      const land = await ground;
-      if (land) payload.ground = land;
+      const g = await ground;
+      if (g) payload.ground = g;
       try {
         win.postMessage(payload, window.location.origin);
       } catch {
@@ -556,7 +563,10 @@ export default function LivingMap() {
         // and the village's own photograph under it, even though their hand
         // request tells them they may do nothing.
         // The cover lifts when the map answers this one with land-ready.
-        void pushConfig();
+        // A new frame has been sent no blank yet; one land read serves the
+        // ground and the seed verdict (configPush.ts, landGround.ts).
+        blankSent.current = false;
+        void pushConfig(readLand());
         pushHand();
         pushPhotos();
         pushChipsNow();
@@ -681,6 +691,15 @@ export default function LivingMap() {
   };
 
   if (modules.loaded && !mapModule) return <ModuleGate moduleId="map" name="How Power Is Held" />;
+  if (slate.state === "blank" && !board) {
+    return (
+      <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+        <BlankSlate slate={slate} onLeave={exitApp} onOpenBoard={() => { setBoard(true); enterTheLand(); }} />
+      </div>
+    );
+  }
+  /* Nothing mounts until the slate is known, so a visitor to a blank village never downloads the map. */
+  const known = slate.state !== "checking";
 
   /*
    * APP MODE. No Layout, no header, no bottom nav, and no page scroll.
@@ -812,7 +831,7 @@ export default function LivingMap() {
         </button>
       )}
 
-      {presence === "checking" && (
+      {(presence === "checking" || (presence === "present" && !known)) && (
         <p className="text-center text-muted-foreground py-24">Opening the map...</p>
       )}
 
@@ -840,9 +859,9 @@ export default function LivingMap() {
         </div>
       )}
 
-      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} slow={slow} onEnter={enterTheLand} />
+      <EnterTheLandGate open={known && presence === "present" && !entered} preparing={known && presence === "present" && entered && preparing} slow={slow} onEnter={enterTheLand} />
 
-      {presence === "present" && entered && (
+      {known && presence === "present" && entered && (
         <iframe
           ref={frame}
           src={`${groundsUrl}${withSkipIntro(startHash)}`}
