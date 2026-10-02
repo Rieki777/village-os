@@ -121,7 +121,8 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
 
   return (
     <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm">
+      {/* px-6 under sm so "Continue with Google" keeps to one line at 375px. */}
+      <div className="bg-white rounded-2xl shadow-2xl px-6 py-10 sm:px-10 w-full max-w-sm">
         <div className="w-14 h-14 rounded-full bg-teal-deep/10 flex items-center justify-center mx-auto mb-6">
           <Lock className="w-7 h-7 text-teal-deep" />
         </div>
