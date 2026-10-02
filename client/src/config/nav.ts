@@ -33,6 +33,11 @@ export type NavLink = {
   /** Signed-in roles allowed to see this. Absent means everyone. */
   roles?: readonly string[];
   /**
+   * One of the brochure pages (shared/brochure.ts). Shown only while this
+   * village serves them, which a new village does not.
+   */
+  brochure?: true;
+  /**
    * Amber treatment, for the two entries that lead into the village's own
    * working surfaces. It reads as "this is the machine room", not as "this is
    * the team's": the Launch Plan is open to every signed-in member and the
@@ -122,7 +127,7 @@ export const NAV: readonly NavEntry[] = [
       { href: "/tools", label: "Tools", module: "tools" },
       { href: "/village-health", label: "Health", module: "health" },
       { href: "/tokens", label: "The Exchange", module: "exchange" },
-      { href: "/housing", label: "Housing" },
+      { href: "/housing", brochure: true, label: "Housing" },
       { href: "/network", label: "Village Network", module: "network" },
       { href: "/contribute", label: "Contribute", module: "commerce" },
       /**
@@ -138,14 +143,14 @@ export const NAV: readonly NavEntry[] = [
   {
     label: "Join",
     items: [
-      { href: "/investor", label: "Investor", subtitle: "Capital Contributor", icon: TrendingUp },
-      { href: "/steward", label: "Village Steward", subtitle: "Co-Creator", icon: Users },
-      { href: "/resident", label: "Resident", subtitle: "Co-Creator", icon: HomeIcon },
-      { href: "/prosperity", label: "Prosperity Creator", subtitle: "Business Builder", icon: Sparkles },
-      { href: "/opportunities", label: "Business Opportunities" },
-      { href: "/visit", label: "Plan a Visit" },
-      { href: "/love-letter", label: "Sign the Love Letter" },
-      { href: "/work-with-us", label: "Work With Us" },
+      { href: "/investor", brochure: true, label: "Investor", subtitle: "Capital Contributor", icon: TrendingUp },
+      { href: "/steward", brochure: true, label: "Village Steward", subtitle: "Co-Creator", icon: Users },
+      { href: "/resident", brochure: true, label: "Resident", subtitle: "Co-Creator", icon: HomeIcon },
+      { href: "/prosperity", brochure: true, label: "Prosperity Creator", subtitle: "Business Builder", icon: Sparkles },
+      { href: "/opportunities", brochure: true, label: "Business Opportunities" },
+      { href: "/visit", brochure: true, label: "Plan a Visit" },
+      { href: "/love-letter", brochure: true, label: "Sign the Love Letter" },
+      { href: "/work-with-us", brochure: true, label: "Work With Us" },
     ],
   },
   {
@@ -157,13 +162,13 @@ export const NAV: readonly NavEntry[] = [
      */
     label: "Guides",
     items: [
-      { href: "/co-creators-guide", label: "Co-Creators Guide" },
+      { href: "/co-creators-guide", brochure: true, label: "Co-Creators Guide" },
       { href: "/first-walk", label: "Your First Walk" },
       { href: "/game-mechanics", label: "Game Mechanics" },
-      { href: "/good-neighbor", label: "Good Neighbor" },
+      { href: "/good-neighbor", brochure: true, label: "Good Neighbor" },
       { href: "/training", label: "Training" },
-      { href: "/resident-rights", label: "Resident Rights" },
-      { href: "/steward-rights", label: "Steward Rights" },
+      { href: "/resident-rights", brochure: true, label: "Resident Rights" },
+      { href: "/steward-rights", brochure: true, label: "Steward Rights" },
       { href: "/exit-policy", label: "Leaving Well" },
       // Ungated on purpose (L1): the library is public and read-only, the
       // platform's own "what a village can be" page.
@@ -173,14 +178,14 @@ export const NAV: readonly NavEntry[] = [
   {
     label: "About",
     items: [
-      { href: "/how-we-create", label: "How We Create" },
+      { href: "/how-we-create", brochure: true, label: "How We Create" },
       { href: "/governance", label: "Governance" },
       // The live surface, module-gated: /governance explains how the village
       // decides and is always there, /decisions shows what it is deciding and
       // exists only where the engine is switched on.
       { href: "/decisions", label: "Decisions", module: "governance" },
-      { href: "/master-plan", label: "Master Plan" },
-      { href: "/team", label: "Our Team" },
+      { href: "/master-plan", brochure: true, label: "Master Plan" },
+      { href: "/team", brochure: true, label: "Our Team" },
       /**
        * R12 opened this page to every member, and the menu was the last door
        * still shut. `POST /api/dry-run` answers any signed-in member ("any
@@ -218,6 +223,7 @@ export const NAV: readonly NavEntry[] = [
        */
       {
         href: "/project-history",
+        brochure: true,
         label: "🛠 Command Centre",
         roles: ["admin", "founder"],
         accent: true,

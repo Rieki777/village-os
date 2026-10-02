@@ -79,7 +79,7 @@ const buildJourneySteps = (villageName: string, tokenName: string) => [
     title: `Join the ${villageName} Family`,
     // S2 brochure lane, 2026-08-30: dropped "Amora 508c1a", a US tax-entity
     // reference stated as this village's own on every fork. See LoveLetter.tsx
-    // and server/seeds/brochure-legal-seed.json (legal.membership.entityLabel).
+    // and server/seeds/amora/brochure-legal-seed.json (legal.membership.entityLabel).
     description: "Contemplate and sign our Love Letter, formally becoming a member of the community.",
     icon: Heart,
     link: "/love-letter",

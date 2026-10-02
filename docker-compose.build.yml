@@ -1,0 +1,15 @@
+# Build the app image from this folder instead of pulling the published one.
+# For anyone running code they changed. Use it together with the main file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# GIT_SHA is what lets /health say which commit is serving. Unset, it reads "dev".
+#   GIT_SHA=$(git rev-parse HEAD) docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  app:
+    image: village-os:local
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-}

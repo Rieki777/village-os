@@ -236,6 +236,15 @@ jobs:
         # resolving is not a guard running.
         run: node scripts/fork-env-audit.mjs
 
+      - name: Public tree
+        # This repository is public and linked from regencivics.earth. On
+        # 2026-10-02 its tree still held the fleet ledger, session prompts, a
+        # production database's proxy host, Railway ids and the path to the
+        # backup recovery key; all of it moved to the private operations
+        # repository. This refuses the next copy, by file name and by content.
+        # Its self-test runs with the others above.
+        run: node scripts/check-public-tree.mjs
+
       - name: Voice guard
         # Shipped language follows the house writing rules (the Rye Voice
         # Profile). It reads only JSX text and string literals, parsed with

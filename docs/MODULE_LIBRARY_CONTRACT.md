@@ -22,8 +22,10 @@ on all of them equally, and that is not the deal here.
 
 ## What the library is
 
-The platform is a white-label village-coordination system. Villages fork it, run it on their own
-infrastructure, and own the code and the data. Modules are units of capability. The four core modules
+The platform is a white-label village-coordination system, Village OS, published under the MIT
+licence. Villages run its published image on their own infrastructure and own the code and the data;
+a village forks the repository only if it means to change the code. Modules are units of capability.
+There are twenty-five of them. The four core modules
 (quests, gratitude, progression, profiles) are always on and cannot be disabled. Every other module
 ships off, and a village turns on what it wants.
 
@@ -31,7 +33,7 @@ The library is the catalog of modules a village can enable, including ones you w
 
 **Every module is first-party code in the platform repository.** There is no plugin runtime, and there
 is not going to be one. A module you build is merged into the upstream repository, reviewed there, and
-shipped to every fork as part of the platform.
+shipped to every village as part of the platform.
 
 **Modules ship only by pull request to the upstream repository.** There is no other distribution
 channel: no side-loading, no zip file, no private registry, no "install this in your fork" instruction
@@ -52,7 +54,7 @@ who do I call.
 | | **Included** | **Connected** | **Managed** |
 |---|---|---|---|
 | Built by | us | you | you |
-| Billed by | us, in the platform price | **you, direct to the village** | **us** |
+| Billed by | n/a | **you, direct to the village** | **us** |
 | Supported by | us | you for the service, us for the connector | us first line, you behind a private escalation |
 | Credential | none, or the village's own upstream account | **a key the village holds and can see** | **platform-held, the village never sees it** |
 | The village has an account with you | n/a | **yes** | **no** |
@@ -139,7 +141,7 @@ to us as an integration nobody happened to use, and neither of us finds out unti
 **13. Your code passes the platform's gates and a human security review, before it is merged.** New in
 1.1, and it is the clause that makes the rest of this document safe to offer.
 
-A contributed module is not a plugin in a sandbox. It is code that runs inside every fork's own server
+A contributed module is not a plugin in a sandbox. It is code that runs inside every village's own server
 process, with that server's database credentials and that server's network access, in villages that
 never met you. There is no runtime boundary to fall back on, so the review at merge time is the entire
 boundary.
@@ -422,7 +424,7 @@ existing listings as a re-acceptance and does not apply retroactively.
   out the individual contributor a library needs first. Clause 1 became tiered: a free module touching
   no member personal data needs a name and a contact address.
 - **Clause 13, gates plus a human security review before merge.** The clause that makes the rest of
-  the document safe to offer, because contributed code runs inside every fork's own server process.
+  the document safe to offer, because contributed code runs inside every village's own server process.
 - **Clause 14, the builders' pool**, and the rule that a listing declaring a price is out of it.
 - **A price is shown to members**, where 1.0 kept it to admins.
 - **The appendix.** Version 1.0 was held back from publication because it described unbuilt

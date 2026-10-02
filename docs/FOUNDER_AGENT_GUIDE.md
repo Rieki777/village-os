@@ -6,65 +6,61 @@ you, an AI agent, and not for the founder. It tells you where things are, what
 order the setup happens in, what each setting means, and the things you must
 never do.
 
-The founder is the one who decides and the one who clicks. Read the next
-section before anything else.
+Start with `AGENTS.md` at the repository root if you have not: it is the front
+door, and it is short. This guide is the long reference behind it. The founder
+is the one who decides. Read the next section before anything else.
 
 ---
 
 ## 0. The rule that outranks everything
 
-**Your role is to suggest, never to execute. You are their guide.**
+**Explain each step before it happens. Run a command, or take any action that
+changes something, only after the founder has said yes to that step. Then tell
+them what happened.**
 
-That is the founder's own instruction and it is the frame for every other
-sentence in this document. Everything below is written to make it operational.
+This is the rule `AGENTS.md` and `docs/FOUNDER_SETUP_PROMPT.md` state in the
+same words, and if any document in this repository reads differently,
+`AGENTS.md` wins. It replaced the rule that stood here until 2026-10-02,
+"suggest, never execute". A founder who has never used a terminal cannot run
+`docker compose up` alone, and an assistant that may only suggest leaves them
+stuck at the first command. What that rule protected stands unchanged: the
+founder decides, credentials never pass through you, and you never act as them.
 
-### What "suggest" means here
+A yes covers the one step you described. Ask again for the next. Reading needs
+no yes: this repository, the village's logs, its public pages, the founder's
+own material. When something fails, stop, say what you saw, and ask before you
+try anything else.
 
-You suggest values. You explain what a setting does and what happens if it is
-left blank. You draft copy in the founder's voice and hand it to them to paste
-or reject. You read their own material, their website, their notes, their
-existing documents, and you propose answers they can accept or change. You read
-this repository and tell them what a screen is about to do before they touch it.
-You watch them work and you catch the mistake before it is saved.
+### What it means in practice
 
-### The boundary, in both directions
-
-| You may | You may not |
+| With a yes for that step, you may | Never, even with a yes |
 |---|---|
-| Read this repository, in full, any file | Write to the village's database, by SQL or by any admin API call |
-| Read the live site's public pages | Sign in to `/admin` as the founder, or hold their session token |
-| Draft the village name, tagline, member name, footer sentence, quest text, FAQ answers, page copy, and type any of it into the field it belongs in | Press Save. The founder presses Save |
-| Explain what a hero image slot is for and which page it lands on | Upload an image on their behalf |
-| Explain what a module does, what turning it on reveals, and what it will ask for next | Turn a module on or off |
-| Read `.env.example` and explain what a variable is for | Set an environment variable in Railway |
-| Explain the deploy sequence and read a deploy's own logs when the founder has given you that access | Trigger a deploy, push to `main`, or run a migration against their database |
+| Run a setup command on the founder's own computer: `node scripts/fork-init.mjs`, `docker compose up -d`, the backup commands in `START_HERE.md` | Ask for, read out, type or paste a password, an API key, a token or a database URL with a password in it, or print `.env` |
+| Draft the village name, tagline, member name, footer sentence, quest text, FAQ answers and page copy, and type it into the field it belongs in while they watch | Press Save or Launch. The founder presses Save and Launch |
+| Explain what a module does, what turning it on reveals, and what it will ask for next | Call an admin API on their behalf, `PUT /api/admin/brand` included, or write to their database |
+| Set a setting that is not a secret and that the founder chose: a port, their domain | Put a secret into their hosting provider's settings. They paste secrets by hand |
 | Explain what Stripe, Resend and Anthropic each cost and what each unlocks | Create an account, accept terms, enter card details, or spend their money |
-| Tell the founder exactly which DNS record to add and where | Change DNS |
+| Tell the founder exactly which DNS record to add and where | Sign in to `/admin` as the founder, or hold their session token |
 | Say plainly that a step needs a decision only they can make | Make that decision for them and report it as done |
+| Read `.env.example` and explain any variable | Push to `Rieki777/village-os`, ask anybody for access to it, or run the `:edge` image for a village |
 
-### Where the line actually sits
+### Where the line sits in Admin
 
-Rieki, who set the rule, has drawn the boundary more exactly since: **filling in
-a form field is not executing.** The line sits at Save and at Launch. Typing a
-drafted tagline into the box while the founder watches holds no credential and
-takes no decision, because the founder is the one who presses Save and the one
-who clicks to launch. They read the field before it is committed and they change
-whatever they want.
+**Filling in a form field is not executing.** Rieki drew the line at Save and
+at Launch, and it holds under the new rule. Typing a drafted tagline into the
+box while the founder watches holds no credential and takes no decision,
+because the founder presses Save and the founder clicks to launch. They read
+the field before it is committed and change whatever they want.
 
-Read the table above with that in mind. "Save any of it" is the prohibition. The
-drafting and the typing on the left of it are the work you are there to do. An
-agent that refuses to touch the form at all leaves the founder doing the part of
-setup a model is genuinely good at, which makes the whole setup flow pointless.
-
-Two conditions hold the refinement in place, and both have to be true:
+Two conditions hold that in place, and both have to be true:
 
 - **The browser is one the founder is already signed into.** You never sign in.
   You never receive the token that would let you.
 - **The founder sees the field before it is saved.** A value typed into a form
   in front of them is still a suggestion, and they can clear it in one
   keystroke. A value delivered by an API call is in their village whether they
-  read it or not, which is why `PUT /api/admin/brand` stays on the right of the
-  table and typing does not.
+  read it or not, which is why the admin APIs stay on the right of the table
+  and typing does not.
 
 ### Two worked examples, so the line is unmistakable
 
@@ -153,30 +149,37 @@ tense is no help. Say this plainly and move to the remedy.
    themselves, and carry on suggesting.
 
 If what they pasted was `ADMIN_PASSWORD`, none of steps 3 and 4 apply. Send them
-to Railway to change the variable and redeploy.
+to change it themselves, in `.env` on their own computer or in their hosting
+provider's variables, and restart the village.
 
 ---
 
 ## 1. What this platform is
 
 It is a white-label coordination platform for a village: a piece of land, a
-community, and the work of running both. One codebase serves every village.
-Nobody forks it by copying and renaming. What makes an instance somebody's own
-is its own database, its own domain, its own environment variables, and a set
-of records inside its own database that carry the name, the pictures, the words
-and the numbers.
+community, and the work of running both. Its name is **Village OS** (it was
+called game-amora until 1.2.0), and every village runs the same published
+image, `ghcr.io/rieki777/village-os:<version>`, pinned to a release. Forking is
+optional, only for a village that means to change the code, and nobody needs
+access to `Rieki777/village-os` to run one. What makes an instance somebody's
+own is its own database, its own domain, its own environment variables, and a
+set of records inside its own database that carry the name, the pictures, the
+words and the numbers.
 
 The stack, from `CLAUDE.md` and `package.json`: React 19 with Vite and wouter in
-`client/src`, one large Express server at `server/index.ts` plus `server/lib/*`,
-MySQL with hand-written SQL migrations in `drizzle/` applied at boot by
-`server/db/migrate.ts`. Deployment is Railway or a published container image
-(`ops/RELEASES.md`).
+`client/src`, one large Express server at `server/index.ts` plus `server/lib/*`
+and `server/routes/*`, MySQL with hand-written SQL migrations in `drizzle/`
+applied at boot by `server/db/migrate.ts`. A village runs the image with Docker
+on one machine (`docker-compose.yml`, `START_HERE.md` part A) or on a hosting
+provider such as Railway (`START_HERE.md` part B, `docs/PROVISIONING.md`);
+`ops/RELEASES.md` covers the releases.
 
-The platform is made of **modules**. Each one is a part of village life the
-village can switch on: a map of the land, a quest board, stays and hosting, a
-material library, an exchange, governance, messaging. `shared/modules.ts` is the
-registry of everything the platform can be. A village with no modules on is
-still a working site.
+The platform is made of **modules**: 25 of them. Each one is a part of village
+life the village can switch on: a map of the land, a quest board, stays and
+hosting, a material library, an exchange, governance, messaging. Four core
+modules (quests, gratitude, progression, profiles) are always on; the other 21
+ship off. `shared/modules.ts` is the registry of everything the platform can
+be. A village with only the core modules on is still a working site.
 
 What this means for you: almost everything a founder wants to change is a
 setting, not a code change. Reach for the admin screens first, every time. A
@@ -201,11 +204,15 @@ them stop there.
 Three states, and each sends you somewhere different:
 
 - **Nothing deployed.** The village does not exist yet, and there is no address
-  to curl. `docs/PROVISIONING.md` is where this starts. Its first decision is
-  whether the founder self-hosts, holding the Railway account and the domain and
-  every key themselves, or whether ReGen Civics hosts the instance for them for
-  a fee. Read that document with them and stay on the rule in section 0: the
-  three human-only steps it names up front are human-only for you too.
+  to curl. `START_HERE.md` is where this starts: part A runs the village on one
+  computer with Docker, part B on a hosting provider, with
+  `docs/PROVISIONING.md` behind it. On a provider the first decision is whether
+  the founder self-hosts, holding the Railway account and the domain and every
+  key themselves, or whether ReGen Civics hosts the instance for them. ReGen
+  Civics does not charge for hosting: accepted Season 2 projects are hosted
+  free, and gifts go to CORE. Read those documents with them and stay on the
+  rule in section 0: the three human-only steps `docs/PROVISIONING.md` names up
+  front are human-only for you too.
 - **Deployed, no domain yet.** A village can be stood up before DNS exists.
   `scripts/fork-init.mjs` takes `--domain` as an optional flag, and
   `docs/PROVISIONING.md` says to leave it off and fill `FRONTEND_URL` in later.
@@ -458,22 +465,33 @@ by what it achieves and the move does not affect your advice.
 **What it achieves:** the village is deployed, has a database and a volume, has
 its environment variables, and answers on its own domain.
 
-The wizard's Go-live step lists the one-time technical work: deploy on Railway,
-add a persistent volume mounted at `/app/data`, set the environment variables,
-point the domain, and read `PLATFORM_FOUNDATION.md` for the full architecture.
+The wizard's Go-live step lists one-time technical work: deploy on Railway, add
+a persistent volume mounted at `/app/data`, set the environment variables,
+point the domain, and read `PLATFORM_FOUNDATION.md`. That panel predates the
+published image and is stale in places (it still names `JOURNEY_PASSWORD`,
+which is retired). Do not follow it over the walkthrough.
 
-**The full walkthrough is `docs/PROVISIONING.md` and it is the source of truth
-for this step.** `docs/FOUNDER_SETUP_PROMPT.md` is the same walkthrough written
-as a prompt a founder pastes into their own session. Read both before advising
-on any of it. The things worth carrying in your head:
+**The source of truth for this step is `START_HERE.md`, with
+`docs/PROVISIONING.md` behind it for a hosting provider.**
+`docs/FOUNDER_SETUP_PROMPT.md` is the same walkthrough written as a prompt a
+founder pastes into their own assistant. Read them before advising on any of
+it. The things worth carrying in your head:
 
-- `scripts/fork-init.mjs` generates the environment variables and prints a
-  one-time bootstrap password. Two of the values it generates,
-  `MEMBER_SECRETS_KEY` and `VILLAGE_SECRETS_KEY`, cannot be recovered once
-  anything has been stored under them. Set once, leave alone.
-- `ADMIN_PASSWORD` authenticates exactly once, for the bootstrap call that
-  creates the founder account, and then refuses everyone forever. Setting
-  `FOUNDER_EMAILS` is what stops a later lockout being permanent.
+- `scripts/fork-init.mjs` generates every secret and writes it to `.env`. It
+  does not print `ADMIN_PASSWORD` unless `--show-password` is passed; do not
+  pass it, and do not open `.env`. The founder reads the file themselves. Two
+  of the values it generates, `MEMBER_SECRETS_KEY` and `VILLAGE_SECRETS_KEY`,
+  cannot be recovered once anything has been stored under them. Set once,
+  leave alone.
+- The server applies every migration itself, at boot, before it listens. There
+  is no migrate step. A first boot on an empty database takes minutes.
+- The founder claims the village at `<address>/claim` with their email, their
+  name and the `ADMIN_PASSWORD` they read from `.env`. After a founder exists
+  that password refuses everyone except `BREAK_GLASS_ADMIN_EMAIL`, which is
+  what stops a later lockout being permanent. `FOUNDER_EMAILS` re-grants the
+  founder role on Google sign-in to an existing account, and needs Google
+  sign-in configured; on a default invite-only village it cannot create a
+  founder from nothing.
 - Resend accepts mail through an unverified sending domain and answers success.
   Nothing arrives, with no error and no bounce anywhere in the platform. Do not
   let a founder believe email works until the domain reads verified in Resend's
@@ -483,42 +501,39 @@ on any of it. The things worth carrying in your head:
   platform: DNS, Resend sender-domain verification, and creating a Stripe
   account.
 
-`docs/FOUNDER_SETUP_PROMPT.md` was written before the suggest-never-execute rule
-was stated and it reads as a more executing posture in places. Where the two
-disagree, the rule in section 0 wins. Read that tension with the refinement
-above in hand: where the prompt has an agent doing the typing, that is inside
-the line, and `docs/PROVISIONING.md` says the same thing in its own words. What
-stays outside the line is unchanged. You do not press Save, you do not launch,
-you do not hold a credential, and you do not deploy.
+`docs/FOUNDER_SETUP_PROMPT.md` states the same rule as section 0, and if any
+document in this repository reads differently, `AGENTS.md` wins. With a yes
+for each step you may run the setup commands. What stays outside the line
+whatever the founder says: you do not press Save, you do not launch, and you do
+not hold a credential.
 
 ---
 
 ## 4. Getting the residents in
 
 Second question every founder asks, right after the site starts looking like
-theirs: "twelve people live here, how do I get them accounts?" This document had
-no answer for a while. Here is the whole of it.
+theirs: "twelve people live here, how do I get them accounts?" Here is the
+whole of it.
 
-**There is no invite flow.** No invite codes for accounts, no "add member"
-button that mints one, no bulk import. Search the tree for it and what turns up
-is the quest crew invite code in `server/routes/quests.ts`, which joins somebody
-to a crew and creates nothing. Tell the founder this plainly and early, because
-"send them all invites" is the thing they expect to do and the absence looks
-like a broken screen rather than a design.
+**Members join by invitation.** `membership.invite_only` ships true, so a
+village is invitation-only until its founder changes that dial. The path has
+three parts:
 
-The path that exists has two halves, and the first half is the resident's own
-work:
-
-1. **The resident makes their own account**, in one of two ways. The sign-up
-   page is `/register` on the village's own site, a public client route in
-   `client/src/App.tsx`, and it posts to `POST /api/auth/register` from
-   `client/src/contexts/AuthContext.tsx` with a name, an email, a password and
-   the paths they pick. Or they sign in with Google, at
-   `/api/auth/google/start` (`server/routes/authGoogle.ts`), which creates the
-   account on first arrival with no password at all. Setup for Google lives in
-   `docs/GOOGLE_SIGN_IN.md`. Both routes make a plain member holding no
-   privileges.
-2. **An admin sets the role afterwards**, at `PUT /api/admin/users/:id/role`.
+1. **The founder makes an invitation link for each person**, from the
+   invitation panel on their own profile (`client/src/components/profile/InvitePanel.tsx`,
+   calling `POST /api/invites` in `server/routes/invites.ts`). Anybody holding
+   `member.vouch` may make one, and the founder does. Each link is
+   `/register?invite=<token>`, works once, lasts 14 days, and a person may have
+   up to 20 open links at a time. The link is shown once, when it is made;
+   the panel's list says what became of each one and never repeats the link.
+2. **The resident makes their own account with it**, in one of two ways: the
+   sign-up page the link opens, which posts to `POST /api/auth/register`, or
+   Google sign-in at `/api/auth/google/start` (`server/routes/authGoogle.ts`),
+   set up as `docs/GOOGLE_SIGN_IN.md` says. Both doors check the invitation
+   the same way (`server/lib/inviteDoor.ts`), and both make a plain member
+   holding no privileges. Somebody without a link can ask to join at
+   `/request-membership`, and the request lands in the founder's Admin.
+3. **An admin sets the role afterwards**, at `PUT /api/admin/users/:id/role`.
    It takes exactly `member`, `admin` or `founder`. Before the village launches,
    only a founder may call it; after launch an admin and a founder reach the
    same surfaces, which is a deliberate decision recorded in the route's own
@@ -530,10 +545,11 @@ the member's address, so a credential never travels through the founder or
 through you. It depends on email working, which is the Resend trap in section 3:
 an unverified sending domain answers success and delivers nothing.
 
-Practical shape for twelve people: the founder sends them the `/register` link
-on their own domain, each person signs themselves up, and the founder promotes
-the two or three who need admin. Nothing in that needs you to touch an account,
-and drafting the message the founder sends is work you can do.
+Practical shape for twelve people: the founder makes twelve invitation links
+from their profile and sends one to each person, each person signs themselves
+up, and the founder promotes the two or three who need admin. Nothing in that
+needs you to touch an account, and drafting the message the founder sends with
+each link is work you can do.
 
 ### "Role" means three different things in this codebase
 
@@ -581,15 +597,12 @@ supported write is `PUT /api/admin/brand`, which the wizard calls when the
 founder presses Save, and which merges section by section so a partial payload
 never blanks a field it did not send.
 
-### The brand.json file on the volume is not the source of truth
+### There is no brand file on the volume
 
-Several documents in this repository still name data/brand.json as the brand
-overlay, including `docs/FORK_RUNBOOK.md`, `PLATFORM_FOUNDATION.md` and
-`FIXES_TO_MAKE_2026-07-17_FOUNDATION_LEVERS.md`. **No code in this tree reads a
-file by that name.** `server/repos/store.ts` holds the old file-backed
-repository and nothing outside tests imports it. Writing that file onto the
-uploads volume changes nothing, and the API keeps reporting empty values while
-the file sits there looking correct.
+Older documents named data/brand.json as the brand overlay. **No code in this
+tree reads a file by that name, and there is no `data/*.json` store any more.**
+Writing that file onto the uploads volume changes nothing, and the API keeps
+reporting empty values while the file sits there looking correct.
 
 It is written here without code formatting on purpose, because a path in this
 document is a route you are meant to follow and this one leads nowhere. If you
@@ -663,10 +676,10 @@ platform default. Everything else wins.
 | Any Settings figure (acreage, appraisal, target raise, and the rest) | The page shows no figure at all |
 | Map skin, walk, vocabulary | The map keeps its own look and its own words |
 
-Two identity values are served by the config API and have **no field in the
-wizard**: `project.country` and `project.fiatCurrency`. Their platform defaults
-are `CR` and `CRC`. They are two different situations, and an earlier version of
-this document called them the same thing and was wrong about one of them.
+Two identity values deserve their own note: `project.country` and
+`project.fiatCurrency`. Both ship blank. They are two different situations, and
+an earlier version of this document called them the same thing and was wrong
+about one of them.
 
 **`project.fiatCurrency` is read, and it decides what money looks like.**
 `defaultDisplayCurrency()` in `shared/money.ts` reads it, and two callers use
@@ -675,21 +688,13 @@ fetches `/api/game/config` and takes the project's currency as the code a viewer
 starts on. `resourcesDefaultUnit()` in `server/index.ts` uses it as the declared
 unit a new resources rule starts in. A grep for the key name finds the helper
 and misses both callers, because neither of them names the key, and that is
-exactly how the earlier claim was made and how it survived review. The
-repository's own gate says why the key matters:
-`scripts/check-identity-keys.mjs` carries `project.fiatCurrency` in its
-`KNOWN_PENDING` list, with the reason "prices render against it, so clearing it
-before the founder sets one changes displayed money."
+exactly how the earlier claim was made and how it survived review.
 
-The platform default is `CRC`, `mergedConfig()` substitutes it whenever the
-village has left the value blank, and no admin screen writes it. So a village
-outside Costa Rica displays colones and nobody chose that. On the original Costa
-Rican village it is invisibly correct, which is why it stayed. The helper's own
-fallback is `CHF` and it never fires through the config merge, because the merge
-has already put `CRC` there. `PUT /api/admin/brand` spreads whatever `project`
-object it is handed, so the value is storable, and nothing in the wizard sends
-it. Giving a founder a real door for this is a code change, which section 7
-covers, and section 0 still holds: you do not make that call yourself.
+The platform default is blank, and a blank answer displays as the helper's own
+fallback, `CHF`. The Launch Plan (`/journey-to-launch`) asks the founder for
+the village's currency, and Make This Yours has the field that writes it. The
+currency is the founder's answer: section 0 holds, and you do not make that
+call yourself.
 
 **`project.country` is genuinely dead.** The only thing in this tree that
 touches it is `mergedConfig()`, which merges it and serves it. No reader, no
@@ -726,7 +731,8 @@ fails CI, and CI is `.github/workflows/ci.yml`.
   `scripts/server-index-size-baseline.json`, in **lines and in route
   registrations**, and `--update-baseline` refuses to write a higher number in
   either. No file under `server/routes/` may pass 2,000 lines, so the monolith
-  cannot move house. New routes go in `server/routes/<domain>.ts`.
+  cannot move house. New routes go in `server/routes/<domain>.ts`, registered
+  from `server/index.ts`.
 - `client/src/pages/Admin.tsx` is capped by `scripts/check-file-lines.mjs`
   against `scripts/file-lines-baseline.json`, per file, and `--update-baseline`
   refuses to raise any tracked file's count. Any file in `client/src` that
@@ -764,7 +770,7 @@ same values sections 3 and 6 are about. Both run as named steps in
 
 Read the identity gate before you tell a founder that a config value has no
 reader. Its `KNOWN_PENDING` entries carry the reason each key is still
-populated, and one of those entries is what corrected the `project.fiatCurrency`
+populated, and one of those entries once corrected the `project.fiatCurrency`
 claim this document used to make in section 6.
 
 ### The image budget is a ratchet too
@@ -912,8 +918,8 @@ A short list, so the rule in section 0 does not read as "do nothing".
 - Type a value the founder has approved into the field it belongs in, in their
   own signed-in browser, and leave Save to them. Section 0 covers where that
   line sits.
-- Draft the message a founder sends their residents pointing them at
-  `/register`, and explain who needs promoting afterwards.
+- Draft the message a founder sends each resident with their invitation link,
+  and explain who needs promoting afterwards.
 - Write down what they decided, so the next session starts from a record.
 - Tell them when something in this document disagrees with the code, and trust
   the code.
@@ -924,7 +930,8 @@ A short list, so the rule in section 0 does not read as "do nothing".
 
 | For | Read |
 |---|---|
-| Standing up a new instance, end to end | `docs/PROVISIONING.md` |
+| Your rules, which win any conflict | `AGENTS.md` |
+| Standing up a new instance, end to end | `START_HERE.md`, then `docs/PROVISIONING.md` for a hosting provider |
 | The same walkthrough as a prompt to paste | `docs/FOUNDER_SETUP_PROMPT.md` |
 | The long-form reference behind provisioning | `docs/FORK_RUNBOOK.md` |
 | The system map | `docs/ARCHITECTURE.md` |
@@ -938,8 +945,9 @@ A short list, so the rule in section 0 does not read as "do nothing".
 | Contributor rules, gates, and the honest way to run the suite | `CLAUDE.md` |
 | Building or changing a fork's modules | `.claude/skills/fork-builder/SKILL.md` |
 
-`MODULES_MASTER_PLAN.md` Part 1 is known-stale. The code wins every
-disagreement, with `docs/ARCHITECTURE.md` next.
+`MODULES_MASTER_PLAN.md` Part 1 is known-stale. On how you behave, `AGENTS.md`
+wins. On what the platform does, the code wins every disagreement, with
+`docs/ARCHITECTURE.md` next.
 
 ---
 
@@ -956,8 +964,8 @@ it was written down.
 - **The brand.json incident.** That somebody wrote to a file of that name on the
   volume and the API kept reporting empty values is reported experience, and
   this document did not verify the event. What was verified is the part that
-  matters: no code in this tree reads a file of that name, several documents
-  still name it, and the brand record is the `app_config` row.
+  matters: no code in this tree reads a file of that name, and the brand record
+  is the `app_config` row.
 - **`project.fiatCurrency` was wrong here and is now corrected.** An earlier
   version of this section said the key had no reader. It has three, reached
   through `defaultDisplayCurrency()` rather than by its own name, which is why a
@@ -980,7 +988,8 @@ it was written down.
   a route it must resolve, and it is right to. What it does not check: anchors,
   external links, and whether a path that resolves still holds what this
   document says it holds.
-- **Deployment specifics vary by village.** The `/app/data` mount path, the
-  Railway service names and the build trigger are read from this repository's
-  own Dockerfile and provisioning document. A self-hosted village running the
-  published container image may differ. Check `ops/RELEASES.md` for that path.
+- **Deployment specifics vary by village.** The `/app/data` mount path is read
+  from this repository's own `Dockerfile` and `docker-compose.yml`. Service
+  names on a hosting provider are each village's own, and a village deploying
+  its own fork builds it from that fork. Check `ops/RELEASES.md` for the image
+  path.

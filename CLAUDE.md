@@ -2,10 +2,13 @@
 
 <!-- describes: .github/workflows/ci.yml scripts/ server/lib/ledger.ts server/lib/economy.ts shared/modules.ts server/db/migrate.ts -->
 
-**game-amora** is a white-label village-coordination platform: React 19 + Vite + wouter client
+**Village OS** (this repository, `Rieki777/village-os`; it was called game-amora until 1.2.0) is a
+white-label village-coordination platform: React 19 + Vite + wouter client
 in `client/src`, one large Express server (`server/index.ts` + `server/lib/*`), MySQL with
 hand-written SQL migrations in `drizzle/` that a custom runner applies **at boot, fail-loud**
-(`server/db/migrate.ts`). Villages fork this repo; "Amora" is only the first tenant. Platform
+(`server/db/migrate.ts`). Villages run the published image or fork this repo; "Amora" is only
+the first tenant. **This file is for contributors.** A founder setting up their own village, or
+their AI assistant, starts at `AGENTS.md` and `START_HERE.md` instead. Platform
 code carries no village's brand — that rule is enforced mechanically (see Gates).
 
 ## Reading order
@@ -17,8 +20,12 @@ code carries no village's brand — that rule is enforced mechanically (see Gate
 3. `docs/FORK_RUNBOOK.md` — provisioning, env vars, seeds. **Any session that adds an env var,
    seed, or provisioning step appends one line there, same session.**
 4. `docs/FEEDBACK_HUB_CONTRACT.md` — only when touching the feedback relay.
-5. **`SEASON2_FLEET_LEDGER.md` section 27, THE LANDING ORDER** — read it before you touch a
-   contended resource, and append a row when you claim one. Several sessions run against this
+5. **The fleet ledger, section 27, THE LANDING ORDER** — read it before you touch a
+   contended resource, and append a row when you claim one. Since 2026-10-02 it lives in the
+   maintainers' PRIVATE operations repository, `Rieki777/village-os-ops`, checked out beside the
+   worktrees: `../village-os-ops/SEASON2_FLEET_LEDGER.md`. Commit and push a claim there directly,
+   no pull request. Never copy it back into this public tree; `scripts/check-public-tree.mjs`
+   fails CI on it, and on Railway hosts, local paths and session prompts. Several sessions run against this
    repository at once, and section 27 is where they stay out of each other's way: migration
    numbers, the six ratchet baselines, `server/index.ts`, `ci.yml`, the shared integration
    worktrees, plus the hazards that have actually cost time (removing a worktree can delete the
@@ -158,7 +165,8 @@ Two things that stop this producing a false green, both paid for on 2026-09-04. 
 COUNT and WHICH step: a healthy `verify` is 45 steps, the billing outage produced runs that died
 in 2 to 3 seconds having started nothing, and an npm outage failed one dependency step on a run
 where everything else passed. And a cancelled run is not a red, since `ci.yml` cancels superseded
-runs per ref. Full detail, with the traps, in `SEASON2_FLEET_LEDGER.md` section 27d.
+runs per ref. Full detail, with the traps, in the fleet ledger's section 27d (private, see the
+reading order above).
 
 Two CI budgets cap the client: main JS and total `dist/public`, both
 measured after `pnpm build`. Read the numbers off `MAX_MAIN_JS_KB` and `MAX_TOTAL_DIST_KB` in
@@ -363,7 +371,8 @@ worth knowing: `server/repos/store-db.ts` names every spec'd column on every INS
 previous release writes an EXPLICIT NULL and the default never applies. Same root cause as the
 `dbCollection` trap below.
 
-**Numbering.** Claim the number in `SEASON2_FLEET_LEDGER.md` section 3 before creating the file,
+**Numbering.** Claim the number in the fleet ledger's section 3 (private, see the reading order;
+an outside contributor says the number in the pull request instead) before creating the file,
 then `node scripts/check-migration-numbers.mjs --next` to confirm. Numbers only go forward: a
 gap is never filled, because some branch or some instance may still hold a file with that name.
 **9000 and above is reserved for migrations a village writes for its own instance**; upstream

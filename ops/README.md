@@ -131,7 +131,10 @@ tool never redeploys them. `plan` and `apply` both print a `NOTIFY` line for
 each one instead: currently that means logging it, or, if
 `notify.method` is `"webhook"`, posting `{ event: "fleet_release", tag }` to
 `notify.target`. A self-hosted village's health never gates the ring; we do
-not own its deploy, so we cannot hold anyone else's rollout on it.
+not own its deploy, so we cannot hold anyone else's rollout on it. It moves
+when it changes its own pinned tag (for example from `:1.2.0` to the next
+release), never by following `:stable`; `ops/RELEASES.md` and
+`docs/UPGRADING.md` say how.
 
 ## Stop then start, never blue or green
 

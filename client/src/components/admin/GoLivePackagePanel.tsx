@@ -156,9 +156,9 @@ export default function GoLivePackagePanel({
         <p className="text-sm font-semibold text-foreground">Take this with you</p>
         <p className="text-xs text-muted-foreground mt-1">
           One markdown file with every step below, the commands, the variables and the
-          repository references. Save it, hand it to a developer, or paste it into an LLM
-          agent that can run commands and drive a browser for you. It carries none of your
-          secrets: every value in it is a placeholder.
+          repository references. Save it, hand it to a developer, or give it to your own AI
+          assistant, which explains each step and runs a command only after you say yes. It
+          carries none of your secrets: every value in it is a placeholder.
         </p>
         <button
           type="button"

@@ -40,6 +40,7 @@ import {
 import type { LaunchGroup } from "@shared/launchRequirements";
 import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
 import StewardSlatePicker, { type StewardCandidate } from "@/components/governance/StewardSlatePicker";
+import { useBrochurePages } from "@/lib/brochure";
 
 /**
  * S65: the launch guide. Same brain as the Work With Us guide, different
@@ -626,6 +627,7 @@ function TestRun() {
 }
 
 export default function JourneyToLaunch() {
+  const brochureOn = useBrochurePages() === true;
   const { user, loading } = useAuth();
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
   const [status, setStatus] = useState<any>(null);
@@ -826,12 +828,14 @@ export default function JourneyToLaunch() {
             >
               Village economics
             </button>
-            <Link
-              href="/project-history"
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
-            >
-              <History className="w-3.5 h-3.5" /> Command Centre
-            </Link>
+            {brochureOn && (
+              <Link
+                href="/project-history"
+                className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
+              >
+                <History className="w-3.5 h-3.5" /> Command Centre
+              </Link>
+            )}
             {!launched && (
               <button
                 onClick={() => setGuideOpen(true)}

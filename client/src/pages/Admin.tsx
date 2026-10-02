@@ -8997,25 +8997,25 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         </Link>
       </SetupSection>
 
-      <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
+      <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup, for you, your developer or your own AI assistant.">
         <ol className="space-y-4 text-sm text-gray-700">
           <li>
-            <p className="font-medium text-gray-900">1. Deploy on Railway</p>
-            <p className="text-gray-500 mb-1">From the project folder, with the Railway CLI linked to your service:</p>
-            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">railway up --ci -m "Initial deploy"</pre>
+            <p className="font-medium text-gray-900">1. Run the published image</p>
+            <p className="text-gray-500 mb-1">On one computer, docker compose up -d from the starter kit. On a host such as Railway, a service running:</p>
+            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">ghcr.io/rieki777/village-os:&lt;version&gt;</pre>
           </li>
           <li>
             <p className="font-medium text-gray-900">2. Add a persistent data volume</p>
-            <p className="text-gray-500 mb-1">All player and content data lives here. Without it, every deploy wipes it.</p>
+            <p className="text-gray-500 mb-1">Photographs and documents live here. Without it, every deploy wipes them.</p>
             <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">railway volume add --mount-path /app/data</pre>
           </li>
           <li>
-            <p className="font-medium text-gray-900">3. Set environment variables</p>
-            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`railway variables \\
-  --set "ADMIN_PASSWORD=<pick-a-strong-one>" \\
-  --set "JOURNEY_PASSWORD=<pick-a-strong-one>" \\
-  --set "FRONTEND_URL=https://your-domain"`}</pre>
-            <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under {CONNECTIONS_GROUP_TITLE}.</p>
+            <p className="font-medium text-gray-900">3. Write the settings</p>
+            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`node scripts/fork-init.mjs \\
+  --village-name "Your Village" \\
+  --admin-email you@example.org \\
+  --domain your-domain`}</pre>
+            <p className="text-gray-500 mt-1">It writes .env with every secret generated. Copy the values into your host's variables yourself. The Resend email key can also go in later, under {CONNECTIONS_GROUP_TITLE}.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">4. Point your domain</p>
@@ -9023,11 +9023,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
           <li>
             <p className="font-medium text-gray-900">5. Social image & favicon</p>
-            <p className="text-gray-500">Edit <code>client/index.html</code>: the <code>og:image</code>, <code>twitter:image</code>, and favicon links (these are build-time, not in this wizard).</p>
+            <p className="text-gray-500">Only in a fork you build yourself: edit <code>client/index.html</code> for the <code>og:image</code> and <code>twitter:image</code> links, which are build-time and not in this wizard.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">6. Full reference</p>
-            <p className="text-gray-500">See <code>PLATFORM_FOUNDATION.md</code> in the repo for the complete white-label architecture and swap points.</p>
+            <p className="text-gray-500">See <code>START_HERE.md</code> and <code>docs/PROVISIONING.md</code> in the Village OS repository, and <code>AGENTS.md</code> for your AI assistant.</p>
           </li>
         </ol>
       </SetupSection>

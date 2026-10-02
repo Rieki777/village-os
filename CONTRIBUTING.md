@@ -110,7 +110,8 @@ and `CLAUDE.md` carries the table of what is safe in one release and what needs 
 
 **Numbering, in order:**
 
-1. Claim the number in `SEASON2_FLEET_LEDGER.md` section 3 before you create the file.
+1. Say which number you are taking in your pull request. Maintainers keep the claims in a private
+   fleet ledger and confirm the number, or ask you to move it, before merging.
 2. Confirm with `node scripts/check-migration-numbers.mjs --next`.
 3. Numbers only go forward. A gap is never filled, because some branch or some instance may still
    hold a file with that name.

@@ -37,7 +37,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 
 | Tier | What it means |
 | --- | --- |
-| `included` | the platform bills (it is in the platform price) and supports it end to end. Credential is none, or the village's own upstream account where the village is the merchant of record. No pill in the catalog: included is the absence of a badge, the same way everything that is not core is silent today. |
+| `included` | the platform supports it end to end. Credential is none, or the village's own upstream account where the village is the merchant of record. No pill in the catalog: included is the absence of a badge, the same way everything that is not core is silent today. |
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 

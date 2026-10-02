@@ -76,7 +76,7 @@ const buildJourneySteps = (villageName: string, tokenName: string) => [
     stage: "Member",
     // S2 brochure lane, 2026-08-30: dropped "508 Membership" / "508(c)(1)(a)",
     // a US tax-entity reference stated as this village's own on every fork.
-    // See LoveLetter.tsx and server/seeds/brochure-legal-seed.json
+    // See LoveLetter.tsx and server/seeds/amora/brochure-legal-seed.json
     // (legal.membership.entityLabel).
     title: "Sign Love Letter / Formal Membership",
     description: "Become an official member of the community.",

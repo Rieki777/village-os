@@ -46,8 +46,12 @@ export default function Layout({ children }: LayoutProps) {
   // test rather than a second branch.
   const tokenName = useTokenName("Recognition");
   const role = user?.role;
+  // The brochure pages are the first village's own story (shared/brochure.ts).
+  // A village that does not serve them gets none of their menu entries or
+  // footer links; while the config loads they stay out rather than flash in.
+  const brochureOn = cfg?.brochurePages === true;
   const visible = (item: NavLink) =>
-    moduleOn(item.module) && (!item.roles || (!!role && item.roles.includes(role)));
+    moduleOn(item.module) && (!item.brochure || brochureOn) && (!item.roles || (!!role && item.roles.includes(role)));
 
   // An entry named after a token carries the village's word for it, and its
   // href stays put. Substituted HERE, once, because both the desktop dropdown
@@ -464,46 +468,60 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Your Journey</h2>
               <ul className="space-y-2">
-                <li>
-                  <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Investor
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Village Steward
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Resident
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Prosperity Creator
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Sign the Love Letter
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Plan a Visit
-                  </Link>
-                </li>
+                {brochureOn && (
+                  <li>
+                    <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Investor
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Village Steward
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Resident
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Prosperity Creator
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Sign the Love Letter
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Plan a Visit
+                    </Link>
+                  </li>
+                )}
                 <li>
                   <Link href="/gratitude" className="text-white hover:underline transition-colors text-sm block py-1.5">
                     {tokenName} Wall
                   </Link>
                 </li>
-                <li>
-                  <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Work With Us
-                  </Link>
-                </li>
+                {brochureOn && (
+                  <li>
+                    <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Work With Us
+                    </Link>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -526,21 +544,27 @@ export default function Layout({ children }: LayoutProps) {
                     Roles & Leadership
                   </Link>
                 </li>
-                <li>
-                  <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    How We Create
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Good Neighbor Criteria
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Our Team
-                  </Link>
-                </li>
+                {brochureOn && (
+                  <li>
+                    <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      How We Create
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Good Neighbor Criteria
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Our Team
+                    </Link>
+                  </li>
+                )}
                 {/* Three pages the app mounted and then linked from nowhere.
                     The module-gated two must stay gated: both render NotFound
                     when their module is off, which is the default for every
@@ -594,11 +618,13 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Resources</h2>
               <ul className="space-y-2">
-                <li>
-                  <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Co-Creators Guide
-                  </Link>
-                </li>
+                {brochureOn && (
+                  <li>
+                    <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Co-Creators Guide
+                    </Link>
+                  </li>
+                )}
                 <li>
                   <Link href="/feedback" className="text-white hover:underline transition-colors text-sm block py-1.5">
                     Report a Bug / Share an Idea
@@ -648,21 +674,27 @@ export default function Layout({ children }: LayoutProps) {
                     </Link>
                   </li>
                 )}
-                <li>
-                  <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Housing
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Business Opportunities
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Master Plan
-                  </Link>
-                </li>
+                {brochureOn && (
+                  <li>
+                    <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Housing
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Business Opportunities
+                    </Link>
+                  </li>
+                )}
+                {brochureOn && (
+                  <li>
+                    <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
+                      Master Plan
+                    </Link>
+                  </li>
+                )}
               </ul>
             </div>
 

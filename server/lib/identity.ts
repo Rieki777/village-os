@@ -24,13 +24,25 @@ import { randomUUID } from "crypto";
 import type { Pool } from "mysql2/promise";
 
 /**
+ * 1.2.0: additive. `/api/platform/info` gained `product`, and `/api/game/config`
+ * gained `brochurePages`. Nothing a peer already read changed shape.
+ *
  * 1.1.0: additive. `/.well-known/village.json`, `/api/public/org.json` and the
  * `/org/**.md` mirror joined the public surface, and nothing a peer already
  * read changed shape. A peer must still branch on the discovery document's
  * `supports` array and never on this ordering: a fork that turned a module off
  * is not older, it is differently shaped, and semver cannot say that.
  */
-export const PLATFORM_VERSION = "1.1.0";
+export const PLATFORM_VERSION = "1.2.0";
+
+/**
+ * What this software is called, for people. NOT the wire identifier: the
+ * `platform` string in `/api/platform/info` and in `/.well-known/village.json`
+ * stays `custom-game-foundation` forever, because peers (server/lib/network.ts)
+ * and the ReGen Civics hub match it exactly, and renaming it would make every
+ * older village stop recognising this one.
+ */
+export const PRODUCT_NAME = "Village OS";
 
 export interface InstanceIdentity {
   /** UUID minted at first boot, stable for the deployment's lifetime. */

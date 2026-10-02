@@ -46,13 +46,15 @@ The wizard covers, in order:
    registry (Admin → Tokens), which `mergedConfig()` reads ahead of this
    overlay, so a name typed here could never win and the two boxes that tried
    have been removed.
-2. **Pictures** — the six hero images (homepage + 4 journeys + master plan), each
-   with Amora's current image as the default and a live thumbnail.
+2. **Pictures** — the hero images, the header logo, the footer mark and the tab
+   icon, each with a live thumbnail. Every slot ships empty.
 3. **Numbers** — village dues and other figures (Settings tab).
 4. **Content** — one-click into every existing editor (page copy, FAQs, build
    progress, training, visit, investor summary, season, quests).
 5. **Go live** — the one-time technical checklist (Railway deploy, data volume,
    env vars, domain, build-time og:image/favicon) with copy-paste commands.
+   `START_HERE.md` is the current guide to running a village, and wins where
+   this panel's commands have aged.
 
 Use the wizard first; drop to the files below only for deeper structural changes
 (new personas, a different stage ladder, new page layouts).
@@ -61,7 +63,7 @@ Use the wizard first; drop to the files below only for deeper structural changes
 
 | Layer | File(s) | What lives there |
 |---|---|---|
-| **Setup Wizard (live)** | the `brand` row of `app_config`, edited in `/admin` → Make This Yours | Project name, tagline, member name, location, the six hero images, wizard progress. Live-editable, no deploy. Merged over gameConfig by `/api/game/config`. Token names are the token registry's, never this overlay's. |
+| **Setup Wizard (live)** | the `brand` row of `app_config`, edited in `/admin` → Make This Yours | Project name, tagline, member name, location, the images, wizard progress. Live-editable, no deploy. Merged over gameConfig by `/api/game/config`. Token names are the token registry's, never this overlay's. |
 | **Game config (defaults)** | `shared/gameConfig.ts` | The default identity + images the overlay falls back to, plus the structural bits the wizard doesn't touch: personas/paths, the stage ladder + earning rules, gratitude budget rules, next-best-action rules, default season. |
 | Theme | `client/src/index.css` | Color tokens, fonts |
 | Content seeds | `server/seeds/content-seed.json`, `server/seeds/quests-seed.json`, `DEFAULT_*` constants in `server/index.ts` | Page copy, starter quests, FAQs, milestones, training modules, visit config, village dues, brand defaults. (All also editable at runtime in admin.) |
@@ -74,7 +76,11 @@ platform bug.
 
 ## The game engine (platform)
 
-### Server (`server/index.ts`)
+### Server (`server/index.ts` and `server/routes/`)
+
+Some of these still live in `server/index.ts` and some in route modules. New
+routes go in `server/routes/<domain>.ts`, registered from `server/index.ts`,
+which is ratcheted and may not grow.
 
 | Endpoint | What it does |
 |---|---|
@@ -112,12 +118,15 @@ Stage computation: `computeStage()` interprets the declarative rules in
 
 ## Launching project #2 (checklist)
 
-**The fast path (no code):** fork, deploy, then do everything in `/admin` →
-"Make This Yours" — identity, images, numbers, and all content, plus the Go-live
-technical steps. That covers most projects.
+**The fast path (no code):** run the published image
+(`ghcr.io/rieki777/village-os:<version>`, pinned to a release; `START_HERE.md`
+walks it), then do everything in `/admin` → "Make This Yours" — identity,
+images, numbers, and all content. That covers most projects, and needs no
+fork and no access to the repository.
 
 **Deeper structural changes (code):**
-1. Fork the repo; rename in `package.json`.
+1. Fork the repository. A fork is only for changing code, and it deploys
+   through the repository's own `Dockerfile`.
 2. In `shared/gameConfig.ts`, change the structural bits the wizard doesn't touch:
    personas/paths, the stage ladder + earning rules, gratitude budget, next
    actions. (Identity + hero-image *defaults* also live here but are normally set
@@ -127,17 +136,18 @@ technical steps. That covers most projects.
    (FAQs, milestones, training, visit, investor summary, village dues) if you want
    the project to *boot* with its own content instead of editing it in admin later.
 5. Rewrite the persona journey pages + marketing pages if their structure differs.
-6. Set env vars: `ADMIN_PASSWORD`, `JOURNEY_PASSWORD`, `FRONTEND_URL`.
-7. Deploy with a **persistent volume mounted at `/app/data`** (all runtime state,
-   including the brand overlay, lives in `data/*.json`; without a volume every
-   deploy wipes it — seeds live in `server/seeds/` so they survive the mount).
+6. Write `.env` with `node scripts/fork-init.mjs`, which generates every
+   secret; `.env.example` explains each variable.
+7. Deploy with a **persistent volume mounted at `/app/data`** for uploaded
+   files. Everything else, the brand overlay included, lives in MySQL, and the
+   server applies its own migrations at boot. Seeds live in `server/seeds/` so
+   the mount never shadows them.
 
 ## Known trade-offs and next steps
 
-- Storage is flat JSON — right for one village (tens-to-hundreds of members), and
-  the API layer means a database can replace it later without client changes.
-- The auth token is unsigned base64 (pre-existing). Fine for a community site at
-  this trust level; upgrade to signed tokens before scale.
+- Storage is MySQL, with hand-written migrations in `drizzle/` that the server
+  applies at boot. There is no `data/*.json` store any more.
+- Member tokens are signed with `AUTH_TOKEN_SECRET`.
 - Legacy field: the player balance is stored as `heartsBalance` on the user row (`server/repos/users.ts`)
   (predates the Gratitude rename); the API exposes it as `gratitude.balance`.
 - Not yet built (next phases): Living Village map (milestones rendered on an

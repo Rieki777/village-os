@@ -12,7 +12,8 @@ If you read one section, read section 1. If you are a machine, skip to section 6
 ## 1. What this is, in one page
 
 A **village** is one running instance of this platform: one Node process, one MySQL
-database, one domain. A community forks the repo, deploys it, and owns it. There is
+database, one domain. A community runs the published image and owns it; it forks
+the repo only if it means to change the code. There is
 no central server every village depends on, no shared user table, and no account
 anyone must create to participate in the network.
 
@@ -31,10 +32,11 @@ Five things the village keeps, and everything else is arrangement:
 | **Recognition** | gratitude sent between people, settled per lunar cycle |
 | **Value** | a double-entry ledger whose balances sum to zero, per token |
 
-Around that sit **sixteen modules**, four of which are core and always on
-(quests, gratitude, progression, profiles). The other twelve ship **off** and a
-village turns on only what it will use: map, forum, feed, stays, automation,
-health, library, badges, exchange, commerce, network, tools.
+Around that sit **twenty-five modules**, four of which are core and always on
+(quests, gratitude, progression, profiles). The other twenty-one ship **off** and
+a village turns on only what it will use: the map, a forum, messaging, events,
+stays, a library, an exchange, governance and the rest. `MODULES.md` lists all
+twenty-five.
 
 And a guide, **Maia**, who reads the village and helps run it. She is section 5.
 
@@ -244,9 +246,13 @@ It is never a fact about your village.
 
 ## 7. Running your own
 
-The short version; `FORK_RUNBOOK.md` is the long one.
+The short version; `START_HERE.md` at the repository root is the guide and
+`FORK_RUNBOOK.md` the long reference.
 
-Fork the repo, provide `DATABASE_URL`, deploy. Migrations run at boot and fail
+Run the published image, pinned to a release (`ghcr.io/rieki777/village-os:1.2.0`),
+on one machine with `docker-compose.yml` or on a hosting provider such as
+Railway, with `DATABASE_URL` set. Nobody needs access to the repository for
+that; a village forks it only to change the code. Migrations run at boot and fail
 loudly if anything is wrong, so a village never serves over a broken schema. The
 four core modules are on; everything else is off until you turn it on. Brand and
 copy come from the Setup Wizard, so no code change is needed to make it yours.

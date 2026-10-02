@@ -52,6 +52,15 @@
  *                    out every member and re-locks anything MEMBER_SECRETS_KEY
  *                    or VILLAGE_SECRETS_KEY encrypted.
  *   --dry            report what WOULD be written; write nothing.
+ *   --compose        this village runs with docker-compose.yml on one machine.
+ *                    Also generates the two MySQL passwords the compose file
+ *                    reads, points DATABASE_URL at its `db` service, and sets
+ *                    FRONTEND_URL to http://localhost:<port> when no --domain
+ *                    is given (--port, default 3000, sets VILLAGE_PORT too).
+ *   --show-password  print the one-time ADMIN_PASSWORD. Off by default: it is
+ *                    in the file this writes, and a founder's AI assistant
+ *                    running this command has no need to see it. Open the
+ *                    file yourself and read the ADMIN_PASSWORD line.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -112,6 +121,13 @@ const domainInput = typeof args.domain === "string" ? args.domain.trim() : "";
 const fromEmailOverride = typeof args["from-email"] === "string" ? args["from-email"].trim() : "";
 const supportEmailOverride = typeof args["support-email"] === "string" ? args["support-email"].trim() : "";
 const adminPasswordOverride = typeof args["admin-password"] === "string" ? args["admin-password"].trim() : "";
+const COMPOSE = !!args.compose;
+const SHOW_PASSWORD = !!args["show-password"];
+const portInput = typeof args.port === "string" ? args.port.trim() : "3000";
+if (!/^\d{2,5}$/.test(portInput)) {
+  console.error(`fork-init: --port "${portInput}" is not a port number.`);
+  process.exit(1);
+}
 const outPath = path.resolve(ROOT, typeof args.out === "string" ? args.out : ".env");
 const examplePath = path.resolve(ROOT, typeof args.example === "string" ? args.example : ".env.example");
 
@@ -158,7 +174,7 @@ function genPassword() {
 }
 
 const domain = domainInput.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-const frontendUrl = domain ? `https://${domain}` : "";
+const frontendUrl = domain ? `https://${domain}` : COMPOSE ? `http://localhost:${portInput}` : "";
 const emailFrom =
   fromEmailOverride || (domain ? `${villageName} <hello@${domain}>` : "");
 const supportEmail = supportEmailOverride || adminEmail;
@@ -170,6 +186,15 @@ const memberSecretsKey = genHex32();
  * one of them may have to be rotated without taking the other's stores down
  * with it. Same recipe, separate draw. */
 const villageSecretsKey = genHex32();
+/* The uploads export's own token (GET /api/admin/backup/uploads-archive). It
+ * was the one generated value this script left for a human, and a village
+ * that never sets it has no backup of its members' photographs. */
+const backupExportToken = genHex32();
+/* Compose only: the database the compose file starts, and the address the app
+ * reaches it at on the network compose makes. `db` is the service name. */
+const mysqlPassword = COMPOSE ? genHex32() : "";
+const mysqlRootPassword = COMPOSE ? genHex32() : "";
+const databaseUrl = COMPOSE ? `mysql://village:${mysqlPassword}@db:3306/village` : "";
 
 /**
  * What this script can resolve, keyed by the exact variable name in
@@ -177,19 +202,25 @@ const villageSecretsKey = genHex32();
  * has it (usually blank) and reported as needing a human step.
  *
  * `secret: true` means the VALUE is never printed back in the report, only
- * the fact that it was generated. The exception is ADMIN_PASSWORD: the
- * founder needs it once to complete the bootstrap call, so it is shown
- * deliberately.
+ * the fact that it was generated. ADMIN_PASSWORD is printed only with
+ * --show-password: the founder needs it once, on the /claim page, and reads it
+ * from the file; an assistant running this script for them should never be
+ * handed it.
  */
 const RESOLVED = {
   AUTH_TOKEN_SECRET: { value: authTokenSecret, secret: true, note: "generated" },
   MEMBER_SECRETS_KEY: { value: memberSecretsKey, secret: true, note: "generated" },
   VILLAGE_SECRETS_KEY: { value: villageSecretsKey, secret: true, note: "generated" },
-  ADMIN_PASSWORD: { value: adminPassword, secret: false, note: "generated, one-time" },
+  ADMIN_PASSWORD: { value: adminPassword, secret: !SHOW_PASSWORD, note: "generated, one-time" },
   FRONTEND_URL: { value: frontendUrl, secret: false, note: domain ? "from --domain" : "" },
   EMAIL_FROM: { value: emailFrom, secret: false, note: domain ? "from --village-name and --domain" : "" },
   BREAK_GLASS_ADMIN_EMAIL: { value: adminEmail, secret: false, note: "from --admin-email" },
   PLATFORM_SUPPORT_EMAIL: { value: supportEmail, secret: false, note: "from --support-email or --admin-email" },
+  BACKUP_EXPORT_TOKEN: { value: backupExportToken, secret: true, note: "generated" },
+  DATABASE_URL: { value: databaseUrl, secret: true, note: "the compose file's own database" },
+  MYSQL_PASSWORD: { value: mysqlPassword, secret: true, note: "generated, compose only" },
+  MYSQL_ROOT_PASSWORD: { value: mysqlRootPassword, secret: true, note: "generated, compose only" },
+  VILLAGE_PORT: { value: COMPOSE ? portInput : "", secret: false, note: "compose only" },
 };
 
 const KEY_LINE = /^([A-Z][A-Z0-9_]*)=(.*)$/;
@@ -293,9 +324,15 @@ for (const f of filledKeys) {
 }
 
 console.log("");
-console.log("Your one-time bootstrap password (used once, then it stops working):");
-console.log(`  ${adminPassword}`);
-console.log("Save it somewhere safe until you have run the bootstrap step in docs/PROVISIONING.md.");
+if (SHOW_PASSWORD) {
+  console.log("Your one-time founder password (used once on the /claim page, then it stops working):");
+  console.log(`  ${adminPassword}`);
+} else {
+  console.log("Your one-time founder password is the ADMIN_PASSWORD line in");
+  console.log(`  ${path.relative(ROOT, outPath)}`);
+  console.log("Open that file yourself to read it, and keep it to yourself. You type it");
+  console.log("once, on your village's /claim page, and then it stops working.");
+}
 
 if (defaultedKeys.length) {
   console.log("");
@@ -345,5 +382,7 @@ console.log(
 console.log(
   DRY
     ? "\nNothing was written (--dry)."
-    : `\nNext: copy these values into Railway, your service, Variables. This local file is\nfor development and does not deploy on its own. Then follow docs/PROVISIONING.md.`,
+    : COMPOSE
+      ? `\nNext: docker compose up -d, wait for the app to say it is listening\n(docker compose logs -f app), then open ${frontendUrl}/claim. START_HERE.md has the rest.`
+      : `\nNext: put these values in your host's environment variables (on Railway, your\nservice, Variables). This file does not deploy on its own. Then follow START_HERE.md.`,
 );

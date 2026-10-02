@@ -15,6 +15,7 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
+import { useBrochurePages } from "@/lib/brochure";
 
 const PRINCIPLES = [
   {
@@ -46,6 +47,7 @@ const DECISION_STEPS = [
 ];
 
 export default function Governance() {
+  const brochureOn = useBrochurePages() === true;
   const villageName = useVillageName();
   return (
     <Layout>
@@ -252,16 +254,19 @@ export default function Governance() {
           <p className="text-stone-700 leading-relaxed mb-4">
             Governance is logged on Hypha, an open-source platform owned by its contributors. Every proposal, vote, and contribution is transparent and traceable. Value in, value out.
           </p>
-          <Link
-            href="/co-creators-guide"
-            className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
-          >
-            Learn more in the Game Guide <ArrowRight className="w-4 h-4" />
-          </Link>
+          {brochureOn && (
+            <Link
+              href="/co-creators-guide"
+              className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
+            >
+              Learn more in the Game Guide <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       </section>
 
-      {/* CTA */}
+      {/* CTA. Both of its doors are brochure pages, so it goes with them. */}
+      {brochureOn && (
       <section className="bg-teal-deep text-white py-20">
         <div className="container max-w-3xl mx-auto px-4 text-center">
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
@@ -286,6 +291,7 @@ export default function Governance() {
           </div>
         </div>
       </section>
+      )}
     </Layout>
   );
 }

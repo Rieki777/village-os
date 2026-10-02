@@ -12,11 +12,12 @@ stale. Where you see a path, open it.
 
 ## What this platform is, in five lines
 
-It is a white-label village-coordination system. A village forks the repository and runs it on its own
-infrastructure, so it owns the code and the data. Modules are units of capability: some tables, some
-routes, some screens, a few tunable numbers, and one entry in a registry that ties them together. Four
-core modules are always on; every other module ships off and a village turns on what it wants. There
-is no plugin runtime, so a module you write is merged upstream and shipped to every fork as part of the
+It is a white-label village-coordination system, Village OS. A village runs the published image on its
+own infrastructure and owns the code (MIT) and the data; it forks the repository only to change the
+code. Modules are units of capability: some tables, some routes, some screens, a few tunable numbers,
+and one entry in a registry that ties them together. There are twenty-five: four core modules are
+always on, and the other twenty-one ship off until a village turns on what it wants. There is no
+plugin runtime, so a module you write is merged upstream and shipped to every village as part of the
 platform.
 
 ## Run this first

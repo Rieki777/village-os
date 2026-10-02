@@ -33,6 +33,7 @@ import { Link, useLocation } from "wouter";
 import { X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { FAB_ACTIONS, FabTriggerIcon, type FabAction } from "@/config/mobileNav";
+import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
 import { haptic } from "@/lib/haptics";
 import { isBareRoute, normalisePath } from "./MobileTabBar";
 
@@ -75,7 +76,9 @@ export default function MobileFab() {
   const [location] = useLocation();
   const { user } = useAuth();
   const currentPath = normalisePath(location);
-  const actions = resolve(FAB_ACTIONS, currentPath, !!user);
+  // A shortcut into a brochure page goes with the pages (shared/brochure.ts).
+  const brochureOn = useBrochurePages() === true;
+  const actions = resolve(FAB_ACTIONS.filter((a) => brochureOn || !a.href || !isBrochurePath(a.href)), currentPath, !!user);
 
   const toggle = useCallback(() => {
     // "press" is 10ms, the number this line used to spell out. The util in
