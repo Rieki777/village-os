@@ -247,7 +247,7 @@ export default function MobileFab() {
             // Nearest the trigger reveals first, so the stack springs upward.
             const delay = open ? `${(actions.length - 1 - i) * 38}ms` : `${i * 18}ms`;
             const cls =
-              "group/row flex items-center gap-2.5 outline-none transition-all duration-300 focus-visible:opacity-100 " +
+              "group/row flex items-center gap-2.5 outline-none transition-[transform,opacity] duration-300 focus-visible:opacity-100 " +
               (open ? "opacity-100 translate-x-0 scale-100" : "opacity-0 translate-x-5 scale-90");
             const style: React.CSSProperties = { transitionDelay: delay, transitionTimingFunction: SPRING };
 
@@ -315,7 +315,10 @@ export default function MobileFab() {
           onClick={toggle}
           onFocus={() => setTucked(false)}
           data-fab-trigger
-          className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 motion-reduce:transition-none hover:scale-105 active:scale-95 ${
+          // Named properties, never `all`: `all` also animates the visibility
+          // this button inherits from the hide rule in index.css, which held
+          // it on screen through a dialog's opening and late after it closed.
+          className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-[transform,opacity,box-shadow] duration-300 motion-reduce:transition-none hover:scale-105 active:scale-95 ${
             hidden ? "pointer-events-none scale-0 opacity-0" : "pointer-events-auto"
           } ${open ? "scale-105" : ""}`}
           style={{

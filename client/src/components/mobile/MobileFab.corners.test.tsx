@@ -273,4 +273,30 @@ describe("index.css bounds its phone-only rules with Tailwind's own md", () => {
     expect(blocks.length).toBe(1);
     expect(blocks[0].cond).toBe(`(width >= ${md})`);
   });
+
+  /*
+   * A journal sitting's Next landed under the button on a phone the moment a
+   * step loaded (journal QA, 2026-10-02). The sitting carries
+   * `data-hides-fab-phone`, and the rule that honours it lives below md only:
+   * on a desk the button is nowhere near the sitting's controls.
+   */
+  it("steps the button out for a phone-only focused task, exactly below md", () => {
+    const blocks = mediaBlocks.filter((b) => b.body.includes("[data-hides-fab-phone]"));
+    expect(blocks.length).toBe(1);
+    expect(blocks[0].cond).toBe(`(width < ${md})`);
+
+    // jsdom applies no media queries, so apply the block's own body: this is
+    // the phone half of the rule, as shipped.
+    const style = document.createElement("style");
+    style.textContent = blocks[0].body;
+    document.head.appendChild(style);
+    try {
+      const { rerender } = render(withRouter(<MobileFab />));
+      expect(getComputedStyle(fabBox()).visibility).not.toBe("hidden");
+      rerender(withRouter(<><MobileFab /><div data-hides-fab-phone /></>));
+      expect(getComputedStyle(fabBox()).visibility).toBe("hidden");
+    } finally {
+      style.remove();
+    }
+  });
 });

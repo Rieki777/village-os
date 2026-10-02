@@ -102,8 +102,11 @@ export default function SittingFlow({
   const hintId = `${promptId}-hint`;
   const isLastAsked = index === steps.length - 2;
 
+  // On a phone the shortcuts button sat over Next the moment a step loaded
+  // (journal QA, 2026-10-02). A sitting is one focused task, so on a phone
+  // the button steps out until it ends (index.css, `data-hides-fab-phone`).
   return (
-    <div>
+    <div data-hides-fab-phone>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-muted-foreground">
           {def.label}, {sitting.depth === "deep" ? "deep" : "light"}

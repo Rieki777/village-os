@@ -973,6 +973,9 @@ button, a, [role="button"], input, textarea, select, summary {
  * seat is selected, desktop included, so an unscoped rule hid the button on
  * desktop for as long as a seat was picked. A modal under `.md:hidden` counts
  * only below md, where that wrapper actually shows.
+ *
+ * `data-hides-fab-phone` is the phone-only opt-in: a focused task whose own
+ * controls land in this corner on a small screen (a journal sitting's Next).
  */
 :root:has(
   [aria-modal="true"]:not(.md\:hidden *),
@@ -985,7 +988,7 @@ button, a, [role="button"], input, textarea, select, summary {
   visibility: hidden;
 }
 @media (width < 48rem) {
-  :root:has(.md\:hidden [aria-modal="true"]) [data-mobile-fab] {
+  :root:has(.md\:hidden [aria-modal="true"], [data-hides-fab-phone]) [data-mobile-fab] {
     visibility: hidden;
   }
 }
