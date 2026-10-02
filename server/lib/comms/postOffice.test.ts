@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { enrollmentById } from "../../repos/commsJourneys";
@@ -237,6 +237,35 @@ describe.skipIf(!configured)("sendResendEmail, through the post office", () => {
     expect(await mailer().sendResendEmail({ to: ["nobody"], subject: "x", html: "x" })).toEqual({ sent: false, reason: "no_recipients" });
     expect(await mailer({ key: "" }).sendResendEmail({ to: ["b1@example.test"], subject: "x", html: "x" })).toEqual({ sent: false, reason: "no_api_key" });
     expect(await mailer({ sender: "" }).sendResendEmail({ to: ["b1@example.test"], subject: "x", html: "x" })).toEqual({ sent: false, reason: "no_sender" });
+  });
+
+  it("prints the old no-key line once per call however many recipients, and records each one skipped", async () => {
+    /*
+     * server/housing.routes.e2e.test.ts counts this exact line as one send per
+     * call, and the move out of server/index.ts dropped it once: the e2e went
+     * red after four minutes. This says it in a second.
+     */
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+    });
+    const m = mailer({ key: "" });
+    let answer;
+    try {
+      answer = await m.sendResendEmail({ to: ["d1@example.test, d2@example.test"], subject: "x", html: "x" });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(answer).toEqual({ sent: false, reason: "no_api_key" });
+    expect(m.sent, "no provider was called").toEqual([]);
+    expect(lines.filter((l) => l === "[RESEND] API key not set, skipping email")).toHaveLength(1);
+    const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+      "SELECT status, skip_reason FROM comms_messages WHERE to_email IN ('d1@example.test', 'd2@example.test') ORDER BY to_email",
+    );
+    expect(rows.map((r) => [r.status, r.skip_reason])).toEqual([
+      ["skipped", "not_configured"],
+      ["skipped", "not_configured"],
+    ]);
   });
 
   it("answers a refusal as rejected and an unreachable provider as failed, as it always did", async () => {

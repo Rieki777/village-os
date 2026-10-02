@@ -64,10 +64,14 @@ const newContactId = (): string => `ct_${crypto.randomBytes(12).toString("hex")}
 const epochSeconds = (d: Date | null | undefined): number | null =>
   d instanceof Date && Number.isFinite(d.getTime()) ? Math.floor(d.getTime() / 1000) : null;
 
-/** Why this deployment cannot send at all right now, or null when it can. */
-function notConfigured(deps: PostOfficeDeps): "no_api_key" | "no_sender" | null {
+/**
+ * Why this deployment cannot send at all right now, or null when it can. Takes
+ * the sender already read, because reading it logs a malformed value and one
+ * email should say so once.
+ */
+function notConfigured(deps: PostOfficeDeps, from: string): "no_api_key" | "no_sender" | null {
   if (!deps.hasApiKey()) return "no_api_key";
-  if (!deps.sender()) return "no_sender";
+  if (!from) return "no_sender";
   return null;
 }
 
@@ -88,13 +92,13 @@ async function sendNow(
 ): Promise<PostResult> {
   const pool = deps.getPool();
   const messageId = row.inLedger ? row.id : null;
-  const gap = notConfigured(deps);
+  const from = deps.sender();
+  const gap = notConfigured(deps, from);
   if (gap) {
     if (row.inLedger) await record(`a skip for ${row.id}`, () => markSkipped(pool, row.id, "not_configured"));
     console.log(`[comms] ${gap === "no_api_key" ? "no provider key is set" : "no sender address is configured"}, so the email was recorded and not sent`);
     return { status: "skipped", messageId, reason: gap };
   }
-  const from = deps.sender();
   const mailto = addressOfSender(from);
   const listUnsubscribe =
     email.kind !== "essential" && row.contactId

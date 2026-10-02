@@ -255,18 +255,23 @@ export function createMailer(deps: MailerDeps) {
    *
    * The `from` override this used to accept was passed by no caller and is
    * gone: every email leaves under the one configured sender.
+   *
+   * THE LOG LINES ARE PART OF THE MOVE. Each call prints the line the old
+   * mailer printed, once per call, before anything is posted: a fork with no
+   * key reads "[RESEND] API key not set, skipping email" exactly as it always
+   * has, and server/housing.routes.e2e.test.ts counts that line as the number
+   * of emails a route tried to send. The rows are still written, as `skipped`,
+   * so Sent mail shows what would have gone.
    */
   async function sendResendEmail(opts: { to: string[]; subject: string; html: string; replyTo?: string; origin?: string }): Promise<MailResult> {
+    const gap = !postOffice.hasApiKey() ? "no_api_key" : !postOffice.sender() ? "no_sender" : null;
+    if (gap === "no_api_key") console.log("[RESEND] API key not set, skipping email");
+    if (gap === "no_sender") {
+      console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
+    }
     const to = normalizeRecipients(opts.to);
     if (!to.length) {
-      if (!postOffice.hasApiKey()) {
-        console.log("[RESEND] API key not set, skipping email");
-        return { sent: false, reason: "no_api_key" };
-      }
-      if (!postOffice.sender()) {
-        console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
-        return { sent: false, reason: "no_sender" };
-      }
+      if (gap) return { sent: false, reason: gap };
       console.log("[RESEND] No recipients, skipping email");
       return { sent: false, reason: "no_recipients" };
     }
