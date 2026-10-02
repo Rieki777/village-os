@@ -424,3 +424,57 @@ describe("each journey says its own steps (F37)", () => {
     expect(control.mine, "jLine at the council fire").toBe(control.council);
   });
 });
+
+/* F41. A journey that ran to its end took her sheet down on a phone one line
+   before she said where the whole journey lives, so the closing line and its
+   link went into a dock nobody could see. */
+describe("a journey that runs to its end on a phone (F41)", () => {
+  let b: Booted;
+  let during = false;
+  beforeAll(async () => {
+    b = boot("#hud=pocket&skipIntro", PHONE);
+    await settle(200);
+    b.run("playJourney('j4')");
+    await landed(b, 1);
+    during = b.doc.body.classList.contains("msheet");
+    // Left alone: the dwell carries it to the end.
+    await until(() => walking(b) === null, 60000);
+  });
+  afterAll(() => b?.close());
+
+  it("ran to its end on its own", () => {
+    expect(during, "her sheet was up during the walk").toBe(true);
+    expect(walking(b)).toBeNull();
+    expect(b.run<string>("GUIDE.why")).toBe("done");
+  });
+
+  it("keeps her sheet up for the closing line and its link", () => {
+    expect(b.doc.body.classList.contains("msheet"), "body.msheet after the finish").toBe(true);
+    // Her closing line, after her last stop. Village news may follow it on the fast clock.
+    const all = lines(b);
+    const closing = all.filter((d) => (d.textContent ?? "").includes("The walk ends here.")).pop();
+    expect(closing, "the closing line").toBeTruthy();
+    expect(all.indexOf(closing as HTMLElement)).toBeGreaterThan(all.indexOf(stopLines(b).slice(-1)[0] as HTMLElement));
+    expect(closing?.querySelector("a")?.getAttribute("href") ?? "").toMatch(/\/investor$/);
+    // #gresume is not asserted: while the Welcome Walk is switched off, guideAffordance keeps it down whatever happens.
+  });
+
+  it("leaves no live row behind", () => {
+    expect(live(rowButtons(b))).toEqual([]);
+  });
+
+  it("hands the sheet to the visitor: ASK MAIA puts it away", () => {
+    (b.doc.getElementById("pbAsk") as HTMLButtonElement).click();
+    expect(b.doc.body.classList.contains("msheet")).toBe(false);
+  });
+
+  it("a walk ended early still gives the phone its screen back (the control)", async () => {
+    b.doc.body.classList.remove("msheet");
+    b.run("playJourney('j4')");
+    await landed(b, stopLines(b).length + 1);
+    expect(b.doc.body.classList.contains("msheet")).toBe(true);
+    b.run("jEnd()");
+    expect(b.doc.body.classList.contains("msheet"), "body.msheet after `stay here`").toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});

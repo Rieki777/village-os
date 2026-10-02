@@ -8269,7 +8269,17 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
     JTMR=setTimeout(()=>{if(JWALK&&JWALK.id===id&&!JWALK.paused&&GUIDE.on){JWALK.i++;step()}},JDWELL);
     tourTimer=JTMR};
   const step=()=>{if(!JWALK||JWALK.id!==id)return;
-    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jSheetOff();jRowsOff();
+    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jRowsOff();
+      /* HER SHEET STAYS UP FOR HER LAST LINE. Every other ending drops it
+         (jHalt says why: a person who took the map back wants the screen),
+         and this one used to as well, one line before she said where the
+         whole journey lives. On a phone #maia is display:none without
+         msheet, so the closing line and its link were written into a dock
+         nobody could see and the journey simply stopped. Nothing waits
+         under the sheet at a finish: the walk offer stays down after one
+         (guideAffordance). The sheet is the visitor's from here, so
+         JSHEET lets go of it and ASK MAIA puts it away like any other time. */
+      JSHEET=false;
       GUIDE.finish();   // it ran to the end, so there is nothing to resume
       if(logged&&typeof endWalk==='function')endWalk(true,at);
       const route=SITE_ROUTES[id]||'/';
@@ -10373,7 +10383,15 @@ function guideAffordance(){
   try{done=!!localStorage.getItem('amora-walk-done')}catch(_){}
   try{hid=sessionStorage.getItem('amora-walk-offer')==='off'}catch(_){}
   lab.textContent=back?'Resume the walk':'Take the walk';
-  box.classList.toggle('on',!live&&!hid&&(back||!done))}
+  /* Not straight after a finish. GUIDE.finish() asks this before endWalk has
+     written amora-walk-done, and a journey that is not the counted walk never
+     writes it, so `done` read false and the walk was offered again the moment
+     any journey ended, under the sheet that now stays up for her closing
+     line. While the walk is switched off the line above keeps the offer down
+     anyway; this is for the day it comes back. GUIDE.start clears `why`, so
+     the next run is unaffected. */
+  const fin=!!(window.GUIDE&&GUIDE.why==='done');
+  box.classList.toggle('on',!live&&!hid&&!fin&&(back||!done))}
 window.guideAffordance=guideAffordance;
 function guideGo(){
   const id=(window.GUIDE&&GUIDE.id)||welcomeJourney();if(!id)return;
