@@ -470,20 +470,26 @@ describe("build mode, as the blueprint footprint and flow readers see it", () =>
 });
 
 /**
- * THE WELCOME WALK IS OFF, AND STAYS OFF UNTIL SOMEBODY TURNS IT BACK ON.
+ * NO WALK UNTIL THE VILLAGE WRITES ONE, AND NEVER THE EXAMPLE.
  *
  * Rye, 2026-10-01: "Get rid of the maia walkthrough for now, it's not great,
- * we'll have to make one." The artifact holds that as one switch,
- * WELCOME_WALK_ON, read by every door into the walk. This pins the decision
- * the same way mapArtifactHandoff.test.ts pins its own: the artifact is
+ * we'll have to make one." Then 2026-10-02: "Onboarding is something that
+ * founders should do and really personalize and put their spirit into it.
+ * So just add this to a journey to launch that's suggested remove the
+ * example journey for now." The artifact asks welcomeWalkOn() at every door
+ * into the walk, and it answers yes only for a walk the village wrote. This
+ * boots the map as a village that has written none, which is every map
+ * opened standalone, and pins that nothing is offered, the way
+ * mapArtifactHandoff.test.ts pins its own decision: the artifact is
  * regenerated as one enormous file, and a regeneration that quietly put the
- * walk back would otherwise ship with nobody noticing.
+ * seed's walk back would otherwise ship with nobody noticing. What a written
+ * walk does is in mapArtifactWelcomeWalk.test.ts.
  *
  * The other journeys walk on the same engine, so the control below plays one
  * of them. A guard that switched the whole engine off would pass every check
  * about the walk and fail that one.
  */
-describe("the Welcome Walk, switched off (Rye, 2026-10-01)", () => {
+describe("the Welcome Walk, until the village writes one (Rye, 2026-10-01 and 2026-10-02)", () => {
   const read = <T,>(b: Booted, js: string): T => (b.window as unknown as { eval(s: string): T }).eval(js);
 
   describe("on a desk", () => {
@@ -494,9 +500,10 @@ describe("the Welcome Walk, switched off (Rye, 2026-10-01)", () => {
     });
     afterAll(() => b?.window.close());
 
-    it("is switched off, and the scene still carries it as data", () => {
-      expect(read<boolean>(b, "WELCOME_WALK_ON")).toBe(false);
-      expect(read<string | null>(b, "welcomeJourney()"), "the walk is still in the scene").toBe("j1");
+    it("is off, names no newcomer's journey, and the scene still carries the example as data", () => {
+      expect(read<boolean>(b, "welcomeWalkOn()")).toBe(false);
+      expect(read<string | null>(b, "welcomeJourney()")).toBeNull();
+      expect(read<string | undefined>(b, "(jById('j1')||{}).name"), "the example is still in the scene").toBe("The Welcome Walk");
     });
 
     it("leaves Maia's dock without the tour chip, and keeps her other two", () => {

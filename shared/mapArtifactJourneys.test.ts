@@ -1,7 +1,7 @@
 /**
  * THE JOURNEYS WALK THEIR OWN STEPS, AT THE VISITOR'S PACE, AND ONLY WHILE SHE CAN BE SEEN.
  *
- * The Welcome Walk is switched off (WELCOME_WALK_ON, #402), and the Resident,
+ * The Welcome Walk is the village's own or none (welcomeWalkOn), and the Resident,
  * Steward and Investor journeys still walk on the same engine: playJourney in
  * the map artifact flies the camera stop by stop and writes each stop into
  * Maia's log with a row of answers under it. A QA sweep on 2026-10-01 found
@@ -290,7 +290,7 @@ const narration = (stop: HTMLElement) =>
 it("reads the artifact this file is about (the positive control)", () => {
   expect(JDWELL, "the dwell, read off the file").toBe(6500);
   expect(html).toContain("function playJourney(");
-  expect(html).toContain("const WELCOME_WALK_ON=false;");
+  expect(html).toContain("function welcomeWalkOn(){");
 });
 
 /* F43. Rows from stops already passed stayed live. Every row calls the same
@@ -368,7 +368,7 @@ describe("each journey says its own steps (F37)", () => {
         const b = boot("#skipIntro", DESK);
         await settle(200);
         walkLines = b.run<string[]>("Object.values(MAIA_STOPS)");
-        control = b.run("({gate:MAIA_STOPS.gate,council:MAIA_STOPS.council,mine:jLine({at:'council'},BY.council)})");
+        control = b.run("({gate:MAIA_STOPS.gate,council:jLine({at:'council'}),mine:jLine({at:'council',line:'Our own words.'})})");
         const total = b.run<(id: string) => number>("(id=>jById(id).steps.filter(st=>st.at&&BY[st.at]).length)")(id);
         b.run<(id: string) => void>("playJourney")(id);
         const stops: { title: string; said: string; more: boolean }[] = [];
@@ -419,9 +419,13 @@ describe("each journey says its own steps (F37)", () => {
     expect(all.some((s) => /\d+ open seats belong to this place/.test(s)), "the plural form is said somewhere").toBe(true);
   });
 
-  it("still gives the Welcome Walk its own words (the control: the monologue is kept, for its walk)", () => {
+  it("gives the village's walk its own words and never the monologue (the control: the monologue is still on the page)", () => {
+    // The seed's lines are still there to be heard, which is what makes the
+    // negative checks above mean something. jLine, the walk's voice, says the
+    // stop's own line and nothing else (Rye, 2026-10-02).
     expect(control.gate).toMatch(/^I am Maia\./);
-    expect(control.mine, "jLine at the council fire").toBe(control.council);
+    expect(control.council, "jLine at the council fire with no words of its own").toBe("");
+    expect(control.mine, "jLine at the council fire with the village's words").toBe("Our own words.");
   });
 });
 

@@ -5732,24 +5732,49 @@ function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key).filter(seatOpe
   if(s.event)bits.push(`<b>${escq(s.event)}</b>`);
   maiaSay(`${escq(s.name)}: ${escq(s.blurb.split('.')[0].toLowerCase())}. ${bits.length?('Right now: '+bits.join(' · ')+'.'):''} ${s.state==='funding'?`The pool is at <b>${Math.round(s.fund*100)}%</b>, and every pledge raises real walls.`:''}`)}
 
-/* THE WELCOME WALK IS OFF. Rye, 2026-10-01: "Get rid of the maia walkthrough
-   for now, it's not great, we'll have to make one." Every door into it reads
-   this one switch: Maia's chip, the t key, her concierge and the links in her
-   own sentences, the pocket offer and its drawer cell, the welcomes that
-   offered it, the Journeys door, the Loom, and a #/journey/ address. The
-   journey engine stays because the other journeys walk on it, and WALK_SEED
-   stays because the pocket gesture hint reads its two lines. The walk itself
-   is welcomeJourney(), so a fork whose scene has no j1 loses its own first
-   journey from the offers too, which is the same walk under another name. */
-const WELCOME_WALK_ON=false;
-const isWelcomeWalk=id=>!!id&&id===welcomeJourney();
-/** The journeys the map offers a visitor: every one, less the walk while it is off. */
-function offeredJourneys(){return SCENE.journeys.filter(j=>WELCOME_WALK_ON||!isWelcomeWalk(j.id))}
+/* THE WELCOME WALK IS THE VILLAGE'S OWN, OR THERE IS NONE.
+   Rye, 2026-10-01: "Get rid of the maia walkthrough for now, it's not great,
+   we'll have to make one." Then, 2026-10-02: "Onboarding is something that
+   founders should do and really personalize and put their spirit into it.
+   So just add this to a journey to launch that's suggested remove the
+   example journey for now."
+   So the walk is on exactly when this village has written one. The founder
+   writes it under Village settings (the Journey to Launch links there), the
+   shell pushes it from the map_walk document in {type:'config'}, and it
+   arrives here as window.WALK. Every door into the walk asks welcomeWalkOn():
+   Maia's chip, the t key, her concierge and the links in her own sentences,
+   the pocket offer and its drawer cell, the welcomes that offer it, the
+   Journeys door and a #/journey/ address.
+   THE EXAMPLE IS OFFERED TO NOBODY. j1 is the seed's Welcome Walk, Maia's
+   monologue about another village's land (MAIA_STOPS, WALK_SEED), and it is
+   never played, whether or not this village has written its own. Its data
+   stays, because the ruling says "for now" and the gesture hint reads two of
+   WALK_SEED's lines.
+   THE VILLAGE'S WALK IS A JOURNEY BUILT FROM ITS OWN STEPS, so it walks on
+   the engine the other journeys use and says only the village's words. A
+   stop with no words of its own says what is true at the place (jDeep), and
+   never a seed line. A stop whose place is not on the land is passed by, as
+   on any journey, and a walk with no stop on the land is not offered. */
+const EXAMPLE_WALK_ID='j1',VILLAGE_WALK_ID='walk';
+/** The village's own walk as a journey, or null when it has written none. Built fresh, so it follows the land. */
+function villageWalk(){const w=Array.isArray(window.WALK)?window.WALK.filter(x=>x&&typeof x==='object'):[];
+  if(!w.length)return null;
+  return{id:VILLAGE_WALK_ID,name:'The Welcome Walk',src:'village',blurb:'',
+    steps:w.map((x,si)=>({t:String(x.title||''),at:(x.structure_key&&BY[x.structure_key])?x.structure_key:null,
+      line:String(x.body||''),wid:String(x.id||('step-'+(si+1))),addr:'creator'}))}}
+window.villageWalk=villageWalk;
+/** Is there a walk to offer: has this village written one, with a stop on the land? */
+function welcomeWalkOn(){const j=villageWalk();return !!j&&j.steps.some(st=>st.at)}
+window.welcomeWalkOn=welcomeWalkOn;
+const isWelcomeWalk=id=>id===VILLAGE_WALK_ID;
+const isExampleWalk=id=>id===EXAMPLE_WALK_ID;
+/** The journeys the map offers a visitor: the village's own walk when there is one, then every journey but the example. */
+function offeredJourneys(){return[...(welcomeWalkOn()?[villageWalk()]:[]),...SCENE.journeys.filter(j=>!isExampleWalk(j.id))]}
 
 /* deterministic concierge (zero-token first, per platform doctrine) */
 const LEX=[
-  {re:/tour|show me around|walk me around/i,fn:()=>WELCOME_WALK_ON?startTour()
-    :maiaSay(`The guided walk is being made again. Until it is back, tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
+  {re:/tour|show me around|walk me around/i,fn:()=>welcomeWalkOn()?startTour()
+    :maiaSay(`There is no guided walk here yet. Tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
   /* ON A PHONE THE ANSWER IS THE LIST. The desk answer cycles the attention
      banner, and body.pocket hides that banner outright: MEASURED at 390x844,
      the chip flew the camera to the Greenhouse, the card it filled measured
@@ -5826,11 +5851,19 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   /* A phone has no Space key and hides the banner it cycles, so there the
      way to what needs hands is Get Involved, as in What's alive? above. */
   const hands=document.body.classList.contains('pocket')?'open <b>Get Involved</b>':'press <b>Space</b>';
-  maiaSay(`Nothing on the land matches that yet. ${WELCOME_WALK_ON?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
+  maiaSay(`Nothing on the land matches that yet. ${welcomeWalkOn()?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
-if(!WELCOME_WALK_ON)document.querySelectorAll('#maiaActions .chip[data-say="tour"]').forEach(c=>c.remove());
+/* THE TOUR CHIP COMES AND GOES WITH THE WALK. It is in the markup, and it is
+   off until the village's walk arrives from the shell, so it leaves the dock
+   here and comes back in syncWalkDoors(). Kept by reference, so the handler
+   wired above travels with it. */
+const TOUR_CHIP=document.querySelector('#maiaActions .chip[data-say="tour"]');
+function syncTourChip(){const box=$('maiaActions');if(!TOUR_CHIP||!box)return;
+  if(!welcomeWalkOn()){TOUR_CHIP.remove();return}
+  if(!TOUR_CHIP.isConnected)box.insertBefore(TOUR_CHIP,box.firstChild)}
+syncTourChip();
 $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
 /* The minimise button says what it will do, and whether Maia is open, from
    one place. .min is set and cleared at four sites (the header, a question
@@ -5851,7 +5884,7 @@ $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
    intro's nine-second nudge asks tourI whether she is already walking someone.
    The journey writes them; nothing reads them to decide anything. */
 let TOUR=[],tourI=-1,tourTimer=null;
-function startTour(){if(!WELCOME_WALK_ON)return;const id=welcomeJourney();if(id)playJourney(id)}
+function startTour(){if(!welcomeWalkOn())return;const id=welcomeJourney();if(id)playJourney(id)}
 
 /* pulse replay → ripples + narration
    ONLY WHAT A FEED SENT. The seed's six are sample copy, and they played as
@@ -6177,7 +6210,7 @@ function buildExportJSON(status){
        made the published scene and the draft share it, so holding a number
        wrote it into the live map's copy too. */
     vital_overrides:JSON.parse(JSON.stringify(window.VITAL_OVR||{})),
-    walk:{steps:(window.WALK||window.WALK_SEED||[]),log:(window.WALK_LOG||[]).slice(),note:'walk steps are village data — the seed is Amora’s voice; overrides come from /api/map/config'},
+    walk:{steps:(window.WALK||[]),log:(window.WALK_LOG||[]).slice(),note:'the village\'s own walk, from /api/map/config; empty when it has written none, and never the seed'},
     counts:'computed on read, never stored — recompute, never increment (§5.2 scaling contract)'};
   return out}
 $('exportBtn').onclick=()=>{const out=buildExportJSON();
@@ -8045,7 +8078,7 @@ function parseConn(cs){const p=cs.split(':');
   if(p[0]==='thread')return{kind:'thread',id:p[1],ai:(p[2]==='+'||p[2]==='g')?p[2]:+p[2]};
   return{kind:'step',j:p[1],si:+p[2]}}
 const thById=id=>SCENE.threads.find(t=>t.id===id);
-const jById=id=>SCENE.journeys.find(j=>j.id===id);
+const jById=id=>id===VILLAGE_WALK_ID?villageWalk():SCENE.journeys.find(j=>j.id===id);
 function connTarget(cs){const c=parseConn(cs);
   if(c.kind==='quest')return SCENE.quests[c.i]?SCENE.quests[c.i].at:null;
   if(c.kind==='seat')return SCENE.seats[c.i]?SCENE.seats[c.i].at:null;
@@ -8127,7 +8160,7 @@ function renderLoom(){
       <div class="laddrs">${chips}${guess}<span class="lgrip achip add${ast?' staged':''}" data-conn="${escq(acs)}">${ast?'◉ '+escq(atName(LOOM_STAGED.get(acs))):'+ place'}</span></div>
       ${(t._res&&!(t.structures&&t.structures.length))?`<span class="lwhy">${escq(t._res.why)}</span>`:''}</div>${provChip(p)}</div>`}).join('')+`</section>`}
   if(F.kind.journey){html+=`<section class="lsec" data-sec="journey"><h4><svg viewBox='0 0 24 24' style='width:12px;height:12px;vertical-align:-1px'><g stroke='currentColor' stroke-width='2.4' fill='none' stroke-linecap='round'><path d='M5 19c6-1 2-6 8-7s3-5 6-7M15.5 5H19v3.5'/></g></svg> Journeys<small>each a numbered route. Drag any step</small></h4>`+
-   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small>${(WELCOME_WALK_ON||!isWelcomeWalk(j.id))?`<button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button>`:''}</div>
+   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small>${!isExampleWalk(j.id)?`<button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button>`:''}</div>
     <div class="lsteps">${j.steps.map((st,si)=>{const cs=`step:${j.id}:${si}`;const p=classify(st);
       const dim=!(F.prov[p]||LOOM_STAGED.has(cs));
       return`<span class="lgrip lstep pv-${p}${dim?' provoff':''}" data-conn="${escq(cs)}"><i>${si+1}</i>${st.stage?`<em>${escq(st.stage)}</em>`:''}<span>${escq(st.t)}</span><u>${toLabel(cs)}</u></span>`}).join('')}</div></div>`).join('')+`</section>`}
@@ -8660,34 +8693,32 @@ const MAIA_STOPS={
   community:'The Village Heart. Kitchen, library, council fire. We have no bosses. We are circles, and every circle keeps a home somewhere on this land.',
   ridgeA:'My roof is up there. This hamlet is being pooled into existence, so the gold ring fills as money turns into walls. Saturday is a build day and my back already knows it.',
   sanctuary:'South, under the mist, the Sanctuary is still a drawing. I like standing here. You can see what we have promised each other and have yet to build.',
-  council:'That is my village. Everything you walked past traces to something true: a funded build, a claimed quest, a filled seat. My whole job now is to get you off this map and onto the land. Where shall we start?'
+  council:'That is my village. My whole job now is to get you off this map and onto the land. Where shall we start?'
 };
 window.MAIA_STOPS=MAIA_STOPS;
 
-/* Which journey is the newcomer's. j1 is Amora's Welcome Walk; a fork that
-   imported its own journeys gets its first one, and a village with none gets
-   nothing rather than a broken call. */
-function welcomeJourney(){return (jById('j1')?'j1':((SCENE.journeys[0]||{}).id||null))}
+/* Which journey is the newcomer's: the village's own walk, when it has
+   written one with a stop on the land, and otherwise none. It used to be j1,
+   the seed's example, or a fork's first journey in its place. */
+function welcomeJourney(){return welcomeWalkOn()?VILLAGE_WALK_ID:null}
 window.welcomeJourney=welcomeJourney;
 
-/* The read-only view the old tour left behind. Built from the journey and
-   Maia's own lines, so qa/secB.js §14 now checks narration against the words
-   she actually says. Rebuilt on demand because SCENE.journeys is replaced
-   wholesale by restoreScene() on every shell push. */
+/* The read-only view the old tour left behind. Built from the village's own
+   walk and its own words, so qa/secB.js §14 checks narration against the
+   words she actually says. Rebuilt whenever the walk arrives. */
 function tourView(){const id=welcomeJourney(),j=id&&jById(id);
   return (j?j.steps:[]).filter(st=>st.at&&BY[st.at])
-    .map(st=>({at:st.at,z:1.25,txt:MAIA_STOPS[st.at]||st.t||''}))}
+    .map(st=>({at:st.at,z:1.25,txt:st.line||st.t||''}))}
 window.tourView=tourView;
 TOUR=tourView();
 
-/* Whose words, in order. The village's own push over the {type:'config'}
-   bridge wins, because a fork's guide is the fork's guide. Then Maia's line
-   for that place. Then the Welcome Walk seed the village already wrote. An
-   empty answer is honest and the caller falls back to live scene data. */
-function jLine(st,s){
-  const k=s?s.key:null;if(!k)return '';
-  const pick=arr=>{const w=(arr||[]).find(x=>x&&x.structure_key===k&&x.body);return w?w.body:''};
-  return pick(window.WALK)||MAIA_STOPS[k]||pick(window.WALK_SEED)||''}
+/* Whose words at a stop of the walk: the village's, for that stop, and
+   nobody else's. It used to fall back to Maia's line for the place and then
+   to the seed walk, which is another village's voice on this one's land. An
+   empty answer is honest and the caller falls back to live scene data. Read
+   off the stop, so a walk that comes back to a place says what the founder
+   wrote for that visit. */
+function jLine(st){return String(st&&st.line||'')}
 window.jLine=jLine;
 
 /* What is true at this place right now, read off the scene rather than
@@ -8777,17 +8808,17 @@ function jOffer(){if(!JWALK||!JWALK.paused)return;
   maiaSay(escq(say)+'<div class="jrow"><button class="btn" onclick="jNext()">▸ walk on</button>'
     +'<button class="btn ghostbtn" onclick="jEnd()">✕ stay here</button></div>',null,say)}
 
-/* Which id the run records for this stop. The Welcome Walk's seeded steps keep
-   their own ids so a village counting walk-log rows keeps counting the same
-   steps it always counted. */
-function jStepId(j,x){
-  const k=x.st.at;
-  const seed=k&&(window.WALK_SEED||[]).find(w=>w&&w.structure_key===k);
-  return seed?seed.id:(j.id+':'+x.si)}
+/* Which id the run records for this stop: the id the village's own step
+   carries, which is what the walk report joins back to the founder's step.
+   It used to look the place up in the seed walk and record the seed's id. */
+function jStepId(j,x){return x.st.wid||(j.id+':'+x.si)}
 
-function playJourney(id,opts){const j=jById(id);if(!j)return;
-  /* The walk is off (WELCOME_WALK_ON): an old #/journey/ link to it lands on the map instead. */
-  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(routeNow()))setHash(viewHash());return}
+function playJourney(id,opts){
+  /* The example is offered to nobody, and the village's walk only once it
+     has one (welcomeWalkOn): an old #/journey/ link to either lands on the
+     map instead. */
+  if(isExampleWalk(id)||(isWelcomeWalk(id)&&!welcomeWalkOn())){if(/^#\/journey\//.test(routeNow()))setHash(viewHash());return}
+  const j=jById(id);if(!j)return;
   const o=opts||{};
   leaveIntro();closeLoom();$('panel').classList.remove('open');panelKey=null;
   $('module').classList.remove('show');closeInspect&&closeInspect();
@@ -8871,6 +8902,8 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
       JSHEET=false;document.body.classList.remove('jwalk');
       GUIDE.finish();   // it ran to the end, so there is nothing to resume
       if(logged&&typeof endWalk==='function')endWalk(true,at);
+      /* The village's walk lives on the map alone, so it has no page to point at. */
+      if(isWelcomeWalk(id)){maiaSay('The walk ends here. Wander wherever you like, and say my name when you want me.');return}
       const route=SITE_ROUTES[id]||'/';
       maiaSay('The walk ends here. The whole of <b>'+escq(j.name)+'</b> lives at '
         +'<a href="'+safeHref(siteHref(route))+'" target="_blank" rel="noopener">'+escq(route)+'</a>. '
@@ -8910,7 +8943,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
          place already described says which stop that was, and `tell me
          more` reads the place out again for anyone who wants it. */
       const own=isWelcomeWalk(id);
-      const line=own?jLine(x.st,s):'';
+      const line=own?jLine(x.st):'';
       const was=own?0:(JWALK.told[s.key]|0);
       const deep=(line||(!own&&(x.st.body||was)))?null:jDeep(s);
       if(!own&&!x.st.body)JWALK.told[s.key]=JWALK.i+1;   // the latest stop here, so a third visit points at the second
@@ -10198,7 +10231,7 @@ window.topFit=topFit;
   document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(el)show(el)});
   document.addEventListener('focusout',hide);
   addEventListener('scroll',hide,true);
-  const TIPS={lyNow:'Now: only what is. Every icon traces to something true.',
+  const TIPS={lyNow:'Now: the land as the map holds it today, with planned buildings left out.',
     lyVision:'Vision: the whole masterplan. Blueprint ghosts are the fundable gap.',
     lyOrg:'Org: a ring where each circle lives, and one satellite per role. Hollow is open, half is partly held, solid is filled.',
     lyFlows:'The village metabolism. Each kind of moving thing wears its own mark, and the line beneath it keeps that colour.',
@@ -11309,7 +11342,7 @@ function renderDrawer(){const d=$('pdrawer');if(!d)return;
    `</div><h4>ways in</h4><div class="pgrid">
     <button class="pcell" data-pa="wall">⚑ <span>Get Involved</span></button>
     <button class="pcell" data-pa="loom">⧉ <span>The Loom (view)</span></button>
-    ${WELCOME_WALK_ON?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
+    ${welcomeWalkOn()?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
     <button class="pcell" data-pa="mask">✦ <span>Your view</span></button>
     <button class="pcell" data-pa="exit">⏏ <span>Leave the map</span></button></div>
    <h4>lenses on the land</h4><div class="pgrid plens">`+
@@ -11336,7 +11369,7 @@ if($('pbExit'))$('pbExit').onclick=()=>{hap(8);exitMap()};
 function exitMap(){try{if(window.parent!==window){window.parent.postMessage({type:'exit'},'*');return}}catch(_){}
   toast('⏏ On the site, this returns you to the village menu.')}
 window.exitMap=exitMap;
-/* ---------- THE WELCOME WALK — village data, Amora's words as the seed ---------- */
+/* ---------- THE WELCOME WALK: the village's own, in window.WALK. The seed below is an example nobody is offered ---------- */
 window.WALK_SEED=[
  {id:'w1',structure_key:'gate',title:'Welcome to Amora',gesture:'pan',
   body:'Every story here walked in through this gate. Today that’s you. This map is the living land, 123 hectares on the Osa Peninsula, drawn from what is real.',
@@ -11355,7 +11388,7 @@ window.WALK_SEED=[
  {id:'w6',structure_key:'ridgeA',title:'Walls Rising',gesture:'none',
   body:'This hamlet is being pooled into existence. Watch the gold ring fill as funding becomes walls. The ✦ lantern burns brighter as build day comes near.'},
  {id:'w7',structure_key:'sanctuary',title:'Where the Land Still Dreams',gesture:'none',
-  body:'The Sanctuary is coming. Everything on this map traces to something true: a funded build, a claimed quest, a filled seat. Delete the map and no truth dies.'},
+  body:'The Sanctuary is coming. You can see what we have promised each other and have yet to build.'},
  {id:'w8',structure_key:'council',title:'Where Shall We Start?',gesture:'choice',
   body:'The whole point of this map is to get you off it and into the real one. Pick a door.'}];
 window.WALK=null;window.WGATE={};window.WALK_LOG=window.WALK_LOG||[];
@@ -11405,9 +11438,9 @@ window.endWalk=endWalk;
 /* nextWalk() and the #walkCard renderer stood here. The journey renders into
    the Maia dock on both profiles, so a second card that says the same things
    in a different voice is one surface too many.
-   WALK_SEED above is untouched: it is the village's own copy, jLine() reads it
-   as the third-choice source for a stop's words, and verify_badges.js reads
-   step w4. #walkCard's markup, CSS and band slot are still in the file and
+   WALK_SEED above is the seed's example, offered to nobody (welcomeWalkOn):
+   nothing speaks its words any more, the gesture hint reads two of its
+   gate_hint lines, and verify_badges.js reads step w4. #walkCard's markup, CSS and band slot are still in the file and
    nothing shows them; removing a band tenant belongs to whoever owns the
    band. */
 /* gates fed by real use */
@@ -11435,7 +11468,14 @@ addEventListener('message',e=>{
   if(d.skin)SHELL_SKIN=d.skin;
   if(d.scene&&typeof d.scene==='object')applyScene(d.scene,d.sceneVersion);
   if(d.skin)applySkinExport(d.skin);
-  if(Array.isArray(d.walk)&&d.walk.length)window.WALK=d.walk;
+  /* The village's walk and welcome. A key that is present is the village's
+     answer, null included: null means it has written none, so no walk is
+     offered and the guide greets people plainly. A key that is absent, as in
+     the bare config the shell sends after a failed fetch, keeps what the map
+     already has. */
+  if('walk' in d)window.WALK=(Array.isArray(d.walk)&&d.walk.length)?d.walk:null;
+  if('welcome' in d)window.WELCOME=(typeof d.welcome==='string'&&d.welcome.trim())?d.welcome.trim().slice(0,600):null;
+  syncWalkDoors();
   if(d.vocabulary)VILLAGE_VOCAB=heldVocab(d.vocabulary);
   if(d.vocabulary&&applyVocabulary(d.vocabulary).length){
     /* The land redraws itself every frame, but these are DOM and do not. */
@@ -11528,7 +11568,7 @@ function guideAffordance(){
      walking too, and every journey runs through GUIDE.start, so a Resident
      walk stopped by a hand at stop three had to start again from stop one.
      guideGo resumes any journey at the stop it reached. */
-  if(!WELCOME_WALK_ON&&!back){box.classList.remove('on');return}
+  if(!welcomeWalkOn()&&!back){box.classList.remove('on');return}
   let done=false,hid=false;
   try{done=!!localStorage.getItem('amora-walk-done')}catch(_){}
   try{hid=sessionStorage.getItem('amora-walk-offer')==='off'}catch(_){}
@@ -11609,16 +11649,20 @@ if($('gresumeX'))$('gresumeX').onclick=()=>{
 if(document.body.classList.contains('pocket')){
   framePocket();
   setTimeout(()=>{leaveIntro();
-    if(!routeNow()){
-      guideAffordance();
+    if(!routeNow())
+      /* AFTER THE LAND, because the walk it offers and the welcome it says are
+         the village's, and inside the shell they arrive in {type:'config'}.
+         Said before that, the offer was always down and the welcome always
+         the platform's. Standalone, nothing is coming and it runs now. */
+      afterLand(()=>{guideAffordance();
       if(!localStorage.getItem('amora-walk-done'))
         /* NO TOAST HERE, AND THAT WAS MEASURED. A welcome toast sits in the
            bottom band at 390x844 and covered both the seed and the walk
            offer for its whole six seconds, which is to say it hid the very
            button it was pointing at. #ghint above already teaches the two
            gestures and this button already says what it does. */
-        {maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door.'+(WELCOME_WALK_ON?' Tap <b>Take the walk</b> and I will show you around.':''));
-          if(!document.body.classList.contains('msheet'))maiaUnread(true)}}},700)}
+        {maiaSay(welcomeLine(true));
+          if(!document.body.classList.contains('msheet'))maiaUnread(true)}})},700)}
 
 
 /* intro
@@ -11645,8 +11689,8 @@ function arrivalLift(){
   const vy=parseFloat(document.documentElement.style.getPropertyValue('--top-vy'))||0;
   return Math.min(Math.max(0,vy),ARRIVAL_LIFT_MAX)}
 function arrivalWelcome(){
-  maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
-  setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)}
+  maiaSay(welcomeLine(false));
+  setTimeout(()=>{if(!JWALK)maiaSay(welcomeWalkOn()?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)}
 function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670-arrivalLift()/0.84,0.84,arrivalWelcome)}
 /* THE LAND IS HANDED OVER ONCE. Inside the shell this file draws the seed
@@ -11675,6 +11719,7 @@ function arriveOnLand(){
    cost the visitor the arrival. A key that opens something is caught by the
    opener it calls. */
 let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false;
+const LAND_WAITERS=[];
 function arrivalNow(){
   if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;arriveOnLand()}
   else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}}
@@ -11693,7 +11738,34 @@ function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
   const pf=POCKET_FRAME;POCKET_FRAME=null;
   if(pf&&inShell()&&!travel&&cam.x===pf.x&&cam.y===pf.y&&cam.z===pf.z)framePocket();
   arrivalNow();
+  for(const fn of LAND_WAITERS.splice(0))try{fn()}catch(_){}
   shellPost({type:'land-ready'})}
+/* Run once the village's own land and words are in: now, when they already
+   are or when nothing is coming (standalone), and otherwise on the handover. */
+function afterLand(fn){if(LAND_HANDED||!inShell())fn();else LAND_WAITERS.push(fn)}
+window.afterLand=afterLand;
+/* WHAT ARRIVES WITH THE WALK. The tour chip and the read-only tour view follow
+   it on every push, so a founder who saves a walk under Village settings sees
+   it offered on the map behind the panel. The pocket offer is decided once by
+   the boot above, after the land; a later push decides it again. */
+function syncWalkDoors(){syncTourChip();TOUR=tourView();
+  if(LAND_HANDED&&document.body.classList.contains('pocket'))guideAffordance()}
+window.syncWalkDoors=syncWalkDoors;
+/* HER FIRST LINE ON THE MAP. It promised "Everything you see traces to
+   something true: a funded build, a claimed quest, a filled seat", over a
+   seed whose builds, quests and seats are samples. So it greets, says how the
+   map moves, and claims nothing about the land. A village that has written
+   its own welcome (window.WELCOME, pushed by the shell beside the walk) is
+   greeted in its own words, escaped, so a founder's sentence can never
+   become markup. */
+function welcomeLine(pocket){
+  const greet=window.WELCOME?escq(window.WELCOME)
+    :'Welcome to the living map of <b>'+escq(SCENE.name||'this village')+'</b>.';
+  const how=pocket?' The land is yours to move: drag it, pinch it, tap any building to open its door.'
+    :' Hover anything, and click any building to open its door.';
+  const walk=!welcomeWalkOn()?'':pocket?' Tap <b>Take the walk</b> and I will show you around.':' Want the short walk?';
+  return greet+how+walk}
+window.welcomeLine=welcomeLine;
 window.landHandedOver=landHandedOver;
 window.arrivalNow=arrivalNow;
 addEventListener('pointerdown',arrivalTaken,true);
