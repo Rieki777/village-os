@@ -71,6 +71,13 @@ const ALLOWLIST = {
   // would be a link to an error message. /forgot-password keeps its one door
   // on the sign-in page, which is the only place a person wants it.
   "/set-password": "entered from a one-time email link; a site link has no token",
+  // The three pages Village Comms emails link to (docs/comms/BUILD_SPEC.md
+  // 5.4). Each reads a signed `?t=` link that only an email carries, so a site
+  // link would open a page with nothing to act on. A member changes the same
+  // preferences from their own profile, which is a door of its own.
+  "/email/preferences": "entered from the signed preferences link in an email footer; a site link has no token",
+  "/email/unsubscribe": "entered from the signed unsubscribe link in an email; a site link has no token",
+  "/email/a": "entered from a signed one-click answer in an email; a site link has no token",
   // The founder's way in on day one, and the way back in after a lockout. It
   // is handed over out of band, the way a reset link is: FORK_RUNBOOK and the
   // provisioning docs name it, and the person who needs it has been told to go

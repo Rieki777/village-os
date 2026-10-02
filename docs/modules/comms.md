@@ -66,3 +66,31 @@ key, the sending domain and the sender stay with the admin in the secrets plane.
 `setup: "required"`. A village supplies its own provider key, a verified sending domain, a
 sender on that domain, delivery reports and a postal address for the footer, then sends itself a
 test, all in Comms Settings. Until then the module reads as not ready.
+
+## Where it lives
+
+- **The sink.** Domain code tells comms something happened through `server/lib/commsSink.ts` and
+  imports nothing under `server/lib/comms/`. `fire()` never throws and never waits; the server
+  registers the one handler at boot, from `server/lib/comms/dispatch.ts`, where each lane adds the
+  cases it acts on.
+- **The post office.** `server/lib/comms/postOffice.ts` writes the ledger row, then sends.
+  Essential mail is always sent inside the request that asked for it, its words are never stored
+  (most of it carries a link that acts for the person), and a ledger fault never stops it going.
+  The old mailer keeps its names in `server/lib/comms/mailer.ts`, as a thin call to the post
+  office.
+- **The one door out.** `server/lib/comms/transport.ts` is the only code that calls the email
+  provider. `RESEND_API_BASE` points it at the fake provider in tests
+  (`server/testkit/fakeResend.ts`).
+- **Signed links.** `server/lib/comms/links.ts` signs every one-click link under a key of its own,
+  ids only, and nothing acts on a GET.
+- **Delivery reports.** `server/routes/commsWebhook.ts` registers before `express.json()`, proves
+  each report with `server/lib/comms/webhook.ts`, and stores it once.
+- **Journeys.** `server/lib/comms/journeys.ts` enrolls, stops and touches; the defaults it plans
+  from are `shared/comms/defaults/journeys.ts`.
+- **Routes.** `server/routes/comms.ts` (Admin, gated per route, never wholesale),
+  `server/routes/commsPublic.ts` (unsubscribe and preferences, never gated) and
+  `server/routes/commsEvents.ts` (on one gathering, behind the events module's gate).
+- **Admin.** The Comms group in the rail, one screen per file in
+  `client/src/components/admin/comms/`. Settings and Sent mail show whatever the module says.
+- **Tables.** All SQL is in `server/repos/commsMessages.ts`, `server/repos/commsContacts.ts` and
+  `server/repos/commsJourneys.ts`.

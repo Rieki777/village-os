@@ -108,7 +108,7 @@ describe("adminNav", () => {
     expect(out[0].items.map((i) => i.key)).toEqual(["cycles"]);
   });
 
-  it("the mapping is exactly the ruled sixteen", () => {
+  it("the mapping is exactly the ruled twenty-one", () => {
     expect(TAB_MODULE).toEqual({
       "circles-map": "map",
       "events-admin": "events",
@@ -133,7 +133,18 @@ describe("adminNav", () => {
       // app.use("/api/admin/governance", requireModule("governance")), so the
       // tab hides with the engine instead of offering a form that 404s.
       "governance-weights": "governance",
+      // Village Comms: the five screens that drive the automations. Sent mail
+      // and Settings are NOT here, because a village sets up its sending
+      // before it turns comms on and the post office records every email
+      // whatever the module says (docs/comms/BUILD_SPEC.md 6).
+      "comms-overview": "comms",
+      "comms-journeys": "comms",
+      "comms-words": "comms",
+      "comms-people": "comms",
+      "comms-letters": "comms",
     });
+    expect(TAB_MODULE["comms-sent"]).toBeUndefined();
+    expect(TAB_MODULE["comms-settings"]).toBeUndefined();
   });
 
   it("tabBadge maps the lifecycle words a founder reads", () => {

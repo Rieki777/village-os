@@ -228,6 +228,10 @@ const Mint = lazyPage(() => import("./pages/Mint"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
+// Three pages an email links to, from ONE module: the bundler keeps one chunk.
+const EmailPreferences = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailPreferences })));
+const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailUnsubscribe })));
+const EmailAction = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailAction })));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
 const GoodNeighbor = lazyPage(() => import("./pages/GoodNeighbor"));
@@ -384,6 +388,9 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/email/preferences" component={EmailPreferences} />
+      <Route path="/email/unsubscribe" component={EmailUnsubscribe} />
+      <Route path="/email/a" component={EmailAction} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />
       <Route path="/good-neighbor" component={GoodNeighbor} />
