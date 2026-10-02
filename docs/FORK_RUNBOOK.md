@@ -677,6 +677,15 @@ The founder's own words for roads, water and zones live in the
 a line, with the colour and glyph it is drawn in) and `phases` (what a build
 phase is called, keyed by the number the scene stores).
 
+The numbers across the top of the map (the crown bar's chips) live in the
+`map_chips` document in `app_config`, written by `PUT /api/admin/map/chips` from
+the Village settings drawer on the map, and served resolved for each viewer at
+`GET /api/map/chips` (both behind the `map` module's gate). Nothing to provision:
+with no document the bar draws its five example numbers, each one saying
+"example", until a founder points a chip at a source. The sources and what each
+counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
+module (Events, Village Health) is drawn only for a viewer who can open it.
+
 ### Promises made on the map (0062)
 
 `quests.map_key` and `events.map_key`: varchar(190), nullable, UNIQUE. The name

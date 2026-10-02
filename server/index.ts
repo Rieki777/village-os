@@ -125,6 +125,7 @@ import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
+import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -19557,6 +19558,7 @@ ${inner}
     members,
     getPool,
   });
+  registerMapChipsRoutes(app, { isAdmin, authedUser, getPool, seasonState, lapseContext });
 
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {
