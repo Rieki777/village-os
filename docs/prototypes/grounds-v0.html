@@ -4913,9 +4913,24 @@ function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key);
   if(s.event)bits.push(`<b>${escq(s.event)}</b>`);
   maiaSay(`${escq(s.name)}: ${escq(s.blurb.split('.')[0].toLowerCase())}. ${bits.length?('Right now: '+bits.join(' · ')+'.'):''} ${s.state==='funding'?`The pool is at <b>${Math.round(s.fund*100)}%</b>, and every pledge raises real walls.`:''}`)}
 
+/* THE WELCOME WALK IS OFF. Rye, 2026-10-01: "Get rid of the maia walkthrough
+   for now, it's not great, we'll have to make one." Every door into it reads
+   this one switch: Maia's chip, the t key, her concierge and the links in her
+   own sentences, the pocket offer and its drawer cell, the welcomes that
+   offered it, the Journeys door, the Loom, and a #/journey/ address. The
+   journey engine stays because the other journeys walk on it, and WALK_SEED
+   stays because the pocket gesture hint reads its two lines. The walk itself
+   is welcomeJourney(), so a fork whose scene has no j1 loses its own first
+   journey from the offers too, which is the same walk under another name. */
+const WELCOME_WALK_ON=false;
+const isWelcomeWalk=id=>!!id&&id===welcomeJourney();
+/** The journeys the map offers a visitor: every one, less the walk while it is off. */
+function offeredJourneys(){return SCENE.journeys.filter(j=>WELCOME_WALK_ON||!isWelcomeWalk(j.id))}
+
 /* deterministic concierge (zero-token first, per platform doctrine) */
 const LEX=[
-  {re:/tour|show me around|walk me around/i,fn:()=>startTour()},
+  {re:/tour|show me around|walk me around/i,fn:()=>WELCOME_WALK_ON?startTour()
+    :maiaSay(`The guided walk is being made again. Until it is back, tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
   {re:/help|contribute|hands|volunteer|do something/i,fn:()=>{$('attnBtn').click();maiaSay(`Here's what needs hands. I'll cycle you through; press <b>Space</b> or the banner button for the next one. Claim something small; the land loves small and steady.`)}},
   {re:/happen|alive|news|today|pulse/i,fn:()=>{maiaSay(`Today so far: Sol finished the seedling census, the Ridge crowdpool crossed <b>72%</b>, fourteen kilos came out of the beds, and the Hearth is prepping the <b>full-moon feast</b>. It's a good day on the land.`)}},
   {re:/vision|master ?plan|future|dream/i,fn:()=>{setMode('vision');$('lyVision').click&&null}},
@@ -4953,10 +4968,11 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
     return maiaSay(`The <b>${escq(seat.s)}</b> seat is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`)}
   for(const l of LEX)if(l.re.test(txt)){done('lex',null);return l.fn()}
   done('none',null);
-  maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: <a onclick="startTour()">the tour</a>, or name any building.`)}
+  maiaSay(`Nothing on the land matches that yet. That's a signal, not a dead end: unmatched asks teach the village which role or place is missing, so yours is saved. Meanwhile: ${WELCOME_WALK_ON?'<a onclick="startTour()">the tour</a>, or name':'name'} any building.`)}
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
+if(!WELCOME_WALK_ON)document.querySelectorAll('#maiaActions .chip[data-say="tour"]').forEach(c=>c.remove());
 $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
 
 /* The tour was a second script about the same eight places. It is the journey
@@ -4969,7 +4985,7 @@ $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
    intro's nine-second nudge asks tourI whether she is already walking someone.
    The journey writes them; nothing reads them to decide anything. */
 let TOUR=[],tourI=-1,tourTimer=null;
-function startTour(){const id=welcomeJourney();if(id)playJourney(id)}
+function startTour(){if(!WELCOME_WALK_ON)return;const id=welcomeJourney();if(id)playJourney(id)}
 
 /* pulse replay → ripples + narration */
 let pulseI=0;
@@ -6896,7 +6912,7 @@ function renderLoom(){
       <div class="laddrs">${chips}${guess}<span class="lgrip achip add${ast?' staged':''}" data-conn="${escq(acs)}">${ast?'◉ '+escq(atName(LOOM_STAGED.get(acs))):'+ place'}</span></div>
       ${(t._res&&!(t.structures&&t.structures.length))?`<span class="lwhy">${escq(t._res.why)}</span>`:''}</div>${provChip(p)}</div>`}).join('')+`</section>`}
   if(F.kind.journey){html+=`<section class="lsec" data-sec="journey"><h4><svg viewBox='0 0 24 24' style='width:12px;height:12px;vertical-align:-1px'><g stroke='currentColor' stroke-width='2.4' fill='none' stroke-linecap='round'><path d='M5 19c6-1 2-6 8-7s3-5 6-7M15.5 5H19v3.5'/></g></svg> Journeys<small>each a numbered route. Drag any step</small></h4>`+
-   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small><button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button></div>
+   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small>${(WELCOME_WALK_ON||!isWelcomeWalk(j.id))?`<button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button>`:''}</div>
     <div class="lsteps">${j.steps.map((st,si)=>{const cs=`step:${j.id}:${si}`;const p=classify(st);
       const dim=!(F.prov[p]||LOOM_STAGED.has(cs));
       return`<span class="lgrip lstep pv-${p}${dim?' provoff':''}" data-conn="${escq(cs)}"><i>${si+1}</i>${st.stage?`<em>${escq(st.stage)}</em>`:''}<span>${escq(st.t)}</span><u>${toLabel(cs)}</u></span>`}).join('')}</div></div>`).join('')+`</section>`}
@@ -7151,7 +7167,7 @@ const MODULES={
       `<div class="lastv">${SCENE.quests.length} quests on the land · propose your own at /propose-quest</div>`}},
   journeys:{name:'Journeys',icon:MICON.journeys,route:'/first-walk',
     blurb:'Walk a path. Every journey is a route on the land; steps without a place yet wait on the Loom.',
-    sample:ctx=>SCENE.journeys.map(j=>{const placed=j.steps.filter(st=>st.at&&BY[st.at]).length;
+    sample:ctx=>offeredJourneys().map(j=>{const placed=j.steps.filter(st=>st.at&&BY[st.at]).length;
       return `<div class="mrow"><span><b>${escq(j.name)}</b><small>${placed} of ${j.steps.length} steps placed</small></span>
        <span style="display:flex;gap:6px"><button class="btn" type="button" onclick="playJourney('${escj(j.id)}')">➹ walk it</button></span></div>`}).join('')},
   health:{name:'Village Health',icon:'☀',route:'/village-health',
@@ -7486,6 +7502,8 @@ function jStepId(j,x){
   return seed?seed.id:(j.id+':'+x.si)}
 
 function playJourney(id,opts){const j=jById(id);if(!j)return;
+  /* The walk is off (WELCOME_WALK_ON): an old #/journey/ link to it lands on the map instead. */
+  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(location.hash))setHash('');return}
   const o=opts||{};
   leaveIntro();closeLoom();$('panel').classList.remove('open');panelKey=null;
   $('module').classList.remove('show');closeInspect&&closeInspect();
@@ -9014,7 +9032,7 @@ function renderDrawer(){const d=$('pdrawer');if(!d)return;
    `</div><h4>ways in</h4><div class="pgrid">
     <button class="pcell" data-pa="wall">⚑ <span>Get Involved</span></button>
     <button class="pcell" data-pa="loom">⧉ <span>The Loom (view)</span></button>
-    <button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>
+    ${WELCOME_WALK_ON?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
     <button class="pcell" data-pa="mask">✦ <span>Your view</span></button>
     <button class="pcell" data-pa="exit">⏏ <span>Leave the map</span></button></div>
    <div style="font-size:10px;color:#8f855f;margin-top:10px">the look of the map is yours to set here. Building and rewiring live on the desktop map.</div>`;
@@ -9190,6 +9208,7 @@ addEventListener('message',e=>{try{
    become markup however a fork edits them. */
 function guideAffordance(){
   const box=$('gresume'),lab=$('gresumeLab');if(!box||!lab)return;
+  if(!WELCOME_WALK_ON){box.classList.remove('on');return}
   const live=!!(window.GUIDE&&GUIDE.on);
   const back=!!(window.GUIDE&&GUIDE.ran&&GUIDE.at>0&&GUIDE.why!=='done');
   let done=false,hid=false;
@@ -9264,7 +9283,7 @@ if(document.body.classList.contains('pocket')){
            offer for its whole six seconds, which is to say it hid the very
            button it was pointing at. #ghint above already teaches the two
            gestures and this button already says what it does. */
-        maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door. Tap <b>Take the walk</b> and I will show you around.')}},700)}
+        maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door.'+(WELCOME_WALK_ON?' Tap <b>Take the walk</b> and I will show you around.':''))}},700)}
 
 
 /* intro
@@ -9276,8 +9295,8 @@ if(document.body.classList.contains('pocket')){
    painted, on every /map visit (2026-10-01, #399). */
 function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
-    maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door. Want the short walk?`);
-    setTimeout(()=>{if(!JWALK)maiaSay(`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`)},9000)})}
+    maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
+    setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <a onclick="startTour()">take the tour</a>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
 const enterBtn=$('enterBtn');
 if(enterBtn)enterBtn.onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
   shellPost({type:'intro-done'});arriveOnLand()};
