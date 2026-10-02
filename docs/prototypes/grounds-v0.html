@@ -3415,7 +3415,13 @@ function makePoi(s){
   const el=document.createElement('div');el.className='poi st-'+s.state;el.dataset.k=s.key;
   paintPoiArt(s,el);
   el.onclick=e=>{e.stopPropagation();if(dragMoved)return;buildMode?openInspect(s.key):openPanel(s.key)};
-  el.onmouseenter=()=>{if(!buildMode)showHover(s,el)};el.onmouseleave=hideHover;
+  /* HOVER IS A THING A MOUSE HAS. A finger's tap sends compatibility mouse
+     events, mouseenter among them, so the desk card ("click to open the door")
+     came up on every tap and stayed over the vitals strip while the panel it
+     announced was already open. pointerenter says which pointer arrived; a pen
+     keeps its hover, the same rule the canvas keeps. */
+  el.addEventListener('pointerenter',e=>{if(e.pointerType==='touch'||buildMode)return;showHover(s,el)});
+  el.addEventListener('pointerleave',hideHover);
   /* Same rule as the canvas: touchNav owns fingers, so a finger here would
      drag the building AND pan the land under it. This is the only pointer
      handler outside #scene that a finger could still have reached. */
@@ -4363,7 +4369,9 @@ function bannerHTML(s){return `<span class="dot" style="background:${s.circle?(C
 function refreshBanner(s){const el=bEls[s.key];if(el)el.innerHTML=bannerHTML(s)}
 function makeBanner(s){const el=document.createElement('div');el.className='banner';
   el.innerHTML=bannerHTML(s);
-  el.onclick=()=>buildMode?openInspect(s.key):openPanel(s.key);el.onmouseenter=e=>showHover(s,el);el.onmouseleave=hideHover;
+  el.onclick=()=>buildMode?openInspect(s.key):openPanel(s.key);
+  el.addEventListener('pointerenter',e=>{if(e.pointerType!=='touch')showHover(s,el)}); // a finger's tap is no hover, as on the plates
+  el.addEventListener('pointerleave',hideHover);
   bWrap.appendChild(el);bEls[s.key]=el;return el}
 for(const s of SCENE.structures)makeBanner(s);
 function syncBanners(){
@@ -4675,6 +4683,7 @@ function updateHover(px,py){
 /* portal panel */
 let panelKey=null;
 function openPanel(key,tab,item){const s=BY[key];if(!s){toast('That place is no longer on the map.');return}panelKey=key;closeInspect();setHash('#/place/'+key);
+  hideHover(); // the card invites a click on a door that is now open, whichever way it was opened
   $('panel').classList.add('open'); // opened before the flight so travelTo can measure the strip that stays visible
   travelTo(s.x,s.y,Math.max(cam.z,1.25));
   if(item)setHash('#/place/'+key+'?item='+item); // the badge you tapped, in the address bar

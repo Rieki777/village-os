@@ -332,3 +332,47 @@ describe("a drag or a pinch that starts on a mark over the land", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* THE HOVER CARD IS A MOUSE'S. A finger's tap sends compatibility mouse events,
+   mouseenter among them, so the desk card ("click to open the door") came up on
+   every tap of a plate or a name and stayed over the vitals strip with the
+   panel already open. Measured at 390x844: [120,26,250,106], display block. The
+   sequence below is the one Chromium sent for a tap, recorded in that probe. */
+describe("the hover card and a finger", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const card = () => (b.doc.getElementById("hovercard") as HTMLElement).style.display;
+  const arrive = (el: Element, pointerType: string) => {
+    el.dispatchEvent(new b.window.PointerEvent("pointerover", { bubbles: true, pointerType }));
+    el.dispatchEvent(new b.window.PointerEvent("pointerenter", { pointerType }));
+    el.dispatchEvent(new b.window.MouseEvent("mouseover", { bubbles: true }));
+    el.dispatchEvent(new b.window.MouseEvent("mouseenter"));
+  };
+  const plate = () => b.doc.querySelector("#icons .poi") as Element;
+  const name = () => b.doc.querySelector("#banners .banner:not(.geo)") as Element;
+
+  it("stays down when a finger lands on a building or its name", () => {
+    b.run("hideHover()");
+    arrive(plate(), "touch");
+    expect(card(), "after a tap on a plate").not.toBe("block");
+    arrive(name(), "touch");
+    expect(card(), "after a tap on a name").not.toBe("block");
+  });
+
+  it("still comes up for a mouse (the control: hover is not switched off)", () => {
+    arrive(plate(), "mouse");
+    expect(card()).toBe("block");
+  });
+
+  it("goes down when a door opens, however it was opened", () => {
+    arrive(plate(), "mouse");
+    b.run("openPanel('greenhouse')");
+    expect(card()).toBe("none");
+    expect(b.uncaught).toEqual([]);
+  });
+});
