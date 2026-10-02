@@ -218,3 +218,93 @@ describe("a phone arrives framed on the village (F05, F53)", () => {
     expect(now).toEqual(b.camAtLoad);
   });
 });
+
+describe("the bottom bar's first cell on a phone (F11, F61)", () => {
+  let b: Booted;
+  const routes: string[] = [];
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    // siteNav is the artifact's one door to the site. Recorded here, and
+    // answered the way it answers inside the shell: it navigated, so stop.
+    (b.window as unknown as { siteNav: (ev: Event, route: string) => boolean }).siteNav = (ev, route) => {
+      routes.push(route);
+      ev.preventDefault();
+      return false;
+    };
+  });
+  afterAll(() => b?.close());
+
+  it("from the land, takes the same door as the desk's Circles tab, to /map/circles", () => {
+    routes.length = 0;
+    click(b, "#pbMap");
+    expect(routes, "routes handed to siteNav").toEqual(["/map/circles"]);
+    expect(body(b).contains("circles"), "the in-file circles stay closed").toBe(false);
+    expect(b.window.document.querySelectorAll("#pbMap svg").length, "both drawn icons survive the tap").toBe(2);
+  });
+
+  it("from the Loom, goes back to the land and nowhere else", () => {
+    routes.length = 0;
+    b.run("openLoom()");
+    expect(body(b).contains("loom")).toBe(true);
+    click(b, "#pbMap");
+    expect(body(b).contains("loom"), "the Loom closed").toBe(false);
+    expect(body(b).contains("circles"), "and did not open the circles").toBe(false);
+    expect(routes, "and did not leave the map").toEqual([]);
+  });
+
+  it("from the Loom opened over the in-file circles, goes back to the land in one tap", () => {
+    routes.length = 0;
+    b.run("setMapType('circles',true);openLoom()");
+    expect([body(b).contains("circles"), body(b).contains("loom")]).toEqual([true, true]);
+    click(b, "#pbMap");
+    expect([body(b).contains("circles"), body(b).contains("loom")]).toEqual([false, false]);
+    expect(routes).toEqual([]);
+  });
+
+  it("from the in-file circles a #/circles link opens, goes back to the land", () => {
+    routes.length = 0;
+    b.run("setMapType('circles',true)");
+    click(b, "#pbMap");
+    expect(body(b).contains("circles")).toBe(false);
+    expect(routes).toEqual([]);
+  });
+
+  it("asking for the land closes the Loom, from any caller", () => {
+    b.run("openLoom();setMapType('living',true)");
+    expect(body(b).contains("loom")).toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+describe("switching to the in-file circles with a sheet or a door open (F60)", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("closes the place sheet, and the address names the circles", () => {
+    b.run("openPanel('greenhouse')");
+    expect(b.window.document.getElementById("panel")?.classList.contains("open"), "the control: the sheet opened").toBe(
+      true,
+    );
+    b.run("setMapType('circles',true)");
+    expect(b.window.document.getElementById("panel")?.classList.contains("open")).toBe(false);
+    expect(b.run<unknown>("panelKey")).toBeNull();
+    expect(b.window.location.hash).toBe("#/circles");
+    b.run("setMapType('living',true)");
+  });
+
+  it("closes a module door, and the address still names the circles", () => {
+    b.run("openDoor('wallet',{})");
+    expect(b.window.document.getElementById("module")?.classList.contains("show"), "the control: the door opened").toBe(
+      true,
+    );
+    b.run("setMapType('circles',true)");
+    expect(b.window.document.getElementById("module")?.classList.contains("show")).toBe(false);
+    expect(b.window.location.hash).toBe("#/circles");
+    expect(b.uncaught).toEqual([]);
+  });
+});
