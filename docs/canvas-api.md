@@ -315,3 +315,24 @@ After the Birthing every write answers `409` and says to suggest the row on the 
   here writes to the public pulse, except adopting a purpose statement, which writes the same pulse
   line `PUT /api/admin/purpose` writes. Every adopt, decline, withdraw and matrix write leaves an
   admin audit event.
+## The canvas moon (Wave 4)
+
+`server/routes/canvasRevisit.ts`. Plan section 4.4: the moon asks about the block the village chose
+to grow (the loaded season file's moon on that date), plus any block a key moment flagged in the
+moon ending or the one beginning, and one block in canvas order when there is neither. A conflict
+moment never adds a block here: its notice reaches the care holder alone.
+
+| Route | Who | Body | Answers |
+| --- | --- | --- | --- |
+| `GET /api/canvas/moon` | members and admins | none | `200 { "next": { newMoonAt, startsAt, moon, blocks: [{ id, name }], source: { chosen, flagged, rotated } } \| null, "gathering": { id, status } \| null, "calendarOn", "mayOffer" }` |
+| `POST /api/canvas/moon/gathering` | `event.manage` | none | `201 { "gathering": { id, status: "draft" }, "message", "publishAt" }`, `403` (not the calendar's manager), `409` (the calendar is off, or one is already on the calendar's list) |
+
+The offer is made once and never seeded: it writes one DRAFT gathering that recurs every new moon
+(`{ freq: "lunar", on: "new_moon" }`) at the season's session time, or 18:00 in the village's
+timezone, and remembers it under the `canvas-moon` app_config key. Publishing it is a second act in
+the calendar's own admin list. The weekly brief and the moon digest carry the same moon as one line
+of block titles (`canvasMoonLine`, shared/canvasRevisit.ts).
+
+The four key moments themselves have no route: each is raised where it happens
+(`raiseCanvasRevisit`, server/lib/canvasRevisit.ts) and lands as a `canvas_revisit` notification in
+the daily digest. See that file's header for who hears which.

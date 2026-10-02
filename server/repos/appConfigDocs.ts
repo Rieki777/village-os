@@ -77,6 +77,36 @@ export async function readConfigDocument<T = Record<string, unknown>>(
 }
 
 /**
+ * Every document whose key starts with `prefix`, keys ascending, as
+ * `readConfigDocument` would read each one: a value that is not a JSON object
+ * is left out. For a family of per-item documents that nothing caches, such as
+ * the village's agreements (`village-agreement:<id>`, server/lib/agreements.ts).
+ */
+export async function readConfigDocumentsByPrefix<T = Record<string, unknown>>(
+  pool: Pool,
+  prefix: string,
+): Promise<Array<{ key: string; doc: T }>> {
+  const like = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT config_key, value FROM app_config WHERE config_key LIKE ? ORDER BY config_key",
+    [like],
+  );
+  const out: Array<{ key: string; doc: T }> = [];
+  for (const r of rows) {
+    let value: unknown = r.value;
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        continue;
+      }
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) out.push({ key: String(r.config_key), doc: value as T });
+  }
+  return out;
+}
+
+/**
  * Store `doc` under `key`, replacing whatever was there: the same statement
  * `dbDocument.put()` issues.
  *

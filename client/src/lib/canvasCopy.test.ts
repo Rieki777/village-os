@@ -107,6 +107,10 @@ describe("the files this test reads", () => {
         "CanvasFrameSay.tsx",
         "CanvasSuggestionForm.tsx",
         "DecisionMatrixRows.tsx",
+        // The canvas moon (Wave 4, 2026-09-28): the next new moon, the block
+        // titles its question names, and the offer of a draft gathering. It
+        // shows a date and no number at all. Held to every rule below.
+        "CanvasMoon.tsx",
       ].sort(),
     );
     for (const f of SURFACE) expect(f.body.length, f.name).toBeGreaterThan(200);

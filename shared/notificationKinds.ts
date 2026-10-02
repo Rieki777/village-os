@@ -494,6 +494,19 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     celebrate: false,
     wordsInAppOnly: true,
   },
+  /*
+   * One of the canvas's four key moments came round (shared/canvasRevisit.ts):
+   * something new started, a partner arrived, the conflict pathway was used,
+   * or the village is about to raise money. The notice names a block and asks
+   * whether its answer still holds. It carries nobody's words, no name and no
+   * count, and it goes out in the daily digest and never at once.
+   */
+  canvas_revisit: {
+    group: "village",
+    blurb: "A key moment came round, and the canvas asks whether one of the village's answers still holds.",
+    many: "{n} canvas answers are worth another look.",
+    celebrate: false,
+  },
   exit_opened: {
     group: "village",
     blurb: "A departure process opened. The published exit policy describes every step of it.",

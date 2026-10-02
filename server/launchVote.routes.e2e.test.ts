@@ -417,6 +417,17 @@ describe.skipIf(!DB_CONFIGURED)("a village sets itself up alone, and can issue n
 });
 
 describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be asked", () => {
+  /*
+   * THE BIRTHING IS A KEY MOMENT (plan 4.2, Wave 4). Switching governance on in
+   * the setup above was one too, and it is the same moment in the same moon, so
+   * its notices are cleared here: what the case after the propose reads is the
+   * Birthing's own raise and nothing the setup left.
+   */
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await pool.query("DELETE FROM notifications WHERE type = 'canvas_revisit'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  });
+
   it("opens at 100 and 100, with the roll frozen at three", async () => {
     const ida = await register("Ida Kestrel", "ida");
     idaToken = ida.token; idaId = ida.id;
@@ -440,6 +451,31 @@ describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be as
     expect(Number(rows[0].unity)).toBe(100);
     expect(Number(rows[0].quorum)).toBe(100);
     expect(rows[0].roll).toBe(3);
+  });
+
+  it("asks the admins, before the vote: look at Power, Resourcing, Legal and Impact again", async () => {
+    // The propose records `launch:proposed:<ballot>`, and the moment hangs off
+    // that event (server/lib/canvasRevisit.ts). Fire and forget, so wait for
+    // four rows and a second read that agrees.
+    const read = async () => {
+      const [r] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT user_id, title, body, actor_user_id FROM notifications WHERE type = 'canvas_revisit' ORDER BY title",
+      );
+      return r;
+    };
+    const deadline = Date.now() + 20_000;
+    while ((await read()).length < 4 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 600));
+    const rows = await read();
+    expect(rows.map((r) => r.title)).toEqual([
+      "Before you raise: look at Impact again.",
+      "Before you raise: look at Legal again.",
+      "Before you raise: look at Power again.",
+      "Before you raise: look at Resourcing again.",
+    ]);
+    // Before the handover, and with nobody holding the canvas pen, the admins alone.
+    expect(new Set(rows.map((r) => String(r.user_id)))).toEqual(new Set([founderId]));
+    expect(rows.every((r) => r.actor_user_id === null && !/\d/.test(String(r.body)))).toBe(true);
   });
 
   it("puts the slate IN the frozen document, so a member votes on it", async () => {

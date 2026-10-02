@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `6303fb5c0cfc2322`, which regenerating reproduces.
+It describes the sources at fingerprint `833b26a4d27d9e87`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -214,7 +214,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 6 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
+A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 7 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `agreement`); the other 3 open as practice votes (`role_application`, `badge_grant`, `quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -238,6 +238,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `power_return` | Hands a power the village was holding back to the admin panel. | its own entry in the close dispatcher |
 | `conflict_agreement` | Adopts a new version of the conflict agreement, which the exit policy's restorative path then reads through. Nothing already under way is reopened. | its own entry in the close dispatcher |
 | `gps_change` | Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened. | its own entry in the close dispatcher |
+| `agreement` | Makes a written agreement the village's own, exactly as worded, with the review date it names. Nothing else changes on its own. | its own entry in the close dispatcher |
 | `role_declare` | Writes a role into being: its name and what it is for. | its own entry in the close dispatcher |
 | `role_seat` | Puts a named member into a seat. | its own entry in the close dispatcher |
 | `role_unseat` | Takes a named member out of a seat. | its own entry in the close dispatcher |
@@ -245,7 +246,7 @@ What closing a decision DOES, per subject type, and the one place that question 
 | `governance_mode` | Changes how one vote is weighed, and which token carries the weight when it is a token. | its own entry in the close dispatcher |
 | `mint_rule` | Changes what the village mints and on what terms. It shares the dial executor and carries a higher quorum floor. | the same executor as `mechanics`, one executor and two subject types |
 
-14 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
+15 subject types execute something. Whether a member's vote BINDS is derived from this same table, so the word on the decision page and the behaviour at the close cannot come apart.
 
 ## Two kinds of decision, and when each one happens
 
@@ -469,6 +470,8 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/game/mechanics/proposals/dry-run` | signed in | none |
 | GET | `/api/game/mechanics/standing` | signed in | none |
 | POST | `/api/governance/advisory` | signed in | none |
+| GET | `/api/governance/agreements` | signed in | none |
+| POST | `/api/governance/agreements` | signed in | none |
 | GET | `/api/governance/ballots` | anyone, including a stranger | none |
 | GET | `/api/governance/ballots/:id` | anyone, including a stranger | none |
 | POST | `/api/governance/ballots/:id/close` | capability | `proposal.decide` |
@@ -510,7 +513,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-55 routes: 41 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+57 routes: 43 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
 
@@ -551,7 +554,7 @@ What is broken today, by name. A document that only described the parts that wor
 - **A stored reason on a no vote is shown to nobody.** The widget invites a member to say why and the reader that serves votes drops it.
 - **The module lifecycle is edited by hand**, so a village turns its own governance on through the admin panel and never through a vote.
 - **Four displays about the hub bridge are false.** The sync flag is never set true so the card always says pending, the space check idles on every delivery, an outcome's source is hardcoded, and the card credits a hub with issuing a secret it does not issue.
-- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 14, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
+- **Two schema comments have drifted.** The engine's own migration lists five subject types in the column comment where the dispatcher now executes 15, and a later migration's header names the number of the one before it. Neither is edited, because a shipped migration file is never edited; both are stated here instead.
 
 ## What is staged
 
@@ -1047,7 +1050,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "6303fb5c0cfc2322",
+  "commit": "833b26a4d27d9e87",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1197,6 +1200,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "power_return",
     "conflict_agreement",
     "gps_change",
+    "agreement",
     "role_declare",
     "role_seat",
     "role_unseat",
@@ -1745,11 +1749,11 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "power_grant",
       "power_return",
       "role_seat",
-      "gps_change"
+      "gps_change",
+      "agreement"
     ],
     "advisory": [
       "role_application",
-      "agreement",
       "badge_grant",
       "quest_payout"
     ],
@@ -1922,6 +1926,20 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "signed in",
       "capability": null,
       "file": "server/index.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/agreements",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/governanceAgreements.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/agreements",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/governanceAgreements.ts"
     },
     {
       "method": "GET",

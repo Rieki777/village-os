@@ -26,7 +26,7 @@
 import crypto from "node:crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { numberVar } from "./variables";
-import { wordsInAppOnly } from "../../shared/notificationKinds";
+import { manyLine, wordsInAppOnly } from "../../shared/notificationKinds";
 
 /**
  * Fallback only — the live ceiling is the notify.daily_email_cap game
@@ -283,6 +283,18 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
       return "daily";
     case "restorative_intake":
       return "immediate"; // a human reached out about a rupture — same day matters
+    // One of the canvas's four key moments (shared/canvasRevisit.ts). The
+    // DIGEST ONLY, fixed, whatever the member's other preferences say: the plan
+    // (section 4.2) asks for the daily digest and never a push, so no email
+    // leaves at once. This governs EMAIL ONLY. The in-app row is written
+    // moments after the act and the bell shows its age, so a care holder can
+    // still tell roughly when an exit opened or an objection was ruled; the
+    // email cadence does not hide that (an open finding, recorded in ledger
+    // 27c). The digest lists titles alone, folds the kind's rows into one
+    // line (`digestLines` below), and a title names a block and nothing else.
+    // The global `emailsOff` above still turns it off.
+    case "canvas_revisit":
+      return "daily";
     // Moderation: a report waiting for a steward, and the reply to the member
     // who filed it. Same reasoning as restorative_intake — somebody flagged
     // harassment and the clock on the first look starts now. It rides the
@@ -414,6 +426,33 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
 }
 
 /**
+ * ONE KEY MOMENT IS ONE LINE, NOT TWELVE.
+ *
+ * A canvas key moment writes a `canvas_revisit` row per block it asks about
+ * (server/lib/canvasRevisit.ts), and starting a collaboration asks about all
+ * twelve. Listed one by one, a single circle declared would read as "12 things
+ * happened while you were away" and push anything else the member was owed
+ * past the cut of ten. So when a digest holds more than one of them they fold
+ * into the kind's `many` line, where the first one stood: the same words the
+ * bell shows for a burst of one kind (`manyLine`, shared/notificationKinds.ts;
+ * the bell folds at four, client/src/lib/notificationFeed.ts). Every row
+ * stays its own row, keyed per block for the canvas moon, and every row is
+ * still stamped as emailed. Every other kind is one line per row, as before.
+ */
+function digestLines(rows: RowDataPacket[]): Array<{ title: string; link: string | null }> {
+  const canvas = rows.filter((r) => String(r.type) === "canvas_revisit");
+  const lines: Array<{ title: string; link: string | null }> = [];
+  for (const r of rows) {
+    if (canvas.length > 1 && String(r.type) === "canvas_revisit") {
+      if (r === canvas[0]) lines.push({ title: manyLine("canvas_revisit", canvas.length), link: r.link ?? null });
+      continue;
+    }
+    lines.push({ title: String(r.title), link: r.link ?? null });
+  }
+  return lines;
+}
+
+/**
  * The daily digest: unread, never-emailed rows from the last few days whose
  * type resolves to 'daily' for that member. One email per member per run.
  */
@@ -441,12 +480,15 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
     const daily = list.filter((r) => emailCadenceFor(String(r.type), prefs) === "daily");
     if (!daily.length) continue;
 
-    const subject = daily.length === 1 ? String(daily[0].title) : `${daily.length} things happened while you were away`;
-    const items = daily
+    // The subject and the cut count LINES, and a line is not always a row
+    // (`digestLines`): one key moment is one thing that happened.
+    const lines = digestLines(daily);
+    const subject = lines.length === 1 ? lines[0].title : `${lines.length} things happened while you were away`;
+    const items = lines
       .slice(0, 10)
-      .map((r) => `<li style="margin:4px 0"><a href="${escapeHtml(deps.origin() + (r.link ?? "/profile"))}" style="color:#2D5A5A">${escapeHtml(String(r.title))}</a></li>`)
+      .map((r) => `<li style="margin:4px 0"><a href="${escapeHtml(deps.origin() + (r.link ?? "/profile"))}" style="color:#2D5A5A">${escapeHtml(r.title)}</a></li>`)
       .join("");
-    const more = daily.length > 10 ? `<p style="color:#6b7280">…and ${daily.length - 10} more.</p>` : "";
+    const more = lines.length > 10 ? `<p style="color:#6b7280">…and ${lines.length - 10} more.</p>` : "";
     await deps.sendEmail({
       to: [user.email],
       subject,
