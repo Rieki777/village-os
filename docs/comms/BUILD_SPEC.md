@@ -853,7 +853,7 @@ Anyone holding `event.manage` can give a gathering a time vote. There are two mo
 
 **Live.** The gathering's own time follows the leader as votes arrive, so what Rye asked for is literal: whichever time is winning IS the time on the calendar and the gathering page, marked "time still being voted". The page refreshes the tally every 10 seconds while visible.
 
-**Rules** live in `shared/timePoll.ts`, pure and unit-tested. They are copied from ReGen Civics' season schedule (`shared/seasonSchedule.ts` there) and made general:
+**Rules** live in `shared/comms/timePoll.ts`, pure and unit-tested. They are copied from ReGen Civics' season schedule (`shared/seasonSchedule.ts` there) and made general:
 - **Leader:** the most approvals. A tie keeps the current leader. With no votes, the first option leads.
 - **Applied time:** the pin when set; else the leader once it has led for `settle_minutes` (default `comms.time_poll_settle_minutes`, 0, so it follows live); else the time last applied.
 - **Once mode:**
