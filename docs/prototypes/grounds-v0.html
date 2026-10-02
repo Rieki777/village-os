@@ -5755,7 +5755,11 @@ addEventListener('keydown',e=>{
   clampCam()});
 
 /* ---------- build mode: the founder's hand (layout editor) ---------- */
-let buildMode=false,placing=null,dragS=null,dragMoved=false,iconMode='painted'; // A1: the painted land is the house lookwindow.buildModeOn=()=>buildMode;
+let buildMode=false,placing=null,dragS=null,dragMoved=false,iconMode='painted'; // A1: the painted land is the house look
+/* Its own line. It once sat on the end of the comment above, so it was part
+   of the comment and never ran, and the two readers that draw a blueprint's
+   footprint and its flows in build mode always saw build mode as off. */
+window.buildModeOn=()=>buildMode;
 const UNDO=[];
 /* REG block relocated above (boot-order: pois need ARCHMAP) */
 function inBound(x,y){const p=SCENE.bound;let inside=false;
