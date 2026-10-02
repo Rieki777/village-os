@@ -1012,6 +1012,17 @@
   #vdrop .vhow{font-size:10px;color:#8f855f;font-style:italic;line-height:1.4}
   #vdrop .vfact{color:#d8cba2;font-size:11.5px}
   #vdrop .btn{font-size:11px;padding:4px 11px}
+  #vdrop .vsample{font-size:10.5px;letter-spacing:.08em;color:#e8c877}
+  /* A SAMPLE READING WEARS ITS MARK ON THE CHIP. The chips read 24, 62kg,
+     96, 76% and 132 on every village with nothing on them to say no one
+     counted those. The bar has no room for a word at the widths it is drawn
+     at (the labels are already hidden under 1500 px and on a phone), so the
+     number itself is underlined in dots and the drop-down it opens leads
+     with "Sample reading". rebuildVitals ends each chip's data-tip with the
+     number's source, so a source that names a sample ("module sample",
+     "drawn land + sample") is what this keys on, and a number the founder
+     set or the drawn land measured loses the mark by itself. */
+  .vital[data-tip$="sample"] b{text-decoration:underline dotted #e8c877;text-decoration-thickness:1.5px;text-underline-offset:2px}
   .vital{cursor:pointer}
   /* THE BAR SHEDS IN STEPS, AND topFit PICKS THE STEP. These three widths
      were a guess at when the bar fits between the buttons, and every one of
@@ -1956,13 +1967,15 @@ const SCENE={
   name:"Amora",
   place:"Osa Peninsula · Costa Rica",
   vitals:[
-    {k:"people",label:"People",v:24,sub:"18 active this cycle",src:"Stages & Roles"},
-    {k:"food",label:"Food",v:"62kg",sub:"harvest this week",src:"Village Health"},
-    {k:"water",label:"Water",v:"96",sub:"4 springs · healthy",src:"Village Health"},
-    {k:"canopy",label:"Canopy",v:"76%",sub:"93.1 ha forest held",src:"Village Health"},
-    {k:"hearts",label:"Hearts",v:132,sub:"gratitude this cycle",src:"Gratitude"},
+    // Every figure here is a sample. The bar draws vitalsData(), which marks
+    // each number that nothing has counted.
+    {k:"people",label:"People",v:24,sub:"18 active this cycle",src:"module sample"},
+    {k:"food",label:"Food",v:"62kg",sub:"harvest this week",src:"module sample"},
+    {k:"water",label:"Water",v:"96",sub:"4 springs · healthy",src:"module sample"},
+    {k:"canopy",label:"Canopy",v:"76%",sub:"forest cover",src:"module sample"},
+    {k:"hearts",label:"Hearts",v:132,sub:"gratitude this cycle",src:"module sample"},
   ],
-  moon:"🌔", moonName:"waxing gibbous · cycle closes in 6 days",
+  moon:"🌔", moonName:"waxing gibbous", // read from today's date at boot; see moonToday()
   districts:[
     {id:"arrival",name:"The Arrival",x:680,y:290},
     {id:"ponds",name:"The Ponds",x:1140,y:430},
@@ -4462,6 +4475,42 @@ const VICON={people:'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 0114 0z',
   water:'M12 3s6 7 6 11a6 6 0 01-12 0c0-4 6-11 6-11z',
   canopy:'M12 3l7 8h-4l4 6H5l4-6H5l7-8zM12 17v4',
   hearts:'M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z'};
+/* THE MOON IS TODAY'S MOON. The chip was a fixed waxing gibbous, "cycle
+   closes in 6 days", on every day of the year, over a drop-down that names
+   its source as the lunar calendar. lunation() is Meeus's formula for the
+   instant of a new or full moon (Astronomical Algorithms, ch. 49) with its
+   seven largest corrections, which lands within five minutes of the 2026
+   eclipses; plain days-since-a-new-moon arithmetic was off by more than a
+   day, and a countdown that is a day out is an invented number. The phase
+   is named from where today falls between two new moons, and "new moon" or
+   "full moon" only on the visitor's own calendar day of it. The map does
+   not know when the village's own cycle closes, so the line says how far
+   the next full or new moon is and nothing more. */
+function lunation(k,q){k+=q;const T=k/1236.85,R=Math.PI/180,E=1-0.002516*T-0.0000074*T*T;
+  const M=(2.5534+29.1053567*k-0.0000014*T*T)*R,Mp=(201.5643+385.81693528*k+0.0107582*T*T)*R,F=(160.7108+390.67050284*k-0.0016118*T*T)*R;
+  const c=q?[-0.40614,0.17302,0.01614,0.01043,0.00734,-0.00515,0.00209]:[-0.40720,0.17241,0.01608,0.01039,0.00739,-0.00514,0.00208];
+  const jde=2451550.09766+29.530588861*k+0.00015437*T*T
+    +c[0]*Math.sin(Mp)+c[1]*E*Math.sin(M)+c[2]*Math.sin(2*Mp)+c[3]*Math.sin(2*F)+c[4]*E*Math.sin(Mp-M)+c[5]*E*Math.sin(Mp+M)+c[6]*E*E*Math.sin(2*M);
+  return (jde-2440587.5)*864e5}
+function moonToday(when){
+  const now=+(when||new Date()),DAY=864e5;
+  const mid=t=>{const d=new Date(t);d.setHours(0,0,0,0);return +d};
+  const k0=Math.floor((now-Date.UTC(2000,0,6,18,14))/DAY/29.530588853)-1,ev=[];
+  for(let k=k0;k<k0+4;k++)ev.push([lunation(k,0),'new moon'],[lunation(k,0.5),'full moon']);
+  ev.sort((a,b)=>a[0]-b[0]);
+  const news=ev.filter(e=>e[1]==='new moon');
+  const prev=news.filter(e=>e[0]<=now).pop()[0],nextNew=news.find(e=>e[0]>now)[0];
+  const f=(now-prev)/(nextNew-prev),i=Math.floor(f*8+0.5)%8;
+  const today=ev.find(e=>mid(e[0])===mid(now));
+  const next=ev.find(e=>e[0]>now&&mid(e[0])!==mid(now));
+  const n=Math.round((mid(next[0])-mid(now))/DAY);
+  const NAMES=['','waxing crescent','first quarter','waxing gibbous','','waning gibbous','last quarter','waning crescent'];
+  const FACES=['','🌒','🌓','🌔','','🌖','🌗','🌘'];
+  const j=i===0?(f<0.5?1:7):i===4?(f<0.5?3:5):i;
+  return{moon:today?(today[1]==='new moon'?'🌑':'🌕'):FACES[j],
+    name:(today?today[1]:NAMES[j])+' · '+next[1]+(n===1?' tomorrow':' in '+n+' days')}}
+window.moonToday=moonToday;
+{const m=moonToday();SCENE.moon=m.moon;SCENE.moonName=m.name}
 function rebuildVitals(){const w=$('vitals');
   const D=(typeof vitalsData==='function')?vitalsData():null;
   w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+SCENE.vitals.map(v=>{
@@ -7797,9 +7846,15 @@ const MODULES={
     sample:ctx=>offeredJourneys().map(j=>{const placed=j.steps.filter(st=>st.at&&BY[st.at]).length;
       return `<div class="mrow"><span><b>${escq(j.name)}</b><small>${placed} of ${j.steps.length} steps placed</small></span>
        <span style="display:flex;gap:6px"><button class="btn" type="button" onclick="playJourney('${escj(j.id)}')">➹ walk it</button></span></div>`}).join('')},
+  /* Drawn from vitalsData(), the same answer the bar reads, so a number the
+     founder set or the land measured shows here as it does there, and a
+     sample says so on its row. It printed the seed's literals with no mark,
+     under "The same truth the crown banner reads". */
   health:{name:'Village Health',icon:'☀',route:'/village-health',
-    blurb:'The numbers behind the map. The same truth the crown banner reads.',
-    sample:ctx=>SCENE.vitals.map(v=>`<div class="mrow"><span><b>${escq(v.label)}</b><small>${escq(v.sub)}</small></span><span><b>${escq(v.v)}</b></span></div>`).join('')},
+    blurb:'The numbers behind the map, the same ones the crown banner reads.',
+    sample:ctx=>{const D=vitalsData();const rows=SCENE.vitals.map(v=>({v,d:D[v.k]||v,smp:/sample/.test(String((D[v.k]||v).src||''))}));
+      return rows.map(({v,d,smp})=>`<div class="mrow"><span><b>${escq(v.label)}</b><small>${escq(d.sub)}${smp?' · sample':''}</small></span><span><b>${escq(d.v)}</b></span></div>`).join('')
+        +(rows.some(r=>r.smp)?'<div class="lastv">a row marked sample is a stand-in. It counts itself once the module behind it feeds the map</div>':'')}},
   events:{name:'Events',icon:MICON.events,route:'/events',
     blurb:'Feasts, build days, ceremonies. Every event is a place and a time on the land, and its lantern burns brighter as the day comes near.',
     sample:ctx=>EVENTS.map(e=>`<div class="mrow"><span><b>✦ ${e.title}</b><small>${e.when} · at ${escq(e.at.map(k=>BY[k]?BY[k].name:k).join(' + '))} · sample</small></span>
@@ -8714,7 +8769,9 @@ function vitalsData(){
       how:springs+' spring structures stand on the map; the quality index is sample until Village Health feeds it'},
     canopy:forestF.length?{v:Math.min(99,Math.round(forestHa/Math.max(1,boundHa)*100))+'%',sub:forestHa.toFixed(1)+' ha drawn forest',src:'drawn land',
       how:forestHa.toFixed(1)+' ha of drawn forest ÷ '+boundHa.toFixed(0)+' ha inside the boundary'}
-      :{v:'76%',sub:'93.1 ha forest held',src:'module sample',how:'no forest drawn yet. Draw the zones and this counts itself'},
+      /* The fallback said "93.1 ha forest held" over "no forest drawn yet":
+         no hectare of it was ever measured. */
+      :{v:'76%',sub:'forest cover',src:'module sample',how:'no forest drawn yet. Draw the zones and this counts itself'},
     hearts:{v:132,sub:'gratitude this cycle',src:'module sample',how:'reads the Gratitude ledger'}};
   const OVR=window.VITAL_OVR||{};
   for(const k in D)if(OVR[k])D[k]={...D[k],v:OVR[k].v,src:'founder-set',how:'set by the founder. It overrides the counted number; clear it to listen to the land again'};
@@ -8761,7 +8818,7 @@ function openVitalDrop(k,anchor){
               <button class="btn" style="font-size:10.5px;padding:3px 9px" onclick="vitalSet('${escj(k)}')">Hold this number</button>
             </div>`}
      </div>`:'';
-  dp.innerHTML=`<h5>${escq(name)}</h5>${(body[k]||(()=>''))()}${ovr}
+  dp.innerHTML=`<h5>${escq(name)}</h5>${/sample/.test(rawSrc)?'<div class="vsample">Sample reading. Nothing has counted this from the village yet.</div>':''}${(body[k]||(()=>''))()}${ovr}
     <div class="vhow" style="opacity:.8">source: ${escq(k==='moon'?'the lunar calendar':(D[k]?D[k].src:'—'))} · live feeds from the bioregion can plug in here</div>`;
   dp.classList.add('show')}
 window.openVitalDrop=openVitalDrop;

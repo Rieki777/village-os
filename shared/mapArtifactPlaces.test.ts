@@ -689,3 +689,112 @@ describe("Maia, on what is alive and on what she keeps", () => {
     expect(m.uncaught).toEqual([]);
   });
 });
+
+/**
+ * A SAMPLE NUMBER IN THE CROWN BAR WEARS ITS MARK (F29).
+ *
+ * The chips read 24 people, 62kg, 96, 76% and 132 hearts on every village,
+ * all of them literals in vitalsData(), with nothing on the chip to say so.
+ * The Canopy drop-down said "93.1 ha forest held" over "no forest drawn
+ * yet", and the Village Health door printed the same literals under "The
+ * same truth the crown banner reads". The moon was a fixed waxing gibbous
+ * whose cycle closed "in 6 days" on every day of the year. Hiding the
+ * samples would take four of five figures off the bar, which is Rye's call,
+ * so they are marked.
+ *
+ * The chips' keyboard reach and their accessible names are F25's, in another
+ * lane, so nothing here asks for a role or a tabindex.
+ */
+describe("the crown bar's figures", () => {
+  let m: Booted;
+  const chips = () =>
+    [...m.window.document.querySelectorAll<HTMLElement>("#vitals .vital")]
+      .filter((c) => c.dataset.k !== "moon")
+      .map((c) => {
+        const b = c.querySelector("b") as HTMLElement;
+        const deco = m.window.getComputedStyle(b);
+        return {
+          k: c.dataset.k ?? "",
+          value: b.textContent ?? "",
+          /* jsdom keeps the shorthand as written and does not expand it. */
+          dotted: deco.textDecoration,
+        };
+      });
+  const healthRows = () => {
+    m.run("openDoor('health',{})");
+    const card = m.window.document.getElementById("moduleCard");
+    const rows = [...(card?.querySelectorAll(".mrow") ?? [])].map((r) => (r.textContent ?? "").replace(/\s+/g, " ").trim());
+    const text = (card?.textContent ?? "").replace(/\s+/g, " ");
+    m.run("closeDoor()");
+    return { rows, text };
+  };
+  const dropFor = (k: string) => {
+    m.window.document.querySelector<HTMLElement>(`#vitals .vital[data-k="${k}"]`)?.click();
+    const drop = m.window.document.getElementById("vdrop");
+    const out = { shown: !!drop?.classList.contains("show"), lead: drop?.querySelector(".vsample")?.textContent ?? null, text: (drop?.textContent ?? "").replace(/\s+/g, " ") };
+    drop?.classList.remove("show");
+    return out;
+  };
+  beforeAll(async () => {
+    m = boot("#skipIntro", { shell: true });
+    await settle(200);
+    m.post(config(SEED));
+    await settle(50);
+  });
+  afterAll(() => m?.close());
+
+  it("underlines every sample number in dots, on the chip itself", () => {
+    const seen = chips();
+    expect(seen.map((c) => c.k)).toEqual(["people", "food", "water", "canopy", "hearts"]);
+    for (const c of seen) expect(c.dotted, `${c.k} ${c.value}`).toMatch(/underline.*dotted|dotted.*underline/);
+  });
+
+  it("opens the drop-down on the word", () => {
+    const people = dropFor("people");
+    expect(people.shown).toBe(true);
+    expect(people.lead).toBe("Sample reading. Nothing has counted this from the village yet.");
+    expect(dropFor("moon").lead, "the moon is the calendar, never a sample").toBeNull();
+  });
+
+  it("no longer claims hectares of forest that nothing measured", () => {
+    const canopy = m.run<{ sub: string; how: string }>("vitalsData().canopy");
+    expect(canopy.how, "the case: no forest is drawn").toContain("no forest drawn yet");
+    expect(canopy.sub).not.toMatch(/ha forest/);
+    expect(dropFor("canopy").text).not.toMatch(/ha forest held/);
+  });
+
+  it("labels each sample row on the Village Health door", () => {
+    const { rows, text } = healthRows();
+    expect(rows.length).toBe(5);
+    expect(rows.filter((r) => r.includes(" · sample")).length).toBe(5);
+    expect(text).not.toContain("same truth");
+    expect(text).not.toContain("93.1");
+  });
+
+  it("drops the mark from a number the founder set (the control: the mark follows the source)", () => {
+    const s = clone(SEED);
+    s.vital_overrides = { people: { v: "31" } };
+    m.post(config(s, 7));
+    const people = chips().find((c) => c.k === "people");
+    expect(people?.value).toBe("31");
+    expect(people?.dotted).not.toContain("dotted");
+    expect(chips().filter((c) => c.dotted.includes("dotted")).length, "the other four stay marked").toBe(4);
+    expect(dropFor("people").lead).toBeNull();
+    expect(healthRows().rows[0]).not.toContain("sample");
+  });
+
+  /* Each instant below is the full or new moon itself, so its calendar day
+     is the same in every time zone; the counts allow for the zone. */
+  it("names the moon of the day it is asked, and counts to the next one", () => {
+    const at = (iso: string) => m.run<{ moon: string; name: string }>(`moonToday(new Date('${iso}'))`);
+    expect(at("2026-08-28T04:18:00Z")).toEqual({ moon: "🌕", name: expect.stringMatching(/^full moon · new moon in 1[45] days$/) });
+    expect(at("2026-08-12T17:41:00Z")).toEqual({ moon: "🌑", name: expect.stringMatching(/^new moon · full moon in 1[56] days$/) });
+    expect(at("2026-10-02T12:00:00Z").name).toMatch(/^last quarter · new moon in [78] days$/);
+    expect(at("2026-10-21T12:00:00Z").name).toMatch(/^waxing gibbous · full moon in [45] days$/);
+    expect(m.run<string>("SCENE.moonName")).not.toContain("cycle closes");
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
+  });
+});
