@@ -943,3 +943,80 @@ describe("a saved draft waiting to be chosen", () => {
   });
 });
 
+
+describe("a publish refused because a colleague published first", () => {
+  let m: Booted;
+  let refused: { live: number; liveEdits: number; list: string[] };
+  let looked: { visiting: boolean; edits: number };
+  beforeAll(async () => {
+    m = await framed();
+    // The village's public config, which now says version 7.
+    (m.window as unknown as { fetch: unknown }).fetch = async () => ({
+      ok: true,
+      json: async () => ({ scene: JSON.stringify(live7()), sceneVersion: 7 }),
+    });
+    rename(m, "gate", "Mine");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    await answerLast(m, "publish", {
+      ok: false,
+      reason: "stale",
+      error: "Other Admin published a change to the live map while you were working.",
+      live: { version: 7, by: "Other Admin", at: "2026-10-01" },
+    });
+    await settle(50);
+    refused = {
+      live: m.run<number>("LIVE.version"),
+      liveEdits: m.run<number>("LIVE_SCENE.map_edits.length"),
+      list: [...m.window.document.querySelectorAll("#pubList li")].map((li) => li.textContent ?? ""),
+    };
+    press(m, "pubConfirm"); // Show me the live map, once the newer land is in
+    await settle(0);
+    looked = { visiting: m.run<boolean>("VISITOR_VIEW"), edits: m.run<number>("EDITS.length") };
+    m.run("toggleVisitor()");
+  });
+  afterAll(() => m?.close());
+
+  it("brings the live map up to the version the refusal names", () => {
+    expect(refused.live).toBe(7);
+    expect(refused.liveEdits).toBe(5);
+  });
+
+  it("shows that version when asked for the live map", () => {
+    expect(looked).toEqual({ visiting: true, edits: 5 });
+  });
+
+  it("lists the change to make again", () => {
+    expect(refused.list).toContain("renamed gate");
+  });
+
+  it("starts the next draft from the new version once this one is thrown away", async () => {
+    m.run("openDiscard()");
+    press(m, "pubConfirm");
+    await answerLast(m, "draft-discard", { ok: true });
+    rename(m, "welcome", "Made again");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    expect(lastAsk(m, "publish")?.baseVersion).toBe(7);
+  });
+});
+
+
+describe("a stale draft opened, then thrown away", () => {
+  it("starts from the version on screen, not the one the draft forked from", async () => {
+    const m = boot(null, { shell: true });
+    await settle(200);
+    m.post(config(live7(), 7));
+    m.post(hand(7, draftOf(MINE.slice(0, 1))));
+    press(m, "restoreYes");
+    const opened = m.run<number>("BASE_VERSION");
+    m.run("openDiscard()");
+    press(m, "pubConfirm");
+    await answerLast(m, "draft-discard", { ok: true });
+    const after = m.run<number>("BASE_VERSION");
+    m.close();
+    expect(opened).toBe(6);
+    expect(after).toBe(7);
+  });
+});
+

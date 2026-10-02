@@ -10145,16 +10145,37 @@ async function doPublish(){
    publish and was told no needs to know who moved it and that their work
    survived, in that order. */
 function showConflict(r){
+  /* The refusal says which version is live, so the bar and the visitor view
+     say it too. They went on naming the version this page arrived with. */
+  if(r.live&&r.live.version)LIVE={version:+r.live.version,by:r.live.by||null,at:r.live.at||null};
+  const fresh=refreshLiveScene();
   const card=$('pubCard');card.classList.add('conflict');
   $('pubTitle').textContent='The live map moved while you were working';
   $('pubBlast').innerHTML=escq(r.error||'Someone published a change to the live map.')+
-    (r.live&&r.live.version?` It is now version ${r.live.version}.`:'');
+    (r.live&&r.live.version?` It is now version ${escq(r.live.version)}.`:'');
+  /* What the person can actually do. Nothing in the map moves a draft onto a
+     newer version, so the card says so, and lists the changes to make again
+     before they are thrown away. */
+  const mine=unpublished().slice().reverse().slice(0,40);
   $('pubList').innerHTML='<li>Your draft is exactly as you left it. Nothing was published.</li>'+
-    '<li>Look at the live map first, then bring your changes onto it.</li>';
+    '<li>To publish, look at the live map, then throw this draft away and make these changes again on the new version:</li>'+
+    mine.map(e=>`<li>${escq(editLine(e))}</li>`).join('');
   $('pubNote').style.display='none';
   $('pubConfirm').textContent='Show me the live map';
-  $('pubConfirm').onclick=()=>{closePublish();if(!VISITOR_VIEW)toggleVisitor()};
+  /* Waits for the newer land, so a quick press does not show the old one. */
+  $('pubConfirm').onclick=async()=>{closePublish();await fresh;if(!VISITOR_VIEW)toggleVisitor()};
+  renderDraftBar();
 }
+/* The live land as the village has it now, after a refusal said it moved.
+   Read from /api/map/config, the public answer the shell pushes on boot.
+   Asking the shell for a whole config push would apply the village's skin
+   over any restyling in this draft, and its next save would keep that. */
+function refreshLiveScene(){
+  if(!inShell()||typeof fetch!=='function')return Promise.resolve(false);
+  return fetch('/api/map/config').then(res=>res.ok?res.json():null).then(b=>{
+    if(!b||typeof b.scene!=='string'||!b.scene)return false;
+    const v=+b.sceneVersion||0;if(v<=LIVE_SCENE_VERSION)return false;
+    return applyScene(JSON.parse(b.scene),v)}).catch(()=>false)}
 
 /* Throwing a draft away.
    The same card publishing uses, in its refusal colour, because this is the
@@ -10202,8 +10223,11 @@ async function doDiscard(){
     return toast('Draft thrown away. You are starting from the live map.')}
   /* Back to the live land. Falling back to a reload rather than leaving the
      discarded work on screen: the row is gone, and a map still showing it
-     would be the one lie this whole round exists to stop telling. */
-  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;DRAFT_HOLD=null;renderDraftBar();
+     would be the one lie this whole round exists to stop telling.
+     The base is the version of the land put back on screen. It stayed on the
+     version the draft forked from, so after a refused publish every publish
+     from here was refused again, however much was thrown away. */
+  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;BASE_VERSION=LIVE_SCENE_VERSION||BASE_VERSION;DRAFT_HOLD=null;renderDraftBar();
     return toast('Draft thrown away. You are looking at the live map.')}
   toast('Draft thrown away.');
 }
