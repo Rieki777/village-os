@@ -128,6 +128,7 @@ import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
+import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -6798,7 +6799,7 @@ async function startServer() {
    * The ceiling here is deliberately above MAX_SCENE_BYTES so the size
    * message a person reads is the one written in shared/mapScene.ts.
    */
-  app.use(["/api/map/draft", "/api/map/publish"], express.json({ limit: SCENE_BODY_LIMIT }));
+  app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -6842,7 +6843,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents", "village-map"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -7083,6 +7084,7 @@ async function startServer() {
       return res.status(501).json({ error: "Not implemented", message: "Intents land with the introductions module" });
     });
 
+    registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
