@@ -141,6 +141,53 @@ describe("planning a sync off the service's schema", () => {
     accountsForEveryKind(plan);
   });
 
+  it("NEVER TAKES A SORT ENUM FOR THE KIND ARGUMENT when a familiar name sits beside it", () => {
+    // Found by a verifier: `sort_by` lists "role" among its values, and an
+    // earlier rule took any enum naming one of our kinds over a plain `kind`.
+    // The sync then sent `{ sort_by: "role" }` with no kind at all, and told the
+    // steward that circles and role assignments were not offered, which the
+    // service never said.
+    const plan = planKinds(
+      listRecords({
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          sort_by: { type: "string", enum: ["name", "role", "created_at"] },
+        },
+      }),
+    );
+    expect(plan.argument).toBe("kind");
+    expect(plan.ask.map((a) => a.wire)).toEqual(["circle", "role", "role_assignment"]);
+    expect(plan.notOffered).toEqual([
+      "tension: not offered by the service yet",
+      "risk: not offered by the service yet",
+    ]);
+    accountsForEveryKind(plan);
+  });
+
+  it("never takes a parent filter for the kind argument either", () => {
+    const plan = planKinds(
+      listRecords({
+        type: "object",
+        properties: { parent_type: { type: "string", enum: ["circle"] }, record_type: { type: "string" } },
+      }),
+    );
+    expect(plan.argument).toBe("record_type");
+    expect(plan.ask.map((a) => a.wire)).toEqual(["circle", "role", "role_assignment"]);
+  });
+
+  it("still reads an enum under an unfamiliar name when no familiar name exists, which is the control", () => {
+    const plan = planKinds(
+      listRecords({
+        type: "object",
+        properties: { category: { type: "string", enum: ["circle", "role", "role_assignment"] }, limit: { type: "number" } },
+      }),
+    );
+    expect(plan.argument).toBe("category");
+    expect(plan.source).toBe("schema");
+    expect(plan.ask.map((a) => a.wire)).toEqual(["circle", "role", "role_assignment"]);
+  });
+
   it("asks for nothing when the named argument accepts none of our kinds, and says what it does accept", () => {
     const plan = planKinds(
       listRecords({ type: "object", properties: { kind: { type: "string", enum: ["meeting", "project"] } } }),

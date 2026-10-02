@@ -7,9 +7,12 @@
  *   1. An https address saves through the ONE config route, and an http one is
  *      refused in the browser by the same validator the server runs, before a
  *      byte is sent. The refusal test carries its own control: the same flow
- *      with an https address does send.
- *   2. Sync now shows what came back, every failure by kind in the service's
- *      own words, and a link to the queue the suggestions landed in.
+ *      with an https address does send. A save carries only the field that
+ *      was edited, so another admin's change to the other one survives.
+ *   2. Sync now shows what came back, every failure by kind, a refusal in the
+ *      service's own words and an unreadable reply without its detail, the
+ *      note saying how the kinds were chosen, and a link to the queue the
+ *      suggestions landed in.
  *   3. While the module is off, the panel says when the connection can be
  *      checked and asks the server nothing about it. The control is the
  *      preview case, where it does ask.
@@ -29,6 +32,12 @@ type Answer = { status: number; body: unknown };
 let lifecycle = "preview";
 let status: Answer;
 let sync: Answer;
+/**
+ * What each read of the stored config answers, in order; the last one repeats.
+ * The panel reads once on mount and `save` reads again just before it writes,
+ * so a second entry stands in for another admin's change in between.
+ */
+let stored: Record<string, unknown>[];
 
 const READY = {
   connection: { state: "ready", sentence: "Connected. The key is set in the admin panel. It ends 9f2a.", mayCall: true },
@@ -47,10 +56,8 @@ function stub() {
       const method = init?.method ?? "GET";
       const reply = (a: Answer) => ({ status: a.status, ok: a.status < 400, json: async () => a.body });
       if (url === "/api/admin/modules" && method === "GET") {
-        return reply({
-          status: 200,
-          body: { modules: [{ id: "saberra", served: lifecycle, config: { apiUrl: "", dashboardUrl: "" } }] },
-        });
+        const config = stored.length > 1 ? stored.shift()! : stored[0];
+        return reply({ status: 200, body: { modules: [{ id: "saberra", served: lifecycle, config }] } });
       }
       if (url === "/api/admin/modules/saberra/config" && method === "PUT") {
         return reply({ status: 200, body: { success: true, config: JSON.parse(init.body).config } });
@@ -69,6 +76,7 @@ beforeEach(() => {
   lifecycle = "preview";
   status = { status: 200, body: READY };
   sync = { status: 200, body: { landed: 0, facts: 0, failures: [], truncated: [], notOffered: [] } };
+  stored = [{ apiUrl: "", dashboardUrl: "" }];
   stub();
 });
 
@@ -106,6 +114,37 @@ describe("the address", () => {
     fireEvent.change(await serviceField(), { target: { value: "https://village.example.org/mcp" } });
     fireEvent.click(screen.getByRole("button", { name: "Save addresses" }));
     await waitFor(() => expect(callsTo("/api/admin/modules/saberra/config", "PUT")).toHaveLength(1));
+  });
+
+  it("SENDS ONLY THE FIELD THAT WAS EDITED, so another admin's change to the other survives", async () => {
+    // Found by a verifier: the save always carried both fields, the untouched
+    // one from this tab's stale copy, and so reverted whatever another admin had
+    // saved since. On the service address that sends the key to the old host.
+    stored = [
+      { apiUrl: "https://a.example.org", dashboardUrl: "https://d1.example.org" },
+      { apiUrl: "https://a.example.org", dashboardUrl: "https://d2.example.org" },
+    ];
+    renderPanel();
+    await waitFor(() => expect((screen.getByLabelText(/Dashboard address/) as HTMLInputElement).value).toBe("https://d1.example.org"));
+    fireEvent.change(await serviceField(), { target: { value: "https://a2.example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save addresses" }));
+    await waitFor(() => expect(callsTo("/api/admin/modules/saberra/config", "PUT")).toHaveLength(1));
+    const sent = JSON.parse(callsTo("/api/admin/modules/saberra/config", "PUT")[0]![1].body).config;
+    expect(sent).toEqual({ apiUrl: "https://a2.example.org", dashboardUrl: "https://d2.example.org" });
+  });
+
+  it("keeps a corrected service address when only the dashboard is edited", async () => {
+    stored = [
+      { apiUrl: "https://old.example.org", dashboardUrl: "https://d1.example.org" },
+      { apiUrl: "https://new.example.org", dashboardUrl: "https://d1.example.org" },
+    ];
+    renderPanel();
+    await waitFor(() => expect((screen.getByLabelText(/Service address/) as HTMLInputElement).value).toBe("https://old.example.org"));
+    fireEvent.change(screen.getByLabelText(/Dashboard address/), { target: { value: "https://d3.example.org" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save addresses" }));
+    await waitFor(() => expect(callsTo("/api/admin/modules/saberra/config", "PUT")).toHaveLength(1));
+    const sent = JSON.parse(callsTo("/api/admin/modules/saberra/config", "PUT")[0]![1].body).config;
+    expect(sent).toEqual({ apiUrl: "https://new.example.org", dashboardUrl: "https://d3.example.org" });
   });
 
   it("refuses an http dashboard address the same way", async () => {
@@ -208,6 +247,66 @@ describe("Sync now", () => {
       await screen.findByText("role assignment: the service said no (scope does not permit this tool)"),
     ).toBeInTheDocument();
     expect(screen.getByText(/role: cut short/)).toBeInTheDocument();
+  });
+
+  it("SAYS HOW THE KINDS WERE CHOSEN, including why the schema could not be read", async () => {
+    // Found by a verifier: the note was in the answer and nowhere on screen, so
+    // a guessed plan failing looked like a measured one failing.
+    sync = {
+      status: 200,
+      body: {
+        landed: 0,
+        facts: 0,
+        failures: [{ kind: "roleAssignment", label: "role assignment", why: "vendor-error", detail: "unknown kind" }],
+        truncated: [],
+        notOffered: [],
+        asked: {
+          argument: "kind",
+          kinds: ["circle", "role", "role_assignment"],
+          source: "mail",
+          note: 'The service did not list its tools, so the kinds its mail names were asked for under "kind". It answered: Session not initialized',
+        },
+      },
+    };
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
+    expect(await screen.findByText(/It answered: Session not initialized/)).toBeInTheDocument();
+    expect(screen.getByText("role assignment: the service said no (unknown kind)")).toBeInTheDocument();
+  });
+
+  it("shows the plan's note when the schema decided too, so a measured plan reads as measured", async () => {
+    sync = {
+      status: 200,
+      body: {
+        landed: 1,
+        facts: 2,
+        failures: [],
+        asked: { argument: "record_type", kinds: ["circle"], source: "schema", note: `The service's schema names "record_type" and accepts: circle.` },
+      },
+    };
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
+    expect(await screen.findByText(/schema names "record_type"/)).toBeInTheDocument();
+  });
+
+  it("NAMES AN UNREADABLE REPLY WITHOUT REPEATING ITS DETAIL, and still repeats a refusal's", async () => {
+    sync = {
+      status: 200,
+      body: {
+        landed: 0,
+        facts: 0,
+        failures: [
+          { kind: "roleAssignment", label: "role assignment", why: "unreadable", detail: "RAW-VENDOR-TEXT" },
+          { kind: "circle", label: "circle", why: "refused", detail: "the service answered 403" },
+        ],
+      },
+    };
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
+    expect(await screen.findByText("role assignment: the reply could not be read")).toBeInTheDocument();
+    // The control: a refusal's own detail IS shown, so the absence is the rule.
+    expect(screen.getByText("circle: the call did not go through (the service answered 403)")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("RAW-VENDOR-TEXT");
   });
 
   it("says so when the sync answers in a shape it cannot read, instead of printing undefined counts", async () => {

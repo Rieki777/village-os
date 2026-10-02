@@ -90,7 +90,10 @@ role_assignment". So:
 reads `list_records`' `inputSchema`:
 
 1. A property carrying an enum that names one of our kinds is the kind argument, and the
-   enum decides what is offered. The enum's own spelling is what gets sent.
+   enum decides what is offered. The enum's own spelling is what gets sent. When any
+   property carries a familiar argument name, only those are read here: a `sort_by` that
+   lists `role` among its values is a sort order, and taking it once sent `{ sort_by:
+   "role" }` with no kind at all.
 2. Otherwise a familiar argument name (`kind`, `record_type`, `type`, `table` and a few
    more) is the kind argument, and the table above decides what is offered.
 3. Otherwise, or when `tools/list` fails or carries no schema, the argument is `kind` and
@@ -99,7 +102,16 @@ reads `list_records`' `inputSchema`:
 A kind this village holds and the service does not offer is **asked for nowhere and named
 in the answer**, one line each under `notOffered` (`tension: not offered by the service
 yet`). The answer's `asked` says which argument and values were sent and which rule above
-chose them, so a measured plan and a guessed one can be told apart.
+chose them, so a measured plan and a guessed one can be told apart. The panel prints its
+note under every sync, louder when the mail decided.
+
+**A failure describes the reply's shape, never its values.** A failure's `detail` is taken
+before the boundary above runs, so neither the allow list nor the address net has seen it,
+and it reaches the sync's answer. An unreadable reply is therefore described by its keys
+(identifiers only; a key with a space or an `@` is counted, never named), each content
+block's type and length, and whether that text parsed as JSON. The service's own words for
+a refusal are clipped to 400 characters and withheld whole when they carry an address. The
+panel repeats a detail only for a refused call and for the service saying no.
 
 ## Configuration
 
@@ -114,6 +126,11 @@ Both are set on the module's card in Admin (`client/src/components/admin/Saberra
 which is where the module's readiness link (`?setting=config`) lands. The same panel shows
 the connection (key set or not, address set or not, facts held) and holds **Sync now**.
 The key itself is never entered there: the panel links to Admin, Integrations.
+
+The panel saves **only the fields somebody edited**, over a fresh read of the stored config.
+A save that carried both would put this tab's stale copy of the untouched field over
+whatever another admin saved since, and on `apiUrl` that sends the next sync's key to the
+old host.
 
 One rule decides what counts as an https address: `httpsAddress` in `shared/modules.ts`.
 The listing's `validateConfig` refuses a save with it, the sync route refuses a call with

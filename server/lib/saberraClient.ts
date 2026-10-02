@@ -17,9 +17,22 @@
  *
  * That gap decides how this file is written. Everything about the transport is
  * asserted. Everything about the payload is READ DEFENSIVELY AND REPORTED: a
- * reply this does not understand comes back as `unreadable` with the raw text,
- * never as an empty list. An empty list and a reply we could not parse look
- * identical to a caller, and one of them means the sync is broken.
+ * reply this does not understand comes back as `unreadable`, never as an empty
+ * list. An empty list and a reply we could not parse look identical to a
+ * caller, and one of them means the sync is broken.
+ *
+ * ── A FAILURE DESCRIBES THE REPLY'S SHAPE, NEVER ITS VALUES ──────────────
+ *
+ * A failure's `detail` travels into the sync's answer and onto the steward's
+ * screen, and it is taken BEFORE `readVendorRecord` runs, so neither the allow
+ * list nor the address net has seen it. It used to be the first 400 characters
+ * of the raw reply. A verifier showed an unreadable role assignment reply
+ * arriving on screen carrying `Assignment Title` and `Role Holder`, the two
+ * fields the allow list drops on purpose because their values are people.
+ * So an unreadable reply is described by its keys, its content blocks' types
+ * and lengths, and whether their text parsed: enough to fix the reader, and
+ * nothing a person wrote. A vendor's error message is clipped and dropped
+ * whole when it carries an address, the rule every intake here holds.
  *
  * ── ASKING THE SERVICE WHAT IT TAKES ─────────────────────────────────────
  *
@@ -38,6 +51,7 @@
  * turns the payload half from a contract into a fact.
  */
 import { readEventStream } from "./saberraStream";
+import { carriesAnAddress } from "./saberraRecords";
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -66,6 +80,91 @@ export type ToolsResult = { ok: true; tools: ToolInfo[] } | CallFailure;
 
 /** Pages of `tools/list` read before stopping. A service with more is a service listing something else. */
 const MAX_TOOL_PAGES = 5;
+
+/** The longest detail a failure carries. */
+const DETAIL_MAX = 400;
+/** Keys named when a reply is described. The rest are counted. */
+const KEYS_NAMED = 12;
+/** Content blocks described one by one. The rest are counted. */
+const BLOCKS_NAMED = 5;
+/**
+ * A key named in a description: an identifier, never a label. `results` and
+ * `nextCursor` are structure and say where the rows were. A key with a space,
+ * an @ or any other punctuation (`Assignment Title`, a person's name, an
+ * address) is counted and never named.
+ */
+const NAMEABLE_KEY = /^[A-Za-z_$][A-Za-z0-9_$-]{0,39}$/;
+
+function clip(text: string): string {
+  return text.length > DETAIL_MAX ? `${text.slice(0, DETAIL_MAX)}…` : text;
+}
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+function keyList(o: Record<string, unknown>): string {
+  const all = Object.keys(o);
+  if (all.length === 0) return "none";
+  const named = all.filter((k) => NAMEABLE_KEY.test(k)).slice(0, KEYS_NAMED);
+  const rest = all.length - named.length;
+  if (named.length === 0) return `${plural(rest, "key")}, none named`;
+  return rest > 0 ? `${named.join(", ")}, and ${rest} more` : named.join(", ");
+}
+
+function shape(v: unknown): string {
+  if (v === null || v === undefined) return "empty";
+  if (typeof v === "string") return `a string of ${plural(v.length, "character")}`;
+  if (Array.isArray(v)) return `a list of ${plural(v.length, "item")}`;
+  if (typeof v !== "object") return `a ${typeof v}`;
+  return `an object with keys: ${keyList(v as Record<string, unknown>)}`;
+}
+
+function textShape(text: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return "not JSON";
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return `JSON with keys: ${keyList(parsed as Record<string, unknown>)}`;
+  }
+  return `JSON, ${shape(parsed)}`;
+}
+
+function blockShape(block: unknown): string {
+  if (!block || typeof block !== "object" || Array.isArray(block)) return shape(block);
+  const b = block as Record<string, unknown>;
+  const type = typeof b.type === "string" && NAMEABLE_KEY.test(b.type) ? b.type : "of no named type";
+  if (typeof b.text !== "string") return `${type}, carrying no text`;
+  return `${type}, ${plural(b.text.length, "character")}, ${textShape(b.text)}`;
+}
+
+/**
+ * A reply this could not read, described by its SHAPE and never by its values.
+ * The header's "A FAILURE DESCRIBES THE REPLY'S SHAPE" says why.
+ */
+export function describeReply(message: Record<string, unknown>): string {
+  const [where, v] = message.result !== undefined ? ["the result", message.result] : ["the message", message];
+  const parts = [`${where} was ${shape(v)}`];
+  const content = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>).content : undefined;
+  if (Array.isArray(content)) {
+    content.slice(0, BLOCKS_NAMED).forEach((block, i) => parts.push(`content block ${i + 1} is ${blockShape(block)}`));
+    if (content.length > BLOCKS_NAMED) parts.push(`${content.length - BLOCKS_NAMED} more blocks`);
+  }
+  return clip(parts.join("; "));
+}
+
+/**
+ * The service's own words for a refusal, clipped, and withheld whole when they
+ * carry an address. Withheld whole, never cleaned: the platform's intake rule.
+ */
+function vendorWords(message: unknown): string {
+  if (typeof message !== "string" || message.trim() === "") return "the service reported an error";
+  if (carriesAnAddress(message)) return "the service's message carried an email address, so it is not repeated here";
+  return clip(message.trim());
+}
 
 /** Both types, always. Their server answers 406 to a client that offers one. */
 function headers(token: string, sessionId?: string): Record<string, string> {
@@ -133,7 +232,7 @@ async function request(
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     });
   } catch (e) {
-    return { ok: false, why: "refused", detail: e instanceof Error ? e.message : String(e) };
+    return { ok: false, why: "refused", detail: clip(e instanceof Error ? e.message : String(e)) };
   }
   if (!res.ok) {
     return { ok: false, why: "refused", detail: `the service answered ${res.status}` };
@@ -142,18 +241,23 @@ async function request(
   const body = await res.text();
   const stream = readEventStream(body);
   if (stream.messages.length === 0) {
-    const detail = stream.unparsed.length > 0 ? stream.unparsed.join(" ").slice(0, 400) : "the reply carried no message";
+    const n = stream.unparsed.length;
+    const chars = stream.unparsed.reduce((sum, p) => sum + p.length, 0);
+    const detail =
+      n > 0
+        ? `the reply carried ${plural(n, "payload")} that ${n === 1 ? "was" : "were"} not JSON, ${plural(chars, "character")} in all`
+        : "the reply carried no message";
     return { ok: false, why: "unreadable", detail };
   }
 
   const first = stream.messages[0];
   if (!first || typeof first !== "object" || Array.isArray(first)) {
-    return { ok: false, why: "unreadable", detail: JSON.stringify(first).slice(0, 400) };
+    return { ok: false, why: "unreadable", detail: `the first message was ${shape(first)}` };
   }
   const msg = first as Record<string, unknown>;
   if (msg.error) {
-    const err = msg.error as Record<string, unknown>;
-    return { ok: false, why: "vendor-error", detail: String(err.message ?? "the service reported an error") };
+    const err = typeof msg.error === "object" ? (msg.error as Record<string, unknown>) : {};
+    return { ok: false, why: "vendor-error", detail: vendorWords(err.message) };
   }
   return { ok: true, message: msg };
 }
@@ -170,7 +274,7 @@ export async function callTool(
   const msg = answer.message;
   const payload = readRecords(msg.result);
   if (payload === null) {
-    return { ok: false, why: "unreadable", detail: JSON.stringify(msg.result ?? msg).slice(0, 400) };
+    return { ok: false, why: "unreadable", detail: describeReply(msg) };
   }
   return { ok: true, ...payload };
 }
@@ -191,7 +295,7 @@ export async function listTools(o: ClientOptions, sessionId: string): Promise<To
     if (!answer.ok) return answer;
     const page = readTools(answer.message.result);
     if (page === null) {
-      return { ok: false, why: "unreadable", detail: JSON.stringify(answer.message.result ?? answer.message).slice(0, 400) };
+      return { ok: false, why: "unreadable", detail: describeReply(answer.message) };
     }
     tools.push(...page.tools);
     cursor = page.cursor;

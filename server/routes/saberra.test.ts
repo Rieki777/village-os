@@ -39,6 +39,12 @@ const state = vi.hoisted(() => ({
   asked: [] as Record<string, unknown>[],
   /** What `tools/list` answers. The default lists nothing useful, so the plan falls back to the mail. */
   tools: { ok: true, tools: [] } as Record<string, unknown>,
+  /**
+   * The service's raw bytes per wire kind. A kind named here goes through the
+   * REAL `callTool` with a fetch that answers these bytes, so the reading under
+   * test is the client's own and never a stub's.
+   */
+  wire: {} as Record<string, string>,
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -56,14 +62,21 @@ vi.mock("../lib/secrets", () => ({
   secretValue: () => state.value,
 }));
 
-vi.mock("../lib/saberraClient", () => ({
-  openSession: async () => state.session,
-  listTools: async () => state.tools,
-  callTool: async (_c: unknown, _s: unknown, _t: unknown, args: Record<string, unknown>) => {
-    state.asked.push(args);
-    return state.call;
-  },
-}));
+vi.mock("../lib/saberraClient", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../lib/saberraClient")>();
+  return {
+    openSession: async () => state.session,
+    listTools: async () => state.tools,
+    callTool: async (c: Parameters<typeof real.callTool>[0], s: string, t: string, args: Record<string, unknown>) => {
+      state.asked.push(args);
+      const bytes = state.wire[String(args.kind)];
+      if (bytes !== undefined) {
+        return real.callTool({ ...c, fetchImpl: async () => new Response(bytes, { status: 200 }) }, s, t, args);
+      }
+      return state.call;
+    },
+  };
+});
 
 vi.mock("../lib/identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1", bornAt: "" }) }));
 
@@ -157,6 +170,7 @@ beforeEach(() => {
   state.pages = 0;
   state.asked = [];
   state.tools = { ok: true, tools: [] };
+  state.wire = {};
 });
 
 describe("who may cause a sync", () => {
@@ -434,5 +448,54 @@ describe("asking the service in its own names", () => {
     const r = await post("/api/saberra/sync");
     const assignment = (r.body.failures as { kind: string; label: string }[]).find((f) => f.kind === "roleAssignment");
     expect(assignment?.label).toBe("role assignment");
+  });
+});
+
+/**
+ * THE SYNC'S ANSWER IS A SURFACE TOO. A reply the client cannot read used to
+ * travel into `failures[].detail` word for word, before the allow list or the
+ * address net had seen it, and the panel printed it. Asking for
+ * `role_assignment` makes this the likely first live outcome: the service knows
+ * that name, answers real rows, and their shape has never been measured. The
+ * fixture names nobody real.
+ */
+describe("what a failed sync repeats", () => {
+  const ROWS = JSON.stringify({
+    results: [
+      {
+        id: "rec1",
+        fields: { "Assignment Title": "Jane Example - Treasurer", "Role Holder": "Jane Example", Contact: "jane@example.org" },
+      },
+    ],
+  });
+
+  it("NEVER REPEATS AN UNREADABLE ROLE ASSIGNMENT REPLY, its dropped fields or an address", async () => {
+    const bytes = `event: message\ndata: ${JSON.stringify({ result: { content: [{ type: "text", text: ROWS }] } })}\n\n`;
+    // The control on the fixture: the bytes DO carry all three.
+    for (const s of ["Assignment Title", "Jane Example", "jane@example.org"]) expect(bytes).toContain(s);
+    state.wire = { role_assignment: bytes };
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(200);
+    // The known positive: the role assignment failure IS in the answer, named,
+    // so the absences below are about what it says and never an empty list.
+    const failure = (r.body.failures as { kind: string; why: string; detail: string }[]).find((f) => f.kind === "roleAssignment");
+    expect(failure?.why).toBe("unreadable");
+    expect(failure?.detail).toContain("results");
+    const whole = JSON.stringify(r.body);
+    expect(whole).not.toContain("Assignment Title");
+    expect(whole).not.toContain("Role Holder");
+    expect(whole).not.toContain("Jane");
+    expect(whole).not.toContain("example.org");
+  });
+
+  it("never repeats prose with an address in it", async () => {
+    const prose = "Jane Example holds Treasurer (jane@example.org)";
+    state.wire = {
+      role_assignment: `event: message\ndata: ${JSON.stringify({ result: { content: [{ type: "text", text: prose }] } })}\n\n`,
+    };
+    const r = await post("/api/saberra/sync");
+    expect((r.body.failures as { kind: string }[]).some((f) => f.kind === "roleAssignment")).toBe(true);
+    expect(JSON.stringify(r.body)).not.toContain("example.org");
+    expect(JSON.stringify(r.body)).not.toContain("Jane");
   });
 });

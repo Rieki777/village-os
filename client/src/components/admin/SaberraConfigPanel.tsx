@@ -67,6 +67,21 @@ const WHY_WORDS: Record<FailureWhy, string> = {
   "vendor-error": "the service said no",
 };
 
+/**
+ * Whose detail is repeated on screen: a refusal's, which is a status or a
+ * network error, and the service's own words for saying no, which the server
+ * clips and withholds when they carry an address. An unreadable reply's detail
+ * is a description of the reply's shape, kept in the sync's answer for whoever
+ * fixes the reader and left off this screen, so a server change that ever let
+ * vendor text back into it would still not print it here.
+ */
+const DETAIL_SHOWN: Record<FailureWhy, boolean> = {
+  "no-session": false,
+  refused: true,
+  unreadable: false,
+  "vendor-error": true,
+};
+
 /** POST /api/saberra/sync, the parts this panel shows. */
 interface SyncResult {
   landed: number;
@@ -76,6 +91,8 @@ interface SyncResult {
   failures?: { kind: string; label?: string; why: string; detail: string }[];
   notOffered?: string[];
   addressesSeen?: { id: string; fields: string[] }[];
+  /** How the kinds were chosen. `note` is the only place a failed tools/list read is named. */
+  asked?: { argument: string; kinds: string[]; source: "schema" | "mail"; note: string };
 }
 
 /** "1 fact", "3 facts". */
@@ -142,8 +159,23 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
   }, [on, loadStatus]);
 
   const onSave = async () => {
-    const next = { apiUrl: apiUrl.trim(), dashboardUrl: dashboardUrl.trim() };
-    const refused = MODULES_BY_ID[MODULE_ID]?.validateConfig?.(next) ?? null;
+    /*
+     * ONLY THE FIELDS SOMEBODY EDITED. `save` re-reads the live config and
+     * spreads this over it, and that re-read protects nothing if the patch
+     * names both keys: an untouched field would carry this tab's stale copy
+     * over whatever another admin saved since. On the service address, that
+     * sends the next sync's key to the old host. A verifier found it.
+     */
+    const patch: Record<string, string> = {
+      ...(apiDraft !== null && { apiUrl: apiDraft.trim() }),
+      ...(dashDraft !== null && { dashboardUrl: dashDraft.trim() }),
+    };
+    if (Object.keys(patch).length === 0) {
+      setProblem("Nothing has changed, so there is nothing to save.");
+      return;
+    }
+    // The merged result is what the server validates, so the browser does too.
+    const refused = MODULES_BY_ID[MODULE_ID]?.validateConfig?.({ ...(config ?? {}), ...patch }) ?? null;
     if (refused) {
       setProblem(refused);
       return;
@@ -151,7 +183,7 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
     setProblem(null);
     setSaving(true);
     try {
-      const ok = await save(next);
+      const ok = await save(patch);
       if (ok) {
         // Back to showing what is stored, which `save` has just replaced.
         setApiDraft(null);
@@ -334,6 +366,11 @@ function SyncAnswer({ result }: { result: SyncResult }) {
   const notOffered = result.notOffered ?? [];
   const addresses = result.addressesSeen ?? [];
   const nothing = result.landed === 0 && result.facts === 0 && failures.length === 0;
+  const asked = result.asked && typeof result.asked.note === "string" ? result.asked : null;
+  // A plan the mail decided is a guess, and a plan that asked for nothing
+  // explains every empty line below it. Both read louder than a measured plan.
+  const guessed =
+    asked !== null && (asked.source === "mail" || !Array.isArray(asked.kinds) || asked.kinds.length === 0);
 
   return (
     <div className="mt-3 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-2" role="status">
@@ -347,8 +384,9 @@ function SyncAnswer({ result }: { result: SyncResult }) {
       {failures.length > 0 && (
         <ul className="text-red-700 space-y-1">
           {failures.map((f) => (
-            <li key={`${f.kind}-${f.detail}`}>
-              {f.label ?? f.kind}: {WHY_WORDS[f.why as FailureWhy] ?? "it failed"} ({f.detail})
+            <li key={`${f.kind}-${f.why}`}>
+              {f.label ?? f.kind}: {WHY_WORDS[f.why as FailureWhy] ?? "it failed"}
+              {DETAIL_SHOWN[f.why as FailureWhy] && f.detail ? ` (${f.detail})` : ""}
             </li>
           ))}
         </ul>
@@ -374,6 +412,7 @@ function SyncAnswer({ result }: { result: SyncResult }) {
           {notOffered.map((line) => <li key={line}>{line}</li>)}
         </ul>
       )}
+      {asked && <p className={guessed ? "text-amber-800" : "text-xs text-gray-500"}>{asked.note}</p>}
       {addresses.length > 0 && (
         <p className="text-amber-800">
           {count(addresses.length, "record")} carried an email address, and those fields were

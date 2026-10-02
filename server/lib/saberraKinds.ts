@@ -31,6 +31,10 @@
  *   1. A property carrying an enum that names any of our kinds is the kind
  *      argument, and the enum decides what is offered. We send the enum's own
  *      spelling, so `Role Assignments` in their list is what goes back to them.
+ *      When any property has a familiar argument name, only those are read
+ *      here: a `sort_by` listing "role" among its values is a sort order, and
+ *      taking it sent `{ sort_by: "role" }` with no kind at all and told the
+ *      steward that circles were not offered, which the service never said.
  *   2. Otherwise, a property with a familiar argument name is the kind
  *      argument, and the mail decides what is offered.
  *   3. Otherwise, or when `tools/list` failed or carried no schema, the
@@ -202,9 +206,13 @@ export function planKinds(tools: readonly ToolInfo[] | null, failure?: string): 
     );
   }
 
-  // Rule 1: an enum that names one of our kinds. A familiar argument name wins
-  // a tie, so a schema with two enums picks the one that reads like a kind.
-  const withEnum = Object.keys(props)
+  // Rule 1: an enum that names one of our kinds. Where any property carries a
+  // familiar argument name, only those are candidates, so a filter or a sort
+  // order that happens to list "role" never outranks a plain `kind`. Among
+  // candidates the believed order breaks a tie.
+  const familiar = Object.keys(props).filter((name) => rank(name) < ARGUMENT_NAMES.length);
+  const candidates = familiar.length > 0 ? familiar : Object.keys(props);
+  const withEnum = candidates
     .map((name) => ({ name, values: acceptedValues(props[name], schema) }))
     .filter((p): p is { name: string; values: string[] } => p.values !== null && p.values.some(namesOneOfOurs))
     .sort((a, b) => rank(a.name) - rank(b.name));
