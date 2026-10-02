@@ -94,6 +94,10 @@ describe("the mode table", () => {
   it("lets only the modes that need readers make tool calls", () => {
     expect(ASSISTANT_MODES.proposal.toolCalls).toBe(0);
     expect(ASSISTANT_MODES.concierge.toolCalls).toBe(0);
+    // The journal guide reads a member's private entries, handed to it
+    // prefetched. A reader it could call would be a second road to data.
+    expect(ASSISTANT_MODES.journal.toolCalls).toBe(0);
+    expect(ASSISTANT_MODES.journal.audience).toBe("member");
     expect(ASSISTANT_MODES.studio.toolCalls).toBeGreaterThan(0);
   });
 

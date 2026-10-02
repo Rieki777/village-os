@@ -939,8 +939,13 @@ button, a, [role="button"], input, textarea, select, summary {
 :root {
   --circle-peek-h: 4.75rem;
 }
-:root:has([data-circle-peek]) [data-mobile-fab] {
-  translate: 0 calc(-1 * (var(--circle-peek-h) + 0.5rem));
+/* Phones only, like the peek. The peek is `md:hidden` but stays in the DOM,
+   so without this bound `:has()` still matched on a desk and lifted the
+   shortcuts button (which now shows at every width) over empty space. */
+@media (max-width: 767px) {
+  :root:has([data-circle-peek]) [data-mobile-fab] {
+    translate: 0 calc(-1 * (var(--circle-peek-h) + 0.5rem));
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-mobile-fab] {

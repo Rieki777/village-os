@@ -1162,6 +1162,28 @@ export const MODULES: ModuleDef[] = [
     apiPrefixes: ["/api/intents"],
   },
   {
+    id: "journal",
+    tier: "included",
+    // Entries are one person's words about their own life, and feedback names
+    // its recipient. Nothing here is village content: every row is a member's.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Journal",
+    description:
+      "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+    requires: [],
+    // The guide reads the gratitude a member received lately, and the evening
+    // practice asks who they would like to thank. Better with it, whole without it.
+    recommends: ["gratitude"],
+    capabilities: [],
+    variableKeys: ["journal.pulse_floor"],
+    apiPrefixes: ["/api/journal"],
+    // No openStateCheck, on purpose. That hook is for modules holding VALUE
+    // somebody is owed, and a journal holds none. Off hides the surface; the
+    // entries stay in their tables and come back intact when it is turned on.
+  },
+  {
     id: "governance",
     tier: "included",
     dataClass: "member-pii",

@@ -132,6 +132,7 @@ import { register as registerSitePullRoutes } from "./routes/sitePull";
 import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
+import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -18888,6 +18889,7 @@ ${inner}
   registerLandRoutes(app, { isAdmin, authedUser, guardCapability, getPool, uploadsDir: UPLOADS_DIR });
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
+  registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
    * Put a redemption to the village, with the setup every village-wide vote
@@ -26623,6 +26625,7 @@ ${inner}
       portraits: await portraitsForMember(pool, user.id),
       portraitBudget: await grantsForMember(pool, user.id),
       gratitudeDistributions: await distributionsForMember(pool, user.id),
+      journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

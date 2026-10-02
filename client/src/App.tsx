@@ -128,6 +128,7 @@ const PAGE_TITLES: Record<string, string> = {
   // place: the whole village's record on one page.
   "/photographs": "Every photograph",
   "/admin": "Village settings",
+  "/journal": "Journal",
 };
 
 function PageTitle() {
@@ -270,6 +271,7 @@ const Modules = lazyPage(() => import("./pages/Modules"));
 const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
+const Journal = lazyPage(() => import("./pages/Journal"));
 
 /**
  * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
@@ -401,6 +403,8 @@ function Router() {
       <Route path="/propose" component={Propose} />
       <Route path="/visit" component={Visit} />
       <Route path="/gratitude" component={GratitudeWall} />
+      {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
+      <Route path="/journal" component={Journal} />
       <Route path="/work-with-us" component={WorkWithUs} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

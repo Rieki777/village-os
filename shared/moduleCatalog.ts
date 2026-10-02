@@ -397,6 +397,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 320,
     emblem: "Handshake",
   },
+  journal: {
+    promise: "A private practice for each member, and the few numbers a village may read back from it.",
+    benefits: [
+      "Morning and evening practices, light or deep, plus a debrief after calls and an open page",
+      "A guide that asks one question at a time and checks it heard you right",
+      "A weekly pulse the village reads as numbers, never as words",
+      "Feedback that arrives unsigned, in a weekly batch, only to people who asked for it",
+    ],
+    forWhom: "Teams that want to notice how people are really doing before it becomes a crisis.",
+    setupSummary: "Nothing to set up. The pulse shows from the first answer, and the village can raise that floor.",
+    dataSummary: "Each member's own entries, readable by nobody else, admins included; pulse numbers; and feedback between members who opted in.",
+    hue: 28,
+    emblem: "NotebookPen",
+  },
   hypha: {
     promise: "Your DAO's real numbers from Base, on your own pages.",
     benefits: [

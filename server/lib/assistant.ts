@@ -39,7 +39,8 @@ export type AssistantMode =
   | "launch"
   | "organize"
   | "studio"
-  | "synthesize";
+  | "synthesize"
+  | "journal";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -65,6 +66,11 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   organize: { audience: "admin", dailyBudget: 50, maxTokens: 800, toolCalls: 2 },
   studio: { audience: "admin", dailyBudget: 150, maxTokens: 1600, toolCalls: 4 },
   synthesize: { audience: "admin", dailyBudget: 25, maxTokens: 2000, toolCalls: 0 },
+  // The journal's guide and its feedback shaping (server/routes/journal.ts).
+  // Its own bucket, so an evening of journalling cannot spend the concierge's
+  // day. No tools: the member's own data arrives prefetched and fenced, and
+  // the guide has nothing else to reach for.
+  journal: { audience: "member", dailyBudget: 150, maxTokens: 700, toolCalls: 0 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */
