@@ -8345,8 +8345,12 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
          nobody could see and the journey simply stopped. Nothing waits
          under the sheet at a finish: the walk offer stays down after one
          (guideAffordance). The sheet is the visitor's from here, so
-         JSHEET lets go of it and ASK MAIA puts it away like any other time. */
-      JSHEET=false;
+         JSHEET lets go of it and ASK MAIA puts it away like any other time.
+         The walk's own mark comes off here all the same, because jSheetOff
+         was the line that took it off and this ending no longer calls it:
+         left on, a short phone kept the walk's capped sheet with her two
+         chips hidden long after the walk had finished. */
+      JSHEET=false;document.body.classList.remove('jwalk');
       GUIDE.finish();   // it ran to the end, so there is nothing to resume
       if(logged&&typeof endWalk==='function')endWalk(true,at);
       const route=SITE_ROUTES[id]||'/';
