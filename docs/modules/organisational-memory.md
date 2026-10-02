@@ -15,9 +15,10 @@ connection: its own address at the service and its own token.
 
 ## What it does
 
-- A steward presses sync. This village **pulls** from the service; the service never
-  pushes to us. That is why the listing declares `on-demand` liveness: silence between
-  calls is normal and is not a failure.
+- A steward presses **Sync now** on the module's card in Admin (Modules, Organisational
+  Memory, Settings). This village **pulls** from the service; the service never pushes
+  to us. That is why the listing declares `on-demand` liveness: silence between calls is
+  normal and is not a failure.
 - What comes back is sorted into two halves and only one of them can move today.
 - Suggestions land in the **review queue** that already exists. A steward reads, edits,
   accepts or refuses them, and the change limit, the preview and the publish step apply
@@ -32,7 +33,7 @@ The split is by **personal data**, not by topic.
 
 | Half | Carries | State |
 |---|---|---|
-| structure | circles, roles, role assignments, tensions, risks | flows today |
+| structure | circles, roles, role assignments; tensions and risks once the service offers them | flows today |
 | people | anything that names somebody | gated, see below |
 
 A module whose domain holds personal data is `member-pii`, and behind a vendor driver
@@ -68,6 +69,38 @@ raw vendor record.
 sounds like a label and was the vendor's people-to-seats mapping. It was in the allow list
 for a day and nothing caught it: the address net looks for an address and that is a name.
 
+## What a sync asks for
+
+This village's kind ids are its own and stay so: `circle`, `role`, `roleAssignment`,
+`tension`, `risk` (the allow list keys in `saberraRecords.ts`). The service names one of
+them differently. Its mail of 2026-09-24 says `list_records` covers "Circles, Roles, and
+Role Assignments", and its mail of 2026-09-28 says its founder "called list_records on
+role_assignment". So:
+
+| Ours | Sent to the service | Offered today |
+|---|---|---|
+| `circle` | `circle` | yes |
+| `role` | `role` | yes |
+| `roleAssignment` | `role_assignment` | yes |
+| `tension` | `tension` | not yet |
+| `risk` | `risk` | not yet |
+
+**The argument the kind travels under is not measured.** So before the first
+`list_records`, a sync reads the service's MCP `tools/list`, and `server/lib/saberraKinds.ts`
+reads `list_records`' `inputSchema`:
+
+1. A property carrying an enum that names one of our kinds is the kind argument, and the
+   enum decides what is offered. The enum's own spelling is what gets sent.
+2. Otherwise a familiar argument name (`kind`, `record_type`, `type`, `table` and a few
+   more) is the kind argument, and the table above decides what is offered.
+3. Otherwise, or when `tools/list` fails or carries no schema, the argument is `kind` and
+   the table decides.
+
+A kind this village holds and the service does not offer is **asked for nowhere and named
+in the answer**, one line each under `notOffered` (`tension: not offered by the service
+yet`). The answer's `asked` says which argument and values were sent and which rule above
+chose them, so a measured plan and a guessed one can be told apart.
+
 ## Configuration
 
 `module_settings.config`:
@@ -76,6 +109,15 @@ for a day and nothing caught it: the address net looks for an address and that i
 |---|---|
 | `apiUrl` | the service's address for THIS village. Must be https. The sync sends the village's sealed credential here. |
 | `dashboardUrl` | where the module's link out to the service opens. |
+
+Both are set on the module's card in Admin (`client/src/components/admin/SaberraConfigPanel.tsx`),
+which is where the module's readiness link (`?setting=config`) lands. The same panel shows
+the connection (key set or not, address set or not, facts held) and holds **Sync now**.
+The key itself is never entered there: the panel links to Admin, Integrations.
+
+One rule decides what counts as an https address: `httpsAddress` in `shared/modules.ts`.
+The listing's `validateConfig` refuses a save with it, the sync route refuses a call with
+it, and the panel refuses in the browser by running that same `validateConfig`.
 
 Secret slot: `sera_api_secret`, held in the village's own secret store
 (`server/lib/secrets.ts`). The environment fallback name is `SERA_API_SECRET`.
@@ -96,14 +138,12 @@ for a seat, and that is not a steward's question.
 
 ## What it does not do yet
 
-- **Circles cannot be proposed.** `circle.proposed` is an accepted kind, the review queue
-  runs it through the *seat* reader, and `DraftOp` has no `create_circle`, so a circle
-  proposal accepted today would become a seat named after the circle. Circles ride as
-  stored detail instead, and every held one is named in the sync's answer.
+- **Tensions and risks are not read.** The service does not offer them yet, so a sync
+  does not ask, and says so per kind. They will be asked for the day the service's schema
+  lists them.
 - **Nothing is written back to the service.** The vendor's structure-write tools exist and
   no code here calls them.
 - **Seatings are not proposed.** That is the people half.
-- **No screen calls the sync.** It is reachable by API only.
 
 ## Turning it off
 

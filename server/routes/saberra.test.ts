@@ -35,6 +35,10 @@ const state = vi.hoisted(() => ({
   landedPayloads: [] as Record<string, unknown>[],
   batchIds: [] as string[],
   pages: 0,
+  /** Every argument list `callTool` was handed, in order. */
+  asked: [] as Record<string, unknown>[],
+  /** What `tools/list` answers. The default lists nothing useful, so the plan falls back to the mail. */
+  tools: { ok: true, tools: [] } as Record<string, unknown>,
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -54,7 +58,11 @@ vi.mock("../lib/secrets", () => ({
 
 vi.mock("../lib/saberraClient", () => ({
   openSession: async () => state.session,
-  callTool: async () => state.call,
+  listTools: async () => state.tools,
+  callTool: async (_c: unknown, _s: unknown, _t: unknown, args: Record<string, unknown>) => {
+    state.asked.push(args);
+    return state.call;
+  },
 }));
 
 vi.mock("../lib/identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1", bornAt: "" }) }));
@@ -147,6 +155,8 @@ beforeEach(() => {
   state.landedPayloads = [];
   state.batchIds = [];
   state.pages = 0;
+  state.asked = [];
+  state.tools = { ok: true, tools: [] };
 });
 
 describe("who may cause a sync", () => {
@@ -360,5 +370,69 @@ describe("a sync that works", () => {
     };
     const r = await post("/api/saberra/sync");
     expect(r.body.unmapped).toContain("Some New Field");
+  });
+});
+
+/**
+ * WHAT A SYNC ASKS FOR. The service calls a role assignment `role_assignment`
+ * and offers no tensions or risks yet (their mails of 2026-09-24 and 09-28).
+ * An earlier version sent our own id `roleAssignment` and asked for all five.
+ */
+describe("asking the service in its own names", () => {
+  const sentKinds = (arg = "kind") => state.asked.map((a) => a[arg]);
+
+  it("ASKS FOR role_assignment, and never for a kind the service does not offer", async () => {
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(200);
+    // The known positive first: the three offered kinds were asked for, so the
+    // absences below are about which kinds, never about an empty loop.
+    expect(sentKinds()).toEqual(["circle", "role", "role_assignment"]);
+    expect(sentKinds()).not.toContain("roleAssignment");
+    expect(sentKinds()).not.toContain("tension");
+    expect(sentKinds()).not.toContain("risk");
+  });
+
+  it("NAMES EACH KIND IT HOLDS AND DID NOT ASK FOR, as its own line", async () => {
+    const r = await post("/api/saberra/sync");
+    expect(r.body.notOffered).toEqual([
+      "tension: not offered by the service yet",
+      "risk: not offered by the service yet",
+    ]);
+    expect(r.body.asked.source).toBe("mail");
+  });
+
+  it("uses the argument and the values the service's schema declares", async () => {
+    state.tools = {
+      ok: true,
+      tools: [
+        {
+          name: "list_records",
+          inputSchema: {
+            type: "object",
+            properties: { record_type: { type: "string", enum: ["circle", "role", "role_assignment", "tension"] } },
+          },
+        },
+      ],
+    };
+    const r = await post("/api/saberra/sync");
+    expect(sentKinds("record_type")).toEqual(["circle", "role", "role_assignment", "tension"]);
+    expect(sentKinds("kind").every((v) => v === undefined)).toBe(true);
+    expect(r.body.notOffered).toEqual(["risk: not offered by the service yet"]);
+    expect(r.body.asked).toMatchObject({ argument: "record_type", source: "schema" });
+  });
+
+  it("still syncs when tools/list fails, and says why the plan was guessed", async () => {
+    state.tools = { ok: false, why: "vendor-error", detail: "Method not found" };
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(200);
+    expect(sentKinds()).toEqual(["circle", "role", "role_assignment"]);
+    expect(String(r.body.asked.note)).toContain("Method not found");
+  });
+
+  it("names a failure by our kind and by the words a steward reads", async () => {
+    state.call = { ok: false, why: "vendor-error", detail: "scope does not permit this tool" };
+    const r = await post("/api/saberra/sync");
+    const assignment = (r.body.failures as { kind: string; label: string }[]).find((f) => f.kind === "roleAssignment");
+    expect(assignment?.label).toBe("role assignment");
   });
 });

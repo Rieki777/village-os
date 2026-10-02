@@ -38,6 +38,15 @@
  * an earlier version stored every fact with a null `entity_id` while the panel
  * asked by seat id, so it was empty for every seat forever and no test noticed,
  * because each half was correct on its own.
+ *
+ * ── A SYNC ASKS FOR THE SERVICE'S NAMES, AND ONLY WHAT IT OFFERS ─────────
+ *
+ * This village's kind ids are its own (`roleAssignment`); the service calls
+ * that kind `role_assignment` and does not offer tensions or risks yet. Before
+ * the first `list_records` the sync reads the service's `tools/list`, and
+ * `saberraKinds.ts` turns that into which kinds to ask for, under which
+ * argument. A kind this village holds and the service does not offer is a
+ * named line in the answer (`notOffered`), never an absence.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -45,11 +54,12 @@ import { instanceIdentity } from "../lib/identity";
 import { landProposal } from "../lib/externalProposals";
 import { listOrgRoles } from "../lib/orgChart";
 import { moduleConfig } from "../lib/modules";
-import { MODULES_BY_ID } from "@shared/modules";
+import { MODULES_BY_ID, httpsAddress } from "@shared/modules";
 import { readConnection } from "../lib/saberraConnection";
 import { splitStreams } from "../lib/saberraStreams";
 import { proposeStructure } from "../lib/saberraProposals";
-import { callTool, openSession } from "../lib/saberraClient";
+import { callTool, listTools, openSession } from "../lib/saberraClient";
+import { KIND_LABEL, planKinds } from "../lib/saberraKinds";
 import { secretStatus, secretValue, villageSecretsConfigured } from "../lib/secrets";
 import { factsForEntity, moduleFactCount, upsertFacts } from "../repos/moduleFacts";
 import type { VendorRecord } from "../lib/saberraProposals";
@@ -59,8 +69,6 @@ type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
 const MODULE_ID = "saberra";
 const SECRET_KEY = "sera_api_secret";
-/** Their own kinds, and the only ones a sync asks for. */
-const KINDS: readonly SaberraRecordKind[] = ["circle", "role", "roleAssignment", "tension", "risk"];
 /** `landProposal` refuses an identifier over this, so it is clipped rather than refused. */
 const ID_MAX = 64;
 /** Their page ceiling. More than this many pages is a village, not a sync. */
@@ -70,18 +78,13 @@ const MAX_PAGES = 20;
  * The service's address for THIS village, from the store.
  *
  * An https scheme is required and checked with a real parse, because the
- * village's key is about to be sent to whatever comes back from here.
+ * village's key is about to be sent to whatever comes back from here. The rule
+ * is `httpsAddress`, the same one the module's config validator refuses a save
+ * with, so an address that saved is an address this will call.
  */
 function serviceUrl(): string | null {
   const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
-  const raw = typeof cfg.apiUrl === "string" ? cfg.apiUrl.trim() : "";
-  if (raw === "") return null;
-  try {
-    const u = new URL(raw);
-    return u.protocol === "https:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
+  return httpsAddress(cfg.apiUrl);
 }
 
 /** Read one vendor record into the shape the boundary expects, believing nothing. */
@@ -149,20 +152,26 @@ export function register(app: Express, deps: Deps): void {
       return;
     }
 
+    // What to ask for, read off the service's own schema where it gives one.
+    // A failed read is not a failed sync: the plan falls back to the mail and
+    // its note says so.
+    const listing = await listTools(client, sessionId);
+    const plan = listing.ok ? planKinds(listing.tools) : planKinds(null, listing.detail);
+
     const records: VendorRecord[] = [];
-    const failures: { kind: string; why: string; detail: string }[] = [];
+    const failures: { kind: string; label: string; why: string; detail: string }[] = [];
     const truncated: string[] = [];
-    for (const kind of KINDS) {
+    for (const { kind, wire } of plan.ask) {
       let cursor: string | null = null;
       let pages = 0;
       do {
         const r = await callTool(client, sessionId, "list_records", {
-          kind,
+          [plan.argument]: wire,
           limit: 100,
           ...(cursor ? { cursor } : {}),
         });
         if (!r.ok) {
-          failures.push({ kind, why: r.why, detail: r.detail });
+          failures.push({ kind, label: KIND_LABEL[kind], why: r.why, detail: r.detail });
           break;
         }
         for (const raw of r.records) {
@@ -173,8 +182,9 @@ export function register(app: Express, deps: Deps): void {
         pages += 1;
         // A cursor still in hand at the ceiling means we stopped early, and a
         // steward is told rather than handed a smaller number as a success.
+        // Named the way the steward reads a kind, since the panel prints it.
         if (cursor && pages >= MAX_PAGES) {
-          truncated.push(kind);
+          truncated.push(KIND_LABEL[kind]);
           break;
         }
       } while (cursor);
@@ -272,6 +282,8 @@ export function register(app: Express, deps: Deps): void {
       addressesSeen: reading.addressesSeen,
       truncated,
       failures,
+      notOffered: plan.notOffered,
+      asked: { argument: plan.argument, kinds: plan.ask.map((a) => a.wire), source: plan.source, note: plan.note },
     });
   });
 

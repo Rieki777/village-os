@@ -21,6 +21,16 @@
  * never as an empty list. An empty list and a reply we could not parse look
  * identical to a caller, and one of them means the sync is broken.
  *
+ * ── ASKING THE SERVICE WHAT IT TAKES ─────────────────────────────────────
+ *
+ * Their mail of 2026-09-28 says their founder "called list_records on
+ * role_assignment", which is the service's own name for a kind this village
+ * calls `roleAssignment`. The NAME OF THE ARGUMENT that kind travels under has
+ * never been measured. So `listTools` reads the MCP `tools/list` answer, whose
+ * `inputSchema` per tool is the service saying what it accepts, and
+ * `saberraKinds.ts` decides what to ask from that. This file only fetches it
+ * and reports a reply it cannot read, exactly as `callTool` does.
+ *
  * ── WHY `fetchImpl` IS AN ARGUMENT ───────────────────────────────────────
  *
  * So every case below can be exercised without a token and without a network.
@@ -39,9 +49,23 @@ export interface ClientOptions {
   timeoutMs?: number;
 }
 
+/** Every way a call comes back with nothing, each one named. */
+export type CallFailure = { ok: false; why: "no-session" | "refused" | "unreadable" | "vendor-error"; detail: string };
+
 export type CallResult =
   | { ok: true; records: Record<string, unknown>[]; cursor: string | null }
-  | { ok: false; why: "no-session" | "refused" | "unreadable" | "vendor-error"; detail: string };
+  | CallFailure;
+
+/** One tool as the service lists it. The schema is the service's, believed by nobody here. */
+export interface ToolInfo {
+  name: string;
+  inputSchema: unknown;
+}
+
+export type ToolsResult = { ok: true; tools: ToolInfo[] } | CallFailure;
+
+/** Pages of `tools/list` read before stopping. A service with more is a service listing something else. */
+const MAX_TOOL_PAGES = 5;
 
 /** Both types, always. Their server answers 406 to a client that offers one. */
 function headers(token: string, sessionId?: string): Record<string, string> {
@@ -88,23 +112,25 @@ export async function openSession(o: ClientOptions): Promise<string | null> {
 }
 
 /**
- * One tool call, read as far as it can honestly be read.
+ * One JSON-RPC request inside a session, read down to its first message.
  *
  * The layers are peeled one at a time and each failure is named, because
- * "the sync returned nothing" is the report that wastes an afternoon.
+ * "the sync returned nothing" is the report that wastes an afternoon. What the
+ * message MEANS is the caller's business.
  */
-export async function callTool(
+async function request(
   o: ClientOptions,
   sessionId: string,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<CallResult> {
+  id: number,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<{ ok: true; message: Record<string, unknown> } | CallFailure> {
   let res: Response;
   try {
     res = await o.fetchImpl(o.baseUrl, {
       method: "POST",
       headers: headers(o.token, sessionId),
-      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: args } }),
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     });
   } catch (e) {
     return { ok: false, why: "refused", detail: e instanceof Error ? e.message : String(e) };
@@ -120,17 +146,73 @@ export async function callTool(
     return { ok: false, why: "unreadable", detail };
   }
 
-  const msg = stream.messages[0] as Record<string, unknown>;
+  const first = stream.messages[0];
+  if (!first || typeof first !== "object" || Array.isArray(first)) {
+    return { ok: false, why: "unreadable", detail: JSON.stringify(first).slice(0, 400) };
+  }
+  const msg = first as Record<string, unknown>;
   if (msg.error) {
     const err = msg.error as Record<string, unknown>;
     return { ok: false, why: "vendor-error", detail: String(err.message ?? "the service reported an error") };
   }
+  return { ok: true, message: msg };
+}
 
+/** One tool call, read as far as it can honestly be read. */
+export async function callTool(
+  o: ClientOptions,
+  sessionId: string,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<CallResult> {
+  const answer = await request(o, sessionId, 2, "tools/call", { name: tool, arguments: args });
+  if (!answer.ok) return answer;
+  const msg = answer.message;
   const payload = readRecords(msg.result);
   if (payload === null) {
     return { ok: false, why: "unreadable", detail: JSON.stringify(msg.result ?? msg).slice(0, 400) };
   }
   return { ok: true, ...payload };
+}
+
+/**
+ * The tools the service offers, each with the input schema it declares.
+ *
+ * A reply this cannot read is `unreadable`, never an empty list, for the reason
+ * the whole file gives: "the service offers nothing" and "we could not read
+ * what it offers" would otherwise be the same answer.
+ */
+export async function listTools(o: ClientOptions, sessionId: string): Promise<ToolsResult> {
+  const tools: ToolInfo[] = [];
+  let cursor: string | null = null;
+  let pages = 0;
+  do {
+    const answer = await request(o, sessionId, 3, "tools/list", cursor ? { cursor } : {});
+    if (!answer.ok) return answer;
+    const page = readTools(answer.message.result);
+    if (page === null) {
+      return { ok: false, why: "unreadable", detail: JSON.stringify(answer.message.result ?? answer.message).slice(0, 400) };
+    }
+    tools.push(...page.tools);
+    cursor = page.cursor;
+    pages += 1;
+  } while (cursor && pages < MAX_TOOL_PAGES);
+  return { ok: true, tools };
+}
+
+/** A `tools/list` result, or null when it is not one. A tool with no name is skipped. */
+function readTools(result: unknown): { tools: ToolInfo[]; cursor: string | null } | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const r = result as Record<string, unknown>;
+  if (!Array.isArray(r.tools)) return null;
+  const tools: ToolInfo[] = [];
+  for (const item of r.tools) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const t = item as Record<string, unknown>;
+    if (typeof t.name !== "string" || t.name.trim() === "") continue;
+    tools.push({ name: t.name, inputSchema: t.inputSchema ?? null });
+  }
+  return { tools, cursor: asCursor(r.nextCursor ?? r.cursor) };
 }
 
 /**
