@@ -2047,13 +2047,13 @@ const SCENE={
       circle:"Land",modules:[["health","/village-health"]],
       blurb:"The surveyors marked it 'possible.' The masterplan's own note: springs need a professional to confirm, or to find new ones. A mystery with coordinates."},
     {key:"ridgeA",name:"Ridge Hamlet North",archetype:"homes",district:"ridge",x:1080,y:878,phase:2,state:"building",fund:.72,
-      circle:"Building",modules:[["Crowdpool","/contribute"],["quests","/quests"]],
+      circle:"Building",modules:[["Crowdpool","/campaigns"],["quests","/quests"]],
       blurb:"First walls rising on the ridge road. The crowdpool is 72% of the way to a roof."},
     {key:"ridgeB",name:"Ridge Hamlet South",archetype:"homes",district:"ridge",x:1195,y:978,phase:2,state:"funding",fund:.35,
-      circle:"Building",modules:[["Crowdpool","/contribute"]],
+      circle:"Building",modules:[["Crowdpool","/campaigns"]],
       blurb:"Staked and dreamed. Pooled resources gather; the forest holds the site till then."},
     {key:"sanctuary",name:"The Sanctuary",archetype:"dome",district:"sanctuary",x:1270,y:1108,phase:2,state:"funding",fund:.18,
-      circle:"Healing",modules:[["forum","/forum"],["Crowdpool","/contribute"]],
+      circle:"Healing",modules:[["forum","/forum"],["Crowdpool","/campaigns"]],
       blurb:"Hot pools, cold plunge, a dome for stillness. The healing heart, still gathering."},
     {key:"guest",name:"Guest Lodge",archetype:"hall",district:"grove",x:1560,y:1120,phase:3,state:"blueprint",
       circle:"Community",modules:[["stay","/stay"]],
@@ -7818,6 +7818,27 @@ window.realRoute=realRoute;
    target is checked against client/src/App.tsx at patch time. */
 const LEGACY_ROUTES={'/stays':'/stay','/health':'/village-health','/products':'/contribute','/exchange':'/wallet'};
 window.LEGACY_ROUTES=LEGACY_ROUTES;
+/* TWO DOORS WHOSE ROUTE IS WRONG FOR THEIR NAME, keyed on the exact pair a
+   published scene carries, label folded, route as stored. Both reached
+   visitors on 2026-10-01:
+     Governance|/tools    The Council Fire's Governance door opened the tools
+                          hub. DOOR_CENSUS_2026-08-13 row 3 already moved it
+                          to /governance and the seed says so, but the
+                          published scene predates the census and keeps the
+                          old pair, and /tools is served, so the alias table
+                          above (which heals only routes the site does not
+                          serve) never touched it.
+     Crowdpool|/products  Ridge Hamlet North and South and the Sanctuary.
+                          /products is not served and fell through to
+                          /contribute, the generic payments page. The site's
+                          crowdpool is /campaigns (App.tsx routes it to the
+                          Crowdpool page). Keyed with the label because the
+                          Market's Payments & Donations shares /products and
+                          rightly lands on /contribute.
+   An exact pair and nothing looser, so a founder who binds either label to
+   any other route keeps it. */
+const DOOR_PAIR_FIX={'governance|/tools':'/governance','crowdpool|/products':'/campaigns'};
+window.DOOR_PAIR_FIX=DOOR_PAIR_FIX;
 /* OWN KEYS ONLY. Every table in this door block is a plain object literal,
    so every name on Object.prototype used to answer a lookup in it, and all
    FOUR of them are indexed with a string from a published scene:
@@ -7850,8 +7871,10 @@ function bindDoor(label,route){
   const byName=Object.keys(MODULES).find(k=>MODULES[k].name.toLowerCase()===l.toLowerCase());
   if(byName)return[byName,MODULES[byName].route];
   const bare=r.split('?')[0].split('#')[0];
+  const pair=ownAt(DOOR_PAIR_FIX,l.toLowerCase()+'|'+bare);
   const alias=ownAt(LEGACY_ROUTES,bare);
-  if(!realRoute(r)&&alias)r=alias;
+  if(pair)r=pair;
+  else if(!realRoute(r)&&alias)r=alias;
   const byRoute=r&&Object.keys(MODULES).find(k=>MODULES[k].route.split('?')[0]===r.split('?')[0]);
   if(byRoute)return[byRoute,MODULES[byRoute].route];
   const rr=realRoute(r);

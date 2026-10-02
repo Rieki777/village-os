@@ -471,3 +471,70 @@ describe("the seats, once the village has said which roles it keeps", () => {
     expect(m.uncaught).toEqual([]);
   });
 });
+
+/**
+ * TWO DOORS GO WHERE THEIR NAMES SAY (F34).
+ *
+ * The published scene (version 6) predates DOOR_CENSUS_2026-08-13 and carries
+ * the Council Fire's Governance door on /tools, which the site serves, and
+ * three Crowdpool doors on /products, which it does not and which fell
+ * through to /contribute. These are those pairs, written into the
+ * artifact's own export the way the published scene holds them.
+ */
+describe("the doors a published scene carries from before the census", () => {
+  let m: Booted;
+  const routeOf = (key: string, label: string) =>
+    m.run<string>(`(()=>{const d=BY['${key}'].modules.find(x=>x[0]===${JSON.stringify(label)});return d?doorRoute(d):'(no door)'})()`);
+  const doorAt = (key: string, label: string) => {
+    m.run(`openDoorAt('${key}',BY['${key}'].modules.findIndex(x=>x[0]===${JSON.stringify(label)}))`);
+    const link = m.window.document.querySelector("#moduleCard a.btn");
+    const seen = { text: link?.textContent ?? "", onclick: link?.getAttribute("onclick") ?? "" };
+    m.run("closeDoor()");
+    return seen;
+  };
+  beforeAll(async () => {
+    const s = clone(SEED);
+    const doors = (key: string, list: [string, string][]) => {
+      const st = s.map_structures.find((x) => x.key === key) as Structure & { bindings: { doors: { label: string; route: string }[] } };
+      st.bindings.doors = list.map(([label, route]) => ({ label, route }));
+    };
+    doors("council", [["Stages & Roles", "/roles"], ["Governance", "/tools"]]);
+    doors("ridgeA", [["Crowdpool", "/products"], ["quests", "/quests"]]);
+    doors("sanctuary", [["forum", "/forum"], ["Crowdpool", "/products"]]);
+    doors("market", [["wallet", "/wallet"], ["Payments & Donations", "/products"]]);
+    // A founder's own choice for the same label, which nothing may override.
+    doors("ridgeB", [["Crowdpool", "/investor"]]);
+    m = boot("#skipIntro", { shell: true });
+    await settle(200);
+    m.post(config(s));
+  });
+  afterAll(() => m?.close());
+
+  it("sends Governance to the governance page", () => {
+    expect(routeOf("council", "Governance")).toBe("/governance");
+    expect(doorAt("council", "Governance").onclick).toBe("return siteNav(event,'/governance')");
+  });
+
+  it("sends Crowdpool to the raisings", () => {
+    expect(routeOf("ridgeA", "Crowdpool")).toBe("/campaigns");
+    expect(routeOf("sanctuary", "Crowdpool")).toBe("/campaigns");
+    expect(doorAt("ridgeA", "Crowdpool").text).toContain("Open /campaigns on the site");
+  });
+
+  it("leaves the Market's Payments & Donations on /contribute, which shares /products (the control)", () => {
+    expect(routeOf("market", "Payments & Donations")).toBe("/contribute");
+    expect(routeOf("council", "Stages & Roles")).toBe("/roles");
+  });
+
+  it("keeps a route a founder chose for the same label", () => {
+    expect(routeOf("ridgeB", "Crowdpool")).toBe("/investor");
+  });
+
+  it("draws the seed's own Crowdpool doors on /campaigns", () => {
+    const seedDoors = SEED.map_structures
+      .flatMap((st) => ((st as Structure & { bindings?: { doors?: { label: string; route: string }[] } }).bindings?.doors ?? []))
+      .filter((d) => d.label === "Crowdpool")
+      .map((d) => d.route);
+    expect(seedDoors).toEqual(["/campaigns", "/campaigns", "/campaigns"]);
+  });
+});
