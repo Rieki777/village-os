@@ -676,6 +676,25 @@ describe("the wheel, a pinch and a drag work over a building, a name and a mark"
     expect(wheel(b.doc.getElementById("scene") as Element, { deltaY: -100 }), "the canvas, as before").toBe(true);
   });
 
+  /* Safari sends a trackpad pinch as its own gesture events and never as a
+     ctrl-wheel. The mark layers take them in one place, the loop that zooms
+     the map, which is also the only thing that refuses the page zoom there. */
+  it("takes Safari's gesture pinch from the browser over each of them, and zooms the map", () => {
+    const gesture = (el: Element, type: string, scale: number) => {
+      const ev = new b.window.Event(type, { bubbles: true, cancelable: true });
+      Object.assign(ev, { scale, clientX: at.clientX, clientY: at.clientY });
+      el.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    };
+    for (const [what, el] of Object.entries(marks())) {
+      home();
+      expect(gesture(el, "gesturestart", 1), `Safari's pinch over ${what} starts as the map's`).toBe(true);
+      expect(gesture(el, "gesturechange", 1.5), `and goes on as the map's`).toBe(true);
+      expect(gesture(el, "gestureend", 1.5), `and ends as the map's`).toBe(true);
+      expect(cam().z, `Safari's pinch over ${what} zooms`).toBeGreaterThan(0.84);
+    }
+  });
+
   it("pans on a drag begun on each of them, and the click at the end opens nothing", async () => {
     for (const [what, el] of Object.entries(marks())) {
       home();

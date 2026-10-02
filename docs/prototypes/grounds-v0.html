@@ -3266,9 +3266,10 @@ cv.addEventListener('dblclick',e=>{window.GUIDE&&GUIDE.hand('tap');const[wx,wy]=
     el.addEventListener('gesturestart',start,{passive:false});el.addEventListener('gesturechange',change,{passive:false});
     if(el!==cv)el.addEventListener('gestureend',e=>e.preventDefault(),{passive:false})}
   cv.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
-  /* The mark layers join them: a pinch begun on a building's plate is a pinch
-     at the map, and touchNav already applies it, so these only refuse. */
-  for(const id of ['vitals','pbar','pnav','icons','banners','badges']){const s=document.getElementById(id);if(!s)continue;
+  /* The strip and the bar only refuse. The mark layers are not listed here:
+     the loop above already takes a pinch begun on a building's plate as a
+     pinch at the map, and refuses the page zoom there with it. */
+  for(const id of ['vitals','pbar','pnav']){const s=document.getElementById(id);if(!s)continue;
     for(const t of ['gesturestart','gesturechange','gestureend'])
       s.addEventListener(t,e=>{if(e.cancelable)e.preventDefault()},{passive:false})}})();
 /* THE BUILDING A FINGER IS AIMING AT, which is not the same box as the one
