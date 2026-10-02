@@ -1765,8 +1765,8 @@
       made in more detail. The dressing rows below it stay below it. -->
  <div id="maskLook"></div>
  <div class="srow" data-dup="1"><span class="slbl">your land, in words</span><input type="text" id="skWords" placeholder="e.g. volcanic coast, mango gold"></div>
- <div class="srow"><span class="slbl">accent</span><input type="color" id="skAccent" value="#e8a13c"><span class="amv">Amora's value: #e8a13c</span></div>
- <div class="srow"><span class="slbl">parchment</span><input type="color" id="skParch" value="#f3e6c8"><span class="amv">Amora's value: #f3e6c8</span></div>
+ <div class="srow"><span class="slbl">accent</span><input type="color" id="skAccent" value="#e8a13c"><span class="amv">House value: #e8a13c</span></div>
+ <div class="srow"><span class="slbl">parchment</span><input type="color" id="skParch" value="#f3e6c8"><span class="amv">House value: #f3e6c8</span></div>
  <div class="srow"><span class="slbl">label size</span><input type="range" id="skLbl" min="80" max="130" value="100"><b id="skLblV" style="font-weight:normal;font-size:11px;width:36px;text-align:right">100%</b></div>
  <div class="srow"><span class="slbl">label style</span><select id="skLabelStyle"><option value="ribbon">ribbon · dark plate, parchment letters</option><option value="tablet">tablet · gold plaque, etched</option></select></div>
  <div class="srow"><span class="slbl">flow marks</span><select id="skFlow"><option value="glyph">a mark for every kind</option><option value="gold">one golden orb</option><option value="medium">a coloured dot</option></select></div>
@@ -1793,7 +1793,7 @@
       paint on the land. -->
  <div style="display:flex;gap:8px;margin-top:3px">
   <button class="btn" id="skSave" style="font-size:11px;padding:5px 13px">Save map skin</button>
-  <button class="btn ghostbtn" id="skReset" style="font-size:11px;padding:5px 13px">Reset to Amora</button>
+  <button class="btn ghostbtn" id="skReset" style="font-size:11px;padding:5px 13px">Reset to the house look</button>
   <button class="btn ghostbtn" id="skClose" style="font-size:11px;padding:5px 13px;margin-left:auto">✕</button>
  </div>
  <!-- This sentence is about where the VILLAGE's styling is administered, so
@@ -6050,7 +6050,9 @@ function buildExportJSON(status){
   return out}
 $('exportBtn').onclick=()=>{const out=buildExportJSON();
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));
-  a.download='amora-scene.json';a.click();
+  /* Named after the village the scene is, so a fork's export carries its
+     own name; the seed's name gives the file its old name back. */
+  a.download=(slugify(SCENE.name||'')||'village')+'-scene.json';a.click();
   maiaSay(`Scene exported: <b>${out.map_structures.length} buildings</b>, <b>${out.map_flows.length} flows</b>, <b>${out.map_zones.length-1} features</b>, <b>${EDITS.length} edits remembered</b>. This one file is the land's whole memory, and ${inShell()?'your draft in the village keeps the same story':'autosave keeps the same story in this browser'}.`)};
 addEventListener('keydown',e=>{if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
   if(e.key==='Escape'&&placing){placing=null;document.body.classList.remove('placing');$('ghostPoi').style.display='none'}
@@ -9154,7 +9156,9 @@ $('skReset').onclick=()=>{maskWrite(MASK_ALL);$('skWords').value='';
   if(!inShell()){SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100}
   setGScale(VILLAGE_LOOK.scale||100,true);maskApply();renderSkinThemes();
   if(inShell())return toast(HAND.canEdit?'Back to the village\'s look on your screen. '+SKIN_HOME:'Back to the village\'s look.');
-  logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
+  /* The house look, by name: this file is every village's map, and a fork's
+     founder pressing Reset read another village's name on it (N30). */
+  logEdit('skin','map',{reset:'house'});toast('Back to the house look.')};
 /* Inside the village the button is about the person's own view, which
    everyone has, so everyone gets it and it says what it does there. */
 if(inShell()&&$('skReset')){$('skReset').textContent='Back to the village\'s look';document.body.classList.add('view-reset')}

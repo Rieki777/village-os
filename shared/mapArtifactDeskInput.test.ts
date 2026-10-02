@@ -1055,3 +1055,40 @@ describe("every dial in Your view is the person's own (D11), the founder's inclu
     alone.close();
   });
 });
+
+/* N30. This file is every village's map, and a fork's founder pressing
+   Reset read another village's name on the button, in the toast, in the
+   log entry it wrote and beside the accent and parchment dials, and the
+   scene export downloaded under that village's file name. */
+describe("Reset and the scene export name no village (N30)", () => {
+  it("says the house look where the map runs on its own, and logs it so", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    const reset = alone.doc.getElementById("skReset") as HTMLElement;
+    expect(reset.textContent).toBe("Reset to the house look");
+    expect([...alone.doc.querySelectorAll("#skin .amv")].slice(0, 2).map((e) => e.textContent)).toEqual([
+      "House value: #e8a13c",
+      "House value: #f3e6c8",
+    ]);
+    reset.click();
+    expect(alone.doc.getElementById("toasts")?.lastElementChild?.textContent).toBe("Back to the house look.");
+    expect(alone.run<unknown>("EDITS[EDITS.length-1].diff")).toEqual({ reset: "house" });
+    expect(alone.uncaught).toEqual([]);
+    alone.close();
+  });
+
+  it("names the export after the village the scene is", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    alone.run(
+      "URL.createObjectURL=()=>'blob:scene';window.__saved=[];HTMLAnchorElement.prototype.click=function(){window.__saved.push(this.download)}",
+    );
+    alone.run("SCENE.name='Willow Creek'");
+    (alone.doc.getElementById("exportBtn") as HTMLElement).click();
+    alone.run("SCENE.name=''");
+    (alone.doc.getElementById("exportBtn") as HTMLElement).click();
+    expect(alone.run<string[]>("window.__saved")).toEqual(["willow-creek-scene.json", "village-scene.json"]);
+    expect(alone.uncaught).toEqual([]);
+    alone.close();
+  });
+});
