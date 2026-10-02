@@ -25,10 +25,11 @@
  *
  * Three bridges to the artifact, in order of how much they can be trusted:
  *
- *  1. THE HASH. `/map#/place/greenhouse` forwards to the iframe so a deep
- *     link into the site reaches the same address inside the map. Set once
- *     via `src`; afterwards written to the iframe's own `location.hash`,
- *     because reassigning `src` reloads four megabytes.
+ *  1. THE HASH, both ways. `/map#/place/greenhouse` opens the iframe at the
+ *     same address (once, via `src`, because reassigning `src` reloads
+ *     four megabytes), and the artifact's `{type:'route'}` writes its address
+ *     back into the visible URL. Back, Forward, a reload and a pasted link all
+ *     go through components/map/mapHistory.ts, which says what each one does.
  *  2. `postMessage({type:'nav', route})`. The listener is here and ready. The
  *     artifact does not send it yet; when the map workstream adds it, same-tab
  *     SPA navigation starts working with no change on this side.
@@ -51,6 +52,7 @@ import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
+import { useMapHistory } from "@/components/map/mapHistory";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -105,9 +107,9 @@ async function probeGrounds(): Promise<{ presence: Presence; url: string }> {
  * wrong it errs toward the shell drawing one, which is the safe direction: an
  * extra escape is untidy and no escape strands somebody.
  */
-function pocketProfile(): boolean {
+function pocketProfile(hint: string): boolean {
   if (typeof window === "undefined") return false;
-  const forced = /hud=(pocket|desk)/.exec(window.location.hash || "");
+  const forced = /hud=(pocket|desk)/.exec(hint);
   if (forced) return forced[1] === "pocket";
   return "ontouchstart" in window && Math.min(window.innerWidth, window.innerHeight) < 820;
 }
@@ -120,20 +122,22 @@ export default function LivingMap() {
   const [presence, setPresence] = useState<Presence>("checking");
   /** The URL the manifest names, hashed and immutable where available. */
   const [groundsUrl, setGroundsUrl] = useState<string>(GROUNDS);
+  /* A `#hud=` hint is read from the address the map opened at, once, as the
+     artifact reads it. The address bar follows the map now, so a later read
+     would find the place on screen and lose the hint. */
+  const [hudHint] = useState(() => (typeof window === "undefined" ? "" : window.location.hash));
   /** Whether the artifact is carrying the exit door itself. See pocketProfile. */
-  const [pocket, setPocket] = useState<boolean>(pocketProfile);
+  const [pocket, setPocket] = useState<boolean>(() => pocketProfile(hudHint));
 
   useEffect(() => {
-    const read = () => setPocket(pocketProfile());
+    const read = () => setPocket(pocketProfile(hudHint));
     window.addEventListener("resize", read);
     window.addEventListener("orientationchange", read);
-    window.addEventListener("hashchange", read);
     return () => {
       window.removeEventListener("resize", read);
       window.removeEventListener("orientationchange", read);
-      window.removeEventListener("hashchange", read);
     };
-  }, []);
+  }, [hudHint]);
 
   /**
    * THE ZOOM THE MAP DOES NOT OWN.
@@ -230,16 +234,13 @@ export default function LivingMap() {
     }, 600);
   }, []);
 
-  /**
-   * The hash the map opens on, captured once. Reading it during render on
-   * every pass would reset the iframe's `src` each time the parent re-renders
-   * and reload the artifact under the member's feet.
-   */
-  const [initialHash] = useState(() =>
-    typeof window === "undefined" ? "" : window.location.hash,
-  );
-
-  const { entered, preparing, setPreparing, onEnter, pressed } = useMapEnterGate();
+  const { entered, preparing, setPreparing, onEnter, enterAt, startHash, pressed } = useMapEnterGate();
+  /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts. */
+  const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt });
+  const enterTheLand = useCallback(() => {
+    markEntered();
+    onEnter();
+  }, [markEntered, onEnter]);
 
   useEffect(() => {
     let live = true;
@@ -252,37 +253,6 @@ export default function LivingMap() {
   useEffect(() => {
     if (modules.loaded) rememberMapAvailable(Boolean(mapModule));
   }, [modules.loaded, mapModule?.id]);
-
-  /**
-   * Leaving app mode, by one path.
-   *
-   * A marker entry goes on the history stack when the map opens, so the
-   * browser Back button pops it and lands here in `popstate`. The artifact's
-   * own exit button posts `{type:'exit'}` and calls `history.back()`, which
-   * arrives at the SAME handler, and so does the shell's own escape control
-   * below. One way out, three triggers, no chance of any of them disagreeing.
-   *
-   * Where it lands: popping the marker returns to the `/map` entry, and the
-   * `popstate` handler replaces that entry with `/`. So leaving the map always
-   * arrives at the village door rather than at whichever page the visitor came
-   * from, which is what the control's name promises. A direct deep link that
-   * never pushed a marker takes the second branch to the same place.
-   *
-   * The marker keeps the `/map` URL, so popping it does not navigate on its
-   * own; this handler does that, replacing rather than pushing so a second
-   * Back does not walk straight back into the map.
-   */
-  const exitApp = useCallback(() => {
-    if (window.history.state?.villageMapApp) window.history.back();
-    else navigate("/", { replace: true });
-  }, [navigate]);
-
-  useEffect(() => {
-    window.history.pushState({ villageMapApp: true }, "");
-    const onPop = () => navigate("/", { replace: true });
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [navigate]);
 
   /**
    * Nothing behind the map scrolls while it is open.
@@ -698,6 +668,7 @@ export default function LivingMap() {
       if (!data || typeof data !== "object") return;
 
       if (data.type === "grounds-ready") {
+        onReady();
         // The config and the ground are the same for everyone and need no
         // session; the hand depends on who is asking. Sending them separately
         // means a signed-out visitor still gets the published land and the
@@ -718,6 +689,11 @@ export default function LivingMap() {
         exitApp();
         return;
       }
+      // The map's address changed: the visible URL and Back follow it.
+      if (data.type === "route") {
+        onRoute(data);
+        return;
+      }
       if (isPromiseKind(data.type)) {
         void relayPromise(data);
         return;
@@ -733,7 +709,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
@@ -756,21 +732,6 @@ export default function LivingMap() {
       window.removeEventListener("storage", onStorage);
     };
   }, [pushConfig]);
-
-  /** Parent hash changes reach the artifact without reloading it. */
-  useEffect(() => {
-    const onHash = () => {
-      const win = frame.current?.contentWindow;
-      if (!win) return;
-      try {
-        if (win.location.hash !== window.location.hash) win.location.hash = window.location.hash;
-      } catch {
-        /* Cross-origin only, which cannot happen for a same-origin artifact. */
-      }
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
 
   /**
    * On load: hand over the village's skin, then upgrade door clicks to SPA
@@ -841,8 +802,8 @@ export default function LivingMap() {
    * the whole difference between "fills the screen" and "nearly fills it".
    *
    * Leaving is the artifact's `{type:'exit'}`, the browser Back button, and
-   * the shell's own escape control, and all three run the same path (see the
-   * history effect above). The shell draws one because the artifact's are laid
+   * the shell's own escape control, and all three run the same path (see
+   * mapHistory.ts). The shell draws one because the artifact's are laid
    * out off-screen on a phone, which left app mode with no way out at all.
    */
   return (
@@ -980,12 +941,12 @@ export default function LivingMap() {
         </div>
       )}
 
-      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={onEnter} />
+      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={enterTheLand} />
 
       {presence === "present" && entered && (
         <iframe
           ref={frame}
-          src={`${groundsUrl}${withSkipIntro(initialHash)}`}
+          src={`${groundsUrl}${withSkipIntro(startHash)}`}
           onLoad={onLoad}
           title="Living map of the village"
           className="block h-full w-full border-0"

@@ -39,19 +39,39 @@ export function withSkipIntro(hash: string): string {
 }
 
 /**
+ * Whether the history entry being opened is one where the visitor already
+ * pressed Enter. The shell's map history (mapHistory.ts) records it on the
+ * entry, so Back from a door out to the site, Forward, or F5 returns to the
+ * land and not to this gate a second time.
+ */
+export function arrivedEntered(): boolean {
+  if (typeof window === "undefined") return false;
+  const state = window.history.state as { villageMapApp?: unknown; entered?: unknown } | null;
+  return !!state && state.villageMapApp === true && state.entered === true;
+}
+
+function startsEntered(): boolean {
+  return hashIsMapDeepLink(typeof window === "undefined" ? "" : window.location.hash) || arrivedEntered();
+}
+
+/**
  * Entered / preparing state for the Living Map shell.
  *
- * Deep links start already entered (and preparing). A stuck prepare never
- * strands the visitor: twenty seconds is longer than a healthy config push and
- * short enough to recover from a quiet failure. The shell clears preparing
- * earlier once the published scene has been asked for.
+ * Deep links, and a return to an entry already entered, start entered (and
+ * preparing). A stuck prepare never strands the visitor: twenty seconds is
+ * longer than a healthy config push and short enough to recover from a quiet
+ * failure. The shell clears preparing earlier once the published scene has
+ * been asked for.
+ *
+ * `startHash` is the address the iframe opens at. It is read when the land
+ * is entered and never again, because changing an iframe's `src` reloads the
+ * whole map under the visitor.
  */
 export function useMapEnterGate() {
-  const [entered, setEntered] = useState(() =>
-    hashIsMapDeepLink(typeof window === "undefined" ? "" : window.location.hash),
-  );
-  const [preparing, setPreparing] = useState(() =>
-    hashIsMapDeepLink(typeof window === "undefined" ? "" : window.location.hash),
+  const [entered, setEntered] = useState(startsEntered);
+  const [preparing, setPreparing] = useState(startsEntered);
+  const [startHash, setStartHash] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.hash,
   );
 
   useEffect(() => {
@@ -69,13 +89,23 @@ export function useMapEnterGate() {
    */
   const pressed = useRef(false);
 
-  const onEnter = useCallback(() => {
-    pressed.current = true;
+  /** Open the land at `hash`. A no-op once entered: see startHash. */
+  const enteredNow = useRef(entered);
+  enteredNow.current = entered;
+  const enterAt = useCallback((hash: string) => {
+    if (enteredNow.current) return;
+    enteredNow.current = true;
+    setStartHash(hash);
     setEntered(true);
     setPreparing(true);
   }, []);
 
-  return { entered, preparing, setPreparing, onEnter, pressed };
+  const onEnter = useCallback(() => {
+    pressed.current = true;
+    enterAt(window.location.hash);
+  }, [enterAt]);
+
+  return { entered, preparing, setPreparing, onEnter, enterAt, startHash, pressed };
 }
 
 type EnterTheLandGateProps = {
