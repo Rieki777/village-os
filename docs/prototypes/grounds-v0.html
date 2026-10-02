@@ -8367,6 +8367,50 @@ window.playJourney=playJourney;
   document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.addEventListener('click',jPause,true));
 })();
 
+/* OUT OF SIGHT, THE WALK WAITS. A journey flies the camera every few seconds
+   and writes each stop into her log, and every way of putting her away left
+   it running: ASK MAIA on the bar (mid-walk the sheet is already up, so the
+   tap hides it), Help and Your view (each takes her sheet down to make room),
+   the More drawer drawn over her, and the header that minimises her on a
+   desk. MEASURED for each of those five: the walk went from stop 1 to stop 3
+   in 16 s with her hidden, flying behind the sheet, and the visitor came back
+   two stops on with nothing on screen to say why. A door's card does the same
+   on both profiles, since it covers the whole screen, and so does the Loom,
+   which covers the land the walk is flying over.
+   So the rule is about her and not about the buttons: whenever she stops
+   being visible during a walk the clock stops, and when she is visible again
+   she offers the walk back and waits for the word. One observer on the
+   classes that decide it, so a new way of hiding her is covered on the day
+   it is written. A walk already paused (a question, `tell me more`) is left
+   as it is: its own row is still the newest one in her log. */
+function jCovered(){const on=(id,c)=>{const el=$(id);return !!(el&&el.classList.contains(c))};
+  return on('help','show')||on('skin','show')||on('pdrawer','open')||on('module','show')
+    ||document.body.classList.contains('loom')}
+function jSeen(){const b=document.body.classList,m=$('maia');
+  if(!m||m.classList.contains('min')||$('module').classList.contains('show')||b.contains('loom'))return false;
+  if(!b.contains('pocket'))return true;
+  return b.contains('msheet')&&!$('pdrawer').classList.contains('open')}
+(function jWatchSight(){
+  const look=()=>{if(!JWALK)return;
+    if(!jSeen()){
+      /* `cover` when a sheet took her place, `you` when she was put away on
+         purpose. Only a covering sheet gives her back as it closes. */
+      if(!JWALK.paused&&jPause())JWALK.hid=jCovered()?'cover':'you';
+      return}
+    if(JWALK.hid){JWALK.hid=null;jOffer()}};
+  const mo=new MutationObserver(look);
+  for(const id of ['maia','pdrawer','module'])if($(id))mo.observe($(id),{attributes:true,attributeFilter:['class']});
+  mo.observe(document.body,{attributes:true,attributeFilter:['class']})})();
+/* A sheet that covered her, closed with its own close button, puts her sheet
+   back, and the observer above then offers the walk. Only those closes: Help
+   also closes on any tap outside it, and when that tap is ASK MAIA the bar's
+   own toggle is about to bring her back, so putting the sheet up first would
+   have that toggle take it straight down again. */
+function jSheetBack(){
+  if(JWALK&&JWALK.hid==='cover'&&document.body.classList.contains('pocket')&&!jCovered())
+    document.body.classList.add('msheet')}
+window.jSheetBack=jSheetBack;
+
 /* ESCAPE ENDS THE WALK THROUGH THE ONE ENDER. It used to keep a private copy
    of everything jEnd does, and the first draft of this lane put GUIDE.stop in
    front of that copy, which then read JWALK.log off a JWALK the stop had
@@ -8469,7 +8513,8 @@ function openMask(){maskMount();
   renderSkinThemes();syncPaintTools();
   if(window.hap)hap(8)}
 function closeMask(){$('skin').classList.remove('show');
-  const tp=$('themePanel');if(tp)tp.classList.remove('show')}
+  const tp=$('themePanel');if(tp)tp.classList.remove('show');
+  if(window.jSheetBack)jSheetBack()}
 function toggleMask(){$('skin').classList.contains('show')?closeMask():openMask()}
 window.openMask=openMask;window.closeMask=closeMask;window.toggleMask=toggleMask;
 /* The old name is the one the module card and verify_doors call. */
@@ -10138,7 +10183,7 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
     /* On a phone the whole footer row is this control; the .help-work CSS says why. */
     if(t.closest('.help-wall')||(document.body.classList.contains('pocket')&&t.closest('.help-work'))){closeHelp();
       if($('wall')&&typeof openWall==='function')openWall();return}
-    if(t.closest('.help-close')){closeHelp();return}
+    if(t.closest('.help-close')){closeHelp();if(window.jSheetBack)jSheetBack();return}
     const row=t.closest('.help-row');
     if(row){const was=row.classList.contains('open');
       el.querySelectorAll('.help-row.open').forEach(r=>r.classList.remove('open'));

@@ -478,3 +478,100 @@ describe("a journey that runs to its end on a phone (F41)", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F39. Hiding her (ASK MAIA, Help, Your view, More, a door, the Loom, the
+   header on a desk) left the walk flying and narrating out of sight. */
+interface Hide {
+  name: string;
+  pocket: boolean;
+  hide(b: Booted): void;
+  show(b: Booted): void;
+}
+/* Whether she can be seen, by the classes that decide it. Written out here and
+   not read from the artifact, so a case fails for what the visitor would see
+   and not for a helper the page lacks. A phone shows her only with body.msheet,
+   and the More drawer is drawn over her; a door's card and the Loom cover
+   both profiles. */
+function inView(b: Booted): boolean {
+  const on = (id: string, c: string) => !!b.doc.getElementById(id)?.classList.contains(c);
+  const body = b.doc.body.classList;
+  if (on("maia", "min") || on("module", "show") || body.contains("loom")) return false;
+  if (!body.contains("pocket")) return true;
+  return body.contains("msheet") && !on("pdrawer", "open");
+}
+const tap = (b: Booted, sel: string) => (b.doc.querySelector(sel) as HTMLElement | null)?.click();
+const HIDES: Hide[] = [
+  { name: "the header on a desk", pocket: false, hide: (b) => tap(b, "#maiaHead"), show: (b) => tap(b, "#maiaHead") },
+  {
+    name: "a door's card on a desk",
+    pocket: false,
+    hide: (b) => tap(b, "#dock button"),
+    // The card's own button is an inline handler jsdom will not run; the backdrop is a listener.
+    show: (b) => b.doc.getElementById("module")?.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true })),
+  },
+  { name: "the Loom on a desk", pocket: false, hide: (b) => tap(b, "#loomBtn"), show: (b) => tap(b, "#loomClose") },
+  { name: "ASK MAIA on a phone", pocket: true, hide: (b) => tap(b, "#pbAsk"), show: (b) => tap(b, "#pbAsk") },
+  { name: "Help on a phone", pocket: true, hide: (b) => tap(b, "#pbAttn"), show: (b) => tap(b, "#help .help-close") },
+  { name: "the More drawer on a phone", pocket: true, hide: (b) => tap(b, "#pbMore"), show: (b) => tap(b, "#pbMore") },
+  {
+    name: "Your view on a phone",
+    pocket: true,
+    hide: (b) => {
+      tap(b, "#pbMore");
+      tap(b, '#pdrawer [data-pa="mask"]');
+    },
+    show: (b) => tap(b, "#skX"),
+  },
+];
+
+describe("out of sight, the walk waits (F39)", () => {
+  it("the control: left in view, a journey walks on by itself", async () => {
+    const b = boot("#skipIntro", DESK);
+    await settle(200);
+    b.run("playJourney('j2')");
+    await landed(b, 1);
+    expect(await until(() => (walking(b)?.i ?? 0) >= 1, 10000), "stops walked on, unasked").toBe(true);
+    b.close();
+  });
+
+  describe.each(HIDES)("hidden by $name", (h) => {
+    let b: Booted;
+    let hidden: { i: number | undefined; paused: boolean | undefined; stops: number };
+    beforeAll(async () => {
+      b = boot(h.pocket ? "#hud=pocket&skipIntro" : "#skipIntro", h.pocket ? PHONE : DESK);
+      await settle(200);
+      b.run("playJourney('j2')");
+      await landed(b, 1);
+      h.hide(b);
+      await settle(real(JDWELL * 3));
+      hidden = { i: walking(b)?.i, paused: walking(b)?.paused, stops: stopLines(b).length };
+    });
+    afterAll(() => b?.close());
+
+    it("hid her (the case is the one it says it is)", () => {
+      expect(inView(b)).toBe(false);
+    });
+
+    it("stops the walk where it was for three dwells", () => {
+      expect(hidden).toEqual({ i: 0, paused: true, stops: 1 });
+      expect(b.run<boolean>("GUIDE.on"), "the walk is paused, not ended").toBe(true);
+    });
+
+    it("offers the walk back when she is seen again, and walks on when asked", async () => {
+      h.show(b);
+      await settle(50);
+      expect(inView(b), "she is back").toBe(true);
+      // Her offer, after the stop she was hidden at. The village news may follow it.
+      const all = lines(b);
+      const offer = all.filter((d) => (d.textContent ?? "").includes("Say the word and we walk on.")).pop();
+      expect(offer, "the offer to walk on").toBeTruthy();
+      expect(all.indexOf(offer as HTMLElement)).toBeGreaterThan(all.indexOf(stopLines(b)[0] as HTMLElement));
+      const walkOn = live(rowButtons(b)).find((x) => /walk on/.test(x.textContent ?? ""));
+      expect(walkOn && offer?.contains(walkOn), "the offer's own `walk on` is the live one").toBe(true);
+      expect(press(b, walkOn)).toBe(true);
+      await landed(b, 2);
+      expect(walking(b)?.i).toBe(1);
+      expect(b.uncaught).toEqual([]);
+    });
+  });
+});
