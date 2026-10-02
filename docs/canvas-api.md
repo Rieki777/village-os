@@ -324,7 +324,7 @@ moment never adds a block here: its notice reaches the care holder alone.
 
 | Route | Who | Body | Answers |
 | --- | --- | --- | --- |
-| `GET /api/canvas/moon` | members and admins | none | `200 { "next": { newMoonAt, startsAt, moon, blocks: [{ id, name }], source: { chosen, flagged, rotated } } | null, "gathering": { id, status } | null, "calendarOn", "mayOffer" }` |
+| `GET /api/canvas/moon` | members and admins | none | `200 { "next": { newMoonAt, startsAt, moon, blocks: [{ id, name }], source: { chosen, flagged, rotated } } \| null, "gathering": { id, status } \| null, "calendarOn", "mayOffer" }` |
 | `POST /api/canvas/moon/gathering` | `event.manage` | none | `201 { "gathering": { id, status: "draft" }, "message", "publishAt" }`, `403` (not the calendar's manager), `409` (the calendar is off, or one is already on the calendar's list) |
 
 The offer is made once and never seeded: it writes one DRAFT gathering that recurs every new moon

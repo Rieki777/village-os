@@ -35,6 +35,7 @@ import { emailCadenceFor, insertNotification, resolveNotifyPrefs, runNotificatio
 import { presenceTest } from "./memberPresence";
 import { renderWeeklyBrief } from "./assistantTemplates";
 import { MOMENT_BLOCKS, revisitBody, revisitTitle } from "../../shared/canvasRevisit";
+import { manyLine } from "../../shared/notificationKinds";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvasRevisit] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -334,6 +335,29 @@ describe.skipIf(!configured)("delivery through the real notification spine", () 
     expect(sent[0].to).toEqual(["rv-admin@example.test"]);
     expect(sent[0].html).toContain("Does our Stakeholders answer still hold?");
     expect(sent[0].html, "the body stays in the app").not.toContain("Nothing was sent to them");
+  });
+
+  it("reaches the digest as ONE line for one moment, whatever number of blocks it asks about", async () => {
+    const at = new Date();
+    const raised = await deliverCanvasRevisit({ ...host(), now: () => at }, { trigger: "peer-added" });
+    expect(raised.fresh, "the collaboration moment still writes a row per block").toBe(12);
+    // Something else the member is owed on the same day, so the fold is seen
+    // to leave every other kind alone.
+    await insertNotification(spine(), { userId: "rv-admin", type: "feedback", title: "Your idea was triaged", dedupeKey: "fold-case:feedback:rv-admin" });
+
+    const digest = await runNotificationDigest(spine());
+    expect(digest, "all thirteen rows went out in it").toEqual({ users: 1, rows: 13 });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject, "two things happened: one moment and one triage").toBe("2 things happened while you were away");
+    expect(sent[0].html.match(/<li /g), "one line for the moment, one for the triage").toHaveLength(2);
+    expect(sent[0].html).toContain(manyLine("canvas_revisit", 12));
+    expect(sent[0].html).toContain("Your idea was triaged");
+    for (const block of MOMENT_BLOCKS.collaboration) {
+      expect(sent[0].html, `no line of its own for ${block}`).not.toContain(revisitTitle("collaboration", block));
+    }
+    expect(sent[0].html, "nothing was pushed past the cut").not.toContain("more.</p>");
+    const unsent = (await rowsFor("rv-admin")).filter((r) => r.emailed_at === null);
+    expect(unsent, "a folded row is stamped too, so tomorrow's digest does not send it again").toEqual([]);
   });
 
   it("raises from a recorded audit event only once the row is written", async () => {

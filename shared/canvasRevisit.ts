@@ -24,7 +24,9 @@
  * second trigger of the same moment in the same moon adds nothing, and a
  * block flagged by two different moments is asked twice, once in each
  * moment's words. The bell folds a burst of one kind into one line
- * (`many` in shared/notificationKinds.ts), so twelve rows read as one.
+ * (`many` in shared/notificationKinds.ts), and the daily digest folds every
+ * row of this kind into that same line (`digestLines`, server/lib/notify.ts),
+ * so twelve rows read as one in both places.
  *
  * ── NEVER A PUSH, NEVER AN IMMEDIATE EMAIL ─────────────────────────────────
  *

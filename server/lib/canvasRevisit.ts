@@ -238,14 +238,21 @@ export async function settleCanvasRevisits(): Promise<void> {
  * Four acts in `server/index.ts` already record an audit event, and the
  * moment hangs off the event (`observeEvents`, server/lib/events.ts) so those
  * routes gain no line. Each match is the event's own shape as the route
- * records it today; the e2e suite drives every one of them through its real
- * route, so a route that rewords its event turns a named test red.
+ * records it today. ONLY TWO ARE DRIVEN THROUGH THEIR REAL ROUTE: rewording
+ * `bootstrap:founder` turns a case in server/canvasRevisit.routes.e2e.test.ts
+ * red, and rewording `launch:proposed:` turns one in
+ * server/launchVote.routes.e2e.test.ts red. The other two are pinned only by
+ * hand-typed literals in ./canvasRevisit.test.ts, which model the route's
+ * text and do not read it, so rewording either at its route (server/index.ts)
+ * silently stops the moment while every test stays green:
+ * `network:peer-added:` because no local peer can answer the handshake, and
+ * `draft:accept:circle:` because no e2e case accepts a circle draft yet.
  *
  *   bootstrap:founder                 a founder claims a fresh instance
  *                                     (`bootstrap:break-glass`, a re-run on a
  *                                     claimed one, is not a claim)
- *   network:peer-added:<name>         a peer village added
- *   draft:accept:circle:<id>          a circle accepted from a draft
+ *   network:peer-added:<name>         a peer village added (NOT driven)
+ *   draft:accept:circle:<id>          a circle accepted from a draft (NOT driven)
  *   launch:proposed:<ballot>          the Birthing vote opened
  */
 export function triggerForEvent(e: Pick<EventInput, "kind" | "text" | "entityType">): MomentTrigger | null {

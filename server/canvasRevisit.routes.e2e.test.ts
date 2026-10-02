@@ -18,7 +18,12 @@
  *
  * NOT DRIVEN HERE, and why. A peer village added: the outbound guard refuses
  * every private address by design, so no local peer can answer the handshake
- * (server/lib/canvasRevisit.test.ts matches the route's exact event instead).
+ * (server/lib/canvasRevisit.test.ts matches a hand-typed copy of the route's
+ * event instead). A circle accepted from a draft (POST /api/admin/drafts/:id/
+ * accept, the `draft:accept:circle:` event): not driven yet, and pinned only
+ * by the same kind of hand-typed copy, so rewording that event at its route
+ * would go unseen. The circle case below goes through POST /api/admin/circles,
+ * which raises its moment directly and not through an event.
  * The Birthing opened: it needs the whole launch journey cleared, which
  * server/launchVote.routes.e2e.test.ts already does, so its moment is asserted
  * there, beside the real propose.
