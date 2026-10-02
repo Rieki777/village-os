@@ -3121,9 +3121,23 @@ const GUIDE={
        she does not do is hold the bottom of the screen after somebody has
        just taken the map back. */
     window.jHalt&&jHalt(false);
-    if(GUIDE.why==='hand'&&window.maiaSay)
-      maiaSay('You have the map. I stopped the walk right here; tap <b>Resume the walk</b> whenever you want to carry on.');
     window.guideAffordance&&guideAffordance();
+    /* SHE NAMES ONLY A WAY BACK THAT IS THERE (N09). This line promised
+       "Resume the walk" on every stop by a hand, and with the Welcome Walk
+       switched off guideAffordance kept that button down for every journey,
+       so the Resident, Steward and Investor journeys ended on a promise of a
+       control nobody could find. It reads the offer guideAffordance just
+       set, and where there is none (a walk stopped at its first stop, or an
+       offer the visitor put away) it names one that is always there. On a
+       phone her sheet is already down, so the line raises the badge on ask
+       maia, as her welcome does. */
+    if(GUIDE.why==='hand'&&window.maiaSay){
+      const rb=document.getElementById('gresume');
+      maiaSay(rb&&rb.classList.contains('on')
+        ?'You have the map. I stopped the walk right here; tap <b>Resume the walk</b> whenever you want to carry on.'
+        :'You have the map. I stopped the walk right here. Ask me for a journey whenever you want to walk again.');
+      const bc=document.body.classList;
+      if(bc.contains('pocket')&&!bc.contains('msheet')&&window.maiaUnread)maiaUnread(true)}
     return true},
   /* EVERY INTERACTION ARRIVES HERE, from the gesture entry points the touch
      lane already owns. A `kind` is passed only by the two branches that ARE
@@ -3151,11 +3165,25 @@ window.GUIDE=GUIDE;
    deny-list would have to keep finding every panel that is not the land.
    pointerdown alone, because it fires for a mouse, a pen and a finger, and
    because calling the cancel twice is the same as calling it once. */
+/* A TAP THAT PUTS HELP AWAY IS THAT AND NOTHING MORE (N18). On a phone Help
+   closes on a tap anywhere outside it, and over a walk it covers her, so
+   the walk waits (F39). The same tap then reached GUIDE.hand here, on the
+   canvas's click and in touchNav's touchstart, and ENDED the walk it had
+   just paused: MEASURED at 390x844, JWALK null, the address cleared, and her
+   line promising a Resume button. So a gesture that begins on the land with
+   Help up is the putting away: it hands nothing over, its click opens
+   nothing, and Help's closer gives her sheet back with the walk on offer.
+   A finger that goes on to drag still pans, and a pan is taking the map. */
+let SHEET_TAP=false;
 (function handOnTheLand(){
   const LAND=['scene','icons','banners','badges','minimapWrap'];
+  const onLand=t=>LAND.some(id=>{const el=document.getElementById(id);return !!el&&(el===t||el.contains(t))});
   document.addEventListener('pointerdown',e=>{
-    for(const id of LAND){const el=document.getElementById(id);
-      if(el&&(el===e.target||el.contains(e.target))){GUIDE.hand();return}}},true)})();
+    const h=document.getElementById('help');
+    SHEET_TAP=!!(h&&h.classList.contains('show')&&onLand(e.target));
+    if(!SHEET_TAP&&onLand(e.target))GUIDE.hand()},true);
+  document.addEventListener('click',e=>{if(!SHEET_TAP)return;SHEET_TAP=false;
+    if(onLand(e.target)){e.stopPropagation();e.preventDefault()}},true)})();
 /* MOUSE AND PEN ONLY, PAST THIS LINE. This path was written for a mouse and
    fires for every finger as well, so on a phone it panned the same camera the
    pocket touch handler was already panning, from the same fingers. MEASURED
@@ -10925,8 +10953,9 @@ window.hap=hap;
   function nowFlush(){if(raf){cancelAnimationFrame(raf);raf=0}flush()}
   listen('touchstart',e=>{
     /* THE SAME CANCEL PATH THE MOUSE USES, at the entry point this lane
-       already owns. A finger on the glass is a person taking the map. */
-    window.GUIDE&&GUIDE.hand();
+       already owns. A finger on the glass is a person taking the map,
+       unless it came down to put Help away (SHEET_TAP). */
+    if(!SHEET_TAP)window.GUIDE&&GUIDE.hand();
     if(!T){dragging=true;cv.classList.add('dragging');cam.vx=cam.vy=0;samp=[];
       /* A flight nobody guided still keeps its promise; a guided one was
          dropped above, callback and all, so no step lands late. */
@@ -11095,7 +11124,11 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
   document.addEventListener('pointerdown',e=>{
     if(!el.classList.contains('show'))return;
     const t=e.target;if(t&&t.closest&&(t.closest('#help')||t.closest('#pbAttn')))return;
-    closeHelp()},true);
+    closeHelp();
+    /* Put away by a tap on the land, it gives her sheet back as its own
+       close does, and the walk it covered is offered again (N18). A tap on
+       the bar is left alone: ASK MAIA is about to toggle her itself. */
+    if(SHEET_TAP&&window.jSheetBack)jSheetBack()},true);
 
   if($('pbAttn'))$('pbAttn').onclick=()=>{toggleHelp();hap(8)};
 
@@ -11325,9 +11358,14 @@ addEventListener('message',e=>{
    become markup however a fork edits them. */
 function guideAffordance(){
   const box=$('gresume'),lab=$('gresumeLab');if(!box||!lab)return;
-  if(!WELCOME_WALK_ON){box.classList.remove('on');return}
   const live=!!(window.GUIDE&&GUIDE.on);
   const back=!!(window.GUIDE&&GUIDE.ran&&GUIDE.at>0&&GUIDE.why!=='done');
+  /* THE WALK BEING OFF TAKES DOWN THE OFFER OF A NEW ONE, and only that
+     (N09). It took down the way back into a journey somebody was already
+     walking too, and every journey runs through GUIDE.start, so a Resident
+     walk stopped by a hand at stop three had to start again from stop one.
+     guideGo resumes any journey at the stop it reached. */
+  if(!WELCOME_WALK_ON&&!back){box.classList.remove('on');return}
   let done=false,hid=false;
   try{done=!!localStorage.getItem('amora-walk-done')}catch(_){}
   try{hid=sessionStorage.getItem('amora-walk-offer')==='off'}catch(_){}
