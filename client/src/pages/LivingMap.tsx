@@ -48,10 +48,11 @@ import { useLocation } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { rememberMapAvailable } from "@/lib/landing";
 import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
+import { walkPush } from "@shared/mapAddress";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { authToken, gameFetch } from "@/lib/gameApi";
-import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
+import VillageSettingsDoor, { settingsAsked, takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 import { useMapHistory } from "@/components/map/mapHistory";
 import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
@@ -217,9 +218,10 @@ export default function LivingMap() {
    * The map's dock already carries a Village Settings button, and it says the
    * village's colours and words. The shell answers that one door here instead
    * of handing a founder off the land to change how the land looks. See
-   * VillageSettingsDoor: nothing is added to the map.
+   * VillageSettingsDoor: nothing is added to the map. It opens on arrival
+   * when the address asks (`/map?settings=walk`, the Journey to Launch's link).
    */
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => settingsAsked(window.location.search));
   const mayStyleLand = useMayStyleLand();
 
   const resetZoom = useCallback(() => {
@@ -322,12 +324,12 @@ export default function LivingMap() {
        * part only when present, so a village that has customised none of them
        * gets its own seed and nothing is overwritten with blanks.
        *
-       * A null walk means "use the artifact's seed", so it is omitted rather
-       * than sent as an empty array: the artifact treats a non-empty array as
-       * a replacement, and an empty one would read as a walk with no steps.
+       * The walk and the welcome are always sent once the fetch answered: null
+       * is the village saying it wrote none, so no walk is offered and the
+       * guide greets plainly, never the seed (Rye, 2026-10-02; walkPush).
        */
       if (body?.skin) payload.skin = body.skin;
-      if (Array.isArray(body?.walk) && body.walk.length) payload.walk = body.walk;
+      Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
       /*
        * The published land (0063). Same "absent means keep your own" rule as

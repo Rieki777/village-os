@@ -300,6 +300,24 @@ export function servedWalk(stored: unknown, lang: string): { walk: WalkStep[] | 
 }
 
 /**
+ * THE WALK'S HALF OF THE MAP'S `{type:'config'}` PUSH, from an answer shaped
+ * like /api/map/config's (or the editor's draft, shaped the same).
+ *
+ * Both keys are ALWAYS present, null included, because null is the village's
+ * answer: it has written no walk, or no welcome, so the map offers no walk and
+ * greets plainly. The map treats an ABSENT key as "keep what you have", which
+ * is what the shell's bare push after a failed fetch relies on, so a caller
+ * that has no answer sends neither key and never calls this.
+ */
+export function walkPush(body: unknown): { walk: WalkStep[] | null; welcome: string | null } {
+  const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return {
+    walk: Array.isArray(b.walk) && b.walk.length ? (b.walk as WalkStep[]) : null,
+    welcome: typeof b.welcome === "string" && b.welcome.trim() ? b.welcome.trim() : null,
+  };
+}
+
+/**
  * HAS THIS VILLAGE WRITTEN ITS OWN WALK? The Journey to Launch asks it, as a
  * recommendation, because a village launches fine without one and the map
  * simply offers no walk.

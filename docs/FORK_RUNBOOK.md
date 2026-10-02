@@ -719,12 +719,18 @@ hidden and leaves the last strip behind the address bar). Leaving happens two
 ways that run the same code: the artifact's own exit posts `{type:'exit'}`,
 and the browser Back button pops a marker history entry pushed on open.
 
-`GET /api/map/config` returns `{skin, walk, vocabulary}` in one call, and the
-shell pushes it as a single `{type:'config'}` message on `grounds-ready`. The
-walk lives in a `map_walk` document keyed by language (`en` default);
-**an absent or empty walk means the artifact runs its own seed**, which is why
-the shell omits the key instead of sending `[]`. Edit it in Admin, Make This
-Yours, step 5, which can preview a draft on a real map without saving.
+`GET /api/map/config` returns `{skin, walk, welcome, vocabulary, scene}` in one
+call, and the shell pushes it as a single `{type:'config'}` message on
+`grounds-ready`. The walk and the village's own welcome live in a `map_walk`
+document keyed by language (`en` default; the welcome under `welcome`).
+**An absent or empty walk means the map offers no walk at all, and an absent
+welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+the founders' to write). The seed's example walk is offered to nobody. Once the
+fetch has answered, the shell sends both keys, null included; it leaves them
+out only after a failed fetch, which tells the map to keep what it has. Write
+both on the map under Village settings, which can preview a draft on a real
+map without saving. The Journey to Launch asks for them as a recommended item,
+`welcome-walk`, linking to `/map?settings=walk`.
 `GET /api/admin/map/structures` feeds the step picker from addresses the
 village has actually set (0060).
 

@@ -23,7 +23,7 @@
  * The door keeps its old behaviour for them: it navigates, and `/admin`
  * refuses them there as it always has.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, ExternalLink } from "lucide-react";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import MapSkinPanel from "@/components/MapSkinPanel";
@@ -77,6 +77,23 @@ export function takeSettingsDoor(
 }
 
 /**
+ * THE ADDRESS THAT OPENS THIS DOOR ON THE WALK: `/map?settings=walk`.
+ *
+ * The Journey to Launch asks a founder to write the village's welcome and
+ * walk (shared/launchRequirements.ts, `welcome-walk`), and the editor lives
+ * here on the map, so its link has to land with this door open. The shell
+ * reads this once, as the door's starting state.
+ */
+export const SETTINGS_PARAM = "settings";
+export function settingsAsked(search: string): boolean {
+  try {
+    return new URLSearchParams(search).get(SETTINGS_PARAM) === "walk";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * MAY THIS VIEWER STYLE THE LAND, readable from a handler installed once.
  *
  * The shell installs its `siteNav` shim when the artifact loads, and that
@@ -100,6 +117,24 @@ export default function VillageSettingsDoor({ open, onClose, onOpenFullPage }: {
 }) {
   const mayAdminister = useIsAdmin();
   const closeRef = useRef<HTMLButtonElement | null>(null);
+
+  /*
+   * OPENED BY ADDRESS, the walk is what was asked for: its panel is brought
+   * into view, and the question comes off the address so a reload or a copied
+   * link does not open settings over the land again. Read once, at mount;
+   * history's own state is kept, because the map's Back and Forward live in it.
+   */
+  const [askedWalk] = useState(() => settingsAsked(window.location.search));
+  useEffect(() => {
+    if (!askedWalk) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete(SETTINGS_PARAM);
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    } catch {
+      /* The address keeps its question; the door is open either way. */
+    }
+  }, [askedWalk]);
 
   /*
    * THE PANEL TAKES FOCUS WHEN IT OPENS, and that is not only good manners.
@@ -160,7 +195,7 @@ export default function VillageSettingsDoor({ open, onClose, onOpenFullPage }: {
 
         <div className="px-5 pb-8 space-y-5">
           <MapSkinPanel />
-          <WalkEditorPanel />
+          <WalkEditorPanel focus={askedWalk} />
           <MapVocabularyPanel />
 
           {/* Everything else the settings page holds is still one tap away. */}

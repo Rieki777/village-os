@@ -24,6 +24,7 @@ import {
   WALK_WELCOME_KEY,
   WALK_WELCOME_MAX,
   walkDocumentFrom,
+  walkPush,
   welcomeWalkCheck,
 } from "./mapAddress";
 
@@ -139,5 +140,23 @@ describe("welcomeWalkCheck: the Journey to Launch's question", () => {
 
   it("does not count a welcome alone as a walk", () => {
     expect(welcomeWalkCheck({ [WALK_WELCOME_KEY]: { en: "Come in." } }).state).toBe("missing");
+  });
+});
+
+describe("walkPush: the walk's half of the map's config push", () => {
+  it("always carries both keys, null for what the village has not written", () => {
+    expect(walkPush({ walk: null, welcome: null })).toEqual({ walk: null, welcome: null });
+    expect(walkPush({})).toEqual({ walk: null, welcome: null });
+    expect(walkPush(null)).toEqual({ walk: null, welcome: null });
+  });
+
+  it("reads an empty walk and a blank welcome as none, never as a walk with no stops", () => {
+    expect(walkPush({ walk: [], welcome: "   " })).toEqual({ walk: null, welcome: null });
+  });
+
+  it("passes the village's own on", () => {
+    const pushed = walkPush({ walk: [step()], welcome: " Come in. " });
+    expect(pushed.walk).toHaveLength(1);
+    expect(pushed.welcome).toBe("Come in.");
   });
 });
