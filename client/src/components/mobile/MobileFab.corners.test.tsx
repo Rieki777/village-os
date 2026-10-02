@@ -40,6 +40,17 @@ vi.mock("@/components/natural/useReducedMotion", () => ({
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
   gameFetch: (url: string) => fetch(url),
+  // `MobileFab` reads the brochure switch through `useBrochurePages`, which
+  // calls this. A wholesale `vi.mock` REPLACES the module, so an export the
+  // component gained is simply absent here and every case in this file dies at
+  // render with "No useGameConfig export is defined on the mock" - ten of them,
+  // none of which is about the brochure pages at all.
+  //
+  // ON is the honest value. Before the switch existed every FAB_ACTIONS row
+  // showed, so `brochurePages: true` is the state these corner and visibility
+  // cases were written against, and they keep measuring what they always did.
+  // Whether a shortcut row is filtered out is MobileFab.test.tsx's question.
+  useGameConfig: () => ({ brochurePages: true }),
 }));
 // The launch page's shell and heavy neighbours, as JourneyToLaunch.test.tsx mocks them.
 vi.mock("@/components/Layout", () => ({
