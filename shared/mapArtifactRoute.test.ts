@@ -159,6 +159,13 @@ describe("the artifact's address, inside the shell", () => {
   let f: Framed;
   beforeAll(async () => {
     f = framed();
+    /* The shell sends a config on every path, a bare one when its fetch
+       fails (pushConfig in LivingMap.tsx), and inside the shell the artifact
+       holds every address until that first config lands (ROUTE_HELD, so a
+       shared link is answered by the village's land and not the seed). A
+       stand-in parent that never sends one leaves every goto below waiting
+       on a hold the real shell always ends. */
+    f.post({ type: "config" });
     await settle(1000);
   });
   afterAll(() => f?.window.close());
