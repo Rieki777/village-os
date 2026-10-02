@@ -701,3 +701,57 @@ describe("Save map skin inside the village (F78)", () => {
     expect(last).toEqual(["label-style", "flow-style"]);
   });
 });
+
+/* THE OFFER COUNTS WHAT THE BAR WILL COUNT. A draft waiting to be opened
+   says how many changes it holds, and its own comment promises the number
+   the draft bar shows once it is open. The bar counts what a publish would
+   change (F70), so a change and its undo are none; the offer counted every
+   line of the journal, undos included, so a draft of one rename and a
+   removal taken back was offered as "3 changes" and opened as "1". A draft
+   whose every change was taken back holds nothing of its own, and is not
+   offered at all, the rule a draft that is all live already keeps. */
+describe("a saved draft offered after an undo", () => {
+  /** Saves the work as a draft in the village, then opens the map again with that draft waiting. */
+  async function offeredAfter(work: (m: Booted) => void) {
+    const m = await boot();
+    build(m);
+    work(m);
+    m.run("saveNow()");
+    await settle(50);
+    const draft = m.village.draft;
+    m.close();
+    expect(draft, "the village kept the draft").not.toBeNull();
+    const scene = JSON.parse((draft as { scene: string }).scene) as Scene;
+    expect(scene.map_structures.length, "the undo put the gate back in the draft").toBe(SEED.map_structures.length);
+    const next = await boot();
+    next.post({ ...next.village.hand(), draft: { scene, baseVersion: 6 } });
+    return next;
+  }
+
+  it("says the number of changes the bar shows once the draft is open", async () => {
+    const m = await offeredAfter((w) => {
+      rename(w, "market", "Renamed Market");
+      w.el('.poi[data-k="gate"] .rm').click();
+      w.el("#undoBtn").click();
+    });
+    const offer = m.el("#restoreMsg").textContent ?? "";
+    const shown = m.el("#restoreBar").style.display;
+    m.el("#restoreYes").click();
+    const bar = card(m).bar.state;
+    m.close();
+    expect(shown, "the draft is offered").toBe("flex");
+    expect(bar, "the bar once it is open").toContain("1 unpublished change.");
+    expect(offer).toContain("1 change.");
+  });
+
+  it("is not offered when every change in it was taken back", async () => {
+    const m = await offeredAfter((w) => {
+      w.el('.poi[data-k="gate"] .rm').click();
+      w.el("#undoBtn").click();
+    });
+    const shown = m.el("#restoreBar").style.display;
+    const offer = m.el("#restoreMsg").textContent ?? "";
+    m.close();
+    expect(shown, `offered as: ${offer}`).toBe("none");
+  });
+});

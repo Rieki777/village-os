@@ -9971,10 +9971,14 @@ function unpublished(){return workEdits().filter(e=>(e.seq||0)>PUBLISH_MARK)}
    the live map already has is a real change and stays on the list. Taking
    back a new or duplicated place takes every later line about that place with
    it, its placing and naming included, because the place itself is gone. */
-function netChanges(){
-  const ed=unpublished(),gone=new Set();
+function netChanges(){return netOf(unpublished(),PUBLISH_MARK)}
+/* The same reading of any journal's unpublished lines against its own mark,
+   so a draft still waiting to be opened is counted the way the bar will
+   count it once it is (offeredChanges). */
+function netOf(ed,mark){
+  const gone=new Set();
   for(const e of ed){const d=e.action==='undo'&&e.diff;
-    if(!d||!((d.reverses||0)>PUBLISH_MARK))continue;
+    if(!d||!((d.reverses||0)>mark))continue;
     gone.add(e.seq);gone.add(d.reverses);
     if((d.kind==='add'||d.kind==='dup')&&d.target){const t='structure:'+d.target;
       for(const x of ed)if(x.seq>d.reverses&&x.seq<e.seq&&x.target===t)gone.add(x.seq)}}
@@ -10049,10 +10053,11 @@ function offerDraft(draft){
   $('restoreNo').onclick=openDiscard;
 }
 /* The count is the changes the live map does not have, the same number the
-   draft bar shows once it is open. Said again when the live scene lands,
-   because until then nothing here can tell which edits are live. */
+   draft bar shows once it is open: a change and its undo are none (netOf).
+   Said again when the live scene lands, because until then nothing here can
+   tell which edits are live. */
 function offeredChanges(o){const ed=(o&&o.scene&&o.scene.map_edits)||[],mark=sharedMark(ed,LIVE_SCENE);
-  return ed.filter(e=>(e.seq||0)>mark).length}
+  return netOf(ed.filter(e=>(e.seq||0)>mark),mark).length}
 function sayOffer(){
   if(!OFFERED)return;
   const n=offeredChanges(OFFERED),b=(OFFERED.scene.map_structures||[]).length;
