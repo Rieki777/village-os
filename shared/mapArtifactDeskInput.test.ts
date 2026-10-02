@@ -25,6 +25,8 @@ const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 /** The artifact's own storage key for a saved scene, read from it so this file names no village. */
 const SCENE_KEY = /localStorage\.getItem\('([\w-]+-grounds-scene)'\)/.exec(html)?.[1] ?? "";
+/** And the one for this person's own view (the mask). */
+const MASK_KEY = /const MASK_KEY='([\w-]+)'/.exec(html)?.[1] ?? "";
 
 type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
@@ -165,6 +167,7 @@ it("the artifact is the file the shell mounts (the positive control)", () => {
     expect(html, `#${id} in the markup`).toContain(`id="${id}"`);
   }
   expect(SCENE_KEY, "the saved scene's storage key").toMatch(/-grounds-scene$/);
+  expect(MASK_KEY, "the mask's storage key").toMatch(/-map-mask$/);
 });
 
 /* F01. A sheet parked past the edge took keyboard focus. Tab 20 and 21 of
@@ -688,5 +691,152 @@ describe("the wheel, a pinch and a drag work over a building, a name and a mark"
     expect(b.run<boolean>("!!travel"), "a click on a district plate flies to it").toBe(true);
     b.run("travel=null");
     expect(b.uncaught).toEqual([]);
+  });
+});
+
+/* F22 and F63. "Your view" says it changes how the map looks to you and to
+   nobody else. Inside the village the label style and the flow marks wrote
+   an entry in the village's edit log instead, which set off a 66 KB save of
+   the whole land and a "Saved work found... Restore it" bar on every later
+   visit, and neither they nor the theme were kept: F5 put Emerald Atlas
+   back, and the shell's config push put the village's building size back
+   over the person's own. A reload here is a second jsdom booted with the
+   first one's localStorage, inside a stand-in for the shell's frame. */
+describe("Your view is kept for the person, and stays out of the village's record", () => {
+  const LIVE_SKIN = { theme: "", accent: "#157f7d", global_scale: 1, flow_style: "glyph", label_style: "ribbon" };
+  const inTheVillage =
+    (stored: Record<string, string> = {}) =>
+    (w: ArtifactWindow) => {
+      Object.defineProperty(w, "parent", { configurable: true, get: () => ({ postMessage() {} }) });
+      for (const [k, v] of Object.entries(stored)) w.localStorage.setItem(k, v);
+    };
+  const storage = (b: Booted) => {
+    const out: Record<string, string> = {};
+    for (let i = 0; i < b.window.localStorage.length; i++) {
+      const k = b.window.localStorage.key(i) as string;
+      out[k] = b.window.localStorage.getItem(k) as string;
+    }
+    return out;
+  };
+  /** The shell's two pushes, as LivingMap.tsx sends them, with a published journal of 3 edits. */
+  const arrive = (b: Booted, canEdit: boolean) => {
+    const scene = b.run<{ map_edits: unknown[] }>("JSON.parse(JSON.stringify(buildExportJSON()))");
+    scene.map_edits = [1, 2, 3].map((seq) => ({
+      seq,
+      actor: "founder",
+      action: "rename",
+      target: "structure:gate",
+      diff: {},
+      at: `2026-08-0${seq}T10:00:00.000Z`,
+    }));
+    b.post({ type: "config", scene, sceneVersion: 6, skin: LIVE_SKIN });
+    b.post({ type: "hand", canEdit, canPublish: canEdit, liveVersion: 6, live: { version: 6, by: "the founder" } });
+  };
+  const choose = (b: Booted, id: string, value: string) => {
+    const sel = b.doc.getElementById(id) as HTMLSelectElement;
+    sel.value = value;
+    sel.dispatchEvent(new b.window.Event("change", { bubbles: true }));
+  };
+  const look = (b: Booted) =>
+    b.run<{ theme: string; scale: number; tablet: boolean; flow: string; skinLabel: string; skinTheme: string; edits: number; bar: string }>(
+      `({theme:THEME.label,scale:Math.round(GSCALE*100),tablet:document.body.classList.contains('lbl-tablet'),
+        flow:window.dressOf?dressOf('flow_style'):SKIN.flow_style,skinLabel:SKIN.label_style,skinTheme:SKIN.theme,edits:EDITS.length,
+        bar:$('restoreBar').style.display})`,
+    );
+
+  let first: Booted;
+  let kept: Record<string, string>;
+  let arrived: number;
+  let during: ReturnType<typeof look>;
+  let afterPush: ReturnType<typeof look>;
+  beforeAll(async () => {
+    first = boot("#skipIntro", DESK, inTheVillage());
+    await settle(SETTLE_MS);
+    arrive(first, false);
+    arrived = first.run<number>("EDITS.length");
+    first.run("openMask()");
+    (first.doc.querySelector('#skTheme .swb[data-t="Terra Sol"]') as HTMLElement).click();
+    choose(first, "skLabelStyle", "tablet");
+    choose(first, "skFlow", "gold");
+    first.run("setGScale(130)"); // the dial's change event, which is the one that keeps it
+    during = look(first);
+    await settle(2800); // longer than the autosave's 2.5 s
+    // The village pushes its look again, as the shell does after every scene.
+    first.post({ type: "config", skin: LIVE_SKIN });
+    afterPush = look(first);
+    kept = storage(first);
+  });
+  afterAll(() => first?.close());
+
+  it("arrives inside the village with the published journal (the positive control)", () => {
+    expect(first.run<boolean>("inShell()")).toBe(true);
+    expect(arrived, "the published journal").toBe(3);
+    expect(during.theme, "the swatch took").toBe("Terra Sol");
+  });
+
+  it("writes nothing to the village's edit log or its look, and saves no copy of the land", () => {
+    expect(during.edits, "edits after a label style and flow marks change").toBe(3);
+    expect(during.skinLabel, "the village's own label style").toBe("ribbon");
+    expect(kept[SCENE_KEY], "a saved copy of the whole land").toBeUndefined();
+    expect(JSON.parse(kept[MASK_KEY] ?? "{}")).toEqual({
+      theme: "Terra Sol",
+      label_style: "tablet",
+      flow_style: "gold",
+      scale: 130,
+    });
+  });
+
+  it("keeps the person's view over the village's own look when the village pushes it", () => {
+    expect(afterPush).toMatchObject({ theme: "Terra Sol", scale: 130, tablet: true, flow: "gold" });
+    expect(afterPush.skinTheme, "SKIN stays the village's record").toBe("Emerald Atlas");
+  });
+
+  it("brings the whole view back on the next visit, with no restore bar", async () => {
+    const again = boot("#skipIntro", DESK, inTheVillage(kept));
+    await settle(SETTLE_MS);
+    arrive(again, false);
+    expect(look(again)).toMatchObject({ theme: "Terra Sol", scale: 130, tablet: true, flow: "gold", bar: "none" });
+    expect(again.uncaught).toEqual([]);
+    again.close();
+  });
+
+  it("lets a preference go when the person picks the village's own look again", () => {
+    (first.doc.querySelector('#skTheme .swb[data-t="Emerald Atlas"]') as HTMLElement).click();
+    choose(first, "skLabelStyle", "ribbon");
+    expect(first.run<Record<string, unknown>>("maskRead()")).toEqual({ flow_style: "gold", scale: 130 });
+    first.run("setGScale(100)");
+    expect(first.run<Record<string, unknown>>("maskRead()")).toEqual({ flow_style: "gold" });
+    expect(first.uncaught).toEqual([]);
+  });
+
+  it("offers a copy this browser already holds only to a hand that can edit, and Start fresh lets it go", async () => {
+    const copy = JSON.stringify(first.run("buildExportJSON()"));
+    const visitor = boot("#skipIntro", DESK, inTheVillage({ [SCENE_KEY]: copy }));
+    await settle(SETTLE_MS);
+    arrive(visitor, false);
+    expect(look(visitor).bar, "the bar for someone who cannot edit").toBe("none");
+    visitor.close();
+
+    const editor = boot("#skipIntro", DESK, inTheVillage({ [SCENE_KEY]: copy }));
+    await settle(SETTLE_MS);
+    expect(look(editor).bar, "nothing offered before the hand says who this is").toBe("none");
+    arrive(editor, true);
+    expect(look(editor).bar, "the bar for an editor").toBe("flex");
+    expect(editor.doc.getElementById("restoreMsg")?.textContent).toContain("Saved work found in this browser");
+    (editor.doc.getElementById("restoreNo") as HTMLElement).click();
+    expect(editor.window.localStorage.getItem(SCENE_KEY), "Start fresh").toBeNull();
+    editor.close();
+  });
+
+  it("still dresses and logs the scene when the map runs on its own (file://, the export is the outlet)", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    expect(alone.run<boolean>("inShell()")).toBe(false);
+    const before = alone.run<number>("EDITS.length");
+    choose(alone, "skLabelStyle", "tablet");
+    expect(alone.run<string>("EDITS[EDITS.length-1].action")).toBe("label-style");
+    expect(alone.run<number>("EDITS.length")).toBe(before + 1);
+    expect(alone.run<string>("SKIN.label_style")).toBe("tablet");
+    alone.close();
   });
 });

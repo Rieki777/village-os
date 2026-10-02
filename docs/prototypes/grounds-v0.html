@@ -2211,7 +2211,7 @@ window.flowSpriteReset=()=>{for(const k in FLOW_SPR)delete FLOW_SPR[k]};
 /* Three dresses, one meaning. The mark changes; the line under it never
    stops carrying the type's colour, so distance still reads. */
 function flowMark(x,y,k,col){
-  const st=(window.SKIN&&SKIN.flow_style)||'glyph';
+  const st=(window.dressOf&&dressOf('flow_style'))||'glyph';
   if(st==='glyph'){const s=flowSprite(k);cx.drawImage(s,x-6,y-6,12,12);return}
   cx.fillStyle=(st==='gold')?'#ecd08a':col;
   cx.beginPath();cx.arc(x,y,3.1,0,7);cx.fill()}
@@ -4776,6 +4776,7 @@ $('cApply').onclick=()=>{applyTheme({label:'Your Land',sub:'custom palette',wash
   v:{...THEME.v,'--t-surface':$('cSurface').value,'--t-ring':$('cRing').value,'--t-accent':$('cAccent').value,'--gold':$('cRing').value}},
   `Custom palette applied. Surface, ring, and accent are yours; I tuned the rest to match. Upload a full brand kit on the site and the whole map wears it.`)};
 $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
+  keepLook({words:w,theme:null});
   applyTheme(themeFromWords(w),`I read “${w}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
   $('themePanel').classList.remove('show')};
 
@@ -7025,16 +7026,28 @@ function restoreScene(J){try{
   if(document.body.classList.contains('loom'))renderLoom();
   toast('Restored: '+SCENE.structures.length+' buildings, '+SCENE.features.length+' features, '+EDITS.length+' edits.');
   return true}catch(err){console.warn('restore failed',err);toast('Could not restore the saved session.');return false}}
-(function persistenceBoot(){try{
-  const raw=localStorage.getItem('amora-grounds-scene');if(!raw)return;
-  const J=JSON.parse(raw);if(!J||!Array.isArray(J.map_structures))return;
+/* A SAVE IN THIS BROWSER IS OFFERED ONLY TO A HAND THAT CAN USE IT. Inside
+   the village the offer waits for the hand (applyHand). A person who cannot
+   edit has nothing of their own to restore, and the copy their browser held
+   was the whole published land plus a label style, saved when Your view
+   still wrote the edit log: Restore it laid that stale land over the live
+   one, and the bar came back on every visit because Start fresh only hid
+   it. Start fresh now lets the copy go, which is what it says. Standalone
+   there is no hand to wait for, and it is offered at boot as before. */
+let LOCAL_HELD=null;
+function offerLocal(J){
   $('restoreMsg').textContent=`Saved work found in this browser: ${J.map_structures.length} buildings, ${(J.map_edits||[]).length} edits.`;
   $('restoreBar').style.display='flex';
   /* draftOpened measures this journal against the live one. Left alone, the
      mark stayed at the live map's newest seq, and a save from before a
      colleague's publish had its own changes counted as already live. */
   $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';if(restoreScene(J))draftOpened()};
-  $('restoreNo').onclick=()=>{$('restoreBar').style.display='none'}
+  $('restoreNo').onclick=()=>{$('restoreBar').style.display='none';try{localStorage.removeItem('amora-grounds-scene')}catch(_){}}}
+(function persistenceBoot(){try{
+  const raw=localStorage.getItem('amora-grounds-scene');if(!raw)return;
+  const J=JSON.parse(raw);if(!J||!Array.isArray(J.map_structures))return;
+  if(inShell()){LOCAL_HELD=J;return}
+  offerLocal(J)
 }catch(e){}})();
 
 /* ---------- THE LOOM — the connections lens (D9: a lens, never a ledger).
@@ -7872,9 +7885,49 @@ window.syncPaintTools=syncPaintTools;
    published, and it never becomes an entry in the shared edit log. */
 const MASK_KEY='amora-map-mask';
 function maskRead(){try{return JSON.parse(localStorage.getItem(MASK_KEY)||'{}')||{}}catch(_){return{}}}
-function maskWrite(p){try{const m=maskRead();Object.assign(m,p);
-  localStorage.setItem(MASK_KEY,JSON.stringify(m))}catch(_){}}
+/* Read once and kept in step here, because flowMark asks for the dress on
+   every frame and storage is a parse away. A key written as null is a
+   preference let go, and leaves the record. */
+let MASK=maskRead();
+function maskWrite(p){MASK=Object.assign({},MASK,p);for(const k in MASK)if(MASK[k]==null)delete MASK[k];
+  try{localStorage.setItem(MASK_KEY,JSON.stringify(MASK))}catch(_){}}
 window.maskRead=maskRead;window.maskWrite=maskWrite;
+/* WHAT THE VILLAGE ITSELF WEARS, as the last skin it sent left it, or the
+   house look before one arrives. A person who picks the village's own
+   value again has no preference left to keep, and keeping one would hide
+   whatever the village wears next. */
+const VILLAGE_LOOK={theme:SKIN.theme,words:'',label_style:SKIN.label_style,flow_style:SKIN.flow_style,scale:100};
+/* Who may dress SKIN itself, the village's record that Save map skin and
+   the scene export carry: the map running on its own, or a hand inside the
+   village that can edit. A visitor's choices are their view and nothing
+   else. */
+function dressesTheVillage(){return !inShell()||HAND.canEdit}
+function keepLook(p){const q={};for(const k in p)q[k]=(p[k]==null||p[k]===VILLAGE_LOOK[k])?null:p[k];maskWrite(q)}
+window.keepLook=keepLook;
+const DRESS_OK={label_style:['ribbon','tablet'],flow_style:['glyph','gold','medium']};
+/* The dress on screen: this person's own choice if they made one, else the
+   village's. SKIN stays the village's record, because skinExport and Save
+   map skin carry SKIN, and one person's view is not the village's look. */
+function dressOf(k){const v=MASK[k];return (v&&DRESS_OK[k].includes(v))?v:(SKIN[k]||DRESS_OK[k][0])}
+window.dressOf=dressOf;
+/* THE MASK GOES ON LAST. The village's look arrives after boot, from the
+   shell's config push, a restored scene and Village Settings, and each runs
+   applySkinExport, which puts the village's theme and building size back.
+   MEASURED through the shell: Terra Sol and a size of 130 were both gone
+   after F5, the theme because nothing kept it and the size because the
+   config push set global_scale over it. So a person's own choices are laid
+   over the village's here, at the end of every applySkinExport and once at
+   boot, and never written into SKIN. The village's accent and parchment
+   still apply over a chosen theme, as they do when the swatch is pressed. */
+function maskApply(){
+  const t=MASK.theme&&Object.values(THEMES).find(x=>x.label===MASK.theme);
+  const w=!t&&typeof MASK.words==='string'&&MASK.words.trim();
+  if(t)applyTheme(t);else if(w)applyTheme(themeFromWords(w));
+  if(t||w)applySkinOverrides();
+  applyDress();
+  const v=Math.round(+MASK.scale);if(v>=50&&v<=300)setGScale(v,true);
+  if($('skin').classList.contains('show'))renderSkinThemes()}
+window.maskApply=maskApply;
 /* ONE ROOM. The move is a single appendChild and it is what makes merging a
    panel into another panel safe in a file this size: every control keeps
    the element it was built on, the listener that was bound to it and the
@@ -7922,7 +7975,8 @@ function renderSkinThemes(){const h=$('skTheme');if(!h)return;
   `<i style="background:${t.v['--t-accent']}"></i></span>`+
   `<span><b>${t.label}</b><small>${t.sub}</small></span></button>`).join('');
   $('skTheme').querySelectorAll('.swb').forEach(b=>b.onclick=()=>{const t=Object.values(THEMES).find(x=>x.label===b.dataset.t);
-    if(t){SKIN.theme=t.label;SKIN.words='';$('skWords').value='';applyTheme(t);applySkinOverrides();renderSkinThemes()}})}
+    if(t){if(dressesTheVillage()){SKIN.theme=t.label;SKIN.words=''}$('skWords').value='';applyTheme(t);applySkinOverrides();renderSkinThemes();
+      keepLook({theme:t.label,words:null})}})}
 function applySkinOverrides(){
   if(SKIN.accent){document.documentElement.style.setProperty('--t-accent',SKIN.accent)}
   if(SKIN.parch){document.documentElement.style.setProperty('--parch',SKIN.parch)}
@@ -7937,9 +7991,9 @@ window.skinExport=skinExport;
 /* One place that puts the dress on, so the panel, a restore and a config
    push over the bridge all take the same route. */
 function applyDress(){
-  document.body.classList.toggle('lbl-tablet',SKIN.label_style==='tablet');
-  if($('skFlow'))$('skFlow').value=SKIN.flow_style||'glyph';
-  if($('skLabelStyle'))$('skLabelStyle').value=SKIN.label_style||'ribbon';
+  document.body.classList.toggle('lbl-tablet',dressOf('label_style')==='tablet');
+  if($('skFlow'))$('skFlow').value=dressOf('flow_style');
+  if($('skLabelStyle'))$('skLabelStyle').value=dressOf('label_style');
 }
 window.applyDress=applyDress;
 function applySkinExport(sk){if(!sk)return;
@@ -7965,12 +8019,32 @@ function applySkinExport(sk){if(!sk)return;
   if($('skParch')&&sk.parchment)$('skParch').value=sk.parchment;
   if($('skLbl')){$('skLbl').value=SKIN.lbl;$('skLblV').textContent=SKIN.lbl+'%'}
   if($('skWords'))$('skWords').value=SKIN.words||'';
-  if($('skIcon')&&sk.icon_mode)$('skIcon').value=sk.icon_mode}
+  if($('skIcon')&&sk.icon_mode)$('skIcon').value=sk.icon_mode;
+  /* Read from the skin that arrived and never from SKIN, which an editor's
+     own choices may already have moved. */
+  VILLAGE_LOOK.theme=sk.theme||VILLAGE_LOOK.theme;VILLAGE_LOOK.words=sk.words||'';
+  for(const k of ['label_style','flow_style'])if(DRESS_OK[k].includes(sk[k]))VILLAGE_LOOK[k]=sk[k];
+  if(sk.global_scale)VILLAGE_LOOK.scale=Math.round(sk.global_scale*100);
+  maskApply()}
 window.applySkinExport=applySkinExport;
-if($('skFlow'))$('skFlow').onchange=()=>{SKIN.flow_style=$('skFlow').value;
-  logEdit('flow-style','skin',{to:SKIN.flow_style});toast('Flow marks: '+$('skFlow').selectedOptions[0].textContent+'.')};
-if($('skLabelStyle'))$('skLabelStyle').onchange=()=>{SKIN.label_style=$('skLabelStyle').value;applyDress();
-  logEdit('label-style','skin',{to:SKIN.label_style});toast('Labels: '+$('skLabelStyle').selectedOptions[0].textContent+'.')};
+/* YOUR VIEW, AND INSIDE THE VILLAGE NOTHING MORE. These two wrote an entry
+   in the village's edit log on every change, for everyone. A visitor who
+   only restyled their own labels set off the autosave: the whole land,
+   66 KB, saved in their browser, the builder's "Export scene" toast, and on
+   the next visit "Saved work found in this browser: 23 buildings, 54 edits.
+   Restore it", while the style they had picked was gone. The choice is kept
+   in the mask now, as building size is. Someone who dresses the village
+   (dressesTheVillage) also sets SKIN, so Save map skin carries it, and
+   standalone (file://), where the scene file is the village and its export
+   the outlet, the change is still logged, as Save map skin does there. */
+if($('skFlow'))$('skFlow').onchange=()=>{const v=$('skFlow').value;keepLook({flow_style:v});
+  if(dressesTheVillage())SKIN.flow_style=v;
+  applyDress();if(!inShell())logEdit('flow-style','skin',{to:v});
+  toast('Flow marks: '+$('skFlow').selectedOptions[0].textContent+'.')};
+if($('skLabelStyle'))$('skLabelStyle').onchange=()=>{const v=$('skLabelStyle').value;keepLook({label_style:v});
+  if(dressesTheVillage())SKIN.label_style=v;
+  applyDress();if(!inShell())logEdit('label-style','skin',{to:v});
+  toast('Labels: '+$('skLabelStyle').selectedOptions[0].textContent+'.')};
 applyDress();
 /* A builder already in build mode keeps a chip to the same room. Two doors
    to one panel is the fix; three doors to two panels was the complaint. */
@@ -7978,7 +8052,7 @@ $('skinBtn').onclick=()=>toggleMask();
 $('skClose').onclick=()=>closeMask();
 if($('skX'))$('skX').onclick=()=>closeMask();
 $('skWords').addEventListener('change',()=>{const v=$('skWords').value.trim();if(!v)return;
-  SKIN.words=v;SKIN.theme=null;applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();
+  if(dressesTheVillage()){SKIN.words=v;SKIN.theme=null}applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();keepLook({words:v,theme:null});
   toast('A theme grown from your words. Save makes it yours.')});
 $('skAccent').oninput=()=>{SKIN.accent=$('skAccent').value;applySkinOverrides()};
 $('skParch').oninput=()=>{SKIN.parch=$('skParch').value;applySkinOverrides()};
@@ -7989,7 +8063,7 @@ $('skSave').onclick=()=>{logEdit('skin','map',skinExport());
   toast('✂ Skin saved. The land remembers it, and every export carries it.')};
 $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100;
   document.documentElement.style.removeProperty('--t-accent');document.documentElement.style.removeProperty('--lblScale');
-  applyTheme(THEMES.emerald);applySkinOverrides();
+  applyTheme(THEMES.emerald);applySkinOverrides();maskWrite({theme:null,words:null});
   $('skAccent').value='#e8a13c';$('skParch').value='#f3e6c8';$('skLbl').value=100;$('skLblV').textContent='100%';$('skWords').value='';
   renderSkinThemes();logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
@@ -8233,8 +8307,9 @@ function setGScale(v,quiet){window.GSCALE=v/100;document.documentElement.style.s
      R53 says this dial changes how big the houses look TO YOU. It is kept
      in this browser and it is kept for good. The village's own skin export
      still carries global_scale untouched, because publishing a skin is a
-     different act from a person choosing how big to see the houses. */
-  mmDirty=true;if(!quiet&&window.maskWrite)maskWrite({scale:v})}
+     different act from a person choosing how big to see the houses. The
+     village's own size, chosen again, is no preference (keepLook). */
+  mmDirty=true;if(!quiet&&window.keepLook)keepLook({scale:v})}
 window.setGScale=setGScale;
 $('gScale').oninput=()=>setGScale(+$('gScale').value,true);
 $('gScale').onchange=()=>setGScale(+$('gScale').value);
@@ -8777,7 +8852,10 @@ function applyHand(d){
      riding on an older one. See the note in applyScene: a silent rebase is
      how one admin overwrites another. */
   if(!unpublished().length)BASE_VERSION=+d.liveVersion||0;
-  if(d.draft&&d.draft.scene)offerDraft(d.draft);
+  /* The server's draft wins over this browser's copy, as offerDraft says;
+     the copy is offered only to someone who can edit. */
+  if(d.draft&&d.draft.scene){offerDraft(d.draft);LOCAL_HELD=null}
+  else if(HAND.canEdit&&LOCAL_HELD){offerLocal(LOCAL_HELD);LOCAL_HELD=null}
   renderDraftBar();
 }
 
@@ -9608,6 +9686,7 @@ if(SKIP_INTRO){leaveIntro();
   if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket'))arriveOnLand()}
 
 applyTheme(THEMES.emerald); // boot theme (sets every --t-* var before first paint)
+maskApply(); // and this person's own view over it, which the boot theme would otherwise replace
 requestAnimationFrame(frame); // start the loop only after the whole HUD exists
 </script>
 </body>
