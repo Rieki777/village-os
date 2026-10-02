@@ -4,6 +4,12 @@
  * Found by the 2026-10-01 QA sweep and reproduced by an independent skeptic,
  * all on production:
  *
+ *   F18  "Undo this" after a publish was a dead button. maiaClean keeps only
+ *        the inline handlers MSAY_ON_OK names and undoPublish() was not one,
+ *        so its onclick was stripped and pressing it did nothing at all.
+ *   F19  Once reachable, the undo put the old version live and left the
+ *        screen, "View as visitor" and the base on the undone one, so the
+ *        next small publish carried the undone change straight back.
  *   F70  The publish card listed changes that undo had already taken back,
  *        and counted each undo as one more change.
  *   F71  Undo after Discard draft put a removed building back beside the live
@@ -13,7 +19,9 @@
  *
  * Runs the real artifact in jsdom and plays the village around it: the
  * map's posts to its shell are caught at shellPost, and a small in-memory
- * village answers them the way server/routes/mapScene.ts does. Platform
+ * village answers them the way server/routes/mapScene.ts does, with the
+ * shell's config push before a restore's answer
+ * (client/src/components/map/sceneRelay.ts, tested on its own). Platform
  * stubs mirror mapArtifactBoot.test.ts, which says why each one exists.
  *
  * WHAT THIS CANNOT SEE. Pixels and real pointers. The drag below dispatches
@@ -314,6 +322,157 @@ it("the artifact still has the parts this guard drives (the positive control)", 
   expect(html).toContain("function undoPublish(");
   expect(html).toContain('id="undoBtn"');
   expect(html).toContain("function shellPost(");
+});
+
+describe("Undo this, pressed after a publish (F18)", () => {
+  let m: Booted;
+  let firstPress: { restores: number; version?: number; live: number; button: boolean };
+  let secondPress: { restores: number; live: number };
+  beforeAll(async () => {
+    m = await boot();
+    build(m);
+    rename(m, "market", "Market in v7");
+    await publish(m);
+    const b = undoThis(m);
+    expect(b, "Maia offers the undo").toBeTruthy();
+    b?.click();
+    await settle(50);
+    firstPress = { restores: restores(m).length, version: restores(m)[0]?.version, live: m.village.live.version, button: !!b?.disabled };
+    b?.click();
+    await settle(50);
+    secondPress = { restores: restores(m).length, live: m.village.live.version };
+  });
+  afterAll(() => m?.close());
+
+  it("published version 7 first (the case is the one it says it is)", () => {
+    expect(m.village.revs.map((r) => r.version)).toEqual([6, 7, 8]);
+  });
+
+  it("asks the village to put version 6 back when the rendered button is pressed", () => {
+    expect(firstPress.restores).toBe(1);
+    expect(firstPress.version).toBe(6);
+    expect(firstPress.live).toBe(8);
+  });
+
+  it("does not undo the undo: a second press asks for nothing, and the button is spent", () => {
+    expect(firstPress.button).toBe(true);
+    expect(secondPress).toEqual({ restores: 1, live: 8 });
+  });
+
+  it("is not stripped on its way into the dock", () => {
+    expect(m.run<string[]>("MSAY_STRIPPED.slice()")).not.toContain("button[onclick]");
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
+  });
+});
+
+describe("after the undo, with nothing unpublished in hand (F19)", () => {
+  let m: Booted;
+  let seen: { screen: string; liveScene: string; base: number; visitor: string; card: ReturnType<typeof card> };
+  let next: { live: number; market?: string; gate?: string; history: string[] };
+  beforeAll(async () => {
+    m = await boot();
+    build(m);
+    rename(m, "market", "Market in v7");
+    await publish(m);
+    undoThis(m)?.click();
+    await settle(50);
+    m.run("toggleVisitor()");
+    const visitor = name(m, "market");
+    m.run("toggleVisitor()");
+    seen = {
+      screen: name(m, "market"),
+      liveScene: m.run<string>("LIVE_SCENE.map_structures.find(s=>s.key==='market').name"),
+      base: m.run<number>("BASE_VERSION"),
+      visitor,
+      card: card(m),
+    };
+    rename(m, "gate", "Gate after undo");
+    await publish(m);
+    next = {
+      live: m.village.live.version,
+      market: liveName(m, "market"),
+      gate: liveName(m, "gate"),
+      history: m.village.revs.map((r) => `${r.version}:${(JSON.parse(r.scene) as Scene).map_structures.find((s) => s.key === "market")?.name}`),
+    };
+  });
+  afterAll(() => m?.close());
+
+  it("shows the land that is live again, to the cartographer and in the visitor view", () => {
+    const original = SEED.map_structures.find((s) => s.key === "market")?.name;
+    expect(seen.screen).toBe(original);
+    expect(seen.liveScene).toBe(original);
+    expect(seen.visitor).toBe(original);
+  });
+
+  it("forks from the version the undo made, with nothing left to publish", () => {
+    expect(seen.base).toBe(8);
+    expect(seen.card.bar.publishDisabled).toBe(true);
+    expect(seen.card.open).toBe(false);
+  });
+
+  it("does not carry the undone change back with the next publish", () => {
+    const original = SEED.map_structures.find((s) => s.key === "market")?.name;
+    expect(next.live).toBe(9);
+    expect(next.gate).toBe("Gate after undo");
+    expect(next.market).toBe(original);
+    expect(next.history).toEqual([`6:${original}`, "7:Market in v7", `8:${original}`, `9:${original}`]);
+  });
+
+  it("moved the untouched server draft along with the undo", () => {
+    // After the second publish the route rebased it again, onto 9.
+    expect(m.village.draft?.baseVersion).toBe(9);
+  });
+});
+
+describe("after the undo, with work in hand (F19)", () => {
+  let m: Booted;
+  let seen: { market: string; gate: string; base: number };
+  let refused: { title: string; live: number };
+  beforeAll(async () => {
+    m = await boot();
+    build(m);
+    rename(m, "market", "Market in v7");
+    await publish(m);
+    rename(m, "gate", "Gate in hand");
+    undoThis(m)?.click();
+    await settle(50);
+    seen = { market: name(m, "market"), gate: name(m, "gate"), base: m.run<number>("BASE_VERSION") };
+    await publish(m);
+    refused = { title: m.el("#pubTitle").textContent ?? "", live: m.village.live.version };
+  });
+  afterAll(() => m?.close());
+
+  it("puts the old version live and leaves the draft on screen untouched", () => {
+    expect(m.village.live.version).toBe(8);
+    expect(seen.gate).toBe("Gate in hand");
+    expect(seen.market).toBe("Market in v7");
+  });
+
+  it("keeps the draft's base, so its next publish is refused and says why", () => {
+    expect(seen.base, "rebasing here let the undone change ride the next publish").toBe(7);
+    expect(refused.live).toBe(8);
+    expect(refused.title).toBe("The live map moved while you were working");
+  });
+});
+
+describe("Undo this, pressed while viewing as a visitor (F19)", () => {
+  it("is refused, and asks nothing of the village", async () => {
+    const m = await boot();
+    build(m);
+    rename(m, "market", "Market in v7");
+    await publish(m);
+    m.run("toggleVisitor()");
+    undoThis(m)?.click();
+    await settle(50);
+    const toast = lastToast(m);
+    const sent = restores(m).length;
+    m.close();
+    expect(sent).toBe(0);
+    expect(toast).toContain("Go back to your draft, then undo.");
+  });
 });
 
 describe("the publish card after undo (F70)", () => {

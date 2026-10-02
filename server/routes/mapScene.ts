@@ -43,6 +43,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import {
   discardDraft,
+  followRestore,
   getDraft,
   listRevisions,
   publishScene,
@@ -50,6 +51,7 @@ import {
   publishedScene,
   publishedVersion,
   restoreRevision,
+  revisionScene,
   saveDraft,
 } from "../lib/mapScene";
 import { walkReport } from "../lib/walkLog";
@@ -359,6 +361,9 @@ export function register(app: Express, deps: Deps): void {
       return res.status(400).json({ error: "That is not a version number." });
     }
 
+    // The land as it stood before the undo, read only to tell whether this
+    // member's draft holds work of their own. `followRestore` says why.
+    const liveBefore = await publishedScene(getPool());
     const result = await restoreRevision(getPool(), version, user.id);
     if (!result.ok && result.reason === "missing") {
       return res.status(404).json({ error: `There is no version ${version} to put back.` });
@@ -369,6 +374,11 @@ export function register(app: Express, deps: Deps): void {
         reason: "stale",
         error: "The live map changed a moment ago. Take a look at what moved, then try again.",
       });
+    }
+
+    const restored = liveBefore ? await revisionScene(getPool(), version) : null;
+    if (liveBefore && restored !== null) {
+      await followRestore(getPool(), user.id, liveBefore.scene, { scene: restored, version: result.version });
     }
 
     await recordEvent(getPool(), {

@@ -165,6 +165,37 @@ export function pendingDraft<T extends { scene: string }>(
 }
 
 /**
+ * Bring a member's draft along with their undo, when it holds no work of
+ * their own.
+ *
+ * A publish rebases the draft onto what it made live (see `publishScene`), so
+ * straight after a publish the draft IS the live scene. An undo then put an
+ * older version back and left that draft where it was: still the undone
+ * scene, now different from live, so the next visit offered it as "an
+ * unpublished draft", and opening it put the undone change back on screen
+ * forked from a version the history had already used.
+ *
+ * ONLY a draft byte-identical to the scene that was live a moment before the
+ * undo is moved, onto the restored scene and the version the undo made. A
+ * draft with anything else in it is the member's unpublished work, and moving
+ * it would throw that work away. It stays exactly where it is, forked from
+ * the old version, so its publish is refused as stale and explains itself.
+ * Returns whether the draft moved.
+ */
+export async function followRestore(
+  pool: Pool,
+  userId: string,
+  liveBefore: string | null,
+  restored: { scene: string; version: number },
+): Promise<boolean> {
+  if (liveBefore === null) return false;
+  const draft = await getDraft(pool, userId);
+  if (!draft || draft.scene !== liveBefore) return false;
+  await saveDraft(pool, userId, restored.scene, restored.version);
+  return true;
+}
+
+/**
  * Write a member's working copy.
  *
  * One row per person, replaced wholesale on every autosave. There is no

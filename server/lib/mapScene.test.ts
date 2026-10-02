@@ -19,6 +19,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import {
   discardDraft,
+  followRestore,
   getDraft,
   listRevisions,
   pendingDraft,
@@ -222,6 +223,51 @@ describe.skipIf(!configured)("the map's draft, publish and undo", () => {
       expect(r.ok).toBe(false);
       if (r.ok) throw new Error("unreachable");
       expect(r.reason).toBe("missing");
+    });
+
+    /*
+     * A publish rebases the member's draft onto what it made live, so right
+     * after "Undo this" their draft was still the undone scene. The next visit
+     * offered it as unpublished work, and opening it put the undone change
+     * back on screen. Exactly the route's sequence: read live, restore, follow.
+     */
+    describe("the member's draft follows the undo, only when it holds nothing of theirs", () => {
+      const first = '{"map_scene":{"version":"v0.8-roundD"},"map_structures":[],"n":1}';
+      const second = '{"map_scene":{"version":"v0.8-roundD"},"map_structures":[],"n":2}';
+      async function publishTwiceThenUndo(draft: (published: string) => string) {
+        await publishScene(pool, { scene: first, baseVersion: 0, actorUserId: "u-rye" });
+        await publishScene(pool, { scene: second, baseVersion: 1, actorUserId: "u-rye" });
+        await saveDraft(pool, "u-rye", draft(second), 2); // the rebase the publish route makes
+        const liveBefore = await publishedScene(pool);
+        const undo = await restoreRevision(pool, 1, "u-rye");
+        if (!undo.ok) throw new Error("the undo was refused");
+        const moved = await followRestore(pool, "u-rye", liveBefore!.scene, { scene: (await revisionScene(pool, 1))!, version: undo.version });
+        return { moved, version: undo.version, row: await getDraft(pool, "u-rye"), live: await publishedScene(pool) };
+      }
+
+      it("moves an untouched draft onto the restored scene and the version the undo made", async () => {
+        const r = await publishTwiceThenUndo((published) => published);
+        expect(r.moved).toBe(true);
+        expect(r.row?.scene).toBe(first);
+        expect(r.row?.baseVersion).toBe(3);
+        expect(pendingDraft(r.row, r.live?.scene), "nothing is offered on the next visit").toBeNull();
+      });
+
+      it("leaves real work exactly where it is, forked from the old version", async () => {
+        const mine = JSON.stringify({ ...JSON.parse(second), map_edits: [{ seq: 9, action: "rename" }] });
+        const r = await publishTwiceThenUndo(() => mine);
+        expect(r.moved).toBe(false);
+        expect(r.row?.scene).toBe(mine);
+        expect(r.row?.baseVersion, "its publish is refused as stale and explains itself").toBe(2);
+      });
+
+      it("touches no draft when the member has none", async () => {
+        await publishScene(pool, { scene: first, baseVersion: 0, actorUserId: "u-rye" });
+        const liveBefore = await publishedScene(pool);
+        const moved = await followRestore(pool, "u-mara", liveBefore!.scene, { scene: first, version: 1 });
+        expect(moved).toBe(false);
+        expect(await getDraft(pool, "u-mara")).toBeNull();
+      });
     });
   });
 

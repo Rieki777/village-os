@@ -10337,33 +10337,61 @@ async function doDiscard(){
   toast('Draft thrown away.');
 }
 
-/* Live since, with the undo sitting right there for the minute it matters. */
+/* Live since, with the undo sitting right there for the minute it matters.
+   THE BUTTON IS WIRED HERE, on the line maiaSay hands back. An inline
+   onclick="undoPublish()" was stripped by maiaClean, which keeps only the
+   handlers MSAY_ON_OK names, so the one undo for the most sweeping act in
+   build mode did nothing at all. Adding it to that list would let any string
+   that ever reached maiaSay draw a working "revert the live map" button.
+   It remembers the version it undoes. Read at the press, LIVE.previous has
+   moved on after one undo, and a second press would put back the very change
+   the first one took away. */
 function liveSince(version){
   const t=new Date();
   const hh=String(t.getHours()).padStart(2,'0'),mm=String(t.getMinutes()).padStart(2,'0');
-  maiaSay(`<b>Live since ${hh}:${mm}.</b> Version ${escq(version)} is the map every visitor sees now. `+
-    `<button class="btn ghostbtn" style="font-size:11px;padding:3px 9px;margin-top:6px" onclick="undoPublish()">Undo this</button>`);
+  const back=(LIVE&&+LIVE.previous)||0,from=+version||0;
+  const line=maiaSay(`<b>Live since ${hh}:${mm}.</b> Version ${escq(version)} is the map every visitor sees now. `+
+    `<button class="btn ghostbtn undoPub" style="font-size:11px;padding:3px 9px;margin-top:6px">Undo this</button>`);
+  const b=line&&line.querySelector('.undoPub');
+  if(b)b.addEventListener('click',async()=>{if(b.disabled)return;b.disabled=true;
+    if(await undoPublish(back,from))b.textContent='Undone';else b.disabled=false});
   toast('Live. Everyone sees this map now.');
 }
 
 /* Undo is a publish carrying an older scene, so it takes the same key and
    settles the same race. Nothing is deleted, which is what makes it safe to
-   press when you are not sure. */
-async function undoPublish(){
+   press when you are not sure. Resolves true when the older version is live. */
+async function undoPublish(back,from){
   /* UNDO_ASKS. The version below the live one is NOT live minus one. A
      refused publish still consumes an AUTO_INCREMENT id, and a refused
      publish is how two admins racing get settled, so any village with two
      cartographers has gaps. The server reports `previous` from the history
      itself and this asks for that rather than doing arithmetic on it. */
-  const back=(LIVE&&+LIVE.previous)||0;
-  if(back<1)return toast('There is no earlier version to go back to.');
+  if(back==null)back=(LIVE&&+LIVE.previous)||0;
+  if(back<1){toast('There is no earlier version to go back to.');return false}
+  /* The button undoes the version it was made for. Once the live map has
+     moved past that one, by this undo or by a later publish from here, going
+     back would throw away more than the person pressed for. */
+  if(from&&LIVE&&+LIVE.version!==from){toast(`Version ${from} is no longer the live map, so this undo has nothing left to take back.`);return false}
+  /* Viewing as a visitor, the draft waits in DRAFT_HOLD and comes back over
+     whatever lands meanwhile, so the undone change would return to the screen
+     with it. Undo from the draft, where the land that comes back is seen. */
+  if(VISITOR_VIEW){toast('You are looking at the live map. Go back to your draft, then undo.');return false}
+  const had=LIVE_SCENE;
   const r=await shellAsk('restore',{version:back});
-  if(r.quiet)return toast('No village to reach from here.');
-  if(!r.ok)return toast(r.error||'That version could not be put back.');
+  if(r.quiet){toast('No village to reach from here.');return false}
+  if(!r.ok){toast(r.error||'That version could not be put back.');return false}
   LIVE=(r.live&&r.live.version)?r.live:{version:r.version};
-  BASE_VERSION=+r.version||BASE_VERSION;
+  /* NO REBASE HERE. The village sends the land it just put back before it
+     answers, and applyScene decides what that means for the draft. With
+     nothing unpublished it repaints and takes the new version as its base.
+     With work in hand it leaves the draft and its base alone, so the next
+     publish is refused and explains itself. Rebasing here unconditionally let
+     that next publish carry the undone change straight back onto the live
+     map, listed nowhere on its card. */
   renderDraftBar();
-  toast(`Version ${back} is live again.`);
+  toast(LIVE_SCENE===had?`Version ${back} is live again. Reload the map to see it.`:`Version ${back} is live again.`);
+  return true;
 }
 window.undoPublish=undoPublish;
 
