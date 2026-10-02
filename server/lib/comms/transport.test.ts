@@ -6,7 +6,7 @@ import { RESEND_DEFAULT_BASE, resendApiBase, resendPayload, resendTransport, typ
 
 /**
  * The one mail door, driven against the fake provider in this process
- * (docs/comms/BUILD_SPEC.md 5.2 and 8.1). Nothing here reaches the real API.
+ * (the comms build spec 5.2 and 8.1). Nothing here reaches the real API.
  */
 
 let fake: FakeResend;

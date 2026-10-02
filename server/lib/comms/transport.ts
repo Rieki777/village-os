@@ -1,6 +1,6 @@
 /**
  * THE ONE DOOR OUT: the email provider, over HTTPS, per
- * docs/comms/BUILD_SPEC.md 5.2.
+ * the comms build spec 5.2.
  *
  * Every email the village sends leaves through `send` here and through no
  * other call. The post office decides WHETHER and WHEN; this file only knows

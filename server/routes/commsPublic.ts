@@ -1,6 +1,6 @@
 /**
  * THE PUBLIC COMMS ROUTES, `/api/comms/*`: unsubscribe, preferences, and the
- * one-click actions an email carries (docs/comms/BUILD_SPEC.md 5.4).
+ * one-click actions an email carries (the comms build spec 5.4).
  *
  * STUBS FROM THE FOUNDATION LANE. Each answers 501 with a sentence until the
  * people lane (B2) builds it. They exist now so the addresses the post office

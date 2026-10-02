@@ -1,5 +1,5 @@
 /**
- * A FAKE RESEND, for tests and for nothing else (docs/comms/BUILD_SPEC.md 8.1).
+ * A FAKE RESEND, for tests and for nothing else (the comms build spec 8.1).
  *
  * Rule 13 of the build: never send a real email. Every suite that exercises
  * the post office points `RESEND_API_BASE` at one of these, and nothing in

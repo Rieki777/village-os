@@ -3,7 +3,8 @@
 Provenance: platform
 
 > Registry id `comms`, catalogue name Village Comms. Built 2026-10-02 from the plan Rye approved
-> that day; `docs/comms/BUILD_SPEC.md` is the build spec every lane works from. The schema is
+> that day. The build spec every lane works from is kept in the maintainers' private operations
+> repository, and code comments cite its sections as "the comms build spec". The schema is
 > `drizzle/0228_every_email_is_recorded_before_it_is_sent.sql`,
 > `drizzle/0229_a_gathering_asks_when_and_remembers_who_came.sql` and
 > `drizzle/0230_a_path_remembers_who_walks_it.sql`.

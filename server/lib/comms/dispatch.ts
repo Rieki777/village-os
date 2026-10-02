@@ -1,5 +1,5 @@
 /**
- * WHERE A COMMS TRIGGER GOES (docs/comms/BUILD_SPEC.md sections 2 and 7).
+ * WHERE A COMMS TRIGGER GOES (the comms build spec sections 2 and 7).
  *
  * The server registers this as the sink's one handler at boot
  * (`commsSink.register(createCommsDispatcher(...))` in server/index.ts), and

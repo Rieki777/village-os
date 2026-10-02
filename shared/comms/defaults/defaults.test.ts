@@ -7,7 +7,7 @@ import { DEFAULT_PATH_IDS, DEFAULT_TEMPLATES, DEFAULT_TEMPLATES_BY_KEY, defaultT
 /**
  * The default words and the default journeys are the behaviour every village
  * inherits, so the keys and the numbers are pinned against the spec itself
- * (docs/comms/BUILD_SPEC.md 5.5, 5.6 and 5.11) rather than against a copy of
+ * (the comms build spec 5.5, 5.6 and 5.11) rather than against a copy of
  * this file's own output.
  */
 

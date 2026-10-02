@@ -136,7 +136,7 @@ describe("adminNav", () => {
       // Village Comms: the five screens that drive the automations. Sent mail
       // and Settings are NOT here, because a village sets up its sending
       // before it turns comms on and the post office records every email
-      // whatever the module says (docs/comms/BUILD_SPEC.md 6).
+      // whatever the module says (the comms build spec 6).
       "comms-overview": "comms",
       "comms-journeys": "comms",
       "comms-words": "comms",

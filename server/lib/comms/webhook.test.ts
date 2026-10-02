@@ -3,7 +3,7 @@ import { makeWebhookSecret, signSvix } from "../../testkit/fakeResend";
 import { readDeliveryReport, SVIX_TOLERANCE_SECONDS, verifySvix } from "./webhook";
 
 /**
- * The delivery-report proof (docs/comms/BUILD_SPEC.md 8.1). The fake
+ * The delivery-report proof (the comms build spec 8.1). The fake
  * provider's signer is the reference here, so a verifier that agreed with
  * itself and disagreed with the provider would fail.
  */

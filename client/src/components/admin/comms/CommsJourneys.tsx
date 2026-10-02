@@ -1,5 +1,5 @@
 /**
- * JOURNEYS, in the Comms section of Admin (docs/comms/BUILD_SPEC.md 6).
+ * JOURNEYS, in the Comms section of Admin (the comms build spec 6).
  *
  * A placeholder from the foundation lane, so the rail, the tab key and the
  * render line are in place; the journeys lane (C1) builds the screen in this file.

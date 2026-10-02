@@ -1281,7 +1281,7 @@ export const MODULES: ModuleDef[] = [
      * time-vote emails and letters stay shut. The post office itself,
      * unsubscribe and preferences, the delivery-report webhook, essential mail
      * and member notices run whatever this says, because a password link and
-     * a person's "stop" must never wait on a module (docs/comms/BUILD_SPEC.md
+     * a person's "stop" must never wait on a module (the comms build spec
      * 5.16).
      */
     setup: "required",

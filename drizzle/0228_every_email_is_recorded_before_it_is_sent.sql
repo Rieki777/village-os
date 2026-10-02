@@ -2,7 +2,7 @@
 --
 -- Rye, 2026-10-02: one post office every email passes through, one address
 -- book with permissions, words a village can edit, and one journey engine
--- that runs both event emails and path emails (docs/comms/BUILD_SPEC.md).
+-- that runs both event emails and path emails (the comms build spec).
 -- Until now an email left this platform through one function that called the
 -- provider and kept nothing, so nobody could answer "did that person get it",
 -- nothing could stop a second copy of the same letter, and a person who asked

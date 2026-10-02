@@ -1,7 +1,7 @@
 /**
  * THE POST OFFICE: every email any part of the platform sends goes through
  * `post()`, which writes the ledger row first and sends second
- * (docs/comms/BUILD_SPEC.md 5.1).
+ * (the comms build spec 5.1).
  *
  * WHAT THIS FILE HOLDS TODAY, said plainly. The foundation lane built the
  * door and the urgent path: validate the address, make sure the contact has
@@ -230,7 +230,7 @@ export async function post(deps: PostOfficeDeps, email: OutgoingEmail): Promise<
  * Send what is due. A STUB until the post office lane (B1) builds it: claim
  * queued rows that are due, send at the configured rate, expire the late, back
  * off the retryable, and put a row stuck in `sending` back in the queue
- * (docs/comms/BUILD_SPEC.md 5.1). It answers zeros so the admin "run now"
+ * (the comms build spec 5.1). It answers zeros so the admin "run now"
  * button and the scheduler can be wired to it today.
  */
 export async function drain(

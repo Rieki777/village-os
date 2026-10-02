@@ -1,6 +1,6 @@
 /**
  * PEOPLE ON JOURNEYS: enroll, stop, touch, and the tick
- * (docs/comms/BUILD_SPEC.md 5.6).
+ * (the comms build spec 5.6).
  *
  * `enroll`, `stop` and `touch` work today over `comms_enrollments`, so the
  * lanes that fire triggers can put people on journeys and take them off

@@ -11,7 +11,7 @@ import type { Transport, TransportMessage, TransportResult } from "./transport";
 /**
  * The post office's door and its urgent path, the old mailer's answers kept
  * through it, and people put on and taken off journeys, all against a
- * provisioned scratch schema (docs/comms/BUILD_SPEC.md 5.1 and 5.6).
+ * provisioned scratch schema (the comms build spec 5.1 and 5.6).
  */
 
 const configured = testDbConfigured();

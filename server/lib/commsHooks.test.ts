@@ -7,7 +7,7 @@ import { commsSink } from "./commsSink";
 import { createGathering, deleteGathering, rsvp, updateGathering, withdrawRsvp } from "./gatherings";
 
 /**
- * The gathering hooks of docs/comms/BUILD_SPEC.md section 7, driven through
+ * The gathering hooks of the comms build spec section 7, driven through
  * the real functions against a scratch schema: each fires its trigger, after
  * the change it reports is written, and an edit reports what changed rather
  * than what the editor resent.

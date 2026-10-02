@@ -3,7 +3,7 @@ import type { CommsTrigger } from "../../shared/comms/contracts";
 import { commsSink } from "./commsSink";
 
 /**
- * The sink's whole contract (docs/comms/BUILD_SPEC.md section 4): `fire()`
+ * The sink's whole contract (the comms build spec section 4): `fire()`
  * never throws and never waits, and whatever the handler does wrong is caught
  * and logged with the trigger's type and never its contents.
  */

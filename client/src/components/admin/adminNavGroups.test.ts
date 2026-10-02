@@ -121,7 +121,7 @@ describe("navGroups", () => {
     ]],
     ["Money and agreements", ["tokens", "ledger", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
     ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain", "failures"]],
-    // Village Comms (docs/comms/BUILD_SPEC.md 6): after the week's queues.
+    // Village Comms (the comms build spec 6): after the week's queues.
     ["Comms", ["comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings"]],
     ["Library and files", ["training-modules", "investor-vault", "uploaded-files"]],
   ];

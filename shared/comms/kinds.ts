@@ -10,7 +10,7 @@
  * kept map trap).
  *
  * Fixed by the foundation lane and changed only by the integrator
- * (docs/comms/BUILD_SPEC.md section 4). A list may gain a member; nothing is
+ * (the comms build spec section 4). A list may gain a member; nothing is
  * renamed, because these strings are stored and a renamed one reads as
  * unknown on every row written before the rename.
  *

@@ -2,7 +2,7 @@
  * The two notifications Village Comms sends through the spine.
  *
  * Both are a person being asked to do something a machine should not: write
- * to somebody three weeks into a path (docs/comms/BUILD_SPEC.md 5.11), and
+ * to somebody three weeks into a path (the comms build spec 5.11), and
  * write a gathering's recap while it is fresh (5.9). The journey engine and
  * the recap lanes call these; they live here, beside the kinds they produce
  * (`comms_path_handoff` and `comms_host_recap` in shared/notificationKinds.ts),

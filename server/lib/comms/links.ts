@@ -1,5 +1,5 @@
 /**
- * SIGNED LINKS for every one-click action in an email (docs/comms/BUILD_SPEC.md
+ * SIGNED LINKS for every one-click action in an email (the comms build spec
  * 5.4): unsubscribe, preferences, a guest confirming, "can't make it", a time
  * vote, a recap answer, a letters confirmation, and saying yes to the next
  * gathering.

@@ -1,5 +1,5 @@
 /**
- * THE COMMS ADMIN ROUTES, `/api/admin/comms/*` (docs/comms/BUILD_SPEC.md 5.1,
+ * THE COMMS ADMIN ROUTES, `/api/admin/comms/*` (the comms build spec 5.1,
  * 5.15 and 6). A skeleton from the foundation lane: the status summary and
  * the "run now" button. The setup, words, journeys, people, letters and sent
  * mail lanes add their routes to this file.

@@ -3,7 +3,7 @@
 -- Rye, 2026-10-02: somebody who chooses a path (resident, investor, steward,
 -- prosperity creator) is walked through its next steps by email, the path's
 -- own person is asked to write at three weeks, and a village can send a
--- letter to the people who agreed to get one (docs/comms/BUILD_SPEC.md 5.11
+-- letter to the people who agreed to get one (the comms build spec 5.11
 -- and 5.12).
 --
 -- WHY A TABLE FOR PATHS. `users.paths` says which paths a member is on today

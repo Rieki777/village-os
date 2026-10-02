@@ -1,6 +1,6 @@
 /**
  * DELIVERY REPORTS: proving one came from the provider, and reading what it
- * says (docs/comms/BUILD_SPEC.md 5.3 and 8.1).
+ * says (the comms build spec 5.3 and 8.1).
  *
  * The foundation lane built the proof and the reading. Applying a report to
  * its message (delivered, bounced, complained, and the suppressions those

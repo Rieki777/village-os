@@ -1,5 +1,5 @@
 /**
- * EVERY DEFAULT EMAIL'S WORDS, keyed and versioned (docs/comms/BUILD_SPEC.md
+ * EVERY DEFAULT EMAIL'S WORDS, keyed and versioned (the comms build spec
  * section 5.5).
  *
  * PLACEHOLDERS, ON PURPOSE. The foundation lane fixes the KEYS and the

@@ -1,6 +1,6 @@
 /**
  * THE ONE IMPORT DOMAIN CODE USES TO TELL COMMS SOMETHING HAPPENED
- * (docs/comms/BUILD_SPEC.md sections 2 and 4).
+ * (the comms build spec sections 2 and 4).
  *
  * WHY A SINK. Gatherings, the waitlist, sign-up, profiles, housing, the
  * membrane and the forms all have something to tell the email system, and

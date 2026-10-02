@@ -1,5 +1,5 @@
 /**
- * THE CONTRACTS EVERY COMMS LANE BUILDS AGAINST (docs/comms/BUILD_SPEC.md
+ * THE CONTRACTS EVERY COMMS LANE BUILDS AGAINST (the comms build spec
  * section 4, written as code).
  *
  * Fixed by the foundation lane and changed only by the integrator. Names may

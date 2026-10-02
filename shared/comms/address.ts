@@ -7,7 +7,7 @@
 
 /**
  * The key an address is filed under: trimmed and lowercased, and nothing else
- * folded (docs/comms/BUILD_SPEC.md 5.3). Dots and plus tags are left alone,
+ * folded (the comms build spec 5.3). Dots and plus tags are left alone,
  * because a provider that treats them as meaningful is entitled to, and
  * merging two people into one row is worse than keeping one person twice.
  */

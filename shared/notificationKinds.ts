@@ -379,7 +379,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     celebrate: false,
   },
   /*
-   * Village Comms, day 21 of a path (docs/comms/BUILD_SPEC.md 5.11). The
+   * Village Comms, day 21 of a path (the comms build spec 5.11). The
    * emails have done what emails can do, and the path's contact person is
    * asked to write to somebody by name. People, because it is a person the
    * reader is asked to reach.

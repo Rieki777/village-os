@@ -13,7 +13,7 @@ import {
 
 describe("the comms vocabulary", () => {
   it("holds exactly the words the spec fixes, in its order", () => {
-    // docs/comms/BUILD_SPEC.md section 4. These strings are stored, so a
+    // the comms build spec section 4. These strings are stored, so a
     // renamed one reads as unknown on every row written before the rename.
     expect([...EMAIL_KINDS]).toEqual(["essential", "events", "paths", "letters", "notices"]);
     expect([...MESSAGE_STATUSES]).toEqual([

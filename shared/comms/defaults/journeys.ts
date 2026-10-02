@@ -1,5 +1,5 @@
 /**
- * EVERY DEFAULT JOURNEY, step by step (docs/comms/BUILD_SPEC.md 5.6 and 5.11).
+ * EVERY DEFAULT JOURNEY, step by step (the comms build spec 5.6 and 5.11).
  *
  * THESE NUMBERS ARE THE BEHAVIOUR. The journey engine (lane C1) plans from
  * nothing else: when each email is due, whether it waits for daytime, what a

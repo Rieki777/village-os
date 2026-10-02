@@ -11,7 +11,7 @@
  * and a missing time zone, and never overwrites `first_source`, which is the
  * record of how the village first met this address.
  *
- * Raw SQL lives here and nowhere else (docs/comms/BUILD_SPEC.md section 1,
+ * Raw SQL lives here and nowhere else (the comms build spec section 1,
  * rule 6). No cache sits above this table.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";

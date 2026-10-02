@@ -725,7 +725,7 @@ export function attachModuleReadiness(getPool: () => Pool): void {
     if (def.id === "comms") {
       /*
        * NOT READY, AND SAYING WHERE TO GO. What ready means for comms is the
-       * Settings checklist (docs/comms/BUILD_SPEC.md 5.15): the provider key,
+       * Settings checklist (the comms build spec 5.15): the provider key,
        * a verified sending domain, a sender, delivery reports, a postal
        * address, and a test email that was delivered. None of that can be read
        * yet, because the settings document and the domain check land with the

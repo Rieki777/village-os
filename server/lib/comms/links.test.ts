@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LINK_KEY_LABEL, linkKey, signLink, verifyLink } from "./links";
 
 /**
- * Signed links (docs/comms/BUILD_SPEC.md 5.4). Every case that refuses sits
+ * Signed links (the comms build spec 5.4). Every case that refuses sits
  * beside a case the same key and clock accept, so a verifier that refused
  * everything fails here as loudly as one that refused nothing.
  */

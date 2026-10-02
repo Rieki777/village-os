@@ -1,6 +1,6 @@
 /**
  * COMMS SETTINGS: everything a founder supplies to make the village's email
- * work, in one place (docs/comms/BUILD_SPEC.md 5.15 and 6).
+ * work, in one place (the comms build spec 5.15 and 6).
  *
  * IT STARTS AS THE OLD EMAIL SETTINGS, moved out of client/src/pages/Admin.tsx
  * unchanged in behaviour: the four inboxes each kind of form is routed to,

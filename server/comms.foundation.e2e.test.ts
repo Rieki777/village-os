@@ -1,6 +1,6 @@
 /**
  * VILLAGE COMMS, THE FOUNDATION, DRIVEN THROUGH THE BUILT SERVER
- * (docs/comms/BUILD_SPEC.md section 8, the foundation lane's smoke).
+ * (the comms build spec section 8, the foundation lane's smoke).
  *
  * Boots `dist/index.js` against a scratch schema with the scheduler off and
  * `RESEND_API_BASE` pointed at the fake provider (server/testkit/fakeResend.ts),

@@ -3,7 +3,7 @@
 -- Rye, 2026-10-02: guests who have no account may say they are coming to a
 -- public gathering, the host marks who came and sends a recap, and a session
 -- time can be put to a live vote whose leader IS the time on the calendar
--- (docs/comms/BUILD_SPEC.md sections 5.7 to 5.10).
+-- (the comms build spec sections 5.7 to 5.10).
 --
 -- NO EXISTING TABLE CHANGES. Everything one gathering needs for its emails
 -- lives in `event_comms`, keyed by the event id, so the `events` table and

@@ -1,7 +1,7 @@
 /**
  * THE COMMS ROUTES ON ONE GATHERING, `/api/events/:id/...`: a guest's RSVP,
  * the time vote, the recap, attendance, and the gathering's own email
- * settings (docs/comms/BUILD_SPEC.md 5.7 to 5.10).
+ * settings (the comms build spec 5.7 to 5.10).
  *
  * STUBS FROM THE FOUNDATION LANE, each answering 501 with a sentence. The
  * event email lane (C2), the guests and recaps lane (C3) and the time vote

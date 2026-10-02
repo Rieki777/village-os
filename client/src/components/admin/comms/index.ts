@@ -1,5 +1,5 @@
 /**
- * The Comms screens, one file each (docs/comms/BUILD_SPEC.md 6), gathered so
+ * The Comms screens, one file each (the comms build spec 6), gathered so
  * client/src/pages/Admin.tsx imports them on one line: that page has no
  * lines to spare, and every screen's own work belongs in its own file.
  */

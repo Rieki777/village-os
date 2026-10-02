@@ -121,7 +121,7 @@ export type Capability =
   // letters it sends to people who agreed to get them. It passes the test the
   // handover keys set: a member can finish "the village's ____ look after
   // that". The sender, the domain and the provider key are NOT behind it;
-  // they stay with the admin in the secrets plane (docs/comms/BUILD_SPEC.md 8).
+  // they stay with the admin in the secrets plane (the comms build spec 8).
   | "comms.manage"; // run the village's email: automations, their words, and letters
 
 /**

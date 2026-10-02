@@ -1,5 +1,5 @@
 /**
- * THE PAGES AN EMAIL LINKS TO (docs/comms/BUILD_SPEC.md 5.4): preferences,
+ * THE PAGES AN EMAIL LINKS TO (the comms build spec 5.4): preferences,
  * unsubscribe, and the action page for a one-click answer.
  *
  * ONE LAZY CHUNK FOR ALL THREE. Each is a single small screen reached from an

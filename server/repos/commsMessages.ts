@@ -10,7 +10,7 @@
  * INSTANTS GO IN AS EPOCH SECONDS through FROM_UNIXTIME and come out through
  * UNIX_TIMESTAMP, never as a JavaScript Date. The app pool pins the session
  * to UTC and a test pool does not, and a Date written or read through the
- * driver shifts by the database host's offset (docs/comms/BUILD_SPEC.md
+ * driver shifts by the database host's offset (the comms build spec
  * section 1, rule 7).
  *
  * Raw SQL lives here and nowhere else. No cache sits above these tables.

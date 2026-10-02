@@ -176,7 +176,7 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       ],
     },
     {
-      // Village Comms (docs/comms/BUILD_SPEC.md 6): the village's email, after
+      // Village Comms (the comms build spec 6): the village's email, after
       // the week's queues because keeping in touch is ordinary running. Sent
       // mail and Settings show whether or not the comms module is on (a village
       // sets up its sending first, and the post office records every email

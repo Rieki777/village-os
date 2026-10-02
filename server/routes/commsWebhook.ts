@@ -1,6 +1,6 @@
 /**
  * THE DELIVERY-REPORT WEBHOOK, `POST /api/comms/webhooks/resend`
- * (docs/comms/BUILD_SPEC.md 5.3 and 8.1).
+ * (the comms build spec 5.3 and 8.1).
  *
  * The provider tells the village what became of each email it accepted:
  * delivered, bounced, complained, failed. This route proves a report came
