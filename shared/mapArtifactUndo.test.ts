@@ -660,4 +660,44 @@ describe("Save map skin inside the village (F78)", () => {
     m.close();
     expect(last).toBe("skin");
   });
+
+  /* The twin in the same sheet. The village's skin names a label style and
+     flow marks of its own, so these two selects were promised to every
+     visitor on the publish card and overwritten by the next config push. */
+  const pick = (m: Booted, id: string, value: string) => {
+    const sel = m.el<HTMLSelectElement>(id);
+    sel.value = value;
+    sel.dispatchEvent(new m.window.Event("change"));
+  };
+
+  it("keeps a label style and flow marks on screen too, and lists neither to publish", async () => {
+    const m = await boot();
+    build(m);
+    const edits = m.run<number>("EDITS.length");
+    pick(m, "#skLabelStyle", "tablet");
+    const labelToast = lastToast(m);
+    pick(m, "#skFlow", "gold");
+    const seen = {
+      edits: m.run<number>("EDITS.length"),
+      onScreen: m.run<[string, string, boolean]>("[SKIN.label_style,SKIN.flow_style,document.body.classList.contains('lbl-tablet')]"),
+      labelToast,
+      flowToast: lastToast(m),
+      card: card(m),
+    };
+    m.close();
+    expect(seen.onScreen).toEqual(["tablet", "gold", true]);
+    expect(seen.edits).toBe(edits);
+    expect(seen.labelToast).toContain("Village Settings");
+    expect(seen.flowToast).toContain("Village Settings");
+    expect(seen.card.bar.publishDisabled).toBe(true);
+  });
+
+  it("still logs a label style and flow marks when the map runs on its own", async () => {
+    const m = await boot({ shell: false });
+    pick(m, "#skLabelStyle", "tablet");
+    pick(m, "#skFlow", "gold");
+    const last = m.run<string[]>("EDITS.slice(-2).map(e=>e.action)");
+    m.close();
+    expect(last).toEqual(["label-style", "flow-style"]);
+  });
 });

@@ -8918,15 +8918,29 @@ window.applySkinExport=applySkinExport;
    in the mask now, as building size is. Someone who dresses the village
    (dressesTheVillage) also sets SKIN, so Save map skin carries it, and
    standalone (file://), where the scene file is the village and its export
-   the outlet, the change is still logged, as Save map skin does there. */
+   the outlet, the change is still logged, as Save map skin does there.
+   INSIDE THE VILLAGE THE LOOK HAS ONE HOME, AND IT IS NOT THIS SHEET. The
+   shell pushes the village's skin from Village Settings after every scene it
+   hands the map, published scenes included, and that skin names its own
+   label style and flow marks. So a look an editor chose here and then
+   published reached no visitor at all, while Save said the land remembers it
+   and the publish card listed "restyled the map", "changed the label
+   styling" and "changed the flow styling" as changes every visitor would
+   see. In the shell nothing here goes on the publish list, and an editor is
+   told where the village's look is set. A visitor has no such room to be
+   sent to, so their toast names only what they chose. */
+const SKIN_HOME='The look every visitor sees is set in Village Settings, under Make This Yours.';
+const SKIN_HERE='This look stays on your screen. '+SKIN_HOME;
 if($('skFlow'))$('skFlow').onchange=()=>{const v=$('skFlow').value;keepLook({flow_style:v});
   if(dressesTheVillage())SKIN.flow_style=v;
-  applyDress();if(!inShell())logEdit('flow-style','skin',{to:v});
-  toast('Flow marks: '+$('skFlow').selectedOptions[0].textContent+'.')};
+  applyDress();const said='Flow marks: '+$('skFlow').selectedOptions[0].textContent+'.';
+  if(inShell())return toast(HAND.canEdit?said+' '+SKIN_HERE:said);
+  logEdit('flow-style','skin',{to:v});toast(said)};
 if($('skLabelStyle'))$('skLabelStyle').onchange=()=>{const v=$('skLabelStyle').value;keepLook({label_style:v});
   if(dressesTheVillage())SKIN.label_style=v;
-  applyDress();if(!inShell())logEdit('label-style','skin',{to:v});
-  toast('Labels: '+$('skLabelStyle').selectedOptions[0].textContent+'.')};
+  applyDress();const said='Labels: '+$('skLabelStyle').selectedOptions[0].textContent+'.';
+  if(inShell())return toast(HAND.canEdit?said+' '+SKIN_HERE:said);
+  logEdit('label-style','skin',{to:v});toast(said)};
 applyDress();
 /* A builder already in build mode keeps a chip to the same room. Two doors
    to one panel is the fix; three doors to two panels was the complaint. */
@@ -8941,18 +8955,10 @@ $('skParch').oninput=()=>{SKIN.parch=$('skParch').value;applySkinOverrides()};
 $('skLbl').oninput=()=>{SKIN.lbl=+$('skLbl').value;$('skLblV').textContent=SKIN.lbl+'%';applySkinOverrides()};
 $('skIcon').onchange=()=>{iconMode=$('skIcon').value;toast('Icon style: '+$('skIcon').value)};
 $('skMist').onchange=()=>{SKIN.mist=$('skMist').checked;toast(SKIN.mist?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
-/* INSIDE THE VILLAGE THE LOOK HAS ONE HOME, AND IT IS NOT THIS BUTTON. The
-   shell pushes the village's skin from Village Settings after every scene it
-   hands the map, published scenes included, so a skin saved here and then
-   published reached no visitor at all, while this toast said the land
-   remembers it and the publish card listed "restyled the map" as a change
-   every visitor would see. In the shell the look stays on this screen, the
-   button says where the village's look is set, and nothing goes on the
-   publish list. Standalone, where the export is the real outlet, it saves
-   into the scene as it always has. */
-const SKIN_HOME='The look every visitor sees is set in Village Settings, under Make This Yours.';
+/* Save and Reset keep the rule written above the label and flow controls:
+   in the shell the look stays on this screen and goes on no publish list. */
 $('skSave').onclick=()=>{
-  if(inShell())return toast('✂ This look stays on your screen. '+SKIN_HOME);
+  if(inShell())return toast('✂ '+SKIN_HERE);
   logEdit('skin','map',skinExport());
   toast('✂ Skin saved. The land remembers it, and every export carries it.')};
 $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100;
@@ -8960,8 +8966,8 @@ $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=n
   applyTheme(THEMES.emerald);applySkinOverrides();maskWrite({theme:null,words:null});
   $('skAccent').value='#e8a13c';$('skParch').value='#f3e6c8';$('skLbl').value=100;$('skLblV').textContent='100%';$('skWords').value='';
   renderSkinThemes();
-  /* The same rule as Save above: in the shell this resets the look on this
-     screen, and the village's own look is untouched. */
+  /* The same rule: in the shell this resets the look on this screen, and the
+     village's own look is untouched. */
   if(inShell())return toast('Back to the house look on your screen. '+SKIN_HOME);
   logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
