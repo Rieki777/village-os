@@ -463,6 +463,19 @@
   #maia.min{width:230px}
 
   body:has(#panel.open) #maia,body:has(#inspect.open) #maia{right:414px}
+  /* WHAT NEEDS HANDS STEPS ASIDE WITH HER. Maia moving to right:414 put her
+     left edge at the window less 744px, and the button stayed at the centre,
+     so on every desk under about 1700px she stood on it at z 35 against its
+     30. MEASURED through the shell with a place open: 0% of the button
+     reachable at 1280x720, 22% at 1366x768, 33% at 1400x850, and a real click
+     at its centre put the cursor in Maia's text box.
+     So the button centres on the land the panel leaves, which is the same
+     414px Maia steps by, halved. That clears her from about 1300px up.
+     Below that there is no room beside her, and z 36 keeps the button and
+     the card it opens on top: at 1280 it covers 7px of her left edge. Nothing
+     else sits between 30 and 36 down here; the build bar's 32 is on the left
+     and ends 224px up. */
+  body:has(#panel.open) #attention,body:has(#inspect.open) #attention{left:calc(50% - 207px);z-index:36}
   /* ---------- toasts / ripples ---------- */
   #toasts{position:absolute;top:var(--band-t-toasts,64px);left:50%;transform:translateX(-50%);z-index:65;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
     width:min(92vw,420px)}
