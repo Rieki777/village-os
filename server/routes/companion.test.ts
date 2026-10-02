@@ -30,7 +30,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { saveAgentProfile } from "../lib/agentProfile";
 import { wireAssistant } from "../lib/assistant";
-import { RECORD_REASON_SENTENCE } from "../lib/companionCanvas";
+import { LEGAL_PROMPT_RULE, RECORD_REASON_SENTENCE } from "../lib/companionCanvas";
 import { CONSENT_PREFS_KEY } from "../lib/companionConsent";
 import { ensureInstanceIdentity } from "../lib/identity";
 import { wireReaders } from "../lib/villageReaders";
@@ -275,6 +275,9 @@ describe.skipIf(!configured)("the member companion", () => {
       expect(system).toContain(NEVER_INVENT);
       expect(system).toContain("The member is asking from the Power block of the village's governance canvas.");
       expect(system).toContain("Authority, highest first");
+      // Second review: a closed section is never called blank, and legal counsel keeps its framing.
+      expect(system).toContain('When canvas.answers lists a section under "others" as kept with the administrators or not opened to members, say exactly that, never call it blank or unadopted');
+      expect(system).toContain(LEGAL_PROMPT_RULE);
       // The village's answer reached the model, fenced as data.
       const fence = system.indexOf('<village-data reader="canvas.answers">');
       expect(fence).toBeGreaterThan(-1);
