@@ -234,7 +234,9 @@ export default function LivingMap() {
     }, 600);
   }, []);
 
-  const { entered, preparing, setPreparing, onEnter, enterAt, startHash } = useMapEnterGate();
+  const { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash } = useMapEnterGate();
+  /** The artifact has booted, so on a phone its own bar carries the door out. */
+  const [groundsReady, setGroundsReady] = useState(false);
   /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts. */
   const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt });
   const enterTheLand = useCallback(() => {
@@ -279,6 +281,13 @@ export default function LivingMap() {
   const pushConfig = useCallback(async () => {
     const win = frame.current?.contentWindow;
     if (!win) return;
+    /*
+     * A message goes on EVERY path, a bare `{type:'config'}` when the fetch
+     * fails. The artifact keeps its land covered and its desk arrival waiting
+     * until the shell has said what it will say about the land, and a bare
+     * message changes nothing on the map while it ends the wait.
+     */
+    const payload: Record<string, unknown> = { type: "config" };
     try {
       const res = await fetch("/api/map/config");
       if (!res.ok) return;
@@ -292,7 +301,6 @@ export default function LivingMap() {
        * than sent as an empty array: the artifact treats a non-empty array as
        * a replacement, and an empty one would read as a walk with no steps.
        */
-      const payload: Record<string, unknown> = { type: "config" };
       if (body?.skin) payload.skin = body.skin;
       if (Array.isArray(body?.walk) && body.walk.length) payload.walk = body.walk;
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
@@ -315,9 +323,14 @@ export default function LivingMap() {
           /* Unparseable: the map keeps the land it is already drawing. */
         }
       }
-      win.postMessage(payload, window.location.origin);
     } catch {
       /* The map keeps whatever it is already wearing. */
+    } finally {
+      try {
+        win.postMessage(payload, window.location.origin);
+      } catch {
+        /* The frame went away under the fetch: nobody is waiting. */
+      }
     }
   }, []);
 
@@ -669,19 +682,25 @@ export default function LivingMap() {
 
       if (data.type === "grounds-ready") {
         onReady();
+        setGroundsReady(true);
         // The config and the ground are the same for everyone and need no
         // session; the hand depends on who is asking. Sending them separately
         // means a signed-out visitor still gets the published land and the
         // village's own photograph under it, even though their hand request
         // tells them they may do nothing.
-        // Preparing clears once the published scene has been asked for.
-        void pushConfig().finally(() => setPreparing(false));
+        // The cover lifts when the map answers this one with land-ready.
+        void pushConfig();
         pushGround();
         pushHand();
         pushPhotos();
         // Third and last, because it is the only one nothing waits on: the org
         // lens narrows what is drawn and never decides what may be done.
         pushLens();
+        return;
+      }
+      // The land on screen is the village's own now: the cover can lift.
+      if (data.type === "land-ready") {
+        landed();
         return;
       }
       // The map asking to be closed. Same path as the browser Back button.
@@ -709,7 +728,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
@@ -744,6 +763,8 @@ export default function LivingMap() {
    * demanding the artifact change first.
    */
   const onLoad = () => {
+    // Every script in the frame has run: the cover stops waiting forever.
+    frameLoaded();
     const win = frame.current?.contentWindow as any;
     if (!win) return;
     /*
@@ -838,9 +859,13 @@ export default function LivingMap() {
        * SO IT MOVED TO THE BOTTOM, which clears the top-left corner outright
        * and puts an escape in the half of a phone a thumb can reach. On the
        * pocket profile the artifact now carries the door itself, as a cell in
-       * its own bottom bar, so this one stands down once that bar exists (at
-       * the Enter gate it does not yet, and a phone needs a way out) rather than
-       * shipping two doors with one name. On a desk the artifact makes room:
+       * its own bottom bar, so this one stands down once that bar exists AND
+       * the cover is off it, and not one moment sooner. It used to stand down
+       * the moment Enter was pressed, which on a slow phone left half a minute
+       * of download with no way out at all (F47). The artifact's grounds-ready
+       * is posted by the same script that builds the bar, so it is the bar's
+       * own signal; a land that never boots keeps this door for good. On a desk
+       * the artifact makes room:
        * `body.embed` lifts `#minimapWrap` and the build bar's floor out of the
        * bottom-left corner, because the artifact is the only thing that knows
        * where the artifact's chrome is.
@@ -864,7 +889,7 @@ export default function LivingMap() {
         }}
       />
 
-      {presence !== "absent" && (!pocket || !entered) && (
+      {presence !== "absent" && (!pocket || !groundsReady || preparing) && (
         <button
           type="button"
           onClick={exitApp}
@@ -948,7 +973,7 @@ export default function LivingMap() {
         </div>
       )}
 
-      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={enterTheLand} />
+      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} slow={slow} onEnter={enterTheLand} />
 
       {presence === "present" && entered && (
         <iframe

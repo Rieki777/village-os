@@ -10085,6 +10085,7 @@ window.undoPublish=undoPublish;
                  {type:'goto', hash:'#/place/kitchen'} routes the land.
    map → parent: {type:'grounds-ready', version} once on boot;
                  {type:'route', hash, user} whenever the address changes (setHash);
+                 {type:'land-ready'} once, when the first config is applied (landHandedOver);
                  door clicks already navigate via siteNav/window.top. */
 addEventListener('message',e=>{try{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return; // same-origin shell only (file:// = dev)
@@ -10539,9 +10540,12 @@ window.endWalk=endWalk;
 /* gates fed by real use */
 const _openPanelW=openPanel;openPanel=function(k,t,i){window.WGATE&&(WGATE.tap=true);return _openPanelW(k,t,i)};
 /* config over the bridge: skin + walk + vocabulary in one push */
-addEventListener('message',e=>{try{
+addEventListener('message',e=>{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return;
   const d=e.data;if(!d||d.type!=='config')return;
+  /* Handed over on every path out of here, a throw included: the shell's
+     cover waits on it. Only a config from the shell gets this far. */
+  try{
   /* The land first: everything below dresses what the scene puts down, and
      restoreScene rebuilds the vocabulary anyway. Applying the skin to a
      map that is about to be replaced wholesale is work thrown away. */
@@ -10557,7 +10561,7 @@ addEventListener('message',e=>{try{
   /* Last, so an address held for the land is answered by the land that just
      arrived. See ROUTE_WAIT_MS. */
   landArrived();
-}catch(_){}});
+}catch(_){}finally{landHandedOver()}});
 /* THE SINGLE-POINTER PATH TO THE SAME TWO THINGS. One tap is one step, with
    no press-and-hold, because a step big enough to be worth pressing is better
    than a repeat rate to get wrong. Zoom is about the screen centre, which is
@@ -10732,6 +10736,20 @@ function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
     maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
     setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
+/* THE LAND IS HANDED OVER ONCE. Inside the shell this file draws the seed
+   scene it ships with until the village's own arrives in {type:'config'},
+   and the swap moved half the buildings a second after the visitor first saw
+   them (F66). So the shell covers the frame until this says the land on
+   screen is the village's own, and the desk's arrival glide waits for the
+   same moment: under the cover it flew its first half where nobody could see
+   it. The config handler calls this after applying, on every path, and the
+   shell sends a config even when its fetch fails, so the wait always ends.
+   Standalone, nothing waits: there is no cover and no shell to say so. */
+let LAND_HANDED=false,ARRIVAL_WAITS=false;
+function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
+  if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;arriveOnLand()}
+  shellPost({type:'land-ready'})}
+window.landHandedOver=landHandedOver;
 const enterBtn=$('enterBtn');
 if(enterBtn)enterBtn.onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
   shellPost({type:'intro-done'});arriveOnLand()};
@@ -10739,7 +10757,8 @@ if(SKIP_INTRO){leaveIntro();
   /* The shell's button stands in for this one, so pressing it earns the same
      arrival: the glide in and her welcome. Not on a deep link, which never had
      either, and not in the pocket, whose boot above keeps the camera still. */
-  if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket'))arriveOnLand()}
+  if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket')){
+    if(inShell()&&!LAND_HANDED)ARRIVAL_WAITS=true;else arriveOnLand()}}
 
 applyTheme(THEMES.emerald); // boot theme (sets every --t-* var before first paint)
 maskApply(); // and this person's own view over it, which the boot theme would otherwise replace

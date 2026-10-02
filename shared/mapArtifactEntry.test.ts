@@ -1,6 +1,17 @@
 /**
- * THE ARTIFACT'S HALF OF ENTERING THE LAND: its painterly bake stays off the
- * thread the visitor is using.
+ * THE ARTIFACT'S HALF OF ENTERING THE LAND: it hands its land over once, and
+ * its painterly bake stays off the thread the visitor is using.
+ *
+ * Two defects measured in Chromium on 2026-10-01, both on every entry:
+ *
+ *   F66. Inside the shell the artifact drew the seed scene it ships with, and
+ *        the village's published land replaced it 0.5 to 2.6 s later with 11
+ *        of 22 buildings jumping and a 23rd appearing. The shell now covers
+ *        the frame until the artifact posts `{type:'land-ready'}`, which it
+ *        does once, after applying the first `{type:'config'}`. On a desk the
+ *        arrival glide waits for the same moment, or it flew half its path
+ *        under the cover where nobody could see it. The shell's half is in
+ *        client/src/pages/LivingMap.shell.test.tsx.
  *
  *   F67. bakePainted, the Kuwahara and Reinhard bake behind the Painted
  *        terrain chip, ran whole inside one timer on every boot: a 1.4 to
@@ -8,14 +19,15 @@
  *        shell shares. It now runs in a worker made from its own source, and
  *        where no worker can be made, in short slices.
  *
- * WHAT THIS CAN SEE. That the bake's arithmetic is the same picture, byte for
- * byte, as the bake it replaced (the hashes below were taken from that bake
- * on the same input); that the worker's source stands on its own; and that in
- * a page with no Worker (jsdom has none) the fallback gives the thread back
- * between slices.
+ * WHAT THIS CAN SEE. That the hand-over happens once and starts the arrival;
+ * that the bake's arithmetic is the same picture, byte for byte, as the bake
+ * it replaced (the hashes below were taken from that bake on the same input);
+ * that the worker's source stands on its own; and that in a page with no
+ * Worker (jsdom has none) the fallback gives the thread back between slices.
  *
- * WHAT IT CANNOT. Pixels on screen and the real worker: those were measured
- * in Chromium with an entry probe (the longest task after Enter 1575 to
+ * WHAT IT CANNOT. Pixels on screen, the cover itself, and the real worker:
+ * those were measured in Chromium with an entry probe (seed frames seen by the
+ * visitor 3 to 6 before, 0 after; the longest task after Enter 1575 to
  * 2404 ms before, 166 to 183 ms after; the Painted chip ready 0.8 s after
  * load, from a worker).
  *
@@ -118,6 +130,7 @@ interface Booted {
   run<T>(src: string): T;
   /** A message from the shell, in the shape LivingMap.tsx posts it. */
   post(data: Record<string, unknown>): void;
+  landReady(): number;
 }
 
 /** The artifact at `hash`, on a desk, framed by a stand-in parent unless `standalone`. */
@@ -150,8 +163,69 @@ function boot(hash: string, { standalone = false } = {}): Booted {
       const own = window.eval("JSON").parse(JSON.stringify(data));
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
+    landReady: () => sent.filter((m) => m.type === "land-ready").length,
   };
 }
+
+type Cam = { x: number; y: number; z: number };
+const camOf = (b: Booted) => b.run<Cam>("({x:Math.round(cam.x),y:Math.round(cam.y),z:+cam.z.toFixed(2)})");
+/** The camera the artifact boots with, and where the desk arrival glide starts. */
+const BOOT_CAM = { x: 900, y: 640, z: 0.72 };
+const GLIDE_START = { x: 430, y: 560, z: 1.15 };
+
+describe("the land is handed over once, inside the shell (F66)", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro");
+    // Long enough for the 0.625 s arrival glide to have flown, had it started.
+    await settle(1200);
+  });
+  afterAll(() => b?.window.close());
+
+  it("booted and announced itself (the positive control)", () => {
+    expect(b.uncaught).toEqual([]);
+    expect(b.sent.some((m) => m.type === "grounds-ready")).toBe(true);
+    expect(b.landReady(), "nothing is handed over before the shell has spoken").toBe(0);
+  });
+
+  it("holds the desk arrival under the cover until the land is handed over", () => {
+    expect(camOf(b), "the glide flew where nobody could see it").toEqual(BOOT_CAM);
+    expect(b.run<unknown>("travel")).toBeNull();
+  });
+
+  it("hands over with the first config, and the arrival starts from its first frame", () => {
+    b.post({ type: "config" });
+    expect(b.landReady()).toBe(1);
+    expect(camOf(b)).toEqual(GLIDE_START);
+    expect(b.run<boolean>("!!travel"), "the glide is under way").toBe(true);
+  });
+
+  it("hands over nothing again on a later config (a Village Settings save re-pushes it)", async () => {
+    await settle(900);
+    const landed = camOf(b);
+    b.post({ type: "config" });
+    expect(b.landReady()).toBe(1);
+    expect(camOf(b), "the arrival does not fly a second time").toEqual(landed);
+  });
+
+  it("threw nothing along the way", () => {
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+describe("standalone, nothing waits", () => {
+  it("flies the arrival at boot, as it always did", async () => {
+    const s = boot("#skipIntro", { standalone: true });
+    try {
+      await settle(1200);
+      expect(s.uncaught).toEqual([]);
+      expect(camOf(s), "the glide ran and landed").not.toEqual(BOOT_CAM);
+      expect(s.run<unknown>("travel")).toBeNull();
+    } finally {
+      s.window.close();
+    }
+  });
+});
 
 /*
  * The bake's input, made here: gradients, blocks and noise, so every pass

@@ -3,9 +3,9 @@
  *
  * The artifact is ~5.7 MB, mostly base64 plates. Mounting the iframe on every
  * `/map` visit paid that cost before anyone asked to enter. This component is
- * the gate the shell holds in front of that load, and the short "Preparing the
- * land…" overlay that sits above the iframe while the published scene is asked
- * for. Deep links still open straight in via `hashIsMapDeepLink`.
+ * the gate the shell holds in front of that load, and the "Preparing the
+ * land…" cover that hides the frame until the village's own land is on it.
+ * Deep links still open straight in via `hashIsMapDeepLink`.
  *
  * Lives beside VillageSettingsDoor under components/map so LivingMap.tsx stays
  * a shell, not a second monolith — the file-lines ratchet refuses any client
@@ -54,14 +54,30 @@ function startsEntered(): boolean {
   return hashIsMapDeepLink(typeof window === "undefined" ? "" : window.location.hash) || arrivedEntered();
 }
 
+/** How long the cover waits before it says the connection is slow. */
+const SLOW_MS = 20_000;
+/**
+ * How long after the frame has LOADED the cover waits for the artifact to
+ * say its land is the village's own. A loaded frame has run every script, so
+ * a land that has still not answered is as booted as it will get, and the
+ * visitor sees what there is.
+ */
+const LOADED_GRACE_MS = 10_000;
+
 /**
  * Entered / preparing state for the Living Map shell.
  *
  * Deep links, and a return to an entry already entered, start entered (and
- * preparing). A stuck prepare never strands the visitor: twenty seconds is
- * longer than a healthy config push and short enough to recover from a quiet
- * failure. The shell clears preparing earlier once the published scene has
- * been asked for.
+ * preparing). PREPARING IS A COVER over the land, held until the artifact
+ * says the land on screen is the village's own (`landed`, from its
+ * `{type:'land-ready'}`). Before that the artifact draws the seed scene it
+ * ships with, and the published land replaced it a second later with half
+ * the buildings jumping (F66). So the cover is no longer lifted by a clock
+ * while the map is still downloading: on a slow phone the twenty seconds used
+ * to run out mid-download and leave a blank screen with no way out (F47).
+ * At twenty seconds the words change instead. Once the frame has loaded, a
+ * land that never answers is uncovered after a grace period, so a broken
+ * handshake costs a few seconds, never the map.
  *
  * `startHash` is the address the iframe opens at. It is read when the land
  * is entered and never again, because changing an iframe's `src` reloads the
@@ -70,15 +86,28 @@ function startsEntered(): boolean {
 export function useMapEnterGate() {
   const [entered, setEntered] = useState(startsEntered);
   const [preparing, setPreparing] = useState(startsEntered);
+  const [slow, setSlow] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [startHash, setStartHash] = useState(() =>
     typeof window === "undefined" ? "" : window.location.hash,
   );
 
   useEffect(() => {
-    if (!preparing) return;
-    const t = window.setTimeout(() => setPreparing(false), 20_000);
+    if (!preparing || loaded) return;
+    const t = window.setTimeout(() => setSlow(true), SLOW_MS);
     return () => window.clearTimeout(t);
-  }, [preparing]);
+  }, [preparing, loaded]);
+
+  useEffect(() => {
+    if (!preparing || !loaded) return;
+    const t = window.setTimeout(() => setPreparing(false), LOADED_GRACE_MS);
+    return () => window.clearTimeout(t);
+  }, [preparing, loaded]);
+
+  /** The artifact said its land is the village's own: lift the cover. */
+  const landed = useCallback(() => setPreparing(false), []);
+  /** The frame's document has loaded: every script in it has run. */
+  const frameLoaded = useCallback(() => setLoaded(true), []);
 
   /** Open the land at `hash`. A no-op once entered: see startHash. */
   const enteredNow = useRef(entered);
@@ -93,14 +122,16 @@ export function useMapEnterGate() {
 
   const onEnter = useCallback(() => enterAt(window.location.hash), [enterAt]);
 
-  return { entered, preparing, setPreparing, onEnter, enterAt, startHash };
+  return { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash };
 }
 
 type EnterTheLandGateProps = {
   /** Show the Enter the Land dialog (artifact present, visitor has not entered). */
   open: boolean;
-  /** Show the preparing overlay (entered, config push still in flight). */
+  /** Cover the land (entered, the village's own land not on screen yet). */
   preparing: boolean;
+  /** The cover has waited long enough to say the connection is slow. */
+  slow?: boolean;
   onEnter: () => void;
 };
 
@@ -113,6 +144,7 @@ type EnterTheLandGateProps = {
 export default function EnterTheLandGate({
   open,
   preparing,
+  slow = false,
   onEnter,
 }: EnterTheLandGateProps) {
   const villageName = useVillageName();
@@ -146,17 +178,18 @@ export default function EnterTheLandGate({
         </div>
       )}
 
-      {/* Preparing sits above the iframe; pointer-events none so Leave (and
-          the land beneath) stay reachable while the config push finishes. */}
+      {/* The cover sits over the iframe and under the shell's Leave the map
+          (z-10), so a way out stays on screen while the land loads. It is
+          opaque, and it takes the pointer, because what it hides is the seed
+          scene: a click there opened the seed's version of a building. */}
       {preparing && (
         <div
-          className="absolute inset-0 z-[15] flex items-center justify-center pointer-events-none"
+          className="absolute inset-0 z-[5] flex items-center justify-center px-6 bg-background"
+          role="status"
           aria-live="polite"
         >
-          <p
-            className="px-4 py-2 text-sm rounded-lg border border-border bg-background/90 text-foreground shadow-sm backdrop-blur-sm"
-          >
-            Preparing the land…
+          <p className="px-4 py-2 text-sm text-center rounded-lg border border-border bg-background text-foreground shadow-sm">
+            {slow ? "Still bringing the land. A slow connection takes longer." : "Preparing the land…"}
           </p>
         </div>
       )}
