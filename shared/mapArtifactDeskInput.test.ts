@@ -521,7 +521,9 @@ describe("the Get Involved rows and the vital chips take the keyboard", () => {
     expect(chips.length, "the chips").toBeGreaterThan(4);
     expect(chips.filter((c) => c.tagName !== "BUTTON").length, "chips that are not buttons").toBe(0);
     const people = chips.find((c) => c.dataset.k === "people") as HTMLElement;
-    expect(people.getAttribute("aria-label"), "the reading, and that it is a sample").toMatch(/^People: .+, sample reading$/);
+    // F29, as Rye decided it (2026-10-02): an unset chip is an EXAMPLE, and
+    // the name says so (shared/mapArtifactChips.test.ts holds the rest).
+    expect(people.getAttribute("aria-label"), "the reading, and that it is an example").toMatch(/^People: .+, example\. The founder has not set this yet$/);
     people.focus();
     people.click(); // jsdom's click() carries detail 0, the mark of a key
     await settle(0);

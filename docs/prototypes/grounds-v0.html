@@ -1026,16 +1026,19 @@
   #vdrop .vfact{color:#d8cba2;font-size:11.5px}
   #vdrop .btn{font-size:11px;padding:4px 11px}
   #vdrop .vsample{font-size:10.5px;letter-spacing:.08em;color:#e8c877}
-  /* A SAMPLE READING WEARS ITS MARK ON THE CHIP. The chips read 24, 62kg,
-     96, 76% and 132 on every village with nothing on them to say no one
-     counted those. The bar has no room for a word at the widths it is drawn
-     at (the labels are already hidden under 1500 px and on a phone), so the
-     number itself is underlined in dots and the drop-down it opens leads
-     with "Sample reading". rebuildVitals ends each chip's data-tip with the
-     number's source, so a source that names a sample ("module sample",
-     "drawn land + sample") is what this keys on, and a number the founder
-     set or the drawn land measured loses the mark by itself. */
-  .vital[data-tip$="sample"] b{text-decoration:underline dotted #e8c877;text-decoration-thickness:1.5px;text-underline-offset:2px}
+  /* AN EXAMPLE SAYS SO ON THE CHIP, IN THE WORD. Rye ruled on F29
+     (2026-10-02): the five sample numbers stay, labelled as examples, and
+     the label goes once a founder sets the chip. The dotted underline this
+     replaces said "sample" only to someone who already knew what a dotted
+     underline meant. Where the small labels show, the word rides at the
+     end of the label ("People · example"); where they are hidden (under
+     1500 px, a tight fit, and every phone) it gets a line of its own under
+     the number, so it is never the thing that gets shed. rebuildVitals sets
+     data-example from chipRows(), the one place that decides, and a chip
+     that is counted, measured or held by the founder's word has no mark. */
+  .vital small i{font-style:normal;color:#e8c877}
+  .vital .vex{display:none;font-style:normal;font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#e8c877;line-height:1;margin-top:1px}
+  .vital[data-example] b{line-height:1.05}
   .vital{cursor:pointer}
   /* THE BAR SHEDS IN STEPS, AND topFit PICKS THE STEP. These three widths
      were a guess at when the bar fits between the buttons, and every one of
@@ -1044,10 +1047,11 @@
      page where the fit has not run, which is what :not([data-fit]) says.
      The steps are the same three, in the same order: the small labels, then
      the village name's second line with tighter cells, then the name. */
-  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} }
+  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} #vitals:not([data-fit]) .vital .vex{display:block} }
   @media (max-width:1290px){ #vitals:not([data-fit]) #villageName small{display:none} #vitals:not([data-fit]) .vital{padding:6px 8px} }
   @media (max-width:1160px){ #vitals:not([data-fit]) #villageName{display:none} }
   #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital small{display:none}
+  #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital .vex{display:block}
   #vitals:is([data-fit="2"],[data-fit="3"]) #villageName small{display:none}
   #vitals:is([data-fit="2"],[data-fit="3"]) .vital{padding:6px 8px}
   #vitals[data-fit="3"] #villageName{display:none}
@@ -1130,6 +1134,7 @@
     #skin .srow select{min-width:0;flex:1 1 0}}
   @media (prefers-reduced-motion:reduce){body.pocket #skin{transition:none}}
   body.pocket #vitals .vital small{display:none}
+  body.pocket #vitals .vital .vex{display:block}
   /* A pinch that lands a few pixels high, on the strip instead of the land,
      is still a pinch at the map. These two bars sit over the canvas and take
      nothing but taps, so nothing is lost by refusing the browser here too. */
@@ -4681,7 +4686,16 @@ const VICON={people:'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 0114 0z',
   food:'M12 2c1 4-3 5-3 9a3 3 0 006 0c0-4-4-5-3-9zM7 20h10',
   water:'M12 3s6 7 6 11a6 6 0 01-12 0c0-4 6-11 6-11z',
   canopy:'M12 3l7 8h-4l4 6H5l4-6H5l7-8zM12 17v4',
-  hearts:'M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z'};
+  hearts:'M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z',
+  /* The icons a founder can give a chip of their own in Village settings.
+     shared/mapStatChips.ts carries the same paths for the editor's picker,
+     and shared/mapArtifactChips.test.ts holds the two tables equal. */
+  quests:'M6 21V4m0 0h10l-2 4 2 4H6',
+  seats:'M7 4v9h10V4M5 13h14M7 13v7m10-7v7',
+  circles:'M12 4a8 8 0 100 16 8 8 0 000-16zm0 4a4 4 0 100 8 4 4 0 000-8z',
+  events:'M5 6h14v14H5zM5 10h14M9 3v5m6-5v5',
+  leaf:'M5 19c0-8 5-14 14-14 0 9-6 14-14 14zm0 0l7-7',
+  star:'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z'};
 /* THE MOON IS TODAY'S MOON. The chip was a fixed waxing gibbous, "cycle
    closes in 6 days", on every day of the year, over a drop-down that names
    its source as the lunar calendar. lunation() is Meeus's formula for the
@@ -4718,11 +4732,44 @@ function moonToday(when){
     name:(today?today[1]:NAMES[j])+' · '+next[1]+(n===1?' tomorrow':' in '+n+' days')}}
 window.moonToday=moonToday;
 {const m=moonToday();SCENE.moon=m.moon;SCENE.moonName=m.name}
+/* THE CHIPS ARE THE VILLAGE'S (F29, Rye 2026-10-02): "Mark them as examples
+   and wire them to admin ... Label as example - this label goes away once
+   set." The shell pushes {type:'chips'}: the founder's list from Village
+   settings, in order, each one already resolved by the server
+   (shared/mapStatChips.ts). A chip with a source carries its reading. A chip
+   nobody has set is an EXAMPLE: one of the five this map has always drawn
+   keeps its own number from vitalsData() (sample, the drawn land, or a number
+   held by the founder's word), and any other draws a question mark. Either
+   way the chip says "example" until somebody sets it.
+   Standalone, with no shell, CHIPS stays null and the bar is the five it
+   always was, so every QA run and every file:// open reads the same. */
+window.CHIPS=window.CHIPS||null;
+/* The five this map has always carried. Only these have a number of the
+   map's own; any other id is the founder's word and is never looked up in a
+   table by it ("constructor" is a good id, and every object answers it). */
+const LEGACY_CHIPS=['people','food','water','canopy','hearts'];
+const chipIcon=k=>Object.prototype.hasOwnProperty.call(VICON,k)?VICON[k]:VICON.star;
+/* One row per chip, in the order the bar draws them. Everything that shows a
+   chip's number (the bar, its drop-down, the Village Health door) reads this,
+   so none of them can say a different thing about the same chip. */
+function chipRows(){
+  const D=(typeof vitalsData==='function')?vitalsData():{};
+  const seed=k=>SCENE.vitals.find(v=>v.k===k);
+  const own=(k,label,icon,link)=>{const legacy=LEGACY_CHIPS.includes(k);
+    const d=!legacy?null:(D[k]||(seed(k)?{...seed(k),how:seed(k).sub}:null));
+    if(!d)return{k,label,icon,v:'?',sub:'',how:'An example. The founder has not chosen what this chip reads yet.',src:'example',example:true,link,live:false};
+    /* A held number or a measured one is the village's; only a sample is an example. */
+    return{k,label,icon,v:d.v,sub:d.sub,how:d.how,src:d.src,example:/sample/.test(String(d.src||'')),link,live:false}};
+  if(!Array.isArray(window.CHIPS))return SCENE.vitals.map(v=>own(v.k,v.label,v.k,''));
+  return window.CHIPS.map(c=>(c.state==='live'||c.state==='manual')
+    ?{k:c.id,label:c.label,icon:c.icon,v:c.value,sub:c.sub,how:c.how,src:c.state==='manual'?'founder-set':'live',
+      example:false,link:c.link,live:true,asOf:c.asOf,countedAt:c.countedAt}
+    :own(c.id,c.label,c.icon,c.link))}
+window.chipRows=chipRows;
 function rebuildVitals(){const w=$('vitals');
-  const D=(typeof vitalsData==='function')?vitalsData():null;
-  w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+SCENE.vitals.map(v=>{
-    const d=(D&&D[v.k])||{v:v.v,sub:v.sub,src:v.src,how:v.sub};
-    return `<button type="button" class="vital" data-k="${escq(v.k)}" aria-label="${escq(v.label)}: ${escq(d.v)}, ${escq(vitalProv(d.src))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(d.how)} · ${escq(d.src)}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${VICON[v.k]}"/></svg><span><b>${escq(d.v)}</b><small>${escq(v.label)}</small></span></button>`}).join('')
+  const rows=chipRows();
+  w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+rows.map(r=>
+    `<button type="button" class="vital" data-k="${escq(r.k)}"${r.example?' data-example="1"':''} aria-label="${escq(r.label)}: ${escq(r.v)}, ${escq(vitalProv(r))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(r.how)} · ${escq(vitalSrcWord(r))}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${chipIcon(r.icon)}"/></svg><span><b>${escq(r.v)}</b><small>${escq(r.label)}${r.example?'<i> · example</i>':''}</small>${r.example?'<em class="vex" aria-hidden="true">example</em>':''}</span></button>`).join('')
    +`<button type="button" class="vital" data-k="moon" aria-label="The Moon: ${escq(SCENE.moonName)}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(SCENE.moonName)}"><span id="moon">${escq(SCENE.moon)}</span></button>`;
   /* A KEY CAN OPEN A READING. The chips were divs with an onclick, so the
      drop-downs, and the doors inside them, were mouse only. A click that
@@ -4734,9 +4781,38 @@ function rebuildVitals(){const w=$('vitals');
     if(e.detail===0){const f=$('vdrop').querySelector('button,a[href],input');if(f)f.focus({preventScroll:true})}})}
 /* What a chip says its number is, in the words its own drop-down uses. The
    small label is hidden below 1500 px wide, so the chip's name is the only
-   place a screen reader learns which reading it is, and that it is sample. */
-function vitalProv(src){src=String(src||'');
-  return src==='founder-set'?'set by the founder':(src==='drawn land'?'measured from the drawn land':'sample reading')}
+   place a screen reader learns which reading it is, and that it is an
+   example. */
+function vitalProv(r){if(r.example)return 'example. The founder has not set this yet';
+  return r.src==='live'?'counted by the village':r.src==='drawn land'?'measured from the drawn land':'set by the founder'}
+/* The last word of a chip's tip: where its number comes from. */
+function vitalSrcWord(r){return r.example?'example':r.src==='live'?'counted live':r.src==='founder-set'?'set by the founder':String(r.src||'')}
+/* A push from the shell. Strings only, so nothing in a chip can become
+   markup or code, and drawn through escq like every founder value. The bar
+   is redrawn only when something changed, because the shell asks every
+   minute and a redraw resizes the bar under a reader's pointer. */
+let CHIPS_SIG='';
+function applyChips(list){
+  const str=v=>v==null?'':String(v);
+  const clean=list.filter(c=>c&&typeof c==='object'&&typeof c.id==='string'&&c.id).slice(0,12).map(c=>({
+    id:str(c.id),label:str(c.label),icon:str(c.icon),state:['live','manual','example'].includes(c.state)?c.state:'example',
+    value:c.value==null?null:str(c.value),sub:str(c.sub),how:str(c.how),asOf:str(c.asOf),countedAt:str(c.countedAt),link:str(c.link),source:str(c.source)}));
+  const sig=JSON.stringify(clean);if(sig===CHIPS_SIG)return;
+  CHIPS_SIG=sig;window.CHIPS=clean;rebuildVitals();
+  /* An open reading follows its chip, unless somebody is typing in it. A
+     keyboard reader on one of its doors stays on the same door. */
+  const dp=$('vdrop');if(!dp.classList.contains('show')||!window.VDROP_FROM)return;
+  const k=window.VDROP_FROM.dataset.k;
+  const el=[...document.querySelectorAll('#vitals .vital')].find(e=>e.dataset.k===k);
+  if(!el){dp.classList.remove('show');return}
+  window.VDROP_FROM=el;
+  const a=document.activeElement,inside=dp.contains(a);
+  if(inside&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  const doors=()=>[...dp.querySelectorAll('button,a[href],input')];
+  const at=inside?doors().indexOf(a):-1;
+  openVitalDrop(k,el);
+  if(at>=0){const f=doors()[at];if(f)f.focus({preventScroll:true})}}
+window.applyChips=applyChips;
 window.rebuildVitals=rebuildVitals;rebuildVitals();
 
 /* banners */
@@ -8432,15 +8508,15 @@ const MODULES={
     sample:ctx=>offeredJourneys().map(j=>{const placed=j.steps.filter(st=>st.at&&BY[st.at]).length;
       return `<div class="mrow"><span><b>${escq(j.name)}</b><small>${placed} of ${j.steps.length} steps placed</small></span>
        <span style="display:flex;gap:6px"><button class="btn" type="button" onclick="playJourney('${escj(j.id)}')">➹ walk it</button></span></div>`}).join('')},
-  /* Drawn from vitalsData(), the same answer the bar reads, so a number the
-     founder set or the land measured shows here as it does there, and a
-     sample says so on its row. It printed the seed's literals with no mark,
+  /* Drawn from chipRows(), the rows the bar itself draws, so the founder's
+     chips, their order and their readings show here as they do there, and an
+     example says so on its row. It printed the seed's literals with no mark,
      under "The same truth the crown banner reads". */
   health:{name:'Village Health',icon:'☀',route:'/village-health',
     blurb:'The numbers behind the map, the same ones the crown banner reads.',
-    sample:ctx=>{const D=vitalsData();const rows=SCENE.vitals.map(v=>({v,d:D[v.k]||v,smp:/sample/.test(String((D[v.k]||v).src||''))}));
-      return rows.map(({v,d,smp})=>`<div class="mrow"><span><b>${escq(v.label)}</b><small>${escq(d.sub)}${smp?' · sample':''}</small></span><span><b>${escq(d.v)}</b></span></div>`).join('')
-        +(rows.some(r=>r.smp)?'<div class="lastv">a row marked sample is a stand-in. It counts itself once the module behind it feeds the map</div>':'')}},
+    sample:ctx=>{const rows=chipRows();
+      return rows.map(r=>`<div class="mrow"><span><b>${escq(r.label)}</b><small>${escq(r.sub)}${r.example?' · example':''}</small></span><span><b>${escq(r.v)}</b></span></div>`).join('')
+        +(rows.some(r=>r.example)?'<div class="lastv">a row marked example is a stand-in. It reads the village once the founder chooses its source in Village settings</div>':'')}},
   events:{name:'Events',icon:MICON.events,route:'/events',
     blurb:'Feasts, build days, ceremonies. Every event is a place and a time on the land, and its lantern burns brighter as the day comes near.',
     sample:ctx=>EVENTS.map(e=>`<div class="mrow"><span><b>✦ ${e.title}</b><small>${e.when} · at ${escq(e.at.map(k=>BY[k]?BY[k].name:k).join(' + '))} · sample</small></span>
@@ -9696,46 +9772,81 @@ function vitalsData(){
 window.vitalsData=vitalsData;
 function openVitalDrop(k,anchor){
   const dp=$('vdrop');const D=vitalsData();
+  /* The same row the chip drew (chipRows), so the reading under a chip can
+     never say something the chip did not. A chip the founder has taken off
+     the bar since it was opened has no row, and nothing to show. */
+  const row=k==='moon'?null:chipRows().find(x=>x.k===k);
+  if(k!=='moon'&&!row){dp.classList.remove('show');return}
   const r=anchor.getBoundingClientRect();
   dp.style.left=Math.max(8,Math.min(innerWidth-300,r.left+r.width/2-144))+'px';
   const findQ=kws=>SCENE.quests.find(q=>kws.some(w=>(q.q+' '+(q.desc||'')).toLowerCase().includes(w)));
   const claimBtn=(kws,createLabel,home)=>{const q2=findQ(kws);
     return q2?`<button class="btn" onclick="claimQuest('${escj(q2.q)}','${escj(q2.at?nameOf(q2.at):'the Board')}');$('vdrop').classList.remove('show')">⚑ Claim: ${escq(q2.q)}</button>`
       :`<button class="btn" onclick="vitalQuest('${escj(createLabel)}','${escj(home)}')">⚑ Begin: ${escq(createLabel)}</button>`};
-  const body={
-    people:()=>`<div class="vfact"><b>${escq(D.people.v)}</b> members · ${escq(D.people.sub)}</div><div class="vhow">${escq(D.people.how)}</div>
-      <button class="btn" onclick="openDoor('journeys',{});$('vdrop').classList.remove('show')">➹ Begin a journey</button>`,
-    food:()=>`<div class="vfact"><b>${escq(D.food.v)}</b> · ${escq(D.food.sub)}</div><div class="vhow">${escq(D.food.how)}</div>
-      ${claimBtn(['harvest','garden','seed','plant'],'Feed the village','greenhouse')}`,
-    water:()=>`<div class="vfact"><b>${escq(D.water.v)}</b> · ${escq(D.water.sub)}</div><div class="vhow">${escq(D.water.how)}</div>
-      ${claimBtn(['water','creek','swale','drip','trail'],'Tend the waters','tank')}`,
-    canopy:()=>`<div class="vfact"><b>${escq(D.canopy.v)}</b> · ${escq(D.canopy.sub)}</div><div class="vfact">${D._pathKm.toFixed(1)} km of drawn paths thread the land</div><div class="vhow">${escq(D.canopy.how)}</div>
-      ${claimBtn(['tree','plant','mulch','forest'],'Plant toward the canopy','foodforest')}`,
-    hearts:()=>`<div class="vfact"><b>${escq(D.hearts.v)} ♥</b> · ${escq(D.hearts.sub)}</div><div class="vhow">${escq(D.hearts.how)}</div>
-      <a class="btn" style="text-align:center" href="${siteHref('/gratitude')}" target="_blank" rel="noopener" onclick="return siteNav(event,'/gratitude')">♥ Send gratitude ↗</a>`,
-    moon:()=>`<div class="vfact">${escq(SCENE.moonName)}</div><div class="vhow">the lunar cycle closes the books: gratitude settles, stewards are thanked, the pulse resets</div>
-      <button class="btn" onclick="openDoor('health',{});$('vdrop').classList.remove('show')">☀ Village Health</button>`};
-  const name={people:'People',food:'Food',water:'Water',canopy:'Canopy',hearts:'Hearts',moon:'The Moon'}[k]||k;
+  /* What the five chips this map has always carried say about their own
+     number while they draw it themselves (an example, the drawn land, or a
+     number held by the founder's word). */
+  const facts={
+    people:()=>`<div class="vfact"><b>${escq(D.people.v)}</b> members · ${escq(D.people.sub)}</div><div class="vhow">${escq(D.people.how)}</div>`,
+    food:()=>`<div class="vfact"><b>${escq(D.food.v)}</b> · ${escq(D.food.sub)}</div><div class="vhow">${escq(D.food.how)}</div>`,
+    water:()=>`<div class="vfact"><b>${escq(D.water.v)}</b> · ${escq(D.water.sub)}</div><div class="vhow">${escq(D.water.how)}</div>`,
+    canopy:()=>`<div class="vfact"><b>${escq(D.canopy.v)}</b> · ${escq(D.canopy.sub)}</div><div class="vfact">${D._pathKm.toFixed(1)} km of drawn paths thread the land</div><div class="vhow">${escq(D.canopy.how)}</div>`,
+    hearts:()=>`<div class="vfact"><b>${escq(D.hearts.v)} ♥</b> · ${escq(D.hearts.sub)}</div><div class="vhow">${escq(D.hearts.how)}</div>`};
+  /* And what each of them offers to DO about it. */
+  const offer={
+    people:()=>`<button class="btn" onclick="openDoor('journeys',{});$('vdrop').classList.remove('show')">➹ Begin a journey</button>`,
+    food:()=>claimBtn(['harvest','garden','seed','plant'],'Feed the village','greenhouse'),
+    water:()=>claimBtn(['water','creek','swale','drip','trail'],'Tend the waters','tank'),
+    canopy:()=>claimBtn(['tree','plant','mulch','forest'],'Plant toward the canopy','foodforest'),
+    hearts:()=>`<a class="btn" style="text-align:center" href="${siteHref('/gratitude')}" target="_blank" rel="noopener" onclick="return siteNav(event,'/gratitude')">♥ Send gratitude ↗</a>`};
+  /* The founder's own door for the chip, drawn only for a page the site
+     serves (realRoute), so a typo is a chip with no door and never a door
+     to nowhere. */
+  const route=row&&row.link?realRoute(row.link):'';
+  const door=route?`<a class="btn" style="text-align:center" href="${escq(siteHref(route))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${escj(route)}')">${escq(row.label)} ↗</a>`:'';
+  /* Village settings, where a chip is given its source. The shell answers
+     this route with its own settings drawer for a founder, over the land. */
+  const settings=`<a class="btn" style="font-size:10.5px;padding:3px 9px;text-align:center" href="${escq(siteHref('/admin?tab=setup'))}" target="_blank" rel="noopener" onclick="$('vdrop').classList.remove('show');return siteNav(event,'/admin?tab=setup')">Village settings</a>`;
+  let body;
+  if(k==='moon')body=`<div class="vfact">${escq(SCENE.moonName)}</div><div class="vhow">the lunar cycle closes the books: gratitude settles, stewards are thanked, the pulse resets</div>
+      <button class="btn" onclick="openDoor('health',{});$('vdrop').classList.remove('show')">☀ Village Health</button>`;
+  else if(!row.live&&LEGACY_CHIPS.includes(k))body=facts[k]()+(door||offer[k]());
+  else body=`<div class="vfact"><b>${escq(row.v)}</b>${row.sub?' · '+escq(row.sub):''}</div><div class="vhow">${escq(row.how)}</div>`+door;
+  const name=k==='moon'?'The Moon':row.label;
   /* Where this number comes from, said before anything is asked of you.
      "set value - founder's word" confused the founder who wrote it. */
   const held=!!(window.VITAL_OVR||{})[k];
-  const rawSrc=String((D[k]&&D[k].src)||'');
-  const prov=held?'held by your word':(/drawn/.test(rawSrc)?'measured from your drawn land':'sample reading');
-  const unit=(String((D[k]&&D[k].v)||'').match(/[^0-9.,\s]+$/)||[''])[0];
-  const ovr=(typeof buildMode!=='undefined'&&buildMode&&k!=='moon')?
-    `<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+  const rawSrc=String((row&&row.src)||'');
+  const unit=(String((row&&row.v)||'').match(/[^0-9.,\s]+$/)||[''])[0];
+  let ovr='';
+  if(typeof buildMode!=='undefined'&&buildMode&&k!=='moon'){
+    /* A chip with a source is the village's record, chosen in Village
+       settings, so build mode sends the founder there. Holding a number
+       here as well would put two founder controls on one chip. */
+    if(row.live)ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+       <div style="font-size:10px;letter-spacing:.06em;color:var(--gold-b)">${row.src==='founder-set'?'your number, from Village settings':'counted live from the village'}</div>
+       <div style="font-size:11px;color:#cfc7a8;margin:4px 0 5px">What this chip reads is chosen in Village settings.</div>${settings}</div>`;
+    /* A chip of the founder's own has no number of the map's to hold. */
+    else if(!LEGACY_CHIPS.includes(k))ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+       <div style="font-size:10px;letter-spacing:.06em;color:#b9af8f">example</div>
+       <div style="font-size:11px;color:#cfc7a8;margin:4px 0 5px">Give it a source in Village settings, and it counts itself.</div>${settings}</div>`;
+    else{const prov=held?'held by your word':(row.example?'example':(/drawn/.test(rawSrc)?'measured from your drawn land':'example'));
+      ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
        <div style="font-size:10px;letter-spacing:.06em;color:${held?'var(--gold-b)':'#b9af8f'}">${prov}</div>
        ${held
          ? `<div style="font-size:11.5px;margin-top:4px">Held by your word · <a href="#" onclick="vitalClear('${escj(k)}');return false" style="color:var(--gold-b)">release</a></div>`
          : `<div style="font-size:11px;color:#cfc7a8;margin-top:4px">Know the real number? Set it here and the map holds your word until you release it.</div>
             <div style="display:flex;gap:6px;align-items:center;margin-top:5px">
               <input id="vOvr" type="text" placeholder="the true number" style="flex:1;background:rgba(44,33,20,.8);border:1px solid #6b5430;border-radius:6px;color:var(--parch);font-family:inherit;font-size:11px;padding:4px 8px">
-              ${unit?`<span style="font-size:11px;color:#b9af8f">${escq(unit)}</span>`:''}
+              ${unit&&unit!=='?'?`<span style="font-size:11px;color:#b9af8f">${escq(unit)}</span>`:''}
               <button class="btn" style="font-size:10.5px;padding:3px 9px" onclick="vitalSet('${escj(k)}')">Hold this number</button>
             </div>`}
-     </div>`:'';
-  dp.innerHTML=`<h5>${escq(name)}</h5>${/sample/.test(rawSrc)?'<div class="vsample">Sample reading. Nothing has counted this from the village yet.</div>':''}${(body[k]||(()=>''))()}${ovr}
-    <div class="vhow" style="opacity:.8">source: ${escq(k==='moon'?'the lunar calendar':(D[k]?D[k].src:'—'))} · live feeds from the bioregion can plug in here</div>`;
+       <div style="font-size:11px;color:#cfc7a8;margin:6px 0 5px">Or give it a source in Village settings, and it counts itself.</div>${settings}</div>`}}
+  const source=k==='moon'?'the lunar calendar'
+    :row.live?(row.src==='founder-set'?'the founder, in Village settings':'counted live from the village\'s own records')
+    :row.example?'an example. The founder has not chosen what it reads yet':rawSrc;
+  dp.innerHTML=`<h5>${escq(name)}</h5>${row&&row.example?'<div class="vsample">Example. The founder has not set this chip yet.</div>':''}${body}${ovr}
+    <div class="vhow" style="opacity:.8">source: ${escq(source)}</div>`;
   dp.classList.add('show')}
 window.openVitalDrop=openVitalDrop;
 function vitalQuest(label,home){SCENE.quests.push({q:label,at:home,addr:'resolver-guess',r:'20 ♥',need:'hands welcome',src:'vital'});
@@ -10980,6 +11091,7 @@ window.undoPublish=undoPublish;
 
 /* ---------- embed bridge — the site shell speaks, the map listens ----------
    parent → map: {type:'skin', skin:<art_manifest.skin shape>} applies Village Settings live;
+                 {type:'chips', chips:[...]} the crown bar's chips, read live (applyChips);
                  {type:'goto', hash:'#/place/kitchen'} routes the land.
    map → parent: {type:'grounds-ready', version} once on boot;
                  {type:'route', hash, user} whenever the address changes (setHash);
@@ -10990,6 +11102,8 @@ addEventListener('message',e=>{try{
   const d=e.data;if(!d||typeof d!=='object')return;
   if(d.type==='skin'&&d.skin){SHELL_SKIN=d.skin;applySkinExport(d.skin);toast('✂ Skin applied from Village Settings.')}
   if(d.type==='ground')setGround(d);
+  /* The founder's chips, resolved by the server (applyChips). */
+  if(d.type==='chips'&&Array.isArray(d.chips))applyChips(d.chips);
   /* REPLACED, never pushed. Assigning location.hash added an entry to this
      frame's history, and the browser's Back pops a frame's entry before the
      page's: the next Back only rewound this hash, nothing visible happened,
