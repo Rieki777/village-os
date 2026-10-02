@@ -8592,8 +8592,12 @@ function landArrived(){if(SHELL_LANDED)return;SHELL_LANDED=true;
   /* Routed already, against the seed, when the wait ran out: a place address
      is answered again by the land that just arrived, so a place that was
      missing opens and a place that moved is aimed at where it now stands.
-     Only a place: a journey started twice would walk twice. */
-  if(held||/^#\/place\//.test(location.hash||''))routeHash()}
+     Only a place: a journey started twice would walk twice.
+     HASHMUTE is cleared first because this is a route, not the echo of a
+     setHash: when the wait gave up, its openPanel set the mute, which a
+     0 ms timer clears, and a config landing before that timer ran met a
+     muted router and was never routed. */
+  if(held||/^#\/place\//.test(location.hash||'')){HASHMUTE=false;routeHash()}}
 window.landArrived=landArrived;
 if(ROUTE_HELD)setTimeout(()=>{if(!ROUTE_HELD)return;ROUTE_HELD=false;routeHash()},ROUTE_WAIT_MS);
 else if(location.hash&&location.hash.length>2)setTimeout(routeHash,400);

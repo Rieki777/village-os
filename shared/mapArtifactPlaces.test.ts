@@ -332,6 +332,41 @@ describe("a deep link inside the shell, with the published land arriving after t
   });
 });
 
+/**
+ * THE LAND LANDING IN THE INSTANT THE WAIT GAVE UP. When the wait runs out
+ * the map routes against the seed, and openPanel's setHash mutes the router
+ * until a 0 ms timer clears it. A config that landed before that timer ran
+ * was answered by a muted router: nothing re-routed, and the moved place
+ * stayed aimed at the seed's ground. Seen once in five runs of the suite on
+ * a busy machine, where the loop stalled across the give-up; here the mute
+ * is set the way the give-up sets it, and the land arrives in the same task.
+ */
+describe("a land that arrives while the router is still muted by the give-up", () => {
+  let m: Booted;
+  beforeAll(async () => {
+    m = boot(`#/place/${MOVED}&skipIntro`, { shell: true });
+    await settle(4600);
+  });
+  afterAll(() => m?.close());
+
+  it("is the case: the wait gave up and aimed at the seed", () => {
+    expect(m.run<boolean>("SHELL_LANDED")).toBe(false);
+    expect(m.run<string | null>("panelKey")).toBe(MOVED);
+    expect(Math.round(aimOf(m).x)).toBe(seedAt.x);
+  });
+
+  it("still aims at where the founder moved the place", async () => {
+    m.run("setHash(location.hash)");
+    expect(m.run<boolean>("HASHMUTE"), "the mute the give-up leaves for one task").toBe(true);
+    m.post(config(LIVE));
+    await settle(400);
+    const aim = aimOf(m);
+    expect(Math.round(aim.x), "camera aim x").toBe(movedTo.x);
+    expect(Math.round(aim.y), "camera aim y").toBe(movedTo.y);
+    expect(m.uncaught).toEqual([]);
+  });
+});
+
 describe("a publish landing while a place's door is open", () => {
   it("redraws the open tab from the new land, so Claim names the village's own quest", async () => {
     const m = boot("#skipIntro", { shell: true });
