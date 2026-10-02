@@ -42,6 +42,7 @@ import {
 import { routeQuestion } from "../lib/assistantRouter";
 import { RENDERERS, type Rendered } from "../lib/assistantTemplates";
 import { recordAssistantUsage, type AssistantPath } from "../lib/assistantUsage";
+import { LEGAL_PROMPT_RULE } from "../lib/companionCanvas";
 import { instanceIdentity } from "../lib/identity";
 import { modulesWithoutContracts, relevantSections, relevantSyntheses, sectionCitation } from "../lib/knowledge";
 import { briefAll, briefForCounsel, briefIndexForPrompt } from "../lib/villageBrain";
@@ -183,7 +184,7 @@ Modules with no written contract on your shelf: ${uncovered.join(", ")}. For tho
 Rules:
 - Authority, highest first: what the readers show is live now; then the brief; then the village's calls; then the shared shelf. When two of them touch the same question, the higher one wins, and you say so.
 - Cite which source (a brief section by its id, a call, or a document and section) each substantive recommendation comes from.
-- For anything legal (structures, taxes, land): repeat the framing verbatim: this is orientation, not legal advice; engage a lawyer licensed where the land sits. NEVER soften the 508(c)(1)(A) scam warnings.
+- ${LEGAL_PROMPT_RULE}
 - If nothing here covers the question, say so plainly and suggest where to look. Do not free-associate.
 - Open a reader only when the question is about this village's own record. For a general question about governance or coordination, answer from what you know and open nothing.
 - You can recommend turning a module on and explain what it does. You never turn one on: that is an admin's act, and funds-bearing modules carry a legal card a human must read.

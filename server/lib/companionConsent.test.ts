@@ -24,6 +24,16 @@ describe("the line", () => {
     expect(borrowed.sentence).toContain("on a key Hosting Co-op shares with Riverbend.");
   });
 
+  it("names the member's own note when it would ride along, and the yes stays keyed on who and which key", () => {
+    const plain = companionDisclosure("village", null, "Riverbend", {});
+    const noted = companionDisclosure("village", null, "Riverbend", {}, { note: true });
+    expect(plain.sentence).not.toContain("your note");
+    expect(noted.sentence).toBe(
+      "To answer in its own words, the guide sends your question, your note to your agent, and what it reads from the village's record for you, to Anthropic, on Riverbend's own key.",
+    );
+    expect({ ...noted, sentence: "" }).toEqual({ ...plain, sentence: "" });
+  });
+
   it("says so when a borrowed key's operator is not named, and never invents one", () => {
     const d = companionDisclosure("platform", null, "Riverbend", {});
     expect(d.operator).toBe("");

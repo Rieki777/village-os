@@ -426,11 +426,13 @@ READERS.push(
   {
     key: "canvas.answers",
     describe:
-      "The village's governance canvas: for each block, the answer the village adopted and its latest reading. Members' words only. Name a block in the question to read it whole.",
+      "The village's governance canvas: for each block, the answer the village adopted and its latest reading. Members' words only: a section whose words stay with the administrators is listed under `others` with its state, and is never blank. Name a block in the question to read it whole.",
     audience: "member",
     admittedOnly: true,
     maxTokens: 2200,
-    read: async ({ pool, query }) => canvasAnswersForMembers(pool, query),
+    // The words are members' whoever asks; an administrator is told the
+    // state of the sections whose words stay out (companionCanvas.ts header).
+    read: async ({ pool, query, viewer }) => canvasAnswersForMembers(pool, query, { admin: viewer.isAdmin }),
   },
   {
     key: "canvas.library",

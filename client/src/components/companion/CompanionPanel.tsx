@@ -189,12 +189,16 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
     return parts.join(" ");
   };
 
+  // On a phone the tab bar (z-50, portaled after #root) and the shortcut
+  // button (z-[60]) sit over the bottom of the screen, so the panel docks
+  // above the bar and layers at z-[70], the modal rule in MobileFab.tsx.
+  // From md up the bar is gone and --tabbar-h is 0.
   return (
     <div
       role="dialog"
       aria-label={name ? `Ask about ${name}` : "Ask about the canvas"}
       data-testid="companion-panel"
-      className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh] wrap-anywhere"
+      className="fixed bottom-[calc(var(--tabbar-h)+0.5rem)] md:bottom-4 right-4 z-[70] w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh] wrap-anywhere"
     >
       <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-stone-900">{name ? `Ask about ${name}` : "Ask about the canvas"}</p>

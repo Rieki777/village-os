@@ -78,12 +78,17 @@ function hostOf(url: string | null | undefined): string {
 /**
  * The line for the key that would answer. `source` is `resolveKey`'s answer
  * (server/lib/assistant.ts); `villageName` is the village's own name.
+ * `carries.note` is true when the member's own note would ride in the prompt
+ * (`aboutMeForAssistant`), and the line then names it: the note is the
+ * member's own writing and goes upstream with the question (first review of
+ * the companion lane). The wording is not part of what a yes is keyed on.
  */
 export function companionDisclosure(
   source: KeySource,
   memberKey: MemberKeyFacts | null,
   villageName: string,
   env: NodeJS.ProcessEnv = process.env,
+  carries: { note?: boolean } = {},
 ): CompanionDisclosure {
   const village = villageName.trim() || "this village";
   let provider = "Anthropic";
@@ -109,7 +114,7 @@ export function companionDisclosure(
     provider,
     operator,
     source,
-    sentence: `To answer in its own words, the guide sends your question, and what it reads from the village's record for you, to ${provider}, on ${key}.`,
+    sentence: `To answer in its own words, the guide sends your question, ${carries.note ? "your note to your agent, " : ""}and what it reads from the village's record for you, to ${provider}, on ${key}.`,
   };
 }
 

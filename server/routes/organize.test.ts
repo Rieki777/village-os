@@ -143,4 +143,19 @@ describe.skipIf(!configured)("the stewards' guide, organize mode", () => {
     expect((await organize(null, "how should we organize?")).status).toBe(401);
     expect(upstream).toHaveLength(0);
   });
+
+  it("tells a steward the truth about a confirmed Legal section on the road with no model (second review, 2026-10-01)", async () => {
+    // Seeded here, after the prompt test above, so it does not join that test's brief.
+    await pool.query( // module-review-ok: seeding the scratch schema this suite provisioned
+      "INSERT INTO village_brief (id, section, title, body, audience, source, status) VALUES ('b-legal','legal','What exists on paper',?,'admin','admin','confirmed')",
+      ["LEGAL-WORDS: a cooperative holds the deed."],
+    );
+    const r = await organize("admin", "what did we answer for legal?");
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.path).toBe("deterministic");
+    expect(upstream).toHaveLength(0);
+    // It used to say "The village has not adopted an answer for Legal yet." to the admin who confirmed it.
+    expect(r.body.reply).toContain('For Legal, "What exists on paper" is adopted, and its words stay with the administrators.');
+    expect(r.body.reply).not.toContain("has not adopted");
+  });
 });

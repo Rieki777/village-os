@@ -28,6 +28,7 @@ import type { Pool } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import type { CapabilityCtx } from "../../shared/capabilities";
+import { saveAgentProfile } from "../lib/agentProfile";
 import { wireAssistant } from "../lib/assistant";
 import { RECORD_REASON_SENTENCE } from "../lib/companionCanvas";
 import { CONSENT_PREFS_KEY } from "../lib/companionConsent";
@@ -44,6 +45,7 @@ if (!configured) console.warn("[companion.routes] TEST_DATABASE_URL not set - DB
 const PEOPLE = {
   member: { id: "comp-member", name: "Ash Brook", role: "member", membership: 1 },
   stranger: { id: "comp-stranger", name: "Rook Talbot", role: "member", membership: 0 },
+  noted: { id: "comp-noted", name: "Fern Oakes", role: "member", membership: 1 },
 } as const;
 type Who = keyof typeof PEOPLE;
 
@@ -197,10 +199,14 @@ describe.skipIf(!configured)("the member companion", () => {
       expect(row).toMatchObject({ path: "deterministic", key_source: "none", input_tokens: 0, output_tokens: 0, iterations: 0 });
     });
 
-    it("never reads an admin-audience answer back, and says the block has none", async () => {
+    it("never reads an admin-audience answer back, and says it is written and not opened to members, never that there is none", async () => {
+      // The village HAS adopted Resourcing's section, at the admin audience
+      // (the seed above). This test used to assert "has not adopted", which
+      // was the falsehood (second review, 2026-10-01).
       const r = await ask("member", "where does our money come from?", "resourcing");
       expect(r.status).toBe(200);
-      expect(r.body.reply).toContain("The village has not adopted an answer for Resourcing yet.");
+      expect(r.body.reply).toContain('For Resourcing, "How value moves" is written, and not opened to members, so the guide cannot read it to you.');
+      expect(r.body.reply).not.toContain("has not adopted");
       expect(r.body.reply).not.toContain("ADMIN-ECONOMY");
     });
 
@@ -286,6 +292,28 @@ describe.skipIf(!configured)("the member companion", () => {
       expect(r.body.consent).toMatchObject({ provider: "Anthropic", operator: "Hosting Co-op", source: "platform" });
       expect(r.body.consent.sentence).toContain("on a key Hosting Co-op shares with Riverbend");
       expect(upstream).toHaveLength(0);
+    });
+
+    it("names the member's own note in the line whenever the note would go upstream with the question", async () => {
+      // First review: the line listed the question and the record and left out
+      // the note, which rides in the prompt at the assistant tier or wider.
+      const NOTE = "NOTE-SENTINEL: I can only do mornings and I am learning to keep bees.";
+      const withNote = "To answer in its own words, the guide sends your question, your note to your agent, and what it reads from the village's record for you, to Anthropic, on Riverbend's own key.";
+      // A private note stays out of the prompt, so the line does not name it.
+      expect((await saveAgentProfile(pool, PEOPLE.noted.id, { aboutMe: NOTE, aboutTier: "private" })).ok).toBe(true);
+      const quiet = await ask("noted", "how should we decide spending?", "power");
+      expect(quiet.body.consent.sentence).not.toContain("your note");
+      // At the assistant tier it goes upstream after the yes, so the line names it.
+      expect((await saveAgentProfile(pool, PEOPLE.noted.id, { aboutTier: "assistant" })).ok).toBe(true);
+      const before = await ask("noted", "how should we decide spending?", "power");
+      expect(before.body.consent.sentence).toBe(withNote);
+      expect((await call("GET", "/api/agent/companion", "noted")).body.disclosure.sentence).toBe(withNote);
+      expect(upstream).toHaveLength(0);
+      const yes = await call("POST", "/api/agent/companion/consent", "noted", { provider: "Anthropic", operator: "Riverbend", source: "village" });
+      expect(yes.status, JSON.stringify(yes.body)).toBe(200);
+      await ask("noted", "how should we decide spending?", "power");
+      expect(upstream).toHaveLength(1);
+      expect(String(upstream[0].body.system), "the note the line named is the note that went").toContain(NOTE);
     });
 
     it("closes the door again when the member takes their yes back", async () => {

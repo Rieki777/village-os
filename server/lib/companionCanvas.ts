@@ -25,6 +25,20 @@
  * them for stewards (server/routes/organize.ts). The readings carry the level
  * as its word and never the recorder's name.
  *
+ * ── A CLOSED SECTION IS NEVER CALLED BLANK ─────────────────────────────────
+ *
+ * Only aims, vision, values and language default to the member audience, and
+ * an answer adopted on the canvas keeps its section's audience, so most
+ * adopted answers are ones a member may not read. Each block therefore says
+ * where every section without words in `answers` stands (`others`), by the
+ * rule the canvas's own Say frame keeps (GET /api/canvas/blocks/:id,
+ * server/routes/canvasFrames.ts): a member is told a section is kept with the
+ * administrators, or written and not opened to members, and never whether it
+ * is adopted; an administrator is told its state. Either way the words stay
+ * out, and nobody is told "nothing was adopted" about an answer that was
+ * (second review of the companion lane, 2026-10-01). The Conflict block reads
+ * the conflict agreement's own adoption stamp.
+ *
  * ── CANVAS RESOURCES ARE NOT ON THIS BRANCH YET ────────────────────────────
  *
  * `relevantCanvasResources` is a stub that returns nothing. The resources
@@ -41,7 +55,8 @@
  * overview names blocks and never counts them.
  */
 import type { Pool } from "mysql2/promise";
-import { memberAnswersFrom } from "../../shared/canvasPublicLines";
+import { ADMIN_ONLY_BRIEF_SECTIONS, memberAnswersFrom } from "../../shared/canvasPublicLines";
+import { CONFLICT_AGREEMENT_KEY, agreementOf } from "../../shared/conflictAgreement";
 import {
   CANVAS_BLOCK_IDS,
   CANVAS_BLOCKS,
@@ -50,6 +65,8 @@ import {
   isCanvasBlockId,
   type CanvasBlockId,
 } from "../../shared/governanceCanvas";
+import { BRIEF_BY_ID } from "../../shared/villageBrief";
+import { readConfigDocument } from "../repos/appConfigDocs";
 import { allCanvasReadings, readingsByBlock } from "../repos/canvasReadings";
 import { allDecisionMatrixRows } from "../repos/decisionMatrixRows";
 import { governingPurpose } from "./governingPurpose";
@@ -64,11 +81,50 @@ export interface CanvasAnswerWords {
   words: string;
 }
 
+/**
+ * Where a section stands when its words are not in `answers`, said from the
+ * asker's side. The first two are a member's view and say nothing of whether
+ * the section is adopted, exactly as the canvas's Say frame tells them.
+ */
+export type CanvasSectionState =
+  /** A member's view: one of the four sections kept with the administrators, written or not. */
+  | "admin-only"
+  /** A member's view: written, and not opened to members. */
+  | "not-shared"
+  /** An administrator's view: adopted, and its words stay with the administrators. */
+  | "adopted-kept"
+  /** Written, and nobody has adopted it yet. */
+  | "draft"
+  /** Nothing written yet. */
+  | "blank";
+
+/** One section of a block with no words in `answers`, and why. */
+export interface CanvasSectionRecord {
+  section: string;
+  title: string;
+  state: CanvasSectionState;
+}
+
+/** The conflict agreement as the Conflict block reads it: whether it is adopted, and the day. */
+export interface CanvasAgreementRecord {
+  adopted: boolean;
+  /** The day it was adopted, YYYY-MM-DD, or null while it is not. */
+  on: string | null;
+}
+
 /** One block as the companion reads it. */
 export interface CanvasBlockRecord {
   block: CanvasBlockId;
   name: string;
   answers: CanvasAnswerWords[];
+  /**
+   * Every section the block draws on whose words are not in `answers`, with
+   * its state. Absent on a record from before this field existed, which then
+   * reads as a block with no other sections.
+   */
+  others?: CanvasSectionRecord[];
+  /** The Conflict block only: the stored conflict agreement, or null when none is stored. */
+  agreement?: CanvasAgreementRecord | null;
   /** The newest reading, as its word and sentence, or null when there is none. */
   reading: { word: string; sentence: string; moment: string; on: string } | null;
 }
@@ -98,7 +154,27 @@ export interface ShelfHit {
 export interface CanvasLibraryRead {
   resources: CanvasResourceHit[];
   shelf: ShelfHit[];
+  /**
+   * The legal shelf's own framing, word for word, whenever a hit comes from
+   * it or the question was asked from the Legal block. Said before any of it.
+   */
+  framing?: string;
 }
+
+/**
+ * The legal shelf's framing, verbatim from docs/knowledge/legal-structures.md.
+ * The platform's rule for that document is that legal counsel always carries
+ * it; the record answer prints it first and the model is told to repeat it.
+ */
+export const LEGAL_FRAMING =
+  "This is orientation, not legal advice. Rules vary by state and country, and the details (tax, securities, zoning, employment) are jurisdiction-specific. Always engage a lawyer licensed where the land sits before signing or filing anything.";
+
+/** The shelf document `LEGAL_FRAMING` belongs to. */
+export const LEGAL_SHELF_DOC = "legal-structures";
+
+/** The rule every guide prompt carries for legal questions, shared so organize and the companion say the same thing. */
+export const LEGAL_PROMPT_RULE =
+  "For anything legal (structures, taxes, land): repeat the framing verbatim: this is orientation, not legal advice; engage a lawyer licensed where the land sits. NEVER soften the 508(c)(1)(A) scam warnings.";
 
 /** One row of the Decision Matrix the village wrote, without who last wrote it. */
 export interface MatrixRowRead {
@@ -123,6 +199,19 @@ function clip(text: string, max: number): string {
 }
 
 /**
+ * Cut at the last whole sentence that fits, so an excerpt never stops inside
+ * a word or a disclaimer. With no sentence end in the last two thirds of the
+ * room, it falls back to `clip`.
+ */
+export function clipAtSentence(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const room = t.slice(0, max);
+  const end = Math.max(room.lastIndexOf(". "), room.lastIndexOf("! "), room.lastIndexOf("? "));
+  return end >= max / 3 ? `${room.slice(0, end + 1)} ...` : clip(t, max);
+}
+
+/**
  * The blocks a question names, in canvas order. A block is named by its own
  * name or id as a whole word ("power", "Conflict"), and a plural of the name
  * counts ("meeting" finds Meetings). More than `MAX_FOCUS` names reads as a
@@ -140,26 +229,54 @@ export function blocksNamedIn(text: string): CanvasBlockId[] {
 }
 
 /**
- * Every block's adopted answers and newest reading, at the MEMBER audience.
+ * Where one section with no words in `answers` stands, for this asker, by the
+ * Say frame's rule (GET /api/canvas/blocks/:id). `stored` is the row read at
+ * the ADMIN audience; only its audience, status and whether it holds words
+ * are used here, never its words. A row with no words in it counts as
+ * nothing written, which is what it is.
+ */
+export function sectionStateFor(section: string, stored: { audience: string; status: string; body: string } | undefined, admin: boolean): CanvasSectionState {
+  const written = !!stored && stored.body.trim() !== "";
+  const adminOnly = ADMIN_ONLY_BRIEF_SECTIONS.has(section);
+  if (!admin && adminOnly) return "admin-only";
+  if (!admin && written && stored!.audience !== "member") return "not-shared";
+  if (!written) return "blank";
+  return stored!.status === "confirmed" ? "adopted-kept" : "draft";
+}
+
+/**
+ * Every block's adopted answers and newest reading. The WORDS are read at the
+ * MEMBER audience whoever asks; `admin` changes only what the asker is told
+ * about the sections whose words stay out (see the header).
  *
  * `query` narrows: the blocks it names come back with their answers whole,
  * and nothing else comes back. With no block named, all twelve come back in
  * canvas order, each answer cut to a glimpse, so the whole canvas fits one
  * prompt.
  */
-export async function canvasAnswersForMembers(pool: Pool, query?: string): Promise<CanvasAnswersRead> {
+export async function canvasAnswersForMembers(pool: Pool, query?: string, opts: { admin?: boolean } = {}): Promise<CanvasAnswersRead> {
+  const admin = opts.admin === true;
   const focus = blocksNamedIn(query ?? "");
-  const [brief, readings, purpose] = await Promise.all([
+  const ids = focus.length > 0 ? focus : CANVAS_BLOCK_IDS;
+  const [brief, everyRow, readings, purpose, agreementRaw] = await Promise.all([
     briefAll(pool, "member"),
+    // States only: which sections hold words, at which audience and status.
+    briefAll(pool, "admin"),
     allCanvasReadings(pool),
     governingPurpose(pool),
+    ids.includes("conflict") ? readConfigDocument(pool, CONFLICT_AGREEMENT_KEY) : Promise.resolve(null),
   ]);
   const answers = memberAnswersFrom(brief);
+  const stored = new Map(everyRow.map((r) => [r.section, r]));
   const newest = new Map(readingsByBlock(readings).map(({ blockId, readings: rs }) => [blockId, rs[0] ?? null]));
-  const ids = focus.length > 0 ? focus : CANVAS_BLOCK_IDS;
   const cut = focus.length > 0 ? FOCUSED_WORDS : GLIMPSE_WORDS;
+  // The agreement's own reading of its stamp: a document that fails its shape check is no document.
+  const agreement = agreementRaw ? agreementOf(agreementRaw, []) : null;
   const blocks = ids.map((id): CanvasBlockRecord => {
     const words: CanvasAnswerWords[] = answers[id].map((a) => ({ section: a.section, title: a.title, words: clip(a.body, cut) }));
+    const others: CanvasSectionRecord[] = CANVAS_BLOCKS[id].briefSections
+      .filter((section) => !words.some((w) => w.section === section))
+      .map((section) => ({ section, title: BRIEF_BY_ID[section]?.title ?? section, state: sectionStateFor(section, stored.get(section), admin) }));
     // The purpose statement is the village's adopted answer to block 1, and
     // any signed-in member may read it (GET /api/governance/purpose).
     if (id === "purpose" && purpose.statement.trim()) {
@@ -170,6 +287,8 @@ export async function canvasAnswersForMembers(pool: Pool, query?: string): Promi
       block: id,
       name: CANVAS_BLOCKS[id].name,
       answers: words,
+      others,
+      ...(id === "conflict" ? { agreement: agreement ? { adopted: !!agreement.adoptedAt, on: agreement.adoptedAt ? agreement.adoptedAt.slice(0, 10) : null } : null } : {}),
       reading: r
         ? {
             word: LEVEL_WORDS[r.level],
@@ -193,15 +312,21 @@ export async function relevantCanvasResources(_pool: Pool, _query: string, _max 
   return [];
 }
 
-/** Resources, then the platform's own shelf, for one question. An empty question reads nothing. */
+/**
+ * Resources, then the platform's own shelf, for one question. An empty
+ * question reads nothing. A hit from the legal shelf, or a question asked
+ * from the Legal block, carries that shelf's framing word for word.
+ */
 export async function canvasLibrary(pool: Pool, query: string): Promise<CanvasLibraryRead> {
   if (!query.trim()) return { resources: [], shelf: [] };
   const resources = await relevantCanvasResources(pool, query, 3);
-  const shelf = relevantSections(query, { shelves: ["knowledge"], budget: { maxSections: 3, maxTokens: 600 } }).map((s) => ({
+  const sections = relevantSections(query, { shelves: ["knowledge"], budget: { maxSections: 3, maxTokens: 600 } });
+  const shelf = sections.map((s) => ({
     citation: sectionCitation(s),
-    excerpt: clip(s.body.replace(/\s+/g, " "), 400),
+    excerpt: clipAtSentence(s.body.replace(/\s+/g, " "), 400),
   }));
-  return { resources, shelf };
+  const legal = sections.some((s) => s.docKey === LEGAL_SHELF_DOC) || blocksNamedIn(query).includes("legal");
+  return { resources, shelf, ...(legal ? { framing: LEGAL_FRAMING } : {}) };
 }
 
 /** The Decision Matrix rows the village wrote, each field cut short, and never who wrote them. */
@@ -254,14 +379,47 @@ function joinNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+/** One section with no words in the answer, said from the asker's side. Keyed by the union, so a new state cannot say nothing. */
+const SECTION_SENTENCE: Record<CanvasSectionState, (block: string, title: string) => string> = {
+  "admin-only": (block, title) => `For ${block}, "${title}" is kept with the administrators, so the guide cannot read it to you.`,
+  "not-shared": (block, title) => `For ${block}, "${title}" is written, and not opened to members, so the guide cannot read it to you.`,
+  "adopted-kept": (block, title) => `For ${block}, "${title}" is adopted, and its words stay with the administrators. Read them on the block's Say frame or the Brain tab.`,
+  draft: (block, title) => `For ${block}, "${title}" has a draft nobody has adopted yet.`,
+  blank: (block, title) => `For ${block}, nothing is written under "${title}" yet.`,
+};
+
+/** Where members read the conflict agreement. */
+const AGREEMENT_WHERE = "Read it on How we work together (/governance).";
+
+/** What one block's record lets the asker say about it, before any sentence is written. */
+function blockFacts(b: CanvasBlockRecord) {
+  const others = Array.isArray(b.others) ? b.others : [];
+  const agreement = b.agreement ?? null;
+  const adopted = b.answers.length > 0 || others.some((s) => s.state === "adopted-kept") || agreement?.adopted === true;
+  // A section the asker may not see into: whether it is adopted is not theirs to know.
+  const closed = others.some((s) => s.state === "admin-only" || s.state === "not-shared");
+  const drafted = others.some((s) => s.state === "draft") || (agreement !== null && !agreement.adopted);
+  return { others, agreement, adopted, closed, drafted };
+}
+
 function blockSentences(b: CanvasBlockRecord): string[] {
   const out: string[] = [];
-  if (b.answers.length > 0) {
-    for (const a of b.answers) out.push(`Our answer for ${b.name}, from ${a.title}: "${a.words}"`);
-  } else {
+  const { others, agreement, adopted, closed, drafted } = blockFacts(b);
+  for (const a of b.answers) out.push(`Our answer for ${b.name}, from ${a.title}: "${a.words}"`);
+  if (agreement) {
+    out.push(
+      agreement.adopted
+        ? `The village adopted its conflict agreement${agreement.on ? ` on ${agreement.on}` : ""}. ${AGREEMENT_WHERE}`
+        : `The village's conflict agreement is written, and nobody has adopted it yet. ${AGREEMENT_WHERE}`,
+    );
+  }
+  if (!adopted && !closed && !drafted) {
+    // Only an asker who can see every section is told nothing was adopted.
     out.push(`The village has not adopted an answer for ${b.name} yet.`);
     const elsewhere = CANVAS_BLOCKS[b.block].elsewhere;
-    if (elsewhere) out.push(elsewhere.note);
+    if (elsewhere && !agreement) out.push(elsewhere.note);
+  } else {
+    for (const s of others) out.push(SECTION_SENTENCE[s.state](b.name, s.title));
   }
   out.push(
     b.reading
@@ -271,18 +429,27 @@ function blockSentences(b: CanvasBlockRecord): string[] {
   return out;
 }
 
-/** The whole canvas in three lists of names, and never a count. */
+/** The whole canvas in lists of names, and never a count. */
 function overviewSentences(blocks: readonly CanvasBlockRecord[]): string[] {
   const answered: string[] = [];
+  const kept: string[] = [];
+  const drafts: string[] = [];
   const read: string[] = [];
   const blank: string[] = [];
   for (const b of blocks) {
-    if (b.answers.length > 0) answered.push(b.name);
+    const { adopted, closed, drafted } = blockFacts(b);
+    if (adopted) answered.push(b.name);
+    else if (closed) kept.push(b.name);
+    else if (drafted) drafts.push(b.name);
     if (b.reading) read.push(`${b.name} (${b.reading.word})`);
-    if (b.answers.length === 0 && !b.reading) blank.push(b.name);
+    if (!adopted && !closed && !drafted && !b.reading) blank.push(b.name);
   }
   const out: string[] = [];
-  out.push(answered.length ? `The village has adopted an answer for ${joinNames(answered)}.` : "The village has not adopted an answer for any block yet.");
+  if (answered.length) out.push(`The village has adopted an answer for ${joinNames(answered)}.`);
+  else if (kept.length) out.push("No block has an adopted answer that is opened to members yet.");
+  else out.push("The village has not adopted an answer for any block yet.");
+  if (kept.length) out.push(`Kept with the administrators, so the guide cannot read them to you: ${joinNames(kept)}.`);
+  if (drafts.length) out.push(`Drafts nobody has adopted yet: ${joinNames(drafts)}.`);
   out.push(read.length ? `Its latest readings: ${joinNames(read)}.` : "No block has a reading yet.");
   if (blank.length) out.push(`Nothing is on record yet for ${joinNames(blank)}.`);
   out.push("Ask about one block by name, or from its card, to read its answer and reading in full.");
@@ -290,17 +457,19 @@ function overviewSentences(blocks: readonly CanvasBlockRecord[]): string[] {
 }
 
 function librarySentences(lib: CanvasLibraryRead): { lines: string[]; references: string[] } {
+  // The framing goes first, before any of the shelf's words.
+  const framing = typeof lib.framing === "string" && lib.framing ? [lib.framing] : [];
   if (lib.resources.length > 0) {
     const shown = lib.resources.slice(0, 3);
     return {
-      lines: [`To read: ${joinNames(shown.map((r) => `${r.title} (${r.type}${r.url ? `, ${r.url}` : ""})`))}.`],
+      lines: [...framing, `To read: ${joinNames(shown.map((r) => `${r.title} (${r.type}${r.url ? `, ${r.url}` : ""})`))}.`],
       references: shown.map((r) => `${r.title}. ${r.credit}`),
     };
   }
   if (lib.shelf.length > 0) {
     const shown = lib.shelf.slice(0, 3);
     return {
-      lines: ["From the platform's own governance shelf:", ...shown.map((s) => `${s.citation}: ${s.excerpt}`)],
+      lines: [...framing, "From the platform's own governance shelf:", ...shown.map((s) => `${s.citation}: ${s.excerpt}`)],
       references: shown.map((s) => s.citation),
     };
   }
