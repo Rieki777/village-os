@@ -5,7 +5,8 @@
  * permission role) and a proposed seat out of `normaliseProposedSeat` all
  * describe a role, each in its own spelling and each at its own tier. These
  * functions are the only place those spellings are read, so the view model in
- * `shared/roleSheet.ts` sees one shape.
+ * `shared/roleSheet.ts` sees one shape. `seasonForSheet` does the same for the
+ * season the card's clock reads, so no two hosts spell that mapping twice.
  *
  * INPUTS ARE `any` ON PURPOSE, as `shared/circleView.ts` argues for its own:
  * the caller holds a JSON payload, and the RETURN is the typed thing.
@@ -17,7 +18,7 @@
  * written down" about something it was never sent.
  */
 import type { RoleInput } from "./permissionSheet";
-import { isSeatState, SHEET_WORDS, type SeatHolderIn, type SeatInput } from "./roleSheet";
+import { isSeatState, SHEET_WORDS, type SeatHolderIn, type SeatInput, type SheetContext } from "./roleSheet";
 
 /**
  * The name `/api/org`'s public tier sends for a seat an agent holds. It is the
@@ -167,6 +168,24 @@ export function fromOrgSeat(
     namesServed: !!people?.visible,
     signedIn: !!people?.signedIn,
     offers: { raiseHand: !!opts.raiseHand, contact: false },
+  };
+}
+
+/**
+ * `/api/season` (the client's `useSeason()`), read into the card's clock.
+ *
+ * Null while the read has not landed or failed: the card then prints no clock
+ * at all, never a 0. A season with no end date (`openEnded`) arrives with
+ * `daysLeft: null`, which the view model also reads as "no clock".
+ */
+export function seasonForSheet(state: any): SheetContext["season"] {
+  if (!state || typeof state !== "object") return null;
+  const current = state.current && typeof state.current === "object" ? state.current : null;
+  const days = state.daysLeft;
+  return {
+    name: str(current?.name),
+    endsOn: str(current?.endsOn),
+    daysLeft: typeof days === "number" && Number.isFinite(days) ? days : null,
   };
 }
 
