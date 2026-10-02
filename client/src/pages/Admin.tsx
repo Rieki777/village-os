@@ -9013,7 +9013,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             <p className="font-medium text-gray-900">3. Set environment variables</p>
             <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`railway variables \\
   --set "ADMIN_PASSWORD=<pick-a-strong-one>" \\
-  --set "JOURNEY_PASSWORD=<pick-a-strong-one>" \\
+  --set "AUTH_TOKEN_SECRET=<a-long-random-string>" \\
   --set "FRONTEND_URL=https://your-domain"`}</pre>
             <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under {CONNECTIONS_GROUP_TITLE}.</p>
           </li>
