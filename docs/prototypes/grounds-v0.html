@@ -5080,7 +5080,14 @@ addEventListener('keydown',e=>{
   if(k==='ArrowUp')cam.y-=pan;if(k==='ArrowDown')cam.y+=pan;
   if(k==='+'||k==='=')cam.z*=1.15;if(k==='-')cam.z*=.87;
   if(k==='h'||k==='H')travelTo(1450,680,0.82);
-  if(k===' '){e.preventDefault();$('attnBtn').click()}
+  /* SPACE PRESSES THE CONTROL THAT HAS FOCUS. A button activates on Space
+     only when its keydown default runs, and this branch cancelled it and
+     opened What needs hands instead. MEASURED: Space on Vision, on Get
+     Involved and on a dock door each gave 0 clicks and the attention card.
+     So Space is the shortcut only when focus is on the land or the page
+     itself. Only this branch is narrowed: Escape and the arrows keep
+     working while a button has focus. */
+  if(k===' '&&!(e.target&&e.target.closest&&e.target.closest('button,a,summary,[role=button],[role=link],[role=checkbox],[role=switch],[role=tab],[role=menuitem],[role=option],[contenteditable]'))){e.preventDefault();$('attnBtn').click()}
   if(k==='t'||k==='T')startTour();
   if(k==='v'||k==='V')setMode(mode==='now'?'vision':'now');
   if(k==='w'||k==='W'){$('wall').classList.toggle('show');buildWall()}
@@ -7115,6 +7122,10 @@ document.addEventListener('keydown',e=>{
   if(document.body.classList.contains('loom')){
     if(e.key==='Escape'){e.stopImmediatePropagation();closeLoom()}
     return}
+  /* Ctrl+L is the address bar, and it opened the Loom as well. The same
+     modifier rule as the map's own keys, after the Escape branch so Escape
+     still closes the Loom. */
+  if((e.ctrlKey||e.metaKey||e.altKey)&&!(e.getModifierState&&e.getModifierState('AltGraph')))return;
   if((e.key==='l'||e.key==='L')&&!(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))&&!document.body.classList.contains('intro'))openLoom()},true);
 resolveAllAddresses(); // first-pass wiring: every site quest, role, journey step and thread gets its best deterministic guess
 refreshWork();
@@ -7122,10 +7133,6 @@ refreshWork();
 
 /* ---------- MODULE DOORS — the map as the primary point of interaction.
    Every module has two doors: the menu (site nav) and the land (this map). Same routes, same data — D9 holds. ---------- */
-  /* Ctrl+L is the address bar, and it opened the Loom as well. The same
-     modifier rule as the map's own keys, after the Escape branch so Escape
-     still closes the Loom. */
-  if((e.ctrlKey||e.metaKey||e.altKey)&&!(e.getModifierState&&e.getModifierState('AltGraph')))return;
 window.SITE_BASE='https://amora.regencivics.earth'; // forks set their own in Make This Yours
 window.BUILD_VERSION='v0.8-publish';
 const SITE_ROUTES={j1:'/first-walk',j2:'/resident',j3:'/steward',j4:'/investor'};

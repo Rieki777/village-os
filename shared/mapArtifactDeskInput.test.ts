@@ -308,3 +308,50 @@ describe("the map's shortcuts leave a key held with Ctrl, Cmd or Alt to the brow
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F23. Space on any focused HUD button opened What needs hands, and the
+   button did nothing. A button activates on Space only when its keydown
+   default runs, and the map's handler cancelled it. jsdom never activates a
+   button from a key, so this reads the two things that decide it: whether
+   the keydown was cancelled, and whether the card opened. */
+describe("Space presses the focused control, and is the shortcut only on the land", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const attn = () => !!b.doc.getElementById("attnCard")?.classList.contains("show");
+  const shut = () => b.doc.getElementById("attnCard")?.classList.remove("show");
+
+  it("leaves Space on a focused button, a dock door and Get Involved to the button", () => {
+    for (const el of [
+      b.doc.getElementById("lyVision"),
+      b.doc.getElementById("wallBtn"),
+      b.doc.querySelector<HTMLElement>("#dock button"),
+    ]) {
+      expect(el, "the control to focus").not.toBeNull();
+      shut();
+      el?.focus();
+      const cancelled = press(b, el as HTMLElement, " ");
+      expect(cancelled, `Space on ${el?.id || el?.tagName} left to the browser`).toBe(false);
+      expect(attn(), `no card from Space on ${el?.id || el?.tagName}`).toBe(false);
+    }
+  });
+
+  it("still opens What needs hands from the land (the positive control)", () => {
+    shut();
+    (b.doc.activeElement as HTMLElement | null)?.blur?.();
+    expect(press(b, b.doc.body, " "), "Space on the land is taken").toBe(true);
+    expect(attn()).toBe(true);
+  });
+
+  it("keeps Escape working while a button inside an open panel has focus", () => {
+    b.run("openPanel('greenhouse')");
+    b.doc.getElementById("panelClose")?.focus();
+    press(b, b.doc.getElementById("panelClose") as HTMLElement, "Escape");
+    expect(b.doc.getElementById("panel")?.classList.contains("open")).toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});
