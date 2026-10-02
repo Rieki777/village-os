@@ -51,13 +51,14 @@ import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import { walkPush } from "@shared/mapAddress";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
-import { authToken, gameFetch } from "@/lib/gameApi";
+import { gameFetch } from "@/lib/gameApi";
 import VillageSettingsDoor, { settingsAsked, takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 import { useMapHistory } from "@/components/map/mapHistory";
 import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
 import { fetchLandGround } from "@/components/map/landGround";
 import { pushChips, useChipsCadence } from "@/components/map/statChips";
+import { useOrgFollow } from "@/components/map/orgFollow";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -439,57 +440,14 @@ export default function LivingMap() {
     }
   }, []);
 
-  /**
-   * Who is playing, and what the village says about its seats.
-   *
-   * SEPARATE FROM THE HAND, and deliberately so. `pushHand` decides whether the
-   * Build button works, and hanging these off it would make a founder's edit
-   * rights wait on the org chart: `/api/map` is four queries and reads the whole
-   * `users` table when the caller may see people. This message only decides what
-   * the org lens draws, so it can arrive whenever it arrives.
-   *
-   * BOTH ARE CREDENTIALED, and both have to be. The party is which characters
-   * this particular player has chosen, and `/api/map/config` is fetched WITHOUT
-   * credentials and returns the same answer to everyone, so nothing
-   * identity-bearing may ride it.
-   *
-   * Every failure here is silent and costs only the narrowing. With no party the
-   * map shows every mark, and with no seats it draws each one as the scene wrote
-   * it, which is exactly what a signed-out reader already gets.
+  /*
+   * Who is playing, and what the village says about its circles and seats:
+   * the `lens` message, pushed on grounds-ready and kept current while the
+   * map is open (components/map/orgFollow.ts). SEPARATE FROM THE HAND, so a
+   * founder's edit rights never wait on the org chart, and credentialed,
+   * because the party is one player's and names ride the viewPeople tier.
    */
-  const pushLens = useCallback(async () => {
-    const win = frame.current?.contentWindow;
-    if (!win) return;
-    const [partyRes, orgRes] = await Promise.all([
-      // A party is a signed-in player's. With no session the route answers 401,
-      // which the browser logged on every signed-out visit, and the lens reads
-      // that as no party. Not asking reads the same.
-      authToken() ? gameFetch("/api/me/characters").catch(() => null) : null,
-      gameFetch("/api/map").catch(() => null),
-    ]);
-    const partyBody = partyRes?.ok ? await partyRes.json().catch(() => null) : null;
-    const orgBody = orgRes?.ok ? await orgRes.json().catch(() => null) : null;
-    const party: string[] = Array.isArray(partyBody?.party)
-      ? partyBody.party.map((c: any) => String(c?.archetypeKey ?? "")).filter(Boolean)
-      : [];
-    // Example seats are demo data the `progression` module seeds into every
-    // fresh fork. Handing them over would paint a village's own land with seats
-    // nobody in it has ever heard of.
-    const roles = Array.isArray(orgBody?.roles)
-      ? orgBody.roles
-          .filter((r: any) => r && !r.isExample && typeof r.name === "string")
-          .map((r: any) => ({
-            name: String(r.name),
-            state: String(r.state ?? "open"),
-            archetypes: Array.isArray(r.archetypes) ? r.archetypes.map(String) : [],
-          }))
-      : [];
-    try {
-      win.postMessage({ type: "lens", party, roles }, window.location.origin);
-    } catch {
-      /* The lens keeps whatever it is already drawing. */
-    }
-  }, []);
+  const { pushLens } = useOrgFollow({ frame, live: groundsReady });
 
   /* The crown bar's chips, and their refresh: components/map/statChips.ts. */
   const pushChipsNow = useCallback(() => { void pushChips(frame.current?.contentWindow); }, []);
