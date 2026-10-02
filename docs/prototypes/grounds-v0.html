@@ -5659,7 +5659,11 @@ addEventListener('keydown',e=>{
   const inside=id=>$(id)&&$(id).classList.contains('show')&&$(id).contains(document.activeElement);
   const back=k!=='Escape'?null:inside('vdrop')?window.VDROP_FROM:inside('wall')?$('wallBtn'):null;
   if(k==='Escape')$('vdrop').classList.remove('show');
-  if(k==='Escape'){$('panel').classList.remove('open');panelKey=null;$('module').classList.remove('show');$('attnCard').classList.remove('show');closeInspect();$('resolver')&&$('resolver').classList.remove('show');window.closeMask&&closeMask();$('wall')&&$('wall').classList.remove('show')}
+  if(k==='Escape'){$('panel').classList.remove('open');panelKey=null;$('module').classList.remove('show');$('attnCard').classList.remove('show');closeInspect();$('resolver')&&$('resolver').classList.remove('show');window.closeMask&&closeMask();$('wall')&&$('wall').classList.remove('show');
+    /* The X and "Back to the land" clear the address and this key did not,
+       so a reload reopened what Escape had closed. Only a place or a door
+       address: Escape closing something else must not clear #/loom. */
+    if(/^#\/(place|module)\//.test(location.hash))setHash(viewHash())}
   if(back&&back.isConnected)back.focus({preventScroll:true});
   clampCam()});
 
@@ -7739,7 +7743,7 @@ $('loomEngineBtn').onclick=()=>$('loomEngine').classList.toggle('show');
 function openLoom(){document.body.classList.add('loom');setHash('#/loom');renderLoom();
   if(!window._loomSaid){window._loomSaid=1;
     toast('The Loom. Gold is your word, amber is a guess, gray waits at the Board. Drag any ◉ grip.')}}
-function closeLoom(){document.body.classList.remove('loom');if(location.hash==='#/loom')setHash('');
+function closeLoom(){document.body.classList.remove('loom');if(location.hash==='#/loom')setHash(viewHash());
   if(LOOM_STAGED.size)toast(LOOM_STAGED.size+' staged rewire'+(LOOM_STAGED.size===1?'':'s')+' kept. Reopen the Loom to Save or Discard.')}
 window.openLoom=openLoom;window.closeLoom=closeLoom;window.renderLoom=renderLoom;
 $('loomBtn').onclick=()=>document.body.classList.contains('loom')?closeLoom():openLoom();
@@ -8115,7 +8119,9 @@ function openDoor(a,ctx){
     <div class="lastv">two doors, one room. The site menu and this map open the same place; come in either way.</div>`;
   $('module').classList.add('show')}
 window.openDoor=openDoor;
-function closeDoor(){$('module').classList.remove('show');if(/^#\/module\//.test(location.hash))setHash('')}
+/* A home request names its place's address (homeSheet), so a door can be
+   holding either kind. What stays is the place underneath, when one is open. */
+function closeDoor(){$('module').classList.remove('show');if(/^#\/(module|place)\//.test(location.hash))setHash(viewHash())}
 window.closeDoor=closeDoor;
 $('module').addEventListener('click',e=>{if(e.target===$('module'))closeDoor()});
 document.querySelectorAll('#dock button').forEach(b=>b.onclick=()=>openDoor(b.dataset.m,{}));
@@ -8700,12 +8706,43 @@ $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=n
   renderSkinThemes();logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
-/* ---------- hash router: every place, module, lens and journey has an address ---------- */
+/* ---------- hash router: every place, module, the Loom, the Circles and a journey has an address ----------
+   Lenses (Vision, Org, Flows) have none: a reload comes back on Now. */
 let HASHMUTE=false;
+/* THE ADDRESS GOES TO THE SHELL TOO. Inside the shell this iframe's own URL
+   is one nobody sees, so on its own it could not be copied, shared or
+   reloaded, and Back had nothing to step through. The shell mirrors the
+   route into the visible address bar and decides what Back does with it.
+   `user` says whether a person's own click or key is behind this change
+   (transient activation), because only that earns a history entry: an entry
+   pushed with no activation is one Chrome later skips. Standalone,
+   shellPost does nothing. */
 function setHash(h){HASHMUTE=true;
   try{history.replaceState(null,'',h||location.pathname+location.search)}catch(_){try{location.hash=h||''}catch(__){}}
-  setTimeout(()=>{HASHMUTE=false},0)}
+  setTimeout(()=>{HASHMUTE=false},0);
+  shellPost({type:'route',hash:h||'',user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
 window.setHash=setHash;
+/* What is still on screen once the top layer goes, as an address. Closing
+   the Loom over a place, or a door opened from a place, used to clear the
+   address while the place stayed open, and the shell now shows that address
+   to people. */
+function viewHash(){
+  if(document.body.classList.contains('loom'))return'#/loom';
+  if(document.body.classList.contains('circles'))return'#/circles';
+  if(panelKey&&$('panel').classList.contains('open'))return'#/place/'+panelKey;
+  return''}
+/* THE EMPTY ADDRESS CLOSES WHAT AN ADDRESS OPENED. The shell sends it when
+   Back returns to the map with nothing open, so Back closes the place, the
+   door, the Loom, the Circles or the walk before it leaves the map. The
+   order matters: the place goes first, so each closer after it finds
+   nothing underneath and none of them names an address on the way out. */
+function closeAddressed(){
+  if(typeof jHalt==='function')jHalt();
+  if($('panel').classList.contains('open')){$('panel').classList.remove('open');panelKey=null}
+  $('module').classList.remove('show');
+  if(document.body.classList.contains('circles'))setMapType('living',true);
+  if(document.body.classList.contains('loom'))closeLoom();
+  if(location.hash.length>1)setHash('')}
 function leaveIntro(){if(!document.body.classList.contains('intro'))return;
   document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove();
   shellPost({type:'intro-done'})}
@@ -8713,6 +8750,7 @@ function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
   /* Shell appends &skipIntro when it already showed its own gate; strip it so
      #/circles and friends still match exactly. */
   const h=(location.hash||'').replace(/[&?]skipIntro\b/ig,'').replace(/[?&]$/,'');
+  if(h.length<2){closeAddressed();return}
   if(h==='#/circles'){leaveIntro();if(!document.body.classList.contains('circles'))setMapType('circles',true);return}
   if(h==='#/loom'){leaveIntro();if(document.body.classList.contains('circles'))setMapType('living',true);if(!document.body.classList.contains('loom'))openLoom();return}
   const m=h.match(/^#\/(place|module|journey)\/([A-Za-z0-9_-]+)(?:\?item=([A-Za-z0-9_:-]+))?/);if(!m)return;
@@ -9963,13 +10001,23 @@ window.undoPublish=undoPublish;
    parent → map: {type:'skin', skin:<art_manifest.skin shape>} applies Village Settings live;
                  {type:'goto', hash:'#/place/kitchen'} routes the land.
    map → parent: {type:'grounds-ready', version} once on boot;
+                 {type:'route', hash, user} whenever the address changes (setHash);
                  door clicks already navigate via siteNav/window.top. */
 addEventListener('message',e=>{try{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return; // same-origin shell only (file:// = dev)
   const d=e.data;if(!d||typeof d!=='object')return;
   if(d.type==='skin'&&d.skin){applySkinExport(d.skin);toast('✂ Skin applied from Village Settings.')}
   if(d.type==='ground')setGround(d);
-  if(d.type==='goto'&&typeof d.hash==='string'){leaveIntro();location.hash=d.hash;routeHash()}
+  /* REPLACED, never pushed. Assigning location.hash added an entry to this
+     frame's history, and the browser's Back pops a frame's entry before the
+     page's: the next Back only rewound this hash, nothing visible happened,
+     and the shell never heard it. The shell owns the history; this only
+     routes. An empty hash closes what is open (closeAddressed). HASHMUTE
+     only silences the echo of this file's own setHash, and a goto is no
+     echo: muted, a Back pressed within a tick of a click did nothing. */
+  if(d.type==='goto'&&typeof d.hash==='string'){leaveIntro();
+    try{history.replaceState(null,'',d.hash||location.pathname+location.search)}catch(_){}
+    HASHMUTE=false;routeHash()}
   if(d.type==='promise-result'&&d.id&&(d.kind==='rsvp'||d.kind==='claim'))promiseResult(d);
   /* D8. `hand` is the village saying who is holding this map; `scene-result`
      answers a draft-save, a publish or a restore. */
