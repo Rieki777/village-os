@@ -531,3 +531,49 @@ describe("the Get Involved rows and the vital chips take the keyboard", () => {
     expect(b.uncaught).toEqual([]);
   });
 });
+
+/* F21 and F72. The leave prompt tested EDITS.length, and every visitor
+   arrives with the published journal in EDITS, so everyone who touched the
+   map was told "Changes you made may not be saved" on reload, close or a
+   typed address, having changed nothing. jsdom shows no dialog; it does run
+   the listener, and a cancelled beforeunload event is the prompt. */
+describe("the leave prompt guards unsaved work, and nothing else", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  const prompts = () => {
+    const ev = new b.window.Event("beforeunload", { cancelable: true });
+    b.window.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+  const edit = (seq: number) => ({
+    seq,
+    actor: "founder",
+    action: "rename",
+    target: "structure:gate",
+    diff: {},
+    at: `2026-08-0${seq}T10:00:00.000Z`,
+  });
+
+  it("stays quiet for a visitor who arrives with the published journal and changes nothing", () => {
+    const scene = b.run<{ map_edits: unknown[] }>("JSON.parse(JSON.stringify(buildExportJSON()))");
+    scene.map_edits = [edit(1), edit(2), edit(3)];
+    b.post({ type: "config", scene, sceneVersion: 6 });
+    b.post({ type: "hand", canEdit: false, canPublish: false, liveVersion: 6, live: { version: 6, by: "the founder" } });
+    expect(b.run<number>("EDITS.length"), "the published journal arrived (the positive control)").toBe(3);
+    expect(prompts(), "a prompt for a visitor who changed nothing").toBe(false);
+  });
+
+  it("prompts while an edit waits for its save, and stops once it has saved", async () => {
+    b.run("logEdit('rename','structure:gate',{to:'Probe'})");
+    expect(prompts(), "an edit not yet saved").toBe(true);
+    await settle(2800); // the autosave waits 2.5 s, then writes this browser's copy
+    expect(b.window.localStorage.getItem("amora-grounds-scene"), "the save landed").not.toBeNull();
+    expect(prompts(), "a prompt after the save").toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});

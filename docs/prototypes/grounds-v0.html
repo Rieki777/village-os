@@ -5788,19 +5788,36 @@ function resolverCreate(){const{q,r}=window._rq||{};if(!q||!q.text.trim())return
 const EDITS=[];let editSeq=0;
 function logEdit(action,target,diff){EDITS.push({seq:++editSeq,actor:'founder',action,target,diff:diff||{},at:new Date().toISOString()});scheduleAutosave();window.rebuildVitals&&rebuildVitals()}
 let autosaveT=null,saveNudged=false;
-function scheduleAutosave(){clearTimeout(autosaveT);
+/* WORK NOT YET SAVED ANYWHERE, which is the only thing a reload can lose.
+   Set by every edit, cleared when the save that edit is waiting for has
+   landed: the draft-save reply saying ok for someone who can edit inside the
+   site, or the browser's own copy for everyone else (standalone included,
+   where it is the only save there is). A reply that fails or never comes
+   leaves it set. SAVE_GEN keeps an older save from clearing it after a newer
+   edit has been made. */
+let SAVE_PENDING=false,SAVE_GEN=0;
+function scheduleAutosave(){clearTimeout(autosaveT);SAVE_PENDING=true;const gen=++SAVE_GEN;
   autosaveT=setTimeout(()=>{const J=buildExportJSON();
     /* Two saves, and the local one is not a fallback for the other. This
        file runs from file:// with no parent in every QA suite, and there
        localStorage is the only save that exists. */
-    try{localStorage.setItem('amora-grounds-scene',JSON.stringify(J))}catch(e){}
-    if(inShell()&&HAND.canEdit&&!VISITOR_VIEW)shellAsk('draft-save',{scene:J,baseVersion:BASE_VERSION});
+    let kept=false;
+    try{localStorage.setItem('amora-grounds-scene',JSON.stringify(J));kept=true}catch(e){}
+    if(inShell()&&HAND.canEdit&&!VISITOR_VIEW)shellAsk('draft-save',{scene:J,baseVersion:BASE_VERSION})
+      .then(r=>{if(r&&r.ok&&gen===SAVE_GEN)SAVE_PENDING=false});
+    else if(kept&&gen===SAVE_GEN)SAVE_PENDING=false;
     if(typeof renderDraftBar==='function')renderDraftBar();},2500);
   if(!saveNudged&&EDITS.length>=5){saveNudged=true;
     toast(inShell()&&HAND.canEdit
       ?'Your work saves itself to your own draft. Nobody else sees it until you publish.'
       :'Your work saves itself in this browser. ⤓ Export scene hands you the file any time.')}}
-addEventListener('beforeunload',e=>{if(EDITS.length>0){e.preventDefault();e.returnValue=''}});
+/* THE LEAVE PROMPT GUARDS UNSAVED WORK, AND NOTHING ELSE. It tested
+   EDITS.length, and every visitor arrives with the published journal in
+   EDITS (53 edits on the live map), so everyone who touched the map was told
+   "Changes you made may not be saved" on every reload, close or typed
+   address, having changed nothing. Published history and a saved draft are
+   not lost by leaving; only work still waiting for its save is. */
+addEventListener('beforeunload',e=>{if(SAVE_PENDING){e.preventDefault();e.returnValue=''}});
 /* And the same again: this one is asked `CIRCLE_HOMES[x.c]` with a circle
    name from the scene, and an inherited Function passes the `h &&` guard
    before BY[h] finally comes back undefined. */
