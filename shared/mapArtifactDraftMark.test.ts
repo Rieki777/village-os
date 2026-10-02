@@ -893,3 +893,53 @@ describe("View as visitor", () => {
     expect(unpublished(m)).toHaveLength(1);
   });
 });
+
+describe("a saved draft waiting to be chosen", () => {
+  let m: Booted;
+  let card: { open: boolean; blast: string; discards: number };
+  let held: { build: boolean; saves: number; bar: string };
+  beforeAll(async () => {
+    m = await framed({}, hand(6, draftOf(MINE.slice(0, 1))));
+    press(m, "restoreNo");
+    card = {
+      open: cardOpen(m),
+      blast: m.window.document.getElementById("pubBlast")?.textContent ?? "",
+      discards: asks(m, "draft-discard").length,
+    };
+    press(m, "pubCancel");
+    press(m, "buildBtn");
+    // Build mode is refused while the draft waits, but a person who was
+    // already building when the offer arrived can still change the land.
+    // The edit is played in directly, the inspect card's own two steps.
+    rename(m, "library", "Touched while choosing");
+    await settle(SAVE_WAIT);
+    held = { build: m.run<boolean>("buildMode"), saves: asks(m, "draft-save").length, bar: bar(m) };
+  });
+  afterAll(() => m?.close());
+
+  it("asks before Start over throws it away, counting the draft's own change", () => {
+    expect(card.open).toBe(true);
+    expect(card.blast).toMatch(/^Your 1 unpublished change will be gone\./);
+    expect(card.discards).toBe(0);
+  });
+
+  it("is not saved over while nobody has chosen, and the bar says the new change is not saved", () => {
+    expect(held.saves).toBe(0);
+    expect(held.bar).toMatch(/^Not saved yet\. Your saved draft is waiting/);
+  });
+
+  it("keeps the build hand closed until a choice is made", () => {
+    expect(held.build).toBe(false);
+  });
+
+  it("once thrown away for real, saves the change made while it waited", async () => {
+    press(m, "restoreNo");
+    press(m, "pubConfirm");
+    await answerLast(m, "draft-discard", { ok: true });
+    expect(restoreShown(m)).toBe(false);
+    const saved = lastAsk(m, "draft-save");
+    expect(nameIn(saved?.scene, "library")).toBe("Touched while choosing");
+    expect(nameIn(saved?.scene, "gate"), "nothing of the thrown-away draft").not.toBe(DRAFT_GATE);
+  });
+});
+

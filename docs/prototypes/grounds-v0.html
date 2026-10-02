@@ -1561,8 +1561,8 @@
     box-shadow:0 10px 30px rgba(0,0,0,.6);padding:8px 14px;font-size:12.5px;max-width:min(760px,92vw)}
   body.build.can-edit #draftBar{display:flex}
   body.visiting #draftBar{display:flex;border-left-color:#7bb0a0}
-  /* A save the village refused keeps the bar up out of build mode, in the
-     colour of a refusal. */
+  /* A save the village refused, or one held back while a saved draft waits,
+     keeps the bar up out of build mode, in the colour of a refusal. */
   body.can-edit.save-failed #draftBar{display:flex;border-left-color:#d0614a}
   #draftBar .dsep{opacity:.4}
   #draftBar b{color:var(--gold-b);font-weight:600}
@@ -5770,7 +5770,7 @@ function inBound(x,y){const p=SCENE.bound;let inside=false;
         $('ghostPoi').style.display='block';maiaSay(`Placing a <b>${name}</b>. Click the land to set it down. The dashed line is the property; I won't let it land outside. Esc to change your mind.`)};
       pal.appendChild(b)}}})();
 $('buildBtn').onclick=()=>{
-  /* When the hand stays closed, buildRefusal says why. */
+  /* Two moments when the hand stays closed; buildRefusal says which and why. */
   if(!buildMode&&typeof buildRefusal==='function'){const no=buildRefusal();if(no)return toast(no)}
   buildMode=!buildMode;document.body.classList.toggle('build',buildMode);
   if(typeof renderDraftBar==='function')renderDraftBar();
@@ -6386,7 +6386,7 @@ function scheduleAutosave(){clearTimeout(autosaveT);autosaveT=setTimeout(saveNow
    publish and a discard: the old copy outlived both and offered thrown-away
    work back on the next visit. */
 const RESCUE_KEY='grounds-unsaved-draft';
-let SAVE_SEQ=0,SAVE_DONE=0,SAVE_FAIL=null,SAVE_RETRY=null,SAVE_TRIES=0,LOCAL_FAIL=false;
+let SAVE_SEQ=0,SAVE_DONE=0,SAVE_FAIL=null,SAVE_HELD=false,SAVE_RETRY=null,SAVE_TRIES=0,LOCAL_FAIL=false;
 function saveNow(){clearTimeout(autosaveT);autosaveT=null;
   /* While visiting, the land on screen is the live map and the work is the
      held draft. Saving the screen there wrote the live map into the draft's
@@ -6395,6 +6395,9 @@ function saveNow(){clearTimeout(autosaveT);autosaveT=null;
   if(!inShell()){try{localStorage.setItem('amora-grounds-scene',JSON.stringify(J));LOCAL_FAIL=false}catch(e){LOCAL_FAIL=true}
     renderDraftBar();return}
   if(!HAND.canEdit)return;
+  /* A saved draft is still waiting for its answer, and there is one row per
+     member: this save would replace it before anybody chose to. */
+  if(OFFERED){SAVE_HELD=true;renderDraftBar();return}
   const my=++SAVE_SEQ;
   rescueWrite(J);
   shellAsk('draft-save',{scene:J,baseVersion:BASE_VERSION}).then(r=>saveAnswered(my,r));
@@ -6431,12 +6434,13 @@ function rescueRead(){try{const R=JSON.parse(localStorage.getItem(RESCUE_KEY)||'
    "Changes you made may not be saved" on every reload, close or typed
    address, having changed nothing. Published history and a confirmed save
    are not lost by leaving; only work still waiting is. Inside a shell that
-   is an edit still on its timer, a save on its way, or one the village
-   refused. On its own it is an edit still on its timer, or a copy this
-   browser could not write, because that copy is the only save there is. */
+   is an edit still on its timer, a save on its way, one the village
+   refused, or one held while a waiting draft is chosen. On its own it is
+   an edit still on its timer, or a copy this browser could not write,
+   because that copy is the only save there is. */
 function unsavedWork(){
   if(!inShell())return !!autosaveT||LOCAL_FAIL;
-  return HAND.canEdit&&!!(autosaveT||SAVE_FAIL||SAVE_DONE<SAVE_SEQ)}
+  return HAND.canEdit&&!!(autosaveT||SAVE_FAIL||SAVE_HELD||SAVE_DONE<SAVE_SEQ)}
 addEventListener('beforeunload',e=>{try{if(unsavedWork()){e.preventDefault();e.returnValue=''}}catch(_){}});
 /* Leaving with an edit still on its timer sends it now, and keeps this
    browser's copy, which a reload can offer back if the send does not land. */
@@ -9904,17 +9908,21 @@ function offerWaiting(server){
 }
 
 /* A draft waiting to be chosen, offered through the bar the browser-saved
-   session already uses. */
+   session already uses. Both answers are real choices. Start from the live
+   map used to hide the bar and nothing more, and the next edit's save
+   replaced the waiting draft, which is one row per member, with no card and
+   no warning; so it now goes through the same card Discard draft uses, and
+   nothing saves over the draft until one of the two is chosen. */
 function offerDraft(draft){
   OFFERED=draft;sayOffer();if(!OFFERED)return;
   $('restoreYes').textContent='Open my draft';
-  $('restoreNo').textContent='Start from the live map';
+  $('restoreNo').textContent='Start over from the live map';
   $('restoreBar').style.display='flex';
-  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null;
+  $('restoreYes').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null;SAVE_HELD=false;
     if(restoreScene(draft.scene)){BASE_VERSION=+draft.baseVersion||0;draftOpened();
       /* Work only this browser had goes to the village now. */
       if(draft.local)saveNow()}};
-  $('restoreNo').onclick=()=>{$('restoreBar').style.display='none';OFFERED=null};
+  $('restoreNo').onclick=openDiscard;
 }
 /* The count is the changes the live map does not have, the same number the
    draft bar shows once it is open. Said again when the live scene lands,
@@ -9928,6 +9936,7 @@ function sayOffer(){
      is live. A save that landed after a publish left rows like that, and the
      offer asked a person to choose between two copies of the same land. */
   if(LIVE_SCENE&&!n){if(OFFERED.local)rescueClear();OFFERED=null;$('restoreBar').style.display='none';
+    if(SAVE_HELD){SAVE_HELD=false;saveNow()}
     return}
   $('restoreMsg').textContent=(OFFERED.local
     ?'This browser kept work the village never confirmed: '
@@ -9936,6 +9945,7 @@ function sayOffer(){
 /* Why the Build button stays closed, or nothing. */
 function buildRefusal(){
   if(VISITOR_VIEW)return 'You are looking at the live map. Go back to your draft to build.';
+  if(OFFERED)return 'Your saved draft is waiting. Open it, or start over from the live map, and then build.';
   return ''}
 /* An edit made while visiting lands on the live map's copy on screen, and
    going back to the draft puts the draft back. Said once per visit. */
@@ -9992,7 +10002,7 @@ function renderDraftBar(){
   go.style.display='';$('visitBtn').style.display='';$('dropBtn').style.display='';
   /* A save the village has not taken keeps the bar up out of build mode
      too: the map said the work saves itself, so it says when it did not. */
-  document.body.classList.toggle('save-failed',HAND.canEdit&&!!SAVE_FAIL);
+  document.body.classList.toggle('save-failed',HAND.canEdit&&!!(SAVE_FAIL||SAVE_HELD));
   $('saveRetry').style.display=SAVE_FAIL&&!VISITOR_VIEW?'':'none';
   if(VISITOR_VIEW){
     st.innerHTML='<b>Seeing what a visitor sees.</b> This is the live map.';
@@ -10001,6 +10011,7 @@ function renderDraftBar(){
   go.style.display='';$('visitBtn').textContent='View as visitor';
   const n=unpublished().length;
   st.innerHTML=SAVE_FAIL?`<b>Not saved.</b> ${escq(notSavedWhy())}`
+    :SAVE_HELD?'<b>Not saved yet.</b> Your saved draft is waiting: open it, or start over from the live map.'
     :n?`<b>${n}</b> unpublished change${n===1?'':'s'}. The live map is unchanged.`
      :'Editing a draft. The live map is unchanged.';
   lv.textContent=LIVE?`Live: version ${LIVE.version}${LIVE.by?', by '+LIVE.by:''}`:'Nothing published yet';
@@ -10052,6 +10063,9 @@ function openPublish(){
   /* A publish sends the land on screen, and while visiting that is the live
      map. The card would list the draft's changes over a scene without them. */
   if(VISITOR_VIEW)return toast('You are looking at the live map. Go back to your draft to publish it.');
+  /* A publish rebases this member's one draft row onto what it sends, so it
+     would replace the saved draft still waiting to be chosen. */
+  if(OFFERED)return toast('Your saved draft is waiting. Open it, or start over from the live map, and then publish.');
   const card=$('pubCard');card.classList.remove('conflict');
   $('pubTitle').textContent='Publish to the live map';
   $('pubBlast').innerHTML=`<b>${changes.length} change${changes.length===1?'':'s'}</b> will become the map every visitor sees, straight away. `+
@@ -10151,14 +10165,16 @@ function openDiscard(){
   /* While visiting, the land on screen is the live map, and the draft is
      held. The same answer Publish gives there. */
   if(VISITOR_VIEW)return toast('You are looking at the live map. Go back to your draft to throw it away.');
-  const n=unpublished().length;
-  if(!n)return toast('There is no unpublished work to throw away.');
+  /* A draft still waiting to be opened is counted from itself: nothing of it
+     is on screen yet. */
+  const waiting=OFFERED,n=waiting?offeredChanges(waiting):unpublished().length;
+  if(!n&&!waiting)return toast('There is no unpublished work to throw away.');
   if(!inShell())return toast('This map is running on its own. Reload the page to start over.');
   const card=$('pubCard');card.classList.add('conflict');
   $('pubTitle').textContent='Throw away my draft';
-  $('pubBlast').innerHTML=`Your <b>${n}</b> unpublished change${n===1?'':'s'} will be gone. `+
+  $('pubBlast').innerHTML=(n?`Your <b>${n}</b> unpublished change${n===1?'':'s'} will be gone. `:'Your saved draft will be gone. ')+
     `The live map does not move, and nobody else's draft is touched.`;
-  $('pubList').innerHTML='<li>The map goes back to the version everyone sees.</li>';
+  $('pubList').innerHTML=waiting?'<li>You start from the version everyone sees.</li>':'<li>The map goes back to the version everyone sees.</li>';
   $('pubNote').style.display='none';
   $('pubConfirm').textContent='Throw it away';
   $('pubConfirm').onclick=doDiscard;
@@ -10169,6 +10185,7 @@ async function doDiscard(){
      as a new draft, and every later visit offered it. Let go again if the
      village says no, because then the work is still the work. */
   const pending=!!autosaveT;clearTimeout(autosaveT);autosaveT=null;
+  const waiting=OFFERED;
   $('pubConfirm').disabled=true;
   const r=await shellAsk('draft-discard',{});
   $('pubConfirm').disabled=false;closePublish();
@@ -10177,7 +10194,12 @@ async function doDiscard(){
   /* Nothing of the thrown-away work stays anywhere: not on a timer armed
      while the village answered, not in this browser's copy. */
   clearTimeout(autosaveT);autosaveT=null;clearTimeout(SAVE_RETRY);
-  rescueClear();SAVE_FAIL=null;SAVE_DONE=SAVE_SEQ;
+  rescueClear();SAVE_FAIL=null;SAVE_HELD=false;SAVE_DONE=SAVE_SEQ;
+  if(waiting){OFFERED=null;$('restoreBar').style.display='none';
+    /* Changes made on the live map while the choice waited are the new draft. */
+    if(unpublished().length)saveNow();
+    renderDraftBar();
+    return toast('Draft thrown away. You are starting from the live map.')}
   /* Back to the live land. Falling back to a reload rather than leaving the
      discarded work on screen: the row is gone, and a map still showing it
      would be the one lie this whole round exists to stop telling. */
