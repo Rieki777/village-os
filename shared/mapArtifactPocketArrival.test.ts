@@ -10,7 +10,8 @@
  *   - The bottom bar's first cell opened the circles drawn inside the artifact,
  *     whose names are 2 to 4 px tall, where the desk's Circles tab goes to
  *     /map/circles. From the Loom it went there too, not back to the land.
- *   - Switching to those circles left an open place sheet over 77% of them.
+ *   - Switching to those circles left an open place sheet over 77% of them,
+ *     and under the sheet the land's hover card the tap had raised.
  *   - Over them, the pad zoomed and panned the land hidden underneath, two
  *     fingers panned instead of zooming, and one finger dragged at 35%.
  *   - No control on a phone reached the Vision, Org or Flows lenses or the
@@ -305,6 +306,19 @@ describe("switching to the in-file circles with a sheet or a door open (F60)", (
     b.run("setMapType('circles',true)");
     expect(b.window.document.getElementById("module")?.classList.contains("show")).toBe(false);
     expect(b.window.location.hash).toBe("#/circles");
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("hides the land's hover card a tap on a building left under the sheet", () => {
+    // A tap fires mouseenter on the building, which shows the card and leaves
+    // it up. Here it is shown the same way, by the land's own function.
+    const card = () => b.window.document.getElementById("hovercard")?.style.display;
+    b.run("setMapType('living',true);hoverPin=BY.greenhouse;showHover(BY.greenhouse,document.body)");
+    expect(card(), "the control: the card showed").toBe("block");
+    b.run("setMapType('circles',true)");
+    expect(card()).toBe("none");
+    expect(b.run<unknown>("hoverPin"), "so the land shows it afresh").toBeNull();
+    b.run("setMapType('living',true)");
     expect(b.uncaught).toEqual([]);
   });
 });

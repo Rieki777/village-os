@@ -8401,12 +8401,17 @@ if(location.hash&&location.hash.length>2)setTimeout(routeHash,400);
    the chart's 28, and MEASURED at 390x844 a Greenhouse sheet left open covered
    77% of the chart and every one of its 49 nodes. Closed BEFORE the address is
    set, because closeDoor() clears a #/module/ address and would otherwise
-   wipe #/circles. */
+   wipe #/circles.
+   AND THE LAND'S HOVER CARD. A tap on a building fires mouseenter, so the
+   card shows under the sheet and stays (z 40 over the chart's 28). With the
+   sheet gone it was the next thing over the chart: MEASURED at 390x844, a
+   250x126 card over 4 of the 49 nodes, still saying "click to open the door"
+   with pointer-events off. hoverPin goes too, so the land shows it afresh. */
 function setMapType(t,quiet){const circ=t==='circles';
   if(document.body.classList.contains('loom'))closeLoom();
   document.body.classList.toggle('circles',circ);
   $('msLiving').classList.toggle('on',!circ);$('msCircles').classList.toggle('on',circ);
-  if(circ){$('panel').classList.remove('open');panelKey=null;closeDoor();
+  if(circ){$('panel').classList.remove('open');panelKey=null;closeDoor();hideHover();hoverPin=null;
     buildOrgMap();setHash('#/circles')}else if(location.hash==='#/circles')setHash('');
   if(!quiet)toast(circ?'◎ The Circles. The same village as an organism; click any node to walk to its door.':'🏞 The Living Map. The land itself.')}
 window.setMapType=setMapType;
