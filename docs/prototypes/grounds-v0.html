@@ -1383,6 +1383,13 @@
     border:1px solid #8a6a33;border-radius:14px;color:var(--parch);
     box-shadow:0 12px 34px rgba(0,0,0,.6);overflow:hidden}
   #help.show{display:flex}
+  /* A LANDSCAPE PHONE GETS THE HEIGHT IT HAS (N10). 42vh is 42% of the short
+     edge there: MEASURED, a 164px sheet at 844x390 with a 73px list, one of
+     thirteen threads in view and a sliver of the next. Below 500px tall the
+     sheet may rise to 60px under the top of the window, which keeps the
+     vitals strip and a band of land to tap it away by, and it still yields
+     to the band's own cap, which counts the walk card and the rest. */
+  @media (max-height:500px){body.pocket #help{max-height:min(calc(100vh - var(--band-b-help,70px) - 60px),var(--band-b-help-max,100vh))}}
   .help-head{display:flex;align-items:baseline;gap:8px;padding:10px 14px 8px;border-bottom:1px solid #4a3a22;flex:0 0 auto}
   .help-head h4{font-variant:small-caps;letter-spacing:.18em;font-weight:normal;color:var(--gold-b);font-size:12px}
   .help-sub{font-size:10px;color:#8f855f;font-style:italic}
