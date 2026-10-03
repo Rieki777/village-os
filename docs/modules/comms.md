@@ -38,7 +38,8 @@ must never wait on a module:
   because the person just asked for it.
 - **Unsubscribe and preferences.** One click stops a kind of email, signed out, from any email.
 - **The delivery-report webhook.** The provider's reports of delivered, bounced and complained
-  are stored once each, whatever else is switched off.
+  are stored and applied once each, whatever else is switched off. A permanent bounce or a
+  complaint puts the address on the suppression list.
 - **Member notices.** The notification spine's emails follow each member's own preferences
   exactly as they did before this module existed.
 
@@ -81,11 +82,21 @@ test, all in Comms Settings. Until then the module reads as not ready.
   office.
 - **The one door out.** `server/lib/comms/transport.ts` is the only code that calls the email
   provider. `RESEND_API_BASE` points it at the fake provider in tests
-  (`server/testkit/fakeResend.ts`).
+  (`server/testkit/fakeResend.ts`), and `scripts/check-one-mail-door.mjs` fails CI on any other
+  file that names the provider, imports a mail SDK, posts to its send path or speaks SMTP.
+- **The drain.** `drain()` in `server/lib/comms/postOffice.ts` sends what is queued, on the
+  `comms-post-office` job and on "run now". Each row is claimed by one drain, asked every
+  question again (suppression, permission, Pause all, the daily cap, rehearsal), and retried at
+  1 minute, 5, 30, 2 hours and 6 hours before it is marked failed.
+- **The suppression list.** `server/lib/comms/suppressions.ts`. One row per address, holding the
+  strongest reason it was given; lifting a complaint asks for a reason.
+- **Sent mail.** `server/routes/commsSent.ts` lists and opens the record, tries a failed email
+  again and cancels a queued one.
 - **Signed links.** `server/lib/comms/links.ts` signs every one-click link under a key of its own,
   ids only, and nothing acts on a GET.
 - **Delivery reports.** `server/routes/commsWebhook.ts` registers before `express.json()`, proves
-  each report with `server/lib/comms/webhook.ts`, and stores it once.
+  each report with `server/lib/comms/webhook.ts`, stores it once, and applies it to the email it
+  names, found by the provider's id or the `msg` tag and never by address.
 - **Journeys.** `server/lib/comms/journeys.ts` enrolls, stops and touches; the defaults it plans
   from are `shared/comms/defaults/journeys.ts`.
 - **Routes.** `server/routes/comms.ts` (Admin, gated per route, never wholesale),
@@ -93,5 +104,5 @@ test, all in Comms Settings. Until then the module reads as not ready.
   `server/routes/commsEvents.ts` (on one gathering, behind the events module's gate).
 - **Admin.** The Comms group in the rail, one screen per file in
   `client/src/components/admin/comms/`. Settings and Sent mail show whatever the module says.
-- **Tables.** All SQL is in `server/repos/commsMessages.ts`, `server/repos/commsContacts.ts` and
-  `server/repos/commsJourneys.ts`.
+- **Tables.** All SQL is in `server/repos/commsMessages.ts`, `server/repos/commsContacts.ts`,
+  `server/repos/commsSuppressions.ts` and `server/repos/commsJourneys.ts`.
