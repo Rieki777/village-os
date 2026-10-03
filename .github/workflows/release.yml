@@ -168,6 +168,14 @@ jobs:
             echo "::error::Tag v${WANT} does not match package.json (${pkg}) and server/lib/identity.ts PLATFORM_VERSION (${plat}). Bump both to ${base} in a commit, let ci pass, and tag that commit."
             exit 1
           fi
+          # The starter kit carries docker-compose.yml, so its default image is
+          # what a founder who unzips this release actually starts.
+          compose=$(grep -oE 'ghcr\.io/rieki777/village-os:[0-9A-Za-z.+-]+' docker-compose.yml | head -1 | cut -d: -f2)
+          echo "docker-compose.yml default image ${compose}"
+          if [ "$compose" != "$WANT" ]; then
+            echo "::error::docker-compose.yml starts ghcr.io/rieki777/village-os:${compose}, but this tag is ${WANT}. Set its default image to ${WANT}, let ci pass, and tag that commit."
+            exit 1
+          fi
 
       - name: Require a green ci run on this commit
         # Tags only. The workflow_run path was already triggered BY a green
@@ -611,3 +619,14 @@ jobs:
             gh release create "${TAG}" "${KIT}" --verify-tag --title "Village OS ${VERSION}" --notes-file notes.md ${pre}
           fi
           gh release view "${TAG}" --json url,assets --jq '{url, assets: [.assets[].name]}'
+          commit=$(git rev-parse "refs/tags/${TAG}^{}")
+          {
+            echo "### Tell the regencivics.earth card"
+            echo
+            echo "The Run it yourself card pins its links to a release (docs/RELEASING.md, step 8). Give whoever holds it:"
+            echo
+            echo '```'
+            echo "VILLAGE_OS_RELEASE = \"${VERSION}\""
+            echo "VILLAGE_OS_RELEASE_COMMIT = \"${commit}\""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

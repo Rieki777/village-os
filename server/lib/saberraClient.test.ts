@@ -4,7 +4,7 @@
  * unexpected shape is REPORTED and never mistaken for an empty village.
  */
 import { describe, expect, it } from "vitest";
-import { callTool, openSession, type FetchLike } from "./saberraClient";
+import { callTool, listTools, openSession, type FetchLike } from "./saberraClient";
 
 const reply = (body: string, init: { status?: number; sessionId?: string } = {}) =>
   new Response(body, {
@@ -148,5 +148,160 @@ describe("talking to the outside service", () => {
     const s = spy(() => reply(framed({ result: { records: [{ id: "ok" }, "not a record"] } })));
     const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
     expect(r.ok).toBe(false);
+  });
+});
+
+/**
+ * A REPLY THIS CANNOT READ IS DESCRIBED BY ITS SHAPE, NEVER BY ITS VALUES.
+ *
+ * The detail travels into the sync's answer and onto the steward's screen, and
+ * it is taken BEFORE `readVendorRecord` runs, so neither the allow list nor the
+ * address net has seen it. A verifier showed an unreadable role assignment
+ * reply arriving on screen with the very fields the allow list drops on purpose.
+ * The fixture names nobody real.
+ */
+describe("what a failure says about the reply", () => {
+  const ROWS = JSON.stringify({
+    results: [{ id: "rec1", fields: { "Assignment Title": "Jane Example - Treasurer", "Role Holder": "Jane Example" } }],
+  });
+
+  it("NAMES THE SHAPE OF AN UNREADABLE REPLY, and none of what it carried", async () => {
+    const wire = framed({ result: { content: [{ type: "text", text: ROWS }] } });
+    // The control: the bytes on the wire DO carry the values, so their absence
+    // below is the client's doing and never an empty fixture.
+    expect(wire).toContain("Jane Example");
+    const s = spy(() => reply(wire));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", { kind: "role_assignment" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.why).toBe("unreadable");
+    // What a developer needs: where the rows were, by key, and how big.
+    expect(r.detail).toContain("content");
+    expect(r.detail).toContain("results");
+    expect(r.detail).toContain(`${ROWS.length} characters`);
+    expect(r.detail).not.toContain("Jane");
+    expect(r.detail).not.toContain("Treasurer");
+    expect(r.detail).not.toContain("Assignment Title");
+    expect(r.detail).not.toContain("Role Holder");
+  });
+
+  it("names prose by its length, never by its words", async () => {
+    const prose = "Jane Example holds Treasurer (jane@example.org)";
+    const s = spy(() => reply(framed({ result: { content: [{ type: "text", text: prose }] } })));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.detail).toContain(`${prose.length} characters`);
+    expect(r.detail).toContain("not JSON");
+    expect(r.detail).not.toContain("Jane");
+    expect(r.detail).not.toContain("example.org");
+  });
+
+  it("describes a stream payload that is not JSON by its count and size", async () => {
+    const s = spy(() => reply("event: message\ndata: Jane Example holds Treasurer\n\n"));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.why).toBe("unreadable");
+    expect(r.detail).toContain("not JSON");
+    expect(r.detail).not.toContain("Jane");
+  });
+
+  it("withholds a key that reads as an address", async () => {
+    const s = spy(() => reply(framed({ result: { "jane@example.org": [1], other: true } })));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.detail).toContain("other");
+    expect(r.detail).not.toContain("example.org");
+  });
+
+  it("DROPS A VENDOR MESSAGE THAT CARRIES AN ADDRESS, the rule every intake holds", async () => {
+    const s = spy(() => reply(framed({ error: { code: -32000, message: "jane@example.org may not read role_assignment" } })));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.why).toBe("vendor-error");
+    expect(r.detail).not.toContain("example.org");
+    expect(r.detail).toContain("email address");
+  });
+
+  it("clips a long vendor message", async () => {
+    const s = spy(() => reply(framed({ error: { code: -32000, message: "x".repeat(5000) } })));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.detail.length).toBeLessThanOrEqual(401);
+  });
+});
+
+/**
+ * `tools/list` is how a sync learns what `list_records` takes. These hold the
+ * same line `callTool` holds: an answer this cannot read is named, and never
+ * becomes a service that offers no tools.
+ */
+describe("asking the service what its tools take", () => {
+  const schema = {
+    type: "object",
+    properties: { record_type: { type: "string", enum: ["circle", "role", "role_assignment"] } },
+  };
+
+  it("sends tools/list inside the session, and keeps each tool's schema as the service wrote it", async () => {
+    const s = spy(() =>
+      reply(framed({ result: { tools: [{ name: "list_records", inputSchema: schema }, { name: "ask_sera" }] } }, { keepalives: 2 })),
+    );
+    const r = await listTools(opts(s.fetchImpl), "sess-4");
+    const sent = JSON.parse(String(s.calls[0].init.body));
+    expect(sent.method).toBe("tools/list");
+    expect((s.calls[0].init.headers as Record<string, string>)["mcp-session-id"]).toBe("sess-4");
+    expect(r).toEqual({
+      ok: true,
+      tools: [
+        { name: "list_records", inputSchema: schema },
+        { name: "ask_sera", inputSchema: null },
+      ],
+    });
+  });
+
+  it("follows the next cursor, and stops", async () => {
+    let page = 0;
+    const s = spy(() => {
+      page += 1;
+      return reply(framed({ result: { tools: [{ name: `tool-${page}` }], nextCursor: "more" } }));
+    });
+    const r = await listTools(opts(s.fetchImpl), "s");
+    expect(r.ok).toBe(true);
+    // A service that never stops paging is not allowed to keep the sync waiting.
+    expect(s.calls.length).toBeGreaterThan(1);
+    expect(s.calls.length).toBeLessThanOrEqual(5);
+    expect(JSON.parse(String(s.calls[1].init.body)).params).toEqual({ cursor: "more" });
+  });
+
+  it("REPORTS A RESULT WITH NO TOOL LIST AS UNREADABLE, never as no tools", async () => {
+    const s = spy(() => reply(framed({ result: { somethingElse: true } })));
+    const r = await listTools(opts(s.fetchImpl), "s");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.why).toBe("unreadable");
+      expect(r.detail).toContain("somethingElse");
+    }
+  });
+
+  it("names a refusal of the method in the service's own words", async () => {
+    const s = spy(() => reply(framed({ error: { code: -32601, message: "Method not found" } })));
+    const r = await listTools(opts(s.fetchImpl), "s");
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.why).toBe("vendor-error");
+      expect(r.detail).toBe("Method not found");
+    }
+  });
+
+  it("survives the network throwing", async () => {
+    const fetchImpl: FetchLike = async () => {
+      throw new Error("ECONNRESET");
+    };
+    const r = await listTools(opts(fetchImpl), "s");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.detail).toContain("ECONNRESET");
   });
 });
