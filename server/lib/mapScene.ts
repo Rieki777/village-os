@@ -116,15 +116,13 @@ export async function publishedVersion(pool: Pool): Promise<number> {
 
 /**
  * Who made the live map and when, without its scene: what a refusal needs to
- * say who moved it.
+ * say who moved it. Read through listRevisions, the history's one reader, so
+ * this file's query count stays where the raw-SQL burn-down register has it.
  */
 async function liveStamp(pool: Pool): Promise<{ version: number; actorUserId: string | null; createdAt: string }> {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT version, actor_user_id, created_at FROM map_scene_revisions ORDER BY version DESC LIMIT 1",
-  );
-  const r = rows[0];
+  const [r] = await listRevisions(pool, 1);
   return r
-    ? { version: Number(r.version), actorUserId: r.actor_user_id ?? null, createdAt: String(r.created_at) }
+    ? { version: r.version, actorUserId: r.actorUserId, createdAt: r.createdAt }
     : { version: 0, actorUserId: null, createdAt: "" };
 }
 
