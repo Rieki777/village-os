@@ -18,7 +18,9 @@
  *      the Loom. That is what Forward onto an entry of the closed map sends;
  *   4. the address agrees with the screen after the closers that used to
  *      disagree: Escape left `#/place/x` behind, and closing the Loom or a door
- *      over an open place cleared the address while the place stayed open;
+ *      over an open place cleared the address while the place stayed open.
+ *      Round 3 found the same over an open door and a running walk, and that
+ *      L opened the Loom under a door;
  *   5. the lens is part of the address (Rye, D7): the Vision, Org and Flows
  *      a visitor turned on ride on the end of it, and come back on a reload.
  *
@@ -198,7 +200,8 @@ describe("the artifact's address, inside the shell", () => {
   });
 
   it("closes the place, the door and the Loom on an empty goto", () => {
-    f.run("openPanel('greenhouse');openDoor('stay',{});openLoom()");
+    // The door last: opening the Loom closes a door (see the modes block below).
+    f.run("openPanel('greenhouse');openLoom();openDoor('stay',{})");
     expect([panelOpen(), doorOpen(), loomOpen()]).toEqual([true, true, true]);
     f.post({ type: "goto", hash: "" });
     expect([panelOpen(), doorOpen(), loomOpen()]).toEqual([false, false, false]);
@@ -220,6 +223,81 @@ describe("the artifact's address, inside the shell", () => {
     expect(f.window.location.hash).toBe("#/place/greenhouse");
     f.run("openDoor('stay',{})");
     f.run("closeDoor()");
+    expect(f.window.location.hash).toBe("#/place/greenhouse");
+    expect(f.routes().at(-1)).toBe("#/place/greenhouse");
+    f.run("document.getElementById('panelClose').click()");
+  });
+
+  it("threw nothing along the way", () => {
+    expect(f.uncaught).toEqual([]);
+  });
+});
+
+/*
+ * ROUND 3, MODES: the address named only the Loom, the circles and a place.
+ * Closing the Loom over an open door or a running walk wrote `/map` with the
+ * door or the walk still in front of the visitor, so F5 and a copied link
+ * dropped it. Measured on this branch before the change, with a real browser:
+ * Stays door, L, Escape gave `/map` with the door on screen, and F5 closed it.
+ */
+describe("the address names every layer still on screen", () => {
+  let f: Framed;
+  beforeAll(async () => {
+    f = framed();
+    f.post({ type: "config" });
+    await settle(1000);
+  });
+  afterAll(() => f?.window.close());
+
+  const doorOpen = () => f.run<boolean>("document.getElementById('module').classList.contains('show')");
+  const walk = () => f.run<{ id: string } | null>("JWALK");
+
+  it("closing the Loom over a running walk leaves the walk's address, and the walk goes on", async () => {
+    f.run("playJourney('j2')");
+    await settle(100);
+    expect(walk()?.id, "the control: the walk is running").toBe("j2");
+    expect(f.window.location.hash).toBe("#/journey/j2");
+    f.run("openLoom()");
+    expect(f.window.location.hash).toBe("#/loom");
+    f.run("closeLoom()");
+    expect(walk()?.id).toBe("j2");
+    expect(f.window.location.hash, "a reload would drop the walk").toBe("#/journey/j2");
+    expect(f.routes().at(-1)).toBe("#/journey/j2");
+  });
+
+  it("opening a place ends the walk (the camera is the visitor's), so the address names the place and then nothing", async () => {
+    f.run("openPanel('greenhouse')");
+    expect(walk(), "travelTo hands the camera back, which ends the walk").toBeNull();
+    expect(f.window.location.hash, "no stale walk address under the place").toBe("#/place/greenhouse");
+    f.run("document.getElementById('panelClose').click()");
+    expect(f.window.location.hash).toBe("");
+  });
+
+  it("pressing L with a door open closes the door, so the Loom's own X is on top", () => {
+    f.run("openDoor('stay',{})");
+    expect(doorOpen(), "the control: the door opened").toBe(true);
+    expect(f.window.location.hash).toBe("#/module/stay");
+    f.window.document.dispatchEvent(new f.window.KeyboardEvent("keydown", { key: "l", bubbles: true }));
+    expect(f.run<boolean>("document.body.classList.contains('loom')"), "L opened the Loom").toBe(true);
+    expect(doorOpen(), "the door's backdrop no longer covers the Loom").toBe(false);
+    f.run("closeLoom()");
+    expect(f.window.location.hash).toBe("");
+  });
+
+  it("a door opened over the Loom keeps its address when the Loom under it closes", () => {
+    f.run("openLoom();openDoor('stay',{})");
+    expect(f.window.location.hash).toBe("#/module/stay");
+    f.run("closeLoom()");
+    expect(doorOpen()).toBe(true);
+    expect(f.window.location.hash, "the door is still on screen").toBe("#/module/stay");
+    f.run("closeDoor()");
+    expect(f.window.location.hash).toBe("");
+  });
+
+  it("an address for a missing place leaves the open place named, since it stays on screen", () => {
+    f.run("openPanel('greenhouse')");
+    f.post({ type: "goto", hash: "#/place/no-such-place" });
+    expect(f.run<string | null>("panelKey")).toBe("greenhouse");
     expect(f.window.location.hash).toBe("#/place/greenhouse");
     expect(f.routes().at(-1)).toBe("#/place/greenhouse");
     f.run("document.getElementById('panelClose').click()");

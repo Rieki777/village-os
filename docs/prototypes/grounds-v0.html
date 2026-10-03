@@ -4112,6 +4112,7 @@ $('badges').addEventListener('click',e=>{
 function inviteHere(key){
   const s=BY[key];if(!s)return;
   if(document.body.classList.contains('pocket')){
+    DOOR_ADDR='';
     $('moduleCard').innerHTML=`<h2>⚑ ${escq(s.name)}</h2>
       <div class="route">This place has room for work.</div>
       <p>Nothing is asked for here yet. If you can see what wants doing, write it and the village will meet you at it.</p>
@@ -4540,7 +4541,7 @@ function homeSheet(key){
      query is added after: realRoute returns the bare path and would drop it. */
   const page=realRoute(room?'/stay':'/reserve');
   const route=!page?'':room?page:page+'?from=map&hamlet='+encodeURIComponent(key);
-  setHash('#/place/'+key);
+  DOOR_ADDR='#/place/'+key;setHash(DOOR_ADDR);
   $('moduleCard').innerHTML=`<h2>⌂ Request a home at ${escq(s.name)}</h2>
     <div class="route">${line}</div>
     ${(lot&&housingNote(key))?`<p style="margin:4px 0 0;font-size:11.5px;color:#a3703d">${housingNote(key)}</p>`:''}
@@ -5000,7 +5001,7 @@ function panelHead(s){
 function refreshPanel(){
   if(!panelKey||!$('panel').classList.contains('open'))return;
   const s=BY[panelKey];
-  if(!s){$('panel').classList.remove('open');panelKey=null;setHash('');toast('That place is no longer on the map.');return}
+  if(!s){$('panel').classList.remove('open');panelKey=null;setHash(viewHash());toast('That place is no longer on the map.');return}
   panelHead(s);
   const on=[...$('tabs').children].findIndex(b=>b.classList.contains('on'));
   renderTab(on<0?0:on);
@@ -5069,7 +5070,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
       `<div class="lastv">Adding one, flagging one, or asking for a photograph of yourself to come down all happen through that door.</div>`}
   if(i===4)body.innerHTML=((s.modules&&s.modules.length)?s.modules.map((m,mi)=>`<button class="doorbtn" onclick="openDoorHere(${mi})"><span><b>${escq(doorLabel(m))}</b><br><span>${escq(doorRoute(m))}</span></span><span class="arr">➤</span></button>`).join(''):`<p>No doors here yet. The founder opens them in build mode.</p>`)+
     `<div class="lastv">Every door is also a page. The same room, reachable from the menu or from the land.</div>`}
-$('panelClose').onclick=()=>{$('panel').classList.remove('open');panelKey=null;setHash('')};
+$('panelClose').onclick=()=>{$('panel').classList.remove('open');panelKey=null;setHash(viewHash())};
 function claimQuest(q,at){
   const id=questId(q),on=!QUEST_CLAIM[id];
   if(on)QUEST_CLAIM[id]=1;else delete QUEST_CLAIM[id];
@@ -8060,7 +8061,11 @@ document.querySelectorAll('.lfp').forEach(b=>b.onclick=()=>{LOOMF.prov[b.dataset
 $('lfCircle').innerHTML='<option value="">every circle</option>'+Object.keys(CIRCLE_COL).map(c=>`<option value="${c}">${c} circle</option>`).join('');
 $('lfCircle').onchange=()=>{LOOMF.circle=$('lfCircle').value;renderLoom()};
 $('loomEngineBtn').onclick=()=>$('loomEngine').classList.toggle('show');
-function openLoom(){document.body.classList.add('loom');setHash('#/loom');renderLoom();
+/* A DOOR CLOSES WHEN THE LOOM OPENS, the way setMapType closes the Loom.
+   The L key opened the Loom UNDER an open door (#module is z 60 over the
+   Loom's 50), so the Loom's X sat under the door's backdrop and the first
+   click on it closed the door instead (round 3, modes). */
+function openLoom(){$('module').classList.remove('show');document.body.classList.add('loom');setHash('#/loom');renderLoom();
   if(!window._loomSaid){window._loomSaid=1;
     toast('The Loom. Gold is your word, amber is a guess, gray waits at the Board. Drag any ◉ grip.')}}
 function closeLoom(){document.body.classList.remove('loom');if(routeNow()==='#/loom')setHash(viewHash());
@@ -8396,6 +8401,7 @@ function doorClickHere(k){return doorClick(panelKey,k)}
 window.doorClickHere=doorClickHere;
 function openDoor(a,ctx){
   const key=moduleAt(a)?a:null;
+  DOOR_ADDR=key?'#/module/'+key:'';
   if(!key){ /* A door that names a PAGE rather than a room on this map.
       This was a true dead end: the route was printed as inert text and the
       only button said "Back to the land". A page the site serves now opens.
@@ -8576,7 +8582,7 @@ function jSheetOff(){document.body.classList.remove('jwalk');
 function jHalt(keepSheet){
   clearTimeout(JTMR);
   if(!JWALK)return false;
-  const w=JWALK;JWALK=null;tourI=-1;setHash('');jRowsOff();
+  const w=JWALK;JWALK=null;tourI=-1;setHash(viewHash());jRowsOff();
   document.body.classList.remove('jwalk');
   if(!keepSheet)jSheetOff();
   if(w.log&&typeof endWalk==='function')endWalk(false,w.i);
@@ -8603,7 +8609,7 @@ function jStepId(j,x){
 
 function playJourney(id,opts){const j=jById(id);if(!j)return;
   /* The walk is off (WELCOME_WALK_ON): an old #/journey/ link to it lands on the map instead. */
-  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(routeNow()))setHash('');return}
+  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(routeNow()))setHash(viewHash());return}
   const o=opts||{};
   leaveIntro();closeLoom();$('panel').classList.remove('open');panelKey=null;
   $('module').classList.remove('show');closeInspect&&closeInspect();
@@ -8670,7 +8676,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
     spoken.then(()=>arm(Math.max(JDWELL-(Date.now()-t0),JBREATH)))};
   const step=()=>{if(!JWALK||JWALK.id!==id)return;
     JWALK.beat=(JWALK.beat|0)+1;
-    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jRowsOff();
+    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash(viewHash());jRowsOff();
       /* HER SHEET STAYS UP FOR HER LAST LINE. Every other ending drops it
          (jHalt says why: a person who took the map back wants the screen),
          and this one used to as well, one line before she said where the
@@ -8756,7 +8762,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
      nobody had asked for, so it returns before touching either. */
   window.jEnd=()=>{clearTimeout(JTMR);if(!JWALK)return;GUIDE.stop('end');
     const logged=!!(JWALK&&JWALK.log),at=JWALK?JWALK.i:-1;
-    JWALK=null;tourI=-1;setHash('');jSheetOff();jRowsOff();mvStop();
+    JWALK=null;tourI=-1;setHash(viewHash());jSheetOff();jRowsOff();mvStop();
     if(logged&&typeof endWalk==='function')endWalk(false,at);
     maiaSay('The walk ends here. Wander wherever you like, and say my name when you want me.')};
   JWALK.hold=hold;step()}
@@ -9097,15 +9103,24 @@ function setHash(h){HASHMUTE=true;const a=withLens(routeOf(h));
   setTimeout(()=>{HASHMUTE=false},0);
   shellPost({type:'route',hash:a,user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
 window.setHash=setHash;
-/* What is still on screen once the top layer goes, as an address. Closing
-   the Loom over a place, or a door opened from a place, used to clear the
-   address while the place stayed open, and the shell now shows that address
-   to people. */
+/* WHAT IS ON SCREEN, AS AN ADDRESS, top layer first. Every closer asks this,
+   so the address is whatever is still showing once the top layer goes.
+   It named only the Loom, the circles and a place, so closing the Loom over
+   an open door or a running walk wrote `/map` with the door or the walk still
+   in front of the visitor, and F5 dropped it (round 3, modes). The order is
+   the stacking order: a door (#module, z 60) over the Loom (z 50) over a
+   place's sheet (z 45) over the circles' chart (z 28), and a walk under all
+   of them, because a walk is a way of moving and not a sheet. DOOR_ADDR is
+   the address the open door was given, '' for a door with no room on the
+   map, which leaves the place under it named. */
+var DOOR_ADDR='';
+function walkAddr(){try{return JWALK&&JWALK.id?'#/journey/'+JWALK.id:''}catch(_){return''}}
 function viewHash(){
+  if(DOOR_ADDR&&$('module').classList.contains('show'))return DOOR_ADDR;
   if(document.body.classList.contains('loom'))return'#/loom';
-  if(document.body.classList.contains('circles'))return'#/circles';
   if(panelKey&&$('panel').classList.contains('open'))return'#/place/'+panelKey;
-  return''}
+  if(document.body.classList.contains('circles'))return'#/circles';
+  return walkAddr()}
 /* THE EMPTY ADDRESS CLOSES WHAT AN ADDRESS OPENED. The shell sends it when
    Forward lands on an entry of the map with nothing open. The order matters:
    the place goes first, so each closer after it finds nothing underneath and
@@ -9146,7 +9161,9 @@ function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
   if(m[1]==='place'){if(BY[m[2]]){if(document.body.classList.contains('loom'))closeLoom();
       if(document.body.classList.contains('circles'))setMapType('living',true);
       openPanel(m[2],m[3]?ITAB[m[3].split(':')[0]]||0:0,m[3]||null)}
-    else if(SHELL_LANDED){toast('That place is no longer on the map.');setHash('')}}
+    /* The address names what stays on screen. It was cleared, which left a
+       place that was already open showing under an address of nothing. */
+    else if(SHELL_LANDED){toast('That place is no longer on the map.');setHash(viewHash())}}
   else if(m[1]==='module'&&moduleAt(m[2]))openDoor(m[2],{});
   else if(m[1]==='journey')setTimeout(()=>playJourney(m[2]),500)}
 /* THE SHELL'S ENTER TOKEN. LivingMap shows its own Enter the Land gate and
@@ -9218,7 +9235,7 @@ function setMapType(t,quiet){const circ=t==='circles';
   document.body.classList.toggle('circles',circ);
   $('msLiving').classList.toggle('on',!circ);$('msCircles').classList.toggle('on',circ);
   if(circ){$('panel').classList.remove('open');panelKey=null;closeDoor();hideHover();hoverPin=null;
-    buildOrgMap();setHash('#/circles')}else if(routeNow()==='#/circles')setHash('');
+    buildOrgMap();setHash('#/circles')}else if(routeNow()==='#/circles')setHash(viewHash());
   if(!quiet)toast(circ?'◎ The Circles. The same village as an organism; click any node to walk to its door.':'🏞 The Living Map. The land itself.')}
 window.setMapType=setMapType;
 $('msLiving').onclick=()=>setMapType('living');
