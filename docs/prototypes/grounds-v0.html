@@ -10313,8 +10313,11 @@ function showConflict(r){
     (r.live&&r.live.version?` It is now version ${escq(r.live.version)}.`:'');
   /* What the person can actually do. Nothing in the map moves a draft onto a
      newer version, so the card says so, and lists the changes to make again
-     before they are thrown away. */
-  const mine=unpublished().slice().reverse().slice(0,40);
+     before they are thrown away. Those are the changes the publish card
+     listed a moment ago (netChanges): a change taken back before it was
+     published is not one to make again, and its undo means nothing on the
+     new version. */
+  const mine=netChanges().slice().reverse().slice(0,40);
   $('pubList').innerHTML='<li>Your draft is exactly as you left it. Nothing was published.</li>'+
     '<li>To publish, look at the live map, then throw this draft away and make these changes again on the new version:</li>'+
     mine.map(e=>`<li>${escq(editLine(e))}</li>`).join('');

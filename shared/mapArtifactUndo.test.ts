@@ -139,18 +139,26 @@ interface Posted {
  * draft along with it (followRestore).
  */
 class Village {
-  revs: { version: number; base: number; scene: string }[] = [];
+  revs: { version: number; base: number; scene: string; by: string }[] = [];
   draft: { scene: string; baseVersion: number } | null = null;
   seen: Posted[] = [];
   constructor(seed: Scene, version: number) {
-    this.revs.push({ version, base: version - 1, scene: JSON.stringify(seed) });
+    this.revs.push({ version, base: version - 1, scene: JSON.stringify(seed), by: "the founder" });
   }
   get live() {
     return this.revs[this.revs.length - 1];
   }
   card() {
     const prev = this.revs[this.revs.length - 2];
-    return { version: this.live.version, by: "the founder", previous: prev ? prev.version : null };
+    return { version: this.live.version, by: this.live.by, previous: prev ? prev.version : null };
+  }
+  /** A colleague publishing from the live version, the way their own map would. */
+  publishedBy(by: string, change: (s: Scene) => void) {
+    const s = this.liveScene();
+    change(s);
+    const version = this.live.version + 1;
+    this.revs.push({ version, base: this.live.version, scene: JSON.stringify(s), by });
+    return version;
   }
   liveScene(): Scene {
     return JSON.parse(this.live.scene) as Scene;
@@ -158,7 +166,7 @@ class Village {
   private publish(scene: string, base: number) {
     if (this.revs.some((r) => r.base === base)) return null;
     const version = this.live.version + 1;
-    this.revs.push({ version, base, scene });
+    this.revs.push({ version, base, scene, by: "the founder" });
     return version;
   }
   /** Answers one post, as [messages to the map, in order]. */
@@ -852,6 +860,29 @@ describe("Undo of a card row after a look at the live map (round 3, finding 1)",
     expect(seen.edits, "no undo line was written").toBe(edits);
     expect(seen.seat).toBe(true);
     expect(seen.card.list).toEqual(["created a seat Keeper of the scales"]);
+  });
+});
+
+/* Finding 6. The refused-publish card listed every unpublished line of the
+   journal, so a change taken back before publishing was listed to make
+   again, with its undo. */
+describe("the refused-publish card (round 3, finding 6)", () => {
+  it("lists to make again exactly what the publish card listed", async () => {
+    const m = await boot();
+    build(m);
+    rename(m, "gate", "Renamed Gate");
+    drag(m, "gate", 30, 20);
+    m.el("#undoBtn").click();
+    m.village.publishedBy("Other Admin", (s) => {
+      const market = s.map_structures.find((x) => x.key === "market");
+      if (market) market.name = "Market by Other Admin";
+    });
+    const asked = await publish(m);
+    const refused = { title: m.el("#pubTitle").textContent ?? "", list: [...m.window.document.querySelectorAll("#pubList li")].map((li) => li.textContent ?? "") };
+    m.close();
+    expect(asked.list).toEqual(["renamed gate"]);
+    expect(refused.title).toBe("The live map moved while you were working");
+    expect(refused.list.slice(2)).toEqual(asked.list);
   });
 });
 
