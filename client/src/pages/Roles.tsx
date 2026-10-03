@@ -226,7 +226,10 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   }, [arrive]);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      // The linked row is drawn in place. Its entrance offset is still on it
+      // when the scroll is measured, so it would settle 20px higher, under
+      // the sticky nav (measured in Chromium: header top 92, nav bottom 96).
+      initial={arrive ? false : { opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: index * 0.04 }}
@@ -264,7 +267,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
         </div>
       </button>
 
-      <AnimatePresence>
+      {/* The linked row arrives open, with no opening animation: measuring a
+          height of "auto" makes framer-motion restore the scroll it found
+          (`window.scrollTo(0, y)`), which cancels the smooth scroll above in
+          its first frame and leaves the reader at the top of the page. */}
+      <AnimatePresence initial={!arrive}>
         {expanded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -326,11 +333,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
 }
 
 export default function Roles() {
-  // The seat a link named. The row opens from the first paint; once the seats
-  // load, a match is scrolled to and focused, and a miss is said in one line.
+  // The seat a link named. Rows mount only once the seats load, so the
+  // matching row mounts open and arriving (scrolled to, focused); a miss is
+  // said in one line.
   const [linked] = useState<string | null>(seatFromUrl);
   const [expandedRole, setExpandedRole] = useState<string | null>(linked);
-  const [arrived, setArrived] = useState<string | null>(null);
   const [linkMissed, setLinkMissed] = useState(false);
   const [roles, setRoles] = useState<RoleEntry[] | null>(null);
   const [circles, setCircles] = useState<any[]>([]);
@@ -403,11 +410,7 @@ export default function Roles() {
   // still names what is open. A failed load says its own line and leaves the
   // address alone, so a refresh tries the link again.
   useEffect(() => {
-    if (!roles || !linked) return;
-    if (roles.some((r) => r.id === linked)) {
-      setArrived(linked);
-      return;
-    }
+    if (!roles || !linked || roles.some((r) => r.id === linked)) return;
     setExpandedRole(null);
     setLinkMissed(true);
     writeSeatToUrl(null);
@@ -542,7 +545,7 @@ export default function Roles() {
                       index={i}
                       canTagNeeds={canTagNeeds}
                       sheet={sheet}
-                      arrive={arrived === role.id}
+                      arrive={linked === role.id}
                     />
                   ))}
                 </div>
