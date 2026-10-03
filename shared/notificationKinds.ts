@@ -378,6 +378,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} people sent you appreciation.",
     celebrate: false,
   },
+  /*
+   * Village Comms, day 21 of a path (the comms build spec 5.11). The
+   * emails have done what emails can do, and the path's contact person is
+   * asked to write to somebody by name. People, because it is a person the
+   * reader is asked to reach.
+   */
+  comms_path_handoff: {
+    group: "people",
+    blurb: "Somebody has been on a path for three weeks. A note from a person is the next step.",
+    many: "{n} people on a path are ready to hear from a person.",
+    celebrate: false,
+  },
   message: {
     group: "people",
     blurb: "Somebody wrote to you.",
@@ -473,6 +485,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "village",
     blurb: "Something was flagged for a steward to read, or a report you filed was closed.",
     many: "{n} reports moved.",
+    celebrate: false,
+  },
+  /*
+   * Village Comms (5.9): a gathering you hosted has ended and the people who
+   * came are waiting to hear back. The village group, because the recap is
+   * the village keeping its own record of what it did together.
+   */
+  comms_host_recap: {
+    group: "village",
+    blurb: "A gathering you hosted has ended. The people who came will hear from you once you write the recap.",
+    many: "{n} gatherings you hosted are waiting for a recap.",
     celebrate: false,
   },
   restorative_intake: {

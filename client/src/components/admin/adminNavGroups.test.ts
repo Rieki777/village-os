@@ -110,7 +110,9 @@ describe("navGroups", () => {
     // Value Claims, the editor behind `client/src/lib/moneyClaims.ts`), so it
     // rides in with the other three rather than being placed here.
     ["Make it yours", ["team", "legal", "covenant", "money", "work-with-us", "faqs", "milestones", "visit-config", "investor-summary"]],
-    ["Connections", ["integrations", "email-settings"]],
+    // Email Settings became the start of Comms Settings on 2026-10-02 and moved
+    // to the Comms group below; its old key still renders that screen.
+    ["Connections", ["integrations"]],
     ["What your village runs", [
       "modules", "needs-admin", "variables", "season", "seasons-patterns", "circles-map", "land", "housing",
       "events-admin", "quests-admin", "tools-admin", "library-admin", "badges-admin",
@@ -119,6 +121,8 @@ describe("navGroups", () => {
     ]],
     ["Money and agreements", ["tokens", "ledger", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
     ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain", "failures"]],
+    // Village Comms (the comms build spec 6): after the week's queues.
+    ["Comms", ["comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings"]],
     ["Library and files", ["training-modules", "investor-vault", "uploaded-files"]],
   ];
 
@@ -160,10 +164,29 @@ describe("navGroups", () => {
     ];
     // Tabs added after the reorder, listed apart so `before` stays a record of
     // what the rail carried at the time.
-    const addedSince = ["failures"];
+    const addedSince = [
+      "failures",
+      // Village Comms, 2026-10-02.
+      "comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings",
+    ];
+    // Rows that LEFT the rail, each with a key that still renders a screen, so
+    // a deep link to it still lands. `email-settings` renders Comms Settings.
+    const retiredSince = ["email-settings"];
+    const expected = new Set([...before, ...addedSince].filter((k) => !retiredSince.includes(k)));
     for (const setupComplete of [true, false]) {
-      expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(new Set([...before, ...addedSince]));
+      expect(new Set(allKeys(setupComplete)), `setupComplete=${setupComplete}`).toEqual(expected);
     }
+  });
+
+  it("shows Comms Settings and Sent mail with the comms module off, and the other five with it on", () => {
+    const comms = ["comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings"];
+    const visible = (lifecycle: "off" | "members") =>
+      filterNavByModules(navGroups(true), { comms: lifecycle })
+        .flatMap((g) => g.items.map((i) => i.key))
+        .filter((k) => comms.includes(k));
+    // A village sets up its sending before it turns anything on.
+    expect(visible("off")).toEqual(["comms-sent", "comms-settings"]);
+    expect(visible("members")).toEqual(comms);
   });
 
   it("puts Integrations first in its own group, not second under email", () => {

@@ -47,6 +47,8 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "../lib/commsSink";
 import {
   allHomeTypes,
   allRows as housingRows,
@@ -396,6 +398,8 @@ export function register(app: Express, deps: Deps): void {
       arrivedFrom,
       userId: user?.id ?? null,
     });
+    // A new reservation is written as `new` (drizzle/0077's default).
+    commsSink.fire({ type: "housing_status", reservationId: id, status: "new", email });
 
     /*
      * The village's own history. Audience 'admin', because the text carries a
@@ -541,6 +545,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await setReservationStatus(getPool(), before.id, status, before.status))) {
       return res.json({ ok: true, notified: false });
     }
+    commsSink.fire({ type: "housing_status", reservationId: before.id, status, email: before.email ?? null });
 
     // Asked before the hamlet lookup, because two of the four statuses say
     // nothing and a silent move should cost no reads.

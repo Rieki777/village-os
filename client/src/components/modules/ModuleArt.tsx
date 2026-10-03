@@ -32,14 +32,14 @@
 import { useState } from "react";
 import {
   Activity, Award, BedDouble, CalendarDays, Circle, Coins, Globe, Hammer,
-  Handshake, Heart, Landmark, MessageCircle, MessagesSquare, Mic, Newspaper,
+  Handshake, Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper,
   Sparkles, TrendingUp, Users, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BUNDLED_MODULE_ART } from "./bundledModuleArt";
 
 const EMBLEMS: Record<string, LucideIcon> = {
   Activity, Award, BedDouble, CalendarDays, Coins, Globe, Hammer, Handshake,
-  Heart, Landmark, MessageCircle, MessagesSquare, Mic, Newspaper, Sparkles,
+  Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper, Sparkles,
   TrendingUp, Users, Wrench,
 };
 

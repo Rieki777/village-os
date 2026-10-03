@@ -81,6 +81,11 @@ export const INTERNAL = new Set([
   // and provisionLogPath() reads it back to name that run's ledger file. A
   // founder setting it would only rename a file in the test cache.
   "VILLAGE_TEST_RUN_ID",
+  // Set by the test harness alone: the comms suites point the post office at
+  // the fake provider (server/testkit/fakeResend.ts) with it, so no test ever
+  // sends a real email. A founder setting it would send the village's mail,
+  // and its key, somewhere other than the provider.
+  "RESEND_API_BASE",
   // Read by server/lib/voiceClaim.ts, and NOT settings. That check reads them
   // to refuse a HYPHA_VOICE_WEBHOOK_SECRET that is a copy of some other
   // secret, and these two are names a deployment might carry from elsewhere.

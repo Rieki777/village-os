@@ -1262,6 +1262,66 @@ export const MODULES: ModuleDef[] = [
     hyphaOnly: true,
     // readiness attached by the server at boot (needs the pool).
   },
+  {
+    id: "comms",
+    tier: "included",
+    // An address book, what each person agreed to receive, and a record of
+    // every email written to them. A named person's data from the first row.
+    dataClass: "member-pii",
+    group: "connect",
+    /*
+     * REQUIRED, because the parts that make email arrive are the village's own
+     * and no default can stand in for them: its provider key, a sending
+     * domain it has verified, a sender on that domain, delivery reports, and a
+     * postal address for the footer. Every one is supplied in Comms Settings,
+     * and the readiness reader in server/lib/modules.ts answers for them.
+     *
+     * WHAT THIS LIFECYCLE GOVERNS IS THE AUTOMATIONS, never the plumbing.
+     * With the module off, no journey enrolls or sends and guest RSVPs,
+     * time-vote emails and letters stay shut. The post office itself,
+     * unsubscribe and preferences, the delivery-report webhook, essential mail
+     * and member notices run whatever this says, because a password link and
+     * a person's "stop" must never wait on a module (the comms build spec
+     * 5.16).
+     */
+    setup: "required",
+    name: "Village Comms",
+    description:
+      "The village's email in one place: reminders for the gatherings people said yes to, a few emails that walk somebody along the path they chose, guest RSVPs, a live vote on a session time, and letters to the people who agreed to get them. Every email is recorded before it goes, and anybody can stop any kind of email with one click.",
+    requires: [],
+    // Gatherings are where most of its emails come from, and the calendar is
+    // still worth having without it. Paths and letters need neither.
+    recommends: ["events"],
+    capabilities: ["comms.manage"],
+    variableKeys: [
+      "comms.quiet_start_hour",
+      "comms.quiet_end_hour",
+      "comms.daily_cap",
+      "comms.event_reminder_minutes",
+      "comms.host_nudge_minutes",
+      "comms.recap_window_days",
+      "comms.guests_default",
+      "comms.time_poll_freeze_hours",
+      "comms.time_poll_settle_minutes",
+      "comms.letters_per_day",
+      "comms.retention_months",
+      "comms.send_rate_per_second",
+      "comms.notice_expiry_minutes",
+      "comms.open_tracking",
+      "comms.click_tracking",
+    ],
+    /*
+     * GATED PER ROUTE, the way `/api/admin/hypha` is, and never mounted whole.
+     * Comms Settings and Sent mail have to work while the module is off,
+     * because a village sets up its sending BEFORE it turns anything on, and
+     * the Settings screen is where that happens. So server/routes/comms.ts
+     * mounts requireModule("comms") on the automation routes alone. The
+     * public prefix (`/api/comms`, unsubscribe and preferences) and the
+     * delivery-report webhook are plumbing and are not listed: listing them
+     * here would say they sit behind a gate they must never sit behind.
+     */
+    apiPrefixes: ["/api/admin/comms"],
+  },
   /**
    * THE FIRST CONNECTED LISTING IN THIS REGISTRY.
    *
@@ -1409,6 +1469,7 @@ export const MODULE_KEY_PREFIXES: Record<string, string> = {
   introductions: "introductions",
   governance: "governance",
   hypha: "hypha",
+  comms: "comms",
 };
 
 /**

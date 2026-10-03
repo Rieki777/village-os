@@ -223,6 +223,12 @@ check(
   `handshake=[${handshakeIds.join(",")}] running=[${runningIds.join(",")}]`,
 );
 
+console.log("\n── COMMS (the post office, plumbing at every lifecycle) ──");
+const commsStatus = await api("GET", "/api/admin/comms/status", undefined, founder);
+check("comms status answers the founder", commsStatus.status === 200 && typeof commsStatus.json?.messages?.byStatus === "object", `${commsStatus.status}`);
+const commsRun = await api("POST", "/api/admin/comms/run", { job: "drain" }, founder);
+check("run now drains the post office", commsRun.status === 200 && commsRun.json?.job === "drain", `${commsRun.status}`);
+
 console.log("\n── ECONOMY CLOSING ASSERTION ──");
 const rec2 = await api("GET", "/api/admin/ledger/reconciliation", undefined, founder);
 check("conservation holds across every token", rec2.json.invariants.ok === true, JSON.stringify(rec2.json.invariants.problems));

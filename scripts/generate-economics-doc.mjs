@@ -881,6 +881,25 @@ export function postingKeys(root = ROOT) {
 
     eachChild(sf, (n) => {
       if (!ts.isPropertyAssignment(n) || !ts.isIdentifier(n.name) || n.name.text !== "idempotencyKey") return;
+      /*
+       * AN EMAIL IS NOT A LEDGER POSTING (Village Comms, 2026-10-02). The post
+       * office's OutgoingEmail carries an `idempotencyKey` too, and so does the
+       * ledger row it writes, but that key dedupes a row in `comms_messages`
+       * and never reaches `token_ledger`. Every comms lane posts email from
+       * wherever its trigger lands, so a rule keyed on the FILE would have to
+       * be told about each one. The object is the discriminator instead: an
+       * email names a `subject` AND either its words or where it goes (`html`
+       * on an email, `bodyHtml` or `toEmail` on the row that records it), and
+       * no ledger posting carries that pair. Asking for the pair rather than
+       * `subject` alone means a posting that one day grows a `subject` field
+       * is still read, and still refused when unreadable;
+       * check-economics-doc.test.mjs holds both halves.
+       */
+      const owner = n.parent;
+      const names = ts.isObjectLiteralExpression(owner)
+        ? new Set(owner.properties.filter((p) => p.name && ts.isIdentifier(p.name)).map((p) => p.name.text))
+        : new Set();
+      if (names.has("subject") && ["html", "bodyHtml", "toEmail"].some((k) => names.has(k))) return;
       const line = lineOf(n);
       const got = resolve(n.initializer, 0);
       if (got === "forwarded") { forwarded += 1; return; }
