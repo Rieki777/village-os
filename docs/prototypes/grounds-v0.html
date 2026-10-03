@@ -9999,11 +9999,20 @@ let VISITOR_VIEW=false;
 let DRAFT_HOLD=null;      /* my work, stashed while I look at the live map */
 let VISIT_BUILD=false;    /* build mode was on when the visitor view opened */
 let VISIT_NOTED=false;    /* the visitor view has said that its edits do not stay */
+let SHELL_SKIN=null;      /* the village's own look, as the shell last pushed it */
 let PUB_SEQ=0;
 const PUB_PENDING={};
 
 function inShell(){try{return window.parent!==window}catch(_){return false}}
 function shellPost(m){try{if(inShell())window.parent.postMessage(m,'*')}catch(_){}}
+/* THE LOOK A VISITOR GETS. A visitor's load draws the published scene and
+   then puts the village's own look over it, so the scene's skin (mist, gold
+   tablets, its own sizes) is never what anybody sees inside the village.
+   View as visitor and Discard draft draw the published scene too, and they
+   stopped there, so the preview of what a visitor sees wore a look no
+   visitor gets. They finish the way the load does. Nothing pushed, nothing
+   worn: standalone, the scene's own skin is the only look there is. */
+function wearVillageSkin(){if(SHELL_SKIN&&typeof applySkinExport==='function')applySkinExport(SHELL_SKIN)}
 
 /* Ask the village to do something and wait for its answer.
    The nonce is what makes an answer belong to a question: publish twice
@@ -10195,7 +10204,7 @@ function applyScene(scene,version){
      draft onto the new version: back in the draft, its own change counted as
      published and its next publish went through over the colleague's. So
      the visitor sees the new land, and the draft's mark and base stay put. */
-  if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene,{quiet:true}))SCENE_APPLIED=true;renderDraftBar();return true}
+  if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene,{quiet:true})){SCENE_APPLIED=true;wearVillageSkin()}renderDraftBar();return true}
   /* WORK IN HAND IS WHAT A PUBLISH WOULD CHANGE, the number the bar shows.
      A journal whose unpublished lines all cancel (a move and its undo)
      changes nothing on the land. Counting its lines here kept the screen on
@@ -10215,7 +10224,7 @@ function applyScene(scene,version){
     /* Published scene's edits are the live baseline; 0 made every historical
        edit look unpublished and blocked later live updates. editSeq is set
        inside restoreScene from map_edits. */
-    PUBLISH_MARK=editSeq;
+    PUBLISH_MARK=editSeq;wearVillageSkin();
     /* The village's copy of this draft still holds the lines that cancelled,
        over the old base, and the next visit offered the undone version back
        from it. It follows the screen. */
@@ -10272,10 +10281,14 @@ function toggleVisitor(){
     VISIT_BUILD=buildMode;if(buildMode)$('buildBtn').click();
     undoRowsHold();DRAFT_HOLD=buildExportJSON();
     VISITOR_VIEW=true;VISIT_NOTED=false;document.body.classList.add('visiting');
-    restoreScene(LIVE_SCENE,{quiet:true});
+    /* Dressed the way a visitor's load dresses it: the scene, then the
+       village's own look over it (wearVillageSkin). */
+    restoreScene(LIVE_SCENE,{quiet:true});wearVillageSkin();
     toast('This is the live map. Your draft is waiting.');
   }else{
     VISITOR_VIEW=false;document.body.classList.remove('visiting');
+    /* The way back wears the draft's own look, which the stash took from the
+       screen, so choices made on this screen come back with it. */
     if(DRAFT_HOLD){restoreScene(DRAFT_HOLD);DRAFT_HOLD=null;undoRowsFind()}
     /* Back on as the Build button turns it on, less the greeting: a place
        panel opened while visiting would otherwise sit over the work. */
@@ -10487,7 +10500,7 @@ async function doDiscard(){
      The base is the version of the land put back on screen. It stayed on the
      version the draft forked from, so after a refused publish every publish
      from here was refused again, however much was thrown away. */
-  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){PUBLISH_MARK=editSeq;BASE_VERSION=LIVE_SCENE_VERSION||BASE_VERSION;DRAFT_HOLD=null;forgetUndo();renderDraftBar();
+  if(LIVE_SCENE&&restoreScene(LIVE_SCENE,{quiet:true})){wearVillageSkin();PUBLISH_MARK=editSeq;BASE_VERSION=LIVE_SCENE_VERSION||BASE_VERSION;DRAFT_HOLD=null;forgetUndo();renderDraftBar();
     return toast('Draft thrown away. You are looking at the live map.')}
   toast('Draft thrown away.');
 }
@@ -10600,7 +10613,7 @@ window.undoPublish=undoPublish;
 addEventListener('message',e=>{try{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return; // same-origin shell only (file:// = dev)
   const d=e.data;if(!d||typeof d!=='object')return;
-  if(d.type==='skin'&&d.skin){applySkinExport(d.skin);toast('✂ Skin applied from Village Settings.')}
+  if(d.type==='skin'&&d.skin){SHELL_SKIN=d.skin;applySkinExport(d.skin);toast('✂ Skin applied from Village Settings.')}
   if(d.type==='ground')setGround(d);
   /* REPLACED, never pushed. Assigning location.hash added an entry to this
      frame's history, and the browser's Back pops a frame's entry before the
@@ -11059,6 +11072,8 @@ addEventListener('message',e=>{
   /* The land first: everything below dresses what the scene puts down, and
      restoreScene rebuilds the vocabulary anyway. Applying the skin to a
      map that is about to be replaced wholesale is work thrown away. */
+  /* Kept first, so a scene the push repaints is dressed in it (wearVillageSkin). */
+  if(d.skin)SHELL_SKIN=d.skin;
   if(d.scene&&typeof d.scene==='object')applyScene(d.scene,d.sceneVersion);
   if(d.skin)applySkinExport(d.skin);
   if(Array.isArray(d.walk)&&d.walk.length)window.WALK=d.walk;

@@ -146,6 +146,8 @@ class Village {
   revs: { version: number; base: number; scene: string; by: string }[] = [];
   draft: { scene: string; baseVersion: number } | null = null;
   seen: Posted[] = [];
+  /** The village's own look, pushed with every config when set. */
+  skin: Record<string, unknown> | null = null;
   constructor(seed: Scene, version: number) {
     this.revs.push({ version, base: version - 1, scene: JSON.stringify(seed), by: "the founder" });
   }
@@ -212,7 +214,7 @@ class Village {
     return [];
   }
   config() {
-    return { type: "config", scene: this.liveScene(), sceneVersion: this.live.version };
+    return { type: "config", scene: this.liveScene(), sceneVersion: this.live.version, ...(this.skin ? { skin: this.skin } : {}) };
   }
   hand() {
     return { type: "hand", canEdit: true, canPublish: true, liveVersion: this.live.version, live: this.card(), draft: null };
@@ -232,7 +234,14 @@ interface Booted {
 let SEED: Scene;
 
 /** The artifact, booted with a village around it and the seed published as version 6. */
-async function boot(opts: { shell?: boolean } = {}): Promise<Booted> {
+interface BootOptions {
+  shell?: boolean;
+  /** The village's own look, pushed with its config (Village Settings). */
+  skin?: Record<string, unknown>;
+  /** The skin the published scene itself carries in its art manifest. */
+  sceneSkin?: Record<string, unknown>;
+}
+async function boot(opts: BootOptions = {}): Promise<Booted> {
   const uncaught: unknown[] = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (e) => {
@@ -257,7 +266,13 @@ async function boot(opts: { shell?: boolean } = {}): Promise<Booted> {
     window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
   };
   await settle(200);
-  const village = new Village(SEED ?? (run<Scene>("JSON.parse(JSON.stringify(buildExportJSON()))") as Scene), 6);
+  const seed = JSON.parse(JSON.stringify(SEED ?? run<Scene>("buildExportJSON()"))) as Scene;
+  if (opts.sceneSkin) {
+    const meta = seed.map_scene as { art_manifest?: { skin?: Record<string, unknown> } };
+    meta.art_manifest = { ...(meta.art_manifest ?? {}), skin: { ...(meta.art_manifest?.skin ?? {}), ...opts.sceneSkin } };
+  }
+  const village = new Village(seed, 6);
+  village.skin = opts.skin ?? null;
   if (opts.shell !== false) {
     // The map talks to its parent through shellPost and asks inShell first.
     // Here the parent is the village above, answering on the next tick the
@@ -989,3 +1004,34 @@ describe("Undo this when the edits since publishing cancel out (round 3, finding
   });
 });
 
+/* Finding 8. A visitor's load draws the scene and then puts the village's
+   own look over it. View as visitor and Discard draft drew the scene and
+   stopped, so the preview wore the scene's mist and gold tablets, which no
+   visitor gets. */
+describe("the look of the live map, previewed (round 3, finding 8)", () => {
+  const VILLAGE = { mist: false, label_style: "ribbon", global_scale: 1, label_scale: 1 };
+  const SCENE_SKIN = { mist: true, label_style: "tablet", global_scale: 0.99, label_scale: 0.97 };
+  const look = (m: Booted) => m.run<[boolean, string, number]>("[!!SKIN.mist,SKIN.label_style,SKIN.lbl]");
+
+  it("is the village's own, in View as visitor and after Discard draft, and the draft keeps its own on the way back", async () => {
+    const m = await boot({ skin: VILLAGE, sceneSkin: SCENE_SKIN });
+    build(m);
+    const arrived = look(m);
+    m.run("SKIN.mist=true");
+    const mine = look(m);
+    m.run("toggleVisitor()");
+    const visiting = look(m);
+    m.run("toggleVisitor()");
+    const back = look(m);
+    drag(m, "gate", 30, 20);
+    m.el("#dropBtn").click();
+    m.el("#pubConfirm").click();
+    await settle(50);
+    const discarded = look(m);
+    m.close();
+    expect(arrived, "a visitor's load: the village's look").toEqual([false, "ribbon", 100]);
+    expect(visiting).toEqual(arrived);
+    expect(back, "the draft's own choice on this screen comes back").toEqual(mine);
+    expect(discarded).toEqual(arrived);
+  });
+});
