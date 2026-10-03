@@ -40,11 +40,11 @@ import path from "path";
 import crypto from "crypto";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy, workerFromSource } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -158,9 +158,9 @@ function boot(hash: string, { standalone = false } = {}): Booted {
     window,
     uncaught,
     sent,
-    run: <T>(src: string) => window.eval(src) as T,
+    run: <T>(src: string) => evalIn<T>(window, src),
     post(data) {
-      const own = window.eval("JSON").parse(JSON.stringify(data));
+      const own = ownCopy(window, data);
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
     landReady: () => sent.filter((m) => m.type === "land-ready").length,
@@ -372,7 +372,7 @@ describe("the painterly bake (F67)", () => {
       },
     });
     try {
-      const worker = new Function("postMessage", source) as (post: (m: { f: ArrayBuffer; t: ArrayBuffer }) => void) => void;
+      const worker = workerFromSource<{ f: ArrayBuffer; t: ArrayBuffer }>(source);
       worker((m) => replies.push(m));
     } finally {
       delete (globalThis as { onmessage?: unknown }).onmessage;
@@ -503,9 +503,9 @@ describe("the cover waits for the village's own ground (N19)", () => {
       uncaught,
       sent,
       pictures,
-      run: <T>(src: string) => window.eval(src) as T,
+      run: <T>(src: string) => evalIn<T>(window, src),
       post(data) {
-        const own = window.eval("JSON").parse(JSON.stringify(data));
+        const own = ownCopy(window, data);
         window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
       },
       landReady: () => sent.filter((m) => m.type === "land-ready").length,

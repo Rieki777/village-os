@@ -31,12 +31,12 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 import { blankScene, DRAFT_SCENE_VERSION, SCENE_WORLD } from "./mapFromMasterplan";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -153,10 +153,10 @@ function boot(): Booted {
     },
   });
   const post = (data: Record<string, unknown>) => {
-    const own = window.eval("JSON").parse(JSON.stringify(data));
+    const own = ownCopy(window, data);
     window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
   };
-  return { window, uncaught, asked, run: <T>(src: string) => window.eval(src) as T, post, close: () => window.close() };
+  return { window, uncaught, asked, run: <T>(src: string) => evalIn<T>(window, src), post, close: () => window.close() };
 }
 
 /** What is on the land, counted from the map's own state. */

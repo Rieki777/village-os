@@ -31,11 +31,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -243,7 +243,7 @@ function boot(
     get said() {
       return said;
     },
-    run: <T,>(src: string) => window.eval(src) as T,
+    run: <T,>(src: string) => evalIn<T>(window, src),
     close: () => window.close(),
   };
 }
@@ -257,7 +257,7 @@ const live = (bs: HTMLButtonElement[]) => bs.filter((x) => !x.disabled);
 /** A tap on a button in her log, as a browser takes it: nothing when disabled. */
 function press(b: Booted, button: HTMLButtonElement | undefined): boolean {
   if (!button || button.disabled) return false;
-  b.window.eval(button.getAttribute("onclick") ?? "");
+  evalIn(b.window, button.getAttribute("onclick") ?? "");
   return true;
 }
 const walking = (b: Booted) => b.run<{ id: string; i: number; paused: boolean } | null>("JWALK");

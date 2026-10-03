@@ -20,6 +20,7 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
@@ -28,7 +29,6 @@ const SCENE_KEY = /localStorage\.getItem\('([\w-]+-grounds-scene)'\)/.exec(html)
 /** And the one for this person's own view (the mask). */
 const MASK_KEY = /const MASK_KEY='([\w-]+)'/.exec(html)?.[1] ?? "";
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -152,9 +152,9 @@ function boot(
     window,
     doc: window.document,
     uncaught,
-    run: <T>(src: string) => window.eval(src) as T,
+    run: <T>(src: string) => evalIn<T>(window, src),
     post(data) {
-      const own = window.eval("JSON").parse(JSON.stringify(data));
+      const own = ownCopy(window, data);
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
     close: () => window.close(),

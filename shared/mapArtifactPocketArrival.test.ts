@@ -37,11 +37,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -166,7 +166,7 @@ function boot(hash = "#hud=pocket&skipIntro"): Booted {
       stubTheMissingPlatform(w);
     },
   });
-  const run = <T>(src: string) => window.eval(src) as T;
+  const run = <T>(src: string) => evalIn<T>(window, src);
   return { window, uncaught, camAtLoad: run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"), run, close: () => window.close() };
 }
 
@@ -576,7 +576,7 @@ describe("a phone re-aims its arrival on the village's own scene, under the cove
     let win: ArtifactWindow | null = null;
     const parent = {
       postMessage: (m: { type?: string }) => {
-        if (m && m.type === "land-ready" && win) atReady = win.eval("({x:cam.x,y:cam.y,z:cam.z})") as Cam;
+        if (m && m.type === "land-ready" && win) atReady = evalIn<Cam>(win, "({x:cam.x,y:cam.y,z:cam.z})");
       },
     };
     const virtualConsole = new VirtualConsole();
@@ -596,13 +596,13 @@ describe("a phone re-aims its arrival on the village's own scene, under the cove
       },
     });
     win = window;
-    const run = <T>(src: string) => window.eval(src) as T;
+    const run = <T>(src: string) => evalIn<T>(window, src);
     return {
       window,
       uncaught,
       run,
       post(data) {
-        const own = window.eval("JSON").parse(JSON.stringify(data));
+        const own = ownCopy(window, data);
         window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
       },
       camAtLoad: run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"),

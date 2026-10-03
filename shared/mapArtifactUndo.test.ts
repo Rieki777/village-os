@@ -36,12 +36,12 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 import { restoreRefusal } from "../server/lib/mapScene";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -258,11 +258,11 @@ async function boot(opts: BootOptions = {}): Promise<Booted> {
       stubTheMissingPlatform(w);
     },
   });
-  const run = <T>(src: string) => window.eval(src) as T;
+  const run = <T>(src: string) => evalIn<T>(window, src);
   const post = (data: Record<string, unknown>) => {
     // Through the window's own JSON, so the artifact holds objects of its
     // own realm, the way a structured clone arrives.
-    const own = (window.eval("JSON") as JSON).parse(JSON.stringify(data));
+    const own = ownCopy(window, data);
     window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
   };
   await settle(200);

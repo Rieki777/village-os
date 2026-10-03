@@ -60,6 +60,7 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
@@ -67,7 +68,6 @@ const html = fs.readFileSync(ARTIFACT, "utf8");
 /* jsdom ships no type declarations and this repo carries no @types/jsdom, so
    this file declares the slice of its API it uses. One test does not earn a
    new dependency. */
-type ArtifactWindow = Window & typeof globalThis;
 interface JsdomReport extends Error {
   type?: string;
   cause?: unknown;
@@ -451,7 +451,7 @@ describe("the living map artifact's document stays at 0,0", () => {
    this failing. */
 describe("build mode, as the blueprint footprint and flow readers see it", () => {
   let b: Booted;
-  const read = <T,>(js: string): T => (b.window as unknown as { eval(s: string): T }).eval(js);
+  const read = <T,>(js: string): T => evalIn<T>(b.window, js);
   beforeAll(async () => {
     b = boot("#skipIntro", DESK);
     await settle(SETTLE_MS);
@@ -490,7 +490,7 @@ describe("build mode, as the blueprint footprint and flow readers see it", () =>
  * about the walk and fail that one.
  */
 describe("the Welcome Walk, until the village writes one (Rye, 2026-10-01 and 2026-10-02)", () => {
-  const read = <T,>(b: Booted, js: string): T => (b.window as unknown as { eval(s: string): T }).eval(js);
+  const read = <T,>(b: Booted, js: string): T => evalIn<T>(b.window, js);
 
   describe("on a desk", () => {
     let b: Booted;
