@@ -179,7 +179,13 @@ export default function VillageSettingsDoor({ open, onClose, onOpenFullPage }: {
         aria-label="Village settings"
         className="h-full w-full sm:w-[400px] overflow-y-auto bg-card border-l border-border shadow-2xl"
       >
-        <header className="sticky top-0 flex items-center justify-between gap-3 px-5 py-4 bg-card border-b border-border">
+        {/*
+         * z-10 because a sticky box with no z-index paints at z auto, and any
+         * later box with an opacity below 1 makes its own layer and paints over
+         * it. The chips editor's disabled Up and Down buttons (opacity 40%)
+         * showed through this header as the panel scrolled under it.
+         */}
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-4 bg-card border-b border-border">
           <div>
             <h2 className="font-display text-lg font-bold text-foreground">Village settings</h2>
             <p className="text-xs text-muted-foreground">The village's own colours and words, changed while you watch the land.</p>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
 import { writeStored } from "@/lib/safeStorage";
@@ -67,6 +68,8 @@ interface EditorView {
 
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-deep";
+const iconBtnCls =
+  "shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep disabled:opacity-40";
 const btnCls =
   "min-h-[44px] px-3 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep disabled:opacity-40";
 
@@ -199,17 +202,24 @@ export default function MapChipsPanel() {
               <div className="flex items-center gap-2 mb-2">
                 <ChipIconGlyph icon={chip.icon} />
                 <span className="font-medium text-sm text-gray-900 flex-1 min-w-0 truncate">{name}</span>
-                <button type="button" className={btnCls} disabled={i === 0} onClick={() => move(i, -1)}
-                  aria-label={`Move ${name} earlier`}>Up</button>
-                <button type="button" className={btnCls} disabled={i === chips.length - 1} onClick={() => move(i, 1)}
-                  aria-label={`Move ${name} later`}>Down</button>
-                <button type="button" className={`${btnCls} text-red-600 border-red-200`}
+                {/* Icons with names, so a 400px drawer keeps room for the chip's own name. */}
+                <button type="button" className={iconBtnCls} disabled={i === 0} onClick={() => move(i, -1)}
+                  aria-label={`Move ${name} earlier`} title="Earlier on the bar">
+                  <ArrowUp className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button type="button" className={iconBtnCls} disabled={i === chips.length - 1} onClick={() => move(i, 1)}
+                  aria-label={`Move ${name} later`} title="Later on the bar">
+                  <ArrowDown className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button type="button" className={`${iconBtnCls} text-red-600 border-red-200`}
                   onClick={() => change(chips.filter((_, j) => j !== i))}
-                  aria-label={`Take ${name} off the map`}>Remove</button>
+                  aria-label={`Take ${name} off the map`} title="Take it off the bar">
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-2">
-                <label className="text-xs text-gray-500" htmlFor={fieldId("source")}>
+                <label className="text-xs text-gray-500 sm:col-span-2" htmlFor={fieldId("source")}>
                   What it reads
                   <select id={fieldId("source")} className={`${inputCls} mt-1`} value={chip.source}
                     onChange={(e) => edit(i, chipWithSource(chip, e.target.value as ChipSource, today()))}>
@@ -256,7 +266,7 @@ export default function MapChipsPanel() {
                   </label>
                 )}
 
-                <label className="text-xs text-gray-500" htmlFor={fieldId("link")}>
+                <label className="text-xs text-gray-500 sm:col-span-2" htmlFor={fieldId("link")}>
                   Page it opens
                   <input id={fieldId("link")} className={`${inputCls} mt-1`} value={chip.link} maxLength={64}
                     list="map-chip-links" placeholder="/quests"
