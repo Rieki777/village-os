@@ -49,6 +49,8 @@ vi.mock("../lib/secrets", () => ({
     unreadable: state.secret.unreadable,
   }),
   villageSecretsConfigured: () => state.keyPresent,
+  villageSecretsKeyProblem: () =>
+    state.keyPresent ? null : "VILLAGE_SECRETS_KEY is set, but it is 66 characters with quotes around it.",
   secretValue: () => state.value,
 }));
 
@@ -199,6 +201,8 @@ describe("the ways a sync comes back with nothing", () => {
     const r = await post("/api/saberra/sync");
     expect(r.status).toBe(409);
     expect(r.body.state).toBe("cannot-store");
+    // The reason, named. A key set in the wrong shape is not a key nobody set.
+    expect(String(r.body.error)).toContain("quotes around it");
   });
 
   it("says there is no address, instead of calling an empty one", async () => {

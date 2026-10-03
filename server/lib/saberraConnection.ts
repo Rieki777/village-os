@@ -61,9 +61,16 @@ export interface ConnectionReading {
  *
  * `canStoreSecrets` is whether this deployment holds a village secrets key at
  * all. It is instance-wide and this module cannot see it, so it arrives as an
- * argument.
+ * argument. `keyProblem` is the sentence naming WHY it does not
+ * (`villageSecretsKeyProblem` in secrets.ts): a key set in the wrong shape is
+ * not a key nobody set, and saying "has no key" to an operator who set one
+ * sends them back to a step they already did.
  */
-export function readConnection(status: SecretStatus, canStoreSecrets: boolean): ConnectionReading {
+export function readConnection(
+  status: SecretStatus,
+  canStoreSecrets: boolean,
+  keyProblem: string | null = null,
+): ConnectionReading {
   const finding = status.atRest === "plaintext" ? ("plaintext-at-rest" as const) : null;
 
   // FIRST, always. A stored but unopenable key answers `configured: false`, so
@@ -96,9 +103,11 @@ export function readConnection(status: SecretStatus, canStoreSecrets: boolean): 
   if (!canStoreSecrets) {
     return {
       state: "cannot-store",
-      sentence:
-        "This deployment has no village secrets key, so no integration key can be stored " +
-        "on it at all. Ask your operator to set one before connecting this service.",
+      sentence: keyProblem
+        ? `${keyProblem} Until it is fixed no integration key can be stored on this deployment. ` +
+          "Ask your operator to fix it before connecting this service."
+        : "This deployment has no village secrets key, so no integration key can be stored " +
+          "on it at all. Ask your operator to set one before connecting this service.",
       mayCall: false,
       finding,
     };

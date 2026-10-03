@@ -616,31 +616,12 @@ import {
   SECRET_KEYS,
   secretConfigured,
   secretValue,
-  VILLAGE_SECRETS_ENV,
   villageSecretsConfigured,
+  villageSecretsKeyProblem,
+  villageSecretsKeyStatus,
+  villageSecretsRefusal,
   type SecretKey,
 } from "./lib/secrets";
-/**
- * The second line of the two refusals that stop a founder saving a key.
- *
- * `putSecret` fails closed and THROWS when this deployment has no sealing
- * key, which is right. What it cannot do is answer a browser. Express 4 does
- * not route an async handler rejection anywhere useful, and the registration
- * wrapper this file installs turns it into `500 {"error":"Internal server
- * error"}`, so a founder pasting a Stripe key got an opaque server error and
- * nothing to act on. Measured against the built server before this existed,
- * in server/secretsWiring.e2e.test.ts.
- *
- * `error` carries the store's own sentence verbatim, the same shape the
- * member-key route answers with, so two refusals from one platform read like
- * one platform. `message` carries what the sentence cannot: on a self-hosted
- * instance the founder IS the operator it tells them to ask, so it names the
- * variable and the recipe. Admin.tsx's `refusal()` prefers `message`.
- */
-const SET_VILLAGE_SECRETS_KEY =
-  `Set ${VILLAGE_SECRETS_ENV} in this deployment's environment, then restart and save the key again. ` +
-  `It is 32 random bytes as 64 hex characters: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))". ` +
-  "Nothing was stored, and nothing already stored has changed.";
 import {
   confirmManual,
   launchStatus,
@@ -1657,8 +1638,8 @@ async function initStores(): Promise<void> {
       // database dump carries.
       console.warn(
         `[secrets] ${stranded.length} legacy key(s) are still stored in the clear in the ` +
-          `email-config document and were NOT moved into the sealed store: ${VILLAGE_SECRETS_ENV} ` +
-          `is not set. Every database dump carries them. Keys: ${stranded.join(", ")}. ` +
+          `email-config document and were NOT moved into the sealed store. ${villageSecretsKeyProblem()} ` +
+          `Every database dump carries them. Keys: ${stranded.join(", ")}. ` +
           "They keep working; set the variable and restart to move them.",
       );
     }
@@ -12210,7 +12191,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       colour: req.body?.colour ?? null,
       createdBy: actor?.id ?? "admin",
     });
-    if (!outcome.ok) return res.status(400).json({ error: outcome.error });
+    if (!outcome.ok) return res.status(400).json({ error: outcome.error, message: outcome.message });
     await recordEvent(getPool(), {
       kind: "calendar_subscribed",
       text: `attached the calendar "${outcome.calendar.name}" (${outcome.calendar.urlHost})`,
@@ -17777,7 +17758,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       (k) => typeof req.body?.[k] === "string" && req.body[k].trim(),
     );
     if (carriesKey && !villageSecretsConfigured()) {
-      return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: SET_VILLAGE_SECRETS_KEY });
+      return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     const current = getEmailConfig();
     // Refuse a malformed sender at the door rather than storing something
@@ -17938,6 +17919,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const origin = notifyDeps.origin();
     res.json({
       secrets: allSecretStatuses(),
+      // Whether a key can be saved here at all, and if not, why, so the
+      // banner says it before a founder types one (server/lib/secrets.ts).
+      villageSecretsKey: villageSecretsKeyStatus(),
       cards: integrationCards(),
       // What each credential has actually DONE. `setAt` on a secret status is
       // when somebody typed it, so nothing here or anywhere else may read it
@@ -17973,7 +17957,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // variable refuses here rather than passing this check and throwing
     // inside putSecret one line later.
     if (value.trim() && !villageSecretsConfigured()) {
-      return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: SET_VILLAGE_SECRETS_KEY });
+      return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     // value: "" clears the admin-typed key (env fallback, if any, resumes).
     await putSecret(getPool(), key, value, actor);

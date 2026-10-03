@@ -50,7 +50,7 @@ import { readConnection } from "../lib/saberraConnection";
 import { splitStreams } from "../lib/saberraStreams";
 import { proposeStructure } from "../lib/saberraProposals";
 import { callTool, openSession } from "../lib/saberraClient";
-import { secretStatus, secretValue, villageSecretsConfigured } from "../lib/secrets";
+import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "../lib/secrets";
 import { factsForEntity, moduleFactCount, upsertFacts } from "../repos/moduleFacts";
 import type { VendorRecord } from "../lib/saberraProposals";
 import type { SaberraRecordKind } from "../lib/saberraRecords";
@@ -109,7 +109,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/saberra/status", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
     try {
-      const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured());
+      const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
       const held = await moduleFactCount(getPool(), MODULE_ID);
       res.json({ connection, held, addressSet: serviceUrl() !== null });
     } catch {
@@ -127,7 +127,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/saberra/sync", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
 
-    const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured());
+    const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
     if (!connection.mayCall) {
       res.status(409).json({ error: connection.sentence, state: connection.state });
       return;
