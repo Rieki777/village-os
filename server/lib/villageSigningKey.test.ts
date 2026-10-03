@@ -13,7 +13,7 @@
  * everything except the thing that mattered is the failure worth naming here.
  */
 import { generateKeyPairSync } from "crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   canSign,
   ensureSigningKey,
@@ -87,6 +87,25 @@ describe("a fresh village", () => {
     // And it is a usable village: it can sign, which is the point of booting.
     const signed = signDocument({ hello: "village" }, k, "2026-08-31T00:00:00.000Z");
     expect(verifyDocument(signed, k.publicKeyPem)).toBe(true);
+  });
+
+  it("names a key set in the wrong shape, and never calls it unset", async () => {
+    // 2026-10-02: the variable was set, with quotes around it, and this line
+    // said "not set". The boot log is where an operator looks first.
+    const { pool, store } = fakePool();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: `"${KEY_A}"` });
+      const said = warn.mock.calls.map((c) => c.map(String).join(" ")).join(" ");
+      expect(said).toContain("[identity] the signing key is stored in PLAINTEXT.");
+      expect(said).toContain("VILLAGE_SECRETS_KEY is set, but it is 66 characters with quotes around it.");
+      expect(said).not.toContain("is not set");
+      expect(said).not.toContain(KEY_A.slice(0, 8));
+      // The shape the gate refuses seals nothing, exactly as an absent key.
+      expect(doc()(store).privateKeyPem).toContain("PRIVATE KEY");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
