@@ -240,6 +240,22 @@ describe("ModuleSettingsSection", () => {
     renderSection({ moduleId: "network", moduleName: "Village Network", lifecycle: "public" });
     expect(await screen.findByText("Village Network has no settings of its own.")).toBeInTheDocument();
   });
+
+  /**
+   * Organisational Memory's readiness link is `?setting=config` on this card.
+   * It landed on "has no settings of its own" until its panel was registered,
+   * so the one thing the link asked a founder to do had nowhere to be done.
+   * The test above is the control: the same sentence does render for a module
+   * that truly has none.
+   */
+  it("LANDS ORGANISATIONAL MEMORY'S SETUP LINK ON ITS ADDRESS FIELD", async () => {
+    const onFocused = vi.fn();
+    renderSection({ moduleId: "saberra", moduleName: "Organisational Memory", lifecycle: "off", focusKey: "config", onFocused });
+    const field = await screen.findByLabelText(/Service address/);
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(onFocused).toHaveBeenCalled();
+    expect(screen.queryByText("Organisational Memory has no settings of its own.")).toBeNull();
+  });
 });
 
 
