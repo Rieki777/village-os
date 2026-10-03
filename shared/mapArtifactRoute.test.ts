@@ -15,10 +15,12 @@
  *      an entry there is popped by the browser's Back before the page's, so a
  *      press would rewind an invisible hash and do nothing visible;
  *   3. an empty `goto` closes what an address opened: the place, the door,
- *      the Loom. That is what Back to the closed map sends;
+ *      the Loom. That is what Forward onto an entry of the closed map sends;
  *   4. the address agrees with the screen after the closers that used to
  *      disagree: Escape left `#/place/x` behind, and closing the Loom or a door
- *      over an open place cleared the address while the place stayed open.
+ *      over an open place cleared the address while the place stayed open;
+ *   5. the lens is part of the address (Rye, D7): the Vision, Org and Flows
+ *      a visitor turned on ride on the end of it, and come back on a reload.
  *
  * The platform stubs mirror mapArtifactBoot.test.ts, which says why each one
  * exists. The parent is the only addition: `window.parent` is replaced before
@@ -122,7 +124,7 @@ interface Framed {
   routes(): string[];
 }
 
-function framed(): Framed {
+function framed(start = "#skipIntro"): Framed {
   const uncaught: unknown[] = [];
   const sent: { type?: string; hash?: string }[] = [];
   const virtualConsole = new VirtualConsole();
@@ -133,7 +135,7 @@ function framed(): Framed {
   const { window } = new JSDOM(html, {
     runScripts: "dangerously",
     pretendToBeVisual: true,
-    url: "http://localhost/grounds/index.html#skipIntro",
+    url: `http://localhost/grounds/index.html${start}`,
     virtualConsole,
     beforeParse(w) {
       w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
@@ -225,5 +227,95 @@ describe("the artifact's address, inside the shell", () => {
 
   it("threw nothing along the way", () => {
     expect(f.uncaught).toEqual([]);
+  });
+});
+
+/*
+ * D7 (Rye, 2026-10-02): a lens is part of the address. Before, a reload came
+ * back on Now whatever the visitor had on: measured on this branch, Vision
+ * then F5 gave `/map` and mode `now`.
+ */
+describe("the lens is part of the address", () => {
+  let f: Framed;
+  beforeAll(async () => {
+    f = framed();
+    f.post({ type: "config" });
+    await settle(1000);
+  });
+  afterAll(() => f?.window.close());
+
+  const lens = () => f.run<{ mode: string; org: boolean; flows: boolean }>("({mode,org:orgOn,flows:flowsOn})");
+  const click = (id: "lyNow" | "lyVision" | "lyOrg" | "lyFlows") =>
+    (f.window.document.getElementById(id) as HTMLButtonElement).click();
+
+  it("a lens a visitor turns on is written into the address and sent to the shell", () => {
+    f.sent.length = 0;
+    click("lyVision");
+    expect(f.window.location.hash).toBe("#lens=vision");
+    expect(f.routes().at(-1)).toBe("#lens=vision");
+    click("lyOrg");
+    expect(f.window.location.hash).toBe("#lens=vision,org");
+  });
+
+  it("rides on the end of whatever is open, and keeps riding when it closes", () => {
+    f.run("openPanel('greenhouse')");
+    expect(f.window.location.hash).toBe("#/place/greenhouse&lens=vision,org");
+    f.run("openLoom()");
+    expect(f.window.location.hash).toBe("#/loom&lens=vision,org");
+    f.run("closeLoom()");
+    expect(f.window.location.hash).toBe("#/place/greenhouse&lens=vision,org");
+    f.run("document.getElementById('panelClose').click()");
+    expect(f.window.location.hash).toBe("#lens=vision,org");
+  });
+
+  it("Now and the toggles take it back off", () => {
+    click("lyNow");
+    click("lyOrg");
+    expect(lens()).toEqual({ mode: "now", org: false, flows: false });
+    expect(f.window.location.hash).toBe("");
+  });
+
+  it("an address puts its lens on, and an address without one takes it off", () => {
+    f.post({ type: "goto", hash: "#/loom&lens=flows" });
+    expect(f.run<boolean>("document.body.classList.contains('loom')")).toBe(true);
+    expect(lens()).toEqual({ mode: "now", org: false, flows: true });
+    expect(f.window.document.getElementById("lyFlows")?.classList.contains("on"), "the button agrees").toBe(true);
+    f.post({ type: "goto", hash: "#/place/kitchen" });
+    expect(lens()).toEqual({ mode: "now", org: false, flows: false });
+    expect(f.window.location.hash).toBe("#/place/kitchen");
+    f.run("document.getElementById('panelClose').click()");
+  });
+
+  it("threw nothing along the way", () => {
+    expect(f.uncaught).toEqual([]);
+  });
+});
+
+describe("a reload comes back seeing what the visitor saw", () => {
+  it("a place seen through Vision opens as it was", async () => {
+    const f = framed("#/place/greenhouse&lens=vision&skipIntro");
+    f.post({ type: "config" });
+    await settle(1200);
+    expect(f.run<string | null>("panelKey")).toBe("greenhouse");
+    expect(f.run<string>("mode")).toBe("vision");
+    expect(f.window.document.getElementById("lyVision")?.classList.contains("on")).toBe(true);
+    expect(f.window.location.hash).toBe("#/place/greenhouse&lens=vision");
+    expect(f.uncaught).toEqual([]);
+    f.window.close();
+  });
+
+  it("a lens with nothing open comes back on the land, with nothing open", async () => {
+    const f = framed("#lens=org,flows&skipIntro");
+    f.post({ type: "config" });
+    await settle(1200);
+    expect(f.run<{ org: boolean; flows: boolean; mode: string }>("({mode,org:orgOn,flows:flowsOn})")).toEqual({
+      mode: "now",
+      org: true,
+      flows: true,
+    });
+    expect(f.run<string | null>("panelKey")).toBeNull();
+    expect(f.window.location.hash).toBe("#lens=org,flows");
+    expect(f.uncaught).toEqual([]);
+    f.window.close();
   });
 });

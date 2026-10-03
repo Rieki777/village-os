@@ -5121,13 +5121,14 @@ mm.addEventListener('click',e=>{const r=mm.getBoundingClientRect();
 $('lyNow').onclick=()=>setMode('now');$('lyVision').onclick=()=>setMode('vision');
 $('lyOrg').onclick=()=>{orgOn=!orgOn;$('lyOrg').classList.toggle('on',orgOn);
   document.body.classList.toggle('org-lens',orgOn); // the key rides the same switch
+  lensMoved();
   toast(orgOn?'Org lens: a halo where each circle lives, and one satellite for every role.':'Org lens off')};
 let flowsSeen=false;
-$('lyFlows').onclick=()=>{flowsOn=!flowsOn;$('lyFlows').classList.toggle('on',flowsOn);
+$('lyFlows').onclick=()=>{flowsOn=!flowsOn;$('lyFlows').classList.toggle('on',flowsOn);lensMoved();
   toast(flowsOn?'Flows lens on. Every kind of moving thing wears its own mark: a droplet for water, a bowl for a cooked meal, a leaf for compost.':'Flows lens off');
   if(flowsOn&&!flowsSeen){flowsSeen=true;
     maiaSay(`The <b>Flows lens</b>: the village as one body. Spring to tank to beds; garden to kitchen; kitchen back to soil as compost. The dashed falls are <b>imports</b>, and every one is a quest waiting to be written. Close the loop and the map will show it.`)}};
-function setMode(m){mode=m;$('lyNow').classList.toggle('on',m==='now');$('lyVision').classList.toggle('on',m==='vision');
+function setMode(m){mode=m;$('lyNow').classList.toggle('on',m==='now');$('lyVision').classList.toggle('on',m==='vision');lensMoved();
   if(m==='vision'){maiaSay(`This is the <b>Vision</b>, the whole masterplan at full build-out. The blue ghosts are the gap between today and the dream, and every one of them is fundable and questable. The southern dream-lands? Just the future, waiting for ground to break.`)}
   mmDirty=true}
 /* Once a person has set the hour, the glyph is the state, so the name
@@ -5765,7 +5766,7 @@ addEventListener('keydown',e=>{
     /* The X and "Back to the land" clear the address and this key did not,
        so a reload reopened what Escape had closed. Only a place or a door
        address: Escape closing something else must not clear #/loom. */
-    if(/^#\/(place|module)\//.test(location.hash))setHash(viewHash())}
+    if(/^#\/(place|module)\//.test(routeNow()))setHash(viewHash())}
   if(back&&back.isConnected)back.focus({preventScroll:true});
   clampCam()});
 
@@ -8062,7 +8063,7 @@ $('loomEngineBtn').onclick=()=>$('loomEngine').classList.toggle('show');
 function openLoom(){document.body.classList.add('loom');setHash('#/loom');renderLoom();
   if(!window._loomSaid){window._loomSaid=1;
     toast('The Loom. Gold is your word, amber is a guess, gray waits at the Board. Drag any ◉ grip.')}}
-function closeLoom(){document.body.classList.remove('loom');if(location.hash==='#/loom')setHash(viewHash());
+function closeLoom(){document.body.classList.remove('loom');if(routeNow()==='#/loom')setHash(viewHash());
   if(LOOM_STAGED.size)toast(LOOM_STAGED.size+' staged rewire'+(LOOM_STAGED.size===1?'':'s')+' kept. Reopen the Loom to Save or Discard.')}
 window.openLoom=openLoom;window.closeLoom=closeLoom;window.renderLoom=renderLoom;
 $('loomBtn').onclick=()=>document.body.classList.contains('loom')?closeLoom():openLoom();
@@ -8440,7 +8441,7 @@ function openDoor(a,ctx){
 window.openDoor=openDoor;
 /* A home request names its place's address (homeSheet), so a door can be
    holding either kind. What stays is the place underneath, when one is open. */
-function closeDoor(){$('module').classList.remove('show');if(/^#\/(module|place)\//.test(location.hash))setHash(viewHash())}
+function closeDoor(){$('module').classList.remove('show');if(/^#\/(module|place)\//.test(routeNow()))setHash(viewHash())}
 window.closeDoor=closeDoor;
 $('module').addEventListener('click',e=>{if(e.target===$('module'))closeDoor()});
 document.querySelectorAll('#dock button').forEach(b=>b.onclick=()=>openDoor(b.dataset.m,{}));
@@ -8602,7 +8603,7 @@ function jStepId(j,x){
 
 function playJourney(id,opts){const j=jById(id);if(!j)return;
   /* The walk is off (WELCOME_WALK_ON): an old #/journey/ link to it lands on the map instead. */
-  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(location.hash))setHash('');return}
+  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(routeNow()))setHash('');return}
   const o=opts||{};
   leaveIntro();closeLoom();$('panel').classList.remove('open');panelKey=null;
   $('module').classList.remove('show');closeInspect&&closeInspect();
@@ -9056,20 +9057,45 @@ $('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=n
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
 /* ---------- hash router: every place, module, the Loom, the Circles and a journey has an address ----------
-   Lenses (Vision, Org, Flows) have none: a reload comes back on Now. */
+   AND SO DOES THE LENS (Rye, D7, 2026-10-02). Vision, Org and Flows ride on
+   the end of whatever is open, `#/place/greenhouse&lens=vision`, or alone,
+   `#lens=vision,flows`, so a reload or a shared link comes back seeing what
+   the visitor saw. Now is the plain land and writes nothing. */
 let HASHMUTE=false;
+/* The lens part of an address, and the rest of it. `routeOf` also drops the
+   shell's skipIntro token and a hud= layout hint, which name nothing open. */
+function hashParts(h){const s=String(h||'');return s.charAt(0)==='#'?s.slice(1).split('&'):[]}
+function lensOf(h){const p=hashParts(h).find(x=>/^lens=/i.test(x));return p?p.slice(5).toLowerCase():''}
+function routeOf(h){const r=hashParts(h).filter(x=>!/^(?:lens|hud)=|^skipIntro$/i.test(x)).join('&')
+    .replace(/[?&]skipIntro\b/ig,'').replace(/[?&]$/,'');
+  return r.length<1||r==='/'?'':'#'+r}
+function routeNow(){return routeOf(location.hash)}
+function lensNow(){const l=[];if(mode==='vision')l.push('vision');if(orgOn)l.push('org');if(flowsOn)l.push('flows');return l.join(',')}
+function withLens(r){const l=lensNow();if(!l)return r||'';return r?r+'&lens='+l:'#lens='+l}
+/* An address puts its lens on quietly: the lens buttons' own toasts and
+   Maia's Vision speech are for a person pressing them, and a reload that
+   talks is the map talking to nobody. Absent means Now, with Org and Flows
+   off, because the address names the whole view. */
+function applyLens(l){const w=String(l||'').split(','),v=w.includes('vision')?'vision':'now',o=w.includes('org'),fl=w.includes('flows');
+  if(mode!==v){mode=v;$('lyNow').classList.toggle('on',v==='now');$('lyVision').classList.toggle('on',v==='vision');mmDirty=true}
+  if(orgOn!==o){orgOn=o;$('lyOrg').classList.toggle('on',o);document.body.classList.toggle('org-lens',o)}
+  if(flowsOn!==fl){flowsOn=fl;$('lyFlows').classList.toggle('on',fl)}}
+/* A lens a person changed: the address keeps what is open and takes the new lens. */
+function lensMoved(){setHash(routeNow())}
+window.lensMoved=lensMoved;
 /* THE ADDRESS GOES TO THE SHELL TOO. Inside the shell this iframe's own URL
    is one nobody sees, so on its own it could not be copied, shared or
    reloaded, and Back had nothing to step through. The shell mirrors the
    route into the visible address bar and decides what Back does with it.
    `user` says whether a person's own click or key is behind this change
-   (transient activation), because only that earns a history entry: an entry
-   pushed with no activation is one Chrome later skips. Standalone,
-   shellPost does nothing. */
-function setHash(h){HASHMUTE=true;
-  try{history.replaceState(null,'',h||location.pathname+location.search)}catch(_){try{location.hash=h||''}catch(__){}}
+   (transient activation). The shell no longer spends it: the map is one page
+   and every address replaces the last (D6), but the flag costs nothing to
+   keep saying. `h` is what is open; the lens is added here, so no caller can
+   forget it. Standalone, shellPost does nothing. */
+function setHash(h){HASHMUTE=true;const a=withLens(routeOf(h));
+  try{history.replaceState(null,'',a||location.pathname+location.search)}catch(_){try{location.hash=a}catch(__){}}
   setTimeout(()=>{HASHMUTE=false},0);
-  shellPost({type:'route',hash:h||'',user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
+  shellPost({type:'route',hash:a,user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
 window.setHash=setHash;
 /* What is still on screen once the top layer goes, as an address. Closing
    the Loom over a place, or a door opened from a place, used to clear the
@@ -9081,10 +9107,9 @@ function viewHash(){
   if(panelKey&&$('panel').classList.contains('open'))return'#/place/'+panelKey;
   return''}
 /* THE EMPTY ADDRESS CLOSES WHAT AN ADDRESS OPENED. The shell sends it when
-   Back returns to the map with nothing open, so Back closes the place, the
-   door, the Loom, the Circles or the walk before it leaves the map. The
-   order matters: the place goes first, so each closer after it finds
-   nothing underneath and none of them names an address on the way out. */
+   Forward lands on an entry of the map with nothing open. The order matters:
+   the place goes first, so each closer after it finds nothing underneath and
+   none of them names an address on the way out. */
 function closeAddressed(){
   /* A RUNNING WALK ENDS THROUGH THE ONE CANCEL PATH, as Escape and `stay
      here` end it. jHalt alone stopped the walk and left GUIDE.on true and her
@@ -9097,14 +9122,19 @@ function closeAddressed(){
   $('module').classList.remove('show');
   if(document.body.classList.contains('circles'))setMapType('living',true);
   if(document.body.classList.contains('loom'))closeLoom();
-  if(location.hash.length>1)setHash('')}
+  /* Only when the address still names something, or another lens: a bare
+     `#hud=` layout hint names nothing open and stays where it is. */
+  if(routeNow()||lensOf(location.hash)!==lensNow())setHash('')}
 function leaveIntro(){if(!document.body.classList.contains('intro'))return;
   document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove();
   shellPost({type:'intro-done'})}
 function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
-  /* Shell appends &skipIntro when it already showed its own gate; strip it so
-     #/circles and friends still match exactly. */
-  const h=(location.hash||'').replace(/[&?]skipIntro\b/ig,'').replace(/[?&]$/,'');
+  /* Shell appends &skipIntro when it already showed its own gate, and a lens
+     rides on the end of any address: the lens goes on first, then what is
+     left has to match #/circles and friends exactly. */
+  const raw=location.hash||'';
+  applyLens(lensOf(raw));
+  const h=routeOf(raw);
   if(h.length<2){closeAddressed();return}
   if(h==='#/circles'){leaveIntro();if(!document.body.classList.contains('circles'))setMapType('circles',true);return}
   if(h==='#/loom'){leaveIntro();if(document.body.classList.contains('circles'))setMapType('living',true);if(!document.body.classList.contains('loom'))openLoom();return}
@@ -9188,7 +9218,7 @@ function setMapType(t,quiet){const circ=t==='circles';
   document.body.classList.toggle('circles',circ);
   $('msLiving').classList.toggle('on',!circ);$('msCircles').classList.toggle('on',circ);
   if(circ){$('panel').classList.remove('open');panelKey=null;closeDoor();hideHover();hoverPin=null;
-    buildOrgMap();setHash('#/circles')}else if(location.hash==='#/circles')setHash('');
+    buildOrgMap();setHash('#/circles')}else if(routeNow()==='#/circles')setHash('');
   if(!quiet)toast(circ?'◎ The Circles. The same village as an organism; click any node to walk to its door.':'🏞 The Living Map. The land itself.')}
 window.setMapType=setMapType;
 $('msLiving').onclick=()=>setMapType('living');
@@ -11261,7 +11291,7 @@ if(document.body.classList.contains('pocket')){
     const top=v?v.getBoundingClientRect().bottom:0,r=b?b.getBoundingClientRect():null;
     frameVillage(Math.max(0,top),r&&r.height?Math.max(0,innerHeight-r.top):0)})();
   setTimeout(()=>{leaveIntro();
-    if(!location.hash||location.hash.length<3||/hud=/.test(location.hash)){
+    if(!routeNow()){
       guideAffordance();
       if(!localStorage.getItem('amora-walk-done'))
         /* NO TOAST HERE, AND THAT WAS MEASURED. A welcome toast sits in the
@@ -11349,7 +11379,7 @@ if(SKIP_INTRO){leaveIntro();
   /* The shell's button stands in for this one, so pressing it earns the same
      arrival: the glide in and her welcome. Not on a deep link, which never had
      either, and not in the pocket, whose boot above keeps the camera still. */
-  if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket')){
+  if(!routeNow()&&!document.body.classList.contains('pocket')){
     if(inShell()&&!LAND_HANDED)ARRIVAL_WAITS=true;else arriveOnLand()}}
 
 applyTheme(THEMES.emerald); // boot theme (sets every --t-* var before first paint)
