@@ -10196,7 +10196,13 @@ function applyScene(scene,version){
      published and its next publish went through over the colleague's. So
      the visitor sees the new land, and the draft's mark and base stay put. */
   if(VISITOR_VIEW&&DRAFT_HOLD){if(restoreScene(scene,{quiet:true}))SCENE_APPLIED=true;renderDraftBar();return true}
-  const mine=unpublished().length;
+  /* WORK IN HAND IS WHAT A PUBLISH WOULD CHANGE, the number the bar shows.
+     A journal whose unpublished lines all cancel (a move and its undo)
+     changes nothing on the land. Counting its lines here kept the screen on
+     a version the person had just undone, under a bar that had told them a
+     moment before that they had no work, and handed them the undone change
+     as their own unpublished one. */
+  const mine=netChanges().length,lines=unpublished().length;
   if((SCENE_APPLIED||DRAFT_OPENED)&&mine){
     /* Measured again against the land that just arrived. A draft opened
        before any scene landed was measured against nothing, and an undo
@@ -10204,11 +10210,16 @@ function applyScene(scene,version){
     PUBLISH_MARK=sharedMark(EDITS,scene);
     if(SCENE_APPLIED)toast('The live map changed. Your draft is untouched.');
     renderDraftBar();return false}
-  if(restoreScene(scene,{quiet:true})){SCENE_APPLIED=true;forgetUndo();BASE_VERSION=+version||0;
+  if(restoreScene(scene,{quiet:true})){const had=SCENE_APPLIED||DRAFT_OPENED;
+    SCENE_APPLIED=true;forgetUndo();BASE_VERSION=+version||0;
     /* Published scene's edits are the live baseline; 0 made every historical
        edit look unpublished and blocked later live updates. editSeq is set
        inside restoreScene from map_edits. */
     PUBLISH_MARK=editSeq;
+    /* The village's copy of this draft still holds the lines that cancelled,
+       over the old base, and the next visit offered the undone version back
+       from it. It follows the screen. */
+    if(had&&lines)saveNow();
     renderDraftBar();return true}
   return false;
 }

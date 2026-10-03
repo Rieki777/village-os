@@ -282,6 +282,10 @@ async function boot(opts: { shell?: boolean } = {}): Promise<Booted> {
 }
 
 const lastToast = (m: Booted) => m.el("#toasts")?.lastElementChild?.textContent ?? "";
+/** Waits, in short steps, until the condition holds, for at most five seconds. */
+async function until(ok: () => boolean) {
+  for (let i = 0; i < 250 && !ok(); i++) await settle(20);
+}
 const name = (m: Booted, key: string) => m.run<(key: string) => string>("(k=>BY[k]&&BY[k].name)")(key);
 const liveName = (m: Booted, key: string) => m.village.liveScene().map_structures.find((s) => s.key === key)?.name;
 
@@ -943,6 +947,45 @@ describe("the refused-publish card (round 3, finding 6)", () => {
     expect(asked.list).toEqual(["renamed gate"]);
     expect(refused.title).toBe("The live map moved while you were working");
     expect(refused.list.slice(2)).toEqual(asked.list);
+  });
+});
+
+/* Finding 7. With only a move and its undo since publishing, the bar said
+   there was no work, and Undo this then left the screen on the undone
+   version: the repaint was decided by journal lines, the bar by changes. */
+describe("Undo this when the edits since publishing cancel out (round 3, finding 7)", () => {
+  it("repaints the land that is live again, rebases, and the village's draft follows", async () => {
+    const m = await boot();
+    build(m);
+    const original = name(m, "market");
+    rename(m, "market", "Market in v7");
+    await publish(m);
+    drag(m, "gate", 30, 20);
+    m.el("#undoBtn").click();
+    const before = { net: m.run<number>("netChanges().length"), lines: m.run<number>("unpublished().length") };
+    // The draft with the cancelled pair goes to the village, as the timer would send it.
+    m.run("saveNow()");
+    await settle(50);
+    undoThis(m)?.click();
+    // The repaint is slow in jsdom, and its save is answered after it: wait
+    // for the village to have heard that save, then read.
+    await until(() => m.village.seen.filter((s) => s.type === "draft-save").length >= 2);
+    await settle(50);
+    const draft = m.village.draft;
+    const seen = {
+      screen: name(m, "market"),
+      base: m.run<number>("BASE_VERSION"),
+      bar: card(m).bar,
+      draftMarket: draft ? (JSON.parse(draft.scene) as Scene).map_structures.find((s) => s.key === "market")?.name : undefined,
+      draftBase: draft?.baseVersion,
+    };
+    m.close();
+    expect(before, "nothing to publish, two journal lines").toEqual({ net: 0, lines: 2 });
+    expect(seen.screen).toBe(original);
+    expect(seen.base).toBe(8);
+    expect(seen.bar).toEqual({ state: "Editing a draft. The live map is unchanged.", publishDisabled: true });
+    expect(seen.draftMarket, "the village's copy is not the undone version").toBe(original);
+    expect(seen.draftBase).toBe(8);
   });
 });
 
