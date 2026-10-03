@@ -185,7 +185,7 @@ describe.skipIf(!configured)("the crown bar's chips (routes, real schema)", () =
       chip("circles", "circles"),
     ]);
     expect(out.status).toBe(200);
-    const byId = Object.fromEntries((await live()).map((c) => [c.id, c]));
+    const byId: Record<string, any> = Object.fromEntries((await live()).map((c) => [c.id, c]));
     expect(byId.people).toMatchObject({ state: "live", value: "3" }); // founder, Ada, Bo
     expect(byId.work.value).toBe("2"); // Open and seasonal; Closed and the example are not
     expect(byId.done.value).toBe("1"); // this cycle, real quest, real member
