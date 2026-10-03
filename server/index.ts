@@ -623,6 +623,7 @@ import {
   type SecretKey,
 } from "./lib/secrets";
 import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from "./lib/comms/mailer";
+import { sweepCommsRetention } from "./lib/comms/retention";
 import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
 import { formSubmittedTrigger } from "../shared/comms/contracts";
@@ -1308,7 +1309,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
-const { getEmailConfig, sendResendEmail, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin });
+const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) });
 commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice }));
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
@@ -3941,9 +3942,7 @@ const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verify
 const notifyDeps: NotifyDeps = {
   get pool() { return getPool(); },
   memberById: (id) => members.byId(id),
-  // The spine's contract wants `Promise<void>`; the sender now reports what it
-  // did, and this caller has no use for the report.
-  sendEmail: async (opts) => { await sendResendEmail(opts); },
+  sendEmail: sendNotice,
   isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
@@ -4482,6 +4481,7 @@ async function runRetentionSweep(): Promise<string> {
     "DELETE FROM payments_log WHERE handled_at IS NOT NULL AND at < (NOW() - INTERVAL 400 DAY) LIMIT 5000",
   );
   if (pl.affectedRows) parts.push(`${pl.affectedRows} payment log row(s)`);
+  parts.push(...(await sweepCommsRetention(getPool(), numberVar("comms.retention_months"))));
   /*
    * 0093: photographs that were taken down long enough ago to forget.
    *
@@ -7655,7 +7655,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       const recipients = recipientsForType(type);
       if (recipients.length) {
         await sendResendEmail({
-          to: recipients,
+          to: recipients, origin: "forms.team_alert",
           subject: `[${notifyDeps.projectName()}] New ${type} submission from ${applicantName}`,
           html: buildSubmissionEmailHtml(type, data, `${origin}/admin`),
         });
@@ -7663,7 +7663,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal
       if (type === "work-with-us" && (data as any)?.email) {
         await sendResendEmail({
-          to: [(data as any).email],
+          to: [(data as any).email], origin: "forms.ack",
           subject: "We've received your proposal",
           html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your proposal is with us</div></div><div style="padding:22px 24px;line-height:1.6"><p>Hi ${escapeHtml(String(applicantName))},</p><p>Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.</p><p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p></div></div></body></html>`,
         });
@@ -8078,7 +8078,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
         try {
           const mail = await sendResendEmail({
-            to: [normEmail],
+            to: [normEmail], origin: "auth.founder_claim",
             subject: `Set your password`,
             html: `<p><a href="${escapeHtml(claimUrl)}">Set your password</a> (link expires in 60 minutes).</p>
 <p>If the button does nothing, paste this into your browser:<br>${escapeHtml(claimUrl)}</p>`,
@@ -8111,7 +8111,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
       try {
         const mail = await sendResendEmail({
-          to: [normEmail],
+          to: [normEmail], origin: "auth.founder_claim",
           subject: `You are the founder admin. Set your password`,
           html: `<p>Your founder admin account was just created on ${escapeHtml(mergedConfig().project.name)}.</p>
 <p><a href="${escapeHtml(claimUrl)}">Set your password</a> (link expires in 60 minutes).</p>
@@ -8274,17 +8274,18 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!target.email) return res.status(409).json({ error: "That account has no address to send to" });
     const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, target.id, target.tokenVersion ?? 0);
     const claimUrl = `${notifyDeps.origin()}/set-password?token=${encodeURIComponent(claim)}`;
-    let emailed = true;
+    let emailed = false; // what the post office did, never "it did not throw"
     try {
-      await sendResendEmail({
-        to: [target.email],
+      const mail = await sendResendEmail({
+        to: [target.email], origin: "auth.admin_password_link",
         subject: "Set a new password",
         html: `<p>An administrator of ${escapeHtml(mergedConfig().project.name)} sent you a link to set a new password.</p>
 <p><a href="${escapeHtml(claimUrl)}">Set a new password</a> (link expires in 60 minutes, and works once).</p>
 <p>If the button does nothing, paste this into your browser:<br>${escapeHtml(claimUrl)}</p>`,
       });
+      emailed = mail.sent;
+      if (!mail.sent) console.error(`[auth] admin password link NOT SENT for ${target.id}: reason=${mail.reason ?? "unknown"}`);
     } catch (e) {
-      emailed = false;
       console.error(`[auth] admin password link FAILED to send for ${target.id}`, e);
     }
     // This is the one admin action that can produce member-attributed
@@ -10283,18 +10284,15 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (queryId) await markQueryContacted(getPool(), String(queryId));
 
     // The relay email: recipient sees the sender's words; replying goes
-    // STRAIGHT to the sender (Reply-To), never through the platform.
-    try {
-      await sendResendEmail({
-        to: [recipient.email],
-        subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
-        html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
-        replyTo: user.email,
-      });
-      await setContactEmailStatus(getPool(), inserted.id, "sent");
-    } catch {
-      await setContactEmailStatus(getPool(), inserted.id, "failed");
-    }
+    // STRAIGHT to the sender (Reply-To), never through the platform. The status
+    // is what the post office did: "sent" only when the provider took it.
+    const relayed = await sendResendEmail({
+      to: [recipient.email], origin: "map.contact_relay",
+      subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
+      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
+      replyTo: user.email,
+    }).catch(() => ({ sent: false }));
+    await setContactEmailStatus(getPool(), inserted.id, relayed.sent ? "sent" : "failed");
     await notify({
       userId: recipient.id,
       type: "contact_request",
@@ -18617,7 +18615,7 @@ ${inner}
     <p style="margin-top:20px">A team member will be in touch within 48 hours to answer your questions.</p>`)
         : shell(`Thank you for your interest in ${notifyDeps.projectName()}`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. We have your request and a member of our team will be in touch within 48 hours to talk it through with you.</p>`);
       await sendResendEmail({
-        to: [email],
+        to: [email], origin: "investor.packet",
         subject: packet.length
           ? `Your ${notifyDeps.projectName()} Investor Packet`
           : `Thank you for your interest in ${notifyDeps.projectName()}`,
@@ -18629,7 +18627,7 @@ ${inner}
       const investorTeam = recipientsForType("investor-doc-request");
       if (investorTeam.length) {
         await sendResendEmail({
-          to: investorTeam,
+          to: investorTeam, origin: "investor.team_alert",
           subject: packet.length
             ? `[${notifyDeps.projectName()}] New investor doc request from ${name}`
             : `[${notifyDeps.projectName()}] Investor doc request from ${name}, no documents in the packet`,

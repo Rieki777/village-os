@@ -23,11 +23,19 @@
  * `sendResendEmail` IS NOW A THIN CALL TO THE POST OFFICE. Each recipient is
  * posted as its own `essential`, `urgent` email, so every send is a ledger row
  * a founder can read, and the answer keeps the exact `{ sent, reason }` shape
- * every existing caller was written against.
+ * every existing caller was written against. Every caller names an `origin`
+ * (`auth.reset`, `housing.ack` and the rest), so Sent mail can say what made
+ * each email.
+ *
+ * `sendNotice` IS THE NOTIFICATION SPINE'S MAILER (`NotifyDeps.sendEmail`): a
+ * `notices` email under the spine's own key, waiting in the queue for the
+ * drain and dropped once it is `comms.notice_expiry_minutes` old.
  */
 import { randomUUID } from "node:crypto";
 import type { Pool } from "mysql2/promise";
 import type { PostResult } from "../../../shared/comms/contracts";
+import type { NoticeEmail, NoticeSendResult } from "../notify";
+import { numberVar } from "../variables";
 import { post, type PostOfficeDeps } from "./postOffice";
 import { resendTransport, type Transport } from "./transport";
 
@@ -125,7 +133,16 @@ export interface MailerDeps {
   origin(): string;
   /** The provider. Resend unless a test hands in its own. */
   transport?: Transport;
+  /** Every admin's address: where the post office's default mode rehearses to. */
+  adminEmails?(): Promise<string[]>;
+  /** The setup lane's `commsMode()`, once it is plugged in. Absent: the post office's default. */
+  mode?: PostOfficeDeps["mode"];
+  /** The people lane's `permissionFor()`, once it is plugged in. Absent: every kind is allowed. */
+  permissionFor?: PostOfficeDeps["permissionFor"];
 }
+
+/** The statuses that mean the post office took a notice: it is waiting, it went, or it was already taken under this key. */
+const NOTICE_ACCEPTED: ReadonlySet<string> = new Set(["queued", "sending", "sent", "delivered", "rehearsed", "duplicate"]);
 
 /**
  * The same recipient rule the mailer has always applied: every configured
@@ -241,7 +258,45 @@ export function createMailer(deps: MailerDeps) {
     sender: resolvedEmailSender,
     hasApiKey: () => Boolean(deps.secretValue("resend_api_key")),
     origin: deps.origin,
+    ...(deps.adminEmails ? { adminEmails: deps.adminEmails } : {}),
+    ...(deps.mode ? { mode: deps.mode } : {}),
+    ...(deps.permissionFor ? { permissionFor: deps.permissionFor } : {}),
   };
+
+  /**
+   * The notification spine's one mailer. One `notices` email per address
+   * (there is one, the member's own), under the spine's key, left queued for
+   * the drain. It expires `comms.notice_expiry_minutes` after it is written,
+   * because a late notice surprises more than a missed one (regen's rule).
+   *
+   * `accepted` is what the spine stamps `emailed_at` on: the post office took
+   * the row. A row it refused (no provider, a suppressed address, no
+   * permission) is not accepted, and the notification is not stamped as if
+   * it had been emailed.
+   */
+  async function sendNotice(opts: NoticeEmail): Promise<NoticeSendResult> {
+    const to = normalizeRecipients(opts.to);
+    if (!to.length) return { accepted: false, status: "skipped", reason: "no_recipients" };
+    const minutes = Math.max(5, numberVar("comms.notice_expiry_minutes") || 120);
+    let answer: NoticeSendResult | null = null;
+    for (let i = 0; i < to.length; i++) {
+      const r = await post(postOffice, {
+        // The spine's key for the first address, which is the only one there
+        // ever is; a second would need its own key or it would read as a copy.
+        idempotencyKey: i === 0 ? opts.idempotencyKey : `${opts.idempotencyKey}:${i}`,
+        kind: "notices",
+        origin: opts.origin,
+        to: { email: to[i], userId: opts.userId ?? null },
+        subject: opts.subject,
+        html: opts.html,
+        text: "",
+        expiresAt: new Date(Date.now() + minutes * 60_000),
+      });
+      const mine: NoticeSendResult = { accepted: NOTICE_ACCEPTED.has(r.status), status: r.status, ...(r.reason ? { reason: r.reason } : {}) };
+      if (!answer || (answer.accepted && !mine.accepted)) answer = mine;
+    }
+    return answer as NoticeSendResult;
+  }
 
   /**
    * Send one email to each recipient, now. The old name and the old answer,
@@ -315,5 +370,5 @@ export function createMailer(deps: MailerDeps) {
     );
   }
 
-  return { getEmailConfig, buildSubmissionEmailHtml, resolvedEmailSender, sendResendEmail, recipientsForType, postOffice };
+  return { getEmailConfig, buildSubmissionEmailHtml, resolvedEmailSender, sendResendEmail, sendNotice, recipientsForType, postOffice };
 }

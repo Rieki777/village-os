@@ -439,6 +439,7 @@ export function register(app: Express, deps: Deps): void {
       if (recipients.length) {
         await sendResendEmail({
           to: recipients,
+          origin: "housing.team_alert",
           // The person who asked, so a founder can hit reply and be talking
           // to them. Same move the contact relay makes.
           replyTo: email,
@@ -463,6 +464,7 @@ export function register(app: Express, deps: Deps): void {
       // step records an intent, and the next move is a human one.
       await sendResendEmail({
         to: [email],
+        origin: "housing.ack",
         subject: "We have your reservation request",
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
@@ -569,6 +571,7 @@ export function register(app: Express, deps: Deps): void {
     if (notice) {
       void sendResendEmail({
         to: [before.email],
+        origin: "housing.status",
         subject: notice.subject,
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
