@@ -3065,6 +3065,14 @@ function frameVillage(top,bottom){
   cam.x=(x0+x1)/2;cam.y=(y0+y1)/2-(top-bottom)/2/cam.z;cam.vx=cam.vy=0;
   clampCam();return true}
 window.frameVillage=frameVillage;
+/* The pocket's own framing: the strip between the vitals and the bottom bar,
+   measured now. Remembers the camera it set, so the hand-over can tell
+   whether anybody or anything has moved it since (D16). */
+let POCKET_FRAME=null;
+function framePocket(){const v=$('vitals'),b=$('pbar');
+  const top=v?v.getBoundingClientRect().bottom:0,r=b?b.getBoundingClientRect():null;
+  const ok=frameVillage(Math.max(0,top),r&&r.height?Math.max(0,innerHeight-r.top):0);
+  POCKET_FRAME=ok?{x:cam.x,y:cam.y,z:cam.z}:null;return ok}
 /* ANY FLIGHT NOBODY GUIDED ENDS THE GUIDE, and this line closes a hole a probe
    found rather than one anybody predicted. The gesture hooks below are bound
    to #scene, and the marks that sit OVER the land are their own DOM elements:
@@ -11515,9 +11523,7 @@ if($('gresumeX'))$('gresumeX').onclick=()=>{
    village, and a #/circles reader who comes back to the land finds the
    village there, not the beach. */
 if(document.body.classList.contains('pocket')){
-  (()=>{const v=$('vitals'),b=$('pbar');
-    const top=v?v.getBoundingClientRect().bottom:0,r=b?b.getBoundingClientRect():null;
-    frameVillage(Math.max(0,top),r&&r.height?Math.max(0,innerHeight-r.top):0)})();
+  framePocket();
   setTimeout(()=>{leaveIntro();
     if(!routeNow()){
       guideAffordance();
@@ -11590,6 +11596,18 @@ function arrivalNow(){
   else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}}
 function arrivalTaken(){if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;ARRIVAL_TAKEN=true}}
 function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
+  /* A PHONE RE-AIMS ITS ARRIVAL ON THE VILLAGE'S OWN SCENE, UNDER THE COVER
+     (D16). The pocket frames the places before its first painted frame, and
+     inside the shell those are the seed's: the village's scene arrives here
+     later, and a place the seed does not have was left out of the frame,
+     MEASURED as the 23rd live place 40 px past the right edge at 390x844.
+     Reframing after paint was ruled out because a visitor would watch the
+     land jump. Inside the shell the opaque cover is still up at this line
+     and lifts on the land-ready below, so the frame is aimed again here and
+     nobody sees it move. Only a camera still where the pocket put it: a deep
+     link's flight, or any hand that moved it, is left alone. */
+  const pf=POCKET_FRAME;POCKET_FRAME=null;
+  if(pf&&inShell()&&!travel&&cam.x===pf.x&&cam.y===pf.y&&cam.z===pf.z)framePocket();
   arrivalNow();
   shellPost({type:'land-ready'})}
 window.landHandedOver=landHandedOver;
