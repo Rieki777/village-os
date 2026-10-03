@@ -6020,7 +6020,7 @@ function buildExportJSON(status){
 $('exportBtn').onclick=()=>{const out=buildExportJSON();
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));
   a.download='amora-scene.json';a.click();
-  maiaSay(`Scene exported: <b>${out.map_structures.length} buildings</b>, <b>${out.map_flows.length} flows</b>, <b>${out.map_zones.length-1} features</b>, <b>${EDITS.length} edits remembered</b>. This one file is the land's whole memory, and autosave keeps the same story in this browser.`)};
+  maiaSay(`Scene exported: <b>${out.map_structures.length} buildings</b>, <b>${out.map_flows.length} flows</b>, <b>${out.map_zones.length-1} features</b>, <b>${EDITS.length} edits remembered</b>. This one file is the land's whole memory, and ${inShell()?'your draft in the village keeps the same story':'autosave keeps the same story in this browser'}.`)};
 addEventListener('keydown',e=>{if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
   if(e.key==='Escape'&&placing){placing=null;document.body.classList.remove('placing');$('ghostPoi').style.display='none'}
   if(e.key==='Escape'&&typeof drafting!=='undefined'&&drafting){cancelDraft();toast('Draft cancelled.')}
