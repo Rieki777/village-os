@@ -32,11 +32,11 @@ Five things the village keeps, and everything else is arrangement:
 | **Recognition** | gratitude sent between people, settled per lunar cycle |
 | **Value** | a double-entry ledger whose balances sum to zero, per token |
 
-Around that sit **twenty-five modules**, four of which are core and always on
-(quests, gratitude, progression, profiles). The other twenty-one ship **off** and
+Around that sit the **modules**, four of which are core and always on
+(quests, gratitude, progression, profiles). Every other one ships **off** and
 a village turns on only what it will use: the map, a forum, messaging, events,
-stays, a library, an exchange, governance and the rest. `MODULES.md` lists all
-twenty-five.
+stays, a library, an exchange, governance and the rest. `MODULES.md` lists every
+one.
 
 And a guide, **Maia**, who reads the village and helps run it. She is section 5.
 
