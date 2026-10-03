@@ -9084,12 +9084,12 @@ function viewHash(){
    Back returns to the map with nothing open, so Back closes the place, the
    door, the Loom, the Circles or the walk before it leaves the map. The
    order matters: the place goes first, so each closer after it finds
-   nothing underneath and none of them names an address on the way out.
-   A RUNNING WALK ENDS THROUGH THE ONE CANCEL PATH, as Escape and `stay here`
-   end it. jHalt alone stopped the walk and left GUIDE.on true and her line
-   playing, so the next drag announced stopping a walk that had already ended.
-   GUIDE.stop runs jHalt itself and says nothing for 'back'. */
+   nothing underneath and none of them names an address on the way out. */
 function closeAddressed(){
+  /* A RUNNING WALK ENDS THROUGH THE ONE CANCEL PATH, as Escape and `stay
+     here` end it. jHalt alone stopped the walk and left GUIDE.on true and her
+     line playing, so the next drag announced stopping a walk that had
+     already ended. GUIDE.stop runs jHalt itself and says nothing for 'back'. */
   const was=!!JWALK;
   if(window.GUIDE&&GUIDE.on)GUIDE.stop('back');else if(typeof jHalt==='function')jHalt();
   if(was)mvStop();
