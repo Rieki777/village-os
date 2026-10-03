@@ -10130,6 +10130,14 @@ window.topFit=topFit;
     const r=el.getBoundingClientRect();const w=tp.offsetWidth,h=tp.offsetHeight;
     let x=Math.min(innerWidth-w-8,Math.max(8,r.left+r.width/2-w/2));
     let y=r.top-h-9;if(y<6)y=r.bottom+9;
+    /* NOT OVER THE TOP ROW (N07). A chip on the stat bar's second row has
+       room above it, so its tip went up over the first row's buttons and
+       hid Your view, the hour and the Loom while it showed: MEASURED at
+       1280x720, the Hearts tip over Your view by 114x31. A tip above that
+       would meet any of them goes below its anchor instead. */
+    else if(typeof TOP_ROW!=='undefined')for(const id of TOP_ROW.row1){const o=document.getElementById(id);
+      const q=o&&o.getBoundingClientRect();
+      if(q&&q.width&&x<q.right&&x+w>q.left&&y<q.bottom&&y+h>q.top){y=r.bottom+9;break}}
     /* A tip flipped below a vital lands in the top band, where the draft
        bar, the restore bar and the news line live. Push past the band, but
        only for an anchor the band can actually reach, or a tip on a
