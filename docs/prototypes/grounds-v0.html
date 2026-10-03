@@ -4532,15 +4532,21 @@ function homeSheet(key){
   const line=lot?`${lot.sold} of ${lot.total} spoken for${housingTag(key)?' · '+housingTag(key):''}`
             :room?`${room.taken} of ${room.total} full tonight`:'';
   /* A lodge takes bookings and a hamlet takes requests; the sheet is the
-     same door either way, and only the route behind it changes. */
-  const route=room?'/stay':'/request-a-house?structure='+encodeURIComponent(key);
+     same door either way, and only the route behind it changes.
+     A HAMLET'S REQUEST IS /reserve, which reads ?from=map&hamlet=<key>. This
+     line used to send hamlets to /request-a-house, a page the router has
+     never served, so every hamlet chip's main button ended on the 404. The
+     path goes through realRoute so the SITE_PAGES gate covers it, and the
+     query is added after: realRoute returns the bare path and would drop it. */
+  const page=realRoute(room?'/stay':'/reserve');
+  const route=!page?'':room?page:page+'?from=map&hamlet='+encodeURIComponent(key);
   setHash('#/place/'+key);
   $('moduleCard').innerHTML=`<h2>⌂ Request a home at ${escq(s.name)}</h2>
     <div class="route">${line}</div>
     ${(lot&&housingNote(key))?`<p style="margin:4px 0 0;font-size:11.5px;color:#a3703d">${housingNote(key)}</p>`:''}
     <p>Tell us who is coming and when, and a steward answers. Nothing is held until you hear back.</p>
     <div class="acts">
-      <a class="btn" href="${escq(siteHref(route))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${escj(route)}')">Begin your request</a>
+      ${route?`<a class="btn" href="${escq(siteHref(route))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${escj(route)}')">Begin your request</a>`:''}
       <button class="btn ghostbtn" onclick="askAboutLiving('${escj(key)}')">Ask Maia about living here</button>
       <button class="btn ghostbtn" onclick="closeDoor()">Back to the land</button>
     </div>`;

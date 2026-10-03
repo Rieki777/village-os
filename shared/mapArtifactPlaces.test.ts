@@ -588,6 +588,60 @@ describe("the doors a published scene carries from before the census", () => {
 });
 
 /**
+ * A HOME CHIP'S BUTTON OPENS A PAGE THE SITE SERVES (round 4 sweep).
+ *
+ * The house chip beside a hamlet opens a card whose main button, "Begin your
+ * request", went to /request-a-house?structure=<key>. The router has never
+ * served that path, so the button ended on the 404 for every hamlet, on
+ * production as well. The page that takes a home request is /reserve, and it
+ * reads ?from=map&hamlet=<key>. A lodge goes to /stay, which always worked.
+ * homeSheet is called directly with each key, never through a code string.
+ */
+describe("the home chip's request button", () => {
+  let m: Booted;
+  const sheet = (key: string) => {
+    (m.window as unknown as { homeSheet(k: string): void }).homeSheet(key);
+    const link = m.window.document.querySelector<HTMLAnchorElement>("#moduleCard a.btn");
+    const href = link?.getAttribute("href") ?? "";
+    const url = href ? new URL(href) : null;
+    const seen = {
+      path: url?.pathname ?? "(no link)",
+      query: url ? Object.fromEntries(url.searchParams) : {},
+      onclick: link?.getAttribute("onclick") ?? "",
+    };
+    (m.window as unknown as { closeDoor(): void }).closeDoor();
+    return seen;
+  };
+  const pages = () => (m.window as unknown as { SITE_PAGES: string[] }).SITE_PAGES;
+  beforeAll(async () => {
+    m = boot("");
+    await settle(200);
+  });
+  afterAll(() => m?.close());
+
+  it("sends a hamlet to /reserve, a page the site serves, carrying the hamlet", () => {
+    for (const key of ["pondhomes", "ridgeB", "ridgeA"]) {
+      const seen = sheet(key);
+      expect(pages(), key).toContain(seen.path);
+      expect(seen.path, key).toBe("/reserve");
+      expect(seen.query, key).toEqual({ from: "map", hamlet: key });
+      expect(seen.onclick, key).toBe(`return siteNav(event,'/reserve?from=map&hamlet=${key}')`);
+    }
+  });
+
+  it("still sends the lodge to /stay (the control: a route that always worked)", () => {
+    const seen = sheet("guest");
+    expect(pages()).toContain(seen.path);
+    expect(seen.path).toBe("/stay");
+    expect(seen.query).toEqual({});
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
+  });
+});
+
+/**
  * A SAMPLE CONVERSATION SAYS SO WHEREVER IT IS DRAWN (F35).
  *
  * Every thread in the published scene is src 'sample', and three surfaces
