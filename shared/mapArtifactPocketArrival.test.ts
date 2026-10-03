@@ -1,0 +1,503 @@
+/**
+ * A PHONE ARRIVES ON THE VILLAGE, AND ITS BOTTOM BAR, DRAWER AND PAD DO WHAT THEY SAY.
+ *
+ * Found by the 2026-10-01 QA sweep at 390x844 through the shell, every one of
+ * them on production as well:
+ *
+ *   - The first screen was the beach and the road, with 1 of the 20 places the
+ *     land draws inside it. The pocket keeps its camera still from the first
+ *     frame and the camera's default is the desk intro's backdrop.
+ *   - The bottom bar's first cell opened the circles drawn inside the artifact,
+ *     whose names are 2 to 4 px tall, where the desk's Circles tab goes to
+ *     /map/circles. From the Loom it went there too, not back to the land.
+ *   - Switching to those circles left an open place sheet over 77% of them,
+ *     and under the sheet the land's hover card the tap had raised.
+ *   - Over them, the pad zoomed and panned the land hidden underneath, two
+ *     fingers panned instead of zooming, and one finger dragged at 35%.
+ *   - No control on a phone reached the Vision, Org or Flows lenses or the
+ *     time of day.
+ *
+ * Runs the real artifact in jsdom at the address the shell builds for a phone.
+ * The platform stubs mirror mapArtifactBoot.test.ts, which says why each one
+ * exists.
+ *
+ * WHAT IS MEASURED IN CHROMIUM AND HANDED IN HERE. jsdom lays nothing out, so
+ * every box measures zero. The three boxes the code under test reads are given
+ * the rectangles Chromium measured at 390x844 with the pocket profile: the
+ * vitals strip ends at 35, the bottom bar starts at 784, and the circles chart
+ * is 390x729 from y 115. Everything else (the camera, the viewBox, the classes,
+ * the address, the handlers) is the artifact's own state, run as written.
+ *
+ * WHAT THIS CANNOT SEE. Pixels, the CSS cascade, and real fingers. Whether the
+ * bar's label shows the right half, whether the land's hint leaves the chart's
+ * heading, and whether a CDP pinch zooms were measured in Playwright at
+ * 390x844, 360x640, 844x390 and 768x1024 against the shell.
+ */
+import fs from "fs";
+import path from "path";
+import { createRequire } from "module";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
+const html = fs.readFileSync(ARTIFACT, "utf8");
+
+type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
+interface Jsdom {
+  JSDOM: new (
+    markup: string,
+    options: {
+      runScripts: "dangerously";
+      pretendToBeVisual: boolean;
+      url: string;
+      virtualConsole: unknown;
+      beforeParse: (window: ArtifactWindow) => void;
+    },
+  ) => { window: ArtifactWindow };
+  VirtualConsole: new () => { on(event: "jsdomError", listener: (e: Error & { type?: string; cause?: unknown }) => void): void };
+}
+const { JSDOM, VirtualConsole } = createRequire(import.meta.url)("jsdom") as Jsdom;
+
+const PHONE = { width: 390, height: 844 };
+/** Chromium, 390x844, pocket profile. See the header. */
+const MEASURED: Record<string, { left: number; top: number; width: number; height: number }> = {
+  vitals: { left: 0, top: 0, width: 390, height: 35 },
+  pbar: { left: 0, top: 784, width: 390, height: 60 },
+  orgSvg: { left: 0, top: 115, width: 390, height: 729 },
+};
+/** Long enough for every boot timer: the pocket welcome waits 700ms. */
+const SETTLE_MS = 1000;
+const settle = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function inert<T extends object>(known: T): T {
+  return new Proxy(known, {
+    get(target, key) {
+      if (key in target) return Reflect.get(target, key);
+      return typeof key === "symbol" ? undefined : () => undefined;
+    },
+  });
+}
+
+function stubTheMissingPlatform(window: ArtifactWindow) {
+  const pixels = (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(Math.max(0, w * h * 4) || 0) });
+  Object.defineProperty(window.HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value(this: HTMLCanvasElement, kind: string) {
+      if (kind !== "2d") return null;
+      const paint = () => ({ addColorStop() {} });
+      return inert({
+        canvas: this,
+        measureText: () => ({ width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 }),
+        getImageData: (_x: number, _y: number, w: number, h: number) => pixels(w, h),
+        createImageData: (w: number, h: number) => pixels(w, h),
+        createLinearGradient: paint,
+        createRadialGradient: paint,
+        createConicGradient: paint,
+        createPattern: () => ({ setTransform() {} }),
+        getLineDash: () => [],
+        isPointInPath: () => false,
+        isPointInStroke: () => false,
+      });
+    },
+  });
+  class Unobserved {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  }
+  Object.assign(window, {
+    Path2D: class {
+      constructor() {
+        return inert({});
+      }
+    },
+    ResizeObserver: Unobserved,
+    IntersectionObserver: Unobserved,
+    matchMedia: (media: string) => ({
+      matches: false,
+      media,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent: () => false,
+    }),
+  });
+  // The three measured boxes. Every other element keeps jsdom's zero box.
+  const own = window.Element.prototype.getBoundingClientRect;
+  window.Element.prototype.getBoundingClientRect = function (this: Element) {
+    const m = MEASURED[this.id];
+    if (!m) return own.call(this);
+    return { ...m, x: m.left, y: m.top, right: m.left + m.width, bottom: m.top + m.height, toJSON() {} } as DOMRect;
+  };
+}
+
+interface Cam {
+  x: number;
+  y: number;
+  z: number;
+}
+interface Booted {
+  window: ArtifactWindow;
+  uncaught: unknown[];
+  /** The camera the moment the scripts finished: what the first frame paints. */
+  camAtLoad: Cam;
+  run<T>(src: string): T;
+  close(): void;
+}
+
+function boot(hash = "#hud=pocket&skipIntro"): Booted {
+  const uncaught: unknown[] = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on("jsdomError", (e) => {
+    if (e.type === "unhandled-exception") uncaught.push(e.cause ?? e);
+  });
+  const { window } = new JSDOM(html, {
+    runScripts: "dangerously",
+    pretendToBeVisual: true,
+    url: `http://localhost/grounds/index.html${hash}`,
+    virtualConsole,
+    beforeParse(w) {
+      w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
+      Object.assign(w, { innerWidth: PHONE.width, innerHeight: PHONE.height });
+      stubTheMissingPlatform(w);
+    },
+  });
+  const run = <T>(src: string) => window.eval(src) as T;
+  return { window, uncaught, camAtLoad: run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"), run, close: () => window.close() };
+}
+
+const body = (b: Booted) => b.window.document.body.classList;
+const click = (b: Booted, sel: string) => {
+  const el = b.window.document.querySelector<HTMLElement>(sel);
+  expect(el, sel).not.toBeNull();
+  el?.click();
+};
+
+describe("a phone arrives framed on the village (F05, F53)", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("is the pocket profile (the case is the one it says it is)", () => {
+    expect(body(b).contains("pocket")).toBe(true);
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("puts every place the land draws inside the strip between the vitals and the bottom bar", () => {
+    // The camera's own arithmetic (worldToScreen, in CSS px), run on the
+    // camera the first frame paints with.
+    const places = b.run<{ key: string; x: number; y: number }[]>(
+      "SCENE.structures.filter(s=>!(mode==='now'&&s.state==='blueprint')).map(s=>({key:s.key,x:s.x,y:s.y}))",
+    );
+    expect(places.length, "places the land draws in Now").toBeGreaterThan(10);
+    const c = b.camAtLoad;
+    const top = MEASURED.vitals.top + MEASURED.vitals.height;
+    const bottom = MEASURED.pbar.top;
+    const outside = places
+      .map((p) => ({ key: p.key, sx: (p.x - c.x) * c.z + PHONE.width / 2, sy: (p.y - c.y) * c.z + PHONE.height / 2 }))
+      .filter((p) => p.sx < 0 || p.sx > PHONE.width || p.sy < top || p.sy > bottom)
+      .map((p) => `${p.key} at ${Math.round(p.sx)},${Math.round(p.sy)}`);
+    expect(outside, `places off screen with the camera at ${c.x.toFixed(0)},${c.y.toFixed(0)} z ${c.z.toFixed(3)}`).toEqual(
+      [],
+    );
+  });
+
+  it("draws them at a zoom where the district names still show, on this phone", () => {
+    // syncBanners draws a district's plate only while W*cam.z > 900.
+    expect(b.camAtLoad.z * b.run<number>("W")).toBeGreaterThan(900);
+  });
+
+  it("frames them before the first frame, so the camera has not moved since", () => {
+    const now = b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+    expect(now).toEqual(b.camAtLoad);
+  });
+});
+
+describe("the bottom bar's first cell on a phone (F11, F61)", () => {
+  let b: Booted;
+  const routes: string[] = [];
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    // siteNav is the artifact's one door to the site. Recorded here, and
+    // answered the way it answers inside the shell: it navigated, so stop.
+    (b.window as unknown as { siteNav: (ev: Event, route: string) => boolean }).siteNav = (ev, route) => {
+      routes.push(route);
+      ev.preventDefault();
+      return false;
+    };
+  });
+  afterAll(() => b?.close());
+
+  it("from the land, takes the same door as the desk's Circles tab, to /map/circles", () => {
+    routes.length = 0;
+    click(b, "#pbMap");
+    expect(routes, "routes handed to siteNav").toEqual(["/map/circles"]);
+    expect(body(b).contains("circles"), "the in-file circles stay closed").toBe(false);
+    expect(b.window.document.querySelectorAll("#pbMap svg").length, "both drawn icons survive the tap").toBe(2);
+  });
+
+  it("from the Loom, goes back to the land and nowhere else", () => {
+    routes.length = 0;
+    b.run("openLoom()");
+    expect(body(b).contains("loom")).toBe(true);
+    click(b, "#pbMap");
+    expect(body(b).contains("loom"), "the Loom closed").toBe(false);
+    expect(body(b).contains("circles"), "and did not open the circles").toBe(false);
+    expect(routes, "and did not leave the map").toEqual([]);
+  });
+
+  it("from the Loom opened over the in-file circles, goes back to the land in one tap", () => {
+    routes.length = 0;
+    b.run("setMapType('circles',true);openLoom()");
+    expect([body(b).contains("circles"), body(b).contains("loom")]).toEqual([true, true]);
+    click(b, "#pbMap");
+    expect([body(b).contains("circles"), body(b).contains("loom")]).toEqual([false, false]);
+    expect(routes).toEqual([]);
+  });
+
+  it("from the in-file circles a #/circles link opens, goes back to the land", () => {
+    routes.length = 0;
+    b.run("setMapType('circles',true)");
+    click(b, "#pbMap");
+    expect(body(b).contains("circles")).toBe(false);
+    expect(routes).toEqual([]);
+  });
+
+  it("asking for the land closes the Loom, from any caller", () => {
+    b.run("openLoom();setMapType('living',true)");
+    expect(body(b).contains("loom")).toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+describe("switching to the in-file circles with a sheet or a door open (F60)", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("closes the place sheet, and the address names the circles", () => {
+    b.run("openPanel('greenhouse')");
+    expect(b.window.document.getElementById("panel")?.classList.contains("open"), "the control: the sheet opened").toBe(
+      true,
+    );
+    b.run("setMapType('circles',true)");
+    expect(b.window.document.getElementById("panel")?.classList.contains("open")).toBe(false);
+    expect(b.run<unknown>("panelKey")).toBeNull();
+    expect(b.window.location.hash).toBe("#/circles");
+    b.run("setMapType('living',true)");
+  });
+
+  it("closes a module door, and the address still names the circles", () => {
+    b.run("openDoor('wallet',{})");
+    expect(b.window.document.getElementById("module")?.classList.contains("show"), "the control: the door opened").toBe(
+      true,
+    );
+    b.run("setMapType('circles',true)");
+    expect(b.window.document.getElementById("module")?.classList.contains("show")).toBe(false);
+    expect(b.window.location.hash).toBe("#/circles");
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("hides the land's hover card a tap on a building left under the sheet", () => {
+    // A tap fires mouseenter on the building, which shows the card and leaves
+    // it up. Here it is shown the same way, by the land's own function.
+    const card = () => b.window.document.getElementById("hovercard")?.style.display;
+    b.run("setMapType('living',true);hoverPin=BY.greenhouse;showHover(BY.greenhouse,document.body)");
+    expect(card(), "the control: the card showed").toBe("block");
+    b.run("setMapType('circles',true)");
+    expect(card()).toBe("none");
+    expect(b.run<unknown>("hoverPin"), "so the land shows it afresh").toBeNull();
+    b.run("setMapType('living',true)");
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+describe("over the in-file circles on a phone, the pad and the fingers move the chart (F08, F59)", () => {
+  let b: Booted;
+  type VB = [number, number, number, number];
+  const vb = () => b.run<VB>("OVB.slice()");
+  const cam = () => b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+  /** The meet transform: scale, and the screen point of the viewBox origin. */
+  const meet = () => {
+    const [x, y, w, h] = vb();
+    const r = MEASURED.orgSvg;
+    const s = Math.min(r.width / w, r.height / h);
+    return { s, ox: r.left + (r.width - w * s) / 2 - x * s, oy: r.top + (r.height - h * s) / 2 - y * s };
+  };
+  /** Where a chart point lands on screen, by preserveAspectRatio meet. */
+  const onScreen = (px: number, py: number) => {
+    const m = meet();
+    return [m.ox + px * m.s, m.oy + py * m.s];
+  };
+  /** The chart point under a screen point. */
+  const underScreen = (sx: number, sy: number) => {
+    const m = meet();
+    return [(sx - m.ox) / m.s, (sy - m.oy) / m.s];
+  };
+  const reset = () => b.run("OVB=[0,0,1600,1050];orgApplyVB()");
+  const pointer = (type: string, id: number, x: number, y: number) =>
+    b.window.document
+      .getElementById("orgSvg")
+      ?.dispatchEvent(new b.window.PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true }));
+  /** The hub, the village's own node, at the chart's 800,540. */
+  const HUB: [number, number] = [800, 540];
+
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+    b.run("setMapType('circles',true)");
+  });
+  afterAll(() => b?.close());
+
+  it("zooms the chart with the pad's + and leaves the land where it was", () => {
+    reset();
+    const land = cam();
+    click(b, "#pnIn");
+    expect(vb()[2], "the chart's width after +").toBeLessThan(1600);
+    expect(cam(), "the land's camera").toEqual(land);
+  });
+
+  it("pans the chart with the pad's arrows and leaves the land where it was", () => {
+    reset();
+    const land = cam();
+    click(b, "#pnRight");
+    click(b, "#pnDown");
+    const [x, y] = vb();
+    expect(x, "moved right").toBeGreaterThan(0);
+    expect(y, "moved down").toBeGreaterThan(0);
+    expect(cam()).toEqual(land);
+  });
+
+  it("drags the chart as far as the finger went, down as well as across", () => {
+    reset();
+    const [x0, y0] = onScreen(...HUB);
+    pointer("pointerdown", 1, 195, 400);
+    pointer("pointermove", 1, 195, 500);
+    pointer("pointerup", 1, 195, 500);
+    const [x1, y1] = onScreen(...HUB);
+    expect(y1 - y0, "screen px the hub moved for a 100 px drag down").toBeCloseTo(100, 1);
+    expect(x1 - x0).toBeCloseTo(0, 1);
+  });
+
+  it("zooms about the two fingers when they spread, holding the point between them", () => {
+    reset();
+    const mid: [number, number] = [195, 480];
+    const held = underScreen(...mid);
+    pointer("pointerdown", 5, mid[0] - 30, mid[1]);
+    pointer("pointerdown", 6, mid[0] + 30, mid[1]);
+    // The two fingers report in turns, as a phone sends them.
+    for (let d = 38; d <= 126; d += 8) {
+      pointer("pointermove", 5, mid[0] - d, mid[1]);
+      pointer("pointermove", 6, mid[0] + d, mid[1]);
+    }
+    const [x, , w] = vb();
+    expect(w, "the chart's width after a 60 to 252 px spread").toBeCloseTo(1600 * (60 / 252), 0);
+    // The chart point that was under the midpoint is under it still.
+    const [sx, sy] = onScreen(held[0], held[1]);
+    expect(sx).toBeCloseTo(mid[0], 0);
+    expect(sy).toBeCloseTo(mid[1], 0);
+    expect(x, "and did not swing off to one side").toBeGreaterThan(0);
+    pointer("pointerup", 5, mid[0] - 126, mid[1]);
+    pointer("pointerup", 6, mid[0] + 126, mid[1]);
+  });
+
+  it("drags with the next finger after one whose up never arrived, never pinching against it", () => {
+    reset();
+    // A finger the browser stopped reporting: down, and no up or cancel.
+    pointer("pointerdown", 11, 100, 300);
+    // The next touch starts a new gesture, so the browser marks it primary.
+    b.window.document
+      .getElementById("orgSvg")
+      ?.dispatchEvent(new b.window.PointerEvent("pointerdown", { pointerId: 12, clientX: 195, clientY: 400, isPrimary: true, bubbles: true }));
+    pointer("pointermove", 12, 195, 450);
+    pointer("pointerup", 12, 195, 450);
+    expect(vb()[2], "the chart's width, untouched by a drag").toBe(1600);
+    expect(vb()[1], "moved by the drag, 50 px of a chart drawn at 390/1600").toBeCloseTo(-50 / (390 / 1600), 1);
+  });
+
+  it("does not open a node when a pinch ends on one", () => {
+    reset();
+    b.run("window.__opened=null;window.__open=openPanel;openPanel=(k)=>{window.__opened=k}");
+    pointer("pointerdown", 7, 150, 480);
+    pointer("pointerdown", 8, 240, 480);
+    pointer("pointermove", 7, 120, 480);
+    pointer("pointermove", 8, 270, 480);
+    pointer("pointerup", 7, 120, 480);
+    pointer("pointerup", 8, 270, 480);
+    const hub = b.window.document.querySelector('#orgSvg .onode[data-kind="village"]');
+    hub?.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true }));
+    expect(b.run<unknown>("window.__opened")).toBeNull();
+    expect(body(b).contains("circles"), "still on the chart").toBe(true);
+    b.run("openPanel=window.__open");
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+describe("the phone's drawer reaches the lenses and the time of day (F58)", () => {
+  let b: Booted;
+  const state = () =>
+    b.run<{ mode: string; orgOn: boolean; flowsOn: boolean; dayAuto: boolean; dayPhase: number }>(
+      "({mode,orgOn,flowsOn,dayAuto,dayPhase})",
+    );
+  const open = () => {
+    b.run("renderDrawer();$('pdrawer').classList.add('open')");
+  };
+  const cell = (k: string) => `#pdrawer [data-pl="${k}"]`;
+  beforeAll(async () => {
+    b = boot();
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.close());
+
+  it("offers Now, Vision, Org, Flows and the time of day", () => {
+    open();
+    const cells = [...b.window.document.querySelectorAll<HTMLElement>("#pdrawer [data-pl]")].map((c) => c.dataset.pl);
+    expect(cells).toEqual(["now", "vision", "org", "flows", "day"]);
+    expect(b.window.document.querySelector(cell("now"))?.getAttribute("aria-pressed"), "Now is the lens on").toBe("true");
+  });
+
+  it("turns the Vision on, closing the drawer so the land shows", () => {
+    open();
+    click(b, cell("vision"));
+    expect(state().mode).toBe("vision");
+    expect(b.window.document.getElementById("pdrawer")?.classList.contains("open")).toBe(false);
+    open();
+    expect(b.window.document.querySelector(cell("vision"))?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("turns the Org lens on, with its key's class, and Flows", () => {
+    open();
+    click(b, cell("org"));
+    open();
+    click(b, cell("flows"));
+    expect(state()).toMatchObject({ orgOn: true, flowsOn: true });
+    expect(body(b).contains("org-lens")).toBe(true);
+  });
+
+  it("steps the time of day the way the desk's sun button does", () => {
+    const before = state().dayPhase;
+    open();
+    click(b, cell("day"));
+    const after = state();
+    expect(after.dayAuto, "the hour is the reader's now").toBe(false);
+    expect(after.dayPhase).not.toBe(before);
+  });
+
+  it("comes back to Now, the one way back from the Vision a phone had none of", () => {
+    open();
+    click(b, cell("now"));
+    expect(state().mode).toBe("now");
+    expect(b.uncaught).toEqual([]);
+  });
+});

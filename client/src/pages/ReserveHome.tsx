@@ -15,16 +15,16 @@
  * constant compiled into this file, so it arrives over the network and the
  * link's `type` is held raw until it does. See `preselectedHome`.
  *
- * NOTHING PRODUCES `hamlet=` YET, measured 2026-08-14: zero hits for
- * `hamlet=` outside two comments and one column comment, and the map artifact
- * (docs/prototypes/grounds-v0.html) contains no `/reserve` link at all. The
- * two links into this page are Housing.tsx's home cards and
- * ResidentJourney.tsx's deposit stage, and Housing.tsx only forwards a
- * `hamlet` it was handed. So every arrival today has no hamlet: the block
- * below does not render, and the intent is recorded with `structureKey` null,
- * which is a legitimate state this route was built to accept. The producer is
- * one link out of a structure on the map, carrying that structure's own key,
- * and it belongs to the map lane.
+ * THE MAP PRODUCES `hamlet=`. The house chip beside a hamlet on the living
+ * map opens a card whose "Begin your request" button links here with
+ * `?from=map&hamlet=<structureKey>` (homeSheet in
+ * docs/prototypes/grounds-v0.html; shared/mapArtifactPlaces.test.ts pins
+ * it). Before 2026-10-02 that button went to /request-a-house, which the
+ * router never served, so no arrival carried a hamlet. The other links into
+ * this page are Housing.tsx's home cards and ResidentJourney.tsx's deposit
+ * stage, and Housing.tsx only forwards a `hamlet` it was handed. An arrival
+ * with no hamlet is still a legitimate state: the block below does not
+ * render, and the intent is recorded with `structureKey` null.
  *
  * ── THE EXAMPLE RULE ─────────────────────────────────────────────────────
  * This page shows how many homes are open in the chosen hamlet, and it must
