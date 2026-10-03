@@ -8644,12 +8644,20 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
      the time the in-browser engine may hold a line while it loads. Read, the
      pace is JDWELL, as it always was.
      `beat` is the stop this hold belongs to. A line can end after the walk
-     has moved on, and an old stop must never arm the clock for a new one. */
+     has moved on, and an old stop must never arm the clock for a new one.
+     NOR CLEAR IT: the guard comes before clearTimeout. It used to come after,
+     so an old stop's line that settled late (cut by the next stop's line, or
+     flushed by mvStop) cleared the ceiling the CURRENT stop had just armed,
+     and a next line that never reported its end then held the walk for good.
+     Every path that should cancel the clock clears JTMR itself (hold on
+     entry, jPause, jNext, jMore, jEnd, jHalt), so a stale arm has nothing to
+     do. */
   const hold=(spoken,said)=>{clearTimeout(JTMR);
     if(!JWALK||JWALK.id!==id||JWALK.paused)return;
     const beat=JWALK.beat,t0=Date.now();
-    const arm=ms=>{clearTimeout(JTMR);
+    const arm=ms=>{
       if(!JWALK||JWALK.id!==id||JWALK.paused||JWALK.beat!==beat)return;
+      clearTimeout(JTMR);
       /* GUIDE.on is checked here as well as cleared by stop(), because this is
          the timer that used to move the map six seconds after somebody had
          already taken it back. Two locks on the one door that was open. */

@@ -661,6 +661,51 @@ describe("with her voice on, every stop is heard to its end (F04)", () => {
     b.close();
   });
 
+  /* THE CEILING HOLDS PAST THE FIRST STOP (round 4 sweep). Every stop hangs
+     its own line's promise on arm(), and arm() used to clear the walk's timer
+     BEFORE it asked whether its stop was still the current one. A line that
+     settled after the walk had moved on (cut by the next stop's line, or
+     flushed by mvStop) therefore cleared the ceiling the NEW stop had just
+     armed, and returned. With a voice that never reports an end, stop 1's
+     ceiling moved the walk to stop 2, stop 1's line settled a moment later
+     and took stop 2's ceiling with it, and the walk sat at stop 2 for good.
+     The case above stops at i>=1, which is why it stayed green. */
+  it("still walks on from the second stop when no line ever says it ended", async () => {
+    const b = boot("#skipIntro", DESK, { neverEnds: true });
+    await settle(200);
+    b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+    b.run("playJourney('j4')");
+    await landed(b, 1);
+    const first = (b.said[b.said.length - 1]?.words ?? 0) * 450 + 12000;
+    expect(await until(() => (walking(b)?.i ?? 0) >= 1, real(first) + 10000), "stop 1's ceiling moved the walk on").toBe(true);
+    await landed(b, 2);
+    const t = Date.now();
+    const second = (b.said[b.said.length - 1]?.words ?? 0) * 450 + 12000;
+    expect(await until(() => (walking(b)?.i ?? 0) >= 2, real(second) + 10000), "stop 2's ceiling moved the walk on").toBe(true);
+    expect(Date.now() - t, "within stop 2's ceiling and a margin").toBeLessThan(real(second) + 10000);
+    b.run("jEnd()");
+    expect(b.uncaught).toEqual([]);
+    b.close();
+  });
+
+  it("keeps the next stop's ceiling when walk on is pressed mid-line", async () => {
+    const b = boot("#skipIntro", DESK, { neverEnds: true });
+    await settle(200);
+    b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+    b.run("playJourney('j4')");
+    await landed(b, 1);
+    // A person walks on while stop 1 is still being said.
+    b.run("jNext()");
+    await landed(b, 2);
+    const t = Date.now();
+    const second = (b.said[b.said.length - 1]?.words ?? 0) * 450 + 12000;
+    expect(await until(() => (walking(b)?.i ?? 0) >= 2, real(second) + 10000), "stop 2's ceiling moved the walk on").toBe(true);
+    expect(Date.now() - t).toBeLessThan(real(second) + 10000);
+    b.run("jEnd()");
+    expect(b.uncaught).toEqual([]);
+    b.close();
+  });
+
   it("does not sit at the ceiling when the voice drops a line without a word", async () => {
     const b = boot("#skipIntro", DESK, { drops: true });
     await settle(200);
