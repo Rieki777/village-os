@@ -3429,14 +3429,16 @@ let mistSeeds=[...Array(14)].map((_,i)=>({x:1600+rand()*400,y:840+rand()*300,r:6
    window. The ambient life (shimmer, surf, birds, the day) is slow and reads
    the same at 30, so on the phone profile or a coarse pointer, while nothing
    moves the camera, a frame that comes sooner than 32 ms after the last
-   painted one only asks for the next. A drag, a pinch, a flight or a camera
-   still coasting paints every frame, as before. */
+   painted one paints nothing. A drag, a pinch, a flight or a camera still
+   coasting paints every frame, as before. frame() at the foot of this block
+   decides, and stays the one place that schedules the next frame. */
 let IDLE_PAINT=0;
 const COARSE=(()=>{try{return matchMedia('(pointer:coarse)').matches}catch(_){return false}})();
-function frame(ts){
+function stillFrame(ts){
   if((COARSE||document.body.classList.contains('pocket'))&&!dragging&&!travel
-    &&Math.abs(cam.vx)+Math.abs(cam.vy)<.01&&ts-IDLE_PAINT<32){requestAnimationFrame(frame);return}
-  IDLE_PAINT=ts;
+    &&Math.abs(cam.vx)+Math.abs(cam.vy)<.01&&ts-IDLE_PAINT<32)return true;
+  IDLE_PAINT=ts;return false}
+function paintLand(ts){
   const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=ts;
   if(!dragging&&!travel){cam.x+=cam.vx;cam.y+=cam.vy;cam.vx*=.9;cam.vy*=.9;clampCam()}
   if(travel){travel.t+=dt*1.6;const k=travel.t>=1?1:(1-Math.pow(1-travel.t,3));
@@ -3575,7 +3577,8 @@ function frame(ts){
   if(dp>=1.7||dp<0.12){ // moonlight
     const mg=cx.createRadialGradient(cv.width*.75,cv.height*.2,20,cv.width*.75,cv.height*.2,cv.width*.5);
     mg.addColorStop(0,'rgba(200,220,255,.13)');mg.addColorStop(1,'rgba(0,0,0,0)');cx.fillStyle=mg;cx.fillRect(0,0,cv.width,cv.height)}
-  syncBanners();drawMinimap();
+  syncBanners();drawMinimap()}
+function frame(ts){if(!stillFrame(ts))paintLand(ts);
   requestAnimationFrame(frame)}
 </script>
 <script>
