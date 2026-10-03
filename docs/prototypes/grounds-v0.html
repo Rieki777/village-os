@@ -6437,6 +6437,21 @@ function scheduleAutosave(){clearTimeout(autosaveT);autosaveT=setTimeout(saveNow
    work back on the next visit. */
 const RESCUE_KEY='grounds-unsaved-draft';
 let SAVE_SEQ=0,SAVE_DONE=0,SAVE_FAIL=null,SAVE_HELD=false,SAVE_RETRY=null,SAVE_TRIES=0,LOCAL_FAIL=false;
+/* ONE SAVE ON THE WIRE AT A TIME. Each save is the whole draft and the
+   village keeps whichever lands last, so two on the wire could land in the
+   wrong order: a slow first save landed after a quick second one, the
+   village kept the older draft, and the map, having heard yes to the newer
+   one, said everything was saved and let the person leave. A save asked for
+   while one is out waits (SAVE_AGAIN) and goes when the answer comes, built
+   from the screen at that moment, so it is always the newest work. Its copy
+   is in this browser meanwhile, and stays until the save carrying it is
+   confirmed.
+   SAVE_FLIGHT is the save on the wire, settled once its answer is read, so
+   a publish or a discard can let it land first. SAVE_PAUSE holds every save
+   while one of them is being answered. SAVE_SLOW: the save on the wire has
+   gone past the village's usual time. SAVE_STOP: the village refused for a
+   reason no retry can fix, and nothing retries until the person asks. */
+let SAVE_FLIGHT=null,SAVE_AGAIN=false,SAVE_PAUSE=false,SAVE_SLOW=false,SAVE_STOP=false;
 function saveNow(){clearTimeout(autosaveT);autosaveT=null;
   /* While visiting, the land on screen is the live map and the work is the
      held draft. Saving the screen there wrote the live map into the draft's
@@ -6448,32 +6463,56 @@ function saveNow(){clearTimeout(autosaveT);autosaveT=null;
   /* A saved draft is still waiting for its answer, and there is one row per
      member: this save would replace it before anybody chose to. */
   if(OFFERED){SAVE_HELD=true;renderDraftBar();return}
-  const my=++SAVE_SEQ;
+  /* Held: one is out, a publish or discard is being answered, or the village
+     refused for good. The work is kept in this browser either way. */
+  if(SAVE_FLIGHT||SAVE_PAUSE||SAVE_STOP){SAVE_AGAIN=true;rescueWrite(J);renderDraftBar();return}
+  const my=++SAVE_SEQ;SAVE_AGAIN=false;SAVE_SLOW=false;
   rescueWrite(J);
-  shellAsk('draft-save',{scene:J,baseVersion:BASE_VERSION}).then(r=>saveAnswered(my,r));
+  SAVE_FLIGHT=shellAsk('draft-save',{scene:J,baseVersion:BASE_VERSION},()=>{if(my===SAVE_SEQ){SAVE_SLOW=true;renderDraftBar()}})
+    .then(r=>{SAVE_FLIGHT=null;saveAnswered(my,r)});
   renderDraftBar()}
+/* Refusals no retry can fix: the person is signed out, the hand is gone, or
+   the village will not take this scene at all. Retrying those every few
+   seconds, for as long as the page was open, said nothing new and asked the
+   village the same question forever. A thrown fetch, a server error or a
+   village that did not answer can pass, and those still try again on a
+   capped backoff. */
+function saveRefusedForGood(r){const s=+(r&&r.status)||0;
+  return (r&&r.error==='auth_required')||(s>=400&&s<500&&s!==408&&s!==429)}
 function saveAnswered(my,r){
   if(my!==SAVE_SEQ)return;
-  SAVE_DONE=my;clearTimeout(SAVE_RETRY);
-  if(r&&r.ok){SAVE_FAIL=null;SAVE_TRIES=0;rescueClear();
+  SAVE_DONE=my;SAVE_SLOW=false;clearTimeout(SAVE_RETRY);SAVE_RETRY=null;
+  if(r&&r.ok){SAVE_FAIL=null;SAVE_TRIES=0;SAVE_STOP=false;
+    /* Newer work is still waiting to go, and this browser's copy is it. */
+    if(!SAVE_AGAIN)rescueClear();
     if(!saveNudged){saveNudged=true;toast('Your work saves itself to your own draft. Nobody else sees it until you publish.')}}
   else{const first=!SAVE_FAIL;
     SAVE_FAIL=villageSaid(r,'The village did not take the save.');
+    SAVE_STOP=saveRefusedForGood(r);
     if(first)toast('Not saved. '+notSavedWhy());
     /* Tried again on its own. A person who has stopped editing makes no next
        edit to carry the retry. */
-    SAVE_TRIES++;SAVE_RETRY=setTimeout(()=>{if(SAVE_FAIL&&!autosaveT)saveNow()},Math.min(60000,5000*Math.pow(2,SAVE_TRIES-1)))}
+    if(!SAVE_STOP){SAVE_TRIES++;SAVE_RETRY=setTimeout(()=>{if(SAVE_FAIL&&!autosaveT)saveNow()},Math.min(60000,5000*Math.pow(2,SAVE_TRIES-1)))}}
+  /* The work that waited for this answer goes now, unless a publish or a
+     discard is deciding what becomes of it. After a refusal it goes with
+     the retry, which builds the newest scene too. */
+  if(SAVE_AGAIN&&!SAVE_PAUSE&&!SAVE_FAIL)saveNow();
   renderDraftBar()}
+/* Try again, from the bar: the person asking is the one thing that lifts a
+   refusal for good, because only they know they have signed in again. */
+function saveRetry(){SAVE_STOP=false;saveNow()}
 /* The village's refusal, as a sentence a person can act on. A route that
    answers with a code, or with nothing, still has to say something. */
 function villageSaid(r,fallback){
   if(r&&r.quiet)return 'The village did not answer.';
   const e=r&&r.error;
-  if(e==='auth_required')return 'You are signed out. Sign in again to carry on.';
+  if(e==='auth_required'||(r&&r.status===401))return 'You are signed out. Sign in again to carry on.';
   return (typeof e==='string'&&/\s/.test(e))?e:fallback}
-/* The refusal, then where the work is. The shell's own sentence for a lost
-   connection already says the work is still here. */
-function notSavedWhy(){return SAVE_FAIL+(/still here/i.test(SAVE_FAIL||'')?'':' Your changes are still on this screen.')}
+/* The refusal, then whether it will try again, then where the work is. The
+   shell's own sentence for a lost connection already says the work is still
+   here. */
+function notSavedWhy(){return SAVE_FAIL+(SAVE_STOP?' Saving has stopped. Try again sends your changes.':'')+
+  (/still here/i.test(SAVE_FAIL||'')?'':' Your changes are still on this screen.')}
 function rescueWrite(J){try{localStorage.setItem(RESCUE_KEY,JSON.stringify({scene:J,baseVersion:BASE_VERSION,savedAt:new Date().toISOString()}))}catch(_){}}
 function rescueClear(){try{localStorage.removeItem(RESCUE_KEY)}catch(_){}}
 function rescueRead(){try{const R=JSON.parse(localStorage.getItem(RESCUE_KEY)||'null');
@@ -6484,18 +6523,19 @@ function rescueRead(){try{const R=JSON.parse(localStorage.getItem(RESCUE_KEY)||'
    "Changes you made may not be saved" on every reload, close or typed
    address, having changed nothing. Published history and a confirmed save
    are not lost by leaving; only work still waiting is. Inside a shell that
-   is an edit still on its timer, a save on its way, one the village
-   refused, or one held while a waiting draft is chosen. On its own it is
+   is an edit still on its timer, a save on its way or waiting behind
+   one, one the village refused, or one held while a waiting draft is
+   chosen. On its own it is
    an edit still on its timer, or a copy this browser could not write,
    because that copy is the only save there is. */
 function unsavedWork(){
   if(!inShell())return !!autosaveT||LOCAL_FAIL;
-  return HAND.canEdit&&!!(autosaveT||SAVE_FAIL||SAVE_HELD||SAVE_DONE<SAVE_SEQ)}
+  return HAND.canEdit&&!!(autosaveT||SAVE_FAIL||SAVE_HELD||SAVE_AGAIN||SAVE_DONE<SAVE_SEQ)}
 addEventListener('beforeunload',e=>{try{if(unsavedWork()){e.preventDefault();e.returnValue=''}}catch(_){}});
 /* Leaving with an edit still on its timer sends it now, and keeps this
    browser's copy, which a reload can offer back if the send does not land. */
 addEventListener('pagehide',()=>{try{if(autosaveT&&inShell()&&HAND.canEdit)saveNow()}catch(_){}});
-addEventListener('online',()=>{try{if(SAVE_FAIL)saveNow()}catch(_){}});
+addEventListener('online',()=>{try{if(SAVE_FAIL&&!SAVE_STOP)saveNow()}catch(_){}});
 /* And the same again: this one is asked `CIRCLE_HOMES[x.c]` with a circle
    name from the scene, and an inherited Function passes the `h &&` guard
    before BY[h] finally comes back undefined. */
@@ -9968,16 +10008,31 @@ function shellPost(m){try{if(inShell())window.parent.postMessage(m,'*')}catch(_)
 /* Ask the village to do something and wait for its answer.
    The nonce is what makes an answer belong to a question: publish twice
    quickly and two replies come back, and the second must not apply itself
-   over a newer intent. Eight seconds of silence resolves as `quiet`, NOT as a
-   failure, because the map runs standalone from file:// in every QA suite and
-   there is no village there to answer. A caller decides what quiet means; for
-   an autosave it means nothing at all. */
-function shellAsk(type,extra){
+   over a newer intent.
+   ON ITS OWN there is no village, and eight seconds of silence resolves as
+   `quiet`, NOT as a failure, because the map runs standalone from file:// in
+   every QA suite and nothing there will answer.
+   INSIDE A SHELL SILENCE IS NOT AN ANSWER. The shell answers every question
+   on every path, a thrown fetch included (sceneRelay.ts), so a village that
+   has not answered is a village still working. Reading eight seconds of it
+   as "no village" showed a save that landed as "Not saved", a publish that
+   landed as "no village to publish to", and an undo that landed as one that
+   had not, with the button ready to put the same version back twice. The
+   question stays open for the real answer; `slow` hears when the wait
+   passes SHELL_SLOW_MS, so the caller can say the village is still working,
+   and only SHELL_GIVE_UP_MS of silence resolves as quiet, so a frame whose
+   parent never relays (a peek, an editor's preview) cannot hold a caller
+   forever. Both are `let` so a test can shorten them. */
+let SHELL_SLOW_MS=8000,SHELL_GIVE_UP_MS=120000;
+function shellAsk(type,extra,slow){
   const nonce='sc'+(++PUB_SEQ)+'-'+Date.now();
   return new Promise(res=>{
     PUB_PENDING[nonce]=res;
     shellPost(Object.assign({type:type,nonce:nonce},extra||{}));
-    setTimeout(()=>{if(PUB_PENDING[nonce]){delete PUB_PENDING[nonce];res({ok:false,quiet:true})}},8000);
+    const quiet=()=>{if(PUB_PENDING[nonce]){delete PUB_PENDING[nonce];res({ok:false,quiet:true})}};
+    if(!inShell())return void setTimeout(quiet,SHELL_SLOW_MS);
+    if(typeof slow==='function')setTimeout(()=>{if(PUB_PENDING[nonce])try{slow()}catch(_){}},SHELL_SLOW_MS);
+    setTimeout(quiet,SHELL_GIVE_UP_MS);
   });
 }
 function sceneResult(d){const fn=PUB_PENDING[d.nonce];if(!fn)return;delete PUB_PENDING[d.nonce];fn(d)}
@@ -10125,6 +10180,14 @@ function applyScene(scene,version){
   const v=+version||0;
   if(SCENE_APPLIED&&v&&v===LIVE_SCENE_VERSION)return false;
   LIVE_SCENE=scene;LIVE_SCENE_VERSION=v;
+  /* A pushed scene IS the live map, so the bar names its version. Only a
+     publish's answer, a refusal and the hand used to move LIVE, so a
+     colleague's publish or an undo that arrived this way showed the new
+     land under the old number, and the undo button, which asks whether the
+     version it was made for is still live, could put the same version back
+     twice. Who made it is not on the push; the hand and the answers carry
+     that. */
+  if(v&&(!LIVE||v>(+LIVE.version||0)))LIVE={version:v,by:null,at:null};
   sayOffer();
   /* VIEWING AS A VISITOR, the land on screen is the live map and the draft
      waits in DRAFT_HOLD. Counting unpublished() here measured the live
@@ -10170,6 +10233,7 @@ function renderDraftBar(){
   const n=netChanges().length;
   st.innerHTML=SAVE_FAIL?`<b>Not saved.</b> ${escq(notSavedWhy())}`
     :SAVE_HELD?'<b>Not saved yet.</b> Your saved draft is waiting: open it, or start over from the live map.'
+    :SAVE_SLOW?'<b>Still saving.</b> The village has not answered yet. Your changes are still on this screen.'
     :n?`<b>${n}</b> unpublished change${n===1?'':'s'}. The live map is unchanged.`
      :'Editing a draft. The live map is unchanged.';
   lv.textContent=LIVE?`Live: version ${LIVE.version}${LIVE.by?', by '+LIVE.by:''}`:'Nothing published yet';
@@ -10277,8 +10341,19 @@ async function doPublish(){
      draft onto the publish, and every later visit offered it back as
      unpublished work. Let go again on any answer but yes. */
   const pending=!!autosaveT;clearTimeout(autosaveT);autosaveT=null;
+  /* So would a save already on the wire: it wrote the draft as it stood
+     before the publish over the copy the village had just rebased, at the
+     old base. Every save waits while the village answers, and the one out
+     lands first. */
+  SAVE_PAUSE=true;
   $('pubConfirm').disabled=true;$('pubConfirm').textContent='Publishing...';
-  const r=await shellAsk('publish',{scene:sent,baseVersion:BASE_VERSION,note:note||null});
+  if(SAVE_FLIGHT)await SAVE_FLIGHT;
+  /* A slow village is still working: the card stays open on its answer, and
+     a late yes is a yes. Eight seconds of silence used to close the card
+     with "no village to publish to" over a publish that then went live. */
+  const r=await shellAsk('publish',{scene:sent,baseVersion:BASE_VERSION,note:note||null},
+    ()=>{$('pubConfirm').textContent='Still publishing...';toast('The village has not answered yet. Your publish may still land.')});
+  SAVE_PAUSE=false;
   $('pubConfirm').disabled=false;$('pubConfirm').textContent='Publish it';
   if(r.ok){
     closePublish();
@@ -10287,14 +10362,15 @@ async function doPublish(){
     LIVE_SCENE=sent;LIVE_SCENE_VERSION=+r.version||LIVE_SCENE_VERSION;
     /* The village rebased the draft onto what it just published, so the
        draft is saved, and this browser's copy is no longer needed. */
-    SAVE_FAIL=null;SAVE_DONE=SAVE_SEQ;clearTimeout(SAVE_RETRY);rescueClear();
+    SAVE_FAIL=null;SAVE_STOP=false;SAVE_AGAIN=false;SAVE_DONE=SAVE_SEQ;clearTimeout(SAVE_RETRY);rescueClear();
     if(editSeq>sentSeq)scheduleAutosave();
     $('pubNote').value='';
     renderDraftBar();liveSince(r.version);
     return}
-  if(pending||editSeq>sentSeq)scheduleAutosave();
+  if(pending||SAVE_AGAIN||editSeq>sentSeq){SAVE_AGAIN=false;scheduleAutosave()}
   if(r.quiet){closePublish();
-    return toast('This map is running on its own, with no village to publish to.')}
+    return toast(inShell()?'The village has not answered, so this publish may still land. Look at the live version before you publish again.'
+      :'This map is running on its own, with no village to publish to.')}
   if(r.reason==='stale')return showConflict(r);
   toast(villageSaid(r,'The village could not take that change. Your draft is safe.'));
 }
@@ -10370,16 +10446,25 @@ async function doDiscard(){
      as a new draft, and every later visit offered it. Let go again if the
      village says no, because then the work is still the work. */
   const pending=!!autosaveT;clearTimeout(autosaveT);autosaveT=null;
+  /* SO WOULD A SAVE ALREADY ON THE WIRE, or one waiting to try again. The
+     delete went first and the save landed after it, writing the thrown-away
+     work back as a new draft that the next visit offered, under a map that
+     had just said it was gone. Every save waits until the village has
+     answered the discard, and the one already out is answered first. */
+  clearTimeout(SAVE_RETRY);SAVE_RETRY=null;SAVE_PAUSE=true;
   const waiting=OFFERED;
   $('pubConfirm').disabled=true;
-  const r=await shellAsk('draft-discard',{});
+  if(SAVE_FLIGHT)await SAVE_FLIGHT;
+  const r=await shellAsk('draft-discard',{},()=>{$('pubConfirm').textContent='Still waiting for the village...'});
+  SAVE_PAUSE=false;
   $('pubConfirm').disabled=false;closePublish();
-  if(r.quiet||!r.ok){if(pending)scheduleAutosave();
-    return toast(r.quiet?'No village to reach from here. Nothing was thrown away.':villageSaid(r,'That draft could not be thrown away.'))}
+  if(r.quiet||!r.ok){if(pending||SAVE_AGAIN||SAVE_FAIL){SAVE_AGAIN=false;scheduleAutosave()}
+    return toast(r.quiet?(inShell()?'The village has not answered, so your draft is still here.':'No village to reach from here. Nothing was thrown away.')
+      :villageSaid(r,'That draft could not be thrown away.'))}
   /* Nothing of the thrown-away work stays anywhere: not on a timer armed
      while the village answered, not in this browser's copy. */
-  clearTimeout(autosaveT);autosaveT=null;clearTimeout(SAVE_RETRY);
-  rescueClear();SAVE_FAIL=null;SAVE_HELD=false;SAVE_DONE=SAVE_SEQ;
+  clearTimeout(autosaveT);autosaveT=null;clearTimeout(SAVE_RETRY);SAVE_RETRY=null;
+  rescueClear();SAVE_FAIL=null;SAVE_HELD=false;SAVE_AGAIN=false;SAVE_STOP=false;SAVE_DONE=SAVE_SEQ;
   if(waiting){OFFERED=null;$('restoreBar').style.display='none';
     /* Changes made on the live map while the choice waited are the new draft. */
     if(unpublished().length)saveNow();
@@ -10437,9 +10522,10 @@ async function undoPublish(back,from){
      with it. Undo from the draft, where the land that comes back is seen. */
   if(VISITOR_VIEW){toast('You are looking at the live map. Go back to your draft, then undo.');return false}
   const had=LIVE_SCENE;
-  const r=await shellAsk('restore',{version:back});
-  if(r.quiet){toast('No village to reach from here.');return false}
-  if(!r.ok){toast(r.error||'That version could not be put back.');return false}
+  const r=await shellAsk('restore',{version:back},
+    ()=>toast('The village has not answered yet. The undo may still land.'));
+  if(r.quiet){toast(inShell()?'The village has not answered, so this undo may not have landed.':'No village to reach from here.');return false}
+  if(!r.ok){toast(villageSaid(r,'That version could not be put back.'));return false}
   LIVE=(r.live&&r.live.version)?r.live:{version:r.version};
   /* NO REBASE HERE. The village sends the land it just put back before it
      answers, and applyScene decides what that means for the draft. With
@@ -10459,7 +10545,7 @@ window.undoPublish=undoPublish;
   $('pubChip').onclick=openPublish;
   $('visitBtn').onclick=toggleVisitor;
   $('dropBtn').onclick=openDiscard;
-  $('saveRetry').onclick=()=>saveNow();
+  $('saveRetry').onclick=()=>saveRetry();
   $('pubCancel').onclick=closePublish;
   /* STANDALONE_HAND. No shell means no village to ask, and no village to ask
      means this is the founder's own design tool exactly as it has always

@@ -666,7 +666,7 @@ describe("a save the village refuses", () => {
     expect(refused.leaving).toBe(true);
   });
 
-  it("tries again from the bar, listens only to the newest save's answer, and a save the village takes clears it", async () => {
+  it("tries again from the bar, sends the newer work once the retry has answered, and a save the village takes clears it", async () => {
     const before = asks(m, "draft-save").length;
     press(m, "saveRetry");
     expect(asks(m, "draft-save")).toHaveLength(before + 1);
@@ -674,8 +674,15 @@ describe("a save the village refuses", () => {
     expect(nameIn(retried.scene, "gate")).toBe("Edit One");
     rename(m, "welcome", "Edit Two");
     await settle(SAVE_WAIT);
-    await answerLast(m, "draft-save", { ok: true, baseVersion: 6 });
-    // The retry's answer arrives last, and late: it must not undo the newer yes.
+    // One save on the wire at a time: the newer work waits for the retry.
+    expect(asks(m, "draft-save")).toHaveLength(before + 1);
+    await m.answer(retried, { ok: true, baseVersion: 6 });
+    const newest = lastAsk(m, "draft-save");
+    expect(asks(m, "draft-save")).toHaveLength(before + 2);
+    expect(nameIn(newest.scene, "welcome")).toBe("Edit Two");
+    expect(asksBeforeLeaving(m), "the newer work is still on its way").toBe(true);
+    await m.answer(newest, { ok: true, baseVersion: 6 });
+    // A second answer to the retry, arriving late, must not undo the newer yes.
     await m.answer(retried, { ok: false, error: REACH });
     expect(bar(m)).toMatch(/^2 unpublished changes\./);
     expect(asksBeforeLeaving(m)).toBe(false);
@@ -722,6 +729,9 @@ describe("work the village refused, on the next visit", () => {
     press(m, "restoreYes");
     m.run("openPublish()");
     press(m, "pubConfirm");
+    // Opening this browser's copy sent it to the village, and a publish lets
+    // a save on the wire land first.
+    await answerLast(m, "draft-save", { ok: true, baseVersion: 6 });
     const published = lastAsk(m, "publish");
     m.close();
     expect(published?.baseVersion).toBe(6);
@@ -988,6 +998,9 @@ describe("a publish refused because a colleague published first", () => {
   });
 
   it("starts the next draft from the new version once this one is thrown away", async () => {
+    // The look at the live map sent the refused work to the village, and a
+    // discard lets a save on the wire land first.
+    await answerLast(m, "draft-save", { ok: true, baseVersion: 6 });
     m.run("openDiscard()");
     press(m, "pubConfirm");
     await answerLast(m, "draft-discard", { ok: true });
@@ -1017,3 +1030,208 @@ describe("a stale draft opened, then thrown away", () => {
   });
 });
 
+/*
+ * ROUND 3 (2026-10-02): THE SAVE, THE PUBLISH AND THE UNDO ON A VILLAGE THAT
+ * TAKES ITS TIME.
+ *
+ * Each of these was reproduced in Chromium against a stand-in village by the
+ * build-mode re-sweep and again by an independent skeptic. Here the village
+ * is the test: a question is answered when the test answers it, so a slow
+ * village is one that has not answered yet, and the ORDER in which the map
+ * asks is what the village would see.
+ */
+const RESCUE = "grounds-unsaved-draft";
+const rescued = (m: Booted) => {
+  const raw = storageOf(m)[RESCUE];
+  return raw ? (JSON.parse(raw) as { scene: Scene }) : null;
+};
+const undoThis = (m: Booted) =>
+  [...m.window.document.querySelectorAll<HTMLButtonElement>("#maiaLog button")].filter((b) => /^Undo this$|^Undone$|^Not undone$/.test(b.textContent ?? "")).pop();
+const PUBLISHED_7 = { ok: true, version: 7, live: { version: 7, by: "me", previous: 6 } };
+
+describe("two saves on the wire (round 3, finding 3)", () => {
+  it("never happens: newer work waits for the answer, goes whole, and only its own yes lets the browser's copy go", async () => {
+    const m = await framed();
+    rename(m, "market", "Moved first");
+    await settle(SAVE_WAIT);
+    const first = lastAsk(m, "draft-save");
+    rename(m, "gate", "Renamed second");
+    await settle(SAVE_WAIT);
+    const whileOut = { saves: asks(m, "draft-save").length, leaving: asksBeforeLeaving(m), kept: nameIn(rescued(m)?.scene, "gate") };
+    await m.answer(first, { ok: true, baseVersion: 6 });
+    const second = lastAsk(m, "draft-save");
+    const afterFirst = { saves: asks(m, "draft-save").length, leaving: asksBeforeLeaving(m), kept: !!rescued(m) };
+    await m.answer(second, { ok: true, baseVersion: 6 });
+    const done = { leaving: asksBeforeLeaving(m), kept: !!rescued(m), bar: bar(m) };
+    m.close();
+    expect(whileOut, "the newer work waits, and this browser holds it").toEqual({ saves: 1, leaving: true, kept: "Renamed second" });
+    expect(afterFirst).toEqual({ saves: 2, leaving: true, kept: true });
+    expect(nameIn(second.scene, "gate")).toBe("Renamed second");
+    expect(nameIn(second.scene, "market")).toBe("Moved first");
+    expect(done.leaving).toBe(false);
+    expect(done.kept).toBe(false);
+    expect(done.bar).toMatch(/^2 unpublished changes\./);
+  });
+});
+
+describe("Discard draft while a save is on the wire (round 3, finding 4)", () => {
+  it("lets the save land, then throws the draft away, and nothing writes it back", async () => {
+    const m = await framed();
+    rename(m, "market", "Work I threw away");
+    await settle(SAVE_WAIT);
+    const out = lastAsk(m, "draft-save");
+    m.run("openDiscard()");
+    press(m, "pubConfirm");
+    const early = asks(m, "draft-discard").length;
+    await m.answer(out, { ok: true, baseVersion: 6 });
+    const order = m.asked.map((q) => q.type);
+    await answerLast(m, "draft-discard", { ok: true });
+    await settle(SAVE_WAIT);
+    const after = { saves: asks(m, "draft-save").length, kept: !!rescued(m), market: m.run<string>("BY.market.name") };
+    m.close();
+    expect(early, "the delete waited for the save on the wire").toBe(0);
+    expect(order.filter((t) => t === "draft-save" || t === "draft-discard")).toEqual(["draft-save", "draft-discard"]);
+    expect(after.saves, "nothing saved the thrown-away work again").toBe(1);
+    expect(after.kept).toBe(false);
+    expect(after.market).not.toBe("Work I threw away");
+  });
+});
+
+describe("Publish while a save is on the wire (N25)", () => {
+  it("lets the save land first, so it cannot write over the copy the publish rebased", async () => {
+    const m = await framed();
+    rename(m, "gate", "Saved, then published");
+    await settle(SAVE_WAIT);
+    const out = lastAsk(m, "draft-save");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    const early = asks(m, "publish").length;
+    await m.answer(out, { ok: true, baseVersion: 6 });
+    const pub = lastAsk(m, "publish");
+    await answerLast(m, "publish", PUBLISHED_7);
+    await settle(SAVE_WAIT);
+    const order = m.asked.map((q) => q.type).filter((t) => t === "draft-save" || t === "publish");
+    m.close();
+    expect(early, "the publish waited for the save on the wire").toBe(0);
+    expect(order).toEqual(["draft-save", "publish"]);
+    expect(nameIn(pub?.scene, "gate")).toBe("Saved, then published");
+  });
+});
+
+describe("a village slower than eight seconds (round 3, finding 5; N23)", () => {
+  /* One map, three slow answers in turn: each case leaves the map where the
+     next one starts, so each fails on its own when its own answer is misread. */
+  let m: Booted;
+  beforeAll(async () => {
+    m = await framed();
+  });
+  afterAll(() => m?.close());
+
+  it("says a slow save is still saving, never that it was not saved, and takes the late yes", async () => {
+    rename(m, "gate", "Slow one");
+    await settle(SAVE_WAIT);
+    const q = lastAsk(m, "draft-save");
+    await settle(8500);
+    const slow = { bar: bar(m), leaving: asksBeforeLeaving(m) };
+    await m.answer(q, { ok: true, baseVersion: 6 });
+    const late = { bar: bar(m), leaving: asksBeforeLeaving(m) };
+    expect(slow.bar).toBe("Still saving. The village has not answered yet. Your changes are still on this screen.");
+    expect(slow.leaving).toBe(true);
+    expect(late.bar).toMatch(/^1 unpublished change\./);
+    expect(late.leaving).toBe(false);
+    expect((await toasts(m)).filter((t) => t.startsWith("Not saved."))).toEqual([]);
+  }, 30_000);
+
+  it("keeps the publish card open on a slow publish, and a late yes is a yes", async () => {
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    const p = lastAsk(m, "publish");
+    await settle(8500);
+    const during = { open: cardOpen(m), button: m.window.document.getElementById("pubConfirm")?.textContent ?? "" };
+    await m.answer(p, PUBLISHED_7);
+    const said = await toasts(m);
+    expect(during).toEqual({ open: true, button: "Still publishing..." });
+    expect(said).toContain("The village has not answered yet. Your publish may still land.");
+    expect(said.join(" ")).not.toContain("running on its own");
+    expect(m.run<number>("LIVE.version")).toBe(7);
+    expect(m.window.document.getElementById("draftLive")?.textContent).toBe("Live: version 7, by me");
+  }, 30_000);
+
+  it("keeps Undo this pressed while a slow undo is answered, and never calls the village absent", async () => {
+    const b = undoThis(m);
+    expect(b, "Maia offers Undo this under the publish that landed").toBeTruthy();
+    b?.click();
+    const r = lastAsk(m, "restore");
+    await settle(8500);
+    const waiting = { disabled: !!b?.disabled, label: b?.textContent ?? "" };
+    await m.answer(r, { ok: true, version: 8, live: { version: 8, by: "me", previous: 7 } });
+    const said = await toasts(m);
+    expect(waiting).toEqual({ disabled: true, label: "Undo this" });
+    expect(said).toContain("The village has not answered yet. The undo may still land.");
+    expect(said.join(" ")).not.toContain("No village to reach");
+    expect(b?.textContent).toBe("Undone");
+  }, 30_000);
+});
+
+describe("a save refused for a reason no retry can fix (D28)", () => {
+  /** A save the village refuses with this answer, then six seconds, longer than the first retry's five. */
+  async function refusedWith(answer: Record<string, unknown>) {
+    const m = await framed();
+    rename(m, "gate", "Edit One");
+    await settle(SAVE_WAIT);
+    await answerLast(m, "draft-save", answer);
+    const saves = asks(m, "draft-save").length;
+    await settle(6000);
+    return { m, saves, later: asks(m, "draft-save").length, bar: bar(m) };
+  }
+
+  it("stops on a 401, says so, keeps newer work in this browser, and Try again sends the newest", async () => {
+    const r = await refusedWith({ ok: false, status: 401, error: "Sign in to keep a draft of the map." });
+    rename(r.m, "welcome", "Edit Two");
+    await settle(SAVE_WAIT);
+    const held = { saves: asks(r.m, "draft-save").length, kept: nameIn(rescued(r.m)?.scene, "welcome"), leaving: asksBeforeLeaving(r.m) };
+    press(r.m, "saveRetry");
+    const sent = lastAsk(r.m, "draft-save");
+    const total = asks(r.m, "draft-save").length;
+    r.m.close();
+    expect(r.later, "no retry on its own").toBe(r.saves);
+    expect(r.bar).toBe(
+      "Not saved. You are signed out. Sign in again to carry on. Saving has stopped. Try again sends your changes. Your changes are still on this screen.",
+    );
+    expect(held).toEqual({ saves: r.saves, kept: "Edit Two", leaving: true });
+    expect(total).toBe(r.saves + 1);
+    expect(nameIn(sent?.scene, "welcome")).toBe("Edit Two");
+  });
+
+  it("stops on a 403, in the village's own words", async () => {
+    const r = await refusedWith({ ok: false, status: 403, error: "Shaping the map is a cartographer's work." });
+    r.m.close();
+    expect(r.later).toBe(r.saves);
+    expect(r.bar).toMatch(/^Not saved\. Shaping the map is a cartographer's work\. Saving has stopped\./);
+  });
+
+  it("still tries again on its own when the connection dropped (the control)", async () => {
+    const r = await refusedWith({ ok: false, error: REACH });
+    r.m.close();
+    expect(r.later).toBe(r.saves + 1);
+    expect(r.bar).not.toContain("Saving has stopped");
+  });
+});
+
+describe("Undo this refused because the session ended (N22)", () => {
+  it("says so in words, where it used to toast the code", async () => {
+    const m = await framed();
+    rename(m, "gate", "Published then undone");
+    m.run("openPublish()");
+    press(m, "pubConfirm");
+    await answerLast(m, "publish", PUBLISHED_7);
+    const b = undoThis(m);
+    b?.click();
+    await answerLast(m, "restore", { ok: false, error: "auth_required" });
+    const seen = { said: await toasts(m), disabled: !!b?.disabled };
+    m.close();
+    expect(seen.said).toContain("You are signed out. Sign in again to carry on.");
+    expect(seen.said).not.toContain("auth_required");
+    expect(seen.disabled, "another press can still work once signed in").toBe(false);
+  });
+});
