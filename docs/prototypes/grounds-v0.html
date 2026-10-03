@@ -494,6 +494,13 @@
      edge at 176, 12px of air, and half the 212px button with room for a
      wider badge. It only binds under about 1014px, so a laptop never sees it. */
   body.embed:has(#panel.open) #attention,body.embed:has(#inspect.open) #attention{left:max(calc(50% - 207px),300px)}
+  /* SHE STOPS SHORT OF THE SHELL'S DOOR TOO (N06). Stepped aside to
+     right:414 her left edge is the window less 744px, which at 900 wide is
+     156, under Leave the map (its right edge 176) along the bottom where her
+     text box is: MEASURED, 3 of 27 points of her input reached the page
+     above instead. Below about 932px she narrows to keep 12px of air, and
+     never below the 230 she is when minimised. */
+  body.embed:has(#panel.open) #maia:not(.min),body.embed:has(#inspect.open) #maia:not(.min){width:max(230px,min(330px,calc(100vw - 602px)))}
   /* ---------- toasts / ripples ---------- */
   #toasts{position:absolute;top:var(--band-t-toasts,64px);left:50%;transform:translateX(-50%);z-index:65;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
     width:min(92vw,420px)}
@@ -5304,6 +5311,49 @@ $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
   keepLook({words:w,theme:null,palette:null});
   applyTheme(themeFromWords(w),`I read “${w}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
   $('themePanel').classList.remove('show')};
+
+/* WHAT NEEDS HANDS STANDS ABOVE HER WHEN THERE IS NO ROOM BESIDE HER (N06).
+   With a place or the inspector open, the land left of the 400px panel holds
+   the shell's door, this button and Maia side by side only from about
+   1280px. Below that the button (z 36 there, so its card stays on top) sat
+   on her text box: MEASURED with the Greenhouse open, 11% of her input
+   reachable at 900x900, 33% at 960x1040, 56% at 1024x768, 78% at 1180x800,
+   and a click on the left of her box opened What needs hands. So when the
+   two would meet, the button steps left if the bottom edge has the room,
+   and otherwise stands just above her measured top, under her z, and right
+   of the build bar when that is up, which the lifted button would meet. Measured, never assumed: her height is her
+   log's and her rows', and she glides to right:414 over .28s, so this runs
+   again when that glide ends. */
+(function attnClearOfMaia(){
+  const a=$('attention'),m=$('maia');if(!a||!m)return;
+  let raf=0;
+  const fit=()=>{raf=0;
+    a.style.removeProperty('bottom');a.style.removeProperty('z-index');a.style.removeProperty('left');
+    const bc=document.body.classList;
+    if(bc.contains('pocket')||bc.contains('intro'))return;
+    const shown=id=>{const el=$(id);return !!el&&el.classList.contains('open')};
+    if(!shown('panel')&&!shown('inspect'))return;
+    const ar=a.getBoundingClientRect(),mr=m.getBoundingClientRect();
+    if(!ar.width||!mr.width||getComputedStyle(m).display==='none')return;
+    if(ar.right+8<=mr.left||ar.left>=mr.right+8)return;
+    /* A few px of overlap and room on its left: it steps left, staying on
+       the bottom edge, clear of the shell's door (188) or the window's edge,
+       and of the minimap where that stands on the same row. */
+    const need=ar.right+8-mr.left;let floor=bc.contains('embed')?188:14;
+    const mm=$('minimapWrap'),mmr=mm&&getComputedStyle(mm).display!=='none'?mm.getBoundingClientRect():null;
+    if(mmr&&mmr.width&&mmr.top<ar.bottom&&mmr.bottom>ar.top)floor=Math.max(floor,mmr.right+8);
+    if(ar.left-need>=floor){a.style.left=Math.floor(ar.left-need+ar.width/2)+'px';return}
+    a.style.bottom=Math.ceil(innerHeight-mr.top+10)+'px';a.style.zIndex='30';
+    const bb=$('buildBar');
+    if(bb&&getComputedStyle(bb).display!=='none'){const br=bb.getBoundingClientRect(),nr=a.getBoundingClientRect();
+      if(nr.left<br.right+8&&nr.top<br.bottom&&nr.bottom>br.top)a.style.left=Math.ceil(br.right+8+nr.width/2)+'px'}};
+  const soon=()=>{if(!raf)raf=requestAnimationFrame(fit)};
+  const mo=new MutationObserver(soon);
+  for(const id of ['panel','inspect','maia'])if($(id))mo.observe($(id),{attributes:true,attributeFilter:['class']});
+  mo.observe(document.body,{attributes:true,attributeFilter:['class']});
+  m.addEventListener('transitionend',soon);
+  if(typeof ResizeObserver==='function')new ResizeObserver(soon).observe(m);
+  addEventListener('resize',soon);soon()})();
 
 /* attention cycle */
 let attnIdx=0;
