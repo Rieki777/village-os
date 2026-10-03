@@ -241,7 +241,7 @@ describe("a district plate over a building hands the click to the building", () 
 
   /** The Kitchen, under its own district's plate, as it is at the arrival camera. */
   const KEY = "kitchen";
-  const plateOf = () => b.run<HTMLElement>(`bEls['d_'+BY['${KEY}'].district]`);
+  const plateOf = () => b.run<(key: string) => HTMLElement>("(k=>bEls['d_'+BY[k].district])")(KEY);
   const poi = () => b.window.document.querySelector<HTMLElement>(`.poi[data-k="${KEY}"]`) as HTMLElement;
   const reset = () => b.run("if(panelKey)document.getElementById('panelClose').click();travel=null;panelKey=null");
   /** A real click on the plate, landing in the stack a browser would report there. */

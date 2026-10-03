@@ -541,9 +541,10 @@ const bar = (m: Booted) => m.window.document.getElementById("draftState")?.textC
 const cardOpen = (m: Booted) => !!m.window.document.getElementById("pubWrap")?.classList.contains("show");
 const restoreShown = (m: Booted) => (m.window.document.getElementById("restoreBar") as HTMLElement | null)?.style.display !== "none";
 const publishDisabled = (m: Booted) => (m.window.document.getElementById("pubGo") as HTMLButtonElement).disabled;
-/** The inspect card's own two steps: the name changes, then the edit is logged. */
+/** The inspect card's own two steps: the name changes, then the edit is logged.
+    The values go in as arguments, never spliced into the code the page runs. */
 const rename = (m: Booted, key: string, to: string) =>
-  m.run(`BY[${JSON.stringify(key)}].name=${JSON.stringify(to)};logEdit('rename','structure:'+${JSON.stringify(key)},{to:${JSON.stringify(to)}})`);
+  m.run<(key: string, to: string) => void>("((k,to)=>{BY[k].name=to;logEdit('rename','structure:'+k,{to})})")(key, to);
 /** Whether closing the page now would ask first. */
 const asksBeforeLeaving = (m: Booted) =>
   m.run<boolean>("(()=>{const e=new Event('beforeunload',{cancelable:true});dispatchEvent(e);return e.defaultPrevented})()");
@@ -564,10 +565,8 @@ function storageOf(m: Booted): Record<string, string> {
   return out;
 }
 function recordToasts(m: Booted) {
-  m.run(
-    "window.__toasts=[];new MutationObserver(ms=>ms.forEach(x=>x.addedNodes.forEach(n=>__toasts.push(n.textContent))))" +
-      ".observe(document.getElementById('toasts'),{childList:true})",
-  );
+  m.run(`window.__toasts=[];new MutationObserver(ms=>ms.forEach(x=>x.addedNodes.forEach(n=>__toasts.push(n.textContent))))
+    .observe(document.getElementById('toasts'),{childList:true})`);
 }
 async function toasts(m: Booted) {
   await settle(0);
@@ -615,10 +614,8 @@ describe("a config push from the shell, under an open inspect card", () => {
     m.post(config(live6(), 6));
     sameVersion = { card: m.run<boolean>("BY.market===window.__card") };
     m.post(config(live7(), 7));
-    m.run(
-      "(()=>{const i=document.getElementById('iName');i.value='Typed after the push';" +
-        "i.dispatchEvent(new Event('input'));i.dispatchEvent(new Event('change'))})()",
-    );
+    m.run(`(()=>{const i=document.getElementById('iName');i.value='Typed after the push';
+      i.dispatchEvent(new Event('input'));i.dispatchEvent(new Event('change'))})()`);
     newVersion = {
       onMap: m.run<string>("BY.market.name"),
       saved: m.run<string>("buildExportJSON().map_structures.find(r=>r.key==='market').name"),

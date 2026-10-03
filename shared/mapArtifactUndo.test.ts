@@ -264,23 +264,24 @@ async function boot(opts: { shell?: boolean } = {}): Promise<Booted> {
 }
 
 const lastToast = (m: Booted) => m.el("#toasts")?.lastElementChild?.textContent ?? "";
-const name = (m: Booted, key: string) => m.run<string>(`BY[${JSON.stringify(key)}]&&BY[${JSON.stringify(key)}].name`);
+const name = (m: Booted, key: string) => m.run<(key: string) => string>("(k=>BY[k]&&BY[k].name)")(key);
 const liveName = (m: Booted, key: string) => m.village.liveScene().map_structures.find((s) => s.key === key)?.name;
 
 /** Rename through the inspect card, the way a person types and tabs away. */
 function rename(m: Booted, key: string, to: string) {
-  m.run(`openInspect(${JSON.stringify(key)})`);
+  m.run<(key: string) => void>("openInspect")(key);
   const box = m.el<HTMLInputElement>("#iName");
   box.value = to;
   box.dispatchEvent(new m.window.Event("input"));
   box.dispatchEvent(new m.window.Event("change"));
 }
 /** Drag a place by the events its poi listens for, to a point the artifact
-    itself says is on screen. */
+    itself says is on screen. The values go in as arguments to a function the
+    page hands back, never spliced into the code it evaluates. */
 function drag(m: Booted, key: string, dx: number, dy: number) {
-  const [x0, y0, x1, y1] = m.run<number[]>(
-    `(()=>{const s=BY[${JSON.stringify(key)}],a=worldToScreen(s.x,s.y),b=worldToScreen(s.x+${dx},s.y+${dy});return [a[0]/DPR,a[1]/DPR,b[0]/DPR,b[1]/DPR]})()`,
-  );
+  const [x0, y0, x1, y1] = m.run<(key: string, dx: number, dy: number) => number[]>(
+    "((k,dx,dy)=>{const s=BY[k],a=worldToScreen(s.x,s.y),b=worldToScreen(s.x+dx,s.y+dy);return [a[0]/DPR,a[1]/DPR,b[0]/DPR,b[1]/DPR]})",
+  )(key, dx, dy);
   const poi = m.el(`.poi[data-k="${key}"]`);
   poi.dispatchEvent(new m.window.MouseEvent("pointerdown", { bubbles: true, clientX: x0, clientY: y0 }));
   m.window.dispatchEvent(new m.window.MouseEvent("pointermove", { clientX: x1, clientY: y1 }));

@@ -279,10 +279,25 @@ describe("the painterly bake (F67)", () => {
   it("runs on its own source in a worker, and paints the same picture as the bake it replaced", () => {
     const source = b.run<string>("bakeWorkerSource()");
     const replies: { f: ArrayBuffer; t: ArrayBuffer }[] = [];
-    const worker = new Function("postMessage", `let onmessage;${source};return onmessage;`) as (
-      post: (m: { f: ArrayBuffer; t: ArrayBuffer }) => void,
-    ) => (e: { data: unknown }) => void;
-    const onmessage = worker((m) => replies.push(m));
+    /* The source is run whole, never spliced into a longer string: the
+       worker's one global, `onmessage`, is caught by a setter for the length
+       of the call, the way a worker's own global would take it. */
+    const caught: { onmessage?: (e: { data: unknown }) => void } = {};
+    Object.defineProperty(globalThis, "onmessage", {
+      configurable: true,
+      get: () => caught.onmessage,
+      set: (f: (e: { data: unknown }) => void) => {
+        caught.onmessage = f;
+      },
+    });
+    try {
+      const worker = new Function("postMessage", source) as (post: (m: { f: ArrayBuffer; t: ArrayBuffer }) => void) => void;
+      worker((m) => replies.push(m));
+    } finally {
+      delete (globalThis as { onmessage?: unknown }).onmessage;
+    }
+    const onmessage = caught.onmessage;
+    if (!onmessage) throw new Error("the worker source set no onmessage");
     const donor = b.run<{ m: number[]; s: number[] }>("({m:PALETTE_DONOR.m.slice(),s:PALETTE_DONOR.s.slice()})");
     onmessage({ data: { px: platePixels().buffer, donor: { m: [...donor.m], s: [...donor.s] } } });
     expect(replies.length).toBe(1);

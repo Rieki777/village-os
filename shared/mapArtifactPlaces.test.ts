@@ -372,7 +372,7 @@ describe("a publish landing while a place's door is open", () => {
     const m = boot("#skipIntro", { shell: true });
     await settle(200);
     m.post(config(SEED));
-    m.run(`openPanel('${RETITLED_AT}',1)`);
+    m.run<(key: string, tab: number) => void>("openPanel")(RETITLED_AT, 1);
     const before = m.window.document.getElementById("panelBody")?.textContent ?? "";
     m.post(config(LIVE, 7));
     const body = m.window.document.getElementById("panelBody");
@@ -390,7 +390,7 @@ describe("a publish landing while a place's door is open", () => {
     const m = boot("#skipIntro", { shell: true });
     await settle(200);
     m.post(config(LIVE));
-    m.run(`openPanel('${ADDED.key}',0)`);
+    m.run<(key: string, tab: number) => void>("openPanel")(ADDED.key, 0);
     const gone = clone(LIVE);
     gone.map_structures = gone.map_structures.filter((s) => s.key !== ADDED.key);
     m.post(config(gone, 7));
@@ -446,7 +446,7 @@ describe("the seats, once the village has said which roles it keeps", () => {
       ],
     });
     const doc = m.window.document;
-    m.run(`openPanel('${AT}',2)`);
+    m.run<(key: string, tab: number) => void>("openPanel")(AT, 2);
     const rows = [...doc.querySelectorAll<HTMLElement>("#panelBody .seatrow")].map((r) => {
       const a = r.querySelector("a, button");
       return {
@@ -530,9 +530,11 @@ describe("the seats, once the village has said which roles it keeps", () => {
 describe("the doors a published scene carries from before the census", () => {
   let m: Booted;
   const routeOf = (key: string, label: string) =>
-    m.run<string>(`(()=>{const d=BY['${key}'].modules.find(x=>x[0]===${JSON.stringify(label)});return d?doorRoute(d):'(no door)'})()`);
+    m.run<(key: string, label: string) => string>(
+      "((k,l)=>{const d=BY[k].modules.find(x=>x[0]===l);return d?doorRoute(d):'(no door)'})",
+    )(key, label);
   const doorAt = (key: string, label: string) => {
-    m.run(`openDoorAt('${key}',BY['${key}'].modules.findIndex(x=>x[0]===${JSON.stringify(label)}))`);
+    m.run<(key: string, label: string) => void>("((k,l)=>openDoorAt(k,BY[k].modules.findIndex(x=>x[0]===l)))")(key, label);
     const link = m.window.document.querySelector("#moduleCard a.btn");
     const seen = { text: link?.textContent ?? "", onclick: link?.getAttribute("onclick") ?? "" };
     m.run("closeDoor()");
@@ -631,7 +633,7 @@ describe("sample conversations, on the desk and in the pocket", () => {
   });
 
   it("labels each sample row in a place's panel, and leaves the real one bare", () => {
-    desk.run(`openPanel('${AT}',0)`);
+    desk.run<(key: string, tab: number) => void>("openPanel")(AT, 0);
     const rows = desk.window.document.querySelectorAll<HTMLElement>("#panelBody .cvrow");
     const read = [...rows].map((r) => ({ title: r.querySelector("b")?.textContent ?? "", small: r.querySelector("small")?.textContent ?? "" }));
     expect(read.length).toBeGreaterThan(1);
@@ -639,7 +641,7 @@ describe("sample conversations, on the desk and in the pocket", () => {
   });
 
   it("labels them in the Forum door, and says the forum holds the real ones", () => {
-    desk.run(`openDoor('forum',{at:'${AT}'})`);
+    desk.run<(at: string) => void>("(at=>openDoor('forum',{at}))")(AT);
     const rows = smalls(desk, "#moduleCard .mrow small");
     const foot = smalls(desk, "#moduleCard .lastv").join(" | ");
     desk.run("closeDoor()");
@@ -836,7 +838,7 @@ describe("the crown bar's figures", () => {
   /* Each instant below is the full or new moon itself, so its calendar day
      is the same in every time zone; the counts allow for the zone. */
   it("names the moon of the day it is asked, and counts to the next one", () => {
-    const at = (iso: string) => m.run<{ moon: string; name: string }>(`moonToday(new Date('${iso}'))`);
+    const at = (iso: string) => m.run<(iso: string) => { moon: string; name: string }>("(iso=>moonToday(new Date(iso)))")(iso);
     expect(at("2026-08-28T04:18:00Z")).toEqual({ moon: "🌕", name: expect.stringMatching(/^full moon · new moon in 1[45] days$/) });
     expect(at("2026-08-12T17:41:00Z")).toEqual({ moon: "🌑", name: expect.stringMatching(/^new moon · full moon in 1[56] days$/) });
     expect(at("2026-10-02T12:00:00Z").name).toMatch(/^last quarter · new moon in [78] days$/);

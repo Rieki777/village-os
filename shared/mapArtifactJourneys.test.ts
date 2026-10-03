@@ -369,8 +369,8 @@ describe("each journey says its own steps (F37)", () => {
         await settle(200);
         walkLines = b.run<string[]>("Object.values(MAIA_STOPS)");
         control = b.run("({gate:MAIA_STOPS.gate,council:MAIA_STOPS.council,mine:jLine({at:'council'},BY.council)})");
-        const total = b.run<number>(`jById('${id}').steps.filter(st=>st.at&&BY[st.at]).length`);
-        b.run(`playJourney('${id}')`);
+        const total = b.run<(id: string) => number>("(id=>jById(id).steps.filter(st=>st.at&&BY[st.at]).length)")(id);
+        b.run<(id: string) => void>("playJourney")(id);
         const stops: { title: string; said: string; more: boolean }[] = [];
         for (let n = 1; n <= total; n++) {
           const line = await landed(b, n);
