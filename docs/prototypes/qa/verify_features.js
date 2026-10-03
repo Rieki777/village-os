@@ -530,7 +530,7 @@ const ok = (c, n) => { console.log((c ? 'PASS ' : 'FAIL ') + n); if (!c) fails++
   });
   ok(vhome.open && /Request a home at Ridge Hamlet North/.test(vhome.txt) && /2 of 5 spoken for/.test(vhome.txt),
     'D2 A3: the home chip opens its own sheet with the occupancy');
-  ok(/\/request-a-house\?structure=ridgeA/.test(vhome.href) && vhome.maia,
+  ok(/\/reserve\?from=map&hamlet=ridgeA$/.test(vhome.href) && vhome.maia,
     `D2 A3: and carries the structure to the request (${vhome.href})`);
 
   const vlodge = await page.evaluate(async () => {
