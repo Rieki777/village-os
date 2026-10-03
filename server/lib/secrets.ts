@@ -76,7 +76,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import { registrySecretKeys } from "../../shared/modules";
-import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
+import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 
 /** The platform's own seven. A literal union, so every call site still typechecks. */
 const BASE_SECRET_KEYS = [
@@ -150,6 +150,78 @@ export function villageSecretsKey(env: NodeJS.ProcessEnv = process.env): Buffer 
 
 export function villageSecretsConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return villageSecretsKey(env) !== null;
+}
+
+/**
+ * The sentence naming what is wrong with this deployment's key, or null when
+ * it is usable: unset, or set in a shape `keyFromEnv` refuses (quotes, a pasted
+ * `NAME=`, base64, the wrong length). Every operator-facing refusal and boot
+ * line uses this, so "not set" is only ever said about a key that is not set.
+ * It never carries any part of the value.
+ */
+export function villageSecretsKeyProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  return keyEnvProblem(VILLAGE_SECRETS_ENV, env);
+}
+
+/**
+ * What Admin, Integrations reads before a founder types anything, so the
+ * refusal is on the screen before a key is pasted and bounced. Admin-only: the
+ * route that returns it checks `isAdmin` first.
+ */
+export function villageSecretsKeyStatus(env: NodeJS.ProcessEnv = process.env): {
+  configured: boolean;
+  problem: string | null;
+} {
+  return { configured: villageSecretsConfigured(env), problem: villageSecretsKeyProblem(env) };
+}
+
+/**
+ * The second line of the two refusals that stop a founder saving a key, the
+ * `message` beside `NO_VILLAGE_SECRETS_KEY_SENTENCE` in a 503.
+ *
+ * `putSecret` fails closed and THROWS when this deployment has no sealing key,
+ * which is right. What it cannot do is answer a browser: Express 4 does not
+ * route an async handler rejection anywhere useful, so a founder pasting a
+ * Stripe key got an opaque 500 and nothing to act on (measured against the
+ * built server in server/secretsWiring.e2e.test.ts). So the routes check
+ * first and answer 503 with two fields. `error` carries the store's own
+ * sentence verbatim, the shape the member-key route answers with, so two
+ * refusals from one platform read like one platform. `message` carries what
+ * that sentence cannot: on a self-hosted instance the founder IS the operator
+ * it tells them to ask, so this names the problem, the variable and the
+ * recipe. Admin.tsx's `refusal()` prefers `message`.
+ *
+ * Moved here from server/index.ts, where it was a constant that said "Set
+ * VILLAGE_SECRETS_KEY" to a founder who had set it in the wrong shape.
+ * `retry` is what the founder does once it is fixed, in their own terms.
+ */
+export function villageSecretsRefusal(
+  env: NodeJS.ProcessEnv = process.env,
+  retry = "save the key again",
+): string {
+  const problem = villageSecretsKeyProblem(env) ?? `${VILLAGE_SECRETS_ENV} cannot be read.`;
+  const verb = (env[VILLAGE_SECRETS_ENV] ?? "").trim() ? "Correct it" : "Set it";
+  return (
+    `${problem} ${verb} in this deployment's environment, then restart and ${retry}. ` +
+    `It is 32 random bytes as 64 hex characters: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))". ` +
+    "Nothing was stored, and nothing already stored has changed."
+  );
+}
+
+/**
+ * The launch journey's reading of the key (`village-secrets-key` in
+ * shared/launchRequirements.ts). Lives beside the key because it reads the
+ * environment and nothing else, so server/lib/launch.ts resolves it without a
+ * closure from server/index.ts.
+ */
+export function villageSecretsLaunchCheck(env: NodeJS.ProcessEnv = process.env): {
+  state: "ok" | "missing";
+  detail: string;
+} {
+  const problem = villageSecretsKeyProblem(env);
+  return problem
+    ? { state: "missing", detail: problem }
+    : { state: "ok", detail: `${VILLAGE_SECRETS_ENV} is set, so Integrations can lock the keys saved there` };
 }
 
 /**
@@ -242,7 +314,7 @@ export async function resealPlaintextSecrets(
   if (!key) {
     console.warn(
       `[secrets] ${plaintext.length} integration secret(s) are stored in plaintext and cannot be ` +
-        `sealed: ${VILLAGE_SECRETS_ENV} is not set. Every database dump carries them. Keys: ` +
+        `sealed. ${villageSecretsKeyProblem(env)} Every database dump carries them. Keys: ` +
         plaintext.join(", "),
     );
     return { sealed: 0, leftPlaintext: plaintext.length };
@@ -289,11 +361,11 @@ function openStored(
     if (opened === null && !warnedUnreadable.has(String(key))) {
       warnedUnreadable.add(String(key));
       console.warn(
-        `[secrets] cannot open the stored value for "${String(key)}": ` +
+        `[secrets] cannot open the stored value for "${String(key)}". ` +
           (k
-            ? `${VILLAGE_SECRETS_ENV} does not match the key it was sealed with`
-            : `${VILLAGE_SECRETS_ENV} is not set`) +
-          `. Falling back to ${envNameFor(key)} if that is set.`,
+            ? `${VILLAGE_SECRETS_ENV} does not match the key it was sealed with.`
+            : villageSecretsKeyProblem(env)) +
+          ` Falling back to ${envNameFor(key)} if that is set.`,
       );
     }
     // An empty plaintext is the same as nothing stored: this store has always

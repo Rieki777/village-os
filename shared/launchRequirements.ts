@@ -253,6 +253,35 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
 
   // ── Integrations: keys, each honest about what stops without it ──────────
   {
+    id: "village-secrets-key",
+    group: "integrations",
+    title: "Set VILLAGE_SECRETS_KEY so Integrations can save keys",
+    /*
+     * FIRST IN ITS GROUP, because every row below it that says "Open
+     * Integrations" sends a founder to a screen that refuses to save while
+     * this is missing. On 2026-10-02 a founder set it in the wrong shape and
+     * every message said "not set"; the check's detail now names the shape.
+     *
+     * RECOMMENDED, NEVER BLOCKING, because villages are already live. Nothing
+     * reads this list to decide whether a village IS launched: `launchedAt` is
+     * written once by the launch ballot and never derived from the checks.
+     * What a blocking row CAN do is hold `readyToLaunch` false, which closes
+     * the launch vote on a village that is running its Game without having
+     * held one yet. A recommended row moves only `recommendedOpen`, so adding
+     * it changes no village's launch state, and server/lib/
+     * launchSecretsKey.test.ts holds that against a launched village and an
+     * unlaunched one. Every key also still reads from its environment
+     * variable without this, so a village with no key loses the Admin screen
+     * and not a working integration.
+     */
+    why: "Every key saved under Integrations is locked with it, and until it is set that screen refuses to save one. Generate it with openssl rand -hex 32 and keep a copy in a password manager. On Railway, open the web service, then Variables, then New Variable: the name is VILLAGE_SECRETS_KEY and the value is only the 64 characters, with no quotes. Deploy, wait for Active, then save your keys.",
+    severity: "recommended",
+    checkKey: "village-secrets-key",
+    fixAt: "/admin?tab=integrations",
+    fixLabel: "Open Integrations",
+    runbookAnchor: "setting-village_secrets_key-on-railway-and-when-it-is-set-but-still-refused",
+  },
+  {
     id: "resend-key",
     group: "integrations",
     title: "Connect email (Resend)",
