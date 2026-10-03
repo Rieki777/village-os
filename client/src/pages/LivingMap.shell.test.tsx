@@ -39,17 +39,21 @@ const json = (body: unknown, status = 200) =>
 
 /** Whether the village answers the published-land read; a case can say no. */
 let configAnswers = true;
+/** What /api/land says; by default a village that has not placed itself. */
+let landAnswer: unknown = { imageryUrl: null };
 
 function answer(url: string): Response {
   if (url.startsWith("/grounds/manifest.json")) return json({ present: true, url: "/grounds/grounds-abc.html" });
   if (url.startsWith("/api/map/config")) {
     return configAnswers ? json({ skin: null, walk: null, vocabulary: null, scene: null }) : json({ error: "down" }, 503);
   }
+  if (url.startsWith("/api/land")) return json(landAnswer);
   return json({});
 }
 
 beforeEach(() => {
   configAnswers = true;
+  landAnswer = { imageryUrl: null };
   vi.stubGlobal("fetch", vi.fn(async (url: unknown) => answer(String(url))));
 });
 afterEach(() => {
@@ -279,5 +283,50 @@ describe("leaving the map lands on the page before it (D6, D8)", () => {
       window.history.back();
     });
     await waitFor(() => expect(screen.queryByText("the quests page")).toBeTruthy());
+  });
+});
+
+/*
+ * N19, the shell's half. The map lifts the cover with land-ready once it has
+ * applied the config, and the village's own ground came in a separate message
+ * nothing waited for, so the cover lifted over the seed's geography while the
+ * village's picture was still decoding. The ground rides in the config now, so
+ * the map knows there is one and holds the cover until it has drawn
+ * (shared/mapArtifactEntry.test.ts plays the map's half).
+ */
+describe("the village's own ground travels in the config (N19)", () => {
+  const sent = async () => {
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const post = vi.fn();
+    Object.defineProperty(frame()!.contentWindow!, "postMessage", { configurable: true, value: post });
+    fromMap({ type: "grounds-ready" });
+    await aMoment();
+    return post.mock.calls.map(([m]) => m as Record<string, unknown>);
+  };
+
+  it("carries the picture and its frame in the config, and sends it ahead too so it downloads early", async () => {
+    landAnswer = { imageryUrl: "/uploads/land/core.png", spanM: 1600, seedFrame: false, centre: null };
+    arrive("/map#/place/greenhouse");
+    const msgs = await sent();
+    const GROUND = { core: { url: "/uploads/land/core.png" }, frame: { spanM: 1600, seed: false, centre: null } };
+    expect(msgs.find((m) => m.type === "config")?.ground, "the ground the cover waits on").toEqual(GROUND);
+    const ahead = msgs.findIndex((m) => m.type === "ground");
+    expect(msgs[ahead], "sent on its own as well").toEqual({ type: "ground", ...GROUND });
+    expect(ahead, "and ahead of the config").toBeLessThan(msgs.findIndex((m) => m.type === "config"));
+  });
+
+  it("carries none for a village that keeps the seed", async () => {
+    arrive("/map#/place/greenhouse");
+    const msgs = await sent();
+    expect(msgs.find((m) => m.type === "config")).toBeTruthy();
+    expect(msgs.find((m) => m.type === "config")).not.toHaveProperty("ground");
+  });
+
+  it("still sends the config, with no ground, when the land read fails", async () => {
+    landAnswer = undefined; // an empty body, which will not parse
+    arrive("/map#/place/greenhouse");
+    const msgs = await sent();
+    expect(msgs.filter((m) => m.type === "config").length).toBe(1);
+    expect(msgs.find((m) => m.type === "config")).not.toHaveProperty("ground");
   });
 });

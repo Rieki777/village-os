@@ -2519,7 +2519,14 @@ let satPlate=null,paintPlate=null,paintF=null,paintT=null,paintReady=false,brush
    read first rather than by overwriting the seed, so a seed image that
    decodes late cannot land on top of a village's ground. */
 let vilCore=null,vilSur=null,vilSurRect=null;
-const groundCore=()=>vilCore||satPlate;
+/* ANOTHER PLACE'S GROUND IS ON ITS WAY (N19). Set the moment a village
+   standing anywhere but the seed's own rectangle announces its picture, and
+   not when the picture decodes: until then the seed's photograph, coast and
+   caption are invented geography under that village, so the honest vector
+   floor shows instead. A village on the seed's own rectangle keeps the seed
+   until its own picture lands, because there the seed is true. */
+let GROUND_ELSEWHERE=false,VIL_CORE_URL=null;
+const groundCore=()=>vilCore||(GROUND_ELSEWHERE?null:satPlate);
 /* THE SEED'S GEOGRAPHY BELONGS TO THE SEED'S RECTANGLE. Its surround, its
    place names and its coordinate caption describe one piece of the Earth.
    Under a village standing on that same piece they are true and they stay,
@@ -2535,7 +2542,7 @@ const SEED_GEOREF=Object.freeze({lat:GEOREF.lat,lon:GEOREF.lon,z:GEOREF.z,
   pinW:Object.freeze(GEOREF.pinW.slice()),mPerUnit:GEOREF.mPerUnit});
 const SEED_M_PER_UNIT=M_PER_UNIT;
 let vilFrame=null;
-const seedGeography=()=>!vilCore||!!(vilFrame&&vilFrame.seed);
+const seedGeography=()=>vilCore?!!(vilFrame&&vilFrame.seed):!GROUND_ELSEWHERE;
 /* Whether the map knows where its own ground is, so it may print coordinates.
    The seed always does. A village elsewhere does only when its visibility
    let the centre cross the wire. */
@@ -2546,8 +2553,8 @@ const activePlate=()=>terrainMode==='paint'?groundCore():(terrainMode==='sat'?gr
 /* A plate that fails to load leaves the map exactly as it was. There is no
    broken-image state and no empty frame: the vector floor drawn by
    paintTerrain() is already the honest answer for "no photograph yet". */
-function loadPlate(url,onto){try{const im=new Image();im.decoding='async';
-  im.onload=()=>{try{onto(im)}catch(_){}};im.onerror=()=>{};im.src=url}catch(_){}}
+function loadPlate(url,onto,failed){try{const im=new Image();im.decoding='async';
+  im.onload=()=>{try{onto(im)}catch(_){}};im.onerror=()=>{try{failed&&failed()}catch(_){}};im.src=url}catch(_){failed&&failed()}}
 /* What a pushed frame means for the map's scale and coordinates.
 
    THE SEED'S RECTANGLE: the seed georeference is exactly right, so it is put
@@ -2581,21 +2588,34 @@ function applySeedGeography(){try{const el=$('mmLabel');if(el)el.style.display=s
    what a QA run asserts on. A message carrying neither url is not an error:
    it is a village that has not placed itself yet, and it means "keep the
    seed", which is the same answer /api/land gives with configured:false. */
-function setGround(g){
-  if(!g||typeof g!=='object')return false;
+/* `drawn` is called once, when the village's own picture has decoded or
+   failed, or at once when there is none to wait for: the config handler holds
+   the shell's cover on it (N19). The shell sends the picture on its own as
+   soon as it knows it, so the download starts early, and again inside the
+   config, which is what the cover waits on: the same picture is never loaded
+   twice, and a caller that asks while it is still loading waits for it. */
+let VIL_CORE_WAIT=null; // the callers waiting while VIL_CORE_URL loads, or null
+function setGround(g,drawn){
+  let told=false;const done=()=>{if(!told&&drawn){told=true;drawn()}};
+  if(!g||typeof g!=='object'){done();return false}
   const core=g.core&&typeof g.core.url==='string'&&g.core.url?g.core.url:null;
   const sur=g.surround&&typeof g.surround.url==='string'&&g.surround.url?g.surround.url:null;
   const r=g.surround&&g.surround.rect;
   const rect=Array.isArray(r)&&r.length===4&&r.every(n=>typeof n==='number'&&isFinite(n))?r.slice():null;
   const frame=g.frame&&typeof g.frame==='object'?g.frame:null;
-  if(core)loadPlate(core,im=>{vilCore=im;vilFrame=adoptFrame(frame);
-    paintReady=false;mmDirty=true;applySeedGeography();
-    window.bakePainted&&bakePainted()});
+  if(core&&core===VIL_CORE_URL){if(VIL_CORE_WAIT)VIL_CORE_WAIT.push(done);else done()}
+  else if(core){VIL_CORE_URL=core;VIL_CORE_WAIT=[...(VIL_CORE_WAIT||[]),done];
+    GROUND_ELSEWHERE=!(frame&&frame.seed===true);mmDirty=true;applySeedGeography();
+    const told2=()=>{if(VIL_CORE_URL!==core)return;const w=VIL_CORE_WAIT||[];VIL_CORE_WAIT=null;w.forEach(f=>f())};
+    loadPlate(core,im=>{if(VIL_CORE_URL===core){vilCore=im;vilFrame=adoptFrame(frame);
+      paintReady=false;mmDirty=true;applySeedGeography();
+      window.bakePainted&&bakePainted()}told2()},told2)}
+  else done();
   if(sur)loadPlate(sur,im=>{vilSur=im;vilSurRect=rect;mmDirty=true});
   return !!(core||sur);
 }
 window.setGround=setGround;
-window.groundSource=()=>vilCore?'village':(satPlate?'seed':'vector');
+window.groundSource=()=>vilCore?'village':(groundCore()?'seed':'vector');
 /* QA hook, in the same spirit as window.camBounds and window.minZoom: what
    the map would actually draw, asked from outside. */
 window.groundHas=()=>{const s=groundSurround();return {core:!!groundCore(),village:!!vilCore,surround:!!s,rect:s?s.rect.slice():null,
@@ -11305,8 +11325,17 @@ addEventListener('message',e=>{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return;
   const d=e.data;if(!d||d.type!=='config')return;
   /* Handed over on every path out of here, a throw included: the shell's
-     cover waits on it. Only a config from the shell gets this far. */
+     cover waits on it. Only a config from the shell gets this far.
+     AND NOT BEFORE THE VILLAGE'S OWN GROUND HAS DRAWN (N19). The config
+     carries it now, and the cover used to lift over the seed's coast and
+     caption while the village's picture was still decoding: MEASURED with
+     the picture held 8 s, 7.6 s of another place's geography in plain view.
+     A ground that fails, or takes longer than GROUND_WAIT_MS, hands over
+     anyway, onto the honest vector floor (GROUND_ELSEWHERE). */
+  let handOver=landHandedOver;
   try{
+  if(d.ground&&typeof d.ground==='object'){
+    if(LAND_HANDED)setGround(d.ground);else handOver=holdForGround(d.ground)}
   /* The land first: everything below dresses what the scene puts down, and
      restoreScene rebuilds the vocabulary anyway. Applying the skin to a
      map that is about to be replaced wholesale is work thrown away. */
@@ -11325,7 +11354,15 @@ addEventListener('message',e=>{
   /* Last, so an address held for the land is answered by the land that just
      arrived. See ROUTE_WAIT_MS. */
   landArrived();
-}catch(_){}finally{landHandedOver()}});
+}catch(_){}finally{handOver()}});
+/* The hand-over for a config that carries a ground: when the config is
+   applied AND the picture has drawn, or GROUND_WAIT_MS after the config,
+   whichever is first. Returns what the config handler calls when it is done. */
+const GROUND_WAIT_MS=8000;
+function holdForGround(g){let drawn=false,applied=false,tm=0;
+  const go=()=>{if(drawn&&applied){clearTimeout(tm);landHandedOver()}};
+  setGround(g,()=>{drawn=true;go()});
+  return ()=>{applied=true;if(!drawn)tm=setTimeout(()=>{drawn=true;go()},GROUND_WAIT_MS);go()}}
 /* THE SINGLE-POINTER PATH TO THE SAME TWO THINGS. One tap is one step, with
    no press-and-hold, because a step big enough to be worth pressing is better
    than a repeat rate to get wrong. Zoom is about the screen centre, which is

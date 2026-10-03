@@ -55,6 +55,7 @@ import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/compon
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 import { useMapHistory } from "@/components/map/mapHistory";
 import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
+import { fetchLandGround } from "@/components/map/landGround";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -298,6 +299,20 @@ export default function LivingMap() {
      * message changes nothing on the map while it ends the wait.
      */
     const payload: Record<string, unknown> = { type: "config" };
+    // The village's own ground rides in the same message, so the map can hold
+    // its cover until that ground has drawn (N19). It is also sent on its own
+    // the moment it is known, so the picture downloads while the config is
+    // still on its way; the map loads it once either way.
+    const ground = fetchLandGround().then((land) => {
+      if (land) {
+        try {
+          win.postMessage({ type: "ground", ...land }, window.location.origin);
+        } catch {
+          /* The frame went away: nobody is waiting. */
+        }
+      }
+      return land;
+    });
     try {
       const res = await fetch("/api/map/config");
       if (!res.ok) return;
@@ -336,6 +351,8 @@ export default function LivingMap() {
     } catch {
       /* The map keeps whatever it is already wearing. */
     } finally {
+      const land = await ground;
+      if (land) payload.ground = land;
       try {
         win.postMessage(payload, window.location.origin);
       } catch {
@@ -380,72 +397,6 @@ export default function LivingMap() {
       win.postMessage({ type: "photos", places: body.gallery }, window.location.origin);
     } catch {
       /* The map keeps the door it already has. */
-    }
-  }, []);
-
-  /**
-   * The ground the map draws its village on.
-   *
-   * The artifact ships Amora's satellite plate baked in, and for a long time
-   * that was the ONLY ground a deployment could have: a new village's map
-   * needed a developer, three Python scripts and a redeploy of a 5.7 MB file.
-   * This push is what makes the ground data instead of code -- the village's
-   * own picture, fetched once into the uploads volume by
-   * `POST /api/admin/land/imagery` and served from there.
-   *
-   * ABSENT MEANS KEEP YOUR OWN, the same rule the walk and the scene follow.
-   * A village that has not placed itself answers `imageryUrl: null` and gets
-   * no message at all, so the map draws the seed it was built with. That is
-   * the ordinary state of a fresh fork and it is not a failure.
-   *
-   * THE PICTURE TRAVELS WITH ITS FRAME. A URL on its own told the map nothing
-   * about where the picture was taken or how much ground it covers, so the map
-   * stretched it across a frame it was never cut for: three times too large
-   * and 345 m off on the one village this was built for. `frame` is what fixes
-   * that, and it carries only what the route was already willing to publish:
-   *
-   *   spanM   the width, which sets the scale and names no place
-   *   seed    one yes-or-no, worked out on the server: does this picture show
-   *           the seed's own rectangle? If so the seed's surround, place names
-   *           and caption still describe the ground and stay; if not they are
-   *           another place's geography and the map takes them down
-   *   centre  whatever /api/land gives, which is null at "hidden" and rounded
-   *           at "approximate". The map uses it for coordinates it shows and
-   *           shows none when it is null
-   *
-   * No surround travels with it yet. A wider fetch does not exist on this
-   * route, and a village standing anywhere but the seed's own rectangle gets
-   * no borrowed coastline in the meantime. When that fetch lands it attaches
-   * here as `surround: { url, rect }`.
-   */
-  const pushGround = useCallback(async () => {
-    const win = frame.current?.contentWindow;
-    if (!win) return;
-    try {
-      const res = await fetch("/api/land");
-      if (!res.ok) return;
-      const body = await res.json();
-      const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
-      if (!url) return;
-      const spanM = Number(body?.spanM);
-      const c = body?.centre;
-      win.postMessage(
-        {
-          type: "ground",
-          core: { url },
-          frame: {
-            spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
-            seed: body?.seedFrame === true,
-            centre:
-              c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
-                ? { lat: Number(c.lat), lon: Number(c.lon) }
-                : null,
-          },
-        },
-        window.location.origin,
-      );
-    } catch {
-      /* The map keeps the ground it is already standing on. */
     }
   }, []);
 
@@ -634,14 +585,13 @@ export default function LivingMap() {
       if (data.type === "grounds-ready") {
         onReady();
         setGroundsReady(true);
-        // The config and the ground are the same for everyone and need no
-        // session; the hand depends on who is asking. Sending them separately
-        // means a signed-out visitor still gets the published land and the
-        // village's own photograph under it, even though their hand request
-        // tells them they may do nothing.
+        // The config, which carries the ground, is the same for everyone and
+        // needs no session; the hand depends on who is asking. Sending them
+        // separately means a signed-out visitor still gets the published land
+        // and the village's own photograph under it, even though their hand
+        // request tells them they may do nothing.
         // The cover lifts when the map answers this one with land-ready.
         void pushConfig();
-        pushGround();
         pushHand();
         pushPhotos();
         // Third and last, because it is the only one nothing waits on: the org
@@ -679,7 +629,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushHand, pushPhotos, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
