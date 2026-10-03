@@ -17,10 +17,22 @@
  * Out of LivingMap.tsx so the order of the restore branch can be tested
  * without mounting a frame: the page is at the line ceiling, and this is the
  * one relay whose ORDER is the behaviour.
+ *
+ * A REFUSAL TRAVELS WHOLE. The route's sentence (`message`, else `error`)
+ * and the status both go back. Forwarding the bare `error` turned a 401
+ * into the code "auth_required" on the map, toasted as it stood by the undo
+ * button, and without the status the map could not tell a refusal no retry
+ * will fix (signed out, the hand gone) from a connection that dropped, so it
+ * retried both forever.
  */
 import { gameFetch } from "@/lib/gameApi";
 
 export type SceneReply = Record<string, unknown>;
+
+/** The village's no, as the map needs it: the sentence and the status. */
+function refusal(res: Response, body: any): SceneReply {
+  return { ok: false, status: res.status, error: body?.message ?? body?.error };
+}
 
 export async function relaySceneMessage(
   msg: any,
@@ -46,13 +58,13 @@ export async function relaySceneMessage(
         body: JSON.stringify({ scene, baseVersion: msg.baseVersion ?? 0 }),
       });
       const body = await res.json().catch(() => null);
-      return send(res.ok ? { ok: true, baseVersion: body?.baseVersion } : { ok: false, error: body?.error });
+      return send(res.ok ? { ok: true, baseVersion: body?.baseVersion } : refusal(res, body));
     }
 
     if (msg.type === "draft-discard") {
       const res = await gameFetch("/api/map/draft", { method: "DELETE" });
       const body = await res.json().catch(() => null);
-      return send(res.ok ? { ok: true } : { ok: false, error: body?.error });
+      return send(res.ok ? { ok: true } : refusal(res, body));
     }
 
     if (msg.type === "publish") {
@@ -66,14 +78,22 @@ export async function relaySceneMessage(
       if (res.ok) return send({ ok: true, version: body?.version, live: body?.live });
       // 409 carries WHO moved the map and WHEN. It travels untouched: the
       // route owns that sentence so there is one place it is written.
-      return send({ ok: false, reason: body?.reason, error: body?.error, live: body?.live });
+      return send({ ...refusal(res, body), reason: body?.reason, live: body?.live });
     }
 
     if (msg.type === "restore") {
       const version = Number(msg.version);
-      const res = await gameFetch(`/api/map/revisions/${version}/restore`, { method: "POST" });
+      // The version this undoes, so the village can refuse when something
+      // newer is live. Passed through untouched: the route decides.
+      const from = Number(msg.from);
+      const res = await gameFetch(`/api/map/revisions/${version}/restore`, {
+        method: "POST",
+        ...(Number.isInteger(from) && from > 0 ? { body: JSON.stringify({ from }) } : {}),
+      });
       const body = await res.json().catch(() => null);
-      if (!res.ok) return send({ ok: false, error: body?.error });
+      // 409 names who published since, and what is live: the same card a
+      // refused publish carries.
+      if (!res.ok) return send({ ...refusal(res, body), reason: body?.reason, live: body?.live });
       /*
        * THE LAND THAT CAME BACK GOES TO THE MAP BEFORE THE ANSWER DOES. An
        * undo puts an older scene live and the map was never shown it: the

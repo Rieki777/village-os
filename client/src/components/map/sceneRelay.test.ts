@@ -19,7 +19,7 @@ vi.mock("@/lib/gameApi", () => ({ gameFetch: (...a: unknown[]) => gameFetch(...a
 
 import { relaySceneMessage } from "./sceneRelay";
 
-const reply = (ok: boolean, body: unknown) => ({ ok, json: async () => body });
+const reply = (ok: boolean, body: unknown, status = ok ? 200 : 400) => ({ ok, status, json: async () => body });
 
 let order: string[];
 let sent: Record<string, unknown>[];
@@ -48,10 +48,22 @@ describe("restoring an earlier version", () => {
   });
 
   it("pushes nothing when the village refused, and passes its sentence on", async () => {
-    gameFetch.mockResolvedValue(reply(false, { error: "Putting an earlier map back is a cartographer's work." }));
+    gameFetch.mockResolvedValue(reply(false, { error: "Putting an earlier map back is a cartographer's work." }, 403));
     await relaySceneMessage({ type: "restore", nonce: "n2", version: 6 }, send, pushConfig);
     expect(pushConfig).not.toHaveBeenCalled();
-    expect(sent).toEqual([{ ok: false, error: "Putting an earlier map back is a cartographer's work." }]);
+    expect(sent).toEqual([{ ok: false, status: 403, error: "Putting an earlier map back is a cartographer's work." }]);
+  });
+
+  /* ROUND 3, FINDING 2. The map says which version the undo takes back, so
+     the village can refuse once a colleague has published after it, and the
+     refusal carries who and what is live, as a refused publish does. */
+  it("tells the village which version it undoes, and carries a stale refusal back whole", async () => {
+    const live = { version: 8, by: "Other Admin", at: "2026-10-02" };
+    gameFetch.mockResolvedValue(reply(false, { ok: false, reason: "stale", error: "Other Admin published version 8 after version 7.", live }, 409));
+    await relaySceneMessage({ type: "restore", nonce: "n4", version: 6, from: 7 }, send, pushConfig);
+    expect(gameFetch).toHaveBeenCalledWith("/api/map/revisions/6/restore", { method: "POST", body: JSON.stringify({ from: 7 }) });
+    expect(pushConfig).not.toHaveBeenCalled();
+    expect(sent).toEqual([{ ok: false, status: 409, reason: "stale", error: "Other Admin published version 8 after version 7.", live }]);
   });
 
   it("still reports the undo as done when the config push itself fails", async () => {
@@ -75,6 +87,21 @@ describe("the other verbs are unchanged by the move out of LivingMap", () => {
     });
     expect(pushConfig).not.toHaveBeenCalled();
     expect(sent).toEqual([{ ok: true, version: 7, live: { version: 7 } }]);
+  });
+
+  /* N22 and D28. A refusal carried only `error`, so a 401 reached the map
+     as the code "auth_required", and without the status the map could not
+     tell a refusal no retry fixes from a dropped connection. */
+  it("carries the route's sentence and the status of a refused save", async () => {
+    gameFetch.mockResolvedValue(reply(false, { error: "auth_required", message: "Sign in to keep a draft of the map." }, 401));
+    await relaySceneMessage({ type: "draft-save", scene: { a: 1 }, baseVersion: 6 }, send, pushConfig);
+    expect(sent).toEqual([{ ok: false, status: 401, error: "Sign in to keep a draft of the map." }]);
+  });
+
+  it("falls back to the code when the route gave no sentence", async () => {
+    gameFetch.mockResolvedValue(reply(false, { error: "auth_required" }, 401));
+    await relaySceneMessage({ type: "draft-discard" }, send, pushConfig);
+    expect(sent).toEqual([{ ok: false, status: 401, error: "auth_required" }]);
   });
 
   it("answers every path, a thrown fetch included", async () => {
