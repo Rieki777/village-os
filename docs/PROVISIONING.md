@@ -133,6 +133,14 @@ with "this deployment has no village-secrets key", and each of those keys has
 to be set in Railway instead. Clearing a key from the panel keeps working
 either way, so a value you need to remove is never stuck.
 
+Put it on the app service as the 64 characters alone: no quotes, no spaces,
+no `VILLAGE_SECRETS_KEY=` in front. Press Deploy if Railway shows staged
+changes, and wait for the new deployment to read Active. If the panel still
+refuses, its banner and the `[identity]` line in the deploy log name what is
+wrong with the value without printing any of it. `docs/FORK_RUNBOOK.md`,
+"Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still
+refused", gives the fix for each answer.
+
 **Self-host:** you generate it in this step and you hold it. A copy of your
 database carries none of your integration keys in a usable form.
 

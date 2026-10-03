@@ -25,6 +25,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { confirmManual, launchStatus, launchVoteBlocked, recordLaunchCarried, type LaunchDeps } from "./launch";
 import { writeGoverningPurpose } from "./governingPurpose";
+import { readConfigDocument } from "../repos/appConfigDocs";
 import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
@@ -100,10 +101,11 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
     };
   };
 
+  // Read through the repo, the same door server/lib/launch.ts reads by, so
+  // this file adds no raw SQL outside server/repos (module-intake stage 6).
   const launchRow = async (): Promise<string | null> => {
-    const [rows] = await pool.query<any[]>("SELECT value FROM app_config WHERE config_key = 'launch-state'");
-    if (!rows[0]) return null;
-    return typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value);
+    const doc = await readConfigDocument(pool, "launch-state");
+    return doc === null ? null : JSON.stringify(doc);
   };
 
   beforeAll(async () => {
