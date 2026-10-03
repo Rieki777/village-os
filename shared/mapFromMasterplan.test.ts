@@ -114,6 +114,19 @@ describe("a drafted scene", () => {
     expect(draftSceneProblems(s)[0]).toMatch(/is not one this village knows/);
   });
 
+  /* The publish check refuses a repeated key on its own (N28, sceneProblem).
+     A draft lists it with the rows instead, beside every other fault, so an
+     agent that got two things wrong hears about both in one answer. */
+  it("lists a repeated key beside the other faults, where the publish check would name only the key", () => {
+    const s = good();
+    s.map_structures[1].key = "hall";
+    s.map_structures[0].phase = 4;
+    const problems = draftSceneProblems(s);
+    expect(problems.some((p) => /"hall" is used twice/.test(p)), problems.join("\n")).toBe(true);
+    expect(problems.some((p) => /phase must be 1, 2 or 3/.test(p)), problems.join("\n")).toBe(true);
+    expect(sceneProblem(s), "the publish check still refuses it").toMatch(/share the key "hall"/);
+  });
+
   const broken: [string, (s: Record<string, any>) => void, RegExp][] = [
     ["a building with no anchor", (s) => delete s.map_structures[0].anchor, /map_structures\[0\]\.anchor must be/],
     ["an anchor in metres or degrees", (s) => (s.map_structures[0].anchor = { x: -83.83, y: 9.23 }), /outside the world/],

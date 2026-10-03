@@ -24,7 +24,7 @@
  * Shared, because the server enforces these rules and the agent's brief
  * describes them from the same constants, so the two cannot drift.
  */
-import { SCENE_BLOCKS, isSupportedSceneVersion, sceneProblem } from "./mapScene";
+import { SCENE_BLOCKS, isSupportedSceneVersion, sceneEnvelopeProblem, sceneProblem } from "./mapScene";
 
 /**
  * The world the map draws in, in its own units: the artifact's `W` and `H`.
@@ -218,8 +218,13 @@ const KEY = /^[a-z0-9][a-z0-9_-]{0,47}$/i;
  *
  * WHAT IT HOLDS A DRAFT TO, in order:
  *
- *   - THE ENVELOPE, through `sceneProblem`, the same check every publish
- *     makes. A draft this fails could never be published anyway.
+ *   - THE ENVELOPE, through `sceneEnvelopeProblem`, the shape every publish
+ *     checks first. A draft this fails could never be published anyway, and
+ *     nothing past it can be read, so it is the whole answer. The publish
+ *     check's other rule, one place per key (N28), is listed with the rows
+ *     below in its own words, beside every other fault, and `sceneProblem`
+ *     is asked once more at the end so no draft saved here could be refused
+ *     at publish.
  *   - WHAT THE MAP NEEDS TO DRAW IT. The map restores a scene inside one
  *     try/catch, so one building with no anchor takes the whole land down
  *     with it. Each row is checked for the fields the restore reads.
@@ -235,7 +240,7 @@ const KEY = /^[a-z0-9][a-z0-9_-]{0,47}$/i;
  * thing wrong everywhere is told so once with enough examples to see it.
  */
 export function draftSceneProblems(scene: unknown, text?: string): string[] {
-  const envelope = sceneProblem(scene);
+  const envelope = sceneEnvelopeProblem(scene);
   if (envelope) return [envelope];
   const s = scene as Record<string, any>;
   const out: string[] = [];
@@ -365,6 +370,11 @@ export function draftSceneProblems(scene: unknown, text?: string): string[] {
     say("housing.rows must be empty. How many homes are open is the village's own count.");
   }
 
+  // The publish check whole, so a draft that passes here is one a publish takes.
+  if (!out.length) {
+    const publishable = sceneProblem(scene);
+    if (publishable) say(publishable);
+  }
   return out;
 }
 
