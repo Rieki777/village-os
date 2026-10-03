@@ -43,6 +43,7 @@ import {
   ResourcesRoutingEditor,
   ToolsCategoriesEditor,
 } from "@/components/admin/ModuleConfigPanels";
+import SaberraConfigPanel from "@/components/admin/SaberraConfigPanel";
 
 /** A variable row as GET /api/admin/variables sends it. */
 interface Dial {
@@ -88,6 +89,10 @@ const CONFIG_PANELS: Record<string, (p: { password: string }) => ReactElement> =
   crowdpool: CrowdpoolCampaignsEditor,
   resources: ResourcesRoutingEditor,
   automation: AutomationConfigEditor,
+  // The landing target of its readiness link (`?setting=config`), which
+  // pointed at nothing until this panel existed: the two addresses, the
+  // connection, and the one button that pulls.
+  saberra: SaberraConfigPanel,
 };
 
 /**

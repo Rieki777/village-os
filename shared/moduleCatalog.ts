@@ -16,7 +16,7 @@
  * that removed one, still looks finished. `emblem` is a lucide icon name; the
  * client maps it and falls back to a neutral mark for a name it does not know.
  */
-import type { ModuleGroup } from "./modules";
+import type { ModuleGroup, ModuleTier } from "./modules";
 
 export interface ModuleGroupDef {
   id: ModuleGroup;
@@ -491,4 +491,23 @@ export const POOL_REASON_COPY: Record<string, string> = {
   "platform-built": "Earns from the pool, and its share goes back into the pool",
   core: "Core module. Earns from the pool, and its share goes back into the pool",
   withdrawn: "No longer offered, so not in the pool",
+};
+
+/**
+ * The words a module's tier wears as a pill, on every card that shows one,
+ * and in the tier filter.
+ *
+ * The tier id `connected` stays in the data and never renders. On the
+ * Integrations card it sat beside the key's own status, so a founder read
+ * "connected" next to "Not connected" as two answers to one question. The
+ * pill says what the tier means instead: the module talks to a service that
+ * runs somewhere else. `included` wears nothing, as everywhere.
+ *
+ * Keyed by the union, so a tier added in `shared/modules.ts` fails the
+ * compiler here until it has words.
+ */
+export const TIER_PILL: Record<ModuleTier, string | null> = {
+  included: null,
+  connected: "Outside service",
+  managed: "managed",
 };
