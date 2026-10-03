@@ -50,7 +50,7 @@ import { governingPurpose } from "./governingPurpose";
  */
 const GPS_CHECK_KEY = "gps-written";
 import { readConfigDocument } from "../repos/appConfigDocs";
-import { commsLaunchCheck } from "./comms/setup";
+import { commsChecklist, commsLaunchRow, type SetupItem } from "./comms/setup";
 import { normalizeSeasonConfig } from "./seasonCalendar";
 
 export type CheckState = "ok" | "missing" | "partial";
@@ -178,6 +178,8 @@ export async function launchedAtOf(pool: Pool): Promise<string | null> {
 export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<LaunchStatus> {
   const state = await readState(pool);
   const items: LaunchItemStatus[] = [];
+  // The comms rows all read one checklist, so it is gathered once per read.
+  let comms: Promise<SetupItem[]> | null = null;
 
   for (const req of LAUNCH_REQUIREMENTS) {
     // A requirement for a module this village does not run is not a
@@ -277,7 +279,8 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
      */
     if (req.checkKey.startsWith("comms:")) {
       try {
-        const read = await commsLaunchCheck({ getPool: () => pool }, req.checkKey.slice("comms:".length));
+        if (!comms) comms = commsChecklist({ getPool: () => pool });
+        const read = commsLaunchRow(await comms, req.checkKey.slice("comms:".length));
         items.push(
           read
             ? { ...req, state: read.state, detail: read.detail }

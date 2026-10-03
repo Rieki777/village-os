@@ -466,18 +466,28 @@ export async function commsReadiness(deps: GatherDeps): Promise<{ ready: boolean
 /** The launch journey's three email rows, read from the same items the checklist shows. */
 export const LAUNCH_SETUP_KEYS = { sender: "sender", domain: "domain", "delivery-reports": "delivery-reports" } as const;
 
+/** The whole checklist, built once, for a caller that reads several items from it. */
+export async function commsChecklist(deps: GatherDeps): Promise<SetupItem[]> {
+  return buildChecklist(await gatherSetupFacts(deps));
+}
+
 /**
- * One launch row's state (shared/launchRequirements.ts, checkKey `comms:<name>`).
- * Null for a name with no row, which the launch resolver reports as a
- * platform bug rather than dropping.
+ * One launch row's state (shared/launchRequirements.ts, checkKey `comms:<name>`),
+ * read off a checklist already built. Null for a name with no row, which the
+ * launch resolver reports as a platform bug rather than dropping.
  */
+export function commsLaunchRow(items: readonly SetupItem[], name: string): { state: "ok" | "missing"; detail: string } | null {
+  const key = (LAUNCH_SETUP_KEYS as Record<string, SetupKey>)[name];
+  if (!key) return null;
+  const item = items.find((i) => i.key === key);
+  if (!item) return null;
+  return { state: item.done ? "ok" : "missing", detail: item.detail };
+}
+
+/** One launch row, reading the checklist for it alone. */
 export async function commsLaunchCheck(
   deps: GatherDeps,
   name: string,
 ): Promise<{ state: "ok" | "missing"; detail: string } | null> {
-  const key = (LAUNCH_SETUP_KEYS as Record<string, SetupKey>)[name];
-  if (!key) return null;
-  const item = buildChecklist(await gatherSetupFacts(deps)).find((i) => i.key === key);
-  if (!item) return null;
-  return { state: item.done ? "ok" : "missing", detail: item.detail };
+  return commsLaunchRow(await commsChecklist(deps), name);
 }
