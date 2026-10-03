@@ -13,13 +13,13 @@
  * draft passes, outside the database block, so it is checked on every run.
  */
 import http from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import express from "express";
-import mysql from "mysql2/promise";
+import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { DRAFT_SCENE_VERSION, draftSceneProblems } from "../../shared/mapFromMasterplan";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { keepMasterplan } from "../lib/mapMasterplan";
 import { getDraft, publishScene, saveDraft } from "../lib/mapScene";
 import { DRAFT_RULES, exampleDraft, register } from "./agentMap";
@@ -51,7 +51,7 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     const app = express();
     app.use(express.json({ limit: "8mb" }));
     register(app, {
@@ -65,7 +65,8 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
       },
       capabilityCtx: async () => ctx,
       getPool: () => pool as any,
-      confirmSecret: "a-test-secret-that-is-long-enough",
+      // A fresh secret each run: the two calls only have to share one, and no literal secret sits in the code.
+      confirmSecret: randomBytes(24).toString("hex"),
     });
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -84,14 +85,14 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
     holder = { id: "founder-1" };
     ctx = MAP_MAKER;
     resolverAsked.length = 0;
-    await pool.query("DELETE FROM map_scene_revisions");
-    await pool.query("DELETE FROM map_scene_drafts");
-    await pool.query("DELETE FROM app_config WHERE config_key = 'map-masterplan'");
-    await pool.query("DELETE FROM health_events WHERE kind = 'map_draft'");
+    await pool.query("DELETE FROM map_scene_revisions"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
+    await pool.query("DELETE FROM map_scene_drafts"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
+    await pool.query("DELETE FROM app_config WHERE config_key = 'map-masterplan'"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
+    await pool.query("DELETE FROM health_events WHERE kind = 'map_draft'"); // module-review-ok: resetting the scratch schema this suite provisioned, between cases
   });
 
   const call = async (method: string, url: string, body?: unknown) => {
-    const res = await fetch(`${base}${url}`, {
+    const res = await fetch(`${base}${url}`, { // module-review-ok: this suite's own loopback server, not an outbound call
       method,
       headers: { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -99,7 +100,7 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
     return { status: res.status, body: (await res.json()) as any };
   };
   const drafts = async () => {
-    const [rows] = await pool.query<any[]>("SELECT user_id, scene, base_version FROM map_scene_drafts");
+    const [rows] = await pool.query<any[]>("SELECT user_id, scene, base_version FROM map_scene_drafts"); // module-review-ok: every holder's row, read back from the scratch schema this suite provisioned; getDraft reads one holder, and "nothing was written" means by anybody
     return rows;
   };
   const sha = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -189,7 +190,7 @@ describe.skipIf(!testDbConfigured())("the agent's map routes", () => {
       const kept = await getDraft(pool as any, "founder-1");
       expect(kept?.scene).toBe(text);
       expect(kept?.baseVersion).toBe(0);
-      const [trail] = await pool.query<any[]>("SELECT text, actor_kind, audience FROM health_events WHERE kind = 'map_draft'");
+      const [trail] = await pool.query<any[]>("SELECT text, actor_kind, audience FROM health_events WHERE kind = 'map_draft'"); // module-review-ok: the stored row, read back raw from the scratch schema this suite provisioned; recentEvents filters on audience and normalises actor_kind, the two facts asserted here
       expect(trail).toEqual([{ text: "kept a drafted map from their agent (vat_abc123...): 1 buildings, 2 features", actor_kind: "agent", audience: "admin" }]);
     });
 

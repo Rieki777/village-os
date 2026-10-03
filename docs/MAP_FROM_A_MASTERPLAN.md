@@ -53,11 +53,11 @@ step taught:
    village's coordinates" lands that far off unless it uses the frame centre.
 4. **A painted plate, and why it was retired.** `gen_plate.py` sent the masterplan to an image model
    and asked for a painterly world map "keeping the actual geography faithful". It was measured against
-   the satellite (Fix 16, `BUILD_SESSION_PROMPT.md`): ocean coverage 7 percent against 20, a shoreline
-   displaced a mean of 252 world units, edge agreement 0.069, and buildings painted where the scene had
-   none. **An image model asked to keep geography faithful invents geography.** The painted plate became
-   a deterministic filter over the real satellite, and the generated picture survives only as six
-   palette numbers.
+   the satellite (Fix 16 in the original build session's prompt, which is kept in the maintainers'
+   private operations repository): ocean coverage 7 percent against 20, a shoreline displaced a mean of
+   252 world units, edge agreement 0.069, and buildings painted where the scene had none. **An image
+   model asked to keep geography faithful invents geography.** The painted plate became a deterministic
+   filter over the real satellite, and the generated picture survives only as six palette numbers.
 5. **Sprites per kind of building, never per village.** `gen_sprites.py` made one transparent sprite per
    icon family (great hall, greenhouse, spring, and so on, thirty in all) from a fixed style preamble,
    and `gen_wip_sprites.py` made each one's half-built twin from the finished sprite. Natural features

@@ -13,9 +13,9 @@
  * rest of the server writes with, examples and departed members among them,
  * because a count that includes a seeded demo is the defect F29 was about.
  */
-import mysql from "mysql2/promise";
+import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { loadVariables } from "../lib/variables";
 import { loadModuleSettings, setModuleLifecycle } from "../lib/modules";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
@@ -78,7 +78,7 @@ const chip = (id: string, source: string, over: Record<string, unknown> = {}) =>
 describe.skipIf(!configured)("the crown bar's chips (routes, real schema)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 });
     await loadVariables(pool);
     await loadModuleSettings(pool);
     const counted = new Proxy(pool, {

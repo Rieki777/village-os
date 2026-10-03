@@ -12,9 +12,9 @@
  * `map.public_structure` allows it and a 401 when it does not, and names ride
  * only for a reader the capability gate gives `map.viewPeople`.
  */
-import mysql from "mysql2/promise";
+import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { createOrgRole, endSeating, seatHolder, updateOrgRole } from "../lib/orgChart";
 import { mapOrgEtag } from "../lib/mapOrg";
 import { register } from "./mapOrg";
@@ -79,7 +79,7 @@ describe.skipIf(!configured)("GET /api/map/org, the live org an open map follows
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 });
     const { app, handlers } = collect();
     register(app, {
       authedUser: async () => viewer,

@@ -93,15 +93,15 @@ const volume = () => fs.readdirSync(uploadsDir).sort();
 async function upload(bytes: Buffer, name: string, type: string) {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(bytes)], { type }), name);
-  const res = await fetch(`${base}/api/map/masterplan`, { method: "POST", body: form });
+  const res = await fetch(`${base}/api/map/masterplan`, { method: "POST", body: form }); // module-review-ok: this suite's own loopback server, not an outbound call
   return { status: res.status, body: (await res.json()) as any };
 }
 const get = async () => {
-  const res = await fetch(`${base}/api/map/masterplan`);
+  const res = await fetch(`${base}/api/map/masterplan`); // module-review-ok: this suite's own loopback server, not an outbound call
   return { status: res.status, body: (await res.json()) as any };
 };
 const remove = async () => {
-  const res = await fetch(`${base}/api/map/masterplan`, { method: "DELETE" });
+  const res = await fetch(`${base}/api/map/masterplan`, { method: "DELETE" }); // module-review-ok: this suite's own loopback server, not an outbound call
   return { status: res.status, body: (await res.json()) as any };
 };
 
@@ -181,7 +181,7 @@ describe("keeping one", () => {
   });
 
   it("asks for a file when none came", async () => {
-    const res = await fetch(`${base}/api/map/masterplan`, { method: "POST", body: new FormData() });
+    const res = await fetch(`${base}/api/map/masterplan`, { method: "POST", body: new FormData() }); // module-review-ok: this suite's own loopback server, not an outbound call
     expect(res.status).toBe(400);
     expect(volume()).toEqual([]);
   });
