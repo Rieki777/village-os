@@ -235,7 +235,12 @@ export default function LivingMap() {
     }, 600);
   }, []);
 
-  const { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash } = useMapEnterGate();
+  /* The grace lifted the cover before the map said its land had come: the
+     arrival runs now, where it can be seen, and the land still lands later. */
+  const uncovered = useCallback(() => {
+    try { frame.current?.contentWindow?.postMessage({ type: "uncovered" }, window.location.origin); } catch { /* frame gone */ }
+  }, []);
+  const { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash } = useMapEnterGate(uncovered);
   /** The artifact has booted, so on a phone its own bar carries the door out. */
   const [groundsReady, setGroundsReady] = useState(false);
   /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts. */

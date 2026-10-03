@@ -333,6 +333,35 @@ describe("a deep link inside the shell, with the published land arriving after t
 });
 
 /**
+ * THE SHELL'S GRACE UNCOVERS THE LAND BEFORE THE LAND HAS COME (round 4).
+ * When the shell lifts its cover with no config yet it says `uncovered`, and
+ * the arrival runs then. That message must not count as the land arriving: a
+ * deep link to a place only the published land holds still waits for the
+ * config, and opens when it lands, without calling the place gone.
+ */
+describe("a deep link uncovered by the shell's grace before its land arrives", () => {
+  let m: Booted;
+  beforeAll(async () => {
+    m = boot(`#/place/${ADDED.key}&skipIntro`, { shell: true });
+    await settle(300);
+    m.post({ type: "uncovered" });
+    await settle(500);
+    m.post(config(LIVE));
+    await settle(400);
+  });
+  afterAll(() => m?.close());
+
+  it("still opens the place when the land lands, and never calls it gone", () => {
+    expect(m.toasts.filter((t) => NOT_THERE.test(t))).toEqual([]);
+    expect(m.run<string | null>("panelKey")).toBe(ADDED.key);
+  });
+
+  it("threw nothing", () => {
+    expect(m.uncaught).toEqual([]);
+  });
+});
+
+/**
  * THE LAND LANDING IN THE INSTANT THE WAIT GAVE UP. When the wait runs out
  * the map routes against the seed, and openPanel's setHash mutes the router
  * until a 0 ms timer clears it. A config that landed before that timer ran

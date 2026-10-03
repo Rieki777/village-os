@@ -187,4 +187,49 @@ describe("a slow download (F47)", () => {
     expect(cover(), "a loaded land that never answered is shown as it is").toBeNull();
     expect(leave(), "and a land that never booted keeps the shell's door").toBeTruthy();
   });
+
+  /*
+   * The map's desk arrival waits for its land. When the grace lifts the cover
+   * first, the shell tells the map the land is uncovered so the arrival runs
+   * where it can be seen. It sends exactly that and not a bare config: a
+   * config would count as the land arriving and spend the re-route a deep
+   * link needs when the real land comes (shared/mapArtifactPlaces.test.ts).
+   * Measured in Chromium with the config held 20 s: before, the arrival flew
+   * at s21 over a panel the visitor had opened at s14.
+   */
+  it("tells the map its land is uncovered when the grace, and not the map, lifts the cover", async () => {
+    arrive("/map#hud=desk");
+    const enter = await screen.findByRole("button", { name: /Enter the Land/i });
+    act(() => enter.click());
+    await waitFor(() => expect(frame()).toBeTruthy());
+    // The clock is taken over before the frame loads, which is when the grace starts.
+    vi.useFakeTimers();
+    const post = vi.fn();
+    Object.defineProperty(frame()!.contentWindow!, "postMessage", { configurable: true, value: post });
+    act(() => {
+      frame()!.dispatchEvent(new Event("load"));
+    });
+    const sent = () => post.mock.calls.map(([m]) => (m as { type?: string }).type);
+    await act(() => vi.advanceTimersByTimeAsync(9_000));
+    expect(cover(), "still within the grace").toBeTruthy();
+    expect(sent()).not.toContain("uncovered");
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(cover()).toBeNull();
+    expect(sent()).toEqual(["uncovered"]);
+  });
+
+  it("sends nothing of the kind when the map's own land-ready lifts the cover", async () => {
+    vi.useFakeTimers();
+    arrive("/map#/place/greenhouse&hud=desk");
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    const post = vi.fn();
+    Object.defineProperty(frame()!.contentWindow!, "postMessage", { configurable: true, value: post });
+    act(() => {
+      frame()!.dispatchEvent(new Event("load"));
+    });
+    fromMap({ type: "land-ready" });
+    expect(cover()).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(12_000));
+    expect(post.mock.calls.map(([m]) => (m as { type?: string }).type)).not.toContain("uncovered");
+  });
 });

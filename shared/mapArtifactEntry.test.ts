@@ -213,6 +213,87 @@ describe("the land is handed over once, inside the shell (F66)", () => {
   });
 });
 
+/*
+ * A CONFIG THAT LANDS LATE (round 4 sweep). The shell lifts its cover 10 s
+ * after the frame loads even when no config has come (LOADED_GRACE_MS), and
+ * the arrival kept waiting for the config. Measured in Chromium with
+ * /api/map/config held 20 s: the visitor saw the boot backdrop with no
+ * welcome, opened the Greenhouse at s14, and at s21 the late config reset the
+ * camera and glided them away with the panel still open. With a config that
+ * never came, no welcome at all. Now the shell says `uncovered` when its
+ * grace lifts the cover, which runs the arrival without handing the land
+ * over, and a visitor who has already taken the land keeps the camera: the
+ * late hand-over says her welcome and moves nothing.
+ */
+describe("a config that lands after the cover has lifted", () => {
+  const welcomed = (b: Booted) =>
+    [...b.window.document.querySelectorAll("#maiaLog .mline")].filter((n) => /Welcome to the living map/.test(n.textContent ?? "")).length;
+
+  it("runs the arrival and the welcome when the shell's grace uncovers the land", async () => {
+    const b = boot("#skipIntro");
+    try {
+      await settle(600);
+      expect(camOf(b), "still waiting (the case)").toEqual(BOOT_CAM);
+      b.post({ type: "uncovered" });
+      expect(camOf(b), "the glide starts from its first frame").toEqual(GLIDE_START);
+      expect(b.landReady(), "uncovering is not handing the land over").toBe(0);
+      await settle(1200);
+      expect(welcomed(b), "her welcome").toBe(1);
+      const landed = camOf(b);
+      b.post({ type: "config" });
+      expect(b.landReady()).toBe(1);
+      expect(camOf(b), "the late config does not fly the arrival again").toEqual(landed);
+      await settle(900);
+      expect(welcomed(b), "and does not say it twice").toBe(1);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+
+  it("leaves the camera where the visitor took it when the config lands after they acted", async () => {
+    const b = boot("#skipIntro");
+    try {
+      await settle(600);
+      b.run("openPanel('greenhouse')");
+      await settle(1200);
+      const taken = camOf(b);
+      expect(taken, "the visitor's own view").not.toEqual(BOOT_CAM);
+      b.post({ type: "config" });
+      expect(b.landReady()).toBe(1);
+      expect(camOf(b), "no reset to the glide's start").toEqual(taken);
+      expect(b.run<string | null>("panelKey")).toBe("greenhouse");
+      await settle(900);
+      expect(camOf(b), "and no glide afterwards").toEqual(taken);
+      expect(welcomed(b), "her welcome is still said, once").toBe(1);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+
+  it("counts a hand on the land as taking it", async () => {
+    const b = boot("#skipIntro");
+    try {
+      await settle(600);
+      const scene = b.window.document.getElementById("scene") as HTMLElement;
+      // jsdom has no pointer capture; the pan asks for it on the canvas.
+      Object.assign(scene, { setPointerCapture() {}, releasePointerCapture() {}, hasPointerCapture: () => false });
+      scene.dispatchEvent(new b.window.MouseEvent("pointerdown", { bubbles: true, clientX: 700, clientY: 400 }));
+      scene.dispatchEvent(new b.window.MouseEvent("pointerup", { bubbles: true, clientX: 700, clientY: 400 }));
+      b.window.dispatchEvent(new b.window.MouseEvent("pointerup", { bubbles: true, clientX: 700, clientY: 400 }));
+      await settle(300);
+      const taken = camOf(b);
+      b.post({ type: "config" });
+      expect(camOf(b), "no reset to the glide's start").toEqual(taken);
+      expect(b.run<boolean>("!!travel"), "no glide").toBe(false);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+});
+
 describe("standalone, nothing waits", () => {
   it("flies the arrival at boot, as it always did", async () => {
     const s = boot("#skipIntro", { standalone: true });

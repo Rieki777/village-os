@@ -10642,6 +10642,9 @@ addEventListener('message',e=>{try{
      routes. An empty hash closes what is open (closeAddressed). HASHMUTE
      only silences the echo of this file's own setHash, and a goto is no
      echo: muted, a Back pressed within a tick of a click did nothing. */
+  /* The shell's grace lifted its cover with no config yet: the arrival runs
+     now. Only the arrival; the land is handed over by the config (arrivalNow). */
+  if(d.type==='uncovered'&&typeof arrivalNow==='function')arrivalNow();
   if(d.type==='goto'&&typeof d.hash==='string'){leaveIntro();
     try{history.replaceState(null,'',d.hash||location.pathname+location.search)}catch(_){}
     HASHMUTE=false;routeHash()}
@@ -11293,10 +11296,11 @@ function arrivalLift(){
   const v=$('vitals');if(!v||v.dataset.row!=='2'||document.body.classList.contains('pocket'))return 0;
   const vy=parseFloat(document.documentElement.style.getPropertyValue('--top-vy'))||0;
   return Math.min(Math.max(0,vy),ARRIVAL_LIFT_MAX)}
+function arrivalWelcome(){
+  maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
+  setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)}
 function arriveOnLand(){
-  cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670-arrivalLift()/0.84,0.84,()=>{
-    maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
-    setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
+  cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670-arrivalLift()/0.84,0.84,arrivalWelcome)}
 /* THE LAND IS HANDED OVER ONCE. Inside the shell this file draws the seed
    scene it ships with until the village's own arrives in {type:'config'},
    and the swap moved half the buildings a second after the visitor first saw
@@ -11305,12 +11309,39 @@ function arriveOnLand(){
    same moment: under the cover it flew its first half where nobody could see
    it. The config handler calls this after applying, on every path, and the
    shell sends a config even when its fetch fails, so the wait always ends.
-   Standalone, nothing waits: there is no cover and no shell to say so. */
-let LAND_HANDED=false,ARRIVAL_WAITS=false;
-function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
+   Standalone, nothing waits: there is no cover and no shell to say so.
+   THE ARRIVAL IS NOT THE HAND-OVER, AND IT ENDS ONCE. The shell also lifts
+   its cover 10 s after the frame loads when no config has come (its
+   LOADED_GRACE_MS), and the arrival used to keep waiting for the config.
+   MEASURED with /api/map/config held 20 s: the visitor saw the boot backdrop
+   with no welcome, opened the Greenhouse, and the late config then reset the
+   camera and glided them away with the panel still open; with a config that
+   never came there was no welcome at all. So the shell says `uncovered` when
+   its grace lifts the cover, which runs the arrival and nothing else: the
+   land is not handed over, and landArrived keeps the re-route a deep link
+   needs for when the real land comes. And a visitor who takes the land first
+   (a hand on it, a wheel, or a place, door or Loom opened) keeps the camera:
+   whichever comes next says her welcome and moves nothing.
+   NOT A KEY. The shell hands the keyboard to the frame when it loads, under
+   the cover, where nobody can see what a key does; a Tab there would have
+   cost the visitor the arrival. A key that opens something is caught by the
+   opener it calls. */
+let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false;
+function arrivalNow(){
   if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;arriveOnLand()}
+  else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}}
+function arrivalTaken(){if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;ARRIVAL_TAKEN=true}}
+function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
+  arrivalNow();
   shellPost({type:'land-ready'})}
 window.landHandedOver=landHandedOver;
+window.arrivalNow=arrivalNow;
+addEventListener('pointerdown',arrivalTaken,true);
+addEventListener('wheel',arrivalTaken,{capture:true,passive:true});
+/* Wrapped here, below the state they read: an opener called before this line
+   would otherwise reach ARRIVAL_WAITS before it exists. */
+for(const n of ['openPanel','openDoor','openLoom']){const f=window[n];
+  if(typeof f==='function')window[n]=function(){arrivalTaken();return f.apply(this,arguments)}}
 const enterBtn=$('enterBtn');
 if(enterBtn)enterBtn.onclick=()=>{document.body.classList.remove('intro');const ic=$('introCard');ic.style.opacity=0;setTimeout(()=>ic.remove(),1000);
   shellPost({type:'intro-done'});arriveOnLand()};

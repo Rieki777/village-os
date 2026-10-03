@@ -82,8 +82,17 @@ const LOADED_GRACE_MS = 10_000;
  * `startHash` is the address the iframe opens at. It is read when the land
  * is entered and never again, because changing an iframe's `src` reloads the
  * whole map under the visitor.
+ *
+ * `onGraceLift` runs when the grace period, and not the map, lifts the cover.
+ * The map's desk arrival waits for its land, and a land that comes after the
+ * cover has gone used to fly the visitor away from whatever they had opened
+ * meanwhile (and a land that never came left them with no welcome). The shell
+ * uses it to tell the map the land is uncovered, so the arrival runs when it
+ * can be seen.
  */
-export function useMapEnterGate() {
+export function useMapEnterGate(onGraceLift?: () => void) {
+  const graceLift = useRef(onGraceLift);
+  graceLift.current = onGraceLift;
   const [entered, setEntered] = useState(startsEntered);
   const [preparing, setPreparing] = useState(startsEntered);
   const [slow, setSlow] = useState(false);
@@ -100,7 +109,10 @@ export function useMapEnterGate() {
 
   useEffect(() => {
     if (!preparing || !loaded) return;
-    const t = window.setTimeout(() => setPreparing(false), LOADED_GRACE_MS);
+    const t = window.setTimeout(() => {
+      setPreparing(false);
+      graceLift.current?.();
+    }, LOADED_GRACE_MS);
     return () => window.clearTimeout(t);
   }, [preparing, loaded]);
 
