@@ -124,9 +124,6 @@ export function register(app: Express, deps: Deps): void {
     return true;
   }
 
-  /** An act: the gate's own answer, with the sentence this screen already says. */
-  const mayChange = (req: Request, res: Response) => guardCapability(req, res, "comms.manage", REFUSAL);
-
   /** A key from the path, refused with a 404 when it names no words. */
   async function keyFrom(req: Request, res: Response): Promise<string | null> {
     const key = String(req.params.key ?? "");
@@ -228,7 +225,7 @@ export function register(app: Express, deps: Deps): void {
 
   /** The same email, sent to the signed-in admin's own address. */
   app.post("/api/admin/comms/words/:key/test", moduleGate, async (req, res) => {
-    if (!(await mayChange(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const key = await keyFrom(req, res);
     if (!key) return;
     const user = await authedUser(req);
@@ -253,7 +250,7 @@ export function register(app: Express, deps: Deps): void {
 
   /** Save the editor's words as a new live version. */
   app.put("/api/admin/comms/words/:key", moduleGate, async (req, res) => {
-    if (!(await mayChange(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const key = await keyFrom(req, res);
     if (!key) return;
     const read = readDraft(key, req.body);
@@ -266,7 +263,7 @@ export function register(app: Express, deps: Deps): void {
 
   /** Make an old version live again. */
   app.post("/api/admin/comms/words/:key/restore", moduleGate, async (req, res) => {
-    if (!(await mayChange(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const key = await keyFrom(req, res);
     if (!key) return;
     const version = Number(req.body?.version);
@@ -279,7 +276,7 @@ export function register(app: Express, deps: Deps): void {
 
   /** Take the platform's current words as a new live version. Every old version stays. */
   app.post("/api/admin/comms/words/:key/adopt", moduleGate, async (req, res) => {
-    if (!(await mayChange(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const key = await keyFrom(req, res);
     if (!key) return;
     const user = await authedUser(req);
