@@ -446,6 +446,43 @@ describe("in the shell on a phone, when the village's words arrive after the boo
   });
 });
 
+/* The shell's grace lifts its cover 10 s after the frame loads when the map
+   has said no land-ready, and tells the map `uncovered` (round 3). The phone's
+   welcome waits for the village's words, so with a config that is late or
+   never comes the visitor would stand on the land with no greeting at all. */
+describe("in the shell on a phone, when the shell's grace lifts the cover before any config", () => {
+  let b: Booted;
+  let before = "";
+  beforeAll(async () => {
+    b = boot("#hud=pocket&skipIntro", PHONE, { shell: true });
+    await settle(400);
+    before = logText(b);
+    b.post({ type: "uncovered" });
+    await until(() => /Welcome to the living map/.test(logText(b)), 15000);
+  });
+  afterAll(() => b?.close());
+
+  it("held her welcome while the cover was up", () => {
+    expect(before).not.toContain("Welcome to the living map");
+  });
+
+  it("greets plainly once the visitor can see the land, with no config and no land-ready", () => {
+    expect(logText(b)).toContain("The land is yours to move: drag it, pinch it, tap any building to open its door.");
+    expect(b.posted.filter((m) => m.type === "land-ready"), "nothing was handed over").toEqual([]);
+  });
+
+  it("still raises the walk offer when the village's words come after", async () => {
+    expect(b.doc.getElementById("gresume")?.classList.contains("on"), "no walk to offer yet").toBe(false);
+    b.post({ type: "config", walk: WALK, welcome: WELCOME });
+    await until(() => b.doc.getElementById("gresume")?.classList.contains("on") === true, 15000);
+    expect(b.doc.getElementById("gresume")?.classList.contains("on"), "the walk offer").toBe(true);
+  });
+
+  it("threw nothing", () => {
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
 describe("in the shell on a phone, with nothing written (the control)", () => {
   let b: Booted;
   beforeAll(async () => {

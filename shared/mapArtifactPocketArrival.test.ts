@@ -648,6 +648,27 @@ describe("a phone re-aims its arrival on the village's own scene, under the cove
     }
   });
 
+  /* The shell's grace lifts the cover 10 s after the frame loads when no
+     land-ready has come, and says `uncovered` (round 3). From then on the
+     visitor is looking at the phone's opening frame, so a scene that lands
+     later must not re-aim it: that is the jump D16 exists to keep out of
+     sight. */
+  it("does not re-aim once the shell's grace has lifted the cover before the scene came", async () => {
+    const b = bootInShell();
+    try {
+      await settle(SETTLE_MS);
+      b.post({ type: "uncovered" });
+      const seen = b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+      b.post({ type: "config", scene: villageScene(b), sceneVersion: 7 });
+      expect(b.camAtReady(), "the map said land-ready").not.toBeNull();
+      expect(offScreen(b, seen).length, "the scene would have been re-aimed (the case is the one it says)").toBeGreaterThan(0);
+      expect(b.camAtReady(), "the frame the visitor has been watching since the cover lifted").toEqual(seen);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.close();
+    }
+  });
+
   it("leaves a camera somebody already moved where it is (the control)", async () => {
     const b = bootInShell();
     try {

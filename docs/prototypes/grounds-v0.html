@@ -12091,11 +12091,26 @@ function arriveOnLand(){
    the cover, where nobody can see what a key does; a Tab there would have
    cost the visitor the arrival. A key that opens something is caught by the
    opener it calls. */
-let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false;
+let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false,UNCOVERED=false;
 const LAND_WAITERS=[];
+/* THE COVER IS OFF FROM HERE ON, whether the land-ready below lifted it or
+   the shell's grace did (`uncovered`). Two things follow from the second,
+   which neither would see on its own:
+   - A PHONE IS NOT RE-AIMED AFTER THIS (D16). The re-aim on the village's
+     scene is for a frame nobody has seen yet; once the grace has lifted the
+     cover the visitor is looking at this one, and a scene that lands later
+     would make the land jump under them.
+   - WHAT WAITS FOR THE LAND RUNS NOW. The phone's welcome and walk offer wait
+     for the village's words (afterLand). With a config that is late or never
+     comes, the visitor would stand on the land with no greeting at all, the
+     defect the desk arrival had; the desk now glides and greets here, and the
+     phone greets plainly. Words that arrive later still raise the walk offer
+     (syncWalkDoors). */
 function arrivalNow(){
+  UNCOVERED=true;POCKET_FRAME=null;
   if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;arriveOnLand()}
-  else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}}
+  else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}
+  for(const fn of LAND_WAITERS.splice(0))try{fn()}catch(_){}}
 function arrivalTaken(){if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;ARRIVAL_TAKEN=true}}
 function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
   /* A PHONE RE-AIMS ITS ARRIVAL ON THE VILLAGE'S OWN SCENE, UNDER THE COVER
@@ -12111,18 +12126,18 @@ function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
   const pf=POCKET_FRAME;POCKET_FRAME=null;
   if(pf&&inShell()&&!travel&&cam.x===pf.x&&cam.y===pf.y&&cam.z===pf.z)framePocket();
   arrivalNow();
-  for(const fn of LAND_WAITERS.splice(0))try{fn()}catch(_){}
   shellPost({type:'land-ready'})}
 /* Run once the village's own land and words are in: now, when they already
-   are or when nothing is coming (standalone), and otherwise on the handover. */
-function afterLand(fn){if(LAND_HANDED||!inShell())fn();else LAND_WAITERS.push(fn)}
+   are or when nothing is coming (standalone), and otherwise on the handover,
+   or when the shell's grace lifts the cover first (arrivalNow). */
+function afterLand(fn){if(LAND_HANDED||UNCOVERED||!inShell())fn();else LAND_WAITERS.push(fn)}
 window.afterLand=afterLand;
 /* WHAT ARRIVES WITH THE WALK. The tour chip and the read-only tour view follow
    it on every push, so a founder who saves a walk under Village settings sees
    it offered on the map behind the panel. The pocket offer is decided once by
    the boot above, after the land; a later push decides it again. */
 function syncWalkDoors(){syncTourChip();TOUR=tourView();
-  if(LAND_HANDED&&document.body.classList.contains('pocket'))guideAffordance()}
+  if((LAND_HANDED||UNCOVERED)&&document.body.classList.contains('pocket'))guideAffordance()}
 window.syncWalkDoors=syncWalkDoors;
 /* HER FIRST LINE ON THE MAP. It promised "Everything you see traces to
    something true: a funded build, a claimed quest, a filled seat", over a
