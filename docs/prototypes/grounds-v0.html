@@ -5861,16 +5861,21 @@ $('undoBtn').onclick=()=>{const u=UNDO.pop();if(!u)return toast('Nothing to undo
      it, and this is the second line: the remove branch below would lay a
      second copy over the one already on the land, and autosave both. */
   if(u.t==='remove'&&BY[k])return toast(`${BY[k].name} is already on the land, so there is nothing to bring back.`);
-  /* The undo names what it took back, in the journal and on screen. The
-     journal line carries the seq it reverses, which is how the publish card
-     knows the two cancel out (netChanges). */
   const was=EDITS.find(e=>e.seq===u.seq);
-  logEdit('undo',was?was.target:'undo:'+u.t,{kind:u.t,target:k,reverses:u.seq||0});
+  /* THE LAND CHANGES BACK FIRST, AND THE JOURNAL HEARS ABOUT IT AFTER. The
+     undo line carries the seq it reverses, and the publish card leaves a
+     change and its undo off the list together (netChanges). Written before
+     the revert, a record that found nothing to act on still cancelled its
+     change: the seat stayed where it was moved, Undo said it was undone, the
+     card said there was nothing to publish, and the next publish of anything
+     else put the move live without a line about it. So each branch says
+     whether it changed the land, and only a change is logged and announced. */
+  let did=true;
   if(u.t==='add'&&typeof inspKey!=='undefined'&&inspKey===u.key)closeInspect();
-  if(u.t==='move'){const s=BY[u.key];if(s){[s.x,s.y]=u.from};if(u.featPrev){SCENE.features=u.featPrev;paintTerrain()}}
-  if(u.t==='add'){const s=BY[u.key];if(s){const i=SCENE.structures.indexOf(s);if(i>=0)SCENE.structures.splice(i,1);
+  if(u.t==='move'){const s=BY[u.key];if(s){[s.x,s.y]=u.from};if(u.featPrev){SCENE.features=u.featPrev;paintTerrain()}did=!!(s||u.featPrev)}
+  if(u.t==='add'){const s=BY[u.key];did=!!s;if(s){const i=SCENE.structures.indexOf(s);if(i>=0)SCENE.structures.splice(i,1);
     pEls[s.key]&&pEls[s.key].remove();bEls[s.key]&&bEls[s.key].remove();delete pEls[s.key];delete bEls[s.key];delete BY[s.key];refreshWork()}}
-  if(u.t==='dup'){const s=BY[u.key];
+  if(u.t==='dup'){const s=BY[u.key];did=!!s;
     if(s){const i=SCENE.structures.indexOf(s);if(i>=0)SCENE.structures.splice(i,1);
       pEls[s.key]&&pEls[s.key].remove();bEls[s.key]&&bEls[s.key].remove();
       delete pEls[s.key];delete bEls[s.key];delete BY[s.key]}
@@ -5890,8 +5895,11 @@ $('undoBtn').onclick=()=>{const u=UNDO.pop();if(!u)return toast('Nothing to undo
     (u.seats||[]).forEach(([j,x])=>SCENE.seats.splice(Math.min(j,SCENE.seats.length),0,x));
     (u.quests||[]).forEach(([j,x])=>SCENE.quests.splice(Math.min(j,SCENE.quests.length),0,x));
     if(u.featPrev){SCENE.features=u.featPrev;paintTerrain()}refreshWork()}
-  if(u.t==='place')undoPlace(u);
-  if(u.t==='row'||u.t==='rowAdd'||u.t==='rowDel'||u.t==='housing')undoRow(u);
+  if(u.t==='place')did=undoPlace(u);
+  if(u.t==='row'||u.t==='rowAdd'||u.t==='rowDel'||u.t==='housing')did=undoRow(u);
+  if(!did)return toast(was?`"${editLine(was)}" can no longer be taken back, so it stays in your draft.`
+    :'That change can no longer be taken back, so it stays in your draft.');
+  logEdit('undo',was?was.target:'undo:'+u.t,{kind:u.t,target:k,reverses:u.seq||0});
   mmDirty=true;
   /* Said every time. A silent undo let a person who meant to take back a
      typo lose a placement instead, and never know which one went. */
@@ -7398,23 +7406,40 @@ function renderInspect(){const s=BY[inspKey];if(!s){closeInspect();return}
      circle, phase, activity, funding, size, doors and marks all live on it.
    - 'row', 'rowAdd', 'rowDel': a seat, quest or flow the card changed, added
      or removed. Matched by the object itself, so a row the scene has since
-     rebuilt is left alone and never guessed at.
-   - 'housing': the homes row for the place, which lives beside it. */
+     rebuilt is left alone and never guessed at. View as visitor rebuilds
+     every row on the way back, and carries these records across by their
+     place in the list (undoRowsHold, undoRowsFind).
+   - 'housing': the homes row for the place, which lives beside it.
+   Each says whether it changed anything, and Undo logs only a change. */
 function placeSnap(s){return JSON.parse(JSON.stringify(s))}
-function undoPlace(u){const s=BY[u.key];if(!s)return;
+function undoPlace(u){const s=BY[u.key];if(!s)return false;
   for(const f of Object.keys(s))if(!(f in u.before))delete s[f];
   Object.assign(s,u.before);
   paintPoiArt(s,pEls[s.key]);refreshBanner(s);setDerived(s);
   window.refreshBadges&&refreshBadges();refreshWork();
-  if(typeof inspKey!=='undefined'&&inspKey===s.key)renderInspect()}
-function undoRow(u){
-  if(u.t==='housing'){const H=housingRows();if(u.before)H[u.key]=u.before;else delete H[u.key]}
+  if(typeof inspKey!=='undefined'&&inspKey===s.key)renderInspect();
+  return true}
+function undoRow(u){let did=false;
+  if(u.t==='housing'){const H=housingRows();if(u.before)H[u.key]=u.before;else delete H[u.key];did=true}
   else{const L=SCENE[u.coll]||[],i=L.indexOf(u.obj);
-    if(u.t==='row'&&i>=0){for(const f of Object.keys(u.obj))if(!(f in u.before))delete u.obj[f];Object.assign(u.obj,u.before)}
-    if(u.t==='rowAdd'&&i>=0)L.splice(i,1);
-    if(u.t==='rowDel'&&i<0)L.splice(Math.min(u.at,L.length),0,u.obj)}
+    if(u.t==='row'&&i>=0){for(const f of Object.keys(u.obj))if(!(f in u.before))delete u.obj[f];Object.assign(u.obj,u.before);did=true}
+    if(u.t==='rowAdd'&&i>=0){L.splice(i,1);did=true}
+    if(u.t==='rowDel'&&i<0){L.splice(Math.min(u.at,L.length),0,u.obj);did=true}}
+  if(!did)return false;
   window.refreshBadges&&refreshBadges();refreshWork();
-  if(typeof inspKey!=='undefined'&&inspKey&&BY[inspKey])renderInspect()}
+  if(typeof inspKey!=='undefined'&&inspKey&&BY[inspKey])renderInspect();
+  return true}
+/* A ROW RECORD OUTLIVES THE VISIT TO THE LIVE MAP. View as visitor stashes
+   the draft as an export and restores it on the way back, and the restore
+   makes every seat, quest and flow a new object, so a record holding the old
+   one found nothing and did nothing. The export writes each of the three
+   lists whole and in order and the restore reads them back the same way, so
+   a row's place in its list is what survives the trip. Taken just before
+   the stash, and turned back into the row just after the restore. A row
+   that had already left its list (a removal's own record) keeps its object. */
+function undoRowsHold(){for(const u of UNDO)if(u.coll&&u.t!=='rowDel')u.idx=(SCENE[u.coll]||[]).indexOf(u.obj)}
+function undoRowsFind(){for(const u of UNDO)if(u.idx!=null){const o=u.idx>=0?(SCENE[u.coll]||[])[u.idx]:null;
+  if(o)u.obj=o;delete u.idx}}
 function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
   /* The text boxes and sliders write the place on every keystroke, so the
      place as it stood is caught on the first one, the way #iScale has always
@@ -10170,13 +10195,13 @@ function toggleVisitor(){
        blueprint places a visitor never sees were drawn too. The same switch
        the Build button turns, and it comes back on with the draft. */
     VISIT_BUILD=buildMode;if(buildMode)$('buildBtn').click();
-    DRAFT_HOLD=buildExportJSON();
+    undoRowsHold();DRAFT_HOLD=buildExportJSON();
     VISITOR_VIEW=true;VISIT_NOTED=false;document.body.classList.add('visiting');
     restoreScene(LIVE_SCENE,{quiet:true});
     toast('This is the live map. Your draft is waiting.');
   }else{
     VISITOR_VIEW=false;document.body.classList.remove('visiting');
-    if(DRAFT_HOLD){restoreScene(DRAFT_HOLD);DRAFT_HOLD=null}
+    if(DRAFT_HOLD){restoreScene(DRAFT_HOLD);DRAFT_HOLD=null;undoRowsFind()}
     /* Back on as the Build button turns it on, less the greeting: a place
        panel opened while visiting would otherwise sit over the work. */
     if(VISIT_BUILD&&!buildMode){buildMode=true;document.body.classList.add('build');

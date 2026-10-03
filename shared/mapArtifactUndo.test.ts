@@ -756,3 +756,102 @@ describe("a saved draft offered after an undo", () => {
     expect(shown, `offered as: ${offer}`).toBe("none");
   });
 });
+
+/*
+ * ROUND 3 (2026-10-02), THE BUILD-MODE RE-SWEEP. Each was reproduced in
+ * Chromium against a stand-in village and again by an independent skeptic,
+ * and each case below fails on the artifact as it stood before its fix.
+ */
+
+/* Finding 1. View as visitor rebuilds every seat, quest and flow on the way
+   back, and a card row's undo record held the old object: Undo said it had
+   taken the change back and changed nothing, and the change dropped off the
+   publish card while it stayed on the land. */
+describe("Undo of a card row after a look at the live map (round 3, finding 1)", () => {
+  /* Each list read the way a publish would carry it: a seat or quest by its
+     name and its place, a flow whole. A restore fills in fields the live
+     export leaves out (a quest's key, a guessed address), so comparing whole
+     quest rows called the untouched land different. Each case reads the
+     comparison before its edit as well, so a false here is about the edit. */
+  const sameAsLive = (m: Booted, block: string) =>
+    m.run<(b: string) => boolean>(
+      `(b=>{const p={org_roles:r=>r.role+'@'+r.structure_key,quests:r=>r.title+'@'+r.structure_key}[b]||(r=>JSON.stringify(r));
+        return JSON.stringify(buildExportJSON()[b].map(p))===JSON.stringify(LIVE_SCENE[b].map(p))})`,
+    )(block);
+  const roundTrip = (m: Booted) => {
+    m.run("toggleVisitor()");
+    m.run("toggleVisitor()");
+  };
+
+  it("takes back a seat moved on the card, and leaves nothing to publish", async () => {
+    const m = await boot();
+    build(m);
+    const control = sameAsLive(m, "org_roles");
+    m.run<(key: string) => void>("openInspect")("library");
+    const box = [...m.window.document.querySelectorAll<HTMLInputElement>("[data-seat]")].find((b) => !b.checked);
+    expect(box, "the library's card offers a seat to move there").toBeTruthy();
+    if (box) {
+      box.checked = true;
+      box.dispatchEvent(new m.window.Event("change"));
+    }
+    const moved = !sameAsLive(m, "org_roles");
+    roundTrip(m);
+    m.el("#undoBtn").click();
+    const seen = { toast: lastToast(m), same: sameAsLive(m, "org_roles"), net: m.run<number>("netChanges().length"), card: card(m) };
+    m.close();
+    expect(control, "the screen matches the live map before the edit").toBe(true);
+    expect(moved, "the tick moved a seat").toBe(true);
+    expect(seen.toast).toMatch(/^Undid: moved a seat to /);
+    expect(seen.same, "the seat is back where the live map has it").toBe(true);
+    expect(seen.net).toBe(0);
+    expect(seen.card.bar.publishDisabled).toBe(true);
+  });
+
+  it("takes back a quest and a flow added on the card, newest first", async () => {
+    const m = await boot();
+    build(m);
+    const control = { quests: sameAsLive(m, "quests"), flows: sameAsLive(m, "map_flows") };
+    m.run<(key: string) => void>("openInspect")("market");
+    m.el<HTMLInputElement>("#iQTitle").value = "A probe quest";
+    m.el("#iQAdd").click();
+    m.el("#iFOutAdd").click();
+    const added = { quests: !sameAsLive(m, "quests"), flows: !sameAsLive(m, "map_flows") };
+    roundTrip(m);
+    m.el("#undoBtn").click();
+    const flowToast = lastToast(m);
+    m.el("#undoBtn").click();
+    const seen = { flowToast, questToast: lastToast(m), quests: sameAsLive(m, "quests"), flows: sameAsLive(m, "map_flows"), net: m.run<number>("netChanges().length") };
+    m.close();
+    expect(control, "the screen matches the live map before the edits").toEqual({ quests: true, flows: true });
+    expect(added).toEqual({ quests: true, flows: true });
+    expect(seen.flowToast).toMatch(/^Undid: drew a flow/);
+    expect(seen.questToast).toBe("Undid: created a quest A probe quest.");
+    expect(seen).toMatchObject({ quests: true, flows: true, net: 0 });
+  });
+
+  /* The second line of defence: a record that finds nothing to act on says
+     so and leaves the journal alone, so the change stays listed. The rows
+     are rebuilt here by hand, as any future path that rebuilds them would. */
+  it("says a change it cannot reach stays, and leaves it on the publish card", async () => {
+    const m = await boot();
+    build(m);
+    m.run<(key: string) => void>("openInspect")("market");
+    m.el<HTMLInputElement>("#iSeatName").value = "Keeper of the scales";
+    m.el("#iSeatAdd").click();
+    m.run("SCENE.seats=SCENE.seats.map(x=>Object.assign({},x))");
+    const edits = m.run<number>("EDITS.length");
+    m.el("#undoBtn").click();
+    const seen = {
+      toast: lastToast(m),
+      edits: m.run<number>("EDITS.length"),
+      seat: m.run<boolean>("SCENE.seats.some(x=>x.s==='Keeper of the scales')"),
+      card: card(m),
+    };
+    m.close();
+    expect(seen.toast).toBe('"created a seat Keeper of the scales" can no longer be taken back, so it stays in your draft.');
+    expect(seen.edits, "no undo line was written").toBe(edits);
+    expect(seen.seat).toBe(true);
+    expect(seen.card.list).toEqual(["created a seat Keeper of the scales"]);
+  });
+});
+
