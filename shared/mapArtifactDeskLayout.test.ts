@@ -231,6 +231,53 @@ describe("the top row on a desk: the stat bar fits between the buttons, or takes
   });
 });
 
+/**
+ * THE ARRIVAL CLEARS A BAR ON ITS OWN ROW (round 4 sweep). At 1280x720 the
+ * bar takes row two, 51 px down, and the arrival camera (1440,670 at z 0.84)
+ * was framed for a bar on row one: the Welcome Lodge and Pond Homes stood 6 of
+ * 9 points under it, and a real click on either landed on the bar. Placing the
+ * camera 50 world px lower in Chromium (42 screen px at z 0.84) left only the
+ * Gate and one mark under the bar, as production's row-one bar does; a full
+ * 51 px put New Food Forest under Maia's dock. This reads where the glide is
+ * headed after topFit has decided, at sizes on each row.
+ */
+describe("the arrival camera, with the bar on its own row or not", () => {
+  let b: Booted;
+  beforeAll(async () => {
+    b = boot({ width: 1400, height: 850 });
+    await settle(300);
+  });
+  afterAll(() => b?.close());
+  const headed = (d: Desk) => {
+    playGeometry(b, d);
+    b.run("topFit()");
+    b.run("arriveOnLand()");
+    const aim = b.run<{ x: number; y: number; z: number }>("({x:travel.tx,y:travel.ty,z:travel.tz})");
+    b.run("travel=null");
+    return { x: Math.round(aim.x), y: Math.round(aim.y), z: aim.z };
+  };
+
+  it("comes down by the bar's drop, up to 42 px on screen, when the bar takes row two", () => {
+    const d = DESKS[0];
+    expect(d.expect.row, "1280x720 puts the bar on row two (the case)").toBe("2");
+    expect(headed(d)).toEqual({ x: 1440, y: 620, z: 0.84 });
+  });
+
+  it.each(DESKS.slice(1))("keeps the arrival where it was at $size.width x $size.height, with the bar on row one", (d) => {
+    expect(d.expect.row).toBeNull();
+    expect(headed(d)).toEqual({ x: 1440, y: 670, z: 0.84 });
+  });
+
+  it("does not move a pocket's arrival", () => {
+    playGeometry(b, DESKS[0]);
+    b.run("topFit()");
+    b.window.document.body.classList.add("pocket");
+    expect(b.run<number>("arrivalLift()")).toBe(0);
+    b.window.document.body.classList.remove("pocket");
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
 describe("a district plate over a building hands the click to the building", () => {
   let b: Booted;
   beforeAll(async () => {

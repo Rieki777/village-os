@@ -11277,8 +11277,24 @@ if(document.body.classList.contains('pocket')){
    lives inside the card, and wiring a removed button threw a TypeError here,
    above requestAnimationFrame(frame). The HUD stood over a land that never
    painted, on every /map visit (2026-10-01, #399). */
+/* THE ARRIVAL CLEARS A STAT BAR ON ITS OWN ROW. When topFit puts the bar on
+   a second row (desk widths of about 1280 to 1330) it stands 51 px lower, and
+   at the arrival camera it covered the Welcome Lodge and Pond Homes: a real
+   click on either landed on the bar, and one opened the Water reading. So the
+   arrival comes down by as much as the bar did, up to ARRIVAL_LIFT_MAX.
+   MEASURED at the arrival camera, 9 points per building, against production's
+   row-one bar: at 1280x720 and 1320x720 a 42 px lift leaves only the Gate and
+   one mark under the bar, as production does; the full 51 px put New Food
+   Forest under Maia's dock at 720 high. The bar's own row is read off what
+   topFit published (--top-vy), so a desk on row one, and a pocket, are not
+   moved at all. */
+const ARRIVAL_LIFT_MAX=42;
+function arrivalLift(){
+  const v=$('vitals');if(!v||v.dataset.row!=='2'||document.body.classList.contains('pocket'))return 0;
+  const vy=parseFloat(document.documentElement.style.getPropertyValue('--top-vy'))||0;
+  return Math.min(Math.max(0,vy),ARRIVAL_LIFT_MAX)}
 function arriveOnLand(){
-  cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670,0.84,()=>{
+  cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670-arrivalLift()/0.84,0.84,()=>{
     maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
     setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)})}
 /* THE LAND IS HANDED OVER ONCE. Inside the shell this file draws the seed
