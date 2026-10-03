@@ -49,8 +49,9 @@ something outside this platform:
    manages your domain's records (your registrar, Cloudflare, wherever you
    bought it). Nobody else can do this for you.
 2. **Resend sender-domain verification.** Proving you own your sending
-   domain by adding SPF and DKIM records, at resend.com/domains. Same
-   reason: it is your domain.
+   domain by adding the SPF and DKIM records that Comms Settings (or
+   resend.com/domains) shows you, wherever your domain's DNS is managed.
+   Same reason: it is your domain.
 3. **Creating your own Stripe account**, if you take payments. Stripe
    requires the account holder to verify their own identity and banking
    details directly with Stripe.
@@ -127,22 +128,29 @@ hold the key itself.
 
 ## 4. Set up email
 
-Create a Resend account (or use your existing one), then verify your sending
-domain at resend.com/domains: Resend gives you the exact SPF and DKIM
-records to add wherever your domain's DNS lives. This step waits on DNS
-access, which is human-only (see above).
+Create a Resend account (or use your existing one). Everything after that
+is done from Admin, Comms, Settings once you have claimed your founder
+account in step 6, and needs no Railway access. Its checklist takes your
+Resend key, adds your sending domain and shows the exact SPF and DKIM
+records to add wherever your domain's DNS lives, checks verification with
+Resend, sets the sender name and address, connects delivery reports with
+one button, takes the postal address for the footer, and sends you a test
+email that counts once Resend reports it delivered. Adding the DNS records
+waits on DNS access, which is human-only (see above). A Resend key that can
+only send gets the same steps to do by hand in Resend's dashboard.
 
 **The trap:** Resend accepts mail through an unverified domain and answers
-HTTP 200 as if it worked. Nothing arrives. There is no error, no bounce, no
-warning anywhere in this platform. Verify the domain before you trust that
-any email, including your own founder claim link in the next step, is
-actually being delivered.
+HTTP 200 as if it worked. Nothing arrives, with no error and no bounce.
+Comms Settings marks the domain verified only when Resend says so, and
+refuses a sender address that is not on it. Until then, do not trust that
+any email, including your own founder claim link in step 6, is actually
+being delivered.
 
-Once verified, set `RESEND_API_KEY` and `EMAIL_FROM` in Railway.
-`RESEND_API_KEY` can also be set from Admin, Integrations, after you have
-logged in, which needs no Railway access; that route needs
-`VILLAGE_SECRETS_KEY` from step 3 and refuses the save without it.
-`EMAIL_FROM` is a Railway variable only.
+To set email up before you sign in, set `RESEND_API_KEY` and `EMAIL_FROM`
+in Railway instead. Both still work, and whatever is saved in Comms Settings
+takes over from them. Saving the key from the admin panel needs
+`VILLAGE_SECRETS_KEY` from step 3 and refuses the save without it. With no
+sender set anywhere, nothing is sent: each email is recorded as not sent.
 
 ## 5. Deploy and run migrations
 
