@@ -28,3 +28,18 @@ docs/GOVERNANCE.md -text
 docs/VARIABLES.md -text
 docs/MODULES.md -text
 docs/CAPABILITIES.md -text
+
+# What `git archive` leaves out. GitHub builds every release's "Source code"
+# downloads with it, and the release workflow builds the starter kit with it.
+# The maintainers' internal notes moved to a private repository on 2026-10-02
+# and scripts/check-public-tree.mjs refuses them in the tree; these lines keep
+# any copy that slips past both out of a published archive as well.
+SEASON2_FLEET_LEDGER.md export-ignore
+CLAUDE_CODE_PROMPT_* export-ignore
+FIXES_TO_MAKE_* export-ignore
+SESSION_HANDOFF.md export-ignore
+PLAN_TO_A.md export-ignore
+.env export-ignore
+.env.* export-ignore
+# Attributes have no negation, so the template is switched back on by name.
+.env.example -export-ignore

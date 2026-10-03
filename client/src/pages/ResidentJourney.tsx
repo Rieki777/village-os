@@ -153,7 +153,7 @@ const buildJourneySteps = (villageName: string) => [
     // default, an unconditional US tax claim attached to a background
     // check. Amora's original wording is preserved as data
     // (legal.membership.backgroundCheckNote in
-    // server/seeds/brochure-legal-seed.json) and appended at render time
+    // server/seeds/amora/brochure-legal-seed.json) and appended at render time
     // only when a village has published it. See the override below.
     description: "Once your deposit is down, we complete a background check together. It's part of our commitment to community safety",
     icon: FileCheck,

@@ -12,7 +12,7 @@ revision; the enum→registry ledger fix is committed (`339a093`) and applied li
   plan's phases, the handoff's §4 sequence, and the critiques' 42-session
   parallel-track plan. Those documents remain authoritative for **traps, findings,
   locked decisions, and specs** — not for ordering.
-- `AMORA_FOUNDATION_UPGRADE_PLAN.md` is superseded **in its build order only**: its
+- The foundation upgrade plan (an internal note, in the maintainers' private operations repository since 2026-10-02) is superseded **in its build order only**: its
   locked decisions (revisions 2–3), its explicitly-NOT-ported list, and its
   codebase traps remain binding. Its status tables are stale — trust this document.
 - Where a module spec in `docs/modules/*.md` contradicts Part 2 here or a fix in
@@ -21,11 +21,11 @@ revision; the enum→registry ledger fix is committed (`339a093`) and applied li
 
 **Reading order for any session picking this up:**
 1. This document, whole.
-2. `CLAUDE_CODE_PROMPT_2026-07-26_FOUNDATION_HANDOFF.md` §3 — the traps. Twice.
+2. The 2026-07-26 foundation handoff §3, the traps (an internal note, in the maintainers' private operations repository since 2026-10-02). Twice.
 3. `docs/modules/<module>.md` + both `docs/modules/CRITIQUE-*.md` findings for
    whatever you are building.
-4. `AMORA_FOUNDATION_UPGRADE_PLAN.md` rev 2–3 for locked-decision context;
-   `FIXES_TO_MAKE_2026-07-17_FOUNDATION_LEVERS.md` for the F1–F16 levers.
+4. The foundation upgrade plan rev 2–3 for locked-decision context, and the
+   2026-07-17 foundation levers fix list for the F1–F16 levers (an internal note, in the maintainers' private operations repository since 2026-10-02).
 
 ## What this is
 
@@ -135,7 +135,7 @@ session's acceptance includes it** — standing rules with no home get skipped.
    restated, not retired: **value pays exactly once, in exactly one token, at
    exactly one moment (close); the pool token can never be the recognition
    token (fail-loud at close); recognition stays unbuyable and unsellable.**
-   Mechanics reference: `FIXES_TO_MAKE_2026-07-17_FOUNDATION_LEVERS.md` §1.1a.
+   Mechanics reference: the 2026-07-17 foundation levers fix list §1.1a (private operations repository).
 4. **The ledger recomputes, never increments; every write carries an idempotency
    key;** hypha-governed tokens are un-mintable; unknown token slugs fail loud.
 5. **One gate** (`shared/capabilities.ts`): stage unlock OR role grant; badges add
@@ -278,7 +278,7 @@ everything waits on come first: **identity** and **storage truth**. Honest total
 **S0.** GitHub Actions running check/build/test on every push; branch protection
 on `main` so the deploy branch is CI-gated; `pnpm audit` in CI; bundle-size line
 in CI output; the vite dev proxy (hazard table); supersession banners on
-`AMORA_FOUNDATION_UPGRADE_PLAN.md` and the handoff ("decisions stand; statuses
+The foundation upgrade plan and the handoff, both in the private operations repository ("decisions stand; statuses
 and build orders are stale — see MODULES_MASTER_PLAN.md"). Half a session, pays
 for itself by S6.
 

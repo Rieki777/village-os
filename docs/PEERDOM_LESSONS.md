@@ -427,7 +427,7 @@ Peerdom has no answer for any of this, and we should not lose it while borrowing
    `founders-circle`, `steward-circle`, `treasury`, holding a `capabilities[]` array and a `min_stage`),
    and migration `0018_village_map.sql` bolted `circle_id` and `seats` onto that same table. The human
    org chart lives separately as content-JSON cards. These are two different objects wearing one name.
-   Everything below depends on separating them. See `FIXES_TO_MAKE_2026-08-02_ROLE_MODEL.md`.
+   Everything below depends on separating them. See the 2026-08-02 role-model fix list (an internal note, in the maintainers' private operations repository since 2026-10-02).
 
 2. **A holder is a `user_id` plus a focus string.** Free-text holder names cannot route a notification,
    derive vacancy, carry a term, or accumulate history. Add a real assignment table, and add a

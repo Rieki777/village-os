@@ -1896,6 +1896,11 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     for (const key of ["party", "portraits", "portraitBudget", "gratitudeDistributions"]) {
       expect(Array.isArray(exported.json[key]), `${key} is in the export`).toBe(true);
     }
+    // The journal (0227), present whether or not the module is on: a member's
+    // own entries are theirs to download even after a village switched it off.
+    for (const key of ["entries", "pulse", "feedbackSent", "feedbackReceived"]) {
+      expect(Array.isArray(exported.json.journal?.[key]), `journal.${key} is in the export`).toBe(true);
+    }
 
     // Deletion needs the password; then the account is a tombstone.
     expect((await api("POST", "/api/profile/delete-account", { password: "wrong" }, leaverToken)).status).toBe(403);

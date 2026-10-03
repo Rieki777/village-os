@@ -100,6 +100,9 @@ export interface PublicGameConfig {
   paths: { id: string; label: string; role: string; route: string }[];
   stages: GameStagePublic[];
   season: SeasonState;
+  /** Whether this village serves the brochure pages (shared/brochure.ts).
+   *  Absent on a server older than 1.2.0, which reads as off. */
+  brochurePages?: boolean;
 }
 
 export interface SeasonEntry {

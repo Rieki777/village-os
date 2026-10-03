@@ -129,9 +129,14 @@ describe("moduleCatalog", () => {
      * keys and owns twenty-six by namespace, so the shorter question would
      * have missed it.
      */
+    /*
+     * Journal joined on 2026-10-02 with one dial, `journal.pulse_floor`, whose
+     * default of 1 is ruled (shared/journal.ts) and is a working village: a
+     * team of three sees its own pulse the day the module is switched on.
+     */
     expect(claiming).toEqual([
       "feed", "forum", "governance", "gratitude",
-      "introductions", "messaging", "progression", "quests",
+      "introductions", "journal", "messaging", "progression", "quests",
     ]);
   });
 

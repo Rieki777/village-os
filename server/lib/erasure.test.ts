@@ -48,6 +48,7 @@ import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/memberErasure";
 import { saveMemberNeed } from "./needs";
+import { queueFeedback, saveEntry, savePrefs } from "./journal";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 import { landPublicSubmission } from "./publicForms";
@@ -389,9 +390,15 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    // The needs deletion sits after the tombstone, so a break AT the tombstone
-    // leaves it undone and the resume runs it.
-    expect(out.ran).toEqual(["tombstone", "needs-after-tombstone", "audit", "external-stores"]);
+    // The needs and journal deletions sit after the tombstone, so a break AT
+    // the tombstone leaves them undone and the resume runs them.
+    expect(out.ran).toEqual([
+      "tombstone",
+      "needs-after-tombstone",
+      "journal-after-tombstone",
+      "audit",
+      "external-stores",
+    ]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
   });
 
@@ -464,6 +471,52 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       expect(out.ran).toContain("needs-after-tombstone");
       expect(await needsRowsFor(id)).toBe(0);
     });
+  });
+
+  /*
+   * THE JOURNAL LEAVES WITH ITS MEMBER, all four tables, feedback both ways.
+   *
+   * Asserts the ROWS, never that the step ran: a step that ran and deleted
+   * from the wrong column reports the same "done". A neighbour who stays keeps
+   * everything of theirs that does not name the leaver.
+   */
+  it("takes the journal with them: entries, pulse, the feedback yes, and feedback both ways", async () => {
+    const id = "er-journal-1";
+    const neighbour = "er-journal-neighbour";
+    const target = await seedMember(id);
+    const tz = "UTC";
+    await saveEntry(pool, id, {
+      clientId: "c-1", practice: "pulse", depth: "light", writtenAt: new Date().toISOString(),
+      answers: [{ questionKey: "help-most", prompt: "What would help?", text: "rest" }],
+      scores: { load: 4 },
+    }, tz);
+    await saveEntry(pool, neighbour, {
+      clientId: "c-n", practice: "free", depth: "light", writtenAt: new Date().toISOString(),
+      answers: [{ questionKey: "free", prompt: "What is on your mind?", text: "mine" }],
+    }, tz);
+    await savePrefs(pool, id, { open: true, style: "direct", note: "" });
+    await savePrefs(pool, neighbour, { open: true, style: "gentle", note: "" });
+    const parts = { observation: "o", feeling: "f", need: "n", request: "r" };
+    const sent = await queueFeedback(pool, id, { recipientId: neighbour, ...parts }, "to the neighbour", { timeZone: tz, recipientName: "N" });
+    const got = await queueFeedback(pool, neighbour, { recipientId: id, ...parts }, "to the leaver", { timeZone: tz, recipientName: "W" });
+    expect(sent.ok && got.ok, "the fixture must queue both, or the zeros below prove nothing").toBe(true);
+    const named = async () =>
+      Number((await q(
+        "SELECT (SELECT COUNT(*) FROM `journal_entries` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `journal_pulse` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `journal_feedback_prefs` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `journal_feedback` WHERE `author_id` = ? OR `recipient_id` = ?) AS n",
+        [id, id, id, id, id],
+      ))[0].n);
+    expect(await named()).toBe(5);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    expect(await named()).toBe(0);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("journal-after-tombstone");
+    // The neighbour keeps their own entry and their own yes.
+    expect(await q("SELECT `id` FROM `journal_entries` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
+    expect(await q("SELECT `user_id` FROM `journal_feedback_prefs` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
   });
 
   it("says so rather than pretending, when there is no member left to resume", async () => {

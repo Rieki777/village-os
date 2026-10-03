@@ -95,17 +95,16 @@ commits and CI runs on the twentieth. The other nineteen are never checked by
 anything, and a migration that arrived in one of them was never compared
 against anything at all.
 
-Measured on 2026-09-02, over the 174 commits between `v1.1.0` and `main`:
+Measured on 2026-09-02, over the span between `v1.1.0` and that day's `main`,
+using the same query `release.yml` uses to check for a green run: most sampled
+commits had no completed successful CI run, and every migration added in that
+span landed in a commit that had none. Which migrations a given release
+carries is in its `CHANGELOG.md` entry, under **Does it touch your data**.
 
-- 25 commits sampled, using the same query `release.yml` uses to check for a
-  green run. **3 of the 25 had one.**
-- **All five** of the migrations added since 1.1.0 landed in commits with
-  **zero** completed successful CI runs.
-
-So on the current span the guard has never once been asked whether a village
-on 1.1.0 could roll back from the next release. The rule is written down, the
-guard that enforces it is real and good, and the span between two releases
-falls through the gap between them.
+So on that span the guard was never once asked whether a village on 1.1.0
+could roll back from the next release. The rule is written down, the guard
+that enforces it is real and good, and the span between two releases falls
+through the gap between them.
 
 Running it with `--base <previous release tag>` closes that gap. It asks a
 question CI structurally cannot ask, over the span a village actually moves
@@ -126,7 +125,7 @@ and there is nowhere else it could be asked.
 
 Two consequences to expect, both intended:
 
-- **The first release after this lands may fail this job,** because of the five
+- **The first release after this lands may fail this job,** because of the
   unverified migrations above. That is the check finding real work, not the
   check being wrong. Run the command by hand, read what it reports, and fix
   forward.

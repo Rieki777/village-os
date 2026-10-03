@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const SHELL = 'file:///C:/Users/taren/Desktop/Amora/ga-map/docs/prototypes/qa/shell.html';
+const SHELL = require('url').pathToFileURL(require('path').resolve(__dirname, 'shell.html')).href;
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.PW_EXE });
   const p = await (await b.newContext({ viewport: { width: 1480, height: 1180 } })).newPage();

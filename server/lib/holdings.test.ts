@@ -43,8 +43,6 @@ import {
 import { loadVariables, setVariable } from "./variables";
 
 const configured = testDbConfigured();
-const DB_HEAVY = 420_000;
-
 const lock = (over: Partial<TokenLock> = {}): TokenLock => ({
   source: "library-loan",
   ref: "loan-1",
@@ -207,7 +205,7 @@ describe.skipIf(!configured)("what the library actually holds", () => {
     await ensureLibraryToken(pool);
     await loadTokenRegistry(pool);
     await loadVariables(pool);
-  }, DB_HEAVY);
+  });
 
   afterAll(async () => {
     await pool?.end();

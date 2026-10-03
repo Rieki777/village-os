@@ -1406,9 +1406,10 @@ export default function GameMechanics() {
       </section>
 
       {/* The proposal basket: staged changes become a proposal. Sticky above
-          the mobile tab bar (z-[70] modal ladder, bar is z-50). */}
+          the mobile tab bar (z-[70] modal ladder, bar is z-50). It spans the
+          bottom edge, so the shortcuts button steps out while it shows. */}
       {stagedCount > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-[70] bg-white border-t border-stone-200 shadow-lg pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+        <div data-hides-fab className="fixed bottom-0 inset-x-0 z-[70] bg-white border-t border-stone-200 shadow-lg pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           <div className="container max-w-3xl mx-auto px-4 pt-3">
             {!composerOpen ? (
               <div className="flex items-center justify-between gap-3">

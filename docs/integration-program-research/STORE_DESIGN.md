@@ -17,7 +17,8 @@ forks for their module**, and all of it functional and beautiful.
 
 The hard part is not the store. It is that the customer owns the code.
 
-A village forks this repository and runs it on its own infrastructure. It owns `shared/modules.ts`.
+A village runs this platform on its own infrastructure, and the code is MIT: any village may fork the
+repository and deploy its fork. It owns `shared/modules.ts`.
 Any `if (paid)` a developer writes is one edit away from being deleted, by somebody who is legally
 entitled to edit it and who has the file open anyway. So the usual answer, a feature flag checked at
 runtime, is not a weak version of enforcement here. It is not enforcement at all.
@@ -93,8 +94,7 @@ with the reason: the credential is the licence, so a price with no credential be
 with nothing behind it. Managed listings may not name one at all, because a managed credential is
 platform-held and env-only (hub ADR-49) and is not the village's to hold.
 
-Included listings may not carry pricing. Included means "in the platform price", and a second price
-on top of it is a contradiction, not a variant.
+Included listings may not carry pricing.
 
 ### `builtBy` is a credit line and never a tier
 

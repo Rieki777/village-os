@@ -179,6 +179,20 @@ check("ingest recording + transcript", rec.status === 200 && rec.json.segments =
 check("synthesis refuses honestly without a key", (await api("POST", `/api/admin/recordings/${rec.json.recording.id}/synthesize`, {}, founder)).status === 503);
 check("members never see the admin pipeline", (await api("GET", "/api/admin/recordings", undefined, aT)).status === 401);
 
+console.log("\n── JOURNAL ──");
+const jEntry = await api("POST", "/api/journal/entries", {
+  clientId: `smoke-${RUN}`, practice: "evening", depth: "light", writtenAt: new Date().toISOString(),
+  answers: [{ questionKey: "went-well", prompt: "What went well today?", text: "The beds are planted." }],
+}, aT);
+check("save a journal entry", jEntry.status === 200 && !!jEntry.json?.id, `${jEntry.status} ${JSON.stringify(jEntry.json).slice(0,120)}`);
+const jMine = await api("GET", "/api/journal/entries", undefined, aT);
+check("the author reads it back", jMine.status === 200 && jMine.json.some((e) => e.id === jEntry.json?.id));
+const jOther = await api("GET", "/api/journal/entries", undefined, bT);
+check("another member does not", jOther.status === 200 && !jOther.json.some((e) => e.id === jEntry.json?.id));
+const jAdmin = await api("GET", "/api/journal/entries", undefined, founder);
+check("an admin does not either", jAdmin.status === 200 && !jAdmin.json.some((e) => e.id === jEntry.json?.id));
+check("the guide refuses honestly without a key", (await api("POST", "/api/journal/guide", { practice: "evening", messages: [{ role: "user", content: "hello" }] }, aT)).status === 503);
+
 console.log("\n── EXIT (F12) ──");
 check("exit policy is published", (await api("GET", "/api/exit-policy")).json.policy.voluntary.noticePeriodDays > 0);
 const exitOpen = await api("POST", "/api/profile/request-exit", { password: "Member123!" }, bT);
