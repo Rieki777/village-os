@@ -33,8 +33,9 @@ import { tick } from "../lib/comms/journeys";
 import { drain } from "../lib/comms/postOffice";
 import { effectiveLifecycle } from "../lib/modules";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
+import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
 
-type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice">;
+type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice" | "members" | "adminActor">;
 
 /** How far back the status summary counts. */
 const STATUS_DAYS = 30;
@@ -94,4 +95,7 @@ export function register(app: Express, deps: Deps): void {
     const summary = await runners[job as CommsJob]();
     res.json({ job, summary, ranAt: new Date().toISOString() });
   });
+
+  // People: the address book, a person's page, suppress and restore (server/routes/commsPeople.ts).
+  registerPeopleAdmin(app, deps);
 }

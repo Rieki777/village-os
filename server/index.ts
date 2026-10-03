@@ -626,6 +626,8 @@ import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from
 import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
 import { formSubmittedTrigger } from "../shared/comms/contracts";
+import { backfillContacts } from "./lib/comms/backfill";
+import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
 /**
  * The second line of the two refusals that stop a founder saving a key.
  *
@@ -1900,6 +1902,7 @@ async function ensureDataFiles() {
     await alignTableCollations(getPool(), (m) => console.log(m));
   });
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
+  await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
   // rule the quest library follows, and the reason matters here: these are
@@ -4466,6 +4469,7 @@ async function runRetentionSweep(): Promise<string> {
   }
   const bodies = await sweepContactBodies(getPool(), numberVar("map.contact_retention_days"));
   if (bodies) parts.push(`${bodies} contact body(ies)`);
+  const idleContacts = await sweepIdleContacts(getPool(), numberVar("comms.retention_months")); if (idleContacts) parts.push(`${idleContacts} unused email contact(s)`); // Village Comms 5.17: nobody written to, nothing on record
   const ntfDays = numberVar("retention.notifications_days");
   if (ntfDays > 0) {
     const [r]: any = await getPool().query(
@@ -17608,8 +17612,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({ success: true });
   });
-  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice });
-  registerCommsPublicRoutes(app, { overLimit, clientIp });
+  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice, members, adminActor });
+  registerCommsPublicRoutes(app, { overLimit, clientIp, authedUser, getPool, members, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
 
   // ── S63: Integrations — every third-party key, write-only ────────────────
   // Reads return {configured, source, last4, setBy, setAt}; a value NEVER
@@ -26439,6 +26443,7 @@ ${inner}
        * partial export announces itself instead of looking complete.
        */
       externalStores: await exportMemberEverywhere(getPool(), user.id),
+      comms: await exportCommsForMember(pool, user), // Village Comms: the address book, answers, emails, journeys, paths and guest rows (server/repos/commsPeople.ts)
     };
     res.setHeader("Content-Disposition", `attachment; filename="my-data-${user.id}.json"`);
     res.json(exportDoc);
