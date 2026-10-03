@@ -33,6 +33,7 @@ import { tick } from "../lib/comms/journeys";
 import { drain } from "../lib/comms/postOffice";
 import { effectiveLifecycle } from "../lib/modules";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
+import { register as registerWords } from "./commsWords";
 
 type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice">;
 
@@ -94,4 +95,7 @@ export function register(app: Express, deps: Deps): void {
     const summary = await runners[job as CommsJob]();
     res.json({ job, summary, ranAt: new Date().toISOString() });
   });
+
+  // Words: every email's words, versions, preview and test (server/routes/commsWords.ts).
+  registerWords(app, deps);
 }
