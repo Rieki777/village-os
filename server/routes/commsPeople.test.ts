@@ -54,7 +54,7 @@ async function call(method: string, path: string, opts: { body?: unknown; form?:
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(opts.body);
   }
-  const res = await fetch(`${base}${path}`, { method, headers, body });
+  const res = await fetch(`${base}${path}`, { method, headers, body }); // module-review-ok: the test client dialling its own in-process server on 127.0.0.1
   const text = await res.text();
   let parsed: any = null;
   try {
