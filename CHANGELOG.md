@@ -38,15 +38,15 @@ made at the time.
 
 ---
 
-## 1.2.0 (2026-10-05)
+## 1.2.0 (2026-10-03)
 
 **The release that makes a village yours to run.** Village OS is now public,
 free and open source, with a setup path anybody can follow on their own
 computer or hosting provider, and a new village starts clean instead of
 wearing the first village's story.
 
-This is a large release: 236 changes on `main` and 59 database changes since
-1.1.0. Read `docs/UPGRADING.md` before you move, take the backup it describes,
+This is a large release: more than 230 changes on `main` and 60 database
+changes since 1.1.0. Read `docs/UPGRADING.md` before you move, take the backup it describes,
 and move from 1.1.0 straight to 1.2.0.
 
 ### What changed for your village
@@ -119,6 +119,9 @@ and move from 1.1.0 straight to 1.2.0.
   be marked mandatory.
 - Erasure goes further and records how far it got, and a failed update shows a
   page that explains itself instead of a blank error.
+- **A Journal module**, off until a village turns it on: a member answers good
+  questions in their own words, morning and evening, with a weekly team pulse
+  and a kind road for feedback that would otherwise go unsaid.
 
 ### What you must do
 
@@ -132,7 +135,7 @@ and move from 1.1.0 straight to 1.2.0.
 
 ### Does it touch your data
 
-**Yes. 59 database changes**, applied by the village itself as the new version
+**Yes. 60 database changes**, applied by the village itself as the new version
 starts, before it answers anyone. Almost all of them add tables and columns.
 A few correct values that were wrong, and those corrections stay if you go
 back to 1.1.0:
@@ -144,10 +147,11 @@ back to 1.1.0:
 | Brochure pages | Writes `brochure-pages: on` in a database that already has members, so an existing village keeps its story pages. A new, empty database gets nothing, which means off | Harmless either way |
 
 Going back works. Before anything is published, the release workflow applies
-all 59 changes to a populated 1.1.0 database and confirms that every table,
+every one of them to a populated 1.1.0 database and confirms that every table,
 column, type and constraint 1.1.0 needs is still there
 (`node scripts/check-migration-compat.mjs --base v1.1.0`). It passed on
-2026-10-02. Take the backup anyway.
+2026-10-02, and the tag runs it again before the image is published. Take the
+backup anyway.
 
 ### For operators
 

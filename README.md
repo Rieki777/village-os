@@ -3,8 +3,8 @@
 Village OS is software for running a village: a land project, a co-op, a
 community of any size. Members take on quests, thank each other in a way the
 whole village can see, decide things together by proposal and vote, and can
-always see who holds which power and how to give it back. Twenty-five modules
-add the rest (a map of the land, a forum, messages, events, stays, a library,
+always see who holds which power and how to give it back. More than twenty
+modules add the rest (a map of the land, a forum, messages, events, stays, a library,
 a shared exchange, crowdfunding) and each village chooses which ones it runs.
 
 Amora is the first village to run on it. It is developed with ReGen Civics.
@@ -62,7 +62,7 @@ reach villages in one of two ways:
   engine, and a build step fails when the two come apart.
 - [docs/TOKENS.md](docs/TOKENS.md): every token a village issues, who may move
   it, and what happens to it when a moon closes. Generated the same way.
-- [docs/MODULES.md](docs/MODULES.md): all twenty-five modules.
+- [docs/MODULES.md](docs/MODULES.md): every module, generated from the code.
 - [docs/FORK_RUNBOOK.md](docs/FORK_RUNBOOK.md): every environment variable,
   seed and operational trap, with the reasoning.
 

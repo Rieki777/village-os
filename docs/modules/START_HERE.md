@@ -15,8 +15,8 @@ stale. Where you see a path, open it.
 It is a white-label village-coordination system, Village OS. A village runs the published image on its
 own infrastructure and owns the code (MIT) and the data; it forks the repository only to change the
 code. Modules are units of capability: some tables, some routes, some screens, a few tunable numbers,
-and one entry in a registry that ties them together. There are twenty-five: four core modules are
-always on, and the other twenty-one ship off until a village turns on what it wants. There is no
+and one entry in a registry that ties them together. Four core modules are
+always on, and every other one ships off until a village turns on what it wants (`docs/MODULES.md` lists them all). There is no
 plugin runtime, so a module you write is merged upstream and shipped to every village as part of the
 platform.
 

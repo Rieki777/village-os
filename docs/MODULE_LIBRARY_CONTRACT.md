@@ -25,7 +25,7 @@ on all of them equally, and that is not the deal here.
 The platform is a white-label village-coordination system, Village OS, published under the MIT
 licence. Villages run its published image on their own infrastructure and own the code and the data;
 a village forks the repository only if it means to change the code. Modules are units of capability.
-There are twenty-five of them. The four core modules
+`docs/MODULES.md` lists every one. The four core modules
 (quests, gratitude, progression, profiles) are always on and cannot be disabled. Every other module
 ships off, and a village turns on what it wants.
 

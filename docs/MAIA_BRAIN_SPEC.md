@@ -73,12 +73,12 @@ const MODULE_DOCS: Record<string, string> = {
 
 When this was written, eight of the platform's then sixteen modules had a
 contract. **Eight did not**: `quests`, `gratitude`, `progression`, `profiles`,
-`forum`, `automation`, `network`, `commerce`. The platform now has twenty-five
-modules, and the live map is `MODULE_DOCS` in `server/lib/knowledge.ts`; read it
+`forum`, `automation`, `network`, `commerce`. The platform has more modules
+now, and the live map is `MODULE_DOCS` in `server/lib/knowledge.ts`; read it
 rather than the snippet above. For a module with no contract she has the catalog
 copy in `shared/modules.ts` (name, description, dependencies, capabilities,
 variables) and nothing deeper, and she must say so rather than reason from the
-modules that do have one. The catalog is always available for all twenty-five;
+modules that do have one. The catalog is always available for every module;
 the contract is the deep layer for those that have one.
 `crowdpool-dashboard.md` describes no shipped module and is excluded entirely.
 

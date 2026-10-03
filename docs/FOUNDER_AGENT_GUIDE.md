@@ -174,7 +174,7 @@ on one machine (`docker-compose.yml`, `START_HERE.md` part A) or on a hosting
 provider such as Railway (`START_HERE.md` part B, `docs/PROVISIONING.md`);
 `ops/RELEASES.md` covers the releases.
 
-The platform is made of **modules**: 25 of them. Each one is a part of village
+The platform is made of **modules** (`docs/MODULES.md` lists every one, generated from the code). Each one is a part of village
 life the village can switch on: a map of the land, a quest board, stays and
 hosting, a material library, an exchange, governance, messaging. Four core
 modules (quests, gratitude, progression, profiles) are always on; the other 21
