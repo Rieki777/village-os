@@ -115,6 +115,9 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
+import { forgetCommsPerson } from "../repos/commsPeople";
+import { emailKeyOf } from "../../shared/comms/address";
+import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
   erasureRecord,
@@ -522,6 +525,28 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           u.walletAddress = null;
           u.walletVerifiedAt = null;
         });
+      },
+    },
+    {
+      /*
+       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0228 to 0230): their
+       * contacts and answers, journeys and paths, guest rows, votes,
+       * attendance and feedback, the delivery reports that name them, and no
+       * suppression kept, because a suppression is the address under another
+       * name. Their emails stay on the ledger with the address, subject and
+       * words blanked, so the village's counts still add up. The rows and
+       * their reasons are in server/repos/commsPeople.ts.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step below gives: the
+       * member's sessions die there, so nothing they do afterwards can write a
+       * fresh comms row behind this step. `target` is the record read before
+       * the sweep began, so its address is still the real one here; a resume
+       * reads the tombstone and finds the rest by user id alone.
+       */
+      name: "comms",
+      run: async () => {
+        const email = String(target.email ?? "");
+        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
       },
     },
     {
