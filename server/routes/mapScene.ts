@@ -50,6 +50,7 @@ import {
   pendingDraft,
   publishedScene,
   publishedVersion,
+  restoreRefusal,
   restoreRevision,
   revisionScene,
   saveDraft,
@@ -225,7 +226,7 @@ export function register(app: Express, deps: Deps): void {
   /** Throw away my draft. Never touches anyone else's, never touches live. */
   app.delete("/api/map/draft", async (req, res) => {
     const { user, canEdit } = await mapHand(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to throw a draft away." });
     if (!canEdit) return res.status(403).json({ error: "Shaping the map is a cartographer's work." });
     res.json({ ok: true, discarded: await discardDraft(getPool(), user.id) });
   });
@@ -314,7 +315,7 @@ export function register(app: Express, deps: Deps): void {
    */
   app.get("/api/map/revisions", async (req, res) => {
     const { user, canEdit } = await mapHand(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to see the map's history." });
     if (!canEdit) return res.status(403).json({ error: "Forbidden" });
 
     const rows = await listRevisions(getPool(), 50);
@@ -348,7 +349,7 @@ export function register(app: Express, deps: Deps): void {
    */
   app.post("/api/map/revisions/:version/restore", async (req, res) => {
     const { user } = await mapHand(req);
-    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to put an earlier map back." });
     // 0103: ACT. An undo is a publish carrying an old scene, so it takes the
     // same key through the same door.
     const mayRestore = await guardCapability(req, res, "map.publish", {
@@ -360,19 +361,26 @@ export function register(app: Express, deps: Deps): void {
     if (!Number.isInteger(version) || version < 1) {
       return res.status(400).json({ error: "That is not a version number." });
     }
+    // The version this undoes, when the map says. Refused as stale once
+    // something else is live (`restoreRevision` says why). Absent keeps the
+    // old behaviour for a map that does not send it.
+    const from = Number.isInteger(req.body?.from) && req.body.from > 0 ? Number(req.body.from) : null;
 
     // The land as it stood before the undo, read only to tell whether this
     // member's draft holds work of their own. `followRestore` says why.
     const liveBefore = await publishedScene(getPool());
-    const result = await restoreRevision(getPool(), version, user.id);
+    const result = await restoreRevision(getPool(), version, user.id, from);
     if (!result.ok && result.reason === "missing") {
       return res.status(404).json({ error: `There is no version ${version} to put back.` });
     }
     if (!result.ok) {
+      // Who moved it and when, the same card a refused publish carries.
+      const who = result.live.actorUserId ? await members.byId(result.live.actorUserId) : null;
       return res.status(409).json({
         ok: false,
         reason: "stale",
-        error: "The live map changed a moment ago. Take a look at what moved, then try again.",
+        error: restoreRefusal({ version, from, live: result.live.version, by: who?.name ?? null }),
+        live: { version: result.live.version, by: who?.name ?? null, at: result.live.createdAt },
       });
     }
 

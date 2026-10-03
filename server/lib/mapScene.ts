@@ -114,6 +114,44 @@ export async function publishedVersion(pool: Pool): Promise<number> {
   return Number(rows[0]?.v ?? 0);
 }
 
+/**
+ * Who made the live map and when, without its scene: what a refusal needs to
+ * say who moved it.
+ */
+async function liveStamp(pool: Pool): Promise<{ version: number; actorUserId: string | null; createdAt: string }> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT version, actor_user_id, created_at FROM map_scene_revisions ORDER BY version DESC LIMIT 1",
+  );
+  const r = rows[0];
+  return r
+    ? { version: Number(r.version), actorUserId: r.actor_user_id ?? null, createdAt: String(r.created_at) }
+    : { version: 0, actorUserId: null, createdAt: "" };
+}
+
+/**
+ * The sentence for a refused restore. With `from`, the person pressed undo
+ * under a version that is no longer live, and the sentence says who moved
+ * it and what undoing now would cost them. Without it, the live map moved
+ * in the moment between the read and the write.
+ */
+export function restoreRefusal(input: {
+  version: number;
+  from: number | null;
+  live: number;
+  by: string | null;
+}): string {
+  if (input.from === null) {
+    return "The live map changed a moment ago. Take a look at what moved, then try again.";
+  }
+  // Versions only grow, so a `from` above the live one never existed.
+  if (input.from > input.live) return `There is no version ${input.from} to undo.`;
+  const who = input.by ? `${input.by} published version ${input.live}` : `Version ${input.live} was published`;
+  return (
+    `${who} after version ${input.from}, so putting version ${input.version} back now would take that change off ` +
+    "the live map too. Nothing was undone."
+  );
+}
+
 export async function getDraft(pool: Pool, userId: string): Promise<DraftRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT scene, base_version, updated_at FROM map_scene_drafts WHERE user_id = ?",
@@ -321,15 +359,32 @@ export async function revisionScene(pool: Pool, version: number): Promise<string
  *
  * The race is handled exactly as an ordinary publish: the base is read here,
  * and if another publish lands in between, the UNIQUE index refuses this one.
+ *
+ * ── AN UNDO NAMES THE VERSION IT UNDOES ─────────────────────────────────
+ * `from` is the version the person pressed "Undo this" under. Undoing it is
+ * only what they asked for while it is still the live map. Once somebody
+ * else has published after it, putting the older scene back takes their
+ * change off the map as well, and on 2026-10-02 it did exactly that: the
+ * map that pressed the button only knew its own publishes, so it could not
+ * see the colleague's, and nobody was told. So with `from`, a live map that
+ * has moved past it is refused as stale and nothing is written. The insert
+ * also carries `from` as its base, so a publish that lands between this read
+ * and the write is refused by the UNIQUE index, the same as any publish.
+ * Without `from` (an older map, or a restore that is not an undo) the base
+ * is whatever is live, as before.
  */
 export async function restoreRevision(
   pool: Pool,
   version: number,
   actorUserId: string | null,
+  from: number | null = null,
 ): Promise<PublishResult | { ok: false; reason: "missing" }> {
   const scene = await revisionScene(pool, version);
   if (scene === null) return { ok: false, reason: "missing" };
   const base = await publishedVersion(pool);
+  if (from !== null && from !== base) {
+    return { ok: false, reason: "stale", live: await liveStamp(pool) };
+  }
   if (base === version) {
     // Already live. Publishing an identical scene would add a revision that
     // changed nothing, so say it landed and write no row.
