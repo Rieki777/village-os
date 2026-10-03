@@ -50,6 +50,7 @@ import { governingPurpose } from "./governingPurpose";
  */
 const GPS_CHECK_KEY = "gps-written";
 import { readConfigDocument } from "../repos/appConfigDocs";
+import { commsLaunchCheck } from "./comms/setup";
 import { normalizeSeasonConfig } from "./seasonCalendar";
 
 export type CheckState = "ok" | "missing" | "partial";
@@ -263,6 +264,28 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
     if (req.checkKey.startsWith("village:")) {
       const read = await villageFactFor(pool, req.checkKey.slice("village:".length));
       items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
+    /*
+     * THE VILLAGE'S EMAIL, read from the Comms Settings checklist itself
+     * (server/lib/comms/setup.ts), resolved here for the reason the branches
+     * above give: it needs a pool and no cache from server/index.ts. The
+     * sender, the verified domain and delivery reports are three of the six
+     * items that make comms ready, and reading them from the same list means
+     * this row and the checklist can never say two different things.
+     */
+    if (req.checkKey.startsWith("comms:")) {
+      try {
+        const read = await commsLaunchCheck({ getPool: () => pool }, req.checkKey.slice("comms:".length));
+        items.push(
+          read
+            ? { ...req, state: read.state, detail: read.detail }
+            : { ...req, state: "missing", detail: `No comms check for "${req.checkKey}". This is a platform bug, report it` },
+        );
+      } catch (e: any) {
+        items.push({ ...req, state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` });
+      }
       continue;
     }
 
