@@ -4012,10 +4012,21 @@ function makeBadgeGroup(s){
   ($('badges')||iWrap).appendChild(g);bgEls[s.key]=g;return g;
 }
 for(const s of SCENE.structures) makeBadgeGroup(s);
+/* ONE GROUP PER BUILDING ON THE LAND, kept in step with the land. Groups
+   were made once, at boot, for the seed's buildings: a building placed,
+   duplicated or restored later had none, so its seals never showed, and a
+   restore that took the seed's buildings away left their groups standing
+   with their last seals, on a blank board and under another village's
+   draft. Asked on every refresh, which the tick runs every three seconds. */
+function syncBadgeGroups(){
+  const here=new Set(SCENE.structures.map(s=>s.key));
+  for(const k of Object.keys(bgEls))if(!here.has(k)){bgEls[k].remove();delete bgEls[k]}
+  for(const s of SCENE.structures)if(!bgEls[s.key])makeBadgeGroup(s)}
 
 /* Recompute every badge from the projections. Called on the tick, after an
    edit, and after a restore: never trusted to be in sync on its own. */
 function refreshBadges(){
+  syncBadgeGroups();
   for(const s of SCENE.structures){
     const g=bgEls[s.key];if(!g)continue;
     const qs=(typeof questsAt==='function')?questsAt(s.key):[];
@@ -8317,6 +8328,8 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   if(am&&Array.isArray(am.approved)){for(const f of Object.keys(ICONS))window.SPRITE_OK[f]=am.approved.includes(f);
     (am.reroll||[]).forEach(f=>window.SPRITE_RR[f]=true)}
   strandedCheck(false);refreshWork();paintTerrain();mmDirty=true;
+  /* The seals follow the buildings now, not three seconds later. */
+  if(typeof refreshBadges==='function')refreshBadges();
   /* SCENE.seats is a NEW set of objects, so the live states merged onto the
      old ones are gone. Replayed here rather than left to whichever of the
      shell's two independent pushes happened to land second. */

@@ -231,6 +231,13 @@ describe("a village that has published nothing, on the board", () => {
     expect(g.caption).toBe(false);
   });
 
+  it("leaves none of the seed's marks standing on the blank land", () => {
+    // Each building's seals live in a group of their own, made once at boot
+    // for the seed's buildings and never taken down with them.
+    expect(m.run<number>("Object.keys(bgEls).length")).toBe(0);
+    expect(m.window.document.querySelectorAll("#badges .bgroup").length).toBe(0);
+  });
+
   it("has nothing to publish yet, and says the cover may lift", () => {
     expect(m.run<number>("netChanges().length")).toBe(0);
     expect(m.asked.some((a) => a.type === "land-ready")).toBe(true);
@@ -340,6 +347,11 @@ describe("an agent's draft, reviewed on the blank board and published", () => {
   it("draws the agent's land, and only the agent's", () => {
     expect(land(m)).toMatchObject({ structures: 2, features: 1, flows: 1, seats: 0, quests: 0 });
     expect(m.run<string>("BY.hall.name")).toBe("Common House");
+  });
+
+  it("gives the agent's buildings marks of their own, and the seed's none", () => {
+    expect(m.run<string[]>("Object.keys(bgEls).sort()")).toEqual(["hall", "tank"]);
+    expect(m.window.document.querySelectorAll("#badges .bgroup").length).toBe(2);
   });
 
   it("lists every line the agent journaled on the publish card, as the first version", () => {
