@@ -634,8 +634,11 @@ describe.skipIf(!configured)("the drain's rules", () => {
     for (let i = 0; i < 3; i++) rows.push(await post(d, email("letters", "capped-later@example.test", `rules:cap-later:${i}`)));
     expect(rows.map((r) => r.status), "nothing sent yet, so nothing over the cap when written").toEqual(["queued", "queued", "queued"]);
     expect(await drain(d)).toMatchObject({ sent: 2, requeued: 1 });
-    expect(await row(rows[2].messageId!)).toMatchObject({ status: "queued" });
-    expect(Number((await row(rows[2].messageId!)).send_in)).toBeGreaterThan(86_400 - 60);
+    // Three rows written in one second tie on created_at, so WHICH one waits is
+    // the drain's choice. That exactly one does, until the next window, is the rule.
+    const after = await Promise.all(rows.map((r) => row(r.messageId!)));
+    expect(after.map((a) => a.status).sort()).toEqual(["queued", "sent", "sent"]);
+    expect(Number(after.find((a) => a.status === "queued").send_in)).toBeGreaterThan(86_400 - 60);
   });
 
   it("skips gathering, path and letter emails while the module is off, and still sends notices and essential mail", async () => {
