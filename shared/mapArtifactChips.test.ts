@@ -242,6 +242,10 @@ describe("the crown bar before the village has said anything", () => {
     expect(html).toContain("#vitals:not([data-fit]) .vital .vex{display:block}");
     expect(html).toContain('#vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital .vex{display:block}');
     expect(html).toContain("body.pocket #vitals .vital .vex{display:block}");
+    // Out of the flow, across the chip's own bottom edge: it may cost the bar
+    // height, never width. In the flow it pushed a phone's bar 43px off each
+    // side (measured in Chromium at 390px; jsdom lays nothing out).
+    expect(html).toMatch(/\.vital \.vex\{display:none;position:absolute;left:0;right:0;bottom:3px;/);
     expect(html).not.toContain('.vital[data-tip$="sample"]');
   });
 

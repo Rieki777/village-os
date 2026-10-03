@@ -1037,8 +1037,12 @@
      data-example from chipRows(), the one place that decides, and a chip
      that is counted, measured or held by the founder's word has no mark. */
   .vital small i{font-style:normal;color:#e8c877}
-  .vital .vex{display:none;font-style:normal;font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#e8c877;line-height:1;margin-top:1px}
-  .vital[data-example] b{line-height:1.05}
+  /* The word sits in the chip's own bottom edge, across its full width, so
+     it costs the bar a few pixels of height and none of width. As a line in
+     the flow it widened every chip to the word: MEASURED at 390px, five
+     chips went from 70 to 88px and the bar ran 43px off each side of the
+     phone, and at 1280 the bar grew from 498 to 599px. */
+  .vital .vex{display:none;position:absolute;left:0;right:0;bottom:3px;text-align:center;font-style:normal;font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#e8c877;line-height:1;pointer-events:none}
   .vital{cursor:pointer}
   /* THE BAR SHEDS IN STEPS, AND topFit PICKS THE STEP. These three widths
      were a guess at when the bar fits between the buttons, and every one of
@@ -1047,11 +1051,12 @@
      page where the fit has not run, which is what :not([data-fit]) says.
      The steps are the same three, in the same order: the small labels, then
      the village name's second line with tighter cells, then the name. */
-  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} #vitals:not([data-fit]) .vital .vex{display:block} }
+  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} #vitals:not([data-fit]) .vital .vex{display:block} #vitals:not([data-fit]) .vital[data-example]{padding-bottom:13px} }
   @media (max-width:1290px){ #vitals:not([data-fit]) #villageName small{display:none} #vitals:not([data-fit]) .vital{padding:6px 8px} }
   @media (max-width:1160px){ #vitals:not([data-fit]) #villageName{display:none} }
   #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital small{display:none}
   #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital .vex{display:block}
+  #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital[data-example]{padding-bottom:13px}
   #vitals:is([data-fit="2"],[data-fit="3"]) #villageName small{display:none}
   #vitals:is([data-fit="2"],[data-fit="3"]) .vital{padding:6px 8px}
   #vitals[data-fit="3"] #villageName{display:none}
@@ -1135,6 +1140,7 @@
   @media (prefers-reduced-motion:reduce){body.pocket #skin{transition:none}}
   body.pocket #vitals .vital small{display:none}
   body.pocket #vitals .vital .vex{display:block}
+  body.pocket #vitals .vital[data-example]{padding-bottom:13px}
   /* A pinch that lands a few pixels high, on the strip instead of the land,
      is still a pinch at the map. These two bars sit over the canvas and take
      nothing but taps, so nothing is lost by refusing the browser here too. */
