@@ -179,13 +179,17 @@ export default function CommsPeople({ password }: { password: string }) {
     if (openId) void loadPerson(openId);
   }, [openId, loadPerson]);
 
-  /** One write, then both views read again, so the screen shows what the village holds. */
-  const act = async (path: string, body: Record<string, unknown>, done: string) => {
+  /**
+   * One write, then both views read again, so the screen shows what the
+   * village holds. Each caller names its whole route, so
+   * scripts/check-admin-reach.mjs can see the door to every write.
+   */
+  const act = async (url: string, body: Record<string, unknown>, done: string) => {
     if (!openId) return;
     setBusy(true);
     setNote("");
     try {
-      const res = await fetch(`${API_BASE}/admin/comms/people/${encodeURIComponent(openId)}${path}`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify(body),
@@ -357,7 +361,13 @@ export default function CommsPeople({ password }: { password: string }) {
                 <button
                   type="button"
                   disabled={busy || (complained && !restoreReason.trim())}
-                  onClick={() => void act("/restore", { reason: restoreReason.trim() }, "Email to this address can go again.")}
+                  onClick={() =>
+                    void act(
+                      `${API_BASE}/admin/comms/people/${encodeURIComponent(detail.person.id)}/restore`,
+                      { reason: restoreReason.trim() },
+                      "Email to this address can go again.",
+                    )
+                  }
                   className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-800 disabled:opacity-40"
                 >
                   Lift the stop
@@ -378,7 +388,13 @@ export default function CommsPeople({ password }: { password: string }) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void act("/suppress", { detail: stopNote.trim() }, "Email to this address is stopped, except essential mail.")}
+                  onClick={() =>
+                    void act(
+                      `${API_BASE}/admin/comms/people/${encodeURIComponent(detail.person.id)}/suppress`,
+                      { detail: stopNote.trim() },
+                      "Email to this address is stopped, except essential mail.",
+                    )
+                  }
                   className="px-3 py-1.5 rounded-lg border border-red-300 bg-white text-sm text-red-700 disabled:opacity-40"
                 >
                   Stop all email to this address
@@ -422,7 +438,13 @@ export default function CommsPeople({ password }: { password: string }) {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void act(`/journeys/${encodeURIComponent(j.id)}/stop`, {}, "That journey is stopped for this person.")}
+                        onClick={() =>
+                          void act(
+                            `${API_BASE}/admin/comms/people/${encodeURIComponent(detail.person.id)}/journeys/${encodeURIComponent(j.id)}/stop`,
+                            {},
+                            "That journey is stopped for this person.",
+                          )
+                        }
                         className="px-2 py-0.5 rounded border border-gray-300 bg-white text-xs text-gray-800 disabled:opacity-40"
                       >
                         Stop
