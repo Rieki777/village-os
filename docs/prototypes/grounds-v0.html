@@ -5566,7 +5566,7 @@ $('cApply').onclick=()=>{const p={surface:$('cSurface').value,ring:$('cRing').va
   if(window.applySkinOverrides)applySkinOverrides();if(window.syncLookControls)syncLookControls()};
 $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
   keepLook({words:w,theme:null,palette:null});
-  applyTheme(themeFromWords(w),`I read “${w}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
+  applyTheme(themeFromWords(w),`I read “${escq(w)}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
   $('themePanel').classList.remove('show')};
 
 /* WHAT NEEDS HANDS STANDS ABOVE HER WHEN THERE IS NO ROOM BESIDE HER (N06).
@@ -10784,7 +10784,12 @@ function shellAsk(type,extra,slow){
     setTimeout(quiet,SHELL_GIVE_UP_MS);
   });
 }
-function sceneResult(d){const fn=PUB_PENDING[d.nonce];if(!fn)return;delete PUB_PENDING[d.nonce];fn(d)}
+/* The nonce arrives by postMessage, so it may name only a request this map
+   made: an own key of PUB_PENDING holding a function, never an inherited
+   property like constructor or toString. */
+function sceneResult(d){const n=d&&d.nonce;
+  if(typeof n!=='string'||!Object.prototype.hasOwnProperty.call(PUB_PENDING,n))return;
+  const fn=PUB_PENDING[n];if(typeof fn!=='function')return;delete PUB_PENDING[n];fn(d)}
 window.sceneResult=sceneResult;
 
 /* The work, wherever it is. Viewing as a visitor puts the live map on screen
@@ -11055,7 +11060,9 @@ function openPublish(){
   const card=$('pubCard');card.classList.remove('conflict');
   $('pubTitle').textContent='Publish to the live map';
   $('pubBlast').innerHTML=`<b>${changes.length} change${changes.length===1?'':'s'}</b> will become the map every visitor sees, straight away. `+
-    (LIVE?`This replaces version ${LIVE.version}.`:'This is the first published version.')+
+    /* A number, never the message's own text: LIVE arrives from the shell by
+       postMessage, and this line is HTML. */
+    (LIVE?`This replaces version ${(+LIVE.version)||0}.`:'This is the first published version.')+
     ' Nobody else\'s draft is touched.';
   /* The founder's own words, from the journal the map has kept all along. */
   $('pubList').innerHTML=changes.slice().reverse().slice(0,40)
