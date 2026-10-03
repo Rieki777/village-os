@@ -10497,14 +10497,19 @@ function liveSince(version){
   const line=maiaSay(`<b>Live since ${hh}:${mm}.</b> Version ${escq(version)} is the map every visitor sees now. `+
     `<button class="btn ghostbtn undoPub" style="font-size:11px;padding:3px 9px;margin-top:6px">Undo this</button>`);
   const b=line&&line.querySelector('.undoPub');
+  /* Spent once it has worked, and once the village says the live map has
+     moved past the version it was made for, since no later press can work. */
   if(b)b.addEventListener('click',async()=>{if(b.disabled)return;b.disabled=true;
-    if(await undoPublish(back,from))b.textContent='Undone';else b.disabled=false});
+    const done=await undoPublish(back,from);
+    if(done===true)b.textContent='Undone';else if(done==='moved')b.textContent='Not undone';else b.disabled=false});
   toast('Live. Everyone sees this map now.');
 }
 
 /* Undo is a publish carrying an older scene, so it takes the same key and
    settles the same race. Nothing is deleted, which is what makes it safe to
-   press when you are not sure. Resolves true when the older version is live. */
+   press when you are not sure. Resolves true when the older version is live,
+   'moved' when the village refused because the live map has moved past the
+   version being undone, and false when another press could still work. */
 async function undoPublish(back,from){
   /* UNDO_ASKS. The version below the live one is NOT live minus one. A
      refused publish still consumes an AUTO_INCREMENT id, and a refused
@@ -10516,15 +10521,27 @@ async function undoPublish(back,from){
   /* The button undoes the version it was made for. Once the live map has
      moved past that one, by this undo or by a later publish from here, going
      back would throw away more than the person pressed for. */
-  if(from&&LIVE&&+LIVE.version!==from){toast(`Version ${from} is no longer the live map, so this undo has nothing left to take back.`);return false}
+  if(from&&LIVE&&+LIVE.version!==from){toast(`Version ${from} is no longer the live map, so this undo has nothing left to take back.`);return 'moved'}
   /* Viewing as a visitor, the draft waits in DRAFT_HOLD and comes back over
      whatever lands meanwhile, so the undone change would return to the screen
      with it. Undo from the draft, where the land that comes back is seen. */
   if(VISITOR_VIEW){toast('You are looking at the live map. Go back to your draft, then undo.');return false}
   const had=LIVE_SCENE;
-  const r=await shellAsk('restore',{version:back},
+  /* THE VILLAGE IS TOLD WHICH VERSION THIS UNDOES, and refuses when that is
+     no longer the live one. This page only knows its own publishes, so a
+     colleague's publish since never reached the check above: the undo put
+     the older version back over their change, said only that the older one
+     was live again, and neither of them was told. The village knows what
+     is live at the moment it writes, and settles it there. */
+  const r=await shellAsk('restore',{version:back,from:from||undefined},
     ()=>toast('The village has not answered yet. The undo may still land.'));
   if(r.quiet){toast(inShell()?'The village has not answered, so this undo may not have landed.':'No village to reach from here.');return false}
+  if(!r.ok&&r.reason==='stale'){
+    /* Who moved it, in the village's words, and the land they moved it to,
+       the way a refused publish shows it. */
+    if(r.live&&r.live.version)LIVE={version:+r.live.version,by:r.live.by||null,at:r.live.at||null};
+    refreshLiveScene();renderDraftBar();
+    toast(villageSaid(r,'The live map has moved on since that version, so nothing was undone.'));return 'moved'}
   if(!r.ok){toast(villageSaid(r,'That version could not be put back.'));return false}
   LIVE=(r.live&&r.live.version)?r.live:{version:r.version};
   /* NO REBASE HERE. The village sends the land it just put back before it

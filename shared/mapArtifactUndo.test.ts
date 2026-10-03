@@ -36,6 +36,7 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { restoreRefusal } from "../server/lib/mapScene";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
@@ -127,6 +128,7 @@ interface Posted {
   type: string;
   nonce?: string;
   version?: number;
+  from?: number;
   baseVersion?: number;
   scene?: Scene;
 }
@@ -136,7 +138,9 @@ interface Posted {
  * publish is refused when its base already has a child (the UNIQUE index on
  * base_version), a publish rebases the member's draft, and a restore is a
  * publish of an old scene from the live version, which moves an untouched
- * draft along with it (followRestore).
+ * draft along with it (followRestore). A restore that names the version it
+ * undoes (`from`) is refused as stale once something else is live, in the
+ * route's own words (restoreRefusal).
  */
 class Village {
   revs: { version: number; base: number; scene: string; by: string }[] = [];
@@ -171,7 +175,7 @@ class Village {
   }
   /** Answers one post, as [messages to the map, in order]. */
   answer(m: Posted): Record<string, unknown>[] {
-    this.seen.push({ type: m.type, version: m.version, baseVersion: m.baseVersion });
+    this.seen.push({ type: m.type, version: m.version, from: m.from, baseVersion: m.baseVersion });
     const result = (r: Record<string, unknown>) => ({ type: "scene-result", of: m.type, nonce: m.nonce, ...r });
     if (m.type === "draft-save") {
       this.draft = { scene: JSON.stringify(m.scene), baseVersion: m.baseVersion ?? 0 };
@@ -193,6 +197,12 @@ class Village {
     if (m.type === "restore") {
       const src = this.revs.find((r) => r.version === Number(m.version));
       if (!src) return [result({ ok: false, error: `There is no version ${m.version} to put back.` })];
+      const from = Number.isInteger(m.from) ? Number(m.from) : null;
+      if (from !== null && from !== this.live.version) {
+        const live = { version: this.live.version, by: this.live.by, at: "now" };
+        const error = restoreRefusal({ version: Number(m.version), from, live: live.version, by: live.by });
+        return [result({ ok: false, status: 409, reason: "stale", error, live })];
+      }
       const before = this.live.scene;
       const version = this.publish(src.scene, this.live.version);
       if (version === null) return [result({ ok: false, reason: "stale", error: "The live map changed a moment ago." })];
@@ -860,6 +870,56 @@ describe("Undo of a card row after a look at the live map (round 3, finding 1)",
     expect(seen.edits, "no undo line was written").toBe(edits);
     expect(seen.seat).toBe(true);
     expect(seen.card.list).toEqual(["created a seat Keeper of the scales"]);
+  });
+});
+
+/* Finding 2. The page knows only its own publishes, so "Undo this" put the
+   older version back over a colleague's newer one and said only that the
+   older one was live again. The map now says which version it undoes, and
+   the village refuses once that is no longer live. */
+describe("Undo this after a colleague has published (round 3, finding 2)", () => {
+  it("asks the village to undo the version it was made for, is refused, and says who published since", async () => {
+    const m = await boot();
+    build(m);
+    rename(m, "gate", "Gate in my v7");
+    await publish(m);
+    const theirs = m.village.publishedBy("Other Admin", (s) => {
+      const market = s.map_structures.find((x) => x.key === "market");
+      if (market) market.name = "Market by Other Admin";
+    });
+    const b = undoThis(m);
+    b?.click();
+    await settle(50);
+    const seen = {
+      asked: restores(m).map((r) => r.from),
+      live: m.village.live.version,
+      market: liveName(m, "market"),
+      toast: lastToast(m),
+      label: b?.textContent,
+      disabled: !!b?.disabled,
+      bar: m.el("#draftLive").textContent,
+    };
+    m.close();
+    expect(theirs, "the colleague's publish is version 8").toBe(8);
+    expect(seen.asked).toEqual([7]);
+    expect(seen.live, "nothing was written").toBe(8);
+    expect(seen.market).toBe("Market by Other Admin");
+    expect(seen.toast).toBe(restoreRefusal({ version: 6, from: 7, live: 8, by: "Other Admin" }));
+    expect(seen.toast).toContain("Other Admin published version 8");
+    expect(seen).toMatchObject({ label: "Not undone", disabled: true, bar: "Live: version 8, by Other Admin" });
+  });
+
+  it("still undoes when nothing has moved (the control)", async () => {
+    const m = await boot();
+    build(m);
+    rename(m, "gate", "Gate in my v7");
+    await publish(m);
+    const b = undoThis(m);
+    b?.click();
+    await settle(50);
+    const seen = { asked: restores(m).map((r) => r.from), live: m.village.live.version, label: b?.textContent };
+    m.close();
+    expect(seen).toEqual({ asked: [7], live: 8, label: "Undone" });
   });
 });
 
