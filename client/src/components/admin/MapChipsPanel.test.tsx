@@ -97,7 +97,7 @@ describe("the chips editor", () => {
 
   it("offers every source the server can count, and a number the founder types", async () => {
     await open();
-    const options = [...sourceOf(rows()[0]).querySelectorAll("option")].map((o) => o.value);
+    const options = Array.from(sourceOf(rows()[0]).querySelectorAll("option"), (o) => o.value);
     expect(options.slice(0, 2)).toEqual(["none", "manual"]);
     expect(options.slice(2).sort()).toEqual([...STAT_SOURCE_KEYS].sort());
   });
