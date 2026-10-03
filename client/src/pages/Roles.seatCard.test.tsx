@@ -121,6 +121,9 @@ const asked: Array<{ url: string; method: string; body: unknown }> = [];
 
 beforeEach(() => {
   asked.length = 0;
+  // Opening a row writes `?seat=` into the address, and the page opens
+  // whatever seat the address names, so each test starts on a bare /roles.
+  window.history.replaceState(null, "", "/roles");
   session.token = "a-token";
   session.user = { id: "u-me" };
   catalog.modules = [MAP_ON];
