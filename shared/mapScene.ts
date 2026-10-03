@@ -165,6 +165,20 @@ export function sceneProblem(scene: unknown): string | null {
       "Publishing an unknown version would draw the land from fields that have moved."
     );
   }
+  /*
+   * ONE PLACE PER KEY. The map looks every place up by its key, so a second
+   * place with the same key is drawn over the first and one of them is
+   * simply missing for every visitor, while the export goes on carrying
+   * both. Nothing in the map writes two today, so this guards the door
+   * against a direct call or a future bug.
+   */
+  const seen = new Set<string>();
+  for (const place of s.map_structures) {
+    const key = place && typeof place === "object" ? (place as { key?: unknown }).key : undefined;
+    if (typeof key !== "string") continue;
+    if (seen.has(key)) return `Two places in this scene share the key "${key}", so one of them would vanish from the map.`;
+    seen.add(key);
+  }
   return null;
 }
 
