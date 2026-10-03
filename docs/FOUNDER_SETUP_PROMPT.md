@@ -1,112 +1,115 @@
-# Founder setup prompt
+# Village OS setup prompt
 
-Copy everything below the line into a fresh Claude Code session (or Claude
-with terminal and file access) and send it. You do not need to know how to
-code or use a terminal; Claude will run every command. Read each step's
-result before saying "go ahead" to the next one, and stop and ask a human
-(ReGen Civics, or whoever set you up with this link) if anything Claude
-reports does not match what you expected.
+Copy everything below the line and paste it into your own AI assistant: one
+that can read files and run commands on your computer, such as Claude Code, or
+any assistant with a terminal. You do not need to know how to code. The
+assistant explains every step and runs a command only after you say yes.
 
 ---
 
-I am a community founder setting up my own instance of a village
-coordination platform (the repository is `game-amora`). I have never used a
-terminal and I am not a developer. You are going to do the technical work; I
-am going to make the decisions and hand you the account access you hold
-yourself (Railway login, domain DNS, Resend, Stripe). Do not ask me to paste
-a password or an API key into this chat. Instead, tell me exactly where to
-go and what to click, wait for me to say it is done, and where possible use
-your own terminal or browser access once I have logged you into an account.
+I am a community founder. I want to run my own village on **Village OS**, the
+free, open source village platform at <https://github.com/Rieki777/village-os>.
+I may never have used a terminal. Please be my guide and do the technical
+typing, under these rules.
 
-Start by reading `docs/PROVISIONING.md` in this repository in full. That
-document is the source of truth; treat this prompt as your task list and
-that document as the manual you follow to complete each item. If the two
-ever disagree, `docs/PROVISIONING.md` wins and tell me so.
+**The one rule.** Before each step, tell me in plain words what it does and
+why. Run a command, or change anything, only after I say yes to that step.
+Then tell me what happened. A yes covers one step, never the next. If
+something fails, stop, tell me what you saw, and ask before you try anything
+else.
 
-Work through this list in order. After each numbered step, tell me plainly
-what you did, what I need to do myself (if anything), and wait for my
-confirmation before moving on. Do not skip ahead.
+**Secrets never pass through you.** Do not ask me for, show, read out or type
+any password, API key, token or database address with a password in it. Never
+print my `.env` file. When a secret is needed I open the file myself and copy
+it by hand.
 
-## First, ask me these questions
+**My choices stay mine**: my village's name, its money, who joins, when it
+launches. Draft words for me if I ask, and I press Save and Launch myself. Do
+not sign in as me, and do not create accounts for me anywhere.
 
-Before doing anything else, ask me:
+**Never** ask anyone for access to the Village OS repository or push to it,
+never run the `:edge` image for my village, and never run
+`docker compose down -v`, which deletes everything.
 
-1. **My village's name.** The real name, exactly as I want it to appear.
-2. **My own email address**, the one I will use to run this village.
-3. **Which path I am on**: am I self-hosting (I hold my own Railway
-   account), or is ReGen Civics hosting this for me?
-4. **Do I have a domain already**, and if so, what is it? If not, tell me
-   that is fine and we will add it later.
-5. **Will I be selling anything with a card** (stays, memberships, anything
-   paid) at launch, or is that a later decision? If it is later, we skip the
-   Stripe steps for now and I can ask you to come back to them any time.
+## First, read the guides
 
-Do not proceed past this point until you have my answers to all five.
+If you can read web pages, read these two files first and follow them. They
+are the source of truth, and if they disagree with this prompt they win, and
+you should tell me:
 
-## Then, work through docs/PROVISIONING.md in order
+- <https://raw.githubusercontent.com/Rieki777/village-os/main/AGENTS.md>, your rules
+- <https://raw.githubusercontent.com/Rieki777/village-os/main/START_HERE.md>, the steps
 
-1. **Confirm Railway access.** If I am self-hosting, walk me through
-   creating a Railway account if I do not have one, and tell me exactly
-   what to ask ReGen Civics for (repository access) so your Railway project
-   can build from it. If ReGen Civics is hosting, confirm with me that they
-   have told me the project exists, and ask me for anything you need from
-   me to proceed (usually nothing until step 7).
+If you cannot, the steps below match them.
 
-2. **MySQL and the uploads volume.** Guide me through adding a MySQL service
-   and a volume mounted at `/app/data` in the Railway project, or confirm
-   ReGen Civics has already done this for a hosted instance.
+## Then ask me five questions
 
-3. **Generate environment variables.** Run
-   `node scripts/fork-init.mjs --village-name "..." --admin-email "..." --domain "..."`
-   with my answers from above (omit `--domain` if I do not have one yet).
-   Show me its full output. Save the one-time bootstrap password it prints
-   somewhere I can find again; I will need it in step 6. Then tell me,
-   plainly, which variables it could not fill in and why, and help me get
-   each one where required (Stripe and Resend need their own accounts,
-   which come later in this list; skip those for now).
+1. My village's name, exactly as it should appear.
+2. My own email address, the one I will run the village with.
+3. Where it should run: on this computer to try it, on a server I rent, or on
+   a hosting provider such as Railway.
+4. Whether I have a domain name yet. Not having one is fine.
+5. Which operating system this computer runs.
 
-4. **Copy the generated values into Railway.** Walk me through Railway's
-   Variables tab for my service (or do it yourself if you have Railway CLI
-   access I have logged you into), pasting in what `fork-init.mjs` printed.
+Wait for all five answers before doing anything else.
 
-5. **Email setup.** Walk me through creating a Resend account and verifying
-   my sending domain. This needs me to add DNS records; tell me exactly
-   what they are and where to paste them if I tell you who manages my
-   domain. Remind me clearly: an unverified domain looks like it works
-   (Resend answers success) but delivers nothing, silently. Do not let me
-   move on thinking email works until I have confirmed the domain shows
-   verified in Resend's own dashboard.
+## The steps, one at a time
 
-6. **Deploy, migrate, and bootstrap.** Confirm the first deploy is live at
-   `/health`, run the database migrations, then run the bootstrap `curl`
-   command from `docs/PROVISIONING.md` step 6 using my email and the
-   one-time password from step 3. Give me the link it returns (or confirm
-   the email arrived) so I can set my real password.
+1. **Check this computer.** Is Docker installed and running
+   (`docker version`)? Is Node.js 22 or newer installed (`node -v`)? If not,
+   tell me where to download each, explain the installer, and wait while I
+   run it. For a hosting provider I still need Node.js for step 3.
 
-7. **Make it mine.** Once I am logged in, tell me to go to Admin, Make This
-   Yours, and walk me through the wizard steps at a pace I am comfortable
-   with: name and tagline, pictures, dues and budgets, page copy, map
-   styling. This is where my village actually starts looking like mine, and
-   you cannot do this part for me since it is choices, not typing.
+2. **Get the files.** Either download `village-os-starter-<version>.zip` from
+   <https://github.com/Rieki777/village-os/releases/latest> and unzip it, or
+   `git clone https://github.com/Rieki777/village-os.git`. Open the folder.
 
-8. **Payments**, only if I said yes above. Walk me through creating my own
-   Stripe account, and setting the webhook up exactly as
-   `docs/PROVISIONING.md` step 8 describes. Tell me clearly which of the
-   five webhook events matter and why, in plain language, not the technical
-   reasoning.
+3. **Write the settings.** Run
+   `node scripts/fork-init.mjs --compose --village-name "..." --admin-email "..."`
+   with my answers (add `--domain ...` if I have one; leave out `--compose`
+   for a hosting provider). It writes `.env` and lists what it could not fill
+   in. Tell me that list in plain words. Do not open `.env` for me.
 
-9. **Smoke test.** Run `scripts/smoke-all-modules.mjs` against my live
-   domain and tell me, in one or two sentences, whether it passed. If
-   anything failed, tell me what and whether it is something you can fix or
-   something that needs a human step from me.
+4. **Start it.**
+   - On this computer or a rented server: `docker compose up -d`, then follow
+     `docker compose logs -f app` until it says it is listening. The first
+     start takes a few minutes while it builds the database. Then check
+     `http://localhost:3000/health` says `"status":"ok"`.
+   - On a hosting provider: walk me through creating a MySQL service, a
+     service running the image `ghcr.io/rieki777/village-os:1.2.0`, and a
+     volume mounted at `/app/data`. I copy each line of `.env` into the
+     service's variables myself, with `DATABASE_URL` set to the MySQL
+     service's own connection string. `docs/PROVISIONING.md` has the detail.
 
-10. **Wrap up.** Give me a short plain-language summary: what is live, what
-    I still need to do myself (a domain, a Stripe account, anything else
-    that only I can do), and where to find `docs/PROVISIONING.md` and
-    `docs/FORK_RUNBOOK.md` if I want to read the reasoning behind any of
-    this later.
+5. **Claim the village.** I open `<my village address>/claim`, enter my email
+   and name, and type the `ADMIN_PASSWORD` I read from `.env` myself. The
+   page gives me a link to set my own password. Wait until I tell you I am
+   signed in.
 
-Throughout: if a step in `docs/PROVISIONING.md` names something as a
-human-only step (DNS, Resend domain verification, creating a Stripe
-account), do not try to do it yourself or work around it. Tell me exactly
-what to do and wait.
+6. **Make it mine.** Point me to **Admin, Make This Yours**, and help me
+   through it at my pace: name, tagline, place, pictures, colours, modules.
+   Then the **Launch Plan** at `/journey-to-launch`, which lists what is
+   still missing, including my currency and my timezone.
+
+7. **Put it on the internet**, only for a rented server or a provider: my
+   domain pointed at it, HTTPS in front of it, and `FRONTEND_URL` set to my
+   address. Tell me exactly which DNS records to add, and wait while I add
+   them.
+
+8. **Email.** Help me create a Resend account and verify my domain, then set
+   `RESEND_API_KEY` and `EMAIL_FROM` (I paste the key myself). Do not tell me
+   email works until Resend shows my domain as verified: it answers
+   "success" for an unverified domain and delivers nothing.
+
+9. **Invite the first member.** Show me where on my profile I make an
+   invitation link.
+
+10. **Back up.** Explain why, then take the first backup with the commands in
+    `START_HERE.md`, "Backups", and help me copy the `backups` folder
+    somewhere other than this computer. Help me schedule it if I want.
+
+11. **Wrap up.** In a few plain sentences: what is running and where, what I
+    still have to do myself, where my backups are, how to upgrade
+    (`docs/UPGRADING.md`), and where to ask for help:
+    <https://github.com/Rieki777/village-os/issues> and
+    <https://regencivics.earth/village-os>.

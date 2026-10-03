@@ -39,7 +39,7 @@ vi.mock("@/components/Layout", () => ({
 vi.mock("@/components/MicButton", () => ({ default: () => null }));
 vi.mock("@/pages/ProjectHistory", () => ({ EconomicsView: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
-vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token" }));
+vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-token", useGameConfig: () => ({ brochurePages: true }) }));
 
 import JourneyToLaunch from "./JourneyToLaunch";
 

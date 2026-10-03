@@ -1,0 +1,81 @@
+# Village OS on one computer: the app, a MySQL 8 database, and a volume for
+# the photographs and documents members upload. For a laptop or a small VPS.
+#
+# First run, from the folder this file is in:
+#
+#   node scripts/fork-init.mjs --compose --village-name "Your Village" --admin-email you@example.org
+#   docker compose up -d
+#   docker compose logs -f app        # wait for "listening", the first boot takes a few minutes
+#
+# Then open http://localhost:3000/claim and create the founder account with the
+# ADMIN_PASSWORD that fork-init wrote into .env. START_HERE.md walks through it.
+#
+# What each piece is for:
+#
+#   db    MySQL 8. Its data lives in the `db-data` volume and survives
+#         `docker compose down`. It is not published on any port: only the
+#         app can reach it, over the network compose makes for these two.
+#   app   The published image, pinned to a release. The server applies every
+#         pending database migration at boot, before it listens, so there is
+#         no separate migrate step. A first boot against an empty database
+#         has been measured between 40 seconds and 4 minutes.
+#
+# Every setting comes from `.env` next to this file. Nothing secret is in here.
+#
+# Upgrading: change the tag in VILLAGE_OS_IMAGE (or below), then
+# `docker compose pull && docker compose up -d`. Read docs/UPGRADING.md first.
+# Running code you changed yourself: add the build file, which builds the image
+# from this folder instead of pulling it:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# `docker compose down -v` DELETES BOTH VOLUMES, which is your whole village.
+# Plain `docker compose down` keeps them.
+
+name: village-os
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: village
+      MYSQL_USER: village
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is not set. Run node scripts/fork-init.mjs --compose first.}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is not set. Run node scripts/fork-init.mjs --compose first.}
+    volumes:
+      - db-data:/var/lib/mysql
+    # Over TCP on purpose. While MySQL initialises a new data directory it runs
+    # a temporary server on the socket only, and a socket ping answers it, so
+    # the app would start before the real server is listening.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --protocol=TCP -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  app:
+    image: ${VILLAGE_OS_IMAGE:-ghcr.io/rieki777/village-os:1.2.0}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+    ports:
+      - "${VILLAGE_PORT:-3000}:3000"
+    volumes:
+      - village-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # The first boot applies every migration before the server listens.
+      start_period: 600s
+
+volumes:
+  db-data:
+  village-data:

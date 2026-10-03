@@ -49,6 +49,8 @@ export const GATE_LINES: Record<string, string> = {
     "Proposals on their way to a vote, the ballots running today, and the outcome of every one that has closed.",
   health: "This village's vital signs, frozen at the close of each cycle.",
   introductions: "What members say they are looking for, and the introductions waiting on a yes.",
+  journal:
+    "Your own morning and evening pages, a weekly pulse, call debriefs, and a kind road for feedback. Only you read what you write.",
   library: "The village's shared tools and goods, and what is on the shelf today.",
   map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
   messaging: "Private conversations between members, one to one or in a named group.",

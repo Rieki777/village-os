@@ -10,6 +10,15 @@
  * Runs against the S5 harness: a scratch schema with every real migration
  * applied, unique per provision. No TEST_DATABASE_URL and the suite skips
  * loudly rather than passing hollowly.
+ *
+ * NO PER-TEST TIMEOUT OVERRIDE HERE, and there should not be one again without
+ * a measurement behind it. These cases carried a local 420s ceiling because the
+ * test database was a Railway MySQL behind a proxy at roughly 240ms per round
+ * trip, which put a multi-claim case past the global 120s. Against the local
+ * MariaDB the slowest case in this file measures 904ms, so the global leaves
+ * over a hundredfold headroom and the override only bought a hung test seven
+ * minutes to sit in. Three neighbouring suites copied the constant from here;
+ * all four are back on the global.
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
@@ -44,23 +53,6 @@ const configured = testDbConfigured();
 let db: TestDb;
 let pool: mysql.Pool;
 let seq = 0;
-
-/**
- * The ceiling for a case that opens more than one claim.
- *
- * vitest.config.ts sets `testTimeout: 120_000`, which suits a test that makes a
- * handful of round trips. These do not: every claim here is a member row, a
- * ledger account, a mint through `postTransfer`, a SERIALIZABLE transaction and
- * a settlement, and the database is a Railway MySQL behind a proxy measured at
- * roughly 240ms per round trip. A case that opens four claims is several hundred
- * round trips before anything is asserted.
- *
- * Raised, never lowered. A local override BELOW the global is the trap that cost
- * another lane a day: the file's own number wins, so a smaller one silently
- * undercuts headroom the config deliberately provides.
- */
-const DB_HEAVY = 420_000;
-
 async function makeMember(id: string): Promise<string> {
   await pool.query(
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
@@ -264,7 +256,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     const again = await requestVoiceClaim(pool, u, true);
     expect(again.ok).toBe(false);
     if (!again.ok) expect(again.error).toContain("already have a claim");
-  }, DB_HEAVY);
+  });
 
   it("refuses below the threshold", async () => {
     const u = await makeMember("vc-short");
@@ -322,7 +314,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     // truthful record of voice that settled somewhere else.
     expect(fromLedgerUnits(VILLAGE_VOICE, await balanceOf(pool, memberAccount(u), VILLAGE_VOICE))).toBe(0);
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("refuses to cancel a claim Hypha already confirmed", async () => {
     // The exploit: confirm on Hypha, then cancel here, and be paid twice.
@@ -336,7 +328,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(sneak.ok).toBe(false);
     expect(fromLedgerUnits(VILLAGE_VOICE, await balanceOf(pool, memberAccount(u), VILLAGE_VOICE))).toBe(0);
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("refunds once when two cancels race", async () => {
     // The compare-and-set is what makes this true: both callers read
@@ -354,7 +346,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(await cacheDrift(VILLAGE_VOICE)).toBe(0);
     expect(fromLedgerUnits(VILLAGE_VOICE, await balanceOf(pool, memberAccount(u), VILLAGE_VOICE))).toBe(150);
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("reports every already-settled state as `terminal`, whatever the wording", async () => {
     /*
@@ -378,7 +370,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     }
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
     expect(await cacheDrift(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("tells a claim that never existed apart from one already settled", async () => {
     const gone = await settleVoiceClaim(pool, "vc-never-was", "confirmed");
@@ -398,7 +390,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     const second = await requestVoiceClaim(pool, u, true);
     expect(second.ok).toBe(true);
     expect((await claimHistory(pool, u)).length).toBe(2);
-  }, DB_HEAVY);
+  });
 
   // ── What an adversarial pass found ───────────────────────────────────────
 
@@ -474,7 +466,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(r.drift).toBe(0);
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
     expect(await cacheDrift(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("repairs a refund that closed the claim without releasing the voice", async () => {
     /*
@@ -503,7 +495,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(again).toEqual({ ok: true, refunded: false });
     expect(fromLedgerUnits(VILLAGE_VOICE, await balanceOf(pool, memberAccount(u), VILLAGE_VOICE))).toBe(150);
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("will not hand back voice for a claim Hypha confirmed", async () => {
     const u = await makeMember("vc-repair-no");
@@ -515,7 +507,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     const nope = await retryRefund(pool, out.claimId);
     expect(nope.ok).toBe(false);
     expect(fromLedgerUnits(VILLAGE_VOICE, await balanceOf(pool, memberAccount(u), VILLAGE_VOICE))).toBe(0);
-  }, DB_HEAVY);
+  });
 
   // ── The secret ───────────────────────────────────────────────────────────
 
@@ -635,7 +627,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     }
     expect(await conservation(VILLAGE_VOICE)).toBe(0);
     expect(await cacheDrift(VILLAGE_VOICE)).toBe(0);
-  }, DB_HEAVY);
+  });
 
   it("carries the exact amount across the decimals boundary", async () => {
     // The bug this prevents: voice is stored at whatever scale the registry
@@ -655,7 +647,7 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     expect(toLedgerUnits(VILLAGE_VOICE, out.amount)).toBe(units);
     await settleVoiceClaim(pool, out.claimId, "canceled");
     expect(await balanceOf(pool, memberAccount(u), VILLAGE_VOICE)).toBe(units);
-  }, DB_HEAVY);
+  });
 
   it("scopes a claim to its village", async () => {
     expect(villageId()).toBe("local");

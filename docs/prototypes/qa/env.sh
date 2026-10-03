@@ -20,8 +20,8 @@ if command -v cygpath >/dev/null 2>&1; then
 fi
 export GROUNDS_FILE="${GROUNDS_FILE:-file:///${_qa_art#/}}"
 
-export PW_EXE="${PW_EXE:-C:/Users/taren/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe}"
-export NODE_PATH="${NODE_PATH:-C:/Users/taren/Downloads/regen-civics-clean/node_modules}"
+export PW_EXE="${PW_EXE:-${USERPROFILE//\\//}/AppData/Local/ms-playwright/chromium-1223/chrome-win64/chrome.exe}"
+export NODE_PATH="${NODE_PATH:-${USERPROFILE//\\//}/Downloads/regen-civics-clean/node_modules}"
 # Scratch output, beside the suites rather than in one session's temp dir.
 export EXPORT_OUT="${EXPORT_OUT:-$_qa_dir/../.qa-out/amora-export.json}"
 mkdir -p "$(dirname "$EXPORT_OUT")" 2>/dev/null

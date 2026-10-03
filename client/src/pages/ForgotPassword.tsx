@@ -14,6 +14,12 @@ export default function ForgotPassword() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  // "Back to sign in" returns to the door the member came from. The admin card
+  // links here with `?from=admin`, and the page picks between two fixed paths,
+  // so nothing from the URL ever becomes the link. Taking a `next` path here
+  // was refused by CodeQL, rightly: a browser drops tabs and newlines from a
+  // URL, so `/<tab>/evil.example` passes a startsWith check and lands offsite.
+  const signIn = new URLSearchParams(window.location.search).get("from") === "admin" ? "/admin" : "/login";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +57,7 @@ export default function ForgotPassword() {
                   If an account exists for that address, a link to set a new password is on its
                   way. It expires in an hour and works once.
                 </p>
-                <a href="/login" className="inline-block mt-6 text-teal-deep font-semibold hover:underline">
+                <a href={signIn} className="inline-block mt-6 text-teal-deep font-semibold hover:underline">
                   Back to sign in
                 </a>
               </div>
@@ -97,7 +103,7 @@ export default function ForgotPassword() {
                   </button>
                 </form>
                 <div className="mt-6 text-center">
-                  <a href="/login" className="text-sm text-teal-deep hover:underline">
+                  <a href={signIn} className="text-sm text-teal-deep hover:underline">
                     Back to sign in
                   </a>
                 </div>

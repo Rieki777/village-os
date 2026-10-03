@@ -33,6 +33,7 @@ import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
+import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
 
 /**
  * THE CHARACTER SHEET.
@@ -76,6 +77,7 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
  */
 
 export default function Profile() {
+  const brochureOn = useBrochurePages() === true;
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
@@ -662,14 +664,18 @@ export default function Profile() {
                     calls, or from an admin accepting a Work With Us proposal.
                     So the card says the second one and links it.
                   */
-                  <p className="text-muted-foreground">
-                    Nothing here yet. A contribution is recorded when the village accepts an offer
-                    you made through{" "}
-                    <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
-                      Work With Us
-                    </Link>
-                    .
-                  </p>
+                  brochureOn ? (
+                    <p className="text-muted-foreground">
+                      Nothing here yet. A contribution is recorded when the village accepts an offer
+                      you made through{" "}
+                      <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
+                        Work With Us
+                      </Link>
+                      .
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">Nothing here yet.</p>
+                  )
                 ) : (
                   <ul className="space-y-4">
                     <AnimatePresence>
@@ -859,7 +865,7 @@ export default function Profile() {
                     { href: "/quests", label: "Quests" },
                     { href: "/circles", label: "Circles" },
                     { href: "/housing", label: "Housing" },
-                  ].map((l) => (
+                  ].filter((l) => brochureOn || !isBrochurePath(l.href)).map((l) => (
                     <li key={l.href}>
                       <Link
                         href={l.href}

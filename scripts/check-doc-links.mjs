@@ -89,22 +89,9 @@ const SKIPPED = [
   "docs/modules/tools-hub.md",
   "docs/modules/village-map.md",
 
-  // Says so itself, in the first line of the file: "SUPERSEDED (2026-07-26):
-  // see MODULES_MASTER_PLAN.md (v3) ... all build orders and status tables
-  // here are stale."
-  "AMORA_FOUNDATION_UPGRADE_PLAN.md", // brand-ok: a filename here, not identity in code
-
-  // Dated work orders. Each describes the tree on the morning it was written
-  // and was answered months ago, so its paths are evidence of what the author
-  // was looking at and stay as written.
-  "CLAUDE_CODE_PROMPT_2026-07-26_FOUNDATION_HANDOFF.md",
-  "FIXES_TO_MAKE_2026-07-17_FOUNDATION_LEVERS.md",
-  "FIXES_TO_MAKE_2026-08-02_ROLE_MODEL.md",
-
-  // An append-only ledger pinned to an explicit base ref, whose own preamble
-  // says "Never wholesale-rewrite it; edit by hunk." Its references describe
-  // the tree at the commit each lane landed against.
-  "SEASON2_FLEET_LEDGER.md",
+  // The superseded upgrade plan, the dated work orders and the fleet ledger
+  // that used to be skipped here left this tree on 2026-10-02 for the
+  // maintainers' private operations repository, so there is nothing to skip.
 
   // Documents that specify what will be built. Each says so in its own
   // opening lines: I18N_STRATEGY.md is "specification only. Nothing in this

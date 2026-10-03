@@ -182,7 +182,7 @@ git fetch origin
 for r in $(git for-each-ref --format='%(refname)' refs/heads/ refs/remotes/origin/); do
   git ls-tree --name-only "$r" drizzle/ 2>/dev/null | grep -oE '00[0-9]{2}' | tr '\n' ' '
 done
-ls /c/Users/taren/Desktop/Amora/*/drizzle/*.sql
+ls <workspace>/*/drizzle/*.sql
 ```
 
 **An amend or rebase moves the SHA**, so a build marker stamped before it

@@ -286,7 +286,7 @@ if (duplicates.length > 0) {
     console.error(`    ${n}: ${files.join(", ")}`);
   }
   console.error(`  Renumber all but one of each set. The next free upstream number is ${nextFree}.`);
-  console.error(`  Claim it in SEASON2_FLEET_LEDGER.md section 3 BEFORE creating the file, which is what`);
+  console.error(`  Claim it in the fleet ledger, section 3 (../village-os-ops, private), BEFORE creating the file, which is what`);
   console.error(`  stops the next lane taking the same one an hour later.`);
 }
 

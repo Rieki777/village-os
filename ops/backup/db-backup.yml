@@ -1,0 +1,809 @@
+# A village's nightly backup: MySQL plus the uploads volume, GPG-encrypted,
+# with a restore drill on every run. TEMPLATE: this file does not run here.
+#
+# RUN IT ONLY FROM A PRIVATE REPOSITORY. On a public repository every Actions
+# artifact can be downloaded by any signed-in GitHub user and every log line
+# can be read by anyone, so even encrypted backups and their logs do not
+# belong there. Village OS itself is public, which is why this file lives in
+# ops/backup/ and not in .github/workflows/.
+#
+# To use it: create a private repository of your own (an empty one is fine),
+# copy this file to .github/workflows/db-backup.yml there, and set the six
+# secrets below in that repository (Settings, Secrets and variables, Actions).
+# docs/RUNBOOK.md, "Where the backup runs", has the whole procedure, how to
+# make the two keypairs, and how to restore.
+#
+#   PROD_DATABASE_URL            mysql://user:pass@host:port/schema of the
+#                                village, reachable from the internet (on
+#                                Railway, the MySQL service's public URL)
+#   BACKUP_GPG_PUBLIC_KEY        the founder's recovery PUBLIC key. Its private
+#                                half stays offline with the founder.
+#   BACKUP_DRILL_GPG_PUBLIC_KEY  a second keypair used only by the drill below
+#   BACKUP_DRILL_GPG_PRIVATE_KEY
+#   BACKUP_EXPORT_ORIGIN         the village's address, no trailing slash
+#   BACKUP_EXPORT_TOKEN          the same value as BACKUP_EXPORT_TOKEN on the
+#                                village (scripts/fork-init.mjs generates it)
+#
+# Nothing here prints the database host or the manifest, and only ciphertext
+# is ever uploaded. The reasoning behind each step is in the comments below.
+name: db-backup
+
+on:
+  schedule:
+    - cron: "17 9 * * *" # daily, 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require both encryption public keys before doing anything else
+        env:
+          PROD_PUB: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+          DRILL_PUB: ${{ secrets.BACKUP_DRILL_GPG_PUBLIC_KEY }}
+        run: |
+          if [ -z "$PROD_PUB" ]; then
+            echo "BACKUP_GPG_PUBLIC_KEY secret is not set. Refusing to dump: an" >&2
+            echo "unencrypted backup is the exact exposure this workflow exists" >&2
+            echo "to close. See docs/FORK_RUNBOOK.md, Backups section." >&2
+            exit 1
+          fi
+          if [ -z "$DRILL_PUB" ]; then
+            echo "BACKUP_DRILL_GPG_PUBLIC_KEY secret is not set. Refusing to dump:" >&2
+            echo "with no drill recipient, restore-drill below cannot prove this" >&2
+            echo "backup is restorable, and an unverified backup is a hope, not a" >&2
+            echo "backup. See docs/FORK_RUNBOOK.md, Backups section." >&2
+            exit 1
+          fi
+          echo "Both encryption public keys are present."
+
+      - name: Dump production
+        env:
+          DB_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "PROD_DATABASE_URL secret is not set"; exit 1; fi
+          proto_removed="${DB_URL#mysql://}"
+          userpass="${proto_removed%%@*}"
+          hostportdb="${proto_removed#*@}"
+          DB_USER="${userpass%%:*}"
+          DB_PASS="${userpass#*:}"
+          hostport="${hostportdb%%/*}"
+          DB_NAME_RAW="${hostportdb#*/}"
+          DB_NAME="${DB_NAME_RAW%%\?*}"
+          DB_HOST="${hostport%%:*}"
+          DB_PORT="${hostport#*:}"
+          # The host is deliberately not printed. Logs are private here, but a
+          # habit that only holds in private repositories does not hold.
+          echo "Dumping the production schema"
+          mysqldump --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" --password="$DB_PASS" \
+            --single-transaction --set-gtid-purged=OFF --no-tablespaces --skip-extended-insert "$DB_NAME" > dump.sql
+          gzip -9 dump.sql
+          ls -la dump.sql.gz
+
+      - name: Record live production counts (read AFTER the dump, see the drill)
+        env:
+          DB_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          proto_removed="${DB_URL#mysql://}"
+          userpass="${proto_removed%%@*}"
+          hostportdb="${proto_removed#*@}"
+          DB_USER="${userpass%%:*}"; DB_PASS="${userpass#*:}"
+          hostport="${hostportdb%%/*}"; DB_NAME_RAW="${hostportdb#*/}"; DB_NAME="${DB_NAME_RAW%%\?*}"
+          DB_HOST="${hostport%%:*}"; DB_PORT="${hostport#*:}"
+          MYSQL="mysql --host=$DB_HOST --port=$DB_PORT --user=$DB_USER --password=$DB_PASS -N -B $DB_NAME"
+          {
+            echo "users=$($MYSQL -e 'SELECT COUNT(*) FROM users')"
+            echo "token_ledger=$($MYSQL -e 'SELECT COUNT(*) FROM token_ledger')"
+            echo "health_events=$($MYSQL -e 'SELECT COUNT(*) FROM health_events')"
+            echo "quests=$($MYSQL -e 'SELECT COUNT(*) FROM quests')"
+            # The round-trip probe: an exact UTC timestamp string.
+            echo "probe=$($MYSQL -e "SELECT CONCAT(id, '|', DATE_FORMAT(joined_at, '%Y-%m-%dT%H:%i:%s')) FROM users ORDER BY id LIMIT 1")"
+          } > manifest.txt
+          # Not printed: the probe line carries a real member's id and join
+          # time. It travels inside the encrypted bundle and nowhere else.
+          echo "manifest.txt written ($(wc -l < manifest.txt) lines)"
+
+      - name: Bundle and encrypt (dump + manifest travel together, ciphertext only from here on)
+        env:
+          PROD_PUB: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+          DRILL_PUB: ${{ secrets.BACKUP_DRILL_GPG_PUBLIC_KEY }}
+        run: |
+          tar czf bundle.tar.gz dump.sql.gz manifest.txt
+          printf '%s' "$PROD_PUB" > prod_pub.asc
+          printf '%s' "$DRILL_PUB" > drill_pub.asc
+          gpg --batch --yes --output bundle.tar.gz.gpg \
+            --recipient-file prod_pub.asc \
+            --recipient-file drill_pub.asc \
+            --encrypt bundle.tar.gz
+          # The plaintext bundle and the raw dump/manifest must not survive
+          # past this step. Only bundle.tar.gz.gpg gets uploaded.
+          rm -f bundle.tar.gz dump.sql.gz manifest.txt prod_pub.asc drill_pub.asc
+          ls -la bundle.tar.gz.gpg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: bundle.tar.gz.gpg
+          retention-days: 30
+
+  restore-drill:
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: drill
+          MYSQL_DATABASE: restored
+        ports:
+          - 3306:3306
+        # `-h 127.0.0.1 --protocol=TCP` rather than `-h localhost`, and the
+        # reason is the whole 2026-09-02 fix (see the header). `-h localhost`
+        # resolves to the unix socket, which the entrypoint's temporary
+        # initialisation server answers, so the container reported healthy six
+        # seconds in while the real server had not started listening. TCP is
+        # the thing the restore step below actually connects on, and the
+        # temporary server runs with --skip-networking, so a TCP probe cannot
+        # pass early. Probe the port you are going to use.
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --protocol=TCP -uroot -pdrill --silent"
+          --health-interval 5s --health-timeout 3s --health-retries 30
+    steps:
+      - name: Require the drill private key before doing anything else
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DRILL_PRIV" ]; then
+            echo "BACKUP_DRILL_GPG_PRIVATE_KEY secret is not set. Refusing to" >&2
+            echo "report a result: a drill that cannot decrypt cannot prove" >&2
+            echo "anything, and a job that skips its own assertion and exits 0" >&2
+            echo "is exactly the false green ledger section 7 warns about." >&2
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: db-backup-${{ github.run_id }}
+
+      - name: Decrypt with the drill key only (never the founder's recovery key)
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$DRILL_PRIV" | gpg --batch --yes --import
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --output bundle.tar.gz --decrypt bundle.tar.gz.gpg
+          tar xzf bundle.tar.gz
+          gunzip -c dump.sql.gz > dump.sql
+          test -s dump.sql
+          test -s manifest.txt
+          echo "Decrypted and unpacked. Proceeding to restore."
+
+      - name: Wait until the scratch MySQL answers a real query over TCP
+        run: |
+          # The container health check is now honest (see the service options
+          # above), and this step is the belt to its braces. It asserts the
+          # only thing the next step needs: that THIS client, on THIS host and
+          # port, with THESE credentials, can run a statement. Nothing else
+          # here is allowed to stand in for that.
+          #
+          # It fails loudly on the deadline rather than falling through to the
+          # restore, because "could not reach the scratch database" and "the
+          # backup does not restore" are different facts and a drill that
+          # reports the second when it means the first teaches an operator to
+          # stop believing it.
+          deadline=$(( $(date +%s) + 180 ))
+          attempt=0
+          until mysql --host=127.0.0.1 --port=3306 --protocol=TCP \
+                      --user=root --password=drill -N -B \
+                      -e 'SELECT 1' restored >/dev/null 2>&1; do
+            attempt=$(( attempt + 1 ))
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "The drill's own scratch MySQL never accepted a query in 180s ($attempt attempts)." >&2
+              echo "This says nothing about the backup: the dump was never read. It means the" >&2
+              echo "throwaway database this job starts for itself did not come up. Re-run the" >&2
+              echo "workflow; if it repeats, the mysql:8 service block in this file is the place" >&2
+              echo "to look, not the backup." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Scratch MySQL answered SELECT 1 over TCP after $attempt retries."
+
+      - name: Restore into scratch MySQL
+        run: |
+          mysql --host=127.0.0.1 --port=3306 --protocol=TCP --user=root --password=drill restored < dump.sql
+          echo "Restore completed."
+
+      - name: Assert fidelity, exactly against the artifact and loosely against production
+        run: |
+          MYSQL="mysql --host=127.0.0.1 --port=3306 --protocol=TCP --user=root --password=drill -N -B restored"
+          fail=0
+
+          # THE CHECK THAT DECIDES THE DRILL: does the artifact restore to
+          # itself? The expectation is derived from dump.sql, so both sides
+          # describe the same instant and nothing can move underneath them.
+          # --skip-extended-insert on the dump makes it exact: one row, one
+          # INSERT line. This is strictly stronger than comparing against
+          # production, because it also catches rows dropped by the RESTORE
+          # rather than by the dump, which the old comparison could not see.
+          #
+          # The comparisons are string equality on purpose. `[ "$got" -lt 1 ]`
+          # on a non-numeric operand writes an error to stderr and returns 2,
+          # which an `if` reads as false, so a numeric form would print ok when
+          # the count could not be read at all. Measured: an empty or garbage
+          # value fails here, as it must.
+          for t in users token_ledger health_events quests; do
+            want=$(grep -c "^INSERT INTO \`$t\` " dump.sql || true)
+            got=$($MYSQL -e "SELECT COUNT(*) FROM \`$t\`")
+            if [ "$got" != "$want" ]; then
+              echo "MISMATCH $t: the dump carries $want rows, the restore produced '$got'"
+              fail=1
+            else
+              echo "ok $t = $got (dump and restore agree exactly)"
+            fi
+          done
+
+          # The value round-trip, still exact and still fatal. This is the one
+          # that catches a time zone shifting under the restore.
+          want=$(grep -m1 '^probe=' manifest.txt | cut -d= -f2-)
+          got=$($MYSQL -e "SELECT CONCAT(id, '|', DATE_FORMAT(joined_at, '%Y-%m-%dT%H:%i:%s')) FROM users ORDER BY id LIMIT 1")
+          if [ -z "$want" ]; then
+            echo "MISMATCH probe: manifest.txt carries no probe line at all"
+            fail=1
+          elif [ "$got" != "$want" ]; then
+            echo "MISMATCH probe: manifest '$want', restored '$got'"
+            fail=1
+          else
+            echo "ok probe = $got"
+          fi
+
+          if [ "$fail" = "1" ]; then
+            echo "RESTORE DRILL FAILED, this backup does not faithfully restore."
+            exit 1
+          fi
+
+          # Advisory from here down. It must never fail the drill.
+          #
+          # manifest.txt holds live production counts read AFTER mysqldump
+          # finished, over separate connections outside its snapshot, so they
+          # legitimately differ from what the dump captured. There is no exact
+          # comparison available from outside the snapshot and pretending
+          # otherwise is what produced the false red.
+          #
+          # Run 33923245260 failed on exactly this: health_events was one
+          # ahead, every run, because the uploads export audits itself into the
+          # event spine (server/index.ts, "GET /api/admin/backup/
+          # uploads-archive") and its job runs concurrently with the dump. The
+          # backup was faithful each time. Switching the uploads backup on is
+          # what started it, which is why this was green for weeks first.
+          echo "---"
+          echo "Live production counts from manifest.txt, for reference only."
+          echo "These were read after the dump finished, so drift is expected"
+          echo "and is not evidence of anything wrong with the backup:"
+          while IFS='=' read -r key want; do
+            case "$key" in
+              users|token_ledger|health_events|quests) ;;
+              *) continue;;
+            esac
+            got=$($MYSQL -e "SELECT COUNT(*) FROM \`$key\`")
+            if [ "$got" = "$want" ]; then
+              echo "  $key: dump $got, live $want, no drift"
+            else
+              echo "  $key: dump $got, live $want, drifted while the dump ran"
+            fi
+          done < manifest.txt
+
+          echo "Restore drill passed: every table restored exactly the rows the dump carries, the probe timestamp round-tripped exactly, and the artifact was decrypted with the drill key alone."
+
+  restore-drill-negative-control:
+    # Proves the drill is not a rubber stamp: a tampered artifact must be
+    # REFUSED, not silently accepted. Runs the same decrypt step against a
+    # deliberately corrupted copy of the real ciphertext and asserts that it
+    # fails. If corruption ever decrypts cleanly, that is worse than any
+    # single bad backup, it means the drill above cannot be trusted when it
+    # says green, so this job fails loudly rather than passing quietly.
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require the drill private key before doing anything else
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DRILL_PRIV" ]; then
+            echo "BACKUP_DRILL_GPG_PRIVATE_KEY secret is not set. Refusing to" >&2
+            echo "report a result for the same reason restore-drill does." >&2
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: db-backup-${{ github.run_id }}
+
+      - name: Import the drill key
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: printf '%s' "$DRILL_PRIV" | gpg --batch --yes --import
+
+      - name: Corrupt a copy of the real artifact
+        run: |
+          cp bundle.tar.gz.gpg corrupt.tar.gz.gpg
+          size=$(stat -c%s corrupt.tar.gz.gpg)
+          offset=$((size / 2))
+          dd if=/dev/urandom of=corrupt.tar.gz.gpg bs=1 seek="$offset" count=32 conv=notrunc status=none
+          cmp -s bundle.tar.gz.gpg corrupt.tar.gz.gpg && { echo "corruption step did not change the file"; exit 1; }
+          echo "Ciphertext corrupted at byte offset $offset."
+
+      - name: Attempt to decrypt the corrupted artifact (must fail)
+        id: corrupt_decrypt
+        continue-on-error: true
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --output corrupt.tar.gz --decrypt corrupt.tar.gz.gpg
+
+      - name: Assert the corrupted artifact was refused
+        run: |
+          if [ "${{ steps.corrupt_decrypt.outcome }}" = "success" ]; then
+            echo "NEGATIVE CONTROL FAILED: a corrupted, tampered backup decrypted" >&2
+            echo "without complaint. The restore-drill's green cannot be trusted" >&2
+            echo "until this is fixed." >&2
+            exit 1
+          fi
+          echo "Negative control passed: GPG's integrity check refused the corrupted ciphertext, exactly as required. A tampered or truncated real backup would fail restore-drill the same way, not pass it silently."
+
+  # ---------------------------------------------------------------------------
+  # The uploads volume. Everything above this line backs up MySQL only, and for
+  # a fortnight that was the whole backup: member photographs, brand images and
+  # investor documents on the Railway volume at /app/data had no copy anywhere.
+  #
+  # A GitHub Action cannot reach a Railway volume, so the server exports it:
+  # GET /api/admin/backup/uploads-archive, built 2026-08-31, contract in
+  # docs/FORK_RUNBOOK.md. These two jobs are the workflow half. They are
+  # independent of the database jobs on purpose, so one gap never hides the
+  # other, and the alarm job below names which half is red.
+  # ---------------------------------------------------------------------------
+  uploads-configured:
+    # Has anybody switched the uploads backup on? One question, asked once, so
+    # the answer can be a SKIP rather than a failure.
+    #
+    # This used to be the first step of uploads-backup and it exited 1, which
+    # made the whole workflow red and opened the "Backups are failing" issue on
+    # every run of every village that had not set two secrets. That is every
+    # village today. An alarm that is always ringing is not an alarm, and
+    # teaching the reader to ignore it is the exact defect the alarm was added
+    # to fix, one level up.
+    #
+    # Not configured is a SKIP and says so loudly in the run summary. Half
+    # configured is still a FAILURE, because somebody meant to switch this on
+    # and it will not work.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      configured: ${{ steps.gate.outputs.configured }}
+    steps:
+      - name: Is the uploads backup switched on
+        id: gate
+        env:
+          ORIGIN: ${{ secrets.BACKUP_EXPORT_ORIGIN }}
+          TOKEN: ${{ secrets.BACKUP_EXPORT_TOKEN }}
+        run: |
+          if [ -n "$ORIGIN" ] && [ -n "$TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Uploads backup is switched on."
+            exit 0
+          fi
+          if [ -n "$ORIGIN" ] || [ -n "$TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::error::The uploads backup is HALF configured, which will not work." >&2
+            [ -z "$ORIGIN" ] && echo "  BACKUP_EXPORT_ORIGIN is missing." >&2
+            [ -z "$TOKEN" ] && echo "  BACKUP_EXPORT_TOKEN is missing." >&2
+            echo "  Set both, or neither. Steps: docs/RUNBOOK.md." >&2
+            exit 1
+          fi
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Uploads are NOT being backed up. The database is, this is the volume."
+          {
+            echo "### Uploads are not being backed up"
+            echo ""
+            echo "The database backup above is real and ran. This is about the uploads"
+            echo "volume, the photographs and documents members have added, which has no"
+            echo "backup on this deployment because it has never been switched on."
+            echo ""
+            echo "This is a SKIP and not a failure, so the run stays green and the alarm"
+            echo "stays meaningful. It will keep saying this until somebody acts."
+            echo ""
+            echo "To switch it on:"
+            echo ""
+            echo "1. \`openssl rand -hex 32\` gives you the value for BACKUP_EXPORT_TOKEN."
+            echo "2. Set BACKUP_EXPORT_TOKEN on the app service, and redeploy."
+            echo "3. Add the same value as a GitHub Actions repository secret."
+            echo "4. Add BACKUP_EXPORT_ORIGIN, the village base URL, no trailing slash."
+            echo ""
+            echo "Full procedure: docs/RUNBOOK.md, \"Turning on the uploads backup\"."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  uploads-backup:
+    needs: uploads-configured
+    if: needs.uploads-configured.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require every secret this job needs, and name the missing one
+        env:
+          PROD_PUB: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+          DRILL_PUB: ${{ secrets.BACKUP_DRILL_GPG_PUBLIC_KEY }}
+          ORIGIN: ${{ secrets.BACKUP_EXPORT_ORIGIN }}
+          TOKEN: ${{ secrets.BACKUP_EXPORT_TOKEN }}
+        run: |
+          # Fail closed, and say exactly what to do, because for most villages
+          # this is the first thing here that will be red and the person
+          # reading it is not the person who wrote it. Steps: docs/RUNBOOK.md.
+          missing=""
+          [ -z "$PROD_PUB" ] && missing="$missing BACKUP_GPG_PUBLIC_KEY"
+          [ -z "$DRILL_PUB" ] && missing="$missing BACKUP_DRILL_GPG_PUBLIC_KEY"
+          [ -z "$ORIGIN" ] && missing="$missing BACKUP_EXPORT_ORIGIN"
+          [ -z "$TOKEN" ] && missing="$missing BACKUP_EXPORT_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "Uploads are NOT being backed up. Missing repository secret(s):$missing" >&2
+            echo "" >&2
+            echo "This is not a broken backup. It is the uploads backup never having been" >&2
+            echo "switched on, which until today was invisible. To switch it on:" >&2
+            echo "  1. openssl rand -hex 32   -> this value is BACKUP_EXPORT_TOKEN" >&2
+            echo "  2. Set BACKUP_EXPORT_TOKEN on the Railway app service, and redeploy." >&2
+            echo "  3. Add the same value as a GitHub Actions repository secret." >&2
+            echo "  4. Add BACKUP_EXPORT_ORIGIN, the village base URL, no trailing slash," >&2
+            echo "     for example https://amora.example.org" >&2
+            echo "  5. Re-run this workflow." >&2
+            echo "Full procedure: docs/RUNBOOK.md, 'Turning on the uploads backup'." >&2
+            exit 1
+          fi
+          echo "All four secrets are present."
+
+      - name: Export the uploads volume from the running village
+        env:
+          ORIGIN: ${{ secrets.BACKUP_EXPORT_ORIGIN }}
+          TOKEN: ${{ secrets.BACKUP_EXPORT_TOKEN }}
+        run: |
+          base="${ORIGIN%/}"
+          echo "Exporting from $base"
+          # --max-time is generous: the volume streams 64 KB at a time out of
+          # the same process that serves members, so a large volume is slow on
+          # purpose. It is not unbounded, because a hung export that never
+          # returns leaves this workflow looking busy rather than broken.
+          code=$(curl -sS --max-time 1500 \
+                   -o uploads.tar -D raw-headers.txt -w '%{http_code}' \
+                   -H "x-backup-export-token: $TOKEN" \
+                   "$base/api/admin/backup/uploads-archive") || {
+            echo "The request to $base did not complete at all (network, DNS or TLS)." >&2
+            echo "Check the village is up first: curl -sS -o /dev/null -w '%{http_code}' $base/health" >&2
+            exit 1
+          }
+          case "$code" in
+            200) : ;;
+            401)
+              echo "The village refused the export token (401). BACKUP_EXPORT_TOKEN here and" >&2
+              echo "BACKUP_EXPORT_TOKEN on the Railway service are not the same value." >&2
+              echo "Set both from one freshly generated value, then redeploy the service." >&2
+              exit 1;;
+            503)
+              echo "The village has no BACKUP_EXPORT_TOKEN set at all (503), so there is" >&2
+              echo "nothing to authenticate against. Set it as a Railway environment" >&2
+              echo "variable on the app service and redeploy, then re-run this workflow." >&2
+              exit 1;;
+            409)
+              echo "An uploads export was already running on that instance (409). Usually a" >&2
+              echo "manual re-run overlapping the scheduled one. Wait, then re-run." >&2
+              exit 1;;
+            *)
+              echo "The export answered HTTP $code, which is not a documented status for" >&2
+              echo "this route. First 2000 bytes of the body follow:" >&2
+              head -c 2000 uploads.tar >&2 || true
+              exit 1;;
+          esac
+          # Normalise the headers the drill checks against. The route writes
+          # these from the same plan object it writes MANIFEST.txt from, so
+          # they cannot disagree; carrying both means the drill can catch an
+          # archive substituted for another village's.
+          #
+          # Fold the header NAME only, never the value. Field names are
+          # case-insensitive and the drill greps them with a case-SENSITIVE
+          # '^x-uploads-...:', so the name has to be lowered here. The values
+          # are case-sensitive data: takenAt is an ISO-8601 instant whose 'T'
+          # and 'Z' are literal characters, and canary is a filename.
+          #
+          # Run 33923245260 lowered the whole LINE. tr is a stream editor with
+          # no idea where the name stops, so the drill compared a value it had
+          # corrupted itself against the untouched copy in MANIFEST.txt and
+          # called a healthy archive unfaithful. That was this job's first
+          # execution against a real village: the uploads backup had been off
+          # since the job was written, so the fold shipped and sat unrun.
+          tr -d '\r' < raw-headers.txt \
+            | grep -iE '^x-uploads-(taken-at|files|bytes|canary|canary-sha256):' \
+            | awk '{ i = index($0, ":"); if (i) print tolower(substr($0, 1, i - 1)) substr($0, i) }' \
+            > uploads-headers.txt || true
+          rm -f raw-headers.txt
+          if [ ! -s uploads-headers.txt ]; then
+            echo "The export answered 200 but carried none of the x-uploads-* manifest" >&2
+            echo "headers. Something between here and the village is rewriting the" >&2
+            echo "response, and an archive nobody can check is not a backup." >&2
+            exit 1
+          fi
+          cat uploads-headers.txt
+          ls -la uploads.tar
+
+      - name: Encrypt to the same two recipients as the database backup
+        env:
+          PROD_PUB: ${{ secrets.BACKUP_GPG_PUBLIC_KEY }}
+          DRILL_PUB: ${{ secrets.BACKUP_DRILL_GPG_PUBLIC_KEY }}
+        run: |
+          tar czf uploads-bundle.tar.gz uploads.tar uploads-headers.txt
+          printf '%s' "$PROD_PUB" > prod_pub.asc
+          printf '%s' "$DRILL_PUB" > drill_pub.asc
+          gpg --batch --yes --output uploads-bundle.tar.gz.gpg \
+            --recipient-file prod_pub.asc \
+            --recipient-file drill_pub.asc \
+            --encrypt uploads-bundle.tar.gz
+          # Same rule as the database bundle: only ciphertext leaves this job.
+          # A member's photograph is not less private than a database row.
+          rm -f uploads-bundle.tar.gz uploads.tar uploads-headers.txt prod_pub.asc drill_pub.asc
+          ls -la uploads-bundle.tar.gz.gpg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: uploads-backup-${{ github.run_id }}
+          path: uploads-bundle.tar.gz.gpg
+          retention-days: 30
+
+  uploads-restore-drill:
+    needs: uploads-backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Require the drill private key before doing anything else
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DRILL_PRIV" ]; then
+            echo "BACKUP_DRILL_GPG_PRIVATE_KEY secret is not set. Refusing to report a" >&2
+            echo "result, for the same reason the database restore-drill refuses." >&2
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: uploads-backup-${{ github.run_id }}
+
+      - name: Decrypt and unpack with the drill key only
+        env:
+          DRILL_PRIV: ${{ secrets.BACKUP_DRILL_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$DRILL_PRIV" | gpg --batch --yes --import
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --output uploads-bundle.tar.gz --decrypt uploads-bundle.tar.gz.gpg
+          tar xzf uploads-bundle.tar.gz
+          test -s uploads.tar
+          test -s uploads-headers.txt
+          mkdir -p unpacked
+          tar xf uploads.tar -C unpacked
+          echo "Decrypted and unpacked."
+
+      - name: Assert the uploads archive is intact, complete, and this village's
+        run: |
+          # What this proves and what it does not, stated so nobody reads more
+          # into a green than is there: it proves every byte is present and
+          # unaltered. It does not prove a fresh Railway deploy boots from
+          # them, because there is no scratch volume to redeploy into inside a
+          # GitHub Action. Intact and complete is the honest ceiling.
+          set -u
+          fail=0
+          say_fail() { echo "FAIL: $*"; fail=1; }
+
+          test -f unpacked/MANIFEST.txt || { echo "MANIFEST.txt is not in the archive at all." >&2; exit 1; }
+          test -f unpacked/EXPORT-STATUS.txt || { echo "EXPORT-STATUS.txt is not in the archive at all." >&2; exit 1; }
+          echo "--- MANIFEST.txt ---"; cat unpacked/MANIFEST.txt
+          echo "--- EXPORT-STATUS.txt ---"; cat unpacked/EXPORT-STATUS.txt
+          echo "--------------------"
+
+          m() { grep -m1 "^$1=" unpacked/MANIFEST.txt | cut -d= -f2- || true; }
+          s() { grep -m1 "^$1=" unpacked/EXPORT-STATUS.txt | cut -d= -f2- || true; }
+          h() { grep -m1 "^x-uploads-$1:" uploads-headers.txt | cut -d: -f2- | tr -d ' \t' || true; }
+
+          M_TAKEN=$(m takenAt); M_FILES=$(m files); M_BYTES=$(m bytes)
+          M_CANARY=$(m canary); M_SHA=$(m canarySha256)
+          M_ENTRIES=$(m archiveEntries); M_OVERSIZE=$(m excludedOversize)
+          S_COMPLETE=$(s complete); S_ENTRIES=$(s entries)
+          S_CONTENT=$(s contentBytes); S_DEGRADED=$(s degradedCount)
+
+          # 1. The stream reached the end. A tar that dies at 60 percent still
+          #    untars without an error worth noticing, and counts alone cannot
+          #    tell a truncated export from a small volume. EXPORT-STATUS.txt
+          #    is written after the last file, so reading it is the proof.
+          [ "$S_COMPLETE" = "yes" ] || say_fail "EXPORT-STATUS says complete='$S_COMPLETE'. This archive is truncated or degraded. It is not a backup."
+
+          # 2. Order, as the contract states it.
+          first=$(tar -tf uploads.tar | head -1)
+          last=$(tar -tf uploads.tar | tail -1)
+          [ "$first" = "MANIFEST.txt" ] || say_fail "first archive entry is '$first', expected MANIFEST.txt"
+          [ "$last" = "EXPORT-STATUS.txt" ] || say_fail "last archive entry is '$last', expected EXPORT-STATUS.txt"
+
+          # 3. Nothing quietly left out. A non-zero oversize count means a real
+          #    file on the volume is NOT in this archive.
+          [ "$M_OVERSIZE" = "0" ] || say_fail "excludedOversize=$M_OVERSIZE. Files on the volume are missing from this archive: $(grep '^oversize=' unpacked/MANIFEST.txt | cut -d= -f2- | tr '\n' ' ')"
+          [ "$S_DEGRADED" = "0" ] || say_fail "degradedCount=$S_DEGRADED. Files changed under the export, so their contents here are wrong: $(grep '^degraded=' unpacked/EXPORT-STATUS.txt | cut -d= -f2- | tr '\n' ' ')"
+
+          # 4. Counts and bytes, measured off the extracted files rather than
+          #    trusted from the manifest that claims them.
+          got_files=$(find unpacked -maxdepth 1 -type f ! -name MANIFEST.txt ! -name EXPORT-STATUS.txt | wc -l | tr -d ' ')
+          got_bytes=$(find unpacked -maxdepth 1 -type f ! -name MANIFEST.txt ! -name EXPORT-STATUS.txt -printf '%s\n' | awk '{n+=$1} END {print n+0}')
+          got_entries=$(tar -tf uploads.tar | wc -l | tr -d ' ')
+          [ "$got_files" = "$M_FILES" ] || say_fail "extracted $got_files upload files, manifest says $M_FILES"
+          [ "$got_bytes" = "$M_BYTES" ] || say_fail "extracted $got_bytes bytes of file content, manifest says $M_BYTES"
+          [ "$got_entries" = "$M_ENTRIES" ] || say_fail "archive holds $got_entries entries, manifest says $M_ENTRIES"
+          [ "$S_ENTRIES" = "$M_FILES" ] || say_fail "status says $S_ENTRIES entries written, manifest planned $M_FILES"
+          [ "$S_CONTENT" = "$M_BYTES" ] || say_fail "status says $S_CONTENT content bytes, manifest planned $M_BYTES"
+
+          # 5. The canary, re-hashed from the bytes that actually arrived.
+          #    files=0 is a young village, not a broken export: a fresh
+          #    instance answers 200 with the two manifest entries, an empty
+          #    canary and complete=yes. A drill that treats zero as failure
+          #    goes red on every new village, so this branches instead.
+          if [ "$M_FILES" = "0" ]; then
+            [ -z "$M_CANARY" ] || say_fail "files=0 but the manifest names canary='$M_CANARY'"
+            echo "note: this village has no uploads yet. Empty archive, complete=yes, which is a pass."
+          else
+            if [ -z "$M_CANARY" ]; then
+              say_fail "files=$M_FILES but the manifest names no canary"
+            elif [ -f "unpacked/$M_CANARY" ]; then
+              got_sha=$(sha256sum "unpacked/$M_CANARY" | cut -d' ' -f1)
+              [ "$got_sha" = "$M_SHA" ] || say_fail "canary '$M_CANARY' hashes to $got_sha, manifest says $M_SHA"
+            else
+              say_fail "canary '$M_CANARY' named in the manifest is not in the archive"
+            fi
+          fi
+
+          # 6. Headers taken at export time agree with the manifest inside the
+          #    bundle. Two independent copies of the same numbers; a mismatch
+          #    means an archive was substituted between the village and here.
+          [ "$(h files)" = "$M_FILES" ] || say_fail "header x-uploads-files=$(h files) disagrees with manifest files=$M_FILES"
+          [ "$(h bytes)" = "$M_BYTES" ] || say_fail "header x-uploads-bytes=$(h bytes) disagrees with manifest bytes=$M_BYTES"
+          [ "$(h canary)" = "$M_CANARY" ] || say_fail "header x-uploads-canary='$(h canary)' disagrees with manifest canary='$M_CANARY'"
+          [ "$(h canary-sha256)" = "$M_SHA" ] || say_fail "header x-uploads-canary-sha256 disagrees with manifest canarySha256"
+          [ "$(h taken-at)" = "$M_TAKEN" ] || say_fail "header x-uploads-taken-at='$(h taken-at)' disagrees with manifest takenAt='$M_TAKEN'"
+
+          if [ "$fail" = "1" ]; then
+            echo ""
+            echo "UPLOADS RESTORE DRILL FAILED. The encrypted archive from this run is not a" >&2
+            echo "faithful copy of the uploads volume. Do not rely on it." >&2
+            exit 1
+          fi
+          echo ""
+          echo "Uploads drill passed: $M_FILES files, $M_BYTES bytes, complete=yes, nothing"
+          echo "degraded, nothing excluded, canary re-hashed from the delivered bytes, and"
+          echo "the export-time headers agree with the manifest inside the encrypted bundle."
+
+  # ---------------------------------------------------------------------------
+  # The alarm. Everything above this line was already careful to fail loudly,
+  # and none of it made a sound anybody heard: six of the fifteen runs before
+  # 2026-09-02 were red and the backup was still being described as working.
+  #
+  # A red cross on a page nobody opens is not an alarm. An open issue is. It
+  # appears in a list somebody already reads, it notifies on creation and on
+  # every comment, and it answers "are my backups working" without anyone
+  # needing to know where Actions lives. It closes itself on the first fully
+  # green run, so an open one always means a live problem and never an old one.
+  # ---------------------------------------------------------------------------
+  alarm:
+    needs: [backup, restore-drill, restore-drill-negative-control, uploads-configured, uploads-backup, uploads-restore-drill]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@v9
+        env:
+          R_BACKUP: ${{ needs.backup.result }}
+          R_DRILL: ${{ needs.restore-drill.result }}
+          R_NEG: ${{ needs.restore-drill-negative-control.result }}
+          R_UP: ${{ needs.uploads-backup.result }}
+          R_UPDRILL: ${{ needs.uploads-restore-drill.result }}
+          R_CONF: ${{ needs.uploads-configured.outputs.configured }}
+        with:
+          script: |
+            const TITLE = "Backups are failing";
+            const LABEL = "backup-alarm";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const jobs = [
+              ["Database dump and encrypt", process.env.R_BACKUP,
+               "No new database backup was taken by this run."],
+              ["Database restore drill", process.env.R_DRILL,
+               "A backup was taken, but restoring it did not produce a faithful copy. Treat it as unusable."],
+              ["Restore drill negative control", process.env.R_NEG,
+               "The check that proves the drill is able to fail did not pass, so a green drill cannot be trusted either."],
+              ["Uploads export", process.env.R_UP,
+               "Photographs and documents on the uploads volume were not backed up by this run."],
+              ["Uploads restore drill", process.env.R_UPDRILL,
+               "An uploads archive was taken, but it is not a faithful copy of the volume."],
+            ];
+            // A village that has never switched the uploads backup on has two
+            // jobs sitting at "skipped", and skipped is not success. Counting
+            // them as broken opened the alarm issue on every run of every
+            // village, permanently, which is how an alarm stops being read.
+            // Not switched on is reported and does not fail; the database
+            // backup beside it is unaffected either way.
+            const uploadsOn = process.env.R_CONF === "true";
+            const uploadsJobs = new Set(["Uploads export", "Uploads restore drill"]);
+            const broken = jobs.filter(([name, result]) =>
+              result !== "success" && (uploadsOn || !uploadsJobs.has(name)));
+
+            // A job skipped because the job it needed failed is a consequence,
+            // not a second independent fault. Saying so keeps one problem from
+            // reading as two at the hour when that distinction matters.
+            const lines = broken.map(([name, result, why]) =>
+              result === "skipped"
+                ? `- **${name}** did not run, because the job before it failed.`
+                : `- **${name}**: ${result}. ${why}`);
+            if (!uploadsOn) {
+              lines.push(
+                "- _The uploads volume has no backup on this deployment, and this run did " +
+                "not change that. It is not counted as a fault above because it has never " +
+                "been switched on. See the run summary, or docs/RUNBOOK.md, " +
+                "\"Turning on the uploads backup\"._",
+              );
+            }
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: LABEL, per_page: 20,
+            });
+            const open = existing.data.find((i) => i.title === TITLE);
+
+            if (broken.length === 0) {
+              if (open) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo, issue_number: open.number,
+                  body: `Backups are green again as of [run ${context.runId}](${runUrl}). The database dumped, restored into a scratch server and matched its manifest, and the uploads archive came back intact and complete. Closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: open.number, state: "closed",
+                });
+                core.notice(`Backups green. Closed alarm issue #${open.number}.`);
+              } else {
+                core.notice("Backups green. No alarm issue open.");
+              }
+              return;
+            }
+
+            const body = [
+              `Backups did not fully succeed on [run ${context.runId}](${runUrl}), at ${new Date().toISOString()}.`,
+              ``,
+              `**What is broken**`,
+              ...lines,
+              ``,
+              `**What to do**`,
+              `Open [docs/RUNBOOK.md](https://github.com/Rieki777/village-os/blob/main/docs/RUNBOOK.md) in Village OS and read "The backup is red". It says what each failure above means, which of them are urgent, and what to do about each. A first-time failure here is usually two repository secrets that were never set, and the run log names them.`,
+              ``,
+              `This issue closes itself on the next fully green run. While it is open, the problem is live.`,
+            ].join("\n");
+
+            if (open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: open.number, body,
+              });
+              core.setFailed(`Backups still failing. Commented on issue #${open.number}.`);
+            } else {
+              const made = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: TITLE, body, labels: [LABEL],
+              });
+              core.setFailed(`Backups failing. Opened issue #${made.data.number}.`);
+            }

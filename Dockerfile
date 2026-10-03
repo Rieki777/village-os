@@ -2,10 +2,10 @@
 #
 # One image, many villages.
 #
-# This reproduces what Railway's nixpacks build does today (railway.toml:
-# `pnpm run build`, then `NODE_ENV=production node dist/index.js`) as something
-# a founder with nothing but Docker and a DATABASE_URL can run, and something
-# CI can publish once and roll out to every instance.
+# Every village runs this image: published as ghcr.io/rieki777/village-os by
+# .github/workflows/release.yml, started by docker-compose.yml on one machine,
+# and built by Railway for a village deploying from source (railway.toml sets
+# the Dockerfile builder). It replaced the nixpacks build on 2026-08-31.
 #
 # The two facts that shape everything below:
 #
@@ -25,27 +25,25 @@
 #     silent degradation, not a crash: `docs/knowledge` missing only prints
 #     "[knowledge] docs/knowledge missing" and Maia serves an empty shelf.
 #
-# Building it by hand:
+# Running a village: START_HERE.md, with docker-compose.yml, which also starts
+# the database. Building and running it by hand, against a MySQL you already
+# have, with the .env that `node scripts/fork-init.mjs` writes:
 #
 #   docker build --build-arg GIT_SHA=$(git rev-parse HEAD) -t village-os .
-#   docker run -p 3000:3000 \
-#     -e DATABASE_URL=mysql://user:pass@host:3306/village \
-#     -e AUTH_TOKEN_SECRET=$(openssl rand -hex 32) \
-#     -v village-data:/app/data \
-#     village-os
+#   docker run -p 3000:3000 --env-file .env -v village-data:/app/data village-os
 #
 # GIT_SHA is what lets /health say which commit is serving; without it the
 # marker reads "dev". DATABASE_URL is the only variable the server refuses to
-# boot without. AUTH_TOKEN_SECRET is not required but should be set: unset, the
-# server warns and uses a random per-process secret, so every restart logs
-# everybody out and a second replica cannot read the first one's sessions.
-# The volume is where uploads live; without it they vanish with the container.
+# boot without, and ADMIN_PASSWORD is what the /claim page needs to create the
+# founder: without it nobody can ever sign in as one. AUTH_TOKEN_SECRET should
+# be set too: unset, the server uses a random per-process secret, so every
+# restart logs everybody out. The volume is where uploads live; without it
+# they vanish with the container.
 #
 # Debian rather than Alpine on purpose. bcrypt resolves its native binding
 # through node-gyp-build and sharp through @img/sharp-linux-x64, and both pick
 # their glibc prebuilds here. Alpine would send both down the musl path, which
-# is a different set of prebuilds and a compile when one is missing. nixpacks
-# already builds on Debian, so this is also the closer reproduction.
+# is a different set of prebuilds and a compile when one is missing.
 
 ARG NODE_IMAGE=node:22-bookworm-slim
 

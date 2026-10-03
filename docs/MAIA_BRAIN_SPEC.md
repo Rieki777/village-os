@@ -71,12 +71,15 @@ const MODULE_DOCS: Record<string, string> = {
 };
 ```
 
-Eight of the sixteen modules have a contract. **Eight do not**: `quests`,
-`gratitude`, `progression`, `profiles`, `forum`, `automation`, `network`,
-`commerce`. For those she has the catalog copy in `shared/modules.ts` (name,
-description, dependencies, capabilities, variables) and nothing deeper, and she
-must say so rather than reason from the modules that do have one. The catalog is
-always available for all sixteen; the contract is the deep layer for eight.
+When this was written, eight of the platform's then sixteen modules had a
+contract. **Eight did not**: `quests`, `gratitude`, `progression`, `profiles`,
+`forum`, `automation`, `network`, `commerce`. The platform has more modules
+now, and the live map is `MODULE_DOCS` in `server/lib/knowledge.ts`; read it
+rather than the snippet above. For a module with no contract she has the catalog
+copy in `shared/modules.ts` (name, description, dependencies, capabilities,
+variables) and nothing deeper, and she must say so rather than reason from the
+modules that do have one. The catalog is always available for every module;
+the contract is the deep layer for those that have one.
 `crowdpool-dashboard.md` describes no shipped module and is excluded entirely.
 
 **Patterns** are distilled operational counsel written by ReGen: "a village

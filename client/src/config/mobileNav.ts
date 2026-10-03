@@ -23,6 +23,7 @@ import {
   PenLine,
   Shield,
   Compass,
+  NotebookPen,
 } from "lucide-react";
 
 /**
@@ -85,6 +86,12 @@ export type FabAction = {
   /** Only show when signed in (true) or only when signed out (false). */
   requiresAuth?: boolean;
   /**
+   * Module id from shared/modules.ts. The row shows only while that module is
+   * on for this viewer, by the same test the header menu uses (NavLink.module
+   * in config/nav.ts). Absent means always shown.
+   */
+  module?: string;
+  /**
    * When the user is already on this route prefix, the row is useless as
    * navigation, so it swaps to `insteadOf` instead of linking to the page the
    * person is already reading.
@@ -96,12 +103,24 @@ export type FabAction = {
 /**
  * Rendered as a column that grows UPWARD from the trigger, so the LAST entry
  * lands closest to the thumb. Quests sits last on purpose: it is the core loop.
+ * The Journal sits right above it, because it is the other thing a member
+ * reaches for daily, and only while the journal module is on for them.
  */
 export const FAB_ACTIONS: FabAction[] = [
   { key: "roles", label: "Roles", href: "/roles", Icon: Shield },
   { key: "profile", label: "Profile", href: "/profile", Icon: User, requiresAuth: true },
   { key: "signin", label: "Sign in", href: "/login", Icon: UserPlus, requiresAuth: false },
   { key: "work-with-us", label: "Work with us", href: "/work-with-us", Icon: MessageCircle },
+  {
+    key: "journal",
+    label: "Journal",
+    href: "/journal",
+    Icon: NotebookPen,
+    requiresAuth: true,
+    module: "journal",
+    // On the journal itself the row would link to the page being read.
+    anchorPath: "/journal",
+  },
   {
     key: "quests",
     label: "Quests",

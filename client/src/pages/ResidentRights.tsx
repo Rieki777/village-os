@@ -29,7 +29,7 @@ import {
  * (GET /api/content/legal), which is empty on any instance that has not
  * written its own. See WhyCostaRica.tsx for the fuller version of this same
  * fix; Amora's original wording is preserved as data in
- * server/seeds/brochure-legal-seed.json, not deleted.
+ * server/seeds/amora/brochure-legal-seed.json, not deleted.
  */
 const LAND_SHARE_BASE_DESCRIPTION =
   "Your Land Share Agreement gives you long-term security on your piece of this land, renewable, transferable to your children{{TRANSFER}}, and protected by community ownership structures that ensure the land itself can never be sold away from the community.";

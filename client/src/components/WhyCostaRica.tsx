@@ -24,7 +24,7 @@ import { useVillageContent } from "@/hooks/useVillageContent";
  * `/api/content/:section`). A fresh instance has never written that section,
  * so the fetch 404s, and this renders an honest "not published yet" card
  * instead of Amora's law. Amora's own six points are preserved as DATA in
- * server/seeds/brochure-legal-seed.json (not deleted, moved), but that seed
+ * server/seeds/amora/brochure-legal-seed.json (not deleted, moved), but that seed
  * is not yet wired to auto-apply to Amora's already-existing content
  * document (see the brochure lane's report); until it lands here, Amora's
  * production instance shows the same neutral placeholder as a fresh one.

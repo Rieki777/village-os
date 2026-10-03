@@ -32,79 +32,143 @@ every entry, including the ones that say no.
 
 ## Unreleased
 
-Work that is on `main` and has **not been published as an image**. No village
-is running this. It is written down here as it lands so that the next release
-entry is a record rather than a reconstruction.
+Work on `main` that has not been published as an image yet. No village runs
+it. It is written here as it lands, so the next release entry is a record
+made at the time.
 
-At the last count there were 174 commits and five database changes waiting
-here since 1.1.0. That is a large jump for one release, and it is the reason
-`docs/UPGRADING.md` tells you to move one release at a time.
+---
+
+## 1.2.0 (2026-10-03)
+
+**The release that makes a village yours to run.** Village OS is now public,
+free and open source, with a setup path anybody can follow on their own
+computer or hosting provider, and a new village starts clean instead of
+wearing the first village's story.
+
+This is a large release: more than 230 changes on `main` and 60 database
+changes since 1.1.0. Read `docs/UPGRADING.md` before you move, take the backup it describes,
+and move from 1.1.0 straight to 1.2.0.
 
 ### What changed for your village
 
-- **The first payout of a village's life is no longer lost.** Every village
-  stood up so far lost its first payout to a bug in the economy loop. Fixed.
-  It does not recover payouts already missed.
-- **Seats stop paying Gratitude by default.** Holding a seat now pays Village
-  Credits. Gratitude remains available and stops being the automatic choice.
-  A confirmed quest's Gratitude is unaffected.
-- **The ownership token stops carrying another village's name.** Every village
-  booted with the founding village's word on the token that represents
-  ownership of its land, in both the name members read and the internal
-  identifier. Both are corrected, and the identifier is frozen from here on.
-- **Two people editing the same list no longer erase each other.** A whole-list
-  save could silently discard another person's change made seconds earlier,
-  with both saves reporting success. Nine lists were affected, including tools,
-  submissions and milestones.
-- **A village can say where it is,** and gets a picture of its own ground under
-  the Living Map instead of somebody else's valley.
-- **A second way to sign in,** with a Google button, and a founder can claim
-  their village from a phone without a shell.
-- **A failed update now shows a page that explains itself** instead of a blank
-  error, and says that no data was lost.
-- **A new village gets artwork made from its own name.**
-- **Your village decides what it calls the people who run it.** The default is
-  Catalyst, and Admin, Make This Yours takes your own word for it: founder,
-  steward, elder, whatever the village says. Every sentence a member reads that
-  names one of those people follows. It is a name and nothing else: nobody
-  gains or loses any permission, and the admin panel keeps its own name,
-  because a place is not a person.
-- **One moon number, everywhere.** Dating something now takes one number,
-  "Moon 47", counted from your village's own first moon and never reset.
-  Screens used to show the moon's place in the lunar year instead, a number
-  that went back to 1 every year, so two moons a year apart carried the same
-  one. The calendar, the year wheel, the week and month grids and the
-  subscribable calendar feed all say the same number now. A village that has
-  not set its first moon reads the moon's name and its dates and no number,
-  which is the honest answer rather than "Moon 0".
+**Running it yourself**
+
+- **The platform has a name: Village OS.** `/api/platform/info` reports it as
+  `product`, and reports the true version, 1.2.0. (Its `platform` field keeps
+  its old value on purpose: other villages and the hub match it exactly.)
+- **One computer is enough.** `docker-compose.yml` runs the village and its
+  MySQL database together, with a volume for uploads. `START_HERE.md` walks
+  through it, and `node scripts/fork-init.mjs --compose` writes every setting
+  and secret for you.
+- **A starter kit on every release page**: the guide, the setup prompt for
+  your own AI assistant, the compose file, the settings template and the setup
+  script, packaged from the release itself.
+- **An AI assistant has one rule.** `AGENTS.md` is its front door: it explains
+  each step and runs a command only after you say yes, and secrets never pass
+  through it. `fork-init` no longer prints your founder password; you read it
+  from `.env` yourself.
+- **Claim your village from a phone.** Open `/claim`, type the one-time
+  password, set your own. No shell, no curl.
+- **A second way to sign in,** with Google, and `FOUNDER_EMAILS` settles the
+  founder role on sign-in.
+- **Members arrive by invitation.** A member who may vouch makes a one-use
+  link from their profile, valid for fourteen days. Anybody else can ask to
+  join.
+
+**A new village starts clean**
+
+- **The first village's own story pages are off in every new village**: its
+  four journey pages, master plan, team, housing, visit and membership forms,
+  rights pages and build history. "/" shows a plain welcome page with your
+  village's own name, and the menus, footer and sitemap carry no links to
+  them. A village that already served them keeps them (see the data note).
+- **Neutral legal and membership wording to start from,** with places for
+  your village's name, legal entity, data controller and contact, in
+  `server/seeds/templates/`. Nothing applies it for you.
+- **Your currency is yours to set.** It no longer defaults to another
+  village's, and the Launch Plan asks for it. It asks for your timezone too,
+  which still starts on the first village's clock until you choose one.
+- **A new village gets artwork made from its own name,** and names its own
+  cast: the word for the people who run it (Catalyst by default), and its own
+  archetypes.
+
+**Deciding together**
+
+- Proposals from inside and outside the village, delegation that a member
+  accepts, terms on every seat, a steward's veto that carries a reason, and a
+  village that can hold a power itself so that giving it back is a vote.
+- A launch is a proposal that names its stewards, and a village says what it
+  is for before it launches.
+
+**Value and work**
+
+- **Every village was losing the first payout of its life.** Fixed. It does
+  not recover payouts already missed.
+- **Seats pay Village Credits by default,** and Village Credits count in
+  hundredths.
+- A member can redeem what they hold, a circle can hold its own treasury with
+  two caps, and a member is vouched into membership.
+- **Two people editing the same list no longer erase each other.**
+
+**Place and people**
+
+- A village can say where its land is, and the Living Map draws its own
+  ground. Land parcels, places, photographs.
+- A member can open a venture, find their own reservation, say how they are,
+  and carry a portrait. Training records what was completed, and a module can
+  be marked mandatory.
+- Erasure goes further and records how far it got, and a failed update shows a
+  page that explains itself instead of a blank error.
+- **A Journal module**, off until a village turns it on: a member answers good
+  questions in their own words, morning and evening, with a weekly team pulse
+  and a kind road for feedback that would otherwise go unsaid.
 
 ### What you must do
 
-- **Set `FOUNDER_EMAILS`** if you have not. Signing in and holding the founder
-  role are settled together now, and this variable is what settles it.
-- **Read the data note below before upgrading.** Two of the five changes alter
-  information you already have.
+- **Read `docs/UPGRADING.md`, then take the backup it describes.** This
+  release changes your database.
+- **Set `FOUNDER_EMAILS`** if your village uses Google sign-in.
+- **Check your village's currency and timezone** in the Launch Plan
+  (`/journey-to-launch`) after upgrading. A village that never set its
+  currency was reading another village's, and now reads blank until it
+  chooses.
 
 ### Does it touch your data
 
-**Yes. Five changes, and two of them are one-way.**
+**Yes. 60 database changes**, applied by the village itself as the new version
+starts, before it answers anyone. Almost all of them add tables and columns.
+A few correct values that were wrong, and those corrections stay if you go
+back to 1.1.0:
 
 | Change | What it does | Undone by going back? |
 |---|---|---|
-| Migration ledger checksum | Adds a column recording what was in each applied change | Yes, harmless either way |
-| Collection versions | Adds a counter per list so a save can tell it is stale | Yes, harmless either way |
-| Village land | Adds one row holding where the village is | Yes, harmless either way |
-| Ownership token rename | **Changes existing rows.** Corrects the token name and identifier | **No** |
-| Seat payouts | **Changes existing rows.** Switches a seat payout setting off | **No** |
+| Ownership token rename | Corrects the token's name and identifier | **No** |
+| Seat payouts | Switches the Gratitude payout default off for seats | **No** |
+| Brochure pages | Writes `brochure-pages: on` in a database that already has members, so an existing village keeps its story pages. A new, empty database gets nothing, which means off | Harmless either way |
 
-Both one-way changes are corrections to values that were wrong. Going back to
-1.1.0 leaves the corrected values in place, which is the intended outcome.
-Take the backup in `docs/UPGRADING.md` Step 4 anyway.
+Going back works. Before anything is published, the release workflow applies
+every one of them to a populated 1.1.0 database and confirms that every table,
+column, type and constraint 1.1.0 needs is still there
+(`node scripts/check-migration-compat.mjs --base v1.1.0`). It passed on
+2026-10-02, and the tag runs it again before the image is published. Take the
+backup anyway.
 
-> **Not yet verified.** These five changes reached `main` in commits that no
-> completed test run covers, so the automatic check that proves a release can
-> be rolled back has not run on any of them. `docs/RELEASING.md` describes the
-> run that has to happen before this becomes a release.
+### For operators
+
+- **The repository is public**, and the internal coordination notes that
+  were in it moved to a private operations repository.
+  `scripts/check-public-tree.mjs` now fails CI on internal notes, Railway
+  hosts and ids, key paths, private keys and home-folder paths.
+- The release workflow checks that the tag, `package.json` and
+  `PLATFORM_VERSION` agree before it builds, and publishes the GitHub release
+  with the starter kit, built with `git archive` from the tag.
+- `.github/workflows/selfhost-smoke.yml` walks the compose path from a clean
+  checkout on every change to it: boot, migrations, `/claim`, a founder
+  account, a restart, and a backup and restore with the exact commands in
+  `START_HERE.md`. Run it by hand with a published image to prove a release
+  pulls and boots.
+- The encrypted database backup must run from a private repository. On a
+  public one, anybody can download the artifacts and read the logs.
 
 ---
 

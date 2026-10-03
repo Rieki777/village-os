@@ -39,7 +39,8 @@ export type AssistantMode =
   | "launch"
   | "organize"
   | "studio"
-  | "synthesize";
+  | "synthesize"
+  | "journal";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -65,11 +66,22 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   organize: { audience: "admin", dailyBudget: 50, maxTokens: 800, toolCalls: 2 },
   studio: { audience: "admin", dailyBudget: 150, maxTokens: 1600, toolCalls: 4 },
   synthesize: { audience: "admin", dailyBudget: 25, maxTokens: 2000, toolCalls: 0 },
+  // The journal's guide and its feedback shaping (server/routes/journal.ts).
+  // Its own bucket, so an evening of journalling cannot spend the concierge's
+  // day. No tools: the member's own data arrives prefetched and fenced, and
+  // the guide has nothing else to reach for.
+  journal: { audience: "member", dailyBudget: 150, maxTokens: 700, toolCalls: 0 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */
 export const MAX_TURNS = 40;
 export const MAX_MESSAGE_CHARS = 4000;
+
+/**
+ * The burst guard's ceiling per hour, for a caller that names no other. Keyed
+ * on the network by default; see `AssistantRequest.burstKey`.
+ */
+export const ASSIST_BURST_PER_HOUR = 30;
 
 /**
  * One place for the model id, which was pasted into five call sites and would
@@ -247,6 +259,78 @@ export function parseJsonReply<T = any>(text: string, fallback: T): T {
   }
 }
 
+/** A reply the provider stopped because it ran out of room, on either wire. */
+function cutOff(stopReason: string | null | undefined): boolean {
+  return stopReason === "max_tokens" || stopReason === "length";
+}
+
+/**
+ * The named string fields of a reply that was asked to be one JSON object,
+ * read so that a member never sees raw model output. Null when nothing could
+ * be read, and the caller then serves its own sentence.
+ *
+ * `parseJsonReply` alone was not enough for a caller that shows the words: on
+ * a failed parse the callers served `call.text` as it came, so a reply cut off
+ * at the token cap, or valid JSON followed by prose holding a stray brace,
+ * reached the page as `{"reply": "I hear how much...`. Three readings, in
+ * order:
+ *
+ *   1. The whole object parses: each field is its string, or "" when the
+ *      model left it out or gave it another type.
+ *   2. It does not: each field is recovered from a COMPLETE JSON string in
+ *      the text, closing quote and all, and unescaped. A string the cut-off
+ *      ended inside is never served, because half a sentence is a fragment.
+ *   3. Nothing was recovered, and `proseField` is named: plain prose with no
+ *      brace and no fence, which the provider ended on its own, is the
+ *      model's whole answer in its own words and goes in that field.
+ *
+ * Anything else is unreadable, and the answer is null.
+ */
+export function readReplyFields<K extends string>(
+  text: string,
+  fields: readonly K[],
+  opts: { stopReason?: string | null; proseField?: K } = {},
+): Record<K, string> | null {
+  const raw = String(text ?? "");
+  const empty = () => Object.fromEntries(fields.map((f) => [f, ""])) as Record<K, string>;
+
+  const parsed = parseJsonReply<unknown>(raw, null);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const out = empty();
+    for (const f of fields) {
+      const v = (parsed as Record<string, unknown>)[f];
+      if (typeof v === "string") out[f] = v;
+    }
+    return out;
+  }
+
+  const salvaged = empty();
+  let found = false;
+  for (const f of fields) {
+    const escaped = f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(`"${escaped}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(raw);
+    if (!m) continue;
+    // A raw newline inside a string is invalid JSON and a common slip, so
+    // control characters are escaped before the string is read.
+    const body = m[1].replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+    try {
+      salvaged[f] = JSON.parse(`"${body}"`) as string;
+      found = true;
+    } catch {
+      // A malformed escape is not the model's words either.
+    }
+  }
+  if (found) return salvaged;
+
+  const prose = raw.trim();
+  if (opts.proseField && prose && !/[{}]|```/.test(prose) && !cutOff(opts.stopReason)) {
+    const out = empty();
+    out[opts.proseField] = prose;
+    return out;
+  }
+  return null;
+}
+
 // ── The call ─────────────────────────────────────────────────────────────────
 
 export interface AssistantRequest {
@@ -258,6 +342,17 @@ export interface AssistantRequest {
   model: string;
   /** For the per-IP burst guard. */
   clientIp: string;
+  /**
+   * The burst guard's bucket, for a caller that knows a better one than the
+   * network. Absent, it is `assist:<clientIp>`, which is right for a stranger
+   * and every existing caller. A signed-in member surface passes a key of its
+   * own per member, because a whole team often shares one house router, and
+   * one member's long evening on a network-wide bucket throttled every other
+   * member behind it.
+   */
+  burstKey?: string;
+  /** That bucket's ceiling per hour. Absent, ASSIST_BURST_PER_HOUR. */
+  burstPerHour?: number;
   /**
    * Who is asking, for the usage row. Null on the public surfaces.
    * `user_id` cannot be backfilled once rows exist, so it goes in from the
@@ -375,7 +470,8 @@ function withPrefetched(system: string, prefetched: { key: string; data: unknown
  *
  * The per-IP burst limit runs first and ONCE, because it is a guard about a
  * caller and not about spend: an admin surface where every founder shares one
- * office IP would otherwise throttle the village for its own use.
+ * office IP would otherwise throttle the village for its own use. A caller
+ * that names a `burstKey` is counted on that bucket in place of its network.
  *
  * The day budget and the borrowed-key ceiling moved INSIDE the loop, one of
  * each immediately before each POST. `overLimit` counts and inserts in the
@@ -393,7 +489,8 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
   const spec = ASSISTANT_MODES[req.mode];
   if (!spec) return { ok: false, status: 400, error: `unknown assistant mode: ${String(req.mode)}` };
 
-  if (await deps.rateLimited(`assist:${req.clientIp}`, 30, 60 * 60 * 1000)) {
+  const burstKey = req.burstKey || `assist:${req.clientIp}`;
+  if (await deps.rateLimited(burstKey, req.burstPerHour ?? ASSIST_BURST_PER_HOUR, 60 * 60 * 1000)) {
     return { ok: false, status: 429, error: "Slow down a moment, then keep going." };
   }
 
