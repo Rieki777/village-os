@@ -29,6 +29,7 @@ import {
   type SetupTarget,
 } from "../../shared/modules";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { commsReadiness } from "./comms/setup";
 import { recordEvent } from "./events";
 import { hasRealContent } from "./examples";
 import { markModuleUse, usageMarkPending } from "./moduleUsage";
@@ -724,19 +725,26 @@ export function attachModuleReadiness(getPool: () => Pool): void {
     }
     if (def.id === "comms") {
       /*
-       * NOT READY, AND SAYING WHERE TO GO. What ready means for comms is the
-       * Settings checklist (the comms build spec 5.15): the provider key,
-       * a verified sending domain, a sender, delivery reports, a postal
-       * address, and a test email that was delivered. None of that can be read
-       * yet, because the settings document and the domain check land with the
-       * setup lane (B4), which replaces this reader with the real answer.
+       * READY WHEN THE SIX REQUIRED ITEMS OF THE SETUP CHECKLIST ARE DONE
+       * (the comms build spec 5.15 and 5.16): the provider key, a verified
+       * sending domain, a sender on it, delivery reports, a postal address,
+       * and a test email the provider reported delivered. The checklist is
+       * server/lib/comms/setup.ts, and the Settings screen, the Overview's
+       * banner and the launch journey's email rows read the same items, so
+       * this answer and theirs cannot disagree.
        *
-       * Answering "not ready" until then is the honest direction. The other
-       * one would tell a founder their village can send email when nothing
-       * has checked that it can, and the Go-live card would offer itself on
-       * the strength of a guess.
+       * The hint names what is still open. A read that fails answers not
+       * ready, which is the honest direction: the other one would tell a
+       * founder their village can send email when nothing checked that it can.
        */
-      def.readiness = async () => ({ ready: false, hint, target });
+      def.readiness = async () => {
+        try {
+          const r = await commsReadiness({ getPool });
+          return { ready: r.ready, hint: r.ready ? hint : r.hint, target };
+        } catch {
+          return { ready: false, hint, target };
+        }
+      };
       continue;
     }
     def.readiness = async () => {

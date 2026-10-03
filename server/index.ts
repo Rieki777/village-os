@@ -17608,7 +17608,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({ success: true });
   });
-  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice });
+  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice, adminActor, members, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), projectName: () => mergedConfig().project.name, liveHoldersOf, emailConfigRepo });
   registerCommsPublicRoutes(app, { overLimit, clientIp });
 
   // ── S63: Integrations — every third-party key, write-only ────────────────

@@ -252,6 +252,18 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
   },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
+  /*
+   * THE VILLAGE'S EMAIL, FOUR ROWS, ALL SET UP IN COMMS SETTINGS. The key is
+   * still checked from server/index.ts; the other three are read straight off
+   * the Comms Settings checklist (server/lib/comms/setup.ts, checkKey
+   * `comms:<item>`), so this journey and that screen answer from one list.
+   *
+   * The domain row was a manual tick until Village Comms, because nothing
+   * could see a domain's DNS. Comms Settings asks the provider now, so the
+   * tick became a check. The row keeps its id, and a confirmation stored
+   * under it before is simply no longer read: a live check outranks a
+   * remembered "done".
+   */
   {
     id: "resend-key",
     group: "integrations",
@@ -259,20 +271,42 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     why: "Without it nobody receives a welcome, a receipt, or a notification digest. The village goes quiet exactly when someone new arrives.",
     severity: "recommended",
     checkKey: "resend-key",
-    fixAt: "/admin?tab=integrations",
-    fixLabel: "Open Integrations",
+    fixAt: "/admin?tab=comms-settings",
+    fixLabel: "Open Comms Settings",
     runbookAnchor: "resend",
   },
   {
     id: "email-domain",
     group: "reach",
     title: "Verify your sending domain",
-    why: "Mail from an unverified domain lands in spam. Verification is DNS records at your registrar; the Integrations tab shows exactly which ones.",
+    why: "Mail from an unverified domain lands in spam, or nowhere. Comms Settings adds the domain, shows the DNS records to copy to wherever your DNS is managed, and checks them with Resend.",
     severity: "recommended",
-    checkKey: "manual:email-domain",
-    fixAt: "/admin?tab=integrations",
-    fixLabel: "Open Integrations",
+    checkKey: "comms:domain",
+    fixAt: "/admin?tab=comms-settings",
+    fixLabel: "Open Comms Settings",
     runbookAnchor: "resend-domain",
+  },
+  {
+    id: "email-sender",
+    group: "reach",
+    title: "Say who the village's email comes from",
+    why: "Every email leaves under one name and one address, and the address has to be on your verified domain. With no sender set, nothing is sent at all.",
+    severity: "recommended",
+    checkKey: "comms:sender",
+    fixAt: "/admin?tab=comms-settings",
+    fixLabel: "Open Comms Settings",
+    runbookAnchor: "resend",
+  },
+  {
+    id: "email-delivery-reports",
+    group: "integrations",
+    title: "Connect email delivery reports",
+    why: "Resend tells the village which emails arrived, which bounced and which were marked as spam. Without it a dead address keeps being written to, and nobody hears about it.",
+    severity: "recommended",
+    checkKey: "comms:delivery-reports",
+    fixAt: "/admin?tab=comms-settings",
+    fixLabel: "Open Comms Settings",
+    runbookAnchor: "resend",
   },
   {
     id: "stripe-keys",
