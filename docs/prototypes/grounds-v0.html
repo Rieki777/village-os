@@ -3421,7 +3421,23 @@ function addSparkle(x,y,col){for(let i=0;i<14;i++)sparkles.push({x,y,vx:(Math.ra
 let mistSeeds=[...Array(14)].map((_,i)=>({x:1600+rand()*400,y:840+rand()*300,r:60+rand()*80,ph:rand()*7}));
 
 /* ---------- render ---------- */
-function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=ts;
+/* A STILL PHONE PAINTS AT 30 (N21). frame() repaints the whole land on every
+   animation frame, sea, ground, features, shimmer, birds, plates and all,
+   whether or not anything under it changed, so a phone nobody was touching
+   spent most of its main thread on the land: MEASURED at 390x844 with the
+   CPU at 4x, 38 to 43 frames a second and 14.6 s of frame script in a 30 s
+   window. The ambient life (shimmer, surf, birds, the day) is slow and reads
+   the same at 30, so on the phone profile or a coarse pointer, while nothing
+   moves the camera, a frame that comes sooner than 32 ms after the last
+   painted one only asks for the next. A drag, a pinch, a flight or a camera
+   still coasting paints every frame, as before. */
+let IDLE_PAINT=0;
+const COARSE=(()=>{try{return matchMedia('(pointer:coarse)').matches}catch(_){return false}})();
+function frame(ts){
+  if((COARSE||document.body.classList.contains('pocket'))&&!dragging&&!travel
+    &&Math.abs(cam.vx)+Math.abs(cam.vy)<.01&&ts-IDLE_PAINT<32){requestAnimationFrame(frame);return}
+  IDLE_PAINT=ts;
+  const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=ts;
   if(!dragging&&!travel){cam.x+=cam.vx;cam.y+=cam.vy;cam.vx*=.9;cam.vy*=.9;clampCam()}
   if(travel){travel.t+=dt*1.6;const k=travel.t>=1?1:(1-Math.pow(1-travel.t,3));
     cam.x=travel.sx+(travel.tx-travel.sx)*k;cam.y=travel.sy+(travel.ty-travel.sy)*k;cam.z=travel.sz+(travel.tz-travel.sz)*k;
