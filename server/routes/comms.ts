@@ -33,8 +33,10 @@ import { tick } from "../lib/comms/journeys";
 import { drain } from "../lib/comms/postOffice";
 import { effectiveLifecycle } from "../lib/modules";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
+import { register as registerCommsSettings, type CommsSettingsDeps } from "./commsSettings";
 
-type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice">;
+type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice"> &
+  Omit<CommsSettingsDeps, "jobs">;
 
 /** How far back the status summary counts. */
 const STATUS_DAYS = 30;
@@ -94,4 +96,7 @@ export function register(app: Express, deps: Deps): void {
     const summary = await runners[job as CommsJob]();
     res.json({ job, summary, ranAt: new Date().toISOString() });
   });
+
+  // Settings and the Overview (the setup lane, B4): server/routes/commsSettings.ts.
+  registerCommsSettings(app, { ...deps, jobs: COMMS_JOBS });
 }
