@@ -335,9 +335,9 @@ Tooltips on the header (the cards are single links, so the mechanics live
 here):
 - on **turns on**: "Every module ships off. An admin turns one on for
   members or for everyone, and the four core modules are always there."
-- on **wears its pills**: "On a card, connected means the module talks to an
-  outside service, and managed means a vendor runs it for you. A card with
-  neither pill runs entirely here."
+- on **wears its pills**: "On a card, 'Outside service' means the module talks
+  to a service that runs somewhere else, and 'managed' means a vendor runs it
+  for you. A card with neither pill runs entirely here."
 
 | Where | Old | New | Yours |
 |---|---|---|---|

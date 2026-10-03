@@ -32,10 +32,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGameConfig } from "@/lib/gameApi";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link } from "wouter";
-import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY } from "@shared/moduleCatalog";
+import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
-import type { ModuleLifecycle } from "@shared/modules";
+import type { ModuleLifecycle, ModuleTier } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
 
@@ -1053,7 +1053,7 @@ function EmailSettingsTab({ password, openIntegrations }: { password: string; op
  * its last four characters — never the value. Typing a new one replaces it;
  * clearing falls back to the host env var if one exists.
  */
-function IntegrationsTab({ password }: { password: string }) {
+export function IntegrationsTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -1149,8 +1149,8 @@ function IntegrationsTab({ password }: { password: string }) {
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <p className="font-semibold text-gray-900">
                     {c.title}
-                    {c.tier === "connected" && <span className="ml-2 text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded-full">connected</span>}
-                    {c.tier === "managed" && <span className="ml-2 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">managed</span>}
+                    {c.tier === "connected" && <span className="ml-2 text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded-full">{TIER_PILL.connected}</span>}
+                    {c.tier === "managed" && <span className="ml-2 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">{TIER_PILL.managed}</span>}
                     {/* The licence pill, on the one card whose field IS the
                         entitlement. Every other key opens an account; this one
                         is what the village bought. */}
@@ -3708,7 +3708,7 @@ export function ModulesTab({ password }: { password: string }) {
             {tiers.length > 1 && (
               <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className={SELECT} aria-label="Filter by tier">
                 <option value="all">Any tier</option>
-                {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
+                {tiers.map((t) => <option key={t} value={t}>{TIER_PILL[t as ModuleTier] ?? t}</option>)}
               </select>
             )}
             {domains.length > 1 && (
@@ -3788,8 +3788,8 @@ export function ModulesTab({ password }: { password: string }) {
                       {/* The third pill. `included` deliberately shows nothing:
                           it is the absence of a badge, exactly the way
                           everything that is not core is silent here today. */}
-                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>connected</span>}
-                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>managed</span>}
+                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>{TIER_PILL.connected}</span>}
+                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>{TIER_PILL.managed}</span>}
                       {/* Withdrawn sits beside the tier because it changes what
                           a founder can do, which is the same kind of fact. */}
                       {m.withdrawn && <span className={`${PILL} bg-orange-50 text-orange-700 border border-orange-200`}>withdrawn</span>}
@@ -3823,7 +3823,7 @@ export function ModulesTab({ password }: { password: string }) {
                     )}
                     {m.listing && (
                       <p className="text-xs text-gray-600 mt-1.5">
-                        enabled as {m.listing.tier} under library contract {m.listing.contractVersion}
+                        enabled as "{TIER_PILL[m.listing.tier as ModuleTier] ?? m.listing.tier}" under library contract {m.listing.contractVersion}
                         {m.listing.acceptedAt ? ` on ${new Date(m.listing.acceptedAt).toLocaleDateString()}` : ""}
                       </p>
                     )}
