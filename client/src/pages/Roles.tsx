@@ -20,8 +20,10 @@ import {
   MessageCircle,
   ClipboardList,
   Scale,
+  Link2,
 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { prefersReducedMotion } from "@/components/natural/useReducedMotion";
 import InfoTip from "@/components/InfoTip";
 import SeatClaimCard from "@/components/SeatClaimCard";
 import { swatchFor } from "@/lib/swatch";
@@ -97,6 +99,97 @@ function normalizeStatus(s: unknown): SeatStateWord {
   return "open";
 }
 
+// ONE SEAT'S CARD IS A LINK: `/roles?seat=<id>`, the way /map/circles keeps
+// `?focus=` (VillageMap.tsx, `focusFromUrl` and `focusTo`). A steward
+// recruiting for a seat sends the link and the reader lands on that card.
+// A seat id is a slug of the seat's own name (`createOrgRole`), so no person
+// is ever written into the address.
+
+/** The seat the address names, read once on arrival. */
+function seatFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("seat") || null;
+}
+
+/**
+ * Keeps the address in the bar the link to whatever is open. REPLACED and
+ * never pushed: opening and closing rows is reading one page, so Back still
+ * leaves it in one press. Nothing is pushed, so no popstate listener either.
+ */
+function writeSeatToUrl(id: string | null) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("seat", id);
+  else url.searchParams.delete("seat");
+  window.history.replaceState(window.history.state, "", url.toString());
+}
+
+/** The absolute link to one seat's card. */
+function seatLink(id: string): string {
+  const url = new URL("/roles", window.location.origin);
+  url.searchParams.set("seat", id);
+  return url.toString();
+}
+
+/**
+ * "Copy link to this seat". The clipboard write runs inside the click, which
+ * is the user activation a browser asks for. Where the clipboard refuses or
+ * is missing (an http origin has no `navigator.clipboard`), the link appears
+ * in a read-only field, selected, for the reader to copy by hand. The polite
+ * line below is in the row from the moment it opens, so what lands in it is
+ * announced.
+ */
+function SeatLinkCopy({ seatId }: { seatId: string }) {
+  const link = seatLink(seatId);
+  const [said, setSaid] = useState("");
+  // A count so a second refusal selects the field again.
+  const [refused, setRefused] = useState(0);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!refused) return;
+    field.current?.focus();
+    field.current?.select();
+  }, [refused]);
+  useEffect(() => {
+    if (said !== "Link copied.") return;
+    const t = window.setTimeout(() => setSaid(""), 4000);
+    return () => window.clearTimeout(t);
+  }, [said]);
+  const fallBack = () => {
+    setRefused((n) => n + 1);
+    setSaid("Copying did not work here. The link is selected in the field below.");
+  };
+  const copy = () => {
+    setSaid("");
+    const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (!clip?.writeText) return fallBack();
+    clip.writeText(link).then(() => setSaid("Link copied."), fallBack);
+  };
+  return (
+    <div className="pt-4 border-t border-border space-y-2">
+      <button
+        type="button"
+        onClick={copy}
+        className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
+      >
+        <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+        Copy link to this seat
+      </button>
+      {refused > 0 && (
+        <input
+          ref={field}
+          type="text"
+          readOnly
+          value={link}
+          aria-label="Link to this seat"
+          onFocus={(e) => e.currentTarget.select()}
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+        />
+      )}
+      <p role="status" className="text-xs text-muted-foreground">{said}</p>
+    </div>
+  );
+}
+
 interface RoleCardProps {
   role: RoleEntry;
   expanded: boolean;
@@ -105,9 +198,11 @@ interface RoleCardProps {
   /** Whether this reader may say what the seat is held for. */
   canTagNeeds: boolean;
   sheet: SheetSource;
+  /** The reader arrived by a link to this seat (`?seat=`). */
+  arrive: boolean;
 }
 
-function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleCardProps) {
+function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive }: RoleCardProps) {
   // Whose words the vendor panel shows. Taken from the listing rather than
   // written here, because another fork's connector is a different service
   // and a literal would be this platform naming one of them.
@@ -118,6 +213,17 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleC
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
   const holders = (role.holders ?? []).filter(Boolean);
+  // Arriving by a link to this seat: its header is scrolled to and takes
+  // focus, so a keyboard or screen-reader reader starts at the seat they were
+  // sent to. `instant` under reduced motion, because `html` scrolls smoothly
+  // by default (index.css).
+  const header = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = header.current;
+    if (!arrive || !el) return;
+    el.scrollIntoView?.({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "start" });
+    el.focus({ preventScroll: true });
+  }, [arrive]);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -126,10 +232,11 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleC
       transition={{ delay: index * 0.04 }}
     >
       <button
+        ref={header}
         id={headerId}
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border"
+        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border scroll-mt-28"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -179,6 +286,9 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleC
                 ctx={sheet.ctx}
                 action={<SeatAction circleId={role.circleId ?? null} />}
               />
+              {/* The seat as a link, for sending to whoever might hold it.
+                  Outside the night card, in this page's own light inks. */}
+              <SeatLinkCopy seatId={role.id} />
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses
                   when it keeps its org chart in a document. Fetched only once
@@ -216,7 +326,12 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet }: RoleC
 }
 
 export default function Roles() {
-  const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  // The seat a link named. The row opens from the first paint; once the seats
+  // load, a match is scrolled to and focused, and a miss is said in one line.
+  const [linked] = useState<string | null>(seatFromUrl);
+  const [expandedRole, setExpandedRole] = useState<string | null>(linked);
+  const [arrived, setArrived] = useState<string | null>(null);
+  const [linkMissed, setLinkMissed] = useState(false);
   const [roles, setRoles] = useState<RoleEntry[] | null>(null);
   const [circles, setCircles] = useState<any[]>([]);
   const [failed, setFailed] = useState(false);
@@ -283,8 +398,27 @@ export default function Roles() {
       .catch(() => setFailed(true));
   }, []);
 
-  const toggle = (id: string) =>
-    setExpandedRole((prev) => (prev === id ? null : id));
+  // A link to a seat the page no longer lists closes nothing and opens
+  // nothing: the line says so and the address drops the seat, so the bar
+  // still names what is open. A failed load says its own line and leaves the
+  // address alone, so a refresh tries the link again.
+  useEffect(() => {
+    if (!roles || !linked) return;
+    if (roles.some((r) => r.id === linked)) {
+      setArrived(linked);
+      return;
+    }
+    setExpandedRole(null);
+    setLinkMissed(true);
+    writeSeatToUrl(null);
+  }, [roles, linked]);
+
+  const toggle = (id: string) => {
+    const next = expandedRole === id ? null : id;
+    setExpandedRole(next);
+    setLinkMissed(false);
+    writeSeatToUrl(next);
+  };
   const sheet: SheetSource = {
     circles,
     people,
@@ -383,6 +517,11 @@ export default function Roles() {
                   The roles list is catching its breath. Please refresh in a moment.
                 </div>
               )}
+              {linkMissed && (
+                <p className="text-center text-sm text-muted-foreground mb-8">
+                  That seat is not on this page anymore.
+                </p>
+              )}
             </div>
 
             {groups.map(({ title, subtitle, roles: groupRoles }) => (
@@ -403,6 +542,7 @@ export default function Roles() {
                       index={i}
                       canTagNeeds={canTagNeeds}
                       sheet={sheet}
+                      arrive={arrived === role.id}
                     />
                   ))}
                 </div>
