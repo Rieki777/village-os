@@ -210,8 +210,8 @@ export function MasterplanCard() {
 function Step({ n, title, icon, children }: { n: number; title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <li className="rounded-xl border border-border bg-background p-4 sm:p-5">
-      <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground mb-2">
-        {icon}
+      <h2 className="flex items-start gap-2 font-display text-lg font-bold text-foreground mb-2">
+        <span className="mt-1 shrink-0">{icon}</span>
         <span>{n}. {title}</span>
       </h2>
       {children}
