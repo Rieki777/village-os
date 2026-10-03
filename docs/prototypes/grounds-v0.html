@@ -3079,7 +3079,7 @@ const GUIDE={
   at:0,            // the stop it reached, so a resume carries on from there
   log:false,       // whether this run is a counted newcomer walk
   ran:false,       // one has been started at least once this load
-  why:null,        // how the last one ended: 'hand', 'end', 'escape', 'done'
+  why:null,        // how the last one ended: 'hand', 'end', 'escape', 'back', 'done'
   n:{pan:0,pinch:0,tap:0},   // gestures, counted where the map already latched them
   tmr:[],          // every timer the guide owns, so cancel can mean cancel
   wait(fn,ms){const h=setTimeout(()=>{GUIDE.drop(h);if(GUIDE.on)fn()},ms);GUIDE.tmr.push(h);return h},
@@ -9084,9 +9084,15 @@ function viewHash(){
    Back returns to the map with nothing open, so Back closes the place, the
    door, the Loom, the Circles or the walk before it leaves the map. The
    order matters: the place goes first, so each closer after it finds
-   nothing underneath and none of them names an address on the way out. */
+   nothing underneath and none of them names an address on the way out.
+   A RUNNING WALK ENDS THROUGH THE ONE CANCEL PATH, as Escape and `stay here`
+   end it. jHalt alone stopped the walk and left GUIDE.on true and her line
+   playing, so the next drag announced stopping a walk that had already ended.
+   GUIDE.stop runs jHalt itself and says nothing for 'back'. */
 function closeAddressed(){
-  if(typeof jHalt==='function')jHalt();
+  const was=!!JWALK;
+  if(window.GUIDE&&GUIDE.on)GUIDE.stop('back');else if(typeof jHalt==='function')jHalt();
+  if(was)mvStop();
   if($('panel').classList.contains('open')){$('panel').classList.remove('open');panelKey=null}
   $('module').classList.remove('show');
   if(document.body.classList.contains('circles'))setMapType('living',true);

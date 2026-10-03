@@ -479,6 +479,63 @@ describe("a journey that runs to its end on a phone (F41)", () => {
   });
 });
 
+/* BACK ENDS A WALK THROUGH THE ONE CANCEL PATH (round 4 sweep). Back to the
+   closed map arrives as an empty `goto` from the shell, and closeAddressed
+   ended a running walk with jHalt alone. The walk stopped, but GUIDE.on stayed
+   true and mvStop never ran, so her stop's line played on after the walk had
+   ended, and the next drag reached GUIDE.hand, which announced stopping a walk
+   that was already over and pointed at a Resume button that does not exist
+   while the Welcome Walk is off. Escape and `stay here` always went through
+   GUIDE.stop and mvStop. */
+describe("Back during a walk", () => {
+  const back = (b: Booted) =>
+    b.window.dispatchEvent(new b.window.MessageEvent("message", { data: { type: "goto", hash: "" }, origin: b.window.location.origin }));
+  const speaking = (b: Booted) => b.run<boolean>("speechSynthesis.speaking");
+
+  for (const [name, hash, viewport] of [
+    ["on a desk", "#skipIntro", DESK],
+    ["on a phone", "#hud=pocket&skipIntro", PHONE],
+  ] as const) {
+    it(`${name}: ends the walk, stops her line, and a later drag says nothing`, async () => {
+      const b = boot(hash, viewport, {});
+      await settle(200);
+      b.run("mvKokoroUsable=()=>false;MVOICE.mode='hear'");
+      b.run("playJourney('j2')");
+      await landed(b, 1);
+      expect(await until(() => (walking(b)?.i ?? 0) >= 1, 30000), "the walk reached stop 2").toBe(true);
+      await landed(b, 2);
+      expect(speaking(b), "she is saying stop 2 when Back is pressed (the case)").toBe(true);
+      const heard = b.said.length;
+      back(b);
+      expect(walking(b), "the walk ended").toBeNull();
+      expect(b.run<boolean>("GUIDE.on"), "the guide is off").toBe(false);
+      expect(speaking(b), "her stop's line stopped with the walk").toBe(false);
+      const logged = lines(b).length;
+      // The next drag on the land reaches the guide the way every gesture does.
+      b.run("GUIDE.hand('pan')");
+      await settle(100);
+      expect(lines(b).length, "no line written about stopping a walk that already ended").toBe(logged);
+      expect(b.said.slice(heard).map((u) => u.text), "nothing said after Back").toEqual([]);
+      expect(b.uncaught).toEqual([]);
+      b.close();
+    });
+  }
+
+  it("a drag during a running walk still hands her the map and says so (the control)", async () => {
+    const b = boot("#skipIntro", DESK);
+    await settle(200);
+    b.run("playJourney('j2')");
+    await landed(b, 1);
+    const logged = lines(b).length;
+    b.run("GUIDE.hand('pan')");
+    expect(walking(b)).toBeNull();
+    expect(b.run<string>("GUIDE.why")).toBe("hand");
+    expect(lines(b).length).toBe(logged + 1);
+    expect(lastLine(b)?.textContent ?? "").toContain("You have the map.");
+    b.close();
+  });
+});
+
 /* F39. Hiding her (ASK MAIA, Help, Your view, More, a door, the Loom, the
    header on a desk) left the walk flying and narrating out of sight. */
 interface Hide {
