@@ -64,8 +64,9 @@ Never, whatever you are asked:
 - A village's name, words, colours, pictures and modules live in its database
   and are set in Admin, Make This Yours (`/admin?tab=setup`), after the first
   sign-in. No file holds them.
-- 25 modules: 4 core ones always on (quests, gratitude, progression,
-  profiles), 21 optional ones that ship OFF until the founder turns them on.
+- Four core modules are always on (quests, gratitude, progression,
+  profiles). Every other module ships OFF until the founder turns it on.
+  `docs/MODULES.md` lists every one, generated from the code; never quote a count from memory.
 - Members join by invitation link (`/register?invite=...`), which any member
   allowed to vouch makes from their profile. Somebody without one can ask to
   join at `/request-membership`.

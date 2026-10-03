@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Lock, Eye, EyeOff, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Lock, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
@@ -29,7 +29,7 @@ import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken, useGameConfig } from "@/lib/gameApi";
+import { useGameConfig } from "@/lib/gameApi";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link } from "wouter";
 import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY } from "@shared/moduleCatalog";
@@ -69,6 +69,7 @@ import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
+import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
@@ -702,155 +703,6 @@ const STATUS_STYLE: Record<string, string> = {
 };
 function prettyType(t: string) {
   return t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// ── Admin Gate (S1: admins are real users) ───────────────────────────────────
-//
-// The old PasswordGate probed the server with a shared password. Admins are
-// member accounts with role admin|founder now, so the gate is login-aware:
-// signed out → member login; signed in without the role → a clear refusal;
-// admin → the member TOKEN flows into the existing `password` prop plumbing,
-// which already sends `Authorization: Bearer <value>` everywhere. Renaming
-// that prop across fifteen tabs is deliberate later cleanup, not S1.
-
-function AdminGate({ onAuth }: { onAuth: (token: string) => void }) {
-  const { user, loading, login, logout } = useAuth();
-  // Same config the rest of the app reads its identity from (Layout.tsx and
-  // every public page use this hook). Null until the fetch resolves, so
-  // villageName starts blank and the heading falls back to plain "Admin"
-  // rather than flashing anyone's name.
-  const cfg = useGameConfig();
-  const villageName = String(cfg?.project?.name ?? "").trim();
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [checking, setChecking] = useState(false);
-
-  const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
-
-  useEffect(() => {
-    if (isAdmin) {
-      const token = authToken();
-      if (token) onAuth(token);
-    }
-  }, [isAdmin, onAuth]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !pw) return;
-    setChecking(true);
-    setError("");
-    try {
-      await login(email, pw);
-      // On success the user lands in context; the effect above finishes the job
-      // (or the refusal screen renders if the account isn't an admin).
-    } catch {
-      setError("Wrong email or password.");
-      setPw("");
-    }
-    setChecking(false);
-  };
-
-  if (loading || isAdmin) {
-    return (
-      <div className="min-h-screen bg-teal-deep flex items-center justify-center">
-        <BreathingLoader label="Opening the admin" size={56} />
-      </div>
-    );
-  }
-
-  if (user && !isAdmin) {
-    return (
-      <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm text-center">
-          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-7 h-7 text-red-500" />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-gray-900 mb-2">Not an admin</h1>
-          <p className="text-sm text-gray-500 mb-8">
-            You're signed in as <strong>{user.name}</strong>, but this account doesn't
-            have admin access. Ask a founder to grant it, or sign in with an admin
-            account.
-          </p>
-          <button
-            onClick={() => logout()}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark transition-colors"
-          >
-            Sign out and switch accounts
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm">
-        <div className="w-14 h-14 rounded-full bg-teal-deep/10 flex items-center justify-center mx-auto mb-6">
-          <Lock className="w-7 h-7 text-teal-deep" />
-        </div>
-        <h1 className="font-display text-2xl font-bold text-center text-gray-900 mb-2">
-          {villageName ? `${villageName} Admin` : "Admin"}
-        </h1>
-        <p className="text-sm text-gray-500 text-center mb-8">
-          Sign in with your admin account
-        </p>
-        <form onSubmit={submit} className="space-y-4">
-          {/*
-            * `username`, not `email`, even though the field takes an address:
-            * `username` is the token a password manager pairs with
-            * `current-password` to recognise a sign-in form, and this is the
-            * identifier half of exactly that pair. A placeholder is not a name,
-            * so both fields carry one an assistive technology can read.
-            */}
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setError(""); }}
-            placeholder="Email"
-            aria-label="Email"
-            autoComplete="username"
-            autoFocus
-            className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-          />
-          <div className="relative">
-            <input
-              type={show ? "text" : "password"}
-              value={pw}
-              onChange={(e) => { setPw(e.target.value); setError(""); }}
-              placeholder="Password"
-              aria-label="Password"
-              autoComplete="current-password"
-              className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-            />
-            {/*
-              * The eye stays a 16px icon and the thing a thumb hits becomes
-              * 44x44 around it, which is what the input's `pr-12` was already
-              * reserving. gray-600 rather than gray-400 because this is a
-              * control, and 2.6:1 was under the 3:1 a non-text control owes.
-              */}
-            <button
-              type="button"
-              onClick={() => setShow(!show)}
-              aria-label={show ? "Hide password" : "Show password"}
-              className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-600 hover:text-gray-900"
-            >
-              {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {error && <p role="alert" className="text-red-500 text-xs">{error}</p>}
-          <button
-            type="submit"
-            disabled={checking}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark disabled:opacity-60 transition-colors"
-          >
-            {checking ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
 }
 
 // ── Submissions Tab ───────────────────────────────────────────────────────────

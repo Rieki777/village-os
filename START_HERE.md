@@ -190,7 +190,8 @@ database changes as it starts.
 
 ## Modules, and changing the code
 
-Twenty-five modules ship with every village; you choose which are on. To add
+Every village ships with the same modules, and you choose which are on
+([`docs/MODULES.md`](docs/MODULES.md) lists them). To add
 something new, either offer it to the shared Module Library by pull request,
 where it is reviewed and can reach every village
 ([`docs/modules/START_HERE.md`](docs/modules/START_HERE.md)), or keep it in a
