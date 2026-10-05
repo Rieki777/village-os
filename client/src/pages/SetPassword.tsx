@@ -32,7 +32,7 @@ export default function SetPassword() {
         body: JSON.stringify({ token, password: pw }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? data.error ?? "Could not set the password");
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "That didn't save. Try again.");
       // The key comes from the module that owns it (client/src/lib/gameApi.ts),
       // which asks in its own comment that nothing re-type the literal. This
       // page was the one place that did, and it agreed with the constant only
@@ -56,7 +56,7 @@ export default function SetPassword() {
       const isAdminUser = data.user?.role === "admin" || data.user?.role === "founder";
       setTimeout(() => { window.location.href = isAdminUser ? "/admin" : "/profile"; }, 1200);
     } catch (err: any) {
-      setError(err?.message || "Something went wrong. The link may have expired.");
+      setError(err?.message || "That didn't save. Try again.");
     }
     setBusy(false);
   };
@@ -92,7 +92,7 @@ export default function SetPassword() {
                 </p>
                 {!token && (
                   <p className="text-sm text-destructive text-center mb-4">
-                    This link is missing its token. Open the link from your email
+                    This link is incomplete. Open the link from your email
                     again.
                   </p>
                 )}
