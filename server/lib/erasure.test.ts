@@ -389,9 +389,9 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    // The needs deletion sits after the tombstone, so a break AT the tombstone
-    // leaves it undone and the resume runs it.
-    expect(out.ran).toEqual(["tombstone", "needs-after-tombstone", "audit", "external-stores"]);
+    // The comms rows and the needs deletion sit after the tombstone, so a break
+    // AT the tombstone leaves both undone and the resume runs them.
+    expect(out.ran).toEqual(["tombstone", "comms", "needs-after-tombstone", "audit", "external-stores"]);
     expect((await usersRepo(pool).byId(id))!.name).toBe("A departed member");
   });
 

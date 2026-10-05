@@ -102,3 +102,18 @@ export async function upsertContact(
   if (!row) throw new Error("comms_contacts: the row this upsert wrote could not be read back");
   return { id: row.id, created: row.id === input.id };
 }
+
+/**
+ * Record the time zone a person's own device reported, replacing an older
+ * one. The upsert above keeps the FIRST zone it hears, which is right for a
+ * name and a source and wrong for a zone: somebody who moves, or answers from
+ * a phone set to where they actually are, is better served by the newest
+ * reading. Callers validate the zone first (server/lib/comms/contacts.ts).
+ */
+export async function setContactTimezone(pool: Pool, id: string, timezone: string): Promise<void> {
+  await pool.query( // module-review-ok: the address book's one table, one row by id
+    "UPDATE comms_contacts SET timezone = ?, updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? " +
+      "AND (timezone IS NULL OR timezone <> ?)",
+    [timezone.slice(0, 64), VILLAGE, id, timezone.slice(0, 64)],
+  );
+}

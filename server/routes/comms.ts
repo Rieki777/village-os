@@ -34,8 +34,12 @@ import { drain } from "../lib/comms/postOffice";
 import { effectiveLifecycle } from "../lib/modules";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
 import { register as registerCommsSettings, type CommsSettingsDeps } from "./commsSettings";
+import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
 
-type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice"> &
+type Deps = Pick<
+  AppDeps,
+  "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice" | "members" | "adminActor"
+> &
   Omit<CommsSettingsDeps, "jobs">;
 
 /** How far back the status summary counts. */
@@ -99,4 +103,7 @@ export function register(app: Express, deps: Deps): void {
 
   // Settings and the Overview (the setup lane, B4): server/routes/commsSettings.ts.
   registerCommsSettings(app, { ...deps, jobs: COMMS_JOBS });
+
+  // People: the address book, a person's page, suppress and restore (server/routes/commsPeople.ts).
+  registerPeopleAdmin(app, deps);
 }
