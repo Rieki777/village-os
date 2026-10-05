@@ -490,7 +490,8 @@ nothing had ever read the column).
   holds ONLY uploaded images (`data/uploads/`) plus historical JSON kept as
   an archive. `scripts/import-json-to-mysql.ts` remains the restore/cutover
   tool for that archive format.
-- **Automated:** `.github/workflows/db-backup.yml` dumps the production
+- **Automated:** the backup workflow (template `ops/backup/db-backup.yml`, run
+  from a PRIVATE repository of the village's own; see `docs/RUNBOOK.md`) dumps the production
   schema daily (09:17 UTC), keeps 30 days of artifacts, and — on every run —
   RESTORES the dump into a scratch MySQL and asserts row counts plus an
   exact round-tripped timestamp against a manifest taken at dump time. A red
@@ -1264,7 +1265,8 @@ the directory. `/health` reports the volume totals.
 
 ## Backup encryption, the uploads volume gap, and after a suspected exposure (2026-08-30)
 
-**What was found.** `.github/workflows/db-backup.yml` dumped the whole
+**What was found.** The backup workflow (then at .github/workflows/db-backup.yml
+in this public repository, now the template `ops/backup/db-backup.yml`) dumped the whole
 production schema daily, gzipped it, and uploaded it as a plain GitHub
 Actions artifact. Actions artifact download follows repository read access.
 It is not a separate permission. On a repository set to public, that made
@@ -1499,7 +1501,7 @@ have reached someone who should not have had it. It does not require reading
 code. Where a step needs a technical helper, that is called out.
 
 1. **Confirm the backup runs from a private repository.** The encrypted
-   backup workflow (`.github/workflows/db-backup.yml`) uploads its dumps as
+   backup workflow (template `ops/backup/db-backup.yml`) uploads its dumps as
    workflow artifacts, and on a public repository anybody can download those
    and read the logs. `Rieki777/village-os` is public on purpose, so the
    backup belongs in a private repository of the village's own. Check which it
@@ -1621,7 +1623,8 @@ should not be done.
 
 Storage in this document used to be plaintext JSON, by a written decision on
 2026-07-27 that named its own revisit condition: revisit if backups start
-leaving the deployment's trust boundary. `.github/workflows/db-backup.yml`
+leaving the deployment's trust boundary. The backup workflow (then in this
+repository's .github/workflows folder)
 mysqldumps the whole database and uploads it as a GitHub Actions artifact kept
 for 30 days, and the repository was public while those artifacts were produced,
 so the condition had already fired. The repository was made private on

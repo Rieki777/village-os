@@ -41,7 +41,8 @@ Set it up once:
 
 1. Create a private repository (GitHub, New repository, Private). Empty is
    fine.
-2. Copy `ops/backup/db-backup.yml` into it as `.github/workflows/db-backup.yml`.
+2. Copy `ops/backup/db-backup.yml` into it, at the path .github/workflows/db-backup.yml
+   (the folder GitHub runs workflows from).
 3. Set the six secrets its header lists, in that repository's Settings,
    Secrets and variables, Actions. The founder's recovery keypair is made on
    the founder's own computer and its private half never leaves it:
