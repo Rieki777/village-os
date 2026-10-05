@@ -442,6 +442,33 @@ describe("the living map artifact's document stays at 0,0", () => {
   });
 });
 
+/* BUILD MODE IS VISIBLE TO THE TWO READERS THAT ASK THROUGH window.buildModeOn.
+   The line that defined it sat on the end of a `//` comment, so it was part
+   of the comment and never ran, and a blueprint's drawn footprint and its
+   flows vanished in build mode the moment they were deselected. Nothing threw
+   and every other check here stayed green, because both readers guard with
+   `window.buildModeOn&&`. A comment cannot swallow the line again without
+   this failing. */
+describe("build mode, as the blueprint footprint and flow readers see it", () => {
+  let b: Booted;
+  const read = <T,>(js: string): T => (b.window as unknown as { eval(s: string): T }).eval(js);
+  beforeAll(async () => {
+    b = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+  });
+  afterAll(() => b?.window.close());
+
+  it("is answered by window.buildModeOn, which follows the Build button", () => {
+    expect(read<string>("typeof window.buildModeOn")).toBe("function");
+    expect(read<boolean>("window.buildModeOn()")).toBe(false);
+    b.window.document.getElementById("buildBtn")?.click();
+    expect(read<boolean>("window.buildModeOn()")).toBe(true);
+    b.window.document.getElementById("buildBtn")?.click();
+    expect(read<boolean>("window.buildModeOn()")).toBe(false);
+    expect(b.uncaught, `uncaught errors${missingNote(b)}`).toEqual([]);
+  });
+});
+
 /**
  * THE WELCOME WALK IS OFF, AND STAYS OFF UNTIL SOMEBODY TURNS IT BACK ON.
  *

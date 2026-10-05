@@ -71,6 +71,24 @@ describe("sceneProblem", () => {
     expect(problem).toMatch(/v0\.9-roundE/);
     expect(problem).toMatch(/v0\.7/);
   });
+
+  /* N28 (2026-10-02). The map looks places up by key, so a second "gate" is
+     drawn over the first and one place is missing for every visitor. It was
+     stored: the check read only the envelope. */
+  it("refuses two places with one key, and names the key", () => {
+    const twin = scene({
+      map_structures: [
+        { key: "gate", name: "Gateway" },
+        { key: "kitchen", name: "Kitchen" },
+        { key: "gate", name: "Gateway (twin)" },
+      ],
+    });
+    expect(sceneProblem(twin)).toBe('Two places in this scene share the key "gate", so one of them would vanish from the map.');
+  });
+
+  it("still passes places with distinct keys, and rows with no key at all", () => {
+    expect(sceneProblem(scene({ map_structures: [{ key: "gate" }, { key: "kitchen" }, { name: "keyless" }, null] }))).toBeNull();
+  });
 });
 
 describe("sceneSizeProblem", () => {
