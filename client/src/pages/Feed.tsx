@@ -120,11 +120,14 @@ export default function Feed() {
       <section className="py-6 md:py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Village Feed</h1>
-          {/* R47: the line a reader acts on first, the Lore line last and quiet. */}
-          <p className="text-muted-foreground">
-            Tap a heart to thank someone. Each one is a real gift from your
-            sending budget.
-          </p>
+          {/* R47: the line a reader acts on first, the Lore line last and
+              quiet. Only a member can tap a heart, so only a member is told to. */}
+          {user && (
+            <p className="text-muted-foreground">
+              Tap a heart to thank someone. Each one is a real gift from your
+              sending budget.
+            </p>
+          )}
           <p className="text-sm italic text-muted-foreground mt-1">
             Everyday life, woven with the village's milestones.
           </p>
@@ -293,8 +296,8 @@ export default function Feed() {
               {kind || tag
                 ? "Nothing matches that filter. Clear it to see more."
                 : user
-                  ? "No posts yet. Share the first moment."
-                  : "No posts yet."}
+                  ? "Quiet so far. Share the first moment."
+                  : "Quiet so far. Nothing has been posted here yet."}
             </p>
           )}
           {more && (

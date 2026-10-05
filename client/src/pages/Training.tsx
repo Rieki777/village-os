@@ -198,7 +198,7 @@ export default function Training() {
                     <span className="font-semibold text-teal-deep">
                       {requiredDone}/{required.length}
                     </span>{" "}
-                    required modules done. Finish them all to grow into your next stage.
+                    required modules done. Finish the rest to complete your training.
                   </>
                 )}
               </p>

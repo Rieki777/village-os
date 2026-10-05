@@ -257,7 +257,7 @@ export default function Wallet() {
                   </button>
                 </p>
               ) : Object.keys(balances).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No tokens yet. Complete a Quest to receive your first.</p>
+                <p className="text-sm text-muted-foreground">No balances yet.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Object.entries(balances).map(([slug, bal]) => (
@@ -418,7 +418,10 @@ export default function Wallet() {
                 <InfoTip tip="Hypha is the outside network where governance and equity tokens live. This page is a door to it; nothing here moves those holdings." label="What Hypha holdings are" />
               </p>
               <p className="text-xs text-muted-foreground mb-3">
-                Governance and equity tokens live on your Hypha DHO.
+                {/* Frozen wording: the Hypha card waits on the founder's open
+                    Hypha ruling (Copy Book, R45 thread), so R47 leaves it whole. */}
+                Governance and equity tokens live on your Hypha DHO. This platform
+                shows the door, never moves what's behind it.
               </p>
               <a href={hypha.links?.treasury} target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm text-teal-deep font-medium hover:underline">
