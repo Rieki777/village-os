@@ -73,7 +73,7 @@ export default function Visit() {
       if (!res.ok) throw new Error();
       setSubmitted(true);
     } catch {
-      setError("Something went wrong. Please email the team directly.");
+      setError("That didn't go through. Try again, or email the team.");
     }
     setSubmitting(false);
   };
@@ -85,11 +85,11 @@ export default function Visit() {
           <div className="flex items-center gap-3 mb-3">
             <MapPin className="w-6 h-6 text-amber-on-band" />
             <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">
-              Plan a Visit
+              Plan a visit
             </span>
           </div>
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
-            Come and See for Yourself
+            Come and see for yourself
           </h1>
           <p className="text-white text-lg max-w-3xl leading-relaxed">
             {cfg?.hero_subtitle ?? `Experience the land, meet the people, and decide if ${villageName} is where you belong.`}
@@ -101,15 +101,15 @@ export default function Visit() {
         <div className="container max-w-5xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
-              Three Ways to Connect
+              Pick a way to visit
             </h2>
           </div>
           {!cfg && cfgFailed ? (
             <div className="text-center text-stone-600">
-              The ways to visit could not be loaded just now. Reload to try again, or use the form below and we will write back.
+              The ways to visit didn't load. Reload to try again, or use the form below.
             </div>
           ) : !cfg ? (
-            <div className="text-center text-stone-500">Loading...</div>
+            <div className="text-center text-stone-500">Opening the ways to visit…</div>
           ) : (
             <div className="grid md:grid-cols-3 gap-5">
               {[...cfg.visit_types].sort((a, b) => a.order - b.order).map((v) => (
@@ -128,14 +128,14 @@ export default function Visit() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-medium px-4 py-2.5 rounded-xl hover:bg-teal-deep-dark transition-colors"
                     >
-                      {v.cta_label || "Learn More"} <ArrowRight className="w-4 h-4" />
+                      {v.cta_label || "Learn more"} <ArrowRight className="w-4 h-4" />
                     </a>
                   ) : (
                     <a
                       href="#visit-form"
                       className="inline-flex items-center justify-center gap-2 bg-stone-100 text-teal-deep font-medium px-4 py-2.5 rounded-xl hover:bg-stone-200 transition-colors"
                     >
-                      Contact Team <ArrowRight className="w-4 h-4" />
+                      Contact the team <ArrowRight className="w-4 h-4" />
                     </a>
                   )}
                 </div>
@@ -153,9 +153,9 @@ export default function Visit() {
           {cfg && (
             <div className="grid md:grid-cols-3 gap-4">
               {[
-                { Icon: Plane, title: "Getting There", body: cfg.logistics.getting_there },
+                { Icon: Plane, title: "Getting there", body: cfg.logistics.getting_there },
                 { Icon: HomeIcon, title: "Accommodation", body: cfg.logistics.accommodation },
-                { Icon: Backpack, title: "What to Bring", body: cfg.logistics.what_to_bring },
+                { Icon: Backpack, title: "What to bring", body: cfg.logistics.what_to_bring },
               ].map((l) => {
                 const Icon = l.Icon;
                 return (
@@ -177,7 +177,7 @@ export default function Visit() {
         <div className="container max-w-2xl mx-auto px-4">
           <div className="text-center mb-8">
             <Calendar className="w-8 h-8 text-teal-deep mx-auto mb-3" />
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">Tell Us You're Coming</h2>
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">Tell us you're coming</h2>
             <p className="text-stone-600">{cfg?.logistics.contact_note ?? "Fill in the form below or email the team."}</p>
           </div>
           {submitted ? (
@@ -217,7 +217,7 @@ export default function Visit() {
                 </div>
               </div>
               <div>
-                <label htmlFor="visit-type" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Visit Type</label>
+                <label htmlFor="visit-type" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Visit type</label>
                 <select
                   id="visit-type"
                   value={form.visitType}
@@ -246,7 +246,7 @@ export default function Visit() {
                 disabled={submitting}
                 className="w-full bg-teal-deep text-white font-semibold py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
               >
-                {submitting ? "Sending..." : "Send Request"}
+                {submitting ? "Sending…" : "Send request"}
               </button>
             </form>
           )}
