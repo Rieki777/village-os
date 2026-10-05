@@ -149,8 +149,12 @@ Two consequences to expect, both intended:
    (<date>)`, add a fresh empty `## Unreleased` above it, and confirm all three
    headings are answered. Read the entry as though you run a village and have
    not read the code.
-4. **Set the version** in `package.json` and `PLATFORM_VERSION` in
-   `server/lib/identity.ts` to the same number.
+4. **Set the version** in `package.json`, `PLATFORM_VERSION` in
+   `server/lib/identity.ts`, and the default image in `docker-compose.yml`
+   (`ghcr.io/rieki777/village-os:<version>`) to the same number, and the
+   image named in `START_HERE.md` part B. The workflow refuses a tag that the
+   first three disagree with, because the starter kit carries the compose file
+   and a kit that starts an older image is a release that lies.
 5. **Tag and push.**
 
    ```sh
@@ -165,7 +169,17 @@ Two consequences to expect, both intended:
    is the system working.
 7. **Roll it out** with `ops/roll.mjs`, `plan` first. `ops/README.md` has the
    procedure and what to do when a ring halts.
-8. **Tell the villages.** Nothing notifies them. There is no email, no banner
+8. **Tell the regencivics.earth card.** The "Run it yourself" card on
+   regencivics.earth/village-os links this release's starter kit and guide,
+   and its "Copy the setup guide" button reads `docs/FOUNDER_SETUP_PROMPT.md`
+   at a pinned commit. Both are two constants in the hub repository,
+   Rieki777/ReGenCivics.Earth (its villageOsOffer module): give whoever holds
+   that card the new version
+   and the commit the tag points at (`git rev-parse v<version>^{}`). The
+   release job prints both in its summary. The card copies the text below the
+   prompt's single `---` line, so the prompt keeps exactly one;
+   `scripts/setup-prompt-contract.test.mjs` holds that.
+9. **Tell the villages.** Nothing notifies them. There is no email, no banner
    and no update check, so a release nobody announces reaches only the villages
    the platform team hosts. Self-hosted villages find out by running the
    command in `docs/UPGRADING.md` Step 2, whenever they think to. Anything
@@ -177,7 +191,7 @@ Two consequences to expect, both intended:
 
 Written down so it is not rediscovered.
 
-- **Villages are not notified.** Step 8 is a person remembering. A village that
+- **Villages are not notified.** Step 9 is a person remembering. A village that
   has left the fleet has no channel at all beyond polling the registry by hand.
   The cheapest fix is a published document naming the current version that a
   village can poll, or the village checking the registry itself and showing its

@@ -6084,7 +6084,9 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
      way to what needs hands is Get Involved, as in What's alive? above. */
   const hands=document.body.classList.contains('pocket')?'open <b>Get Involved</b>':'press <b>Space</b>';
   maiaSay(`Nothing on the land matches that yet. ${welcomeWalkOn()?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
-$('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(v,'me');setTimeout(()=>conciergeMatch(v),350)};
+/* What the visitor typed is shown as text: escaped before her log treats it as
+   markup (maiaClean strips handlers, but a question is never HTML). */
+$('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(escq(v),'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
 /* THE TOUR CHIP COMES AND GOES WITH THE WALK. It is in the markup, and it is
@@ -10741,7 +10743,10 @@ let VISIT_BUILD=false;    /* build mode was on when the visitor view opened */
 let VISIT_NOTED=false;    /* the visitor view has said that its edits do not stay */
 let SHELL_SKIN=null;      /* the village's own look, as the shell last pushed it */
 let PUB_SEQ=0;
-const PUB_PENDING={};
+/* A Map, never a plain object: sceneResult looks a request up by a nonce that
+   arrives by postMessage, and a Map lookup can only find what this map put in
+   it. An object lookup also reaches inherited names like constructor. */
+const PUB_PENDING=new Map();
 
 function inShell(){try{return window.parent!==window}catch(_){return false}}
 function shellPost(m){try{if(inShell())window.parent.postMessage(m,'*')}catch(_){}}
@@ -10776,20 +10781,19 @@ let SHELL_SLOW_MS=8000,SHELL_GIVE_UP_MS=120000;
 function shellAsk(type,extra,slow){
   const nonce='sc'+(++PUB_SEQ)+'-'+Date.now();
   return new Promise(res=>{
-    PUB_PENDING[nonce]=res;
+    PUB_PENDING.set(nonce,res);
     shellPost(Object.assign({type:type,nonce:nonce},extra||{}));
-    const quiet=()=>{if(PUB_PENDING[nonce]){delete PUB_PENDING[nonce];res({ok:false,quiet:true})}};
+    const quiet=()=>{if(PUB_PENDING.has(nonce)){PUB_PENDING.delete(nonce);res({ok:false,quiet:true})}};
     if(!inShell())return void setTimeout(quiet,SHELL_SLOW_MS);
-    if(typeof slow==='function')setTimeout(()=>{if(PUB_PENDING[nonce])try{slow()}catch(_){}},SHELL_SLOW_MS);
+    if(typeof slow==='function')setTimeout(()=>{if(PUB_PENDING.has(nonce))try{slow()}catch(_){}},SHELL_SLOW_MS);
     setTimeout(quiet,SHELL_GIVE_UP_MS);
   });
 }
 /* The nonce arrives by postMessage, so it may name only a request this map
-   made: an own key of PUB_PENDING holding a function, never an inherited
-   property like constructor or toString. */
+   made, which is what a PUB_PENDING Map lookup can find and nothing else. */
 function sceneResult(d){const n=d&&d.nonce;
-  if(typeof n!=='string'||!Object.prototype.hasOwnProperty.call(PUB_PENDING,n))return;
-  const fn=PUB_PENDING[n];if(typeof fn!=='function')return;delete PUB_PENDING[n];fn(d)}
+  const fn=typeof n==='string'?PUB_PENDING.get(n):undefined;if(typeof fn!=='function')return;
+  PUB_PENDING.delete(n);fn(d)}
 window.sceneResult=sceneResult;
 
 /* The work, wherever it is. Viewing as a visitor puts the live map on screen

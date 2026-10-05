@@ -136,8 +136,11 @@ export type SaberraRecordKind = keyof typeof ALLOWED;
  */
 const LOOKS_LIKE_AN_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
-/** True when a value, or anything inside it, reads as an address. */
-function carriesAnAddress(v: unknown, depth = 0): boolean {
+/**
+ * True when a value, or anything inside it, reads as an address. Exported so
+ * the client's failure details use this net and no second copy of it.
+ */
+export function carriesAnAddress(v: unknown, depth = 0): boolean {
   if (depth > 6) return true;
   if (typeof v === "string") return LOOKS_LIKE_AN_ADDRESS.test(v);
   if (Array.isArray(v)) return v.some((x) => carriesAnAddress(x, depth + 1));

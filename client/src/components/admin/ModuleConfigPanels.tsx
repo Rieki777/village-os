@@ -41,8 +41,11 @@ const saveCls =
  * opened: a founder who leaves this page open while another admin edits the
  * same module would otherwise write a config document back from memory and
  * silently undo them.
+ *
+ * Exported so a panel kept in its own file (`SaberraConfigPanel.tsx`) saves
+ * through this same re-read-then-write path instead of a second one.
  */
-function useModuleConfig(moduleId: string, password: string) {
+export function useModuleConfig(moduleId: string, password: string) {
   const [config, setConfig] = useState<any>(null);
   const [lifecycle, setLifecycle] = useState<string>("off");
   const [loading, setLoading] = useState(true);

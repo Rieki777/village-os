@@ -31,16 +31,22 @@ not sign in as me, and do not create accounts for me anywhere.
 never run the `:edge` image for my village, and never run
 `docker compose down -v`, which deletes everything.
 
-## First, read the guides
+## First, find the release, then read its guides
 
-If you can read web pages, read these two files first and follow them. They
-are the source of truth, and if they disagree with this prompt they win, and
-you should tell me:
+Everything below uses ONE version of Village OS: the latest release. If you
+can read web pages, open <https://github.com/Rieki777/village-os/releases/latest>
+and note its version, for example `v1.2.0`. Call it VERSION, and use it for
+every file, download and image from here on, so nothing mixes two releases.
 
-- <https://raw.githubusercontent.com/Rieki777/village-os/main/AGENTS.md>, your rules
-- <https://raw.githubusercontent.com/Rieki777/village-os/main/START_HERE.md>, the steps
+Then read these two files at that version and follow them. They are the
+source of truth, and if they disagree with this prompt they win, and you
+should tell me:
 
-If you cannot, the steps below match them.
+- `https://raw.githubusercontent.com/Rieki777/village-os/VERSION/AGENTS.md`, your rules
+- `https://raw.githubusercontent.com/Rieki777/village-os/VERSION/START_HERE.md`, the steps
+
+If you cannot read web pages, ask me to open the releases page and tell you
+the version. The steps below match the guides.
 
 ## Then ask me five questions
 
@@ -60,9 +66,10 @@ Wait for all five answers before doing anything else.
    tell me where to download each, explain the installer, and wait while I
    run it. For a hosting provider I still need Node.js for step 3.
 
-2. **Get the files.** Either download `village-os-starter-<version>.zip` from
-   <https://github.com/Rieki777/village-os/releases/latest> and unzip it, or
-   `git clone https://github.com/Rieki777/village-os.git`. Open the folder.
+2. **Get the files, at VERSION.** Either download the starter kit zip
+   attached to that release and unzip it, or
+   `git clone --branch VERSION https://github.com/Rieki777/village-os.git`.
+   Open the folder.
 
 3. **Write the settings.** Run
    `node scripts/fork-init.mjs --compose --village-name "..." --admin-email "..."`
@@ -76,7 +83,8 @@ Wait for all five answers before doing anything else.
      start takes a few minutes while it builds the database. Then check
      `http://localhost:3000/health` says `"status":"ok"`.
    - On a hosting provider: walk me through creating a MySQL service, a
-     service running the image `ghcr.io/rieki777/village-os:1.2.0`, and a
+     service running the image `ghcr.io/rieki777/village-os:` followed by
+     VERSION without its `v` (for `v1.2.0`, the tag `1.2.0`), and a
      volume mounted at `/app/data`. I copy each line of `.env` into the
      service's variables myself, with `DATABASE_URL` set to the MySQL
      service's own connection string. `docs/PROVISIONING.md` has the detail.
