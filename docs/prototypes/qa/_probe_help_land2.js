@@ -3,7 +3,7 @@
 const { chromium } = require('playwright');
 const FILE = process.env.GROUNDS_FILE;
 const EXE = process.env.PW_EXE;
-const OUT = process.env.SHOT_DIR || 'C:/Users/taren/Desktop/Amora/wt-map-overlays/docs/prototypes/.qa-out';
+const OUT = process.env.SHOT_DIR || require('path').resolve(__dirname, '..', '.qa-out');
 const fs = require('fs');
 fs.mkdirSync(OUT, { recursive: true });
 

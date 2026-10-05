@@ -126,8 +126,7 @@ export const MANAGED_LISTING_CAP = 2;
  * moment they need an answer, so it is the tier; who BUILT something is a
  * credit line and never a badge.
  *
- *   included   the platform bills (it is in the platform price) and supports
- *              it end to end. Credential is none, or the village's own
+ *   included   the platform supports it end to end. Credential is none, or the village's own
  *              upstream account where the village is the merchant of record.
  *              No pill in the catalog: included is the absence of a badge,
  *              the same way everything that is not core is silent today.
@@ -1162,6 +1161,28 @@ export const MODULES: ModuleDef[] = [
     apiPrefixes: ["/api/intents"],
   },
   {
+    id: "journal",
+    tier: "included",
+    // Entries are one person's words about their own life, and feedback names
+    // its recipient. Nothing here is village content: every row is a member's.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Journal",
+    description:
+      "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+    requires: [],
+    // The guide reads the gratitude a member received lately, and the evening
+    // practice asks who they would like to thank. Better with it, whole without it.
+    recommends: ["gratitude"],
+    capabilities: [],
+    variableKeys: ["journal.pulse_floor"],
+    apiPrefixes: ["/api/journal"],
+    // No openStateCheck, on purpose. That hook is for modules holding VALUE
+    // somebody is owed, and a journal holds none. Off hides the surface; the
+    // entries stay in their tables and come back intact when it is turned on.
+  },
+  {
     id: "governance",
     tier: "included",
     dataClass: "member-pii",
@@ -1399,10 +1420,12 @@ export const MODULES: ModuleDef[] = [
       // module nobody finishes setting up.
       const api = typeof c.apiUrl === "string" ? c.apiUrl.trim() : "";
       // Both are checked the same way, and the api address is the one that
-      // matters: a sync posts this village's key to it.
+      // matters: a sync posts this village's key to it. `httpsAddress` is the
+      // rule the sync route applies at call time too, so a saved address is
+      // always one the sync will call.
       for (const [label, value] of [["dashboard", url], ["service", api]] as const) {
         if (value === "") continue;
-        if (!/^https:\/\/[^\s]+$/.test(value)) return `The ${label} address has to be an https link.`;
+        if (httpsAddress(value) === null) return `The ${label} address has to be an https link.`;
       }
       return null;
     },
@@ -1586,6 +1609,33 @@ export function supportRoute(def: ModuleDef): SupportRoute {
 }
 
 const HTTPS = /^https:\/\/[^\s]+$/;
+
+/**
+ * THE ONE RULE FOR AN ADDRESS A VILLAGE'S KEY IS SENT TO: the https pattern
+ * above AND a real parse with an https scheme. Answers the address as the
+ * parser writes it, or null.
+ *
+ * It lives here so three callers ask the same question. The saberra listing's
+ * `validateConfig` refuses a save with it, `server/routes/saberra.ts` refuses a
+ * call with it, and the admin panel refuses in the browser by running that
+ * same `validateConfig`. Before this, the save took the pattern and the call
+ * took the parse, so `https://[x` saved cleanly and every sync then said the
+ * village had no address at all.
+ *
+ * No import, on purpose: several scripts transpile this file alone and import
+ * the result, so a runtime import here would break them.
+ */
+export function httpsAddress(raw: unknown): string | null {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!HTTPS.test(text)) return null;
+  try {
+    const u = new URL(text);
+    return u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 const EMAILISH = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;

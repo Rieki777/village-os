@@ -13,6 +13,7 @@ it is the part that saves the other forty.
 
 ## Contents
 
+0. [Where the backup runs](#where-the-backup-runs)
 1. [The first three minutes](#the-first-three-minutes)
 2. [Reading /health](#reading-health)
 3. [What the symptom means](#what-the-symptom-means)
@@ -24,6 +25,45 @@ it is the part that saves the other forty.
 9. [The two minute check, once a week](#the-two-minute-check-once-a-week)
 10. [Who to call, and what to write down](#who-to-call-and-what-to-write-down)
 11. [What this runbook has actually been tested against](#what-this-runbook-has-actually-been-tested-against)
+
+---
+
+## Where the backup runs
+
+**In a private GitHub repository of your own, never in a public one.** On a
+public repository every workflow artifact can be downloaded by any signed-in
+GitHub user and every log line can be read by anyone. The backups are
+encrypted, and that is still not a reason to publish them. Village OS itself is
+public, so its backup workflow is a template, `ops/backup/db-backup.yml`, and
+it does not run there.
+
+Set it up once:
+
+1. Create a private repository (GitHub, New repository, Private). Empty is
+   fine.
+2. Copy `ops/backup/db-backup.yml` into it as `.github/workflows/db-backup.yml`.
+3. Set the six secrets its header lists, in that repository's Settings,
+   Secrets and variables, Actions. The founder's recovery keypair is made on
+   the founder's own computer and its private half never leaves it:
+
+   ```bash
+   gpg --quick-generate-key "Village backup recovery" ed25519 cert never
+   gpg --quick-add-key <fingerprint> cv25519 encr never
+   gpg --armor --export <fingerprint>                  # BACKUP_GPG_PUBLIC_KEY
+   gpg --armor --export-secret-keys <fingerprint> > recovery-key.asc   # keep OFFLINE
+   ```
+
+   The drill keypair is made the same way, and both of its halves go into
+   secrets: it exists only so the workflow can prove each backup decrypts and
+   restores, and it carries no recovery value.
+4. Run it once by hand and watch it pass (section 7 below says what a red run
+   means).
+
+Every command below names that repository. Set it once per terminal:
+
+```bash
+export BACKUP_REPO=you/your-village-backups
+```
 
 ---
 
@@ -52,7 +92,7 @@ is your next stop.
 **3. Are the backups current?**
 
 ```bash
-gh run list --workflow=db-backup.yml --limit 5
+gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 5
 ```
 
 You want a recent `success`. If the newest runs say `failure`, read section 7
@@ -214,7 +254,7 @@ step 1.
 ### 1. Find a backup you trust
 
 ```bash
-gh run list --workflow=db-backup.yml --limit 10
+gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 10
 ```
 
 Take the newest run that says `success`. A `success` here means more than a
@@ -230,7 +270,7 @@ Note the run's id from that listing.
 ### 2. Download it
 
 ```bash
-gh run download <run-id> -n db-backup-<run-id>
+gh run download --repo "$BACKUP_REPO" <run-id> -n db-backup-<run-id>
 ```
 
 You get one file, `bundle.tar.gz.gpg`. It is encrypted and nothing on GitHub
@@ -330,8 +370,8 @@ set, there is no archive and no restore, and section 8 is the only thing to do
 here.
 
 ```bash
-gh run list --workflow=db-backup.yml --limit 10
-gh run download <run-id> -n uploads-backup-<run-id>
+gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 10
+gh run download --repo "$BACKUP_REPO" <run-id> -n uploads-backup-<run-id>
 gpg --output uploads-bundle.tar.gz --decrypt uploads-bundle.tar.gz.gpg
 tar xzf uploads-bundle.tar.gz        # gives uploads.tar and uploads-headers.txt
 mkdir unpacked && tar xf uploads.tar -C unpacked
@@ -354,7 +394,7 @@ files together.
 ## The backup is red
 
 When a backup run fails, a GitHub issue titled **"Backups are failing"** opens
-in this repository. It comments on every later failure and closes itself the
+in the private backup repository. It comments on every later failure and closes itself the
 first time a run is fully green, so an open one always means a live problem.
 
 The issue names which part failed. Here is what each part means and how urgent
@@ -396,8 +436,8 @@ name the cause. The ones seen so far, and what each one is:
 **Re-running a failed run** is safe. It takes a fresh backup and drills it.
 
 ```bash
-gh workflow run db-backup.yml --ref main
-gh run list --workflow=db-backup.yml --limit 3
+gh workflow run db-backup.yml --repo "$BACKUP_REPO" --ref main
+gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 3
 ```
 
 ---
@@ -440,7 +480,7 @@ You need Railway access and GitHub repository settings access.
    Variables, New Variable. Name `BACKUP_EXPORT_TOKEN`, value the string from
    step 1. Deploy the service so it picks it up.
 
-3. **Give the same value to GitHub.** The repository, Settings, Secrets and
+3. **Give the same value to GitHub.** The private backup repository, Settings, Secrets and
    variables, Actions, New repository secret. Name `BACKUP_EXPORT_TOKEN`, same
    value. It has to be the same string; the village compares them.
 
@@ -451,8 +491,8 @@ You need Railway access and GitHub repository settings access.
 5. **Run it and watch it pass.**
 
    ```bash
-   gh workflow run db-backup.yml --ref main
-   gh run list --workflow=db-backup.yml --limit 3
+   gh workflow run db-backup.yml --repo "$BACKUP_REPO" --ref main
+   gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 3
    ```
 
    The `uploads-restore-drill` job prints the file count and byte total it
@@ -472,7 +512,7 @@ fails; this catches a schedule that stopped running at all, which produces no
 failure and therefore no alarm.
 
 ```bash
-gh run list --workflow=db-backup.yml --limit 7
+gh run list --repo "$BACKUP_REPO" --workflow=db-backup.yml --limit 7
 curl -s https://your-village.example/health
 ```
 

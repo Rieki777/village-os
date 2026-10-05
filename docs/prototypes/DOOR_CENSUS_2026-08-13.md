@@ -224,3 +224,27 @@ module's footer, which sat outside the per-hamlet row the probe reads. The predi
 sourced: a hamlet is an example until its structure key appears in `housing.entries` on
 `/api/map/config`, per `HOUSING_AVAILABILITY_CONTRACT.md` section F. All twelve labels go quiet on
 their own the moment that block arrives, with no further patch.
+
+## Correction, 2026-10-01: two rows the published scene never took
+
+A QA sweep opened every door on the live map, as a visitor, and two of them landed on the wrong page.
+
+- **Row 3, Governance.** The seed has carried `/governance` since this census, but the scene the
+  village published (version 6) still carries `["Governance","/tools"]`. `/tools` is a page the site
+  serves, so the read-time alias table, which only heals routes the site does NOT serve, left it
+  alone. The Council Fire's Governance door opened "Village Tools".
+- **Item 1, Crowdpool.** The judgement call above sent Crowdpool to `/contribute` before the map's
+  route list knew `/campaigns` existed (the 2026-08-22 correction records that drift). `/campaigns`
+  is the Crowdpool page ("Our raisings"). The three Crowdpool doors are published as `/products`,
+  which the site does not serve, so they fell through to `/contribute`.
+
+Both are now healed at read time by `DOOR_PAIR_FIX` in the artifact, which matches the exact pair a
+scene carries (label folded, route as stored): `Governance|/tools` goes to `/governance`, and
+`Crowdpool|/products` goes to `/campaigns`. It is a pair and nothing looser, so the Market's
+Payments & Donations, which shares `/products`, still lands on `/contribute`, and a founder who binds
+either label to any other route keeps it. The seed's three Crowdpool doors now say `/campaigns`.
+
+Two things this does not do. The published scene itself still holds the old pairs, because a
+republish writes the raw door slots back; fixing the data means editing the door in build mode and
+publishing. And `/campaigns` reads "No raisings yet" today, while the Ridge Hamlet North overview
+still shows a pool at 72% from the published scene.

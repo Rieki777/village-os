@@ -7,21 +7,33 @@ what, where, what breaks without it.
 
 ## Provisioning
 
-- Railway project + service (nixpacks), volume mounted at `/app/data` — seeds
-  live in `server/seeds/`, never in `data/` (volume shadows the image).
+- Two self-host paths, both running the same image
+  (`ghcr.io/rieki777/village-os:<version>`; a village pins a release such as
+  `1.2.0`, `:stable` is the newest release, `:edge` is `main` and never for a
+  village). **One machine:** `docker-compose.yml` (app + MySQL 8.4 + a volume
+  at `/app/data`), `node scripts/fork-init.mjs --compose --village-name "..."
+  --admin-email ...`, then `docker compose up -d` (`START_HERE.md`, part A).
+  **A hosting provider** such as Railway: a MySQL service, a service running
+  the image, a volume at `/app/data`, and the values from `.env` pasted into
+  the provider's variables by hand (`docs/PROVISIONING.md`). Seeds live in
+  `server/seeds/`, never in `data/` (the volume shadows the image).
+- Nobody needs collaborator or write access to `Rieki777/village-os`. A
+  village that changes code forks it and deploys its fork; Railway then builds
+  the repository's `Dockerfile` (`railway.toml`: `builder = "DOCKERFILE"`).
 - MySQL service on the private network; `DATABASE_URL` referenced on the app
-  service. Run `pnpm db:migrate`; verify with `pnpm db:status`.
-- GitHub repo connected with auto-deploy on `main` (Railway GitHub App needs
-  repo access; sudo-mode approval required once).
+  service. **The server applies every migration itself at boot, before it
+  listens**; there is no migrate step. `pnpm db:status` only inspects.
+- First run: open `<address>/claim` and give an email, a name and the
+  `ADMIN_PASSWORD` from `.env` (`ADMIN_PASSWORD` row below).
 
 ## Environment variables
 
 | Var | Purpose | Without it |
 |---|---|---|
 | `AUTH_TOKEN_SECRET` | Signs member tokens | **Silently degrades to per-process sessions** — logins die on every restart |
-| `ADMIN_PASSWORD` | Bootstrap-only (S1): each fork sets its own value and uses it once to create its founder via `POST /api/admin/bootstrap`. **That response carries `claimUrl`, and on a fresh install it will also carry `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap — keeping it set is fine (foundation policy, Rye 2026-07-26); deleting it is optional hygiene. | No founder can be created |
+| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, Rye 2026-07-26), and the break-glass account needs it. | No founder can be created |
 | `JOURNEY_PASSWORD` | Legacy Command Centre gate — retired at v3 S2 | — |
-| `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account | No recovery if all admins are demoted |
+| `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
 | `ANTHROPIC_BASE_URL` | (optional, dev/CI) points the assistant at a stub instead of api.anthropic.com | Defaults to the real API |
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
@@ -257,21 +269,29 @@ two from the admin panel and almost never touches the first.
   the brand guard (wrong extension) and had been drifting behind the code for
   25 variables, eight of which are also invisible to grep because the code
   reaches them through a string.
-- **THE NINETEEN BROCHURE PAGES ARE STILL CODE, and this is the standing gap
-  in fork-ability.** `SHOPFRONT` in `check-brand-refs.mjs` lists them; they
-  carry 39 references to the first village and roughly 11,500 lines of its
-  story. The exemption is correct (a village's prose about its own land is
-  supposed to name it) and the consequence is not: replacing them is the one
-  step in provisioning that still needs somebody who can edit TSX, and there
-  is no per-page visibility switch, so a village that has not rewritten them
-  is publishing them. Five pieces have been lifted into Admin already, by the
-  pattern to keep using: the Team page, the Legal and Jurisdiction Notices
-  (22 claims, commit fe3f3e1), the two Love Letter covenant paragraphs
-  (`server/seeds/pages-covenant-seed.json`), the FAQs and the milestones. Each
-  extraction is a section in `client/src/components/admin/contentSections.ts`
-  plus a read through the generic `/api/content/:section` route. Nothing about
-  the remaining pages needs new infrastructure, only the work.
-  `docs/PROVISIONING.md` step 7 now tells founders this before they launch.
+- **THE BROCHURE PAGES ARE STILL CODE, and since 2026-10-02 they are OFF in
+  every new village.** `SHOPFRONT` in `check-brand-refs.mjs` lists them: the
+  first village's own 18 story pages and 1 component. The exemption is correct
+  (a village's prose about its own land is supposed to name it). One
+  `app_config` document, `brochure-pages` (`{"enabled": true}`), read once at
+  boot, decides whether a village serves them; absent means off. With it off
+  their routes answer not-found, the menus, footer, sitemap and mobile shortcut
+  drop the links, and `/` shows the neutral welcome page
+  (`client/src/pages/VillageWelcome.tsx`). Migration
+  `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote it ON in
+  every database that already had members, so Amora keeps its pages.
+  `shared/brochure.ts` says how a fork that rewrote the pages turns them back
+  on. Neutral legal and covenant templates with placeholders are in
+  `server/seeds/templates/`; the first village's own wording is in
+  `server/seeds/amora/`; nothing loads either automatically. Five pieces of
+  that prose were lifted into Admin earlier, by the pattern to keep using: the
+  Team page, the Legal and Jurisdiction Notices (22 claims, commit fe3f3e1),
+  the two Love Letter covenant paragraphs
+  (`server/seeds/amora/pages-covenant-seed.json`), the FAQs and the milestones.
+  Each extraction is a section in
+  `client/src/components/admin/contentSections.ts` plus a read through the
+  generic `/api/content/:section` route. `docs/PROVISIONING.md` step 7 tells
+  founders all of this.
 - **Money & Value Claims is the sixth extraction** (economics lane,
   2026-09-03), and a fork inherits none of it. The `money` content section
   holds the home deposit range, the venture investment ranges on
@@ -281,8 +301,8 @@ two from the admin panel and almost never touches the first.
   default and a blank field PUBLISHES NOTHING: no figure, no zero and no
   placeholder. Write yours in Admin, Content, Money & Value Claims; the shape
   and the readers are in `client/src/lib/moneyClaims.ts`. The first village's
-  own figures are preserved as data in `server/seeds/money-claims-seed.json`,
-  which NOTHING loads at boot: like `server/seeds/brochure-legal-seed.json` it
+  own figures are preserved as data in `server/seeds/amora/money-claims-seed.json`,
+  which NOTHING loads at boot: like `server/seeds/amora/brochure-legal-seed.json` it
   is applied by one authenticated admin PUT to `/api/admin/content/money`,
   because an instance that already has a `content` row never runs the
   seed-on-empty path.
@@ -529,7 +549,7 @@ anybody asks when something breaks: **who do I pay, and who do I call.**
 
 | | Included | Connected | Managed |
 |---|---|---|---|
-| Billed by | the platform price | the vendor, direct to you | the platform |
+| Billed by | n/a | the vendor, direct to you | the platform |
 | You call | the platform | the vendor for the service, the platform for the wiring | the platform |
 | The credential | none, or your own upstream account | **yours**, set in Admin → Integrations, source and last4 visible | platform-held, env only, you never see it |
 | You have an account with them | n/a | **yes** | no |
@@ -783,26 +803,32 @@ why.
 
 ## Smoke test after provisioning
 
-**Automated (47 checks across every module):**
+**Automated (47 checks across every module), a developer check and not a
+founder's setup step:**
 
 ```bash
-node scripts/smoke-all-modules.mjs --base https://your-village.example --email founder@example.com --password '…'
+node scripts/smoke-all-modules.mjs --base https://scratch-village.example --email founder@example.com --password '…'
 ```
 
-It registers throwaway members and walks the real loop: quest claim →
+It registers throwaway accounts through `/api/auth/register` with no
+invitation, so a village on the default `membership.invite_only` (true)
+answers it with 403. Run it only against a scratch instance with
+`membership.invite_only` set to false, never against a live village. It walks
+the real loop: quest claim →
 submit → consent → gratitude → forum → feed heart → tools → badges (incl.
 the earned engine) → library intake/loan/settle with escrow reconciliation
 → stays pricing/purchase/activation/nightly posting → exchange firewalls,
 pricing, stocking → health regen + sparse-data honesty → automation
 ingestion + the honest 503 without an API key → exit enumeration → the
-command centre → and finishes by asserting per-token conservation. Run it
-against a fresh deployment; every line should be a ✓.
+command centre → and finishes by asserting per-token conservation. Every
+line should be a ✓.
 
 **The loop, by hand:** `/health` → ok, and its `build` reads
 `<label>-<git sha>` — the SHA is stamped at build time, so if it does not
 match the commit you just pushed, the deploy has not landed yet (a marker
 that never changes is the bug this replaced). Then:
-register → claim → submit → consent (admin) → gratitude send → wall shows
+register (with an invitation link from the founder's profile,
+`/register?invite=<token>`) → claim → submit → consent (admin) → gratitude send → wall shows
 it; `/api/season` shows the seeded season; admin Modules tab lists
 everything OFF.
 
@@ -819,8 +845,9 @@ everything OFF.
   community writes its terms).
 - `node scripts/check-brand-refs.mjs` passes with YOUR village's terms
   added to its banned list.
-- The `db-backup` workflow runs green against your `PROD_DATABASE_URL` —
-  it restores the dump and asserts counts, so green means restorable.
+- The `db-backup` workflow, run from a PRIVATE repository, runs green against
+  your `PROD_DATABASE_URL` — it restores the dump and asserts counts, so green
+  means restorable.
 
 ## Extraction preconditions (who does what)
 
@@ -1342,7 +1369,7 @@ sentence is still true today.
 **What a GitHub Action genuinely cannot do:** reach into a Railway volume
 directly. There is no API for "give me a tarball of this service's mounted
 volume" that a scheduled Action can call, and this repository already has a
-live data point on the alternative: `AMORA_FOUNDATION_UPGRADE_PLAN.md`
+live data point on the alternative: the foundation upgrade plan (an internal note, in the maintainers' private operations repository since 2026-10-02)
 records a one-time volume pull over `railway ssh`, done by hand, once. The
 Railway CLI's `ssh` subcommand is built for an interactive session, and nothing
 in this codebase or its history demonstrates it running unattended, on a
@@ -1461,9 +1488,10 @@ does not prove a fresh deploy boots from the bytes, because there is no
 scratch Railway volume to redeploy into inside a GitHub Action. Intact and
 complete is the honest ceiling.
 
-**Still needed from a human**, and blocked on them: `BACKUP_EXPORT_TOKEN` has
-to be generated (`openssl rand -hex 32`), set as a Railway environment
-variable on the app service, and mirrored as a GitHub Actions secret. Until
+**Still needed from a human**, and blocked on them: `BACKUP_EXPORT_TOKEN`
+(`scripts/fork-init.mjs` generates it; `openssl rand -hex 32` also works) has
+to be set as an environment variable on the app service and mirrored as a
+GitHub Actions secret in the PRIVATE repository the backup runs from. Until
 both exist the route answers 503 and the workflow step has nothing to call.
 
 ### Secrets rotation checklist, for a steward, after any suspected exposure
@@ -1472,11 +1500,16 @@ Use this any time a backup artifact, a database dump, or a `.env` file may
 have reached someone who should not have had it. It does not require reading
 code. Where a step needs a technical helper, that is called out.
 
-1. **Confirm the repository is private.** GitHub, the repository's own page,
-   Settings, General, scroll to "Danger Zone", "Change repository visibility".
-   If it says Public, change it to Private now, before anything else on this
-   list. This alone stops new artifact downloads; it does not undo one that
-   already happened.
+1. **Confirm the backup runs from a private repository.** The encrypted
+   backup workflow (`.github/workflows/db-backup.yml`) uploads its dumps as
+   workflow artifacts, and on a public repository anybody can download those
+   and read the logs. `Rieki777/village-os` is public on purpose, so the
+   backup belongs in a private repository of the village's own. Check which it
+   is: GitHub, that repository's page, Settings, General, "Danger Zone",
+   "Change repository visibility". If the backup has been running from a
+   public repository, stop it there and move it to a private one now, before
+   anything else on this list. This stops new artifact downloads; it does not
+   undo one that already happened.
 2. **Stripe.** Log in to the Stripe dashboard, Developers, API keys. Roll the
    secret key. Update it wherever this village stores it (Admin,
    Integrations, if set there; otherwise the `STRIPE_SECRET_KEY` Railway env
@@ -1594,8 +1627,11 @@ leaving the deployment's trust boundary. `.github/workflows/db-backup.yml`
 mysqldumps the whole database and uploads it as a GitHub Actions artifact kept
 for 30 days, and the repository was public while those artifacts were produced,
 so the condition had already fired. The repository was made private on
-2026-08-30, which narrows who can fetch the artifacts that already exist and
-does not un-produce them. A hosted fleet fires the condition a second time:
+2026-08-30, which narrowed who could fetch the artifacts that already existed
+and did not un-produce them. It is public again now, on purpose, which is why
+that workflow must run only from a private repository: on a public one,
+anybody can download its artifacts and read its logs. A hosted fleet fires the
+condition a second time:
 once ReGen holds another village's Stripe key, "the operator can read the
 database anyway" stops being an answer, because the operator is no longer the
 credential's owner.

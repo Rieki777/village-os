@@ -54,6 +54,9 @@ const TARGETS = [
   ["messaging", "members"],
   // A member's request to be paid back is between them and the village.
   ["redemption", "members"],
+  // A member's own journal is never anybody else's to read, and the module
+  // has no public surface to probe.
+  ["journal", "members"],
   // AFTER messaging, which it requires. Measured: with introductions ahead of
   // it the server answered 409 "requires messaging to be enabled first", the
   // module stayed off, and this script still exited 0. Order is load-bearing

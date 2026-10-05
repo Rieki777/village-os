@@ -311,6 +311,9 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   redemption: "redemption.md",
   // Shipped with its module (Village Comms, 2026-10-02), for the same reason.
   comms: "comms.md",
+  // Shipped with its module (2026-10-02). A contract and no member's words:
+  // the doc describes the tables and never holds an entry.
+  journal: "journal.md",
   // The four CORE modules. A village cannot switch these off, so their
   // contract docs are the ones a fork operator most needs and the last ones
   // written: the gap ratchet counted all four until 2026-09-06.

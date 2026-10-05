@@ -1,0 +1,33 @@
+{
+  "_readme": "A neutral starting point for the content section named legal, which the brochure pages read. Nothing loads this file automatically. Copy it, replace every {{PLACEHOLDER}}, rewrite every [WRITE: ...] in your own words or delete that point, then save it in Admin or with PUT /api/admin/content/legal. Say nothing about law, tax or property that you have not checked with somebody qualified where you are.",
+  "jurisdictionOverview": {
+    "heading": "{{VILLAGE_NAME}} and the law where it stands",
+    "intro": "The rules that apply to {{VILLAGE_NAME}} in {{JURISDICTION}}. Questions go to {{CONTACT_EMAIL}}.",
+    "points": [
+      {
+        "title": "Who runs the village",
+        "body": "{{VILLAGE_NAME}} is run by {{LEGAL_ENTITY}}, registered in {{JURISDICTION}}."
+      },
+      {
+        "title": "Who holds your data",
+        "body": "{{DATA_CONTROLLER}} is responsible for the personal data this village keeps about you. Write to {{CONTACT_EMAIL}} to see it, correct it or have it deleted."
+      },
+      {
+        "title": "Land and housing",
+        "body": "[WRITE: how land or housing is held here, and under which law. Delete this point if nobody can own or rent at {{VILLAGE_NAME}}.]"
+      },
+      {
+        "title": "Contributions and tax",
+        "body": "[WRITE: how a contribution is treated for tax, if at all. If you are not sure, delete this point.]"
+      }
+    ]
+  },
+  "landShareTransferNote": "",
+  "membership": {
+    "entityLabel": "{{LEGAL_ENTITY}}",
+    "contributionParagraph": "[WRITE: what a membership contribution pays for, and whether it is a donation, a fee or neither.]",
+    "contributionShortNote": "",
+    "footerNote": "Your membership is with {{LEGAL_ENTITY}}. Questions go to {{CONTACT_EMAIL}}.",
+    "backgroundCheckNote": ""
+  }
+}

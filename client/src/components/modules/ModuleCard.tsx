@@ -6,7 +6,7 @@
  * viewers, "Preview" for admins only, and a withdrawn line that never hides.
  */
 import { Link } from "wouter";
-import { POOL_REASON_COPY } from "@shared/moduleCatalog";
+import { POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
 import type { ModuleDataClass } from "@shared/modules";
 import ModuleArt from "./ModuleArt";
 
@@ -90,8 +90,8 @@ export default function ModuleCard({ module: m }: { module: CatalogModule }) {
           {m.lifecycle === "preview" && (
             <span className={`${PILL} bg-amber-50 text-amber-700 border-amber-200`}>Preview</span>
           )}
-          {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border-sky-200`}>connected</span>}
-          {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border-violet-200`}>managed</span>}
+          {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border-sky-200`}>{TIER_PILL.connected}</span>}
+          {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border-violet-200`}>{TIER_PILL.managed}</span>}
           {m.priceLine && m.priceLine !== "Free" && (
             <span className={`${PILL} bg-emerald-50 text-emerald-700 border-emerald-200`}>{m.priceLine}</span>
           )}

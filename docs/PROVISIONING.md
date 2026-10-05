@@ -5,26 +5,32 @@ from nothing to a working instance with your own name on it. It is distilled
 from `docs/FORK_RUNBOOK.md`, which is the long-form reference. If a step here
 seems thin, that document has the reasoning behind it.
 
+This is the hosting-provider path, written for Railway. To run a village on
+one computer with Docker instead, follow `START_HERE.md`, part A.
+
 Two paths exist and both end at the same running platform:
 
 - **Self-host.** You (or your own technical helper) hold the Railway account,
   the domain, and every key. ReGen Civics supports the code; you run it.
 - **ReGen-hosted.** ReGen Civics holds the Railway account and runs the
-  instance for you, for a fee. You still hold your own Resend and Stripe
-  accounts if you use them, because those are your relationships with your
-  members, not ReGen's.
+  instance for you. ReGen Civics does not charge for hosting: accepted
+  Season 2 projects are hosted free, and gifts go to CORE. You still hold your
+  own Resend and Stripe accounts if you use them, because those are your
+  relationships with your members, not ReGen's.
 
-Every instance runs the same code from the same repository. Nobody creates a
-copy or a fork of it (`docs/ARCHITECTURE.md`: "a fork inherits the platform
-by pulling, not by find-and-replace"). What makes your instance yours is its
-own database, its own domain, and its own environment variables, set in the
-steps below. Your village's name, tagline, colours and logo are not part of
-any of that: they live in the database and you set them in step 7, after your
-first login.
+Every instance runs the same published image,
+`ghcr.io/rieki777/village-os`, pinned to a release such as `1.2.0`. Nobody
+needs access to the repository to run one, and nobody forks it unless their
+village means to change the code. What makes your instance yours is its own
+database, its own domain, and its own environment variables, set in the steps
+below. Your village's name, tagline, colours and logo are not part of any of
+that: they live in the database and you set them in step 7, after your first
+login.
 
-If you are a founder working through this with your own Claude session,
-paste `docs/FOUNDER_SETUP_PROMPT.md` into that session instead of reading the
-steps below by hand. It walks the same path and does the typing for you.
+If you are working through this with your own AI assistant, paste
+`docs/FOUNDER_SETUP_PROMPT.md` into it instead of reading the steps below by
+hand. It walks the same path, explains each step, and runs a command only
+after you say yes. Its rules are in `AGENTS.md`.
 
 ## Before you start
 
@@ -41,9 +47,9 @@ You need, or need to get during this walkthrough:
 
 ## The human-only steps, named up front
 
-Three things in this walkthrough cannot be done by any script, by Claude, or
-by ReGen Civics on your behalf, because they require proving you control
-something outside this platform:
+Three things in this walkthrough cannot be done by any script, by an AI
+assistant, or by ReGen Civics on your behalf, because they require proving you
+control something outside this platform:
 
 1. **DNS.** Pointing your domain at Railway happens in whatever service
    manages your domain's records (your registrar, Cloudflare, wherever you
@@ -56,31 +62,38 @@ something outside this platform:
    requires the account holder to verify their own identity and banking
    details directly with Stripe.
 
-Everything else below, a founder's own Claude session can do end to end.
+Your own AI assistant can help with everything else below, one step at a
+time, running each only after you say yes. Secrets are the exception: you
+read them from `.env` and paste them into Railway yourself, and they never
+pass through the assistant (`AGENTS.md`).
 
 ## 1. Get Railway access
 
 **Self-host:** create a Railway account if you do not have one, then create
-a new project. Because nobody forks this repository, your project deploys
-from the same GitHub repository every instance runs from; ask ReGen Civics
-to add you as a collaborator so Railway can build from it on your behalf.
+a new project. Your service runs the published image, so it needs access to
+no repository, and nobody asks ReGen Civics or anybody else for access to
+`Rieki777/village-os`. A village that means to change the code forks the
+repository and deploys its own fork instead (step 5).
 
 **ReGen-hosted:** ReGen Civics creates the Railway project for you. Confirm
 with them that it exists before continuing, then skip to step 3; they hold
 the deploy settings in step 2.
 
-## 2. Add MySQL and a volume
+## 2. Add MySQL, the app service and a volume
 
-In your Railway project: add a MySQL database service, and add a volume to
-your app service mounted at `/app/data` (this is where member uploads live;
+In your Railway project: add a MySQL database service; add an app service
+that runs the image `ghcr.io/rieki777/village-os:1.2.0` (name a release,
+never `:edge`, which is the untested tip of `main`); and add a volume to the
+app service mounted at `/app/data` (this is where member uploads live;
 `server/seeds/` in the repository is never touched at deploy time). Connect
 the app service to MySQL so `DATABASE_URL` is filled in for you
 automatically as a service reference; you do not type this one by hand.
 
 ## 3. Generate your environment variables
 
-Run this from a working checkout of the repository (your Claude session can
-clone it if it does not already have one):
+Run this on your own computer, from the starter kit or a clone of the
+repository (`START_HERE.md`, step 2, says how to get either). It needs
+Node 22 or newer:
 
 ```
 node scripts/fork-init.mjs --village-name "Your Village Name" \
@@ -90,16 +103,21 @@ node scripts/fork-init.mjs --village-name "Your Village Name" \
 Leave off `--domain` if you do not have one yet; you can fill `FRONTEND_URL`
 in by hand once you do. This writes a local `.env` file and prints:
 
-- Every value it generated for you (real random secrets; it never reuses one
-  across villages).
-- Your one-time bootstrap password, shown once. Save it now.
+- The name of every value it generated for you (real random secrets; it
+  never reuses one across villages), without the value itself.
+- Where your one-time founder password is: the `ADMIN_PASSWORD` line of
+  `.env`. It is never printed; open the file yourself to read it.
 - A list of every variable it could not fill in, each with the one-line
   reason from `.env.example`. That list is not a failure. It is the rest of
   this walkthrough.
 
-`.env` is for local development only and is never deployed. Copy every value
-it printed into Railway, your app service, the Variables tab, by hand or
-through the Railway CLI. Production reads variables from Railway directly.
+`.env` does not deploy on its own. Open it yourself and copy each value into
+Railway, your app service, the Variables tab, by hand. Production reads
+variables from Railway directly. Only `DATABASE_URL` is needed for the server
+to start; a usable village also needs `AUTH_TOKEN_SECRET`, `ADMIN_PASSWORD`
+and `FRONTEND_URL`, and you should copy every other value the script filled
+in as well, including `MEMBER_SECRETS_KEY`, `VILLAGE_SECRETS_KEY`,
+`BREAK_GLASS_ADMIN_EMAIL` and `BACKUP_EXPORT_TOKEN`.
 
 ### The one generated value that decides whether Admin can hold your keys
 
@@ -152,24 +170,27 @@ takes over from them. Saving the key from the admin panel needs
 `VILLAGE_SECRETS_KEY` from step 3 and refuses the save without it. With no
 sender set anywhere, nothing is sent: each email is recorded as not sent.
 
-## 5. Deploy and run migrations
+## 5. Deploy; the server migrates itself
 
-Connect the GitHub repository to your Railway service if it is not
-connected already (Railway builds with nixpacks from `pnpm run build` and
-starts with `node dist/index.js`; see `railway.toml`). Once the first deploy
-finishes, run the database migrations against it:
+Deploy the app service. It runs the image you named in step 2: Railway pulls
+it and starts it, and nothing is built. A village that changes the code
+deploys its own fork instead, by connecting that fork to the service; Railway
+then builds the repository's `Dockerfile` (`railway.toml` sets
+`builder = "DOCKERFILE"`), which is the same recipe the published image is
+built from.
 
-```
-npx tsx scripts/run-migration.ts --all
-```
-
-Point this at your Railway MySQL's connection string (Railway shows it in
-the MySQL service's Connect tab; use the public proxy URL if you are running
-this from outside Railway's own network). Confirm with:
+**The server applies every database migration itself, at boot, before it
+listens.** There is no migrate step to run. A first boot on an empty database
+can take several minutes, so give it up to fifteen before you worry. To look
+at what has been applied, without changing anything:
 
 ```
 npx tsx scripts/run-migration.ts --status
 ```
+
+Point this at your Railway MySQL's connection string (Railway shows it in
+the MySQL service's Connect tab; use the public proxy URL if you are running
+this from outside Railway's own network).
 
 Then check `https://<your-domain>/health` answers `ok` and its `build` field
 carries a real git SHA. A build marker that never changes means the deploy
@@ -177,8 +198,9 @@ has not actually landed yet.
 
 ## 6. Create your founder account
 
-Open `https://<your-domain>/claim` in a browser. Enter your email and the
-`ADMIN_PASSWORD` you generated in step 3, and submit.
+Open `https://<your-domain>/claim` in a browser. Enter your email, your name,
+and the `ADMIN_PASSWORD` from the `.env` that step 3 wrote (open the file
+yourself to read it), and submit.
 
 You get a link to set your own password. If `RESEND_API_KEY` and `EMAIL_FROM`
 are both set and your sender domain is verified, that link is also emailed to
@@ -190,7 +212,7 @@ That page works from a phone, which matters: this step has stranded two people
 so far, and both times the only way through was a terminal.
 
 <details>
-<summary>The same thing from a shell, if you would rather</summary>
+<summary>The same thing from a shell, for anybody without a browser</summary>
 
 ```
 curl -X POST https://<your-domain>/api/admin/bootstrap \
@@ -202,25 +224,24 @@ The response carries `claimUrl`, plus an `emailed` field and an `emailNote`
 saying why nothing was sent when it reads `false`.
 </details>
 
-Either way, `ADMIN_PASSWORD` now stops working. It authenticates exactly once,
-for this one call, and refuses everyone once your village has a founder.
+Either way, `ADMIN_PASSWORD` now stops working. Once your village has a
+founder it refuses everyone except the account named in
+`BREAK_GLASS_ADMIN_EMAIL`, and that account still has to give it.
 
-### Set `FOUNDER_EMAILS` too, so you can never be locked out again
+### Keep a way back in
 
-`ADMIN_PASSWORD` spends itself here. If you later lose access, there is nothing
-left to reach for, and `forgot-password` cannot help an account that never set
-a password. That is the exact hole both lockouts fell into.
+`forgot-password` cannot help an account that never set a password, which is
+the exact hole both lockouts fell into. Two variables close it:
 
-Add this in Railway alongside your other variables:
-
-```
-FOUNDER_EMAILS=you@example.org
-```
-
-Any Google sign-in from a listed address that Google has verified gets the
-founder role, on every sign-in rather than only the first. So if your role ever
-goes missing, signing in again restores it. It needs step 6a below to be done
-first.
+- **`BREAK_GLASS_ADMIN_EMAIL`**, which `fork-init` set to your `--admin-email`.
+  Keep it, and keep `ADMIN_PASSWORD`, in Railway: if you are ever locked out,
+  that one address can still claim the founder role at `/claim` with the same
+  password.
+- **`FOUNDER_EMAILS=you@example.org`**, once Google sign-in works (step 6a).
+  A Google sign-in from a listed address that Google has verified gives an
+  existing account the founder role back, on every sign-in, so a role that
+  goes missing returns when you sign in again. On a default invite-only
+  village it cannot create a founder from nothing; the claim above does that.
 
 ## 6a. Google sign-in, which ReGen Civics can host for you
 
@@ -260,50 +281,45 @@ This is the only place any of this gets set. Nothing in the repository, and
 nothing this walkthrough has had you type into Railway, carries your
 village's name or look.
 
-### What the wizard reaches, and the nineteen pages it does not
+Then open the Launch Plan (`/journey-to-launch`). It lists what is still
+missing before launch, including your currency and your timezone, which both
+ship blank on purpose.
+
+### What the wizard reaches, and the first village's own pages
 
 The wizard covers the whole shell and the whole product: your header, footer,
 logo, tab icon, colours, fonts, every link, every screen a signed-in member
 coordinates through. Finish it and a member sees your village and nothing
 else.
 
-Nineteen public brochure pages are a separate matter, and this walkthrough
-used to end without saying so. They are the story a village tells visitors who
-are not members yet, and they ship as compiled pages carrying the first
-village's story: its land, its history, its four journey pages, its love
-letter, its reasons for being in the country it is in. Verify what yours is
-showing right now with:
+The first village's own story pages are switched off in yours. Eighteen
+public pages and one component tell that village's story: its four journey
+pages, its master plan, its team, its housing, its visit and membership
+forms, its rights pages, its build history. They are compiled into every
+image, and the exact list is the `SHOPFRONT` array in
+`scripts/check-brand-refs.mjs`. One `app_config` document decides whether a
+village serves them:
 
-```
-node scripts/check-brand-refs.mjs
-```
+- **`brochure-pages`**, read once at boot. `{"enabled": true}` serves them;
+  absent, or anything else, means off. A new village has no such document, so
+  it starts with them off and has nothing to set.
+- **With them off**, each of their routes answers not-found; the menus, the
+  footer, the sitemap and the mobile shortcut drop their links; and `/` shows
+  a plain welcome page carrying your village's own name
+  (`client/src/pages/VillageWelcome.tsx`).
+- **A village that already served them keeps them.** Migration
+  `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote the
+  document ON in every database that already had members when it ran, which
+  is how Amora keeps its pages.
 
-Its last line counts them. As of 2026-09-02 it reads 39 references across 19
-pages, and the exact list of files is the `SHOPFRONT` array in that script.
+Do not turn them on for your village: they tell another village's story. A
+village that has rewritten them in its own fork turns them back on as
+`shared/brochure.ts` describes.
 
-Three things are true about them and it is worth having all three:
-
-1. **They are not a bug and no guard will ever clean them.** A village's own
-   prose about its own land is supposed to carry that village's name. The
-   design intent is that a fork REPLACES these pages the way it replaces its
-   logo.
-2. **Replacing them today needs somebody who can edit code**, which is the one
-   thing the rest of this walkthrough is built to avoid. Five pieces of that
-   prose have already been lifted out into Admin and you can write those now:
-   the Team page, the Legal and Jurisdiction Notices, the two Love Letter
-   covenant paragraphs (the ones your members are asked to sign, which
-   described somebody else's jungle until they moved), the FAQs, and the
-   milestones. Everything else on those pages is still compiled in.
-3. **There is no switch to hide them.** They are routed and linked from the
-   footer with no per-page visibility setting, so a village that has not
-   rewritten them is publishing them.
-
-Until the remaining prose moves into the database, the honest options are: ask
-whoever holds your deploy to rewrite those pages before you announce your
-address, or launch on the member-facing product and leave the brochure pages
-unlinked in your own announcements. Say which one you picked to whoever
-supports your instance, because it decides whether your public address is
-ready to hand out.
+Neutral starting text for your legal and covenant wording, with placeholders
+for your village's name, legal entity, data controller and contact, is in
+`server/seeds/templates/`. The first village's own wording is in
+`server/seeds/amora/`. Nothing loads either automatically.
 
 ## 8. Payments, if you are selling anything
 
@@ -344,10 +360,14 @@ Two of these are worth knowing about early, because their failure is quiet:
   which takes your own photograph through Admin and needs no account, no key
   and no third-party licence. Unset, the land page says nothing is configured
   rather than showing a picture of somewhere else.
-- **`BACKUP_EXPORT_TOKEN`** is what authenticates the uploads half of your
-  backup. Without it the database dump keeps succeeding and looks healthy
-  while your members' uploaded files are in no backup at all. Generate it the
-  same way as the other secrets and mirror it into the backup workflow.
+- **`BACKUP_EXPORT_TOKEN`** is what authenticates the uploads half of the
+  encrypted GitHub Actions backup (`.github/workflows/db-backup.yml`,
+  `docs/RUNBOOK.md`). `fork-init` generates it with the other secrets. Without
+  it the database dump keeps succeeding and looks healthy while your members'
+  uploaded files are in no backup at all. Run that workflow only from a
+  **private** repository: on a public one, anybody can download its artifacts
+  and read its logs. On Railway, your first backup is Railway's own: its
+  database backups and volume snapshots.
 
 If you ever suspect `.env.example` has fallen behind the code, check rather
 than guess:
@@ -363,16 +383,21 @@ a string (`keyEnv: "MAPBOX_TOKEN"`) rather than as `process.env.MAPBOX_TOKEN`.
 
 ## 10. Confirm it actually works
 
-Run the automated smoke test, which registers throwaway members and walks
-the real product loop end to end:
+Sign in with the password you set, and open the Launch Plan
+(`/journey-to-launch`) once more: what it still lists is what stands between
+you and launch. Then invite your first member from your own profile. Members
+join by invitation link (`/register?invite=...`): one use each, valid for
+fourteen days. Somebody without a link can ask to join at
+`/request-membership`, and the request lands in your Admin. That first member
+arriving is the real test of your email and your sign-up together.
 
-```
-node scripts/smoke-all-modules.mjs --base https://<your-domain> \
-     --email you@example.org --password '<your real password now>'
-```
+`scripts/smoke-all-modules.mjs` is a developer check and not a setup step. It
+registers throwaway accounts with no invitation, so a village on the default
+`membership.invite_only` answers it with 403. Run it only against a scratch
+instance with `membership.invite_only` set to false.
 
-Every line it prints should read as a pass. If your village publishes its
-structure publicly (Admin, Org Chart, plus the `map` module), also check:
+If your village publishes its structure publicly (Admin, Org Chart, plus the
+`map` module), also check:
 
 ```
 curl -s https://<your-domain>/.well-known/village.json | jq '.supports, .publicKey.kid'
@@ -403,19 +428,22 @@ village can pull and run a named version with no account and no access token.
   which version it is, and how to pin a version so your village stays put
   while others move.
 
-Deploying from the repository, as step 5 describes, keeps you on whatever is
-newest. Naming a version in your deploy instead is what makes an instance
-reproducible, and it is worth doing before you have members depending on it.
+Step 2 pinned a release, such as `1.2.0`, and that pin is what keeps your
+village still while others move. `:stable` follows the newest release, and
+`:edge` is the untested tip of `main`, never for a village. A fork deployed
+from its own repository runs whatever its branch holds. Read
+`docs/UPGRADING.md` before you change the tag, every time.
 
 ## Where each step's file lives
 
-- `.env.example` names every variable this platform reads and what breaks
-  without it.
+- `.env.example` is the reference for every variable: what it does and what
+  breaks without it.
 - `scripts/fork-init.mjs` writes a filled-in `.env` for a new village.
 - `docs/FORK_RUNBOOK.md` is the long-form reference this walkthrough was
   distilled from.
 - `docs/FOUNDER_SETUP_PROMPT.md` is this same walkthrough, written for a
-  founder to hand directly to their own Claude session.
+  founder to hand directly to their own AI assistant; `AGENTS.md` holds that
+  assistant's rules.
 - `CHANGELOG.md` is what shipped in each release, and which release is
   current.
 - `ops/RELEASES.md` is how to pull a release, pin one, and read the version a

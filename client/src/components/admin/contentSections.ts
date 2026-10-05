@@ -37,7 +37,7 @@ export const CONTENT_SECTIONS = [
   // were asked to SIGN a description of Amora's jungle and Amora's lot count.
   // LoveLetter.tsx reads `covenant.opening` and `covenant.governance`; with
   // nothing saved it falls back to the same sentences minus the geography and
-  // the number. Amora's own wording is in server/seeds/pages-covenant-seed.json.
+  // the number. Amora's own wording is in server/seeds/amora/pages-covenant-seed.json.
   { key: "covenant", label: "Love Letter Covenant", icon: FileText },
   // Economics lane, 2026-09-03: the money figures a village publishes about
   // itself, plus its own words for what the value token converts to. A deposit

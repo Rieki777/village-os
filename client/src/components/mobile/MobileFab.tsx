@@ -1,5 +1,12 @@
 /**
- * MobileFab: floating action button, bottom right, mobile only.
+ * MobileFab: floating action button, bottom right, at EVERY width.
+ *
+ * The name is historical. It was phones only (`md:hidden`) until the Journal
+ * shortcut gave desktop members a reason to want it too, so it now serves
+ * every width: on a phone it sits above the tab bar as before, and from `md`
+ * up, where there is no tab bar, it sits in the bottom-right corner itself.
+ * Shortcut rows can carry a `module`, and a row whose module is off for this
+ * viewer is never offered.
  *
  * Tapping the Amora lotus opens a column of labeled shortcut rows that springs
  * upward from the trigger, nearest row first, behind a soft focus scrim. Each
@@ -25,14 +32,21 @@
  *     The scrim has to sit between the FAB and the bar, not over both — and a
  *     modal has to clear all three, or the tab bar sits on top of the sheet's
  *     own buttons (the village map's node card shipped that way at z-50).
+ *     Since the button shows at every width, the z-50 dialogs (shadcn's
+ *     overlays, the hand-rolled aria-modal ones) would sit UNDER it on a desk,
+ *     clickable through the backdrop. index.css hides the button while any
+ *     modal is up, and a panel that owns this corner while open opts in with
+ *     `data-hides-fab` (the launch guide on /journey-to-launch).
  *  4. Plain tap rows rather than a gesture-driven radial. The gesture version
  *     did not survive iOS Safari.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModules } from "@/modules/ModuleProvider";
 import { FAB_ACTIONS, FabTriggerIcon, type FabAction } from "@/config/mobileNav";
+import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
 import { haptic } from "@/lib/haptics";
 import { isBareRoute, normalisePath } from "./MobileTabBar";
 
@@ -47,11 +61,17 @@ type ResolvedAction = {
   event?: string;
 };
 
-function resolve(actions: FabAction[], currentPath: string, isAuthenticated: boolean): ResolvedAction[] {
+function resolve(
+  actions: FabAction[],
+  currentPath: string,
+  isAuthenticated: boolean,
+  moduleOn: (id?: string) => boolean = () => true,
+): ResolvedAction[] {
   const out: ResolvedAction[] = [];
   for (const a of actions) {
     if (a.requiresAuth === true && !isAuthenticated) continue;
     if (a.requiresAuth === false && isAuthenticated) continue;
+    if (!moduleOn(a.module)) continue;
 
     const onAnchor =
       !!a.anchorPath &&
@@ -74,13 +94,41 @@ export default function MobileFab() {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
   const { user } = useAuth();
+  // The header menu's test (Layout.tsx `moduleOn`): a module is on for this
+  // viewer when the viewer's manifest carries it, and, as `moduleIsOn` reads
+  // it, its lifecycle is not off. Read defensively, since a catalog still in
+  // flight has no list yet and the row should wait for it.
+  const { modules } = useModules();
+  const moduleOn = (id?: string) =>
+    !id || (Array.isArray(modules) && modules.some((m) => m.id === id && m.lifecycle !== "off"));
   const currentPath = normalisePath(location);
-  const actions = resolve(FAB_ACTIONS, currentPath, !!user);
+  // A shortcut into a brochure page goes with the pages (shared/brochure.ts).
+  const brochureOn = useBrochurePages() === true;
+  // BOTH sides of this line, which is what #404 asked for: keep #406's brochure
+  // filter on the list, and take #404's `moduleOn` as the fourth argument. The
+  // two are independent questions about the same shortcut row - whether a page
+  // exists on this village at all, and whether the module behind it is on.
+  const actions = resolve(
+    FAB_ACTIONS.filter((a) => brochureOn || !a.href || !isBrochurePath(a.href)),
+    currentPath,
+    !!user,
+    moduleOn,
+  );
 
-  const toggle = useCallback(() => {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Set when the menu was opened from the keyboard, so focus can move into it.
+  const focusOnOpen = useRef(false);
+
+  const menuItems = () =>
+    Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+  const toggle = useCallback((e?: React.MouseEvent) => {
     // "press" is 10ms, the number this line used to spell out. The util in
     // client/src/lib/haptics.ts holds the vocabulary now.
     haptic("press");
+    // A click with detail 0 came from Enter or Space, not a pointer.
+    focusOnOpen.current = !!e && e.detail === 0;
     setOpen((s) => !s);
   }, []);
 
@@ -92,15 +140,50 @@ export default function MobileFab() {
     return () => document.removeEventListener("click", close);
   }, [open]);
 
-  // Escape to close.
+  // Escape to close. Focus goes back to the trigger when it was inside the
+  // menu, because the rows leave the tab order as the menu shuts. The open
+  // menu is the top layer, so the key it spent closing itself goes no
+  // further: BreakGlass listens on `window` and read the same press as
+  // "decline the override".
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
+      const inside = !!menuRef.current?.contains(document.activeElement);
+      setOpen(false);
+      if (inside) triggerRef.current?.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // Opened from the keyboard: land on the row nearest the trigger, which is
+  // the last one, the way a menu button hands focus to its menu.
+  useEffect(() => {
+    if (!open || !focusOnOpen.current) return;
+    focusOnOpen.current = false;
+    const items = menuItems();
+    items[items.length - 1]?.focus();
+  }, [open]);
+
+  // Arrow keys walk the rows; Home and End jump to either end. Only while the
+  // menu is open: a shut menu's rows are invisible, and these keys belong to
+  // the page again (they scroll it).
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    if (!open) return;
+    const items = menuItems();
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    if (e.key === "ArrowDown") next = at < 0 ? 0 : (at + 1) % items.length;
+    else if (e.key === "ArrowUp") next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = items.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
 
   /*
    * IT STEPS ASIDE WHILE A MEMBER READS DOWN THE PAGE. The trigger is a 56px
@@ -141,7 +224,7 @@ export default function MobileFab() {
       {/* Focus scrim, between the tab bar (z-50) and the FAB (z-[60]). */}
       <div
         aria-hidden="true"
-        className={`fixed inset-0 z-[55] md:hidden bg-black/45 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[55] bg-black/45 transition-opacity duration-300 ${
           open ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
         style={{ backdropFilter: open ? "blur(2px)" : undefined }}
@@ -150,20 +233,24 @@ export default function MobileFab() {
       <div
         // Rides up clear of the living map's circle peek while one shows (index.css).
         data-mobile-fab
-        className="fixed right-4 z-[60] md:hidden flex flex-col items-end pointer-events-none"
+        className="fixed right-4 bottom-[var(--fab-bottom)] md:right-6 md:bottom-6 z-[60] flex flex-col items-end pointer-events-none"
         // Tab bar is h-16 (4rem) of content plus the safe-area pad. Offsetting
         // by that same pad + 3.5rem leaves the trigger's lower edge exactly
-        // 0.5rem over the bar's top edge on EVERY device — the safe area
-        // cancels, so a notched phone and a desktop viewport overlap
-        // identically instead of drifting apart. Anchored in the corner it
-        // belongs in, not hovering a thumb's width above it.
-        style={{ bottom: "max(calc(env(safe-area-inset-bottom, 0px) + 3.5rem), 3.5rem)" }}
+        // 0.5rem over the bar's top edge on EVERY phone: the safe area
+        // cancels, so a notched phone and a plain one overlap identically
+        // instead of drifting apart. Anchored in the corner it belongs in, not
+        // hovering a thumb's width above it. Carried as a variable so `md:`
+        // can take over from it: from `md` up there is no bar to clear, and
+        // the button sits 1.5rem in from the corner itself.
+        style={{ "--fab-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 3.5rem), 3.5rem)" } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
         <div
+          ref={menuRef}
           role="menu"
           aria-label="Shortcuts"
           aria-hidden={!open}
+          onKeyDown={onMenuKey}
           className={`flex flex-col items-end gap-2.5 mb-3 transition-all duration-200 ${
             open ? "pointer-events-auto" : "pointer-events-none"
           }`}
@@ -172,7 +259,7 @@ export default function MobileFab() {
             // Nearest the trigger reveals first, so the stack springs upward.
             const delay = open ? `${(actions.length - 1 - i) * 38}ms` : `${i * 18}ms`;
             const cls =
-              "group/row flex items-center gap-2.5 outline-none transition-all duration-300 focus-visible:opacity-100 " +
+              "group/row flex items-center gap-2.5 outline-none transition-[transform,opacity] duration-300 focus-visible:opacity-100 " +
               (open ? "opacity-100 translate-x-0 scale-100" : "opacity-0 translate-x-5 scale-90");
             const style: React.CSSProperties = { transitionDelay: delay, transitionTimingFunction: SPRING };
 
@@ -190,6 +277,11 @@ export default function MobileFab() {
             const closeThenRun = () => {
               // "tick" is 6ms, the number this line used to spell out.
               haptic("tick");
+              // A row for the page already showing (Profile on /profile) keeps
+              // this component mounted, and focus would stay on a row that is
+              // now invisible and aria-hidden. Hand it back to the trigger
+              // first, the way Escape does.
+              if (menuRef.current?.contains(document.activeElement)) triggerRef.current?.focus();
               setOpen(false);
               if (a.event) window.dispatchEvent(new CustomEvent(a.event));
             };
@@ -230,11 +322,15 @@ export default function MobileFab() {
         {/* Trigger. The lotus rotates and the ring lights up when open, so the
             state is unmistakable without a label. */}
         <button
+          ref={triggerRef}
           type="button"
           onClick={toggle}
           onFocus={() => setTucked(false)}
           data-fab-trigger
-          className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 motion-reduce:transition-none hover:scale-105 active:scale-95 ${
+          // Named properties, never `all`: `all` also animates the visibility
+          // this button inherits from the hide rule in index.css, which held
+          // it on screen through a dialog's opening and late after it closed.
+          className={`relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-[transform,opacity,box-shadow] duration-300 motion-reduce:transition-none hover:scale-105 active:scale-95 ${
             hidden ? "pointer-events-none scale-0 opacity-0" : "pointer-events-auto"
           } ${open ? "scale-105" : ""}`}
           style={{

@@ -16,6 +16,7 @@ import Layout from "@/components/Layout";
 import ModuleCard, { type CatalogModule } from "@/components/modules/ModuleCard";
 import ModuleShelf from "@/components/modules/ModuleShelf";
 import PoolStatement from "@/components/modules/PoolStatement";
+import { TIER_PILL } from "@shared/moduleCatalog";
 import { authToken, useCatalyst } from "@/lib/gameApi";
 import { Hammer } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -87,7 +88,7 @@ export default function Modules() {
             Everything this platform can be, one card at a time. A village{" "}
             <InfoTip tip={`Every module ships off. ${catalyst.aNameCap} turns one on for members or for everyone, and the four core modules are always there.`}>turns on</InfoTip>{" "}
             what it needs and leaves the rest on the shelf, and every card{" "}
-            <InfoTip tip="On a card, connected means the module talks to an outside service, and managed means a vendor runs it for you. A card with neither pill runs entirely here.">wears its pills</InfoTip>{" "}
+            <InfoTip tip={`On a card, "${TIER_PILL.connected}" means the module talks to a service that runs somewhere else, and "${TIER_PILL.managed}" means a vendor runs it for you. A card with neither pill runs entirely here.`}>wears its pills</InfoTip>{" "}
             so you can read it at a glance.
           </p>
         </header>

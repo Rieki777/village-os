@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ASSISTANT_MODES,
+  ASSIST_BURST_PER_HOUR,
   MAX_MESSAGE_CHARS,
   MAX_TURNS,
   assistantKeyOwner,
@@ -18,6 +19,7 @@ import {
   callAssistant,
   parseJsonReply,
   platformDailyCap,
+  readReplyFields,
   resolveKey,
   sanitizeMessages,
   wireAssistant,
@@ -94,6 +96,10 @@ describe("the mode table", () => {
   it("lets only the modes that need readers make tool calls", () => {
     expect(ASSISTANT_MODES.proposal.toolCalls).toBe(0);
     expect(ASSISTANT_MODES.concierge.toolCalls).toBe(0);
+    // The journal guide reads a member's private entries, handed to it
+    // prefetched. A reader it could call would be a second road to data.
+    expect(ASSISTANT_MODES.journal.toolCalls).toBe(0);
+    expect(ASSISTANT_MODES.journal.audience).toBe("member");
     expect(ASSISTANT_MODES.studio.toolCalls).toBeGreaterThan(0);
   });
 
@@ -247,6 +253,37 @@ describe("guard order", () => {
   it("answers 503 when there is no key at all", async () => {
     harness({ villageKey: "" });
     expect(await callAssistant(req())).toEqual({ ok: false, status: 503, error: "assistant-unavailable" });
+  });
+
+  it("counts a caller's own burst bucket, at its own ceiling, in place of the network's", async () => {
+    // A team behind one house router shares one IP; a member surface keys
+    // the burst on the member so one long evening throttles nobody else.
+    const asked: [string, number][] = [];
+    wireAssistant({
+      villageKey: () => "k",
+      rateLimited: async (bucket, max) => {
+        asked.push([bucket, max]);
+        return bucket.startsWith("assist:");
+      },
+      fetchImpl: (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ content: [{ type: "text", text: '{"reply":"hello"}' }] }),
+        text: async () => "",
+      })) as unknown as typeof fetch,
+    });
+    const r = await callAssistant(req({ burstKey: "assist-journal:m-ana", burstPerHour: 80 }));
+    expect(r.ok).toBe(true);
+    expect(asked[0]).toEqual(["assist-journal:m-ana", 80]);
+    expect(asked.some(([b]) => b.startsWith("assist:"))).toBe(false);
+  });
+
+  it("keys the burst on the network at 30 an hour when the caller names nothing", async () => {
+    const asked: [string, number][] = [];
+    wireAssistant({ villageKey: () => "", rateLimited: async (bucket, max) => (asked.push([bucket, max]), false) });
+    await callAssistant(req());
+    expect(asked[0]).toEqual(["assist:10.0.0.1", ASSIST_BURST_PER_HOUR]);
+    expect(ASSIST_BURST_PER_HOUR).toBe(30);
   });
 });
 
@@ -411,6 +448,46 @@ describe("parseJsonReply", () => {
   it("falls back on nothing", () => {
     expect(parseJsonReply("", fb)).toEqual(fb);
     expect(parseJsonReply(null as any, fb)).toEqual(fb);
+  });
+});
+
+describe("readReplyFields: a member never sees raw model output", () => {
+  const F = ["reply", "nextQuestion"] as const;
+
+  it("reads a whole object, with a missing or non-string field as empty", () => {
+    expect(readReplyFields('{"reply":"hi","nextQuestion":3}', F)).toEqual({ reply: "hi", nextQuestion: "" });
+  });
+
+  it("recovers complete strings from JSON the token cap cut off", () => {
+    expect(readReplyFields('{"reply": "I hear you.", "nextQuestion": "What hel', F, { stopReason: "max_tokens" })).toEqual({
+      reply: "I hear you.",
+      nextQuestion: "",
+    });
+  });
+
+  it("recovers from valid JSON followed by prose with a stray brace", () => {
+    expect(readReplyFields('{"reply":"Steady.","nextQuestion":""}\nSee {above}', F)).toEqual({ reply: "Steady.", nextQuestion: "" });
+  });
+
+  it("unescapes what it recovers, and survives a raw newline inside a string", () => {
+    expect(readReplyFields('{"reply": "Say \\"yes\\".\nThen rest.", "nextQuestion": ', F)?.reply).toBe('Say "yes".\nThen rest.');
+  });
+
+  it("never serves a string the cut-off ended inside", () => {
+    expect(readReplyFields('{"reply": "I hear how much', F, { stopReason: "max_tokens", proseField: "reply" })).toBeNull();
+    expect(readReplyFields('{"reply": ', F, { proseField: "reply" })).toBeNull();
+  });
+
+  it("serves plain prose as the named field only when the provider ended it", () => {
+    expect(readReplyFields("That sounds like a full day.", F, { proseField: "reply" })).toEqual({
+      reply: "That sounds like a full day.",
+      nextQuestion: "",
+    });
+    expect(readReplyFields("That sounds like a full", F, { proseField: "reply", stopReason: "max_tokens" })).toBeNull();
+    expect(readReplyFields("That sounds like a full", F, { proseField: "reply", stopReason: "length" })).toBeNull();
+    expect(readReplyFields("Here it is: { reply", F, { proseField: "reply" })).toBeNull();
+    expect(readReplyFields("That sounds like a full day.", F)).toBeNull();
+    expect(readReplyFields("", F, { proseField: "reply" })).toBeNull();
   });
 });
 

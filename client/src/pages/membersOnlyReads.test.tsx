@@ -245,6 +245,16 @@ describe("/training", () => {
 });
 
 describe("/map", () => {
+  /*
+   * Each case arrives the way a link arrives: on a fresh history entry. The
+   * map records on its entry that Enter was pressed, so a later visit to the
+   * SAME entry (Back, Forward, F5) skips the gate, and without this the second
+   * case would find the first one's entry and never see the gate.
+   */
+  beforeEach(() => {
+    window.history.pushState(null, "", "/map");
+  });
+
   /** The artifact's boot handshake, which is what sends the lens reads. */
   async function mapIsReady() {
     // The shell defers the iframe behind Enter the Land (deep links skip it).

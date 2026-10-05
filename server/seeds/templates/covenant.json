@@ -1,0 +1,5 @@
+{
+  "_readme": "A neutral starting point for the content section named covenant: the two paragraphs at the top of the membership page, which is a brochure page. Nothing loads this file automatically. Replace every {{PLACEHOLDER}} and every [WRITE: ...], then save it in Admin or with PUT /api/admin/content/covenant.",
+  "opening": "[WRITE: one short paragraph on why people come to {{VILLAGE_NAME}}, in your own words.]",
+  "governance": "[WRITE: how the people who sign this take part in decisions at {{VILLAGE_NAME}}, and what is still to be decided together.] Questions go to {{CONTACT_EMAIL}}."
+}

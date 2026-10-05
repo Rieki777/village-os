@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Lock, Eye, EyeOff, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Lock, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
@@ -29,13 +29,13 @@ import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
 import { useAuth } from "@/contexts/AuthContext";
-import { authToken, useGameConfig } from "@/lib/gameApi";
+import { useGameConfig } from "@/lib/gameApi";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link } from "wouter";
-import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY } from "@shared/moduleCatalog";
+import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
-import type { ModuleLifecycle } from "@shared/modules";
+import type { ModuleLifecycle, ModuleTier } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
 
@@ -69,6 +69,7 @@ import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
+import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
@@ -705,155 +706,6 @@ function prettyType(t: string) {
   return t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Admin Gate (S1: admins are real users) ───────────────────────────────────
-//
-// The old PasswordGate probed the server with a shared password. Admins are
-// member accounts with role admin|founder now, so the gate is login-aware:
-// signed out → member login; signed in without the role → a clear refusal;
-// admin → the member TOKEN flows into the existing `password` prop plumbing,
-// which already sends `Authorization: Bearer <value>` everywhere. Renaming
-// that prop across fifteen tabs is deliberate later cleanup, not S1.
-
-function AdminGate({ onAuth }: { onAuth: (token: string) => void }) {
-  const { user, loading, login, logout } = useAuth();
-  // Same config the rest of the app reads its identity from (Layout.tsx and
-  // every public page use this hook). Null until the fetch resolves, so
-  // villageName starts blank and the heading falls back to plain "Admin"
-  // rather than flashing anyone's name.
-  const cfg = useGameConfig();
-  const villageName = String(cfg?.project?.name ?? "").trim();
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [checking, setChecking] = useState(false);
-
-  const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
-
-  useEffect(() => {
-    if (isAdmin) {
-      const token = authToken();
-      if (token) onAuth(token);
-    }
-  }, [isAdmin, onAuth]);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !pw) return;
-    setChecking(true);
-    setError("");
-    try {
-      await login(email, pw);
-      // On success the user lands in context; the effect above finishes the job
-      // (or the refusal screen renders if the account isn't an admin).
-    } catch {
-      setError("Wrong email or password.");
-      setPw("");
-    }
-    setChecking(false);
-  };
-
-  if (loading || isAdmin) {
-    return (
-      <div className="min-h-screen bg-teal-deep flex items-center justify-center">
-        <BreathingLoader label="Opening the admin" size={56} />
-      </div>
-    );
-  }
-
-  if (user && !isAdmin) {
-    return (
-      <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm text-center">
-          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-7 h-7 text-red-500" />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-gray-900 mb-2">Not an admin</h1>
-          <p className="text-sm text-gray-500 mb-8">
-            You're signed in as <strong>{user.name}</strong>, but this account doesn't
-            have admin access. Ask a founder to grant it, or sign in with an admin
-            account.
-          </p>
-          <button
-            onClick={() => logout()}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark transition-colors"
-          >
-            Sign out and switch accounts
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm">
-        <div className="w-14 h-14 rounded-full bg-teal-deep/10 flex items-center justify-center mx-auto mb-6">
-          <Lock className="w-7 h-7 text-teal-deep" />
-        </div>
-        <h1 className="font-display text-2xl font-bold text-center text-gray-900 mb-2">
-          {villageName ? `${villageName} Admin` : "Admin"}
-        </h1>
-        <p className="text-sm text-gray-500 text-center mb-8">
-          Sign in with your admin account
-        </p>
-        <form onSubmit={submit} className="space-y-4">
-          {/*
-            * `username`, not `email`, even though the field takes an address:
-            * `username` is the token a password manager pairs with
-            * `current-password` to recognise a sign-in form, and this is the
-            * identifier half of exactly that pair. A placeholder is not a name,
-            * so both fields carry one an assistive technology can read.
-            */}
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setError(""); }}
-            placeholder="Email"
-            aria-label="Email"
-            autoComplete="username"
-            autoFocus
-            className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-          />
-          <div className="relative">
-            <input
-              type={show ? "text" : "password"}
-              value={pw}
-              onChange={(e) => { setPw(e.target.value); setError(""); }}
-              placeholder="Password"
-              aria-label="Password"
-              autoComplete="current-password"
-              className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-            />
-            {/*
-              * The eye stays a 16px icon and the thing a thumb hits becomes
-              * 44x44 around it, which is what the input's `pr-12` was already
-              * reserving. gray-600 rather than gray-400 because this is a
-              * control, and 2.6:1 was under the 3:1 a non-text control owes.
-              */}
-            <button
-              type="button"
-              onClick={() => setShow(!show)}
-              aria-label={show ? "Hide password" : "Show password"}
-              className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center min-w-[44px] min-h-[44px] text-gray-600 hover:text-gray-900"
-            >
-              {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {error && <p role="alert" className="text-red-500 text-xs">{error}</p>}
-          <button
-            type="submit"
-            disabled={checking}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark disabled:opacity-60 transition-colors"
-          >
-            {checking ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // ── Submissions Tab ───────────────────────────────────────────────────────────
 
 export function SubmissionsTab({ password }: { password: string }) {
@@ -1058,7 +910,7 @@ export function SubmissionsTab({ password }: { password: string }) {
  * its last four characters — never the value. Typing a new one replaces it;
  * clearing falls back to the host env var if one exists.
  */
-function IntegrationsTab({ password }: { password: string }) {
+export function IntegrationsTab({ password }: { password: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -1154,8 +1006,8 @@ function IntegrationsTab({ password }: { password: string }) {
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <p className="font-semibold text-gray-900">
                     {c.title}
-                    {c.tier === "connected" && <span className="ml-2 text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded-full">connected</span>}
-                    {c.tier === "managed" && <span className="ml-2 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">managed</span>}
+                    {c.tier === "connected" && <span className="ml-2 text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded-full">{TIER_PILL.connected}</span>}
+                    {c.tier === "managed" && <span className="ml-2 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">{TIER_PILL.managed}</span>}
                     {/* The licence pill, on the one card whose field IS the
                         entitlement. Every other key opens an account; this one
                         is what the village bought. */}
@@ -3713,7 +3565,7 @@ export function ModulesTab({ password }: { password: string }) {
             {tiers.length > 1 && (
               <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className={SELECT} aria-label="Filter by tier">
                 <option value="all">Any tier</option>
-                {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
+                {tiers.map((t) => <option key={t} value={t}>{TIER_PILL[t as ModuleTier] ?? t}</option>)}
               </select>
             )}
             {domains.length > 1 && (
@@ -3793,8 +3645,8 @@ export function ModulesTab({ password }: { password: string }) {
                       {/* The third pill. `included` deliberately shows nothing:
                           it is the absence of a badge, exactly the way
                           everything that is not core is silent here today. */}
-                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>connected</span>}
-                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>managed</span>}
+                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>{TIER_PILL.connected}</span>}
+                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>{TIER_PILL.managed}</span>}
                       {/* Withdrawn sits beside the tier because it changes what
                           a founder can do, which is the same kind of fact. */}
                       {m.withdrawn && <span className={`${PILL} bg-orange-50 text-orange-700 border border-orange-200`}>withdrawn</span>}
@@ -3828,7 +3680,7 @@ export function ModulesTab({ password }: { password: string }) {
                     )}
                     {m.listing && (
                       <p className="text-xs text-gray-600 mt-1.5">
-                        enabled as {m.listing.tier} under library contract {m.listing.contractVersion}
+                        enabled as "{TIER_PILL[m.listing.tier as ModuleTier] ?? m.listing.tier}" under library contract {m.listing.contractVersion}
                         {m.listing.acceptedAt ? ` on ${new Date(m.listing.acceptedAt).toLocaleDateString()}` : ""}
                       </p>
                     )}
@@ -8854,25 +8706,25 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         </Link>
       </SetupSection>
 
-      <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup. Hand these to your developer or Claude Code.">
+      <SetupSection {...step} id="technical" n={7} title="Go live" subtitle="One-time technical setup, for you, your developer or your own AI assistant.">
         <ol className="space-y-4 text-sm text-gray-700">
           <li>
-            <p className="font-medium text-gray-900">1. Deploy on Railway</p>
-            <p className="text-gray-500 mb-1">From the project folder, with the Railway CLI linked to your service:</p>
-            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">railway up --ci -m "Initial deploy"</pre>
+            <p className="font-medium text-gray-900">1. Run the published image</p>
+            <p className="text-gray-500 mb-1">On one computer, docker compose up -d from the starter kit. On a host such as Railway, a service running:</p>
+            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">ghcr.io/rieki777/village-os:&lt;version&gt;</pre>
           </li>
           <li>
             <p className="font-medium text-gray-900">2. Add a persistent data volume</p>
-            <p className="text-gray-500 mb-1">All player and content data lives here. Without it, every deploy wipes it.</p>
+            <p className="text-gray-500 mb-1">Photographs and documents live here. Without it, every deploy wipes them.</p>
             <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">railway volume add --mount-path /app/data</pre>
           </li>
           <li>
-            <p className="font-medium text-gray-900">3. Set environment variables</p>
-            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`railway variables \\
-  --set "ADMIN_PASSWORD=<pick-a-strong-one>" \\
-  --set "JOURNEY_PASSWORD=<pick-a-strong-one>" \\
-  --set "FRONTEND_URL=https://your-domain"`}</pre>
-            <p className="text-gray-500 mt-1">The Resend email API key is set later inside admin, under {CONNECTIONS_GROUP_TITLE}.</p>
+            <p className="font-medium text-gray-900">3. Write the settings</p>
+            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">{`node scripts/fork-init.mjs \\
+  --village-name "Your Village" \\
+  --admin-email you@example.org \\
+  --domain your-domain`}</pre>
+            <p className="text-gray-500 mt-1">It writes .env with every secret generated. Copy the values into your host's variables yourself. The Resend email key can also go in later, under {CONNECTIONS_GROUP_TITLE}.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">4. Point your domain</p>
@@ -8880,11 +8732,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
           <li>
             <p className="font-medium text-gray-900">5. Social image & favicon</p>
-            <p className="text-gray-500">Edit <code>client/index.html</code>: the <code>og:image</code>, <code>twitter:image</code>, and favicon links (these are build-time, not in this wizard).</p>
+            <p className="text-gray-500">Only in a fork you build yourself: edit <code>client/index.html</code> for the <code>og:image</code> and <code>twitter:image</code> links, which are build-time and not in this wizard.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">6. Full reference</p>
-            <p className="text-gray-500">See <code>PLATFORM_FOUNDATION.md</code> in the repo for the complete white-label architecture and swap points.</p>
+            <p className="text-gray-500">See <code>START_HERE.md</code> and <code>docs/PROVISIONING.md</code> in the Village OS repository, and <code>AGENTS.md</code> for your AI assistant.</p>
           </li>
         </ol>
       </SetupSection>

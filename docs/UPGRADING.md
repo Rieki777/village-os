@@ -89,7 +89,10 @@ the upgrade, not after.
 
 ## Step 4. Take the backup
 
-Two things need saving, and they live in different places.
+Two things need saving, and they live in different places. On one computer
+with `docker-compose.yml`, the two commands under "Backups" in `START_HERE.md`
+save both, and that section has the restore. On a hosting provider, use its
+own database backups and volume snapshots. Otherwise:
 
 **The database.** Everything members wrote: people, roles, messages, quests,
 balances, votes.
@@ -121,8 +124,27 @@ have not looked at is not a backup.
 
 ## Step 5. Start the new version
 
-Pull the exact version number. Do not use `:stable` for the upgrade itself,
+Name the exact version number. Do not use `:stable` for the upgrade itself,
 because `:stable` moves and you want to know precisely what you installed.
+Never use `:edge`: it is the untested tip of `main`.
+
+**On one computer with `docker-compose.yml`** (`START_HERE.md`, part A),
+change `VILLAGE_OS_IMAGE` in `.env` to the new version, for example
+`ghcr.io/rieki777/village-os:1.2.0`, then:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Every setting stays in `.env`, so there is nothing to carry over. Never add
+`-v` to `docker compose down`: it deletes the database and every upload.
+
+**On a hosting provider**, change the image tag on the app service to the new
+version and redeploy. Its variables stay where they are.
+
+**With `docker run`**, keep the village's settings in an env file and hand it
+over again:
 
 ```sh
 docker pull ghcr.io/rieki777/village-os:1.2.0
@@ -131,38 +153,33 @@ docker stop village
 docker rm village
 
 docker run -d --name village -p 3000:3000 \
-  -e DATABASE_URL='mysql://user:password@your-database-host:3306/village' \
-  -e AUTH_TOKEN_SECRET='the same secret you used before' \
+  --env-file .env \
   -v village-data:/app/data \
   ghcr.io/rieki777/village-os:1.2.0
 ```
 
-**Carry over EVERY environment variable your village already had, not just the
-two shown above.** The command above is shortened to keep the upgrade steps
-readable, and the two it names are only the ones that will not work at all if
-you get them wrong. This server reads 35. Running with three of them starts
-cleanly and answers `/health` with `ok`, and then:
+**Carry over EVERY environment variable your village already had.** Only
+`DATABASE_URL` is needed for the server to start, so a village started with
+too few starts cleanly and answers `/health` with `ok`, and then:
 
+- without the same `AUTH_TOKEN_SECRET`, every member is signed out,
 - without `VILLAGE_SECRETS_KEY`, every integration secret your village sealed
   can no longer be decrypted,
-- without `FOUNDER_EMAILS`, nobody can be granted the founder role, which the
-  changelog for this very release may be telling you to do,
-- without `FRONTEND_URL`, `EMAIL_FROM`, `SCHEDULER_ENABLED` and the rest, links,
-  email and the nightly jobs go quiet.
+- without `ADMIN_PASSWORD` and `BREAK_GLASS_ADMIN_EMAIL`, a founder who is
+  locked out has no way back in,
+- without `FRONTEND_URL`, `EMAIL_FROM`, `RESEND_API_KEY` and the rest, links
+  and email go quiet.
 
-None of that reports an error naming the cause. The reliable way to do this is
-to copy the running container's full environment before you destroy it:
+None of that reports an error naming the cause. If your container was started
+with `-e` flags instead of an env file, copy its full environment before you
+destroy it:
 
 ```sh
 docker inspect village --format '{{range .Config.Env}}{{println .}}{{end}}' > village-env.txt
 ```
 
-Then pass every line of that file back to `docker run` with `--env-file`, or
-list them out again by hand. `docs/FORK_RUNBOOK.md` has the table of what each
-one is for.
-
-Keep `AUTH_TOKEN_SECRET` the same as before. Changing it signs every member
-out.
+Then pass that file back to `docker run` with `--env-file village-env.txt`.
+`.env.example` explains what each variable is for.
 
 `docker stop` asks the village to finish what it is doing and waits for it, so
 requests already in flight complete rather than being cut off.
@@ -176,6 +193,8 @@ that does not come back healthy. You do not run the commands above.
 ```sh
 docker logs -f village
 ```
+
+(With `docker-compose.yml`: `docker compose logs -f app`.)
 
 It applies the database changes before it starts answering anyone, so there is
 a gap where the village is not reachable. For an upgrade this is usually
@@ -212,22 +231,23 @@ after that point ran**.
 ## Going back
 
 Put the previous version back by starting the previous image. That is the
-whole operation:
+whole operation. With `docker-compose.yml`, set `VILLAGE_OS_IMAGE` in `.env`
+back to the version you were running before and run `docker compose up -d`.
+On a hosting provider, set the image tag back. With `docker run`:
 
 ```sh
 docker stop village && docker rm village
 
 docker run -d --name village -p 3000:3000 \
-  -e DATABASE_URL='mysql://user:password@your-database-host:3306/village' \
-  -e AUTH_TOKEN_SECRET='the same secret' \
+  --env-file .env \
   -v village-data:/app/data \
   ghcr.io/rieki777/village-os:1.1.0
 ```
 
 **Carry over every environment variable here too**, exactly as in step 5. Going
-back with three variables loses the same settings as going forward with three,
-and it loses them at the worst moment, when you are already recovering from
-something. Use the `village-env.txt` you saved before the upgrade.
+back with too few loses the same settings as going forward with too few, and
+it loses them at the worst moment, when you are already recovering from
+something. Use the same env file you started the upgrade with.
 
 **You do not restore the database to go back.** The old version is built to
 keep working over the newer database shape.

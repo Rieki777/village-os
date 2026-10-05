@@ -3179,6 +3179,25 @@ export const VARIABLES: VariableDef[] = [
       { value: "none", label: "Do not ask" },
     ],
   },
+
+  // ── Journal: the one number a village may read back from it ───────────────
+  //
+  // READ by server/lib/journal.ts at the point of use, through `pulseFloor`,
+  // for the pulse aggregate's suppression and the floor the page prints. The
+  // default is PULSE_FLOOR_DEFAULT in shared/journal.ts, which is 1 by ruling
+  // (2026-10-02), and the two are pinned together by server/lib/journal.test.ts.
+  {
+    key: "journal.pulse_floor",
+    category: "Journal",
+    label: "Members who must answer before a pulse average shows",
+    description:
+      "How many different members must answer a pulse question in a week before anybody sees that week's average for it. The default is 1, by ruling: a small team still sees its own pulse, and the privacy the village keeps lives in how feedback is written and delivered. Raise it when members know enough of each other's answers that a small average would point at a person. A floor keeps a small count out of casual reading and cannot stop subtraction: somebody who knows how all but one person answered can still read the last answer off the average. Only numbers are ever shown. The words a member writes in the pulse stay in their own journal.",
+    type: "integer",
+    default: "1",
+    min: 1,
+    max: 1000,
+    unit: "members",
+  },
 ];
 
 // ── Progression: the ladder's economics and thresholds, GENERATED per stage ──
