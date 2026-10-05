@@ -38,7 +38,7 @@
  * 5.95:1 on white to 2.89:1 on `bg-card` at night, and amber-ink 5.60:1 to
  * 3.07:1. This card uses neither.
  */
-import { CheckCircle2, Circle } from "lucide-react";
+import LadderChip from "@/components/sheet/LadderChip";
 import type { GameStagePublic } from "@/lib/gameApi";
 import type { StageRule } from "@shared/gameConfig";
 
@@ -236,30 +236,16 @@ export default function MaturityLadder({
           const current = i === stageIndex;
           return (
             <li key={s.id}>
-              <span
-                aria-current={current ? "step" : undefined}
+              {/* The icon carries the standing visually; `srWords` carries it
+                  to a reader who gets no icon, so the ladder is not colour and
+                  shape alone. */}
+              <LadderChip
+                look={current ? "inverted" : reached ? "lit" : "plain"}
+                current={current}
                 title={`${s.name}: ${s.description}`}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                  current
-                    ? "bg-foreground text-background"
-                    : reached
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {reached ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                ) : (
-                  <Circle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                )}
-                {s.name}
-                {/* The icon carries the standing visually. This carries it to
-                    a reader who gets no icon, so the ladder is not colour and
-                    shape alone. */}
-                <span className="sr-only">
-                  {current ? ", where you stand" : reached ? ", walked" : ", ahead of you"}
-                </span>
-              </span>
+                label={s.name}
+                srWords={current ? ", where you stand" : reached ? ", walked" : ", ahead of you"}
+              />
             </li>
           );
         })}

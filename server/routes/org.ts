@@ -510,7 +510,7 @@ export function register(app: Express, deps: Deps): void {
    * work withholding.
    *
    * THE REASON IS IN THE PAYLOADS, not in the principle. `/api/org`'s public
-   * tier is a first name and nothing else, and `publicHolder` above lists
+   * tier is a first name and nothing else, and `publicHolder` (lib/seatProjection.ts) lists
    * what it strips and why it was stripped: `focus`, `note`, `userId`,
    * `kind`, `lapsed`. Every row this route returns carries `focus` and
    * `endedReason`. Both sit at the MEMBER tier or above in that same

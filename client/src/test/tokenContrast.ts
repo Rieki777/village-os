@@ -16,7 +16,15 @@
  *   - tailwindcss/theme.css: the stock palette (`white`, `stone-500`, ...);
  *   - optionally a brand overlay, the `--tone-*` and semantic values
  *     shared/brandTokens.ts derives for a village and server/lib/themeCss.ts
- *     emits at `:root:root`, which outranks `.dark`.
+ *     emits at `:root:root`, which outranks `.dark`;
+ *   - or the night sheet's own values (`nightOverlay()`), read from the
+ *     `.sheet-night` block in index.css. A surface under that class redeclares
+ *     every semantic token on itself, and a measurement that knew only `:root`
+ *     and `.dark` would measure the night card as a light page.
+ *
+ * A Tailwind v4 variable utility (`text-(--sheet-earned-lit)`, with or
+ * without a `/NN` alpha) is resolved through the same values, so a colour a
+ * component reaches by variable name is measured, never skipped.
  *
  * Translucent grounds are composited bottom up the way the contrast QA probe
  * (scripts/qa/contrast.mjs) does it in a browser, and the ratio comes from
@@ -96,6 +104,8 @@ interface Sheets {
   colors: Record<string, string>;
   root: Record<string, string>;
   dark: Record<string, string>;
+  /** The `.sheet-night` block's declarations. */
+  night: Record<string, string>;
 }
 
 let cached: Sheets | null = null;
@@ -126,7 +136,12 @@ function sheets(): Sheets {
 
   const merge = (bodies: string[]) =>
     bodies.reduce<Record<string, string>>((acc, b) => Object.assign(acc, declarations(b)), {});
-  cached = { colors, root: merge(blocks(indexCss, ":root")), dark: merge(blocks(indexCss, ".dark")) };
+  cached = {
+    colors,
+    root: merge(blocks(indexCss, ":root")),
+    dark: merge(blocks(indexCss, ".dark")),
+    night: merge(blocks(indexCss, ".sheet-night")),
+  };
   return cached;
 }
 
@@ -245,6 +260,11 @@ function utilityColour(prefix: "text" | "bg", cls: string, vars: Record<string, 
   const slash = rest.lastIndexOf("/");
   const name = slash === -1 ? rest : rest.slice(0, slash);
   const alpha = slash === -1 ? 1 : parseFloat(rest.slice(slash + 1)) / 100;
+  const viaVar = /^\((--[\w-]+)\)$/.exec(name);
+  if (viaVar) {
+    const c = parseColor(`var(${viaVar[1]})`, vars);
+    return { ...c, a: c.a * alpha };
+  }
   const raw = sheets().colors[name];
   if (raw === undefined) throw new Error(`${describeEl(el)}: "${cls}" is not a colour this can resolve`);
   const c = parseColor(raw, vars);
@@ -306,6 +326,32 @@ function isBold(el: Element, scheme: Scheme): boolean {
 export function schemeVars(scheme: Scheme, overlay: Record<string, string> = {}): Record<string, string> {
   const s = sheets();
   return { ...s.root, ...(scheme === "dark" ? s.dark : {}), ...overlay };
+}
+
+/**
+ * The night sheet's values, as an overlay for `measureText`: the declarations
+ * of the `.sheet-night` block in index.css, read from the file, so a re-tinted
+ * default is measured the day it changes. Every value there is
+ * `var(--sheet-<role>, <default>)`, which resolves to the platform default
+ * while no village sets the `--sheet-*` layer.
+ */
+export function nightOverlay(): Record<string, string> {
+  return { ...sheets().night };
+}
+
+/**
+ * The contrast of an EDGE against the ground it is drawn on, both given as
+ * the utilities a component carries (`border-notice/55`, `bg-muted`). For a
+ * control's boundary, which wants 3:1 (WCAG 1.4.11). A translucent edge is
+ * composited over the ground first, as the browser paints it.
+ */
+export function edgeContrast(borderClass: string, groundClass: string, vars: Record<string, string>): number {
+  const el = { tagName: "TEST", getAttribute: () => `${borderClass} ${groundClass}` } as unknown as Element;
+  const edge = utilityColour("text", `text-${borderClass.replace(/^border-/, "")}`, vars, el);
+  const ground = utilityColour("bg", groundClass, vars, el);
+  if (!edge || !ground) throw new Error(`cannot read ${borderClass} on ${groundClass}`);
+  const solidGround = over(ground, parseColor("#000000", vars));
+  return contrastRatio(toHex(over(edge, solidGround)), toHex(solidGround));
 }
 
 const EMOJI = new RegExp("^[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s]+$", "u");

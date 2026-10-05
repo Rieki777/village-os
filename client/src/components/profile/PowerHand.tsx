@@ -18,7 +18,7 @@
  * because the hand is still in the inbox and still theirs. An answered hand is
  * down, and the notice that names the power is how the answer reaches them.
  *
- * The seat hand on the map (`components/power/HolderCard.tsx`) uses the same
+ * The seat hand on the map (`components/power/SeatAction.tsx`) uses the same
  * words for the same act, so a member meets one idea in two places.
  *
  * ── THE SERVER'S WORD OUTLASTS A REMOUNT ───────────────────────────────────

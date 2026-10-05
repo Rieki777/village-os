@@ -389,6 +389,24 @@ export function isLapsed(
 }
 
 /**
+ * The state somebody SET on this seat by hand and that still holds, or null.
+ *
+ * An override with no expiry holds until it is cleared; one with an expiry
+ * holds until that instant. `seatState` below reads this first, and the seat
+ * projection (`./seatProjection`) reads it to say where a state came from, so
+ * "declared" and the state it explains are one rule.
+ */
+export function overrideInForce(
+  role: Pick<OrgRole, "statusOverride" | "statusOverrideExpiresAt">,
+  now = new Date(),
+): SeatState | null {
+  const ov = role.statusOverride;
+  if (!ov) return null;
+  const until = role.statusOverrideExpiresAt;
+  return !until || until.getTime() > now.getTime() ? ov : null;
+}
+
+/**
  * The seat's state, derived.
  *
  * `holders` is the live seatings, each already annotated with whether it has
@@ -401,11 +419,8 @@ export function seatState(
   holders: Array<{ lapsed?: boolean }> | number,
   now = new Date(),
 ): SeatState {
-  const ov = role.statusOverride;
-  if (ov) {
-    const until = role.statusOverrideExpiresAt;
-    if (!until || until.getTime() > now.getTime()) return ov;
-  }
+  const ov = overrideInForce(role, now);
+  if (ov) return ov;
   const list: Array<{ lapsed?: boolean }> =
     typeof holders === "number" ? Array.from({ length: holders }, () => ({}) as { lapsed?: boolean }) : holders;
   const live = list.length;

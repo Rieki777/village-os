@@ -55,6 +55,7 @@
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import OwedPostings from "@/components/review/OwedPostings";
+import ProposedSeatPreview from "@/components/power/ProposedSeatPreview";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -876,6 +877,9 @@ export default function Review() {
                   )}
                   {item.sourceRef && (
                     <p className="text-xs text-muted-foreground mt-1">Source: {item.sourceRef}</p>
+                  )}
+                  {item.kind === "role.proposed" && (
+                    <ProposedSeatPreview text={edits[item.id] ?? JSON.stringify(item.payload, null, 2)} />
                   )}
 
                   {/* The textarea. This is the redaction path and the reason

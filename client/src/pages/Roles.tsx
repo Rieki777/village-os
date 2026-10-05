@@ -20,20 +20,25 @@ import {
   MessageCircle,
   ClipboardList,
   Scale,
+  Link2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { prefersReducedMotion } from "@/components/natural/useReducedMotion";
 import InfoTip from "@/components/InfoTip";
 import SeatClaimCard from "@/components/SeatClaimCard";
 import { swatchFor } from "@/lib/swatch";
-import { gameFetch } from "@/lib/gameApi";
+import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
+import SeatAction from "@/components/power/SeatAction";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
+import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
+import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
-
-type RoleStatus = "filled" | "open" | "forming" | "partial";
+import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
+import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 
 interface RoleEntry {
   id: string;
@@ -41,19 +46,26 @@ interface RoleEntry {
   /** The circle this seat sits in, resolved from its id to a display name. */
   group: string;
   circleId?: string | null;
-  status: RoleStatus;
+  status: SeatStateWord;
   holders?: string[];
-  holderNote?: string;
-  aim: string;
-  domain: string;
-  accountabilities: string[];
-  whyItMatters?: string;
-  // Legacy key some stored cards may still carry.
-  evolutionaryPurpose?: string;
   icon?: string;
   color?: string;
   /** A seeded demonstration seat. Its history is demo rows, so it stays off. */
   isExample?: boolean;
+  /** The `/api/org` row as it arrived, which the role card reads for itself. */
+  raw: any;
+}
+
+/** What every expanded card on the page reads besides its own row. */
+interface SheetSource {
+  circles: any[];
+  people: PeopleTier | null;
+  village: unknown;
+  ctx: SheetContext;
+  /** The raise-hand route lives under `/api/map`, so the door follows that module. */
+  raiseHand: boolean;
+  /** Whether the seat's history is shown to this reader (`seatHistoryShown`). */
+  historyShown: boolean;
 }
 
 /** Icon names a card may reference; anything unknown falls back to CircleDot. */
@@ -66,19 +78,129 @@ const ICONS: Record<string, React.ElementType> = {
 // village's circle names, living in platform code: a fork got no subtitle for
 // any circle it actually had. They come from the circle's own purpose now.
 
-const statusBadge: Record<RoleStatus, { label: string; className: string }> = {
-  filled: { label: "Filled", className: "bg-sage/15 text-sage border border-sage/30" },
-  open: { label: "Open Role", className: "bg-amber/15 text-amber-700 border border-amber/40" },
-  forming: { label: "Forming", className: "bg-teal/15 text-teal-deep border border-teal/30" },
-  partial: { label: "Partially Filled", className: "bg-gold/20 text-amber-800 border border-gold/40" },
+// The header's badge says the seat's state in the card's own words
+// (`STATE_WORDS`), keyed by the union, so the row and the card below it can
+// never disagree and a sixth state cannot draw an empty badge. A seat whose
+// term reached its date used to fall through to "Open Role" here.
+const statusBadge: Record<SeatStateWord, string> = {
+  filled: "bg-sage/15 text-sage border border-sage/30",
+  open: "bg-amber/15 text-amber-700 border border-amber/40",
+  forming: "bg-teal/15 text-teal-deep border border-teal/30",
+  partial: "bg-gold/20 text-amber-800 border border-gold/40",
+  expired: "bg-gold/20 text-amber-800 border border-gold/40",
 };
 
-function normalizeStatus(s: unknown): RoleStatus {
+function normalizeStatus(s: unknown): SeatStateWord {
   const v = String(s ?? "").toLowerCase();
+  if (isSeatState(v)) return v;
   if (v.startsWith("fill")) return "filled";
   if (v.startsWith("part")) return "partial";
   if (v.startsWith("form")) return "forming";
   return "open";
+}
+
+// ONE SEAT'S CARD IS A LINK: `/roles?seat=<id>`, the way /map/circles keeps
+// `?focus=` (VillageMap.tsx, `focusFromUrl` and `focusTo`). A steward
+// recruiting for a seat sends the link and the reader lands on that card.
+// A seat id is a slug of the seat's own name (`createOrgRole`), so no person
+// is ever written into the address.
+
+/** The seat the address names, read once on arrival. */
+function seatFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("seat") || null;
+}
+
+/**
+ * Keeps the address in the bar the link to whatever is open. REPLACED and
+ * never pushed: opening and closing rows is reading one page, so Back still
+ * leaves it in one press. Nothing is pushed, so no popstate listener either.
+ */
+function writeSeatToUrl(id: string | null) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("seat", id);
+  else url.searchParams.delete("seat");
+  window.history.replaceState(window.history.state, "", url.toString());
+}
+
+/** The absolute link to one seat's card. */
+function seatLink(id: string): string {
+  const url = new URL("/roles", window.location.origin);
+  url.searchParams.set("seat", id);
+  return url.toString();
+}
+
+/**
+ * "Copy link" under one seat's card. The clipboard write runs inside the
+ * click, which is the user activation a browser asks for. Where the clipboard
+ * refuses or is missing (an http origin has no `navigator.clipboard`), the
+ * link appears in a read-only field, selected, for the reader to copy by
+ * hand. The polite line below is in the row from the moment it opens, so what
+ * lands in it is announced.
+ *
+ * Every name here carries the seat. The control sits outside the card's
+ * `aria-labelledby`, and a screen reader listing the page's buttons hears
+ * each one on its own, so a fixed "this seat" read the same under every row
+ * and named none of them. The visible words stay "Copy link" and open the
+ * accessible name, so a reader who says what they see still reaches it.
+ */
+function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }) {
+  const link = seatLink(seatId);
+  const [said, setSaid] = useState<"" | "copied" | "refused">("");
+  // A count so a second refusal selects the field again.
+  const [refused, setRefused] = useState(0);
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!refused) return;
+    field.current?.focus();
+    field.current?.select();
+  }, [refused]);
+  useEffect(() => {
+    if (said !== "copied") return;
+    const t = window.setTimeout(() => setSaid(""), 4000);
+    return () => window.clearTimeout(t);
+  }, [said]);
+  const fallBack = () => {
+    setRefused((n) => n + 1);
+    setSaid("refused");
+  };
+  const copy = () => {
+    setSaid("");
+    const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (!clip?.writeText) return fallBack();
+    clip.writeText(link).then(() => setSaid("copied"), fallBack);
+  };
+  const line =
+    said === "copied"
+      ? `Link to ${seatName} copied.`
+      : said === "refused"
+        ? "Copying did not work here. The link is selected in the field below."
+        : "";
+  return (
+    <div className="pt-4 border-t border-border space-y-2">
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy link to ${seatName}`}
+        className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
+      >
+        <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+        Copy link
+      </button>
+      {refused > 0 && (
+        <input
+          ref={field}
+          type="text"
+          readOnly
+          value={link}
+          aria-label={`Link to ${seatName}`}
+          onFocus={(e) => e.currentTarget.select()}
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
+        />
+      )}
+      <p role="status" className="text-xs text-muted-foreground">{line}</p>
+    </div>
+  );
 }
 
 interface RoleCardProps {
@@ -86,34 +208,51 @@ interface RoleCardProps {
   expanded: boolean;
   onToggle: () => void;
   index: number;
-  /** Whether holder names reached this reader at all. */
-  canSeePeople: boolean;
   /** Whether this reader may say what the seat is held for. */
   canTagNeeds: boolean;
+  sheet: SheetSource;
+  /** The reader arrived by a link to this seat (`?seat=`). */
+  arrive: boolean;
 }
 
-function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }: RoleCardProps) {
+function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive }: RoleCardProps) {
   // Whose words the vendor panel shows. Taken from the listing rather than
   // written here, because another fork's connector is a different service
   // and a literal would be this platform naming one of them.
   const vendorName = useModule("saberra")?.name ?? "the connected service";
+  const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
   const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
-  const badge = statusBadge[role.status];
   const holders = (role.holders ?? []).filter(Boolean);
-  const why = role.whyItMatters ?? role.evolutionaryPurpose ?? "";
+  // Arriving by a link to this seat: its header is scrolled to and takes
+  // focus, so a keyboard or screen-reader reader starts at the seat they were
+  // sent to. `instant` under reduced motion, because `html` scrolls smoothly
+  // by default (index.css).
+  const header = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = header.current;
+    if (!arrive || !el) return;
+    el.scrollIntoView?.({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "start" });
+    el.focus({ preventScroll: true });
+  }, [arrive]);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      // The linked row is drawn in place. Its entrance offset is still on it
+      // when the scroll is measured, so it would settle 20px higher, under
+      // the sticky nav (measured in Chromium: header top 92, nav bottom 96).
+      initial={arrive ? false : { opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay: index * 0.04 }}
     >
       <button
+        ref={header}
+        id={headerId}
         onClick={onToggle}
-        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border"
+        aria-expanded={expanded}
+        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border scroll-mt-28"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -123,8 +262,8 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="font-display text-lg font-bold text-foreground leading-tight">{role.name}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.className}`}>
-                  {badge.label}
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
+                  {STATE_WORDS[role.status]}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -141,7 +280,11 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
         </div>
       </button>
 
-      <AnimatePresence>
+      {/* The linked row arrives open, with no opening animation: measuring a
+          height of "auto" makes framer-motion restore the scroll it found
+          (`window.scrollTo(0, y)`), which cancels the smooth scroll above in
+          its first frame and leaves the reader at the top of the page. */}
+      <AnimatePresence initial={!arrive}>
         {expanded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -150,60 +293,31 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
             className="overflow-hidden"
           >
             <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-5">
-              {(holders.length > 0 || role.holderNote) && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Held By</h4>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {holders.length > 0 ? holders.join(", ") : "open"}
-                    {role.holderNote && (
-                      <span className="text-muted-foreground italic"> {role.holderNote}</span>
-                    )}
-                  </p>
-                </div>
-              )}
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Aim
-                  <InfoTip tip="The aim is what this role works toward: the outcome it exists to keep alive." label="What an aim is" />
-                </h4>
-                <p className="text-sm text-foreground leading-relaxed">{role.aim}</p>
-              </div>
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-                  Domain
-                  <InfoTip tip="The domain is what this role decides on without asking. Inside it the role holder has real authority; outside it they bring proposals." label="What a domain is" />
-                </h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{role.domain}</p>
-              </div>
-              {(role.accountabilities ?? []).length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                    Key Accountabilities
-                    <InfoTip tip="Accountabilities are the ongoing activities the circle can count on this role to keep doing." label="What accountabilities are" />
-                  </h4>
-                  <ul className="space-y-1.5">
-                    {role.accountabilities.filter(Boolean).map((a) => (
-                      <li key={a} className="text-sm text-muted-foreground flex gap-2">
-                        <span className="text-sage mt-0.5 flex-shrink-0">✓</span>
-                        {a}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {why && (
-                <div className="pt-4 border-t border-border">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Why This Role Matters</h4>
-                  <p className="text-sm text-muted-foreground italic leading-relaxed">{why}</p>
-                </div>
-              )}
-              {/* "Held By" above is the seat today. This is the seat's whole
-                  record, ended holdings included, which is the half a village
-                  loses when it keeps its org chart in a document. Fetched only
-                  once a reader opens the card. */}
+              {/* The role card, the same one the map draws, from this page's
+                  own `/api/org` row at whatever tier it was served. The row
+                  header above already says the circle and the state, so the
+                  card leaves both out and is named by that header. Its one
+                  door is a raised hand, offered while the map module is on
+                  for this reader; the contact relay stays on the map. */}
+              <SeatTradingCard
+                embedded
+                labelledBy={headerId}
+                input={fromOrgSeat(role.raw, sheet.circles, sheet.people, sheet.village, { raiseHand: sheet.raiseHand })}
+                ctx={sheet.ctx}
+                action={<SeatAction circleId={role.circleId ?? null} />}
+              />
+              {/* The seat as a link, for sending to whoever might hold it.
+                  Outside the night card, in this page's own light inks. Not
+                  on a demonstration seat: nobody is recruited for one, so a
+                  link to it has nothing to ask anybody. */}
+              {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {/* The card is the seat today. This is the seat's whole record,
+                  ended holdings included, which is the half a village loses
+                  when it keeps its org chart in a document. Fetched only once
+                  a reader opens the card. */}
               {!role.isExample && (
                 <div className="pt-4 border-t border-border">
-                  <SeatHistory roleId={role.id} canSeePeople={canSeePeople} />
+                  <SeatHistory roleId={role.id} canSeePeople={sheet.historyShown} />
                 </div>
               )}
               {/* Which of the village's needs this seat carries (R18). A
@@ -234,16 +348,32 @@ function RoleCard({ role, expanded, onToggle, index, canSeePeople, canTagNeeds }
 }
 
 export default function Roles() {
-  const [expandedRole, setExpandedRole] = useState<string | null>(null);
+  // The seat a link named. Rows mount only once the seats load, so the
+  // matching row mounts open and arriving (scrolled to, focused); a miss is
+  // said in one line.
+  const [linked] = useState<string | null>(seatFromUrl);
+  const [expandedRole, setExpandedRole] = useState<string | null>(linked);
+  const [linkMissed, setLinkMissed] = useState(false);
   const [roles, setRoles] = useState<RoleEntry[] | null>(null);
   const [circles, setCircles] = useState<any[]>([]);
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
+  const [village, setVillage] = useState<unknown>(undefined);
+  const [historyShown, setHistoryShown] = useState(false);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
+  // The card's clock and the village's class names: one cached read each for
+  // the whole page, however many rows are opened.
+  const season = useSeason();
+  const classNames = useClassNames();
+  // A raised hand posts under `/api/map`, which the map module gates. Offered
+  // only while this reader's catalog lists the module as on: a catalog that
+  // failed to load offers nothing, because the door would answer 404.
+  const map = useModule("map");
+  const raiseHand = !!map && map.lifecycle !== "off";
 
   // Seats are rows now (0049), not cards in a document. `state` arrives
   // DERIVED from live holdings against the seat count, so the page can no
@@ -264,6 +394,8 @@ export default function Roles() {
         );
         setCircles(data.circles ?? []);
         setPeople(data.people ?? null);
+        setVillage(data.village);
+        setHistoryShown(seatHistoryShown(data.people, data.roles));
         setSeatCounts({
           seats: (data.roles as any[]).reduce((n, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles as any[]).reduce((n, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -275,23 +407,44 @@ export default function Roles() {
             circleId: r.circleId ?? null,
             group: String(circleById.get(r.circleId)?.name ?? "Unplaced roles"),
             status: normalizeStatus(r.state),
-            holders: (r.holders ?? []).map((h: any) => h.name).filter(Boolean),
-            holderNote: (r.holders ?? []).map((h: any) => h.note).filter(Boolean).join(" "),
-            aim: String(r.aim ?? ""),
-            domain: String(r.domain ?? ""),
-            accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities : [],
-            whyItMatters: r.whyItMatters ?? "",
+            // An agent's member row carries a vendor's name; the header says
+            // "An agent", as the card under it and the public tier do.
+            holders: (r.holders ?? []).map(orgHolderName).filter((n: string | null): n is string => !!n),
             icon: r.icon ?? undefined,
             color: r.color ?? undefined,
             isExample: !!r.isExample,
+            raw: r,
           })),
         );
       })
       .catch(() => setFailed(true));
   }, []);
 
-  const toggle = (id: string) =>
-    setExpandedRole((prev) => (prev === id ? null : id));
+  // A link to a seat the page no longer lists closes nothing and opens
+  // nothing: the line says so and the address drops the seat, so the bar
+  // still names what is open. A failed load says its own line and leaves the
+  // address alone, so a refresh tries the link again.
+  useEffect(() => {
+    if (!roles || !linked || roles.some((r) => r.id === linked)) return;
+    setExpandedRole(null);
+    setLinkMissed(true);
+    writeSeatToUrl(null);
+  }, [roles, linked]);
+
+  const toggle = (id: string) => {
+    const next = expandedRole === id ? null : id;
+    setExpandedRole(next);
+    setLinkMissed(false);
+    writeSeatToUrl(next);
+  };
+  const sheet: SheetSource = {
+    circles,
+    people,
+    village,
+    ctx: { now: new Date(), season: seasonForSheet(season), classNames },
+    raiseHand,
+    historyShown,
+  };
 
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
@@ -382,6 +535,11 @@ export default function Roles() {
                   The roles list is catching its breath. Please refresh in a moment.
                 </div>
               )}
+              {linkMissed && (
+                <p className="text-center text-sm text-muted-foreground mb-8">
+                  That seat is not on this page anymore.
+                </p>
+              )}
             </div>
 
             {groups.map(({ title, subtitle, roles: groupRoles }) => (
@@ -400,8 +558,9 @@ export default function Roles() {
                       expanded={expandedRole === role.id}
                       onToggle={() => toggle(role.id)}
                       index={i}
-                      canSeePeople={!!people?.visible}
                       canTagNeeds={canTagNeeds}
+                      sheet={sheet}
+                      arrive={linked === role.id}
                     />
                   ))}
                 </div>
