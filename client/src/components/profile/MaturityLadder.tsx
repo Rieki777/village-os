@@ -126,10 +126,10 @@ export default function MaturityLadder({
   return (
     <section aria-labelledby="maturity-h" className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
       <h2 id="maturity-h" className="font-display text-2xl font-bold text-card-foreground">
-        Maturity
+        Path of Growth
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Where you stand on this village's ladder, and what opens the next rung.
+        Where you stand, and how to reach the next stage.
       </p>
 
       {here ? (
@@ -151,7 +151,7 @@ export default function MaturityLadder({
         <>
       {next && here ? (
         <div aria-live="polite" className="mt-4 rounded-xl border border-border bg-muted p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Next rung</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Next stage</p>
           <p className="mt-1 font-semibold text-foreground">{next.name}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {/* The distance when the rung counts something, the mechanic when
@@ -216,7 +216,7 @@ export default function MaturityLadder({
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
-          You stand on the last rung this village has named.
+          You stand on the last stage this village has named.
         </p>
       )}
         </>
