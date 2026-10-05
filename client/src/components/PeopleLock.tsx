@@ -33,6 +33,7 @@
  */
 import { Link, useLocation } from "wouter";
 import { Users } from "lucide-react";
+import { internalPath } from "@/lib/internalPath";
 
 export interface PeopleTier {
   /** Are holder names in the payload this page just read? */
@@ -43,10 +44,6 @@ export interface PeopleTier {
   signedIn: boolean;
 }
 
-/** Internal paths only, the same rule `SignInToSee` applies to its own next. */
-function safeNext(path: string): string {
-  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
-}
 
 export function PeopleLockNote({
   people,
@@ -81,7 +78,7 @@ export function PeopleLockNote({
         </p>
       ) : (
         <Link
-          href={`/login?next=${encodeURIComponent(safeNext(location))}`}
+          href={`/login?next=${encodeURIComponent(internalPath(location) ?? "/")}`}
           className="inline-flex items-center min-h-[44px] px-5 rounded-lg bg-teal-deep text-white font-semibold"
         >
           Sign in to see who holds them

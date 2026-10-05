@@ -65,13 +65,8 @@ import { useModules } from "@/modules/ModuleProvider";
 import { useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { gateLine, nameList } from "./gateCopy";
+import { internalPath } from "@/lib/internalPath";
 
-/** Internal paths only: anything else falls back to home. The backslash
- *  variant is refused too, so this stays safe even in front of a consumer
- *  that normalises "/\" the way location.href would. */
-function safeNext(path: string): string {
-  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
-}
 
 const DOOR =
   "inline-flex items-center justify-center min-h-[44px] px-5 rounded-lg font-semibold" +
@@ -112,7 +107,7 @@ export function SignInDoors({
   align?: "center" | "start";
 }) {
   const [location] = useLocation();
-  const target = safeNext(next ?? location);
+  const target = internalPath(next ?? location) ?? "/";
   return (
     <div
       className={`flex flex-col sm:flex-row gap-3 ${align === "start" ? "sm:justify-start" : "justify-center"}`}
@@ -180,7 +175,7 @@ export function SignInToSee({
 }) {
   const [location] = useLocation();
   const { user, loading } = useAuth();
-  const target = safeNext(next ?? location);
+  const target = internalPath(next ?? location) ?? "/";
   const line = behind ?? gateLine(moduleId);
 
   // The session is still being read. Claiming anything about this reader here
