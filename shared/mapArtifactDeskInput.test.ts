@@ -20,6 +20,7 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
@@ -28,7 +29,6 @@ const SCENE_KEY = /localStorage\.getItem\('([\w-]+-grounds-scene)'\)/.exec(html)
 /** And the one for this person's own view (the mask). */
 const MASK_KEY = /const MASK_KEY='([\w-]+)'/.exec(html)?.[1] ?? "";
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -152,9 +152,9 @@ function boot(
     window,
     doc: window.document,
     uncaught,
-    run: <T>(src: string) => window.eval(src) as T,
+    run: <T>(src: string) => evalIn<T>(window, src),
     post(data) {
-      const own = window.eval("JSON").parse(JSON.stringify(data));
+      const own = ownCopy(window, data);
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
     close: () => window.close(),
@@ -521,7 +521,9 @@ describe("the Get Involved rows and the vital chips take the keyboard", () => {
     expect(chips.length, "the chips").toBeGreaterThan(4);
     expect(chips.filter((c) => c.tagName !== "BUTTON").length, "chips that are not buttons").toBe(0);
     const people = chips.find((c) => c.dataset.k === "people") as HTMLElement;
-    expect(people.getAttribute("aria-label"), "the reading, and that it is a sample").toMatch(/^People: .+, sample reading$/);
+    // F29, as Rye decided it (2026-10-02): an unset chip is an EXAMPLE, and
+    // the name says so (shared/mapArtifactChips.test.ts holds the rest).
+    expect(people.getAttribute("aria-label"), "the reading, and that it is an example").toMatch(/^People: .+, example\. The founder has not set this yet$/);
     people.focus();
     people.click(); // jsdom's click() carries detail 0, the mark of a key
     await settle(0);
@@ -882,6 +884,213 @@ describe("Your view is kept for the person, and stays out of the village's recor
     expect(alone.run<string>("EDITS[EDITS.length-1].action")).toBe("label-style");
     expect(alone.run<number>("EDITS.length")).toBe(before + 1);
     expect(alone.run<string>("SKIN.label_style")).toBe("tablet");
+    alone.close();
+  });
+});
+
+/* D11 and D12, Rye's best-guess calls on the two questions F22 left open.
+   D11: every setting in Your view is the person's own and is kept in their
+   browser, so the sheet's first sentence ("to you, and to nobody else") is
+   true of the accent, the parchment, the label size, the icon style, the
+   dream mist, the village pulse and the custom palette as well. Before, each
+   of those wrote SKIN, the village's record, for every visitor, came back as
+   the village's on the next reload, and the palette was kept nowhere.
+   D12: a founder's Your view is their personal view too. Their theme and
+   dress used to dress SKIN, so the scene export a publish carries took one
+   person's view along as the village's look; Village Settings is its home. */
+describe("every dial in Your view is the person's own (D11), the founder's included (D12)", () => {
+  const VILLAGE_SKIN = { theme: "", accent: "#157f7d", global_scale: 1, label_scale: 1, icon_mode: "auto", mist: false, glow: true };
+  const village =
+    (stored: Record<string, string> = {}) =>
+    (w: ArtifactWindow) => {
+      Object.defineProperty(w, "parent", { configurable: true, get: () => ({ postMessage() {} }) });
+      for (const [k, v] of Object.entries(stored)) w.localStorage.setItem(k, v);
+    };
+  const arrive = (b: Booted, canEdit: boolean) => {
+    b.post({ type: "config", skin: VILLAGE_SKIN });
+    b.post({ type: "hand", canEdit, canPublish: canEdit, liveVersion: 6, live: { version: 6, by: "the founder" } });
+  };
+  const set = (b: Booted, id: string, value: string | boolean, type = "input") => {
+    const el = b.doc.getElementById(id) as HTMLInputElement;
+    if (typeof value === "boolean") el.checked = value;
+    else el.value = value;
+    el.dispatchEvent(new b.window.Event(type, { bubbles: true }));
+  };
+  /** What a visitor sees, and what each control reads back. */
+  const screen = (b: Booted) =>
+    b.run<Record<string, unknown>>(`(()=>{const v=k=>document.documentElement.style.getPropertyValue(k).trim();
+      return {accent:v('--t-accent'),parch:v('--parch'),lbl:v('--lblScale'),surface:v('--t-surface'),icon:iconMode,
+        mist:!!(window.lookOf?lookOf('mist'):SKIN.mist),glow:(window.lookOf?lookOf('glow'):SKIN.glow)!==false,
+        controls:[$('skAccent').value,$('skParch').value,$('skLbl').value,$('skIcon').value,$('skMist').checked,$('skGlow').checked]}})()`);
+  /** The village's record: what Save map skin and a publish carry. */
+  const record = (b: Booted) =>
+    b.run<Record<string, unknown>>(
+      "({accent:SKIN.accent,parch:SKIN.parch,lbl:SKIN.lbl,icon:skinExport().icon_mode,mist:SKIN.mist,glow:SKIN.glow,theme:SKIN.theme,label:SKIN.label_style,edits:EDITS.length,export:skinExport()})",
+    );
+  const storage = (b: Booted) => {
+    const out: Record<string, string> = {};
+    for (let i = 0; i < b.window.localStorage.length; i++) {
+      const k = b.window.localStorage.key(i) as string;
+      out[k] = b.window.localStorage.getItem(k) as string;
+    }
+    return out;
+  };
+  const dress = (b: Booted) => {
+    b.run("openMask()");
+    set(b, "cSurface", "#112233");
+    set(b, "cRing", "#445566");
+    set(b, "cAccent", "#778899");
+    (b.doc.getElementById("cApply") as HTMLElement).click();
+    set(b, "skAccent", "#ff2200");
+    set(b, "skParch", "#102030");
+    set(b, "skLbl", "120");
+    set(b, "skIcon", "iso", "change");
+    set(b, "skMist", true, "change");
+    set(b, "skGlow", false, "change");
+  };
+  const MINE = {
+    accent: "#ff2200",
+    parch: "#102030",
+    lbl: "1.2",
+    surface: "#112233",
+    icon: "iso",
+    mist: true,
+    glow: false,
+    controls: ["#ff2200", "#102030", "120", "iso", true, false],
+  };
+
+  let first: Booted;
+  let kept: Record<string, string>;
+  let before: Record<string, unknown>;
+  let after: Record<string, unknown>;
+  let shown: Record<string, unknown>;
+  beforeAll(async () => {
+    first = boot("#skipIntro", DESK, village());
+    await settle(SETTLE_MS);
+    arrive(first, false);
+    before = record(first);
+    dress(first);
+    shown = screen(first);
+    after = record(first);
+    kept = storage(first);
+  });
+  afterAll(() => first?.close());
+
+  it("puts every choice on the visitor's screen", () => {
+    expect(first.run<boolean>("inShell()"), "inside the village (the case is the one it says)").toBe(true);
+    expect(shown).toEqual(MINE);
+  });
+
+  it("keeps all of them in the visitor's own browser", () => {
+    expect(JSON.parse(kept[MASK_KEY] ?? "{}")).toEqual({
+      palette: { surface: "#112233", ring: "#445566", accent: "#778899" },
+      accent: "#ff2200",
+      parch: "#102030",
+      lbl: 120,
+      icon: "iso",
+      mist: true,
+      glow: false,
+    });
+  });
+
+  it("writes none of them into the village's record or its edit log", () => {
+    expect(after).toEqual(before);
+    expect(after.accent, "the village's own accent").toBe("#157f7d");
+  });
+
+  it("brings every one of them back on the next visit, over the village's look", async () => {
+    const again = boot("#skipIntro", DESK, village(kept));
+    await settle(SETTLE_MS);
+    arrive(again, false);
+    expect(screen(again)).toEqual(MINE);
+    // The village pushes its look again, as the shell does after every scene.
+    again.post({ type: "config", skin: VILLAGE_SKIN });
+    expect(screen(again), "after the village's look arrives again").toEqual(MINE);
+    expect(again.uncaught).toEqual([]);
+    again.close();
+  });
+
+  it("gives every visitor a way back to the village's look, and lets every choice go", async () => {
+    const again = boot("#skipIntro", DESK, village(kept));
+    await settle(SETTLE_MS);
+    arrive(again, false);
+    const reset = again.doc.getElementById("skReset") as HTMLElement;
+    expect(again.window.getComputedStyle(reset).display, "the Reset button, for a visitor").not.toBe("none");
+    expect(reset.textContent).toBe("Back to the village's look");
+    reset.click();
+    expect(again.run<Record<string, unknown>>("maskRead()")).toEqual({});
+    expect(screen(again)).toMatchObject({ accent: "#157f7d", lbl: "1", icon: "auto", mist: false, glow: true });
+    expect(record(again).edits, "and nothing for the village's log").toBe(before.edits);
+    expect(again.uncaught).toEqual([]);
+    again.close();
+  });
+
+  it("keeps a founder's choices theirs too, so a publish carries the village's look (D12)", async () => {
+    const editor = boot("#skipIntro", DESK, village());
+    await settle(SETTLE_MS);
+    arrive(editor, true);
+    const was = record(editor);
+    editor.run("openMask()");
+    (editor.doc.querySelector('#skTheme .swb[data-t="Terra Sol"]') as HTMLElement).click();
+    const sel = editor.doc.getElementById("skLabelStyle") as HTMLSelectElement;
+    sel.value = "tablet";
+    sel.dispatchEvent(new editor.window.Event("change", { bubbles: true }));
+    dress(editor);
+    const now = record(editor);
+    const toast = editor.doc.getElementById("toasts")?.lastElementChild?.textContent ?? "";
+    expect(editor.run<string>("THEME.label"), "a palette over the theme they picked").toBe("Your Land");
+    expect(screen(editor)).toEqual(MINE);
+    expect(now, "SKIN, Save map skin and the scene export").toEqual(was);
+    expect(now.theme).toBe("Emerald Atlas");
+    expect(now.label).toBe("ribbon");
+    expect(toast, "where the village's look is set").toContain("Village Settings");
+    expect(editor.uncaught).toEqual([]);
+    editor.close();
+  });
+
+  it("still dresses the village's record when the map runs on its own, where the file is the village", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    dress(alone);
+    expect(record(alone)).toMatchObject({ accent: "#ff2200", parch: "#102030", lbl: 120, icon: "iso", mist: true, glow: false });
+    expect(alone.uncaught).toEqual([]);
+    alone.close();
+  });
+});
+
+/* N30. This file is every village's map, and a fork's founder pressing
+   Reset read another village's name on the button, in the toast, in the
+   log entry it wrote and beside the accent and parchment dials, and the
+   scene export downloaded under that village's file name. */
+describe("Reset and the scene export name no village (N30)", () => {
+  it("says the house look where the map runs on its own, and logs it so", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    const reset = alone.doc.getElementById("skReset") as HTMLElement;
+    expect(reset.textContent).toBe("Reset to the house look");
+    expect([...alone.doc.querySelectorAll("#skin .amv")].slice(0, 2).map((e) => e.textContent)).toEqual([
+      "House value: #e8a13c",
+      "House value: #f3e6c8",
+    ]);
+    reset.click();
+    expect(alone.doc.getElementById("toasts")?.lastElementChild?.textContent).toBe("Back to the house look.");
+    expect(alone.run<unknown>("EDITS[EDITS.length-1].diff")).toEqual({ reset: "house" });
+    expect(alone.uncaught).toEqual([]);
+    alone.close();
+  });
+
+  it("names the export after the village the scene is", async () => {
+    const alone = boot("#skipIntro", DESK);
+    await settle(SETTLE_MS);
+    alone.run(
+      "URL.createObjectURL=()=>'blob:scene';window.__saved=[];HTMLAnchorElement.prototype.click=function(){window.__saved.push(this.download)}",
+    );
+    alone.run("SCENE.name='Willow Creek'");
+    (alone.doc.getElementById("exportBtn") as HTMLElement).click();
+    alone.run("SCENE.name=''");
+    (alone.doc.getElementById("exportBtn") as HTMLElement).click();
+    expect(alone.run<string[]>("window.__saved")).toEqual(["willow-creek-scene.json", "village-scene.json"]);
+    expect(alone.uncaught).toEqual([]);
     alone.close();
   });
 });

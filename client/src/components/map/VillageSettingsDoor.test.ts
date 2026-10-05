@@ -7,7 +7,8 @@
  * shell deciding it knows better than the link a person clicked.
  */
 import { describe, expect, it } from "vitest";
-import { isVillageSettingsRoute, takeSettingsDoor } from "./VillageSettingsDoor";
+import { LAUNCH_REQUIREMENTS } from "@shared/launchRequirements";
+import { isVillageSettingsRoute, settingsAsked, takeSettingsDoor } from "./VillageSettingsDoor";
 
 describe("the settings door", () => {
   it("answers the dock's own Village Settings route", () => {
@@ -81,5 +82,32 @@ describe("who the door is answered for", () => {
     const angry = { closeDoor: () => { throw new Error("the land is busy"); } };
     expect(takeSettingsDoor("/admin?tab=setup", true, angry, () => { opened = true; })).toBe(true);
     expect(opened).toBe(true);
+  });
+});
+
+/**
+ * THE JOURNEY TO LAUNCH'S LINK LANDS WITH THIS DOOR OPEN ON THE WALK.
+ *
+ * The welcome and walk are written in the editor this door holds, and the
+ * launch row that asks for them links here. The row's address is data in
+ * shared/launchRequirements.ts and the reading of it is this file's, so the
+ * two are pinned against each other: a link that stopped opening the door
+ * would land a founder on the map with nothing open and no word why.
+ */
+describe("the address that opens the door on the walk", () => {
+  it("is the launch row's own link", () => {
+    const row = LAUNCH_REQUIREMENTS.find((r) => r.id === "welcome-walk");
+    expect(row, "the welcome-walk launch row").toBeTruthy();
+    const url = new URL(row!.fixAt, "http://village.test");
+    expect(url.pathname).toBe("/map");
+    expect(settingsAsked(url.search)).toBe(true);
+  });
+
+  it("asks for the walk and nothing else", () => {
+    expect(settingsAsked("?settings=walk")).toBe(true);
+    expect(settingsAsked("?settings=walk&x=1")).toBe(true);
+    expect(settingsAsked("")).toBe(false);
+    expect(settingsAsked("?settings=skin")).toBe(false);
+    expect(settingsAsked("?walk=settings")).toBe(false);
   });
 });

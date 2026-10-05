@@ -154,6 +154,38 @@
         } } } } },
         "responses": { "202": { "description": "confirm required" }, "200": { "description": "posted" }, "404": { "description": "not open on this deployment" }, "409": { "description": "refused; nothing was written" } }
       }
+    },
+    "/api/agent/v1/map": {
+      "get": {
+        "summary": "The brief for drafting the village map from its masterplan: the method (markdown), the rules, the masterplan link, where the village stands, the scene schema with an example, the live version and any draft waiting. Scope map.draft; the holder must be able to draft the map.",
+        "security": [{ "agentToken": [] }],
+        "responses": {
+          "200": { "description": "{method, rules, masterplan, ground, schema, live, draft, submit, reviewUrl}" },
+          "403": { "description": "scope missing, or map_edit_required: the holder may not draft the map" },
+          "429": { "description": "120 reads an hour" }
+        }
+      }
+    },
+    "/api/agent/v1/map/draft": {
+      "post": {
+        "summary": "Keep a drafted scene as the holder's own draft. Two calls: the first checks it and answers 202 with an echo and a confirmToken; the second, with confirm: true, the token and the unchanged echo, writes. Nothing is published: the founder reviews the draft on the map and publishes it. Scope map.draft.",
+        "security": [{ "agentToken": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["scene"], "properties": {
+          "scene": { "type": ["object", "string"], "description": "The scene, as an object or its JSON text. Shape and rules: GET /api/agent/v1/map." },
+          "confirm": { "type": "boolean", "const": true },
+          "confirmToken": { "type": "string" },
+          "echo": { "type": "object", "description": "{sceneSha256, buildings, features, flows, changes, liveVersion, replaces}" }
+        } } } } },
+        "responses": {
+          "202": { "description": "Confirm required. Show the echo, get a yes, send it back.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfirmRequired" } } } },
+          "200": { "description": "{success: true, echo, reviewUrl}: kept as the holder's draft" },
+          "400": { "description": "draft_refused with every problem listed, scene_required or scene_not_json. Nothing was written." },
+          "403": { "description": "scope missing, or map_edit_required" },
+          "409": { "description": "Refused: missing, expired, echo_mismatch, wrong_holder, wrong_action. Nothing was written.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Refused" } } } },
+          "413": { "description": "scene_too_big: over the 3 MB ceiling" },
+          "429": { "description": "20 writes an hour" }
+        }
+      }
     }
   }
 }

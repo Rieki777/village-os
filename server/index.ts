@@ -125,6 +125,10 @@ import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
+import { register as registerMapChipsRoutes } from "./routes/mapChips";
+import { register as registerMapOrgRoutes } from "./routes/mapOrg";
+import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
+import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -163,7 +167,7 @@ import {
   MAP_VOCABULARY_DOC,
   MAP_WALK_DOC,
   sanitiseMapKey,
-  sanitiseWalk,
+  servedWalk,
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
@@ -6775,7 +6779,7 @@ async function startServer() {
    * The ceiling here is deliberately above MAX_SCENE_BYTES so the size
    * message a person reads is the one written in shared/mapScene.ts.
    */
-  app.use(["/api/map/draft", "/api/map/publish"], express.json({ limit: SCENE_BODY_LIMIT }));
+  app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -6819,7 +6823,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents", "village-map"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -7060,6 +7064,7 @@ async function startServer() {
       return res.status(501).json({ error: "Not implemented", message: "Intents land with the introductions module" });
     });
 
+    registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
@@ -19205,17 +19210,15 @@ ${inner}
    * `{type:'config'}` message, so the map applies all three in one pass with
    * no chance of a half-configured frame between two round trips.
    *
-   * `walk` is null when the village has written none for the requested
-   * language. Null is the instruction to use the artifact's own seed, and it
-   * is deliberately not an empty array: the artifact reads a non-empty array
-   * as a replacement and would treat `[]` as a walk with no steps.
+   * `walk` and `welcome` are null when the village has written none for the
+   * language: no walk is offered and the guide greets people plainly. Null
+   * never means the artifact's seed (Rye, 2026-10-02; shared/mapAddress.ts).
    */
   app.get("/api/map/config", async (req, res) => {
     const lang = typeof req.query.lang === "string" && /^[a-z]{2}$/.test(req.query.lang)
       ? req.query.lang
       : DEFAULT_WALK_LANG;
-    const walkDoc = sanitiseWalk(mapWalkRepo.get());
-    const steps = walkDoc[lang] ?? walkDoc[DEFAULT_WALK_LANG] ?? null;
+    const served = servedWalk(mapWalkRepo.get(), lang);
     /*
      * The published scene rides along (0063), for exactly the reason the walk
      * and the vocabulary do: one call, one push, no half-configured frame.
@@ -19247,7 +19250,7 @@ ${inner}
     const housingEntries = await housingPublicEntries(getPool());
     res.json({
       skin: getBrand().skin,
-      walk: steps && steps.length ? steps : null,
+      walk: served.walk, welcome: served.welcome,
       vocabulary: mapVocabRepo.get(),
       // JSON text, not an object: the bytes the map wrote are the bytes it
       // gets back. The shell parses it once, on its way into the frame.
@@ -19487,6 +19490,11 @@ ${inner}
     members,
     getPool,
   });
+  registerMapChipsRoutes(app, { isAdmin, authedUser, getPool, seasonState, lapseContext });
+
+  // The live org the open map polls for: server/routes/mapOrg.ts.
+  registerMapOrgRoutes(app, { authedUser, isAdmin, capabilityCtx, circlesRepo, members, firstName, lapseContext, getPool });
+  registerMapMasterplanRoutes(app, { authedUser, capabilityCtx, getPool, uploadsDir: UPLOADS_DIR });
 
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {

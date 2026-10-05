@@ -178,10 +178,10 @@ describe("sanitiseWalk", () => {
 
   it("omits an empty language instead of storing a walk with no steps", () => {
     /*
-     * The distinction the shell depends on. An absent or empty walk means
-     * "run the artifact's own seed"; an empty ARRAY pushed over the bridge
-     * would read as a walk that exists and has nothing in it, which is a very
-     * short and confusing welcome.
+     * An absent or empty walk means the village has written none, and the
+     * map offers no walk at all (Rye, 2026-10-02). It never means the
+     * artifact's seed. Storing an empty language would read as a walk that
+     * exists and has nothing in it.
      */
     expect(sanitiseWalk({ en: [] })).toEqual({});
     expect(sanitiseWalk({ en: [step({ title: "" })] })).toEqual({});

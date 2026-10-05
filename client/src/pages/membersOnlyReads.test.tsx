@@ -316,9 +316,9 @@ describe("/map", () => {
     enter.click();
     await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
     window.dispatchEvent(new MessageEvent("message", { origin: window.location.origin, data: { type: "grounds-ready" } }));
-    // `/api/map` is the lens's other read, made for everyone: seeing it proves
+    // `/api/map/org` is the lens's other read, made for everyone: seeing it proves
     // the lens ran, so the absence asserted below is not a lens that never started.
-    await waitFor(() => expect(asked).toContain("/api/map"));
+    await waitFor(() => expect(asked).toContain("/api/map/org"));
   }
 
   it("signed out, draws the lens without asking for a party", async () => {

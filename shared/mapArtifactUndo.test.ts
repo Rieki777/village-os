@@ -36,12 +36,12 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 import { restoreRefusal } from "../server/lib/mapScene";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -258,11 +258,11 @@ async function boot(opts: BootOptions = {}): Promise<Booted> {
       stubTheMissingPlatform(w);
     },
   });
-  const run = <T>(src: string) => window.eval(src) as T;
+  const run = <T>(src: string) => evalIn<T>(window, src);
   const post = (data: Record<string, unknown>) => {
     // Through the window's own JSON, so the artifact holds objects of its
     // own realm, the way a structured clone arrives.
-    const own = (window.eval("JSON") as JSON).parse(JSON.stringify(data));
+    const own = ownCopy(window, data);
     window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
   };
   await settle(200);
@@ -717,13 +717,16 @@ describe("Save map skin inside the village (F78)", () => {
     pick(m, "#skFlow", "gold");
     const seen = {
       edits: m.run<number>("EDITS.length"),
-      onScreen: m.run<[string, string, boolean]>("[SKIN.label_style,SKIN.flow_style,document.body.classList.contains('lbl-tablet')]"),
+      onScreen: m.run<[string, string, boolean]>("[dressOf('label_style'),dressOf('flow_style'),document.body.classList.contains('lbl-tablet')]"),
+      // D12: the founder's choice is their own view, and the village's record keeps the village's dress.
+      record: m.run<[string, string]>("[SKIN.label_style,SKIN.flow_style]"),
       labelToast,
       flowToast: lastToast(m),
       card: card(m),
     };
     m.close();
     expect(seen.onScreen).toEqual(["tablet", "gold", true]);
+    expect(seen.record).toEqual(["ribbon", "glyph"]);
     expect(seen.edits).toBe(edits);
     expect(seen.labelToast).toContain("Village Settings");
     expect(seen.flowToast).toContain("Village Settings");
@@ -1033,5 +1036,71 @@ describe("the look of the live map, previewed (round 3, finding 8)", () => {
     expect(visiting).toEqual(arrived);
     expect(back, "the draft's own choice on this screen comes back").toEqual(mine);
     expect(discarded).toEqual(arrived);
+  });
+});
+
+/* N29, the twin of F78 for the village's words. The shell pushes the
+   village's vocabulary after every scene and it wins over the scene's, so a
+   phase renamed here went on the publish card as a change every visitor
+   would see, and reached none of them: they read the Village Settings name.
+   A word the village leaves to the scene is still renamed here. */
+describe("the village's own words, renamed in build mode inside the village (N29)", () => {
+  const VOCAB = { road: [], water: [], zone: ["meadow", "orchard"], media: [], phases: { 2: "Next season" } };
+  /** Click a phase chip and, if an editor opens, type a name and press Enter. */
+  const renamePhase = (m: Booted, n: number, to: string) => {
+    m.el(`#skPhases [data-vp="${n}"]`).click();
+    const box = m.el<HTMLInputElement>("#skPhases input");
+    if (!box) return false;
+    box.value = to;
+    box.dispatchEvent(new m.window.KeyboardEvent("keydown", { key: "Enter" }));
+    return true;
+  };
+  /** A phase's name, as every surface reads it. The number goes through a window property, never into the code. */
+  const phase = (m: Booted, n: number) => {
+    (m.window as unknown as { __n: number }).__n = n;
+    return m.run<string>("phaseName(window.__n)");
+  };
+
+  it("leaves a phase the village names alone, lists nothing to publish, and says where it is set", async () => {
+    const m = await boot();
+    m.post({ type: "config", vocabulary: VOCAB });
+    build(m);
+    m.run("openMask()");
+    const edits = m.run<number>("EDITS.length");
+    const before = phase(m, 2);
+    const opened = renamePhase(m, 2, "Someday");
+    const seen = { opened, edits: m.run<number>("EDITS.length"), phase: phase(m, 2), toast: lastToast(m), card: card(m) };
+    m.close();
+    expect(before, "the village's name arrived (the case is the one it says)").toBe("Next season");
+    expect(seen.opened, "an editor for a word the village holds").toBe(false);
+    expect(seen.edits).toBe(edits);
+    expect(seen.phase).toBe("Next season");
+    expect(seen.toast).toContain("Village Settings");
+    expect(seen.card.bar.publishDisabled).toBe(true);
+  });
+
+  it("leaves the village's zone words alone the same way", async () => {
+    const m = await boot();
+    m.post({ type: "config", vocabulary: VOCAB });
+    build(m);
+    m.run("openMask()");
+    m.el('#skVocab [data-vz="0"]').click();
+    const seen = { editor: !!m.el("#skVocab input"), toast: lastToast(m) };
+    m.close();
+    expect(seen.editor).toBe(false);
+    expect(seen.toast).toContain("Village Settings");
+  });
+
+  it("still renames, and lists, a phase the village leaves to the scene (the control)", async () => {
+    const m = await boot();
+    m.post({ type: "config", vocabulary: VOCAB });
+    build(m);
+    m.run("openMask()");
+    const edits = m.run<number>("EDITS.length");
+    const opened = renamePhase(m, 3, "Someday");
+    const seen = { opened, edits: m.run<number>("EDITS.length"), phase: phase(m, 3), toast: lastToast(m) };
+    m.close();
+    expect(seen).toMatchObject({ opened: true, edits: edits + 1, phase: "Someday" });
+    expect(seen.toast).toContain("Someday");
   });
 });

@@ -40,11 +40,11 @@ import path from "path";
 import crypto from "crypto";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy, workerFromSource } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -158,9 +158,9 @@ function boot(hash: string, { standalone = false } = {}): Booted {
     window,
     uncaught,
     sent,
-    run: <T>(src: string) => window.eval(src) as T,
+    run: <T>(src: string) => evalIn<T>(window, src),
     post(data) {
-      const own = window.eval("JSON").parse(JSON.stringify(data));
+      const own = ownCopy(window, data);
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
     landReady: () => sent.filter((m) => m.type === "land-ready").length,
@@ -372,7 +372,7 @@ describe("the painterly bake (F67)", () => {
       },
     });
     try {
-      const worker = new Function("postMessage", source) as (post: (m: { f: ArrayBuffer; t: ArrayBuffer }) => void) => void;
+      const worker = workerFromSource<{ f: ArrayBuffer; t: ArrayBuffer }>(source);
       worker((m) => replies.push(m));
     } finally {
       delete (globalThis as { onmessage?: unknown }).onmessage;
@@ -402,7 +402,8 @@ describe("the painterly bake (F67)", () => {
       last = now;
     }, 5);
     try {
-      b.run("satPlate={};bakePainted()");
+      // Asked for, as the first opening of Your view asks (D31).
+      b.run("satPlate={};askPaint()");
       for (let waited = 0; waited < 30_000 && !b.run<boolean>("paintReady"); waited += 100) await settle(100);
     } finally {
       clearInterval(beat);
@@ -413,4 +414,187 @@ describe("the painterly bake (F67)", () => {
     expect(b.run<string>("document.getElementById('tmPaint').style.display"), "the Painted chip shows").toBe("");
     expect(b.uncaught).toEqual([]);
   }, 60_000);
+});
+
+/*
+ * D31. The bake above ran on every visit, worker or not: about 1.5 s of CPU on
+ * a desk and about 7 s on a phone at 4x, for a terrain behind a hidden chip in
+ * a sheet most visitors never open. It now waits for the first opening of
+ * Your view, where the terrain switch lives. The plate's arrival calls
+ * bakePainted() exactly as the seed's onload and a village's setGround do.
+ */
+describe("the painterly bake waits until somebody opens the terrain switch (D31)", () => {
+  it("bakes nothing when the plate arrives, and starts once, at the first Your view", async () => {
+    const s = boot("#skipIntro");
+    try {
+      await settle(600);
+      s.run("satPlate={};bakePainted()");
+      const atArrival = s.run<number>("BAKE_GEN");
+      s.run("openMask()");
+      const afterOpen = s.run<number>("BAKE_GEN");
+      s.run("closeMask();openMask()");
+      const afterReopen = s.run<number>("BAKE_GEN");
+      expect(atArrival, "bakes started by the plate arriving").toBe(0);
+      expect(afterOpen, "bakes started by the first Your view").toBe(1);
+      expect(afterReopen, "bakes started by opening it again").toBe(1);
+      expect(s.uncaught).toEqual([]);
+    } finally {
+      // Stops the fallback's slices, as the F67 block does.
+      s.run("BAKE_GEN++");
+      s.window.close();
+    }
+  });
+});
+
+/*
+ * N19. The shell's cover lifted on land-ready, which the artifact posted once
+ * the config was applied, and nothing waited for the village's own ground:
+ * MEASURED in Chromium with the village's picture held 8 s, the cover lifted
+ * at 3.1 s over the seed's coast and its coordinate caption, and the
+ * village's ground replaced them 7.6 s later in plain view. The ground rides
+ * in the config now (client/src/components/map/landGround.ts), and the
+ * hand-over waits for it. jsdom loads no pictures, so Image is a stand-in
+ * the test decodes, or fails, by hand.
+ */
+describe("the cover waits for the village's own ground (N19)", () => {
+  interface Pic {
+    src: string;
+    onload: null | (() => void);
+    onerror: null | (() => void);
+  }
+  function bootWithPictures(hash: string): Booted & { pictures: Pic[] } {
+    const pictures: Pic[] = [];
+    const uncaught: unknown[] = [];
+    const sent: { type?: string }[] = [];
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on("jsdomError", (e) => {
+      if (e.type === "unhandled-exception") uncaught.push(e.cause ?? e);
+    });
+    const parent = { postMessage: (m: { type?: string }) => sent.push(JSON.parse(JSON.stringify(m))) };
+    const { window } = new JSDOM(html, {
+      runScripts: "dangerously",
+      pretendToBeVisual: true,
+      url: `http://localhost/grounds/index.html${hash}`,
+      virtualConsole,
+      beforeParse(w) {
+        w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
+        Object.assign(w, { innerWidth: 1440, innerHeight: 900 });
+        stubTheMissingPlatform(w);
+        Object.defineProperty(w, "parent", { configurable: true, get: () => parent });
+        (w as unknown as { Image: unknown }).Image = class {
+          onload: null | (() => void) = null;
+          onerror: null | (() => void) = null;
+          decoding = "";
+          width = 1200;
+          height = 800;
+          private s = "";
+          get src() {
+            return this.s;
+          }
+          set src(v: string) {
+            this.s = v;
+            pictures.push(this as unknown as Pic);
+          }
+        };
+      },
+    });
+    return {
+      window,
+      uncaught,
+      sent,
+      pictures,
+      run: <T>(src: string) => evalIn<T>(window, src),
+      post(data) {
+        const own = ownCopy(window, data);
+        window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
+      },
+      landReady: () => sent.filter((m) => m.type === "land-ready").length,
+    };
+  }
+  const ELSEWHERE = { core: { url: "/uploads/land/core.png" }, frame: { spanM: 1600, seed: false, centre: null } };
+  const village = (b: { pictures: Pic[] }) => b.pictures.filter((p) => p.src === ELSEWHERE.core.url);
+  const ground = (b: Booted) => b.run<{ source: string; seedGeography: boolean; caption: boolean }>(
+    "({source:groundSource(),seedGeography:groundHas().seedGeography,caption:groundHas().caption})",
+  );
+
+  it("holds the hand-over while the village's picture decodes, with the seed's geography already down", async () => {
+    const b = bootWithPictures("#skipIntro");
+    try {
+      await settle(300);
+      b.post({ type: "config", ground: ELSEWHERE });
+      expect(village(b).length, "the village's picture was asked for").toBe(1);
+      expect(b.landReady(), "handed over before the village's ground has drawn").toBe(0);
+      expect(ground(b), "under the cover, while it decodes").toEqual({ source: "vector", seedGeography: false, caption: false });
+      village(b)[0].onload?.();
+      expect(b.landReady()).toBe(1);
+      expect(ground(b).source).toBe("village");
+      // Every Village Settings save re-sends the config, picture and all.
+      b.post({ type: "config", ground: ELSEWHERE });
+      expect(village(b).length, "the same picture is not loaded twice").toBe(1);
+      expect(b.landReady()).toBe(1);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+
+  it("loads a picture sent ahead once, and the config's cover still waits for it", async () => {
+    const b = bootWithPictures("#skipIntro");
+    try {
+      await settle(300);
+      b.post({ type: "ground", ...ELSEWHERE });
+      b.post({ type: "config", ground: ELSEWHERE });
+      expect(village(b).length, "one download for the two messages").toBe(1);
+      expect(b.landReady(), "waiting for the picture sent ahead").toBe(0);
+      village(b)[0].onload?.();
+      expect(b.landReady()).toBe(1);
+      expect(ground(b).source).toBe("village");
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+
+  it("hands over onto the honest floor when the picture fails", async () => {
+    const b = bootWithPictures("#skipIntro");
+    try {
+      await settle(300);
+      b.post({ type: "config", ground: ELSEWHERE });
+      expect(b.landReady()).toBe(0);
+      village(b)[0].onerror?.();
+      expect(b.landReady()).toBe(1);
+      expect(ground(b)).toEqual({ source: "vector", seedGeography: false, caption: false });
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  });
+
+  it("hands over after GROUND_WAIT_MS when the picture never answers", async () => {
+    const b = bootWithPictures("#skipIntro");
+    try {
+      await settle(300);
+      const wait = b.run<number>("GROUND_WAIT_MS");
+      b.post({ type: "config", ground: ELSEWHERE });
+      await settle(wait - 1500);
+      expect(b.landReady(), "still waiting").toBe(0);
+      await settle(2000);
+      expect(b.landReady()).toBe(1);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.window.close();
+    }
+  }, 30_000);
+
+  it("waits for nothing when the config carries no ground (a village that keeps the seed)", async () => {
+    const b = bootWithPictures("#skipIntro");
+    try {
+      await settle(300);
+      b.post({ type: "config" });
+      expect(b.landReady()).toBe(1);
+      expect(ground(b).seedGeography, "the seed is the village's ground here").toBe(true);
+    } finally {
+      b.window.close();
+    }
+  });
 });

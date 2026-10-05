@@ -107,6 +107,7 @@ This module moves zero tokens. Contact is unpaid; nothing touches `token_ledger`
 ## Endpoints
 
 - `GET /api/map — whole graph in one payload {circles, roles(+holders w/ userId, first name, avatar), quests(open, resolved circleId), meta}; anonymous callers get structure-only (holder names/avatars stripped to counts) when map.public_structure is on, 404 when map.enabled is off; 60s in-memory cache`
+- `GET /api/map/org — the live org the open Living Map follows {version, viewPeople, circles(id, name, parent, status, colour), roles(active, non-example: id, name, circleId, state, seats, holderCount, archetypes, description, holders by name on the viewPeople tier)}; same tiers as /api/map; the version is a hash of the body, sent as ETag "org-<version>", and an If-None-Match that names it gets a bodyless 304 (server/routes/mapOrg.ts, server/lib/mapOrg.ts)`
 - `GET /api/circles — public circle list (also retires the hardcoded Circles.tsx content over time)`
 - `POST /api/admin/circles — create (admin)`
 - `PUT /api/admin/circles/:id — edit incl. aliases, leadRoleId, parentCircleId (admin; rejects alias collisions and parent cycles)`
@@ -359,11 +360,32 @@ Tuesday's holder count can never freeze into the map a founder drew.
 fetched without credentials and returns the same answer to every reader, so the
 party cannot travel on it. It travels on `lens`, which is separate from `hand`
 on purpose: `hand` decides whether the Build button works and must not wait on
-`/api/map`, which is four queries and reads the whole `users` table when the
-caller may see people. `lens` only narrows what is drawn, so it can land late,
-and if it never lands the map shows every mark and draws every seat as the scene
-wrote it. It is pushed once, on the boot handshake, so a party edited in another
-tab reaches the map on the next open.
+the org chart. `lens` only narrows what is drawn, so it can land late, and if it
+never lands the map shows every mark and draws every seat as the scene wrote it.
+The party is read once, on the boot handshake, so a party edited in another tab
+reaches the map on the next open.
+
+**The open map follows the village's live org (Rye, D3, 2026-10-02).** `lens`
+carries the village's circles and every active seat from `GET /api/map/org`,
+and `client/src/components/map/orgFollow.ts` asks again every 15 seconds while
+the tab is visible, sending the version it holds as If-None-Match. An
+unchanged village answers 304 and nothing is posted or redrawn; a hidden tab
+asks nothing and asks once the moment it is shown; a 401, 403 or 404 stops the
+asking. Every later `lens` carries the party it found, because the map reads an
+absent party as "no narrowing".
+
+**Where a live seat sits.** A seat the scene already draws under the same name
+is that seat (the name join `roleApplyLive` has always made). Every other seat
+sits at its circle's home, and a circle's home is the first place on the land
+whose circle names it, by the circle's id or by its name: the founder's word,
+given with the inspector's circle picker in build mode (which offers the
+village's circles once they have arrived) and published with the land. A circle
+no place names has no home yet; it and its seats are listed on the Wall as not
+yet placed, the Org lens key counts them, and nothing is drawn for them. Once
+the village has sent its circles the lens rings those and none of the map's own
+eleven, and a drawn seat the village does not keep is no longer drawn. Live
+seats are their own list (`orgSeats` in the artifact) and never enter
+`SCENE.seats`, so a publish cannot freeze them into the land.
 
 **Empty means every class, everywhere.** `org_roles.archetypes` is nullable, so
 "tagged for nobody" and "not tagged at all" arrive as the same `[]` from
