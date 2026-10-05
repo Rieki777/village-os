@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { OutgoingEmail } from "../../../shared/comms/contracts";
@@ -5,7 +8,6 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../
 import { enrollmentById } from "../../repos/commsJourneys";
 import { insertMessage, messageById } from "../../repos/commsMessages";
 import { startFakeResend, type FakeResend } from "../../testkit/fakeResend";
-import { loadModuleSettings } from "../modules";
 import { insertNotification, runNotificationDigest, runWeeklyBrief, type NotifyDeps } from "../notify";
 import { enroll, stop, tick, touch } from "./journeys";
 import { verifyLink } from "./links";
@@ -643,7 +645,7 @@ describe.skipIf(!configured)("the drain's rules", () => {
 
   it("skips gathering, path and letter emails while the module is off, and still sends notices and essential mail", async () => {
     await clearQueue();
-    // No mode handed in: the default reads the module's own lifecycle, and no row here has turned it on.
+    // No mode and no lifecycle handed in: the default reads off, which is how every module ships.
     const d = viaFake({ mode: undefined });
     for (const kind of ["events", "paths", "letters"] as const) {
       expect(await post(d, email(kind, "off@example.test", `rules:off:${kind}`)), kind).toMatchObject({ status: "skipped", reason: "module_off" });
@@ -653,23 +655,40 @@ describe.skipIf(!configured)("the drain's rules", () => {
   });
 
   it("rehearses to the admins by default while the module is in preview", async () => {
-    await pool.query("INSERT INTO module_settings (module_id, lifecycle) VALUES ('comms', 'preview')"); // module-review-ok: the module's lifecycle, staged in the scratch schema
-    await loadModuleSettings(pool);
-    try {
-      expect(await defaultMode({ adminEmails: async () => ["founder@example.test"] })).toEqual({
-        lifecycle: "preview",
-        paused: false,
-        rehearsalTo: ["founder@example.test"],
-      });
-      await clearQueue();
-      const d = viaFake({ mode: undefined, adminEmails: async () => ["founder@example.test"] });
-      const r = await post(d, email("events", "bo@example.test", "rules:default-rehearsal", { urgent: true }));
-      expect(r).toMatchObject({ status: "rehearsed" });
-      expect(onTheWire(r.messageId).requests[0].body.to).toEqual(["founder@example.test"]);
-    } finally {
-      await pool.query("DELETE FROM module_settings WHERE module_id = 'comms'"); // module-review-ok: putting the scratch schema back
-      await loadModuleSettings(pool);
-    }
+    const admins = async () => ["founder@example.test"];
+    expect(await defaultMode({ adminEmails: admins, lifecycle: () => "preview" })).toEqual({
+      lifecycle: "preview",
+      paused: false,
+      rehearsalTo: ["founder@example.test"],
+    });
+    // The admins are only read while rehearsing.
+    let asked = 0;
+    const counted = async () => {
+      asked += 1;
+      return [] as string[];
+    };
+    await defaultMode({ adminEmails: counted, lifecycle: () => "members" });
+    expect(asked).toBe(0);
+    expect(await defaultMode({})).toEqual({ lifecycle: "off", paused: false, rehearsalTo: [] });
+
+    await clearQueue();
+    const d = viaFake({ mode: undefined, lifecycle: () => "preview", adminEmails: admins });
+    const r = await post(d, email("events", "bo@example.test", "rules:default-rehearsal", { urgent: true }));
+    expect(r).toMatchObject({ status: "rehearsed" });
+    expect(onTheWire(r.messageId).requests[0].body.to).toEqual(["founder@example.test"]);
+    // The mailer hands both readers to the post office it builds.
+    const m = createMailer({
+      emailConfig: () => ({ sender: "Village <hello@village.example.test>" }),
+      secretValue: (k) => (k === "resend_api_key" ? KEY : ""),
+      projectName: () => "Test Village",
+      getPool: () => pool,
+      origin: () => "https://village.example.test",
+      transport: resendTransport({ apiKey: () => KEY, baseUrl: () => fake.url }),
+      lifecycle: () => "preview",
+      adminEmails: admins,
+    });
+    const viaMailer = await post(m.postOffice, email("letters", "cy@example.test", "rules:default-rehearsal:mailer", { urgent: true }));
+    expect(viaMailer).toMatchObject({ status: "rehearsed" });
   });
 
   it("skips an email nobody said yes to, and leaves one waiting when the answer cannot be read", async () => {
@@ -842,5 +861,56 @@ describe.skipIf(!configured)("people on journeys", () => {
   it("refuses a malformed enrollment as a caller's bug", async () => {
     await expect(enroll(deps, { journeyKey: "", contactId: "ct_5", subjectRef: "account" })).rejects.toThrow(RangeError);
     await expect(stop(deps, { contactId: "ct_5" }, "")).rejects.toThrow(RangeError);
+  });
+});
+
+/**
+ * Every file a module loads at runtime, following relative imports and
+ * skipping type-only ones (they are erased). Read with the TypeScript parser,
+ * so a multi-line import and a dynamic `import()` are both edges.
+ */
+function runtimeReach(entry: string): Set<string> {
+  const ROOT = path.resolve(import.meta.dirname, "../../..");
+  const seen = new Set<string>();
+  const queue = [path.resolve(entry)];
+  while (queue.length) {
+    const file = queue.pop()!;
+    if (seen.has(file) || !fs.existsSync(file)) continue;
+    seen.add(file);
+    const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+    const specs: string[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly && ts.isStringLiteral(node.moduleSpecifier)) {
+        specs.push(node.moduleSpecifier.text);
+      } else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        specs.push(node.moduleSpecifier.text);
+      } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
+        specs.push(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    for (const spec of specs) {
+      if (!spec.startsWith(".")) continue;
+      const base = path.resolve(path.dirname(file), spec);
+      for (const candidate of [`${base}.ts`, path.join(base, "index.ts"), base]) {
+        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+          queue.push(candidate);
+          break;
+        }
+      }
+    }
+  }
+  return new Set(Array.from(seen, (f) => path.relative(ROOT, f).split(path.sep).join("/")));
+}
+
+describe("the post office's imports", () => {
+  it("never reach the module registry, server/lib/modules.ts, by any runtime path", () => {
+    const reach = runtimeReach(path.resolve(import.meta.dirname, "postOffice.ts"));
+    expect(reach.has("server/lib/comms/postOffice.ts"), "the walk starts where it says").toBe(true);
+    expect(reach.has("server/lib/comms/suppressions.ts"), "and follows the post office's own imports").toBe(true);
+    expect(reach.has("server/lib/modules.ts")).toBe(false);
+    // A control: the same walk from a file that does import the registry finds it.
+    expect(runtimeReach(path.resolve(import.meta.dirname, "../../routes/comms.ts")).has("server/lib/modules.ts")).toBe(true);
   });
 });

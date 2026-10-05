@@ -1309,7 +1309,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
-const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) });
+const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) });
 commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice }));
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);

@@ -135,6 +135,8 @@ export interface MailerDeps {
   transport?: Transport;
   /** Every admin's address: where the post office's default mode rehearses to. */
   adminEmails?(): Promise<string[]>;
+  /** The comms module's effective lifecycle, for the post office's default mode. Absent: `off`. */
+  lifecycle?: PostOfficeDeps["lifecycle"];
   /** The setup lane's `commsMode()`, once it is plugged in. Absent: the post office's default. */
   mode?: PostOfficeDeps["mode"];
   /** The people lane's `permissionFor()`, once it is plugged in. Absent: every kind is allowed. */
@@ -259,6 +261,7 @@ export function createMailer(deps: MailerDeps) {
     hasApiKey: () => Boolean(deps.secretValue("resend_api_key")),
     origin: deps.origin,
     ...(deps.adminEmails ? { adminEmails: deps.adminEmails } : {}),
+    ...(deps.lifecycle ? { lifecycle: deps.lifecycle } : {}),
     ...(deps.mode ? { mode: deps.mode } : {}),
     ...(deps.permissionFor ? { permissionFor: deps.permissionFor } : {}),
   };

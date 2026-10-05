@@ -32,12 +32,21 @@
  *
  *   mode()           the setup lane's `commsMode()`: the module's lifecycle,
  *                    Pause all, and the rehearsal inbox. The default reads the
- *                    lifecycle, is never paused, and rehearses to the admins.
+ *                    lifecycle through `lifecycle()`, is never paused, and
+ *                    rehearses to the admins.
  *   permissionFor()  the people lane's reading of who said yes to what. The
  *                    default allows every kind. Suppression is NOT inside it:
  *                    the post office asks the suppression list itself, before
  *                    permission, so a suppressed address skips whatever
  *                    permission reader is plugged in.
+ *
+ * THIS FILE NEVER IMPORTS server/lib/modules.ts, by the integrator's
+ * contract for the comms build: the import graph runs one way, from the
+ * module registry towards what comms records (its readiness reader reads the
+ * comms ledger), and an import from here back into the registry is a cycle
+ * the first time anything on that side imports this. The lifecycle is handed
+ * in (`lifecycle()`, bound by server/index.ts), and with nothing handed in it
+ * reads `off`, which is how every module ships.
  *
  * ── THE URGENT PATH ─────────────────────────────────────────────────────────
  *
@@ -95,7 +104,6 @@ import {
   scheduleRetry,
   type OutboundRow,
 } from "../../repos/commsMessages";
-import { effectiveLifecycle } from "../modules";
 import { numberVar } from "../variables";
 import { signLink } from "./links";
 import { isSuppressed } from "./suppressions";
@@ -135,6 +143,12 @@ export interface PostOfficeDeps {
   permissionFor?(emailKey: string, kind: EmailKind, contactId: string | null): Promise<PermissionAnswer>;
   /** Every admin's address: where the default mode rehearses to. */
   adminEmails?(): Promise<string[]>;
+  /**
+   * The comms module's effective lifecycle, for the default mode. Bound by
+   * server/index.ts to `effectiveLifecycle("comms")`, so this file never
+   * imports the module registry. Absent: `off`.
+   */
+  lifecycle?(): ModuleLifecycle;
   /** A dial's value. Absent: the game variable. Tests pass their own. */
   dial?(key: PostOfficeDial): number;
 }
@@ -238,11 +252,12 @@ function inboxOf(list: readonly string[] | null | undefined): string[] {
 
 /**
  * THE DEFAULT MODE, until the setup lane's `commsMode()` is plugged in: the
- * module's own lifecycle, never paused, and rehearsing to every admin. The
- * admins are only read while the module is in preview.
+ * module's own lifecycle as `lifecycle()` reads it (`off` with no reader),
+ * never paused, and rehearsing to every admin. The admins are only read while
+ * the module is in preview.
  */
-export async function defaultMode(deps: Pick<PostOfficeDeps, "adminEmails">): Promise<CommsMode> {
-  const lifecycle = effectiveLifecycle("comms");
+export async function defaultMode(deps: Pick<PostOfficeDeps, "adminEmails" | "lifecycle">): Promise<CommsMode> {
+  const lifecycle: ModuleLifecycle = deps.lifecycle ? deps.lifecycle() : "off";
   const rehearsalTo = lifecycle === "preview" && deps.adminEmails ? await deps.adminEmails() : [];
   return { lifecycle, paused: false, rehearsalTo };
 }
