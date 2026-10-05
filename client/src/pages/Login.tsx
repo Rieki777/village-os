@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useGoogleSignInReturn } from "@/components/auth/useGoogleSignInReturn";
 import { useAuth } from "@/contexts/AuthContext";
+import { internalPath } from "@/lib/internalPath";
 import { motion } from "framer-motion";
 import { Heart, ArrowRight, Mail, Lock } from "lucide-react";
 import { useState } from "react";
@@ -26,14 +27,9 @@ export default function Login() {
     try {
       await login(email, password);
       // A sign-in that started on a members-only page goes back there (R36).
-      // Internal paths only, so a crafted link cannot bounce anyone offsite;
-      // the backslash variant is refused with the same breath.
-      const next = new URLSearchParams(window.location.search).get("next");
-      navigate(
-        next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
-          ? next
-          : "/profile",
-      );
+      // Internal paths only (lib/internalPath.ts), so a crafted link cannot
+      // bounce anyone offsite.
+      navigate(internalPath(new URLSearchParams(window.location.search).get("next")) ?? "/profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -176,7 +172,7 @@ export default function Login() {
                 no Google account. On a village that configured no Google
                 credentials this renders nothing at all.
               */}
-              <GoogleSignInButton next={new URLSearchParams(window.location.search).get("next") ?? "/profile"} />
+              <GoogleSignInButton next={internalPath(new URLSearchParams(window.location.search).get("next")) ?? "/profile"} />
             </form>
 
             <div className="mt-8 text-center">
