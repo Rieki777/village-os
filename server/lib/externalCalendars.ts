@@ -28,7 +28,9 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import ICAL from "ical.js";
 import { CALENDAR_LAYERS, type CalendarLayer } from "../../shared/gatherings";
 import { calendarRemoveMissing, calendarUpsert } from "./calendar";
-import { NO_VILLAGE_SECRETS_KEY_SENTENCE, putSecret, secretValue, villageSecretsConfigured } from "./secrets";
+import {
+  NO_VILLAGE_SECRETS_KEY_SENTENCE, putSecret, secretValue, villageSecretsConfigured, villageSecretsRefusal,
+} from "./secrets";
 import { guardOutboundUrl, guardedFetchText } from "./toolcheck";
 
 export const EXTERNAL_SECRET_PREFIX = "external_calendar_url:";
@@ -112,7 +114,14 @@ export interface AddExternalCalendarInput {
   createdBy: string;
 }
 
-export type AddOutcome = { ok: true; calendar: ExternalCalendarView } | { ok: false; error: string };
+/**
+ * `message`, when present, is the sentence an admin should read. It is set only
+ * on the missing-key refusal, where `error` stays the store's verbatim sentence
+ * and `message` names what is actually wrong with the key.
+ */
+export type AddOutcome =
+  | { ok: true; calendar: ExternalCalendarView }
+  | { ok: false; error: string; message?: string };
 
 /** Attach a calendar. The URL goes to the secrets store; the row keeps host and last4. */
 export async function addExternalCalendar(pool: Pool, input: AddExternalCalendarInput): Promise<AddOutcome> {
@@ -122,7 +131,9 @@ export async function addExternalCalendar(pool: Pool, input: AddExternalCalendar
   // to write without a key. Asking first keeps that refusal in this function's
   // own shape: every other failure here is an {ok:false, error} a founder can
   // read, and a thrown one would be the only 500 on the path.
-  if (!villageSecretsConfigured()) return { ok: false, error: NO_VILLAGE_SECRETS_KEY_SENTENCE };
+  if (!villageSecretsConfigured()) {
+    return { ok: false, error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal(process.env, "add the calendar again") };
+  }
   // webcal:// is what Apple hands out; it is https underneath. The prefix is
   // rewritten as a string because WHATWG ignores a scheme change from a
   // non-special scheme on a parsed URL.

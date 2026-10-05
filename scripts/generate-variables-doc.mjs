@@ -280,6 +280,7 @@ const RENDERED_FIELDS = [
   "applyTiming",
   "criticality",
   "placeDependent",
+  "withheld",
 ];
 
 /** What each type means, in a founder's words. Every member needs one. */
@@ -437,6 +438,7 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
     criticality: criticalityOf(def),
     criticalityExplicit: def.criticality !== undefined,
     placeDependent: def.placeDependent === true,
+    withheld: def.withheld === true,
   };
 }
 
@@ -614,6 +616,17 @@ function variableSection(v) {
     rows.push([
       "Depends on where you are",
       "Yes. The default is where the platform starts, not an answer: a village says which is true of it, and saying so is recorded even when the answer matches the default.",
+    ]);
+  }
+  /*
+   * A VALUE THAT CAN CARRY A KEY is listed and open to proposals like every
+   * other dial (Rye, 2026-09-25), and the public rules page holds its value
+   * back. Saying so here stops a reader taking "kept private" for a fault.
+   */
+  if (v.withheld) {
+    rows.push([
+      "Shown to the public",
+      "Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it.",
     ]);
   }
   lines.push(table(["Fact", "Value"], rows));

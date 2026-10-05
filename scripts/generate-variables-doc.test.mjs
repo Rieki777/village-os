@@ -108,6 +108,7 @@ export interface VariableDef {
   applyTiming?: VariableApplyTiming;
   criticality?: Criticality;
   placeDependent?: true;
+  withheld?: true;
 ${extraField}}
 
 export const VARIABLES: VariableDef[] = ${JSON.stringify(variables, null, 2)};

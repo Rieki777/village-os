@@ -71,6 +71,7 @@ import SetupSection from "@/components/admin/SetupSection";
 import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
+import SecretsKeyBanner, { SealedSaveButton } from "@/components/admin/SecretsKeyBanner";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -1113,6 +1114,7 @@ export function IntegrationsTab({ password }: { password: string }) {
           A key set here beats one from the hosting environment.
         </p>
       </div>
+      <SecretsKeyBanner status={data?.villageSecretsKey} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
         <div className="space-y-5 max-w-2xl">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}
@@ -1215,13 +1217,7 @@ export function IntegrationsTab({ password }: { password: string }) {
                       placeholder={s?.configured ? `Replace key (${c.placeholder})` : c.placeholder}
                       className="flex-1 min-w-[220px] px-3 py-2 text-sm border border-gray-200 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
                     />
-                    <button
-                      onClick={() => put(c.key, drafts[c.key] ?? "")}
-                      disabled={busy === c.key || !(drafts[c.key] ?? "").trim()}
-                      className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40"
-                    >
-                      Save
-                    </button>
+                    <SealedSaveButton status={data?.villageSecretsKey} busy={busy === c.key} empty={!(drafts[c.key] ?? "").trim()} onSave={() => put(c.key, drafts[c.key] ?? "")} />
                     {s?.source === "admin" && (
                       <button
                         onClick={() => { if (window.confirm("Clear this key? If the host environment provides one, it takes over; otherwise this integration disconnects.")) put(c.key, ""); }}
