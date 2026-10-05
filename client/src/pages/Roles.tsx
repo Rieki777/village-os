@@ -131,16 +131,22 @@ function seatLink(id: string): string {
 }
 
 /**
- * "Copy link to this seat". The clipboard write runs inside the click, which
- * is the user activation a browser asks for. Where the clipboard refuses or
- * is missing (an http origin has no `navigator.clipboard`), the link appears
- * in a read-only field, selected, for the reader to copy by hand. The polite
- * line below is in the row from the moment it opens, so what lands in it is
- * announced.
+ * "Copy link" under one seat's card. The clipboard write runs inside the
+ * click, which is the user activation a browser asks for. Where the clipboard
+ * refuses or is missing (an http origin has no `navigator.clipboard`), the
+ * link appears in a read-only field, selected, for the reader to copy by
+ * hand. The polite line below is in the row from the moment it opens, so what
+ * lands in it is announced.
+ *
+ * Every name here carries the seat. The control sits outside the card's
+ * `aria-labelledby`, and a screen reader listing the page's buttons hears
+ * each one on its own, so a fixed "this seat" read the same under every row
+ * and named none of them. The visible words stay "Copy link" and open the
+ * accessible name, so a reader who says what they see still reaches it.
  */
-function SeatLinkCopy({ seatId }: { seatId: string }) {
+function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }) {
   const link = seatLink(seatId);
-  const [said, setSaid] = useState("");
+  const [said, setSaid] = useState<"" | "copied" | "refused">("");
   // A count so a second refusal selects the field again.
   const [refused, setRefused] = useState(0);
   const field = useRef<HTMLInputElement>(null);
@@ -150,29 +156,36 @@ function SeatLinkCopy({ seatId }: { seatId: string }) {
     field.current?.select();
   }, [refused]);
   useEffect(() => {
-    if (said !== "Link copied.") return;
+    if (said !== "copied") return;
     const t = window.setTimeout(() => setSaid(""), 4000);
     return () => window.clearTimeout(t);
   }, [said]);
   const fallBack = () => {
     setRefused((n) => n + 1);
-    setSaid("Copying did not work here. The link is selected in the field below.");
+    setSaid("refused");
   };
   const copy = () => {
     setSaid("");
     const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard;
     if (!clip?.writeText) return fallBack();
-    clip.writeText(link).then(() => setSaid("Link copied."), fallBack);
+    clip.writeText(link).then(() => setSaid("copied"), fallBack);
   };
+  const line =
+    said === "copied"
+      ? `Link to ${seatName} copied.`
+      : said === "refused"
+        ? "Copying did not work here. The link is selected in the field below."
+        : "";
   return (
     <div className="pt-4 border-t border-border space-y-2">
       <button
         type="button"
         onClick={copy}
+        aria-label={`Copy link to ${seatName}`}
         className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
       >
         <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-        Copy link to this seat
+        Copy link
       </button>
       {refused > 0 && (
         <input
@@ -180,12 +193,12 @@ function SeatLinkCopy({ seatId }: { seatId: string }) {
           type="text"
           readOnly
           value={link}
-          aria-label="Link to this seat"
+          aria-label={`Link to ${seatName}`}
           onFocus={(e) => e.currentTarget.select()}
           className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
         />
       )}
-      <p role="status" className="text-xs text-muted-foreground">{said}</p>
+      <p role="status" className="text-xs text-muted-foreground">{line}</p>
     </div>
   );
 }
@@ -294,8 +307,10 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 action={<SeatAction circleId={role.circleId ?? null} />}
               />
               {/* The seat as a link, for sending to whoever might hold it.
-                  Outside the night card, in this page's own light inks. */}
-              <SeatLinkCopy seatId={role.id} />
+                  Outside the night card, in this page's own light inks. Not
+                  on a demonstration seat: nobody is recruited for one, so a
+                  link to it has nothing to ask anybody. */}
+              {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses
                   when it keeps its org chart in a document. Fetched only once

@@ -3,17 +3,23 @@
  * /roles?seat=<id>: ONE SEAT'S CARD AS A LINK.
  *
  * The page kept its open row in local state alone, so no address opened one
- * seat and a steward recruiting for a seat had nothing to send. Four promises:
+ * seat and a steward recruiting for a seat had nothing to send. Six promises:
  *
  *   1. A LINK OPENS ITS SEAT. The row expands, its header is scrolled to
  *      (instantly, under reduced motion) and takes focus.
  *   2. A LINK TO A SEAT THE PAGE NO LONGER LISTS SAYS SO in one line, with the
- *      seats still listed below it. Never a blank.
+ *      seats still listed below it. Never a blank. The address drops `?seat=`
+ *      and keeps everything else, so the bar names what is open.
  *   3. THE ADDRESS IS THE LINK TO WHAT IS OPEN. Opening and closing a row
  *      replaces the URL and adds no history entry.
- *   4. "Copy link to this seat" writes the absolute link inside the click. Where
- *      the clipboard refuses or is missing, a read-only field holds the link,
+ *   4. "Copy link" writes the absolute link inside the click. Where the
+ *      clipboard refuses or is missing, a read-only field holds the link,
  *      selected.
+ *   5. EVERY NAME CARRIES THE SEAT. The control sits outside the card's
+ *      `aria-labelledby`, so its accessible name, the field's and the line it
+ *      says each name the seat; a fixed "this seat" read the same under every
+ *      row. The visible "Copy link" opens the accessible name.
+ *   6. A DEMONSTRATION SEAT OFFERS NO LINK. Nobody is recruited for one.
  *
  * Every absence has a known-positive control beside it.
  */
@@ -91,8 +97,15 @@ const ORG = {
 };
 
 const MISSING = "That seat is not on this page anymore.";
-const COPY = "Copy link to this seat";
-const FIELD = "Link to this seat";
+/** The copy control's accessible name, the fallback field's, and the line a copy says, for one seat. */
+const COPY = (seat: string) => `Copy link to ${seat}`;
+const FIELD = (seat: string) => `Link to ${seat}`;
+const COPIED = (seat: string) => `Link to ${seat} copied.`;
+/** Any seat's copy control, whichever seat it names. */
+const ANY_COPY = /^Copy link/;
+
+/** What `/api/org` answers in this test; reset to ORG before each. */
+let org: typeof ORG;
 
 let scrolled: ReturnType<typeof vi.fn>;
 const hadScroll = Object.prototype.hasOwnProperty.call(HTMLElement.prototype, "scrollIntoView");
@@ -108,6 +121,7 @@ beforeEach(() => {
   session.token = "a-token";
   session.user = { id: "u-me" };
   catalog.modules = [];
+  org = ORG;
   vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
   // jsdom lays nothing out, so it has no scrollIntoView; the spy records the call.
   scrolled = vi.fn();
@@ -117,7 +131,7 @@ beforeEach(() => {
     vi.fn(async (url: unknown) => {
       const u = String(url);
       const reply = (body: unknown, status = 200) => ({ ok: status < 300, status, json: async () => body });
-      if (u === "/api/org") return reply(ORG);
+      if (u === "/api/org") return reply(org);
       if (u === "/api/season") return reply({ current: { name: "Season of Foundations", endsOn: "2099-03-21" }, daysLeft: 171 });
       if (u.endsWith("/needs")) return reply({ needs: [] });
       return reply([]);
@@ -188,6 +202,25 @@ describe("a link to one seat on /roles", () => {
     expect(screen.queryByText(MISSING)).toBeNull();
   });
 
+  it("drops only the seat a miss names from the address, keeping the rest and adding no history entry", async () => {
+    window.history.replaceState(null, "", "/roles?from=newsletter&seat=old-seat");
+    const entries = window.history.length;
+    const view = renderRoles();
+    await screen.findByText(MISSING);
+    expect(window.location.pathname).toBe("/roles");
+    expect(window.location.search).toBe("?from=newsletter");
+    expect(window.history.length).toBe(entries);
+
+    // Known positive: the same address naming a seat the page lists keeps
+    // `?seat=`, so what cleared it above was the miss.
+    view.unmount();
+    window.history.replaceState(null, "", "/roles?from=newsletter&seat=seed-keeper");
+    renderRoles();
+    expect((await header("Seed Keeper")).getAttribute("aria-expanded")).toBe("true");
+    expect(window.location.search).toBe("?from=newsletter&seat=seed-keeper");
+    expect(screen.queryByText(MISSING)).toBeNull();
+  });
+
   it("keeps the open seat in the address, replacing the entry and never pushing one", async () => {
     window.history.replaceState(null, "", "/roles?from=newsletter");
     renderRoles();
@@ -219,7 +252,7 @@ describe("copying a seat's link", () => {
     setClipboard({ writeText });
     const view = renderRoles();
     fireEvent.click(await header("Seed Keeper"));
-    const control = await screen.findByRole("button", { name: COPY });
+    const control = await screen.findByRole("button", { name: COPY("Seed Keeper") });
     // Below the card, outside it.
     expect(card()).toBeTruthy();
     expect(card()!.contains(control)).toBe(false);
@@ -231,10 +264,11 @@ describe("copying a seat's link", () => {
     expect(copied).toBe(`${window.location.origin}/roles?seat=seed-keeper`);
     expect(new URL(copied).origin).toBe(window.location.origin);
 
-    const said = await screen.findByText("Link copied.");
+    // The line names the seat it copied.
+    const said = await screen.findByText(COPIED("Seed Keeper"));
     expect(said.closest('[role="status"]')).toBeTruthy();
     // No fallback field after a copy that worked; the next test is its positive.
-    expect(screen.queryByRole("textbox", { name: FIELD })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: FIELD("Seed Keeper") })).toBeNull();
 
     // The link it copied opens that seat.
     view.unmount();
@@ -251,13 +285,13 @@ describe("copying a seat's link", () => {
     setClipboard({ writeText });
     renderRoles();
     fireEvent.click(await header("Water Keeper"));
-    const control = await screen.findByRole("button", { name: COPY });
+    const control = await screen.findByRole("button", { name: COPY("Water Keeper") });
     // No field before a copy is tried; the field below is its positive.
-    expect(screen.queryByRole("textbox", { name: FIELD })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: FIELD("Water Keeper") })).toBeNull();
 
     fireEvent.click(control);
     expect(writeText).toHaveBeenCalledTimes(1);
-    const field = (await screen.findByRole("textbox", { name: FIELD })) as HTMLInputElement;
+    const field = (await screen.findByRole("textbox", { name: FIELD("Water Keeper") })) as HTMLInputElement;
     const link = `${window.location.origin}/roles?seat=water-keeper`;
     expect(field.value).toBe(link);
     expect(field.readOnly).toBe(true);
@@ -265,7 +299,7 @@ describe("copying a seat's link", () => {
     expect([field.selectionStart, field.selectionEnd]).toEqual([0, link.length]);
     expect(screen.getByText(/Copying did not work here/).closest('[role="status"]')).toBeTruthy();
     // It does not claim a copy; the test above is the positive for this line.
-    expect(screen.queryByText("Link copied.")).toBeNull();
+    expect(screen.queryByText(/copied\.$/)).toBeNull();
   });
 
   it("selects the link in the field when the browser has no clipboard at all", async () => {
@@ -273,10 +307,52 @@ describe("copying a seat's link", () => {
     renderRoles();
     fireEvent.click(await header("Seed Keeper"));
     // Known positive: the control is there to press.
-    fireEvent.click(await screen.findByRole("button", { name: COPY }));
-    const field = (await screen.findByRole("textbox", { name: FIELD })) as HTMLInputElement;
+    fireEvent.click(await screen.findByRole("button", { name: COPY("Seed Keeper") }));
+    const field = (await screen.findByRole("textbox", { name: FIELD("Seed Keeper") })) as HTMLInputElement;
     expect(field.value).toBe(`${window.location.origin}/roles?seat=seed-keeper`);
     await waitFor(() => expect(document.activeElement).toBe(field));
     expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]);
+  });
+
+  it("names its own seat in the control, so a different seat's row does not answer to it", async () => {
+    setClipboard({ writeText: vi.fn(async (_s: string) => undefined) });
+    renderRoles();
+    fireEvent.click(await header("Seed Keeper"));
+    const seed = await screen.findByRole("button", { name: COPY("Seed Keeper") });
+    // The visible words open the accessible name, so a reader who says what
+    // they see ("Copy link") reaches the control.
+    expect(seed.textContent).toBe("Copy link");
+    expect(seed.getAttribute("aria-label")).toBe(COPY("Seed Keeper"));
+    // One copy control on the page, and it is this seat's.
+    expect(screen.getAllByRole("button", { name: ANY_COPY })).toEqual([seed]);
+    expect(screen.queryByRole("button", { name: COPY("Water Keeper") })).toBeNull();
+
+    // The control: open the other row. A copy control is on the page again,
+    // and it answers to its own seat's name and not to Seed Keeper's.
+    fireEvent.click(await header("Water Keeper"));
+    const water = await screen.findByRole("button", { name: COPY("Water Keeper") });
+    await waitFor(() => expect(screen.getAllByRole("button", { name: ANY_COPY })).toEqual([water]));
+    expect(screen.queryByRole("button", { name: COPY("Seed Keeper") })).toBeNull();
+  });
+
+  it("offers no link on a demonstration seat, which nobody is recruited for", async () => {
+    org = {
+      ...ORG,
+      roles: [...ORG.roles, { ...seat("demo-steward", "Demo Steward", "open"), isExample: true }],
+    };
+    setClipboard({ writeText: vi.fn(async (_s: string) => undefined) });
+    renderRoles();
+    const demo = await header("Demo Steward");
+    fireEvent.click(demo);
+    // The row is open and its card is drawn, so the absent control below is
+    // not a shut row.
+    expect(demo.getAttribute("aria-expanded")).toBe("true");
+    expect(card()?.getAttribute("aria-labelledby")).toBe(demo.id);
+    expect(screen.queryByRole("button", { name: ANY_COPY })).toBeNull();
+    expect(screen.queryByRole("button", { name: COPY("Demo Steward") })).toBeNull();
+
+    // Known positive: a real seat on the same page carries its link.
+    fireEvent.click(await header("Seed Keeper"));
+    expect(await screen.findByRole("button", { name: COPY("Seed Keeper") })).toBeTruthy();
   });
 });
