@@ -2299,6 +2299,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+| Shown to the public | Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it. |
 
 ## Hypha
 

@@ -153,7 +153,7 @@ import {
   setPasswordLinkRefusal,
 } from "./lib/memberTokens";
 import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
-import { applyTimingOf, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
+import { applyTimingOf, publicValueFields, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
 import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
 import { DEFAULT_MAP_SKIN, sanitiseMapSkin } from "../shared/mapSkin";
@@ -21089,9 +21089,8 @@ ${inner}
           min: v.min ?? null,
           max: v.max ?? null,
           choices: v.choices ?? null,
-          default: v.default,
-          value: v.value,
-          parsed: v.parsed,
+          // A credential-bearing value is withheld here and stays readable in Admin.
+          ...publicValueFields(v),
           isDefault: v.isDefault,
           ring: ringOf(v),
           applyTiming: applyTimingOf(v),

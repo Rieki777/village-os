@@ -160,6 +160,56 @@ export interface VariableDef {
    * they are governance arithmetic and this registry is one of two readers.
    */
   criticality?: Criticality;
+  /**
+   * THIS DIAL'S VALUE CAN CARRY A CREDENTIAL, so the anonymous mechanics feed
+   * (`GET /api/game/mechanics`) lists the dial and withholds the value.
+   *
+   * `tokens.base_rpc_url` named the field. A provider's dedicated endpoint
+   * puts its key in the path (`https://base-mainnet.g.alchemy.com/v2/<key>`),
+   * and on 2026-10-05 Amora's feed was publishing exactly that to anyone who
+   * asked. The dial stays listed and proposable (Rye, 2026-09-25: villagers
+   * see every dial and may propose a change to any of them); only the value is
+   * held back. Admin still reads it behind auth, because Admin has to edit it.
+   *
+   * `withheldFromPublic` below also withholds any value SHAPED like a
+   * credential on a dial nobody flagged, so the next dial to grow a key is
+   * covered before somebody remembers to mark it.
+   */
+  withheld?: true;
+}
+
+/**
+ * Does this value look like it carries a credential? A provider key in the
+ * path after `/v2/` or `/v3/` (Alchemy, Infura), a key or token in the query
+ * string, or a password in the address itself. Deliberately broad, because it
+ * only ever decides whether a public feed shows a value, and a false positive
+ * costs a member one hidden URL while a false negative publishes a key.
+ */
+export function looksLikeCredential(value: unknown): boolean {
+  if (typeof value !== "string" || value === "") return false;
+  return (
+    /\/v[23]\/[A-Za-z0-9_-]{16,}/.test(value) ||
+    /[?&#](?:api[-_]?key|apikey|key|token|access[-_]?token|secret|auth)=/i.test(value) ||
+    /^[a-z][a-z0-9+.-]*:\/\/[^/?#\s@]*:[^/?#\s@]*@/i.test(value)
+  );
+}
+
+/** Whether the public mechanics feed must hold this dial's value back. */
+export function withheldFromPublic(v: Pick<VariableDef, "withheld"> & { value: string }): boolean {
+  return !!v.withheld || looksLikeCredential(v.value);
+}
+
+/**
+ * The value fields the anonymous mechanics feed sends for one dial. A withheld
+ * dial keeps its place, its label and its default (a platform default is
+ * public code), and sends an empty value with `withheld: true` so the page can
+ * say the value is set and kept private.
+ */
+export function publicValueFields(
+  v: Pick<VariableDef, "withheld" | "default"> & { value: string; parsed: number | boolean | string },
+): { default: string; value: string; parsed: number | boolean | string | null; withheld: boolean } {
+  if (!withheldFromPublic(v)) return { default: v.default, value: v.value, parsed: v.parsed, withheld: false };
+  return { default: looksLikeCredential(v.default) ? "" : v.default, value: "", parsed: null, withheld: true };
 }
 
 /**
@@ -1621,6 +1671,7 @@ export const VARIABLES: VariableDef[] = [
       "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.",
     type: "text",
     default: "https://mainnet.base.org",
+    withheld: true,
   },
 
   // ── Hypha (S13): the SINGLE home for the DHO URL. Everything share-like —
