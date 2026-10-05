@@ -345,7 +345,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
         body: JSON.stringify({ name: calForm.name.trim(), url: calForm.url.trim(), layer: calForm.layer, colour: calForm.colour.trim() || null }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) { toast.error(d?.error ?? "That did not work"); }
+      if (!res.ok) { toast.error(d?.message || d?.error || "That did not work"); }
       else {
         toast.success(d.poll?.ok ? `Attached, ${d.poll.imported} item(s) imported` : `Attached, first fetch failed: ${d.poll?.error ?? "unknown"}`);
         setCalForm({ name: "", url: "", layer: "village", colour: "" });

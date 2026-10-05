@@ -1824,3 +1824,80 @@ disabled, which is why it owns this.
 Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
+
+## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
+
+Admin, Integrations seals every key it saves with `VILLAGE_SECRETS_KEY` (the
+section above says what it protects). `scripts/fork-init.mjs` writes one into a
+fork's `.env` as bare hex, so a key that goes wrong is nearly always a key typed
+or pasted by hand into a host's variable screen. That is where this section
+starts.
+
+### 1. Make the key
+
+- Mac or Linux: `openssl rand -hex 32`
+- Windows PowerShell, which has no openssl:
+  `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+Either prints one line of exactly 64 characters, using only 0-9 and a-f.
+
+### 2. Save it in a password manager first
+
+Before it goes anywhere else. Losing it, or changing it later, makes every key
+saved in Admin, Integrations unreadable, and each one has to be typed again.
+The database backup does not bring it back.
+
+### 3. Set it on Railway
+
+1. Open the project.
+2. Open the **web service**: the one serving the village's address. Never the
+   database service. A variable set on the database service never reaches the
+   server.
+3. Open **Variables**, then **New Variable**.
+4. The name is `VILLAGE_SECRETS_KEY`. The value is ONLY the 64 characters: no
+   quotes, no spaces, and no `VILLAGE_SECRETS_KEY=` in front of it.
+5. If Railway shows staged changes, press **Deploy**. A staged variable reaches
+   nothing until a deploy runs.
+6. Wait for the new deployment to read **Active**. The previous one keeps
+   answering until then, and it has no key.
+7. Open Admin, Integrations. The amber banner at the top is gone once the key
+   is usable, and every Save works. Save your keys.
+
+### 4. On any other host
+
+Set the same environment variable for the process that runs the server, and
+restart it.
+
+### When it is set and Admin, Integrations still refuses
+
+Since 2026-10-02 every message about the key names what is wrong with it, and
+never any part of its value, so it is safe to paste into a support thread. Read
+it in any of three places:
+
+- the deploy log, on the lines starting `[identity]` and `[secrets]`;
+- the amber banner at the top of Admin, Integrations;
+- the Journey to Launch row "Set VILLAGE_SECRETS_KEY so Integrations can save
+  keys".
+
+| The sentence says | What happened | What to do |
+|---|---|---|
+| `VILLAGE_SECRETS_KEY is not set, or is empty, in the environment this server started with.` | The server answering requests never received it. The variable is on another service (the database, or a second web service), the deploy carrying it has not gone Active, or the value was saved blank. | Put it on the web service, press Deploy if changes are staged, and wait for Active. |
+| `... is set, but it is 66 characters with quotes around it.` | Quotes were pasted with the value. | Remove the quotes. |
+| `... with the name VILLAGE_SECRETS_KEY= in front of the key.` | The whole `.env` line went into the value box. | Keep only the 64 characters after the `=`. |
+| `... it is 44 characters in base64.` | It was made with `openssl rand -base64 32`. | Make a new one with `openssl rand -hex 32`, and save that one in the password manager. |
+| `... it is 63 characters.` (or any length other than 64) | A character was lost or added while copying. | Copy the whole key again from the password manager. |
+| `... with a space or line break inside it` | The value wrapped while being copied. | Paste it again as one line. |
+| `... with 1 character that is not 0-9 or a-f` | A stray character, often a lookalike picked up from a chat or a document. | Copy it again from the password manager. |
+
+Every sentence ends with the rule itself: exactly 64 characters, using only 0-9
+and a-f, with nothing else in the value.
+
+A key the server refused never sealed anything, so correcting it costs nothing:
+fix the value, deploy, and save the keys. The exception is a variable that
+WORKED and then changed. Keys saved under the old value open only with the old
+value, so put the exact old value back from the password manager; a new key
+cannot open them.
+
+`MEMBER_SECRETS_KEY` takes the same shape and is set the same way, as its own
+variable with its own value. When members' agents miss deliveries for want of
+it, Admin, What's Failing names what is wrong with it in the same words.

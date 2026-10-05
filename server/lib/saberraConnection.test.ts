@@ -62,6 +62,20 @@ describe("reading the connection", () => {
     expect(r.sentence).toContain("operator");
   });
 
+  it("names WHY nothing can be stored when the caller knows, never calling a set key absent", () => {
+    // A key set with quotes around it is not a key nobody set (2026-10-02).
+    const problem = "VILLAGE_SECRETS_KEY is set, but it is 66 characters with quotes around it.";
+    const r = readConnection(status({}), false, problem);
+    expect(r.state).toBe("cannot-store");
+    expect(r.mayCall).toBe(false);
+    expect(r.sentence).toContain(problem);
+    expect(r.sentence).not.toContain("no village secrets key");
+    expect(r.sentence).toContain("operator");
+    // The reason only speaks to the cannot-store state. A deployment that can
+    // store keys is not told about one.
+    expect(readConnection(status({}), true, problem).sentence).not.toContain(problem);
+  });
+
   it("says plainly that nothing is set up, where that is the truth", () => {
     const r = readConnection(status({}), true);
     expect(r.state).toBe("not-connected");
