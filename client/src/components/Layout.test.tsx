@@ -51,6 +51,7 @@ vi.mock("./mobile/MobileTabBar", () => ({
   isBareRoute: () => false,
 }));
 vi.mock("./mobile/MobileFab", () => ({ default: () => null }));
+vi.mock("./NextStepTrail", () => ({ default: () => null }));
 
 import Layout from "./Layout";
 
