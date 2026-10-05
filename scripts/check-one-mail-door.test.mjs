@@ -3,10 +3,11 @@
  *
  * A guard nobody has watched refuse is a guard that reports green either way.
  * This drives `check-one-mail-door.mjs` against small fixture trees through its
- * `--root` argument: each fixture sends around the door in one of the ways the
- * guard names, and each must fail it, by rule and by file. A tree whose door
- * cannot be seen must fail too, because a scan blind to the call it guards
- * would pass everything.
+ * `--root` argument: each fixture SENDS around the door in one of the ways the
+ * guard names, and each must fail it, by rule and by file. Talking to the
+ * provider about anything but a send (resendAdmin's domains and webhook) must
+ * pass. A tree whose door cannot be seen must fail, because a scan blind to
+ * the call it guards would pass everything.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -62,7 +63,7 @@ function check(label, got, want) {
   });
   check("a send around the door fails", r.status, 1);
   check("naming the file and the line", /server\/lib\/email\.ts:2/.test(r.out), true);
-  check("and the rule", /provider-host/.test(r.out), true);
+  check("and the rule", /send-endpoint/.test(r.out), true);
 }
 
 // 3. A mail SDK, imported or required.
@@ -79,37 +80,58 @@ function check(label, got, want) {
 {
   const r = run({ "server/routes/sneaky.ts": "export const go = (base: string) => fetch(`${base}/emails`, { method: \"POST\" });\n" });
   check("a send to the path with the host in a variable fails", r.status, 1);
-  check("as emails-endpoint", /emails-endpoint/.test(r.out), true);
+  check("as send-call", /send-call/.test(r.out), true);
+  const joined = run({ "server/routes/joined.ts": 'export const go = (base: string) => fetch(base + "/emails/batch", { method: "POST" });\n' });
+  check("a batch send built with + fails", joined.status, 1);
+  check("as send-call", /send-call/.test(joined.out), true);
+  const later = run({ "server/lib/later.ts": "export const url = (base: string) => `${base}/emails`;\n" });
+  check("a send address built to be fetched later fails", later.status, 1);
+  check("as send-url", /send-url/.test(later.out), true);
 }
 
-// 5. Reaching for the provider's address without writing it.
+// 5. PROVIDER SETUP IS NOT A SEND, by the integrator's ruling. resendAdmin's
+//    domains and webhook calls pass, through the door's helper or on their own,
+//    and so does reading the provider's base address.
 {
-  const env = run({ "server/lib/a.ts": "export const base = process.env.RESEND_API_BASE ?? '';\n" });
-  check("reading RESEND_API_BASE outside the door fails", env.status, 1);
-  check("as provider-base", /provider-base: reads process\.env\.RESEND_API_BASE/.test(env.out), true);
-  const call = run({ "server/lib/b.ts": 'import { resendApiBase } from "./comms/transport";\nexport const u = () => resendApiBase();\n' });
-  check("calling resendApiBase outside the door fails", call.status, 1);
-  check("as provider-base", /provider-base: uses resendApiBase/.test(call.out), true);
+  const admin = run({
+    "server/lib/comms/resendAdmin.ts": [
+      'import { resendApiBase } from "./transport";',
+      'export const domains = (key: string) => fetch(`${resendApiBase()}/domains`, { headers: { Authorization: `Bearer ${key}` } });',
+      'export const verify = (id: string) => fetch(`${resendApiBase()}/domains/${id}/verify`, { method: "POST" });',
+      'export const hook = () => fetch("https://api.resend.com/webhooks", { method: "POST" });',
+      "export const base = process.env.RESEND_API_BASE ?? '';",
+      "",
+    ].join("\n"),
+  });
+  check("resendAdmin's domains and webhook calls pass", admin.status, 0);
+  check("with nothing found outside the door", /Outside it: 0 finding\(s\)/.test(admin.out), true);
 }
 
-// 6. Speaking SMTP is a mail client, whatever host it dials.
+// 6. Speaking SMTP is a mail client, whatever host it dials, and a relay host is one too.
 {
   const r = run({ "server/lib/smtp.ts": "export const hello = (s: any, from: string) => s.write(`MAIL FROM:<${from}>`);\n" });
   check("an SMTP client fails", r.status, 1);
   check("as smtp", /smtp: MAIL FROM:/.test(r.out), true);
+  const relay = run({ "server/lib/relay.ts": 'export const relay = { host: "smtp.resend.com", port: 465 };\n' });
+  check("an SMTP relay host fails", relay.status, 1);
+  check("as smtp-host", /smtp-host/.test(relay.out), true);
 }
 
-// 7. Tests may answer the send path (the fake provider does) and set the base,
-//    and may never name the real provider's host.
+// 7. Tests may answer the send path (the fake provider does), post to the fake,
+//    set the base, and name the provider's other endpoints. They may never write
+//    out the real provider's send endpoint.
 {
   const fake = run({
     "server/testkit/fake.ts": 'export const isSend = (p: string) => p === "/emails" || p === "/emails/batch";\n',
-    "server/x.e2e.test.ts": "export const env = { RESEND_API_BASE: 'http://127.0.0.1:1' };\nexport const u = process.env.RESEND_API_BASE;\n",
+    "server/x.e2e.test.ts":
+      "export const env = { RESEND_API_BASE: 'http://127.0.0.1:1' };\nexport const u = process.env.RESEND_API_BASE;\n" +
+      "export const post = (fakeUrl: string) => fetch(`${fakeUrl}/emails`, { method: 'POST' });\n" +
+      'export const d = "https://api.resend.com/domains";\n',
   });
-  check("the fake's send path and a suite's base pass", fake.status, 0);
+  check("the fake's send path, a post to the fake, a suite's base and a domains address pass", fake.status, 0);
   const real = run({ "server/y.test.ts": 'export const u = "https://api.resend.com/emails";\n' });
-  check("a test naming the real host fails", real.status, 1);
-  check("as provider-host", /server\/y\.test\.ts:1\s+provider-host/.test(real.out), true);
+  check("a test writing out the real send endpoint fails", real.status, 1);
+  check("as send-endpoint", /server\/y\.test\.ts:1\s+send-endpoint/.test(real.out), true);
 }
 
 // 8. The client is code too: a browser holding the key would be the worst door of all.

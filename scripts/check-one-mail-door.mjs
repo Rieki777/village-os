@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ONE MAIL DOOR: nothing calls the email provider except
+ * ONE MAIL DOOR: nothing sends an email through the provider except
  * `server/lib/comms/transport.ts` (the comms build spec 5.1).
  *
  * ── THE CLASS THIS EXISTS FOR ────────────────────────────────────────────
@@ -17,22 +17,35 @@
  * caller, one import away from going live around the ledger. It was deleted by
  * the post office lane, and this gate is what keeps the next one from shipping.
  *
+ * ── IT IS ABOUT SENDING ──────────────────────────────────────────────────
+ *
+ * The door this guards is the door an EMAIL goes out by. Talking to the
+ * provider about anything else is not a send: setting up the sending domain,
+ * checking its DNS records, connecting the delivery-report webhook
+ * (server/lib/comms/resendAdmin.ts, `/domains` and `/webhooks`) write no email
+ * to anybody, and they pass, whether they go through `resendApi()` in the door
+ * or dial the provider's address themselves. Reading the provider's base
+ * address is not a send either. The integrator ruled this for the comms build,
+ * and the self-test pins it with a fixture in resendAdmin's shape.
+ *
  * ── WHAT IT LOOKS FOR, AND WHY EACH ONE ──────────────────────────────────
  *
- *   provider-host   a provider's API or SMTP host in a string, anywhere,
- *                   tests and scripts included: nothing in this build calls
- *                   the real provider from a test, a script or a probe
- *                   (rule 13 of the build).
+ *   send-endpoint   a provider's own SEND endpoint written out
+ *                   (`api.resend.com/emails` and its equivalents at other
+ *                   providers), anywhere, tests and scripts included: nothing
+ *                   in this build sends through the real provider from a
+ *                   test, a script or a probe (rule 13 of the build).
+ *   smtp-host       an SMTP relay host (`smtp.resend.com` and the like),
+ *                   anywhere. A relay exists only to send.
  *   mail-sdk        an import or require of a mail provider's SDK, or of an
- *                   SMTP library. The door uses `fetch` and needs none.
- *   provider-base   reading the provider's address without writing it:
- *                   `process.env.RESEND_API_BASE`, `resendApiBase()`, or
- *                   `RESEND_DEFAULT_BASE`. Shipped code only: the suites set
- *                   the variable to point the door at the fake provider.
- *   emails-endpoint a string ending in the provider's send path, `/emails` or
- *                   `/emails/batch`, which is what a copied send looks like
- *                   once the host has been moved into a variable. Shipped
- *                   code only: the fake provider answers that path.
+ *                   SMTP library, anywhere. The door uses `fetch` and needs
+ *                   none.
+ *   send-call       a `fetch` whose address carries the send path, `/emails`
+ *                   or `/emails/batch`: a copied send with its host moved into
+ *                   a variable. Shipped code only: a suite may post to the
+ *                   fake provider, and the fake answers that path.
+ *   send-url        a string ending in the send path, built to be fetched
+ *                   later. Shipped code only, for the same reason.
  *   smtp            a string opening with an SMTP command (EHLO, MAIL FROM,
  *                   RCPT TO, STARTTLS, AUTH LOGIN): code speaking SMTP is a
  *                   mail client, whatever host it dials. Shipped code only.
@@ -45,8 +58,7 @@
  *
  * A line in ALLOWED is a claim that one file is deliberately outside the door,
  * with the reason a reviewer would accept. "I could not find another way" is
- * not a reason. Provider setup (domains, the delivery-report webhook) goes
- * through `resendApi()` in the door itself, so it needs no line here.
+ * not a reason. Provider setup needs no line here: it is not a send.
  *
  * Usage: node scripts/check-one-mail-door.mjs [--root <dir>] [--json]
  *   --root  scan another tree (the self-test points it at fixtures)
@@ -74,8 +86,13 @@ const ALLOWED = {
   "scripts/check-one-mail-door.test.mjs": "The self-test writes fixtures that send around the door, so the gate can be seen to refuse them.",
 };
 
-const PROVIDER_HOST =
-  /\b(api\.resend\.com|smtp\.resend\.com|api\.sendgrid\.com|smtp\.sendgrid\.net|api\.mailgun\.net|api\.eu\.mailgun\.net|smtp\.mailgun\.org|api\.postmarkapp\.com|smtp\.postmarkapp\.com|api\.sparkpost\.com|api\.eu\.sparkpost\.com|api\.brevo\.com|api\.sendinblue\.com|api\.mailjet\.com|mandrillapp\.com|email(-smtp)?\.[a-z0-9-]+\.amazonaws\.com)\b/i;
+/** Each provider's SEND endpoint. Its other endpoints (domains, webhooks, keys) are not sends. */
+const SEND_ENDPOINT =
+  /\b(api\.resend\.com\/emails|api\.sendgrid\.com\/v3\/mail\/send|api(\.eu)?\.mailgun\.net\/v3\/\S*\/messages|api\.postmarkapp\.com\/email|api(\.eu)?\.sparkpost\.com\/api\/v1\/transmissions|api\.(brevo|sendinblue)\.com\/v3\/smtp\/email|api\.mailjet\.com\/v3(\.1)?\/send|mandrillapp\.com\/api\/1\.0\/messages\/send)/i;
+
+/** SMTP relays. A relay exists only to send. */
+const SMTP_HOST =
+  /\b(smtp\.resend\.com|smtp\.sendgrid\.net|smtp\.mailgun\.org|smtp\.postmarkapp\.com|smtp-relay\.(brevo|sendinblue)\.com|in-v3\.mailjet\.com|email-smtp\.[a-z0-9-]+\.amazonaws\.com)\b/i;
 
 const MAIL_SDKS = new Set([
   "resend",
@@ -98,9 +115,17 @@ const MAIL_SDKS = new Set([
   "sendmail",
 ]);
 
-const PROVIDER_BASE_NAMES = new Set(["resendApiBase", "RESEND_DEFAULT_BASE"]);
-const EMAILS_ENDPOINT = /\/emails(\/batch)?\/?$/;
+/** A string that ends in the send path: a send address, built to be fetched. */
+const SEND_URL = /\/emails(\/batch)?\/?$/;
+/** The send path anywhere in a fetch's address, written as a string, a template or an expression. */
+const SEND_PATH_IN_ADDRESS = /\/emails(\/batch)?\/?(?=$|[?#"'`)\s])/;
 const SMTP_COMMAND = /^(EHLO\b|HELO\b|MAIL FROM:|RCPT TO:|STARTTLS\b|AUTH (LOGIN|PLAIN)\b)/;
+
+/** A call that fetches: `fetch(...)`, `globalThis.fetch(...)`, an injected `fetchImpl(...)`. */
+const isFetchCall = (node) =>
+  ts.isCallExpression(node) &&
+  ((ts.isIdentifier(node.expression) && /^(fetch|fetchImpl)$/.test(node.expression.text)) ||
+    (ts.isPropertyAccessExpression(node.expression) && /^(fetch|fetchImpl)$/.test(node.expression.name.text)));
 
 const posix = (p) => p.split(path.sep).join("/");
 
@@ -160,32 +185,18 @@ for (const file of files.sort()) {
 
     const text = literalText(node);
     if (text !== null) {
-      if (PROVIDER_HOST.test(text)) add(node, "provider-host", text.length > 90 ? `${text.slice(0, 90)}...` : text);
-      if (!testOnly && EMAILS_ENDPOINT.test(text)) add(node, "emails-endpoint", text.length > 90 ? `...${text.slice(-90)}` : text);
+      if (SEND_ENDPOINT.test(text)) add(node, "send-endpoint", text.length > 90 ? `${text.slice(0, 90)}...` : text);
+      if (SMTP_HOST.test(text)) add(node, "smtp-host", text.length > 90 ? `${text.slice(0, 90)}...` : text);
+      if (!testOnly && SEND_URL.test(text)) add(node, "send-url", text.length > 90 ? `...${text.slice(-90)}` : text);
       if (!testOnly && SMTP_COMMAND.test(text)) add(node, "smtp", text.length > 60 ? `${text.slice(0, 60)}...` : text);
     }
 
-    if (!testOnly) {
-      if (ts.isPropertyAccessExpression(node) && node.name.text === "RESEND_API_BASE" && /process\.env$/.test(node.expression.getText(source))) {
-        add(node, "provider-base", "reads process.env.RESEND_API_BASE");
-      }
-      if (
-        ts.isElementAccessExpression(node) &&
-        ts.isStringLiteral(node.argumentExpression) &&
-        node.argumentExpression.text === "RESEND_API_BASE" &&
-        /process\.env$/.test(node.expression.getText(source))
-      ) {
-        add(node, "provider-base", "reads process.env[\"RESEND_API_BASE\"]");
-      }
-      // A use of the name, never its own declaration and never an import of it:
-      // importing is not calling, and the call or the reference is what is found.
-      if (
-        ts.isIdentifier(node) &&
-        PROVIDER_BASE_NAMES.has(node.text) &&
-        !(node.parent && (ts.isImportSpecifier(node.parent) || ts.isVariableDeclaration(node.parent) || ts.isFunctionDeclaration(node.parent)) && node.parent.name === node)
-      ) {
-        add(node, "provider-base", `uses ${node.text}`);
-      }
+    // The address a fetch is handed, however it is written: a string, a
+    // template, or `base + "/emails"`. A fetch to anything else passes.
+    if (!testOnly && isFetchCall(node) && node.arguments[0]) {
+      const arg = node.arguments[0];
+      const address = literalText(arg) ?? arg.getText(source);
+      if (SEND_PATH_IN_ADDRESS.test(address)) add(node, "send-call", `fetch(${address.length > 80 ? `...${address.slice(-80)}` : address})`);
     }
     ts.forEachChild(node, visit);
   };
@@ -226,7 +237,7 @@ if (live.length || problems.length) {
   for (const f of live) console.error(`  ${f.rel}:${f.line}  ${f.rule}: ${f.detail}`);
   console.error(
     "\nSend through post() in server/lib/comms/postOffice.ts, which records the email before it goes. " +
-      "Provider setup goes through resendApi() in server/lib/comms/transport.ts.",
+      "Talking to the provider about anything but a send (domains, webhooks) is not a send and passes this guard.",
   );
   process.exit(1);
 }

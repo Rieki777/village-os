@@ -80,10 +80,12 @@ test, all in Comms Settings. Until then the module reads as not ready.
   (most of it carries a link that acts for the person), and a ledger fault never stops it going.
   The old mailer keeps its names in `server/lib/comms/mailer.ts`, as a thin call to the post
   office.
-- **The one door out.** `server/lib/comms/transport.ts` is the only code that calls the email
-  provider. `RESEND_API_BASE` points it at the fake provider in tests
+- **The one door out.** `server/lib/comms/transport.ts` is the only code that sends an email
+  through the provider. `RESEND_API_BASE` points it at the fake provider in tests
   (`server/testkit/fakeResend.ts`), and `scripts/check-one-mail-door.mjs` fails CI on any other
-  file that names the provider, imports a mail SDK, posts to its send path or speaks SMTP.
+  file that sends: one that writes out a provider's send endpoint or an SMTP relay, imports a mail
+  SDK, fetches the send path or speaks SMTP. Setting up the sending domain and the delivery-report
+  webhook is not a send and passes.
 - **The drain.** `drain()` in `server/lib/comms/postOffice.ts` sends what is queued, on the
   `comms-post-office` job and on "run now". Each row is claimed by one drain, asked every
   question again (suppression, permission, Pause all, the daily cap, rehearsal), and retried at

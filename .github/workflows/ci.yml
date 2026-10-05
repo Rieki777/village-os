@@ -399,10 +399,12 @@ jobs:
         # shows up nowhere. server/lib/email.ts was exactly that: a second
         # client, one import from going live around the ledger, for a month.
         #
-        # So nothing but server/lib/comms/transport.ts may name the provider's
-        # host, import a mail SDK, read its base address, post to its send
-        # path or speak SMTP. It prints what it scanned and what it saw inside
-        # the door, and a door it cannot see into fails, so a pass shows its
+        # So nothing but server/lib/comms/transport.ts may SEND: write out a
+        # provider's send endpoint or an SMTP relay, import a mail SDK, fetch
+        # the send path, or speak SMTP. Talking to the provider about anything
+        # else (the sending domain, the delivery-report webhook) is not a send
+        # and passes. It prints what it scanned and what it saw inside the
+        # door, and a door it cannot see into fails, so a pass shows its
         # denominator. Its fixture suite runs with the other self-tests.
         run: node scripts/check-one-mail-door.mjs
 

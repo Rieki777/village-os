@@ -31,11 +31,12 @@
  * that is not https is honoured only on loopback, so a mistyped value can
  * never send the village's key across a network in the clear.
  *
- * THE OTHER CALLS GO THROUGH HERE TOO. Setting up a sending domain and
- * connecting delivery reports also talk to the provider (the comms build
- * spec 5.2, server/lib/comms/resendAdmin.ts), and `resendApi` below is how
- * they do it, so this stays the one file that dials the provider at all.
- * `scripts/check-one-mail-door.mjs` fails any other file that does.
+ * THE ONE DOOR IS FOR SENDING. `scripts/check-one-mail-door.mjs` fails any
+ * other file that sends an email through the provider. Setting up a sending
+ * domain and connecting delivery reports also talk to the provider (the comms
+ * build spec 5.2, server/lib/comms/resendAdmin.ts), and they are not sends:
+ * `resendApi` below offers them the same base, timeout and reading of a
+ * refusal that a send gets, and refuses the send path itself.
  *
  * NO BATCH SENDS, on purpose, though the provider offers one. A batch carries
  * one Idempotency-Key for up to a hundred emails, and the row id riding as
