@@ -116,15 +116,15 @@ export default function Training() {
         method: had ? "DELETE" : "POST",
       });
       if (!res.ok) {
-        setSaid("That did not save. Try again in a moment.");
+        setSaid("That didn't save. Try again.");
         return;
       }
       const data = await res.json();
       // The server's own list, never the one this page guessed at.
       if (Array.isArray(data?.completed)) setCompleted(data.completed.map(String));
-      setSaid(had ? "Taken off your record." : "Added to your record.");
+      setSaid(had ? "No longer marked done." : "Marked done.");
     } catch {
-      setSaid("That did not save. Try again in a moment.");
+      setSaid("That didn't save. Try again.");
     } finally {
       setBusy(null);
     }
@@ -154,7 +154,7 @@ export default function Training() {
             </span>
           </div>
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-3">
-            Learn Together, Grow Together
+            Learn together, grow together
           </h1>
           <p className="text-white text-lg max-w-2xl">
             Practical training in nonviolent communication, authentic relating, and
@@ -171,10 +171,10 @@ export default function Training() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="font-display text-xl font-bold text-teal-deep">
-                  Your Progress
+                  Your progress
                 </h2>
                 <p className="text-sm text-stone-500 mt-0.5">
-                  {done} of {total} modules completed
+                  {done}/{total} modules done
                 </p>
               </div>
               <span className="text-teal-deep font-bold text-2xl">{pct}%</span>
@@ -192,13 +192,13 @@ export default function Training() {
             {required.length > 0 ? (
               <p className="mt-3 text-sm text-stone-600">
                 {requiredDone === required.length ? (
-                  <>You have finished every required module.</>
+                  <>Required training complete.</>
                 ) : (
                   <>
                     <span className="font-semibold text-teal-deep">
-                      {requiredDone} of {required.length}
+                      {requiredDone}/{required.length}
                     </span>{" "}
-                    required modules done. Finishing them all opens the next rung.
+                    required modules done. Finish the rest to complete your training.
                   </>
                 )}
               </p>
@@ -213,11 +213,11 @@ export default function Training() {
 
           {/* Modules */}
           {loading ? (
-            <div className="text-center py-16 text-stone-400">Loading modules...</div>
+            <div className="text-center py-16 text-stone-400">Loading modules…</div>
           ) : modules.length === 0 ? (
             <div className="text-center py-16 text-stone-400">
               <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No training modules available yet. Check back soon.</p>
+              <p>No training modules yet.</p>
             </div>
           ) : (
             <div className="space-y-3">

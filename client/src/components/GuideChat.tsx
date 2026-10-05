@@ -31,8 +31,8 @@ export default function GuideChat({
 }) {
   const defaultGreeting =
     kind === "quest-proposal"
-      ? `Hi, I'm ${assistantName}. So you've got a quest in mind that isn't on the board yet. I'd love to hear it. What do you want to bring to ${projectName}?`
-      : `Hi, I'm ${assistantName}. I help people shape their offering to ${projectName}. There's no wrong way to start. What are you dreaming of bringing?`;
+      ? `Hi, I'm ${assistantName}. Got a Quest the board is missing? Tell me what you'd love to bring.`
+      : `Hi, I'm ${assistantName}, and I help people shape their offering to ${projectName}. What are you dreaming of bringing? There's no wrong way to start.`;
 
   const [messages, setMessages] = useState<ChatMsg[]>([
     {
@@ -101,7 +101,7 @@ export default function GuideChat({
       {
         role: "assistant",
         content:
-          "That did not send, and your proposal is still here. Try the button again in a moment, or use the plain form instead.",
+          "That didn't send. Your proposal is still here, so try again, or use the form instead.",
       },
     ]);
   };
@@ -142,11 +142,11 @@ export default function GuideChat({
               <CheckCircle2 className="w-4 h-4" /> Your proposal is ready
             </p>
             <p className="text-sm text-stone-600 mb-3">
-              {assistantName} has captured everything. Review it, then send it to the {projectName} team.
+              Review it, then send it to the {projectName} team.
             </p>
             <div className="flex flex-wrap gap-2">
               <button onClick={submit} disabled={submitting} className="inline-flex items-center gap-2 bg-teal-deep text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50">
-                {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
+                {submitting ? "Sending…" : "Send proposal"} <ArrowRight className="w-4 h-4" />
               </button>
               <button onClick={() => onRefineInForm(proposal)} className="text-sm font-medium text-teal-deep px-4 py-2 rounded-xl border border-stone-200 hover:bg-stone-50">
                 {refineLabel}
