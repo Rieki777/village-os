@@ -40,7 +40,7 @@ const REQUIRED = new Set(["api-key", "domain", "sender", "delivery-reports", "po
 function payload(done: string[] = [], over: Record<string, unknown> = {}) {
   return {
     lifecycle: "off",
-    ready: [...REQUIRED].every((k) => done.includes(k)),
+    ready: Array.from(REQUIRED).every((k) => done.includes(k)),
     checklist: SETUP_KEYS.map((key, i) => ({
       key,
       n: i + 1,
