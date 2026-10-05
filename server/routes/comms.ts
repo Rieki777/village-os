@@ -35,6 +35,7 @@ import { effectiveLifecycle } from "../lib/modules";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
 import { register as registerCommsSettings, type CommsSettingsDeps } from "./commsSettings";
 import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
+import { register as registerWords } from "./commsWords";
 
 type Deps = Pick<
   AppDeps,
@@ -106,4 +107,7 @@ export function register(app: Express, deps: Deps): void {
 
   // People: the address book, a person's page, suppress and restore (server/routes/commsPeople.ts).
   registerPeopleAdmin(app, deps);
+
+  // Words: every email's words, versions, preview and test (server/routes/commsWords.ts).
+  registerWords(app, deps);
 }

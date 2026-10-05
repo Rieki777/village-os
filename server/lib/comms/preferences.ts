@@ -56,6 +56,14 @@ export const LETTERS_CONFIRM_DAYS = 7;
 export const PREFERENCES_LINK_DAYS = 365;
 
 /** What a confirmation email needs to be written and sent. */
+/** The confirmation's words, from the words lane's renderer or the plain default below. */
+export interface LettersWords {
+  subject: string;
+  html: string;
+  text: string;
+  preheader?: string | null;
+}
+
 export interface LettersMailDeps {
   /** The post office (server/lib/comms/postOffice.ts), bound to its dependencies. */
   post(email: OutgoingEmail): Promise<PostResult>;
@@ -68,12 +76,10 @@ export interface LettersMailDeps {
    * default below at merge; it receives the confirm link as
    * `links.lettersConfirm`.
    */
-  render?: (vars: { "village.name": string; "person.firstName": string; "links.lettersConfirm": string }) => {
-    subject: string;
-    html: string;
-    text: string;
-    preheader?: string | null;
-  };
+  render?: (
+    vars: { "village.name": string; "person.firstName": string; "links.lettersConfirm": string },
+    contactId?: string,
+  ) => LettersWords | Promise<LettersWords>;
 }
 
 export interface PreferencesDeps extends PeopleDeps {
@@ -203,7 +209,7 @@ export async function applyPreferencesChange(
 const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 /** The confirmation's words with no words lane in the build: the platform default, filled in plainly. */
-function defaultLettersWords(vars: { "village.name": string; "person.firstName": string; "links.lettersConfirm": string }) {
+function defaultLettersWords(vars: { "village.name": string; "person.firstName": string; "links.lettersConfirm": string }, _contactId?: string): LettersWords {
   const t = defaultTemplate("letters.confirm");
   const fill = (s: string, html: boolean) =>
     s.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (_m, field: string) => {
@@ -237,7 +243,7 @@ export async function askToConfirmLetters(
     "person.firstName": String(contact.name ?? "").trim().split(/\s+/)[0] || "there",
     "links.lettersConfirm": link,
   };
-  const words = (deps.letters.render ?? defaultLettersWords)(vars);
+  const words = await (deps.letters.render ?? defaultLettersWords)(vars, contact.id);
   const result = await deps.letters.post({
     idempotencyKey: `letters-confirm:${contact.id}:${dayOf(deps.now ? deps.now() : Date.now())}`,
     kind: "essential",

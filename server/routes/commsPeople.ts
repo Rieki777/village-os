@@ -72,6 +72,7 @@ import {
 } from "../lib/comms/permissions";
 import { post } from "../lib/comms/postOffice";
 import { applyPreferencesChange, preferencesToken, preferencesView, type PreferencesDeps } from "../lib/comms/preferences";
+import { renderLettersConfirm } from "../lib/comms/render";
 import { stop as stopJourney } from "../lib/comms/journeys";
 import { recordEvent } from "../lib/events";
 import { contactById } from "../repos/commsContacts";
@@ -124,6 +125,10 @@ function preferencesDepsOf(d: PublicDeps): PreferencesDeps {
       post: (email: OutgoingEmail) => post(d.commsPostOffice, email),
       origin: d.deploymentOrigin,
       projectName: d.projectName,
+      // The words lane's renderer: the village's live words for letters.confirm,
+      // in the village's layout, with the reader's own preferences link in the
+      // footer. Without it the confirmation would go out as the plain default.
+      render: (vars, contactId) => renderLettersConfirm(d.getPool, d.deploymentOrigin(), vars, contactId),
     },
   };
 }
