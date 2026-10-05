@@ -18,7 +18,7 @@
  *
  * Light-only, like every admin surface: fixed grays on fixed white.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { EmailKind, MessageStatus, SkipReason } from "@shared/comms/kinds";
 import { EMAIL_KINDS, MESSAGE_STATUSES } from "@shared/comms/kinds";
@@ -138,8 +138,12 @@ const SKIP_LABEL: Record<SkipReason, string> = {
 const at = (iso: string | null): string => (iso ? new Date(iso).toLocaleString() : "");
 
 function StatusBadge({ status }: { status: MessageStatus }) {
+  // self-start: on a phone the row is a column, and a column stretches its
+  // children, which turned the badge into a bar the width of the screen.
   return (
-    <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[status] ?? STATUS_TONE.queued}`}>
+    <span
+      className={`inline-block self-start rounded-full border px-2 py-0.5 text-xs font-medium sm:self-center ${STATUS_TONE[status] ?? STATUS_TONE.queued}`}
+    >
       {STATUS_LABEL[status] ?? status}
     </span>
   );
@@ -164,6 +168,17 @@ export default function CommsSentMail({ password }: { password: string }) {
   const [detail, setDetail] = useState<DetailAnswer | null>(null);
   const [detailProblem, setDetailProblem] = useState("");
   const [acting, setActing] = useState(false);
+  const detailRef = useRef<HTMLElement | null>(null);
+
+  // The email opens below a list of fifty, which on a phone is out of sight,
+  // so choosing one brings it into view: once it has LOADED, because before
+  // that the section is one short line at the foot of the page and there is no
+  // room below it to scroll its top into view. Optional, because not every
+  // browser (or test DOM) has scrollIntoView.
+  const shownId = detail?.message.id ?? null;
+  useEffect(() => {
+    if (shownId) detailRef.current?.scrollIntoView?.({ block: "start" });
+  }, [shownId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -361,7 +376,7 @@ export default function CommsSentMail({ password }: { password: string }) {
       )}
 
       {openId && (
-        <section aria-label="The email" className="rounded-xl border border-gray-200 bg-white p-5">
+        <section ref={detailRef} aria-label="The email" className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h3 className="text-lg font-semibold text-gray-900">{detail?.message.subject ?? "Reading this email"}</h3>
             <button type="button" className={button} onClick={() => { setOpenId(null); setDetail(null); }}>
