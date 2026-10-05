@@ -1501,7 +1501,7 @@ have reached someone who should not have had it. It does not require reading
 code. Where a step needs a technical helper, that is called out.
 
 1. **Confirm the backup runs from a private repository.** The encrypted
-   backup workflow (`.github/workflows/db-backup.yml`) uploads its dumps as
+   backup workflow (template `ops/backup/db-backup.yml`) uploads its dumps as
    workflow artifacts, and on a public repository anybody can download those
    and read the logs. `Rieki777/village-os` is public on purpose, so the
    backup belongs in a private repository of the village's own. Check which it
@@ -1623,7 +1623,8 @@ should not be done.
 
 Storage in this document used to be plaintext JSON, by a written decision on
 2026-07-27 that named its own revisit condition: revisit if backups start
-leaving the deployment's trust boundary. `.github/workflows/db-backup.yml`
+leaving the deployment's trust boundary. The backup workflow (then in this
+repository's .github/workflows folder)
 mysqldumps the whole database and uploads it as a GitHub Actions artifact kept
 for 30 days, and the repository was public while those artifacts were produced,
 so the condition had already fired. The repository was made private on
