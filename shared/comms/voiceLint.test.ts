@@ -1,6 +1,4 @@
 import { execFileSync } from "node:child_process";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { AI_WORDS, CONTRAST, PASSIVE, RHETORICAL, voiceLint, voiceLintWords } from "./voiceLint";
 
@@ -32,9 +30,10 @@ interface GateFacts {
 }
 
 function readGate(): GateFacts {
-  const url = pathToFileURL(path.resolve(process.cwd(), "scripts/check-voice.mjs")).href;
+  // A static import with a literal path, resolved from the repository root,
+  // which is where `node -e` starts and where vitest runs.
   const script = `
-    const g = await import(${JSON.stringify(url)});
+    import * as g from "./scripts/check-voice.mjs";
     const re = (r) => r.source + "/" + r.flags;
     const samples = JSON.parse(process.argv[1]);
     console.log(JSON.stringify({
@@ -44,7 +43,10 @@ function readGate(): GateFacts {
       rhetorical: re(g.RHETORICAL),
       found: samples.map((s) => g.checkSpan(s).length > 0),
     }));`;
-  const out = execFileSync(process.execPath, ["--input-type=module", "-e", script, JSON.stringify(SAMPLES)], { encoding: "utf8" });
+  const out = execFileSync(process.execPath, ["--input-type=module", "-e", script, JSON.stringify(SAMPLES)], {
+    encoding: "utf8",
+    cwd: process.cwd(),
+  });
   return JSON.parse(out.trim().split("\n").pop() ?? "{}");
 }
 
