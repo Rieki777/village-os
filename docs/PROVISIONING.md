@@ -354,7 +354,7 @@ Two of these are worth knowing about early, because their failure is quiet:
   and no third-party licence. Unset, the land page says nothing is configured
   rather than showing a picture of somewhere else.
 - **`BACKUP_EXPORT_TOKEN`** is what authenticates the uploads half of the
-  encrypted GitHub Actions backup (`.github/workflows/db-backup.yml`,
+  encrypted GitHub Actions backup (`ops/backup/db-backup.yml`,
   `docs/RUNBOOK.md`). `fork-init` generates it with the other secrets. Without
   it the database dump keeps succeeding and looks healthy while your members'
   uploaded files are in no backup at all. Run that workflow only from a

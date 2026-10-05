@@ -490,7 +490,8 @@ nothing had ever read the column).
   holds ONLY uploaded images (`data/uploads/`) plus historical JSON kept as
   an archive. `scripts/import-json-to-mysql.ts` remains the restore/cutover
   tool for that archive format.
-- **Automated:** `.github/workflows/db-backup.yml` dumps the production
+- **Automated:** the backup workflow (template `ops/backup/db-backup.yml`, run
+  from a PRIVATE repository of the village's own; see `docs/RUNBOOK.md`) dumps the production
   schema daily (09:17 UTC), keeps 30 days of artifacts, and — on every run —
   RESTORES the dump into a scratch MySQL and asserts row counts plus an
   exact round-tripped timestamp against a manifest taken at dump time. A red
@@ -1264,7 +1265,8 @@ the directory. `/health` reports the volume totals.
 
 ## Backup encryption, the uploads volume gap, and after a suspected exposure (2026-08-30)
 
-**What was found.** `.github/workflows/db-backup.yml` dumped the whole
+**What was found.** The backup workflow (then at .github/workflows/db-backup.yml
+in this public repository, now the template `ops/backup/db-backup.yml`) dumped the whole
 production schema daily, gzipped it, and uploaded it as a plain GitHub
 Actions artifact. Actions artifact download follows repository read access.
 It is not a separate permission. On a repository set to public, that made
