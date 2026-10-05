@@ -22,7 +22,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { confirmManual, launchStatus, launchVoteBlocked, recordLaunchCarried, type LaunchDeps } from "./launch";
 import { writeGoverningPurpose } from "./governingPurpose";
 import { readConfigDocument } from "../repos/appConfigDocs";
@@ -110,7 +110,7 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 });
     /*
      * A VILLAGE THAT IS READY, by every blocking row this file can answer:
      * the wired checks say ok, the purpose is written, the issuance cap is
