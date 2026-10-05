@@ -6,7 +6,7 @@ import type { EmailVillage } from "../../../shared/comms/letterHtml";
 import { GAME_CONFIG } from "../../../shared/gameConfig";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { verifyLink } from "./links";
-import { derivedValues, loadEmailVillage, preferencesLink, renderLetter, renderTemplate } from "./render";
+import { derivedValues, loadEmailVillage, preferencesLink, renderLetter, renderLettersConfirm, renderTemplate } from "./render";
 import { saveWords } from "./templates";
 
 /**
@@ -133,6 +133,24 @@ describe.skipIf(!configured)("rendering against a village's words", () => {
     expect(inherited.name).toBe(GAME_CONFIG.project.name);
     // An http logo on somebody else's host is never loaded by an email.
     expect(inherited.logoUrl).toBeNull();
+  });
+
+  it("renders the letters confirmation for the people lane's hook, its link the one button and a clean token in the text", async () => {
+    const link = "https://village.example/email/a?t=eyJwIjoibGV0dGVycyJ9.c2lnbmF0dXJl";
+    const words = await renderLettersConfirm(
+      () => pool,
+      "https://village.example",
+      { "person.firstName": "Ana", "links.lettersConfirm": link },
+      "ct_letters",
+    );
+    expect(words.subject.startsWith("Confirm your letters from ")).toBe(true);
+    const buttons = Array.from(words.html.matchAll(/<td align="center" bgcolor=[^>]*><a href="([^"]+)"/g)).map((m) => m[1]);
+    expect(buttons).toEqual([link]);
+    // The regex the people lane's e2e suite reads the token with, over the text part.
+    const token = decodeURIComponent(words.text.match(/\/email\/a\?t=([^\s]+)/)?.[1] ?? "");
+    expect(token).toBe("eyJwIjoibGV0dGVycyJ9.c2lnbmF0dXJl");
+    // The footer carries the reader's own preferences link.
+    expect(words.text).toMatch(/Choose which emails you get: https:\/\/village\.example\/email\/preferences\?t=/);
   });
 
   it("gives the same email for the same inputs, byte for byte", async () => {

@@ -189,6 +189,27 @@ export async function renderTemplate(templateKey: string, vars: MergeValues, ctx
 }
 
 /**
+ * The letters confirmation, shaped for the people lane's hook
+ * (`LettersMailDeps.render` in server/lib/comms/preferences.ts). That lane
+ * signs the double opt-in link and hands it over as `links.lettersConfirm`,
+ * which these words carry as their one button. It reads the village and the
+ * live words, so it answers a promise: the hook awaits it once wired.
+ *
+ * `contactId`, when the caller has it, gives the footer the reader's own
+ * preferences link.
+ */
+export async function renderLettersConfirm(
+  getPool: () => Pool,
+  origin: string,
+  vars: MergeValues,
+  contactId?: string | null,
+): Promise<{ subject: string; html: string; text: string; preheader: string }> {
+  const village = await loadEmailVillage(getPool(), origin);
+  const email = await renderTemplate("letters.confirm", vars, { getPool, village, contactId: contactId ?? null });
+  return { subject: email.subject, html: email.html, text: email.text, preheader: email.preheader };
+}
+
+/**
  * One letter: its words set inside the village's `letter.layout` template,
  * posted as kind `letters` unless the context says otherwise. The letter's own
  * subject and preview line ride in `vars` as `letter.subject` and
