@@ -297,12 +297,6 @@ export interface NoticeEmail {
   origin: string;
   /** The member it is for. */
   userId?: string | null;
-  /**
-   * Attempt it now, inside the producing request, the way a notice always went
-   * before the post office. Only the single immediate notice asks: the daily
-   * digest and the weekly brief loop over many members and wait for the drain.
-   */
-  urgent?: boolean;
 }
 
 /** What the post office did with one notice. */
@@ -427,7 +421,6 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
     idempotencyKey: `notify:${n.id}`,
     origin: "notify.immediate",
     userId: n.userId,
-    urgent: true,
   });
   /*
    * STAMPED WHEN THE POST OFFICE TOOK THE ROW, never when it refused it.

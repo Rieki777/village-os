@@ -37,7 +37,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, not claimed here.
-const PORT = 3500 + (process.pid % 100);
+const PORT = 3400 + (process.pid % 100);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "comms-postoffice-admin";
 const PASSWORD = "CommsPostOffice123!";

@@ -51,9 +51,14 @@ function memorySuppressions() {
       asked.push(`add ${emailKey} ${reason}`);
       if (!held.has(emailKey)) held.set(emailKey, reason);
     },
-    async removeSuppression(emailKey) {
+    async removeSuppression(emailKey, opts) {
       asked.push(`remove ${emailKey}`);
-      held.delete(emailKey);
+      // The real module's rule (server/lib/comms/suppressions.ts): a complaint
+      // lifts only with a reason, and otherwise is refused and stays.
+      if (held.get(emailKey) === "complained" && !String(opts?.reason ?? "").trim()) {
+        return { removed: false, refused: "A complaint lifts only with a reason." };
+      }
+      return { removed: held.delete(emailKey) };
     },
     async listSuppressions(opts) {
       return Array.from(held.entries())

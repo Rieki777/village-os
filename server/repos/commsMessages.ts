@@ -261,12 +261,34 @@ export async function dueMessageIds(pool: Pool, opts: { limit: number; onlyKinds
  * won it, or when it stopped being due between the list and the claim.
  */
 export async function claimMessage(pool: Pool, id: string): Promise<OutboundRow | null> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the claim one drain wins
-    "UPDATE comms_messages SET status = 'sending', updated_at = CURRENT_TIMESTAMP " +
-      `WHERE village_id = ? AND id = ? AND status = 'queued' AND kind <> 'essential' AND ${DUE}`,
-    [VILLAGE, id],
-  );
-  if (res.affectedRows === 0) return null;
+  /*
+   * TWO DRAINS CAN DEADLOCK ON THIS UPDATE, and the claim must survive it.
+   * Each UPDATE locks entries of the (status, send_after) index as well as the
+   * row, so two drains claiming neighbouring rows at once can take those locks
+   * in opposite orders. InnoDB then picks a victim and fails its statement with
+   * ER_LOCK_DEADLOCK (1213); MariaDB under snapshot isolation can answer 1020
+   * instead, and a long wait answers 1205. Measured on the composed tree: the
+   * "two drains at once" test threw 1213 out of drain() and lost the tick.
+   *
+   * The victim's statement was rolled back whole, so trying again is safe: the
+   * retry either claims the row or finds the other drain already did
+   * (affectedRows 0, answered as null). After three tries the row stays queued
+   * for the next drain, which is never a lost email.
+   */
+  let res: ResultSetHeader | null = null;
+  for (let attempt = 0; attempt < 3 && !res; attempt++) {
+    try {
+      [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the claim one drain wins
+        "UPDATE comms_messages SET status = 'sending', updated_at = CURRENT_TIMESTAMP " +
+          `WHERE village_id = ? AND id = ? AND status = 'queued' AND kind <> 'essential' AND ${DUE}`,
+        [VILLAGE, id],
+      );
+    } catch (e: any) {
+      if (![1213, 1205, 1020].includes(Number(e?.errno))) throw e;
+      await new Promise((r) => setTimeout(r, 15 + Math.floor(Math.random() * 35)));
+    }
+  }
+  if (!res || res.affectedRows === 0) return null;
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, the row this drain just claimed
     "SELECT id, kind, contact_id, user_id, to_email, email_key, subject, body_html, body_text, reply_to, attachments, " +
       "attempts, UNIX_TIMESTAMP(expires_at) AS expires_at FROM comms_messages WHERE village_id = ? AND id = ? LIMIT 1",

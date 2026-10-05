@@ -28,10 +28,11 @@
  * each email.
  *
  * `sendNotice` IS THE NOTIFICATION SPINE'S MAILER (`NotifyDeps.sendEmail`): a
- * `notices` email under the spine's own key, dropped once it is
- * `comms.notice_expiry_minutes` old. The single immediate notice is attempted
- * at once (`urgent`), as notices always were; the digest and the weekly brief
- * wait in the queue for the drain.
+ * `notices` email under the spine's own key, waiting in the queue for the
+ * drain and dropped once it is `comms.notice_expiry_minutes` old. Queued, never
+ * urgent, on purpose: the spine notifies whole electorates in a loop, and an
+ * urgent send per member would hold the producing request for every one of
+ * them. The cost is that a notice can arrive up to one scheduler tick later.
  */
 import { randomUUID } from "node:crypto";
 import type { Pool } from "mysql2/promise";
@@ -296,9 +297,6 @@ export function createMailer(deps: MailerDeps) {
         html: opts.html,
         text: "",
         expiresAt: new Date(Date.now() + minutes * 60_000),
-        // The single immediate notice is attempted now, as notices always were;
-        // a provider that refuses or times out leaves it queued for the drain.
-        urgent: opts.urgent === true,
       });
       const mine: NoticeSendResult = { accepted: NOTICE_ACCEPTED.has(r.status), status: r.status, ...(r.reason ? { reason: r.reason } : {}) };
       if (!answer || (answer.accepted && !mine.accepted)) answer = mine;
