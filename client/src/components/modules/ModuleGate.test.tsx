@@ -62,8 +62,8 @@ describe("ModuleGate", () => {
 
     renderGate({ moduleId: "forum", name: "Forum" });
 
-    expect(screen.getByText(/could not be read just now/i)).toBeInTheDocument();
-    expect(screen.queryByText(/hasn.t enabled this module/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/didn.t load/i)).toBeInTheDocument();
+    expect(screen.queryByText(/hasn.t opened this room/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
@@ -105,7 +105,7 @@ describe("ModuleGate", () => {
     renderGate({ moduleId: "forum", name: "Forum" });
 
     expect(screen.queryByText(/opens when you sign in/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Riverbend hasn.t enabled this module/i)).toBeInTheDocument();
+    expect(screen.getByText(/Riverbend hasn.t opened this room/i)).toBeInTheDocument();
   });
 
   it("names the village by its configured name, not a hardcoded one, when a module is off", () => {
@@ -115,7 +115,7 @@ describe("ModuleGate", () => {
 
     renderGate({ moduleId: "quests", name: "Quests" });
 
-    expect(screen.getByText(/Riverbend hasn.t enabled this module/i)).toBeInTheDocument();
+    expect(screen.getByText(/Riverbend hasn.t opened this room/i)).toBeInTheDocument();
     // The ruled sentence (R56/R43 Q8): says WHO can turn it on, never invites
     // a proposal - no member-authored proposal kind touches a lifecycle.
     expect(screen.queryByText(/make a proposal/i)).not.toBeInTheDocument();
@@ -129,6 +129,6 @@ describe("ModuleGate", () => {
 
     renderGate({ moduleId: "quests", name: "Quests" });
 
-    expect(screen.getByText(/This village hasn.t enabled this module/i)).toBeInTheDocument();
+    expect(screen.getByText(/This village hasn.t opened this room/i)).toBeInTheDocument();
   });
 });

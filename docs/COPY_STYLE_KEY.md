@@ -76,3 +76,122 @@ rhetorical-question openers as filler, passive inspiration.
   visitor trusts, no metaphor, the COPY-1 register. Up to three tooltips per
   card where three concepts genuinely live on it. Never a tooltip inside a
   tooltip.
+
+---
+
+# R47 - the four voices: the game guides the player (2026-10-05)
+
+R47 builds on R46 and changes one thing about it: the order.
+
+The founder asked for every screen to read the way a world-class MMORPG guides
+its players, in his words "clear, playful, and direct", "easy to understand,
+direct, and in character" (2026-10-02). On the first draft he added the rule
+that governs everything below: "tell them only what they need to know to keep
+progressing". He approved the model and the plan that follows on 2026-10-05:
+"love All your ideas for improving the plan let's get this done".
+
+## What the games do, and why the order changed
+
+These patterns come from the interface text of World of Warcraft, Final
+Fantasy XIV, Guild Wars 2, Elder Scrolls Online and Old School RuneScape.
+Wherever their string files are published, the patterns were read from those
+files directly:
+
+- Every one of them splits its words into layers. A plain objective sits
+  always on screen ("Report to Momodi at the Quicksand."). A neutral system
+  voice handles alerts. A character gives the why. Optional story comes last.
+- Most players skip the story. In a 2024 World of Warcraft poll, 37.7% said
+  they read no quest text at all. The games answered by putting everything a
+  player needs into the objective line.
+- One next step is always marked, and a lock is shown early and phrased as the
+  fix ("Requires Level 10").
+- Wins are tiny ("Quest Complete!", "Discovered: X"). Errors are short and plain.
+
+R46 put the enchanting line first and the plain line in a tooltip. R47 puts the
+next step first and keeps it visible. The enchanting line becomes the Lore
+line: one line, and always last. Tooltips stay, and they now only define words
+(consent, cycle, Path of Growth).
+
+## The four voices
+
+| Voice | Its job | Shape | Example |
+|---|---|---|---|
+| **Trail** | The next step | Imperative, 3 to 10 words, with a counter where there is one. Always visible. | Next: Sign the Love Letter |
+| **Signal** | What just happened, or what is blocked and how to clear it | 1 to 3 words for a win. One sentence for a block, and it names the fix. | Quest complete! / Opens at Member. Sign the Love Letter to get there. |
+| **Guide** | The welcome, the why, the thanks | Warm, first person, 1 to 3 sentences. Only where the guide can answer back (her chat, the map). | Hi, I'm Maia. Got a Quest the board is missing? |
+| **Lore** | The soul of it | One line, optional, always last | Naming what is good is how the village grows more of it. |
+
+The founder's voice lives most fully in the Guide, the Lore and the NAMES.
+Trail and Signal are where clarity wins.
+
+## The rules
+
+1. **Only what moves them forward.** Player copy never explains machinery: not
+   servers, admins, ledgers, records, or how a thing is checked. Say the outcome
+   ("Nothing was charged"), never the mechanism.
+2. **One next step, always visible.** The server already computes it
+   (`nextActions` in `shared/gameConfig.ts`, served as `me.nextAction`).
+3. **Progress is a number.** "2/5", never a sentence.
+4. **Every block names the fix.** "Opens at Member. Sign the Love Letter to get
+   there."
+5. **Every finish names the next step.**
+6. **Celebrate in 1 to 3 words, then get out of the way.**
+7. **Teach one thing when it is needed, never before.** A hero holds one door
+   forward, not a reading list.
+8. **One name per thing, and one voice per kind of message.** See the lexicon.
+9. **Thanks comes from people.** The games fake it with a letter from a
+   character. This village has real Gratitude.
+
+## Three zones keep their own temperature
+
+- **The Gate** (public pages, sign-in, joining): warm, short, one door forward.
+- **The Quest Log** (quests, the walk, the map, the profile, empty states): the
+  full playful guide voice.
+- **The Ledger** (money, rights, the membership agreement, leaving, privacy):
+  plain and exact, with no play. "Checkout cancelled. Nothing was charged." is
+  the standard.
+
+## Message shapes
+
+| Kind | Shape | Ours |
+|---|---|---|
+| Quest title | 2 to 6 words, a verb or a name | Tend the food forest |
+| Objective | Imperative, names the thing and the place | Tap Buy on the Exchange. |
+| Progress | Number over number | 2/5 stops |
+| Start or finish | Label, then a name | Quest started / Quest complete! |
+| Stage reached | 2 to 4 words, then the next step | You're inside. Guest reached. |
+| Requirement | "Opens at" + stage, then the fix | Opens at Member. Sign the Love Letter to get there. |
+| Error | What failed, then what to do | This page didn't load. Reload to try again. |
+| Empty | What is missing, then how to fill it | No Quests posted yet. Post the first one. |
+| Lore | One line, last, optional | Real work, on real land, beside people becoming your people. |
+
+## The lexicon: one name per thing
+
+| Thing | Say | Never |
+|---|---|---|
+| The work board | the Quest Board, a Quest (capital Q in player copy) | quest board, mission, task |
+| Taking a Quest | Take this Quest | Claim, Accept |
+| The quest states | In progress, Turned in, Complete, Returned | You're on this quest, Awaiting consent, Completed, Not accepted |
+| The membership ladder | the Path of Growth, a stage | Maturity, membership ladder, membership path, level |
+| The token room | the Exchange | Tokens |
+| Thanks | Gratitude, the heart glyph | Hearts, points, XP, earnings |
+| Getting in | Sign in, Create an account | Sign In, Log in, Create Account, Register |
+| A module, in player copy | a room | module |
+| The founder's tour | Your First Walk (founders and admins only) | Meet your village |
+
+Never XP, gold, loot or "level up": Gratitude is thanks, never pay. Growth
+words do the job instead: you grow into a stage, and a room opens.
+
+## Who reads it, and who speaks
+
+- Write every page for ONE reader: a visitor, a member or a founder. Lines
+  meant for founders show only to founders.
+- The guide (Maia, or the name the village gives her) speaks only where she can
+  answer back: her chat, the map, Propose a Quest. Menus, buttons and alerts use
+  the plain system voice, so she is never the one saying "this page didn't
+  load". Her default lines are defaults a village rewrites (map ruling D2,
+  2026-10-02).
+- Platform copy uses world words that fit any land: village, path, Quest,
+  season, moon, room. A village's own flavour comes from its settings and its
+  brochure pages.
+- Flavour can dress up a fact, but it never replaces or invents one.

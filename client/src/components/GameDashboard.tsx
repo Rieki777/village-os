@@ -10,19 +10,19 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
 
 const CLAIM_STATUS: Record<string, { label: string; cls: string }> = {
   claimed: { label: "In progress", cls: "bg-notice/10 text-notice" },
-  submitted: { label: "Awaiting consent", cls: "bg-open/10 text-open" },
+  submitted: { label: "Turned in", cls: "bg-open/10 text-open" },
   /* The last frozen light pair on this sheet, and the only chip of the four
      still wearing one: a near-white tint carrying dark green, which on the
      night card is a bright slab beside three washes of the sheet's own
      palette. The living green at 10% matches its siblings and measures
      6.45:1. */
-  consented: { label: "Completed", cls: "bg-open/10 text-open" },
+  consented: { label: "Complete", cls: "bg-open/10 text-open" },
   // 4.39:1 at 12px, which is under the 4.5 floor for text this size, and the
   // one chip on the row that has to be read carefully. stone-600 on the same
   // stone-100 measures 7.00:1 and keeps the chip the quietest of the four.
   // Both figures read off the SHIPPED stylesheet in Chromium, not off the
   // token values, because the palette is oklch and the arithmetic is sRGB.
-  declined: { label: "Not accepted", cls: "bg-muted text-muted-foreground" },
+  declined: { label: "Returned", cls: "bg-muted text-muted-foreground" },
 };
 
 /**
@@ -154,7 +154,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
   if (status === "failed") {
     return (
       <p role="status" className="text-sm text-muted-foreground">
-        Couldn't load your next step.{" "}
+        Your next step didn't load.{" "}
         <button
           type="button"
           onClick={() => load()}
@@ -213,7 +213,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
           </div>
         </div>
         <span className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-notice px-4 py-2 font-medium text-background transition-transform group-hover:translate-x-0.5">
-          Take it
+          Go
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </span>
       </Link>
@@ -246,7 +246,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
             <h2 className="font-display text-lg font-bold text-card-foreground">Quests</h2>
           </div>
           {me.quests.length === 0 ? (
-            <p className="text-sm text-muted-foreground mb-4">You haven't claimed a quest yet.</p>
+            <p className="text-sm text-muted-foreground mb-4">No Quests yet. Take your first one from the Quest Board.</p>
           ) : (
             <ul className="space-y-2 mb-4">
               {[...activeQuests, ...doneQuests].slice(0, 4).map((q) => (
@@ -273,7 +273,7 @@ export default function GameDashboard({ me: given, meFailed }: { me?: GameMe | n
             </ul>
           )}
           <Link href="/quests" className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline underline-offset-2 hover:text-notice transition-colors">
-            Browse open quests <ArrowRight className="w-4 h-4" />
+            Open the Quest Board <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

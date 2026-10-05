@@ -70,7 +70,7 @@ describe("Login", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password");
   });
 
-  it("keeps the Create Account link off the failing text-amber token (contrast regression guard)", () => {
+  it("keeps the Create an account link off the failing text-amber token (contrast regression guard)", () => {
     // The exact defect this lane measured and fixed: text-amber on this
     // page's background reads 1.32:1 against the real body colour, nowhere
     // near AA's 4.5:1 floor. amber-ink (index.css) is the replacement,
@@ -78,7 +78,7 @@ describe("Login", () => {
     // if `text-amber` (without `-ink`) ever comes back on this link, this
     // test fails before a person has to notice with a contrast meter.
     renderLogin();
-    const createAccount = screen.getByRole("link", { name: /create account/i });
+    const createAccount = screen.getByRole("link", { name: /create an account/i });
     const classes = createAccount.className.split(/\s+/);
     expect(classes).toContain("text-amber-ink");
     expect(classes).not.toContain("text-amber");

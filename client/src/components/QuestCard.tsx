@@ -38,9 +38,9 @@ export const difficultyColors: Record<string, string> = {
 };
 
 const CLAIM_CHIP: Record<string, { label: string; cls: string }> = {
-  claimed: { label: "You're on this quest", cls: "bg-amber text-foreground" },
-  submitted: { label: "Awaiting consent", cls: "bg-white/90 text-teal-deep" },
-  consented: { label: "Completed", cls: "bg-emerald-500 text-white" },
+  claimed: { label: "In progress", cls: "bg-amber text-foreground" },
+  submitted: { label: "Turned in", cls: "bg-white/90 text-teal-deep" },
+  consented: { label: "Complete", cls: "bg-emerald-500 text-white" },
 };
 
 export function QuestPoster({
