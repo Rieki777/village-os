@@ -72,19 +72,18 @@ import type {
 } from "../../../shared/comms/kinds";
 import { PAUSABLE_KINDS } from "../../../shared/comms/preferences";
 import { contactByEmailKey, contactById, type ContactRow } from "../../repos/commsContacts";
-import {
-  enrollmentsForContact,
-  interimAddSuppression,
-  interimIsSuppressed,
-  interimListSuppressions,
-  interimRemoveSuppression,
-  suppressionOf,
-} from "../../repos/commsPeople";
+import { enrollmentsForContact, suppressionOf } from "../../repos/commsPeople";
 import { deletePermission, permissionRow, permissionsForContact, upsertPermission, type PermissionRow } from "../../repos/commsPermissions";
 import { isExampleUser } from "../examples";
 import { isTombstone } from "../oauthAccounts";
 import { stewardMailRefusal } from "../stewardship";
 import { stop as stopJourney } from "./journeys";
+import {
+  addSuppression as addSuppressionRow,
+  isSuppressed as isSuppressedRow,
+  listSuppressions as listSuppressionRows,
+  removeSuppression as removeSuppressionRow,
+} from "./suppressions";
 
 // ── The ports ───────────────────────────────────────────────────────────────
 
@@ -92,25 +91,46 @@ import { stop as stopJourney } from "./journeys";
 export interface SuppressionsPort {
   isSuppressed(emailKey: string): Promise<boolean>;
   addSuppression(emailKey: string, reason: SuppressionReason, detail?: string | null, createdBy?: string | null): Promise<void>;
-  removeSuppression(emailKey: string): Promise<void>;
+  /**
+   * Lift one suppression. A COMPLAINT lifts only with a reason (spec 5.3), so
+   * this answers `refused` with the sentence to show and lifts nothing when
+   * none is given. A caller that answers OK without reading `refused` would
+   * report a restore that never happened.
+   */
+  removeSuppression(
+    emailKey: string,
+    opts?: { reason?: string | null; by?: string | null },
+  ): Promise<{ removed: boolean; refused?: string }>;
   listSuppressions(opts: { emailKey?: string; limit?: number; offset?: number }): Promise<
     Array<{ emailKey: string; reason: string; detail?: string | null; createdBy?: string | null; createdAt?: number }>
   >;
 }
 
 /**
- * The port a running server uses. INTERIM: backed by the writers at the foot
- * of server/repos/commsPeople.ts until the post office lane's module
- * (server/lib/comms/suppressions.ts) is wired in at merge, which replaces
- * this body and nothing else.
+ * The port a running server uses: the post office lane's suppressions module
+ * (server/lib/comms/suppressions.ts), which owns the table. A second
+ * suppression of an address keeps the stronger reason, so a bounce cannot be
+ * turned into a stop the person may lift themselves.
  */
 export function suppressionsPortFor(getPool: () => Pool): SuppressionsPort {
   return {
-    isSuppressed: (emailKey) => interimIsSuppressed(getPool(), emailKey),
-    addSuppression: (emailKey, reason, detail, createdBy) =>
-      interimAddSuppression(getPool(), { emailKey, reason, detail: detail ?? null, createdBy: createdBy ?? null }),
-    removeSuppression: (emailKey) => interimRemoveSuppression(getPool(), emailKey),
-    listSuppressions: (opts) => interimListSuppressions(getPool(), opts),
+    isSuppressed: (emailKey) => isSuppressedRow(getPool(), emailKey),
+    addSuppression: async (emailKey, reason, detail, createdBy) => {
+      await addSuppressionRow(getPool(), { emailKey, reason, detail: detail ?? null, createdBy: createdBy ?? null });
+    },
+    removeSuppression: async (emailKey, opts) => {
+      const lifted = await removeSuppressionRow(getPool(), emailKey, opts ?? {});
+      return lifted.refused ? { removed: false, refused: lifted.refused } : { removed: lifted.removed };
+    },
+    listSuppressions: async (opts) => {
+      const page = await listSuppressionRows(getPool(), {
+        search: opts.emailKey ?? null,
+        limit: opts.limit,
+        offset: opts.offset,
+      });
+      const rows = opts.emailKey ? page.rows.filter((r) => r.emailKey === opts.emailKey) : page.rows;
+      return rows.map((r) => ({ emailKey: r.emailKey, reason: r.reason, detail: r.detail, createdBy: r.createdBy, createdAt: r.createdAt }));
+    },
   };
 }
 
@@ -447,7 +467,12 @@ export async function startAgain(deps: PeopleDeps, input: { contactId: string })
   if (held.reason !== "unsubscribed_all") {
     return { ok: false, status: 409, error: "Email to this address was stopped by the village. Ask a person there to start it again." };
   }
-  await deps.suppressions.removeSuppression(contact.emailKey);
+  // Only a stop the person placed themselves reaches here (checked above), so
+  // the reason is theirs and the post office's complaint rule never refuses it.
+  const lifted = await deps.suppressions.removeSuppression(contact.emailKey, {
+    reason: "the person started their email again from their own preferences page",
+  });
+  if (lifted.refused) return { ok: false, status: 409, error: lifted.refused };
   return { ok: true };
 }
 

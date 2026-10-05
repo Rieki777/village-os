@@ -401,6 +401,22 @@ jobs:
         # server/lib/uploads.ts? It reads the handlers, so it follows the code.
         run: node scripts/check-upload-strip.mjs
 
+      - name: One mail door guard
+        # Every email is written to comms_messages before it is sent, and that
+        # row is where permission, suppression and "did they get it" live. A
+        # send that reaches the provider any other way has none of them and
+        # shows up nowhere. server/lib/email.ts was exactly that: a second
+        # client, one import from going live around the ledger, for a month.
+        #
+        # So nothing but server/lib/comms/transport.ts may SEND: write out a
+        # provider's send endpoint or an SMTP relay, import a mail SDK, fetch
+        # the send path, or speak SMTP. Talking to the provider about anything
+        # else (the sending domain, the delivery-report webhook) is not a send
+        # and passes. It prints what it scanned and what it saw inside the
+        # door, and a door it cannot see into fails, so a pass shows its
+        # denominator. Its fixture suite runs with the other self-tests.
+        run: node scripts/check-one-mail-door.mjs
+
       - name: Living map artifact budget
         # The bundle budget below measures dist/public. The living map is served
         # straight from docs/prototypes and never copied into dist, so it is the

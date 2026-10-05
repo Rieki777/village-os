@@ -410,11 +410,17 @@ export function registerAdmin(app: Express, deps: AdminDeps): void {
         error: "This address marked one of the village's emails as spam. Say why it is right to write to it again.",
       });
     }
-    await people.suppressions.removeSuppression(contact.emailKey);
+    const actor = await actorOf(req);
+    // The post office's suppressions module makes the same complaint check
+    // again and REFUSES rather than throwing, so its answer is read here: an OK
+    // and an audit line for a lift that never happened would be the worst lie
+    // this screen could tell.
+    const lifted = await people.suppressions.removeSuppression(contact.emailKey, { reason: reason || null, by: actor });
+    if (lifted.refused) return res.status(400).json({ error: lifted.refused });
     await recordEvent(pool, {
       kind: "audit",
       text: `comms:suppression-lifted:${held.reason}${reason ? `: ${reason}` : ""}`,
-      actorUserId: await actorOf(req),
+      actorUserId: actor,
       entityType: "comms_contact",
       entityRef: contact.id,
       audience: "admin",

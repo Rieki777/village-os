@@ -30,12 +30,14 @@ import type { Express } from "express";
 import { MODULES_BY_ID } from "../../shared/modules";
 import type { AppDeps } from "../lib/appDeps";
 import { tick } from "../lib/comms/journeys";
-import { drain } from "../lib/comms/postOffice";
+import { drain, POST_OFFICE_EVERY_MS, POST_OFFICE_JOB, runPostOfficeJob } from "../lib/comms/postOffice";
 import { effectiveLifecycle } from "../lib/modules";
+import { registerJob } from "../lib/scheduler";
 import { messageCountsByStatus, providerEventCounts } from "../repos/commsMessages";
 import { register as registerCommsSettings, type CommsSettingsDeps } from "./commsSettings";
 import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
 import { register as registerWords } from "./commsWords";
+import { register as registerSentMailRoutes } from "./commsSent";
 
 type Deps = Pick<
   AppDeps,
@@ -59,6 +61,10 @@ export function register(app: Express, deps: Deps): void {
     // The time vote lane (C4) supplies the real job; until then it has nothing to lock.
     polls: async () => ({ locked: 0, applied: 0 }),
   };
+
+  // The post office's drain on the scheduler, beside the button that runs it now.
+  registerJob(POST_OFFICE_JOB, POST_OFFICE_EVERY_MS, () => runPostOfficeJob(commsPostOffice));
+  registerSentMailRoutes(app, { authedUser, guardCapability, mayStillSee, getPool });
 
   /**
    * What the post office has done lately, and whether it can send at all.

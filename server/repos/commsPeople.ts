@@ -21,8 +21,8 @@
  * the post office lane's module, and the People screen reaches them through
  * that module. This file reads one row by its key for the person page, and
  * the erasure deletes the person's rows directly, because an erasure step
- * must not depend on a module that may refuse it. The interim writers at the
- * foot of this file exist only until that module is wired in at merge.
+ * must not depend on a module that may refuse it. The interim writers that
+ * stood at the foot of this file went at the merge that wired the module in.
  *
  * Raw SQL lives here and nowhere else. Instants come out through
  * UNIX_TIMESTAMP, for the reason server/repos/commsMessages.ts gives.
@@ -625,67 +625,4 @@ export async function sweepIdleContacts(pool: Pool, months: number): Promise<num
     [VILLAGE, m],
   );
   return res.affectedRows;
-}
-
-// ── Interim suppression writes ──────────────────────────────────────────────
-
-/*
- * INTERIM, UNTIL THE POST OFFICE LANE'S MODULE IS WIRED IN AT MERGE.
- *
- * `comms_suppressions` is written by server/lib/comms/suppressions.ts, which
- * the post office lane builds at the same time as this one. The address book
- * reaches suppressions only through an injected port
- * (`SuppressionsPort` in server/lib/comms/permissions.ts), and until that
- * module exists the port is backed by these four functions, so a running
- * server and its e2e suite exercise real rows. The integrator points the port
- * at the real module (`suppressionsPortFor` in that file) and deletes this
- * block.
- *
- * The first reason stands: a second suppression of the same address changes
- * nothing, so a bounced address cannot be turned into one the person may lift
- * themselves by pressing "stop everything" on top of it.
- */
-
-export async function interimIsSuppressed(pool: Pool, emailKey: string): Promise<boolean> {
-  return (await suppressionOf(pool, emailKey)) !== null;
-}
-
-export async function interimAddSuppression(
-  pool: Pool,
-  input: { emailKey: string; reason: string; detail: string | null; createdBy: string | null },
-): Promise<void> {
-  await pool.query( // module-review-ok: interim suppression writer until the post office lane's module is wired in
-    "INSERT IGNORE INTO comms_suppressions (village_id, email_key, reason, detail, created_by) VALUES (?, ?, ?, ?, ?)",
-    [VILLAGE, input.emailKey, input.reason.slice(0, 32), input.detail ? input.detail.slice(0, 500) : null, input.createdBy],
-  );
-}
-
-export async function interimRemoveSuppression(pool: Pool, emailKey: string): Promise<void> {
-  await pool.query( // module-review-ok: interim suppression writer until the post office lane's module is wired in
-    "DELETE FROM comms_suppressions WHERE village_id = ? AND email_key = ?",
-    [VILLAGE, emailKey],
-  );
-}
-
-export async function interimListSuppressions(
-  pool: Pool,
-  opts: { emailKey?: string; limit?: number; offset?: number },
-): Promise<SuppressionRow[]> {
-  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: interim suppression reader until the post office lane's module is wired in
-    "SELECT email_key, reason, detail, created_by, UNIX_TIMESTAMP(created_at) AS created_at FROM comms_suppressions " +
-      `WHERE village_id = ? ${opts.emailKey ? "AND email_key = ?" : ""} ORDER BY created_at DESC, email_key LIMIT ? OFFSET ?`,
-    [
-      VILLAGE,
-      ...(opts.emailKey ? [opts.emailKey] : []),
-      Math.max(1, Math.trunc(opts.limit ?? 100)),
-      Math.max(0, Math.trunc(opts.offset ?? 0)),
-    ],
-  );
-  return rows.map((r) => ({
-    emailKey: String(r.email_key),
-    reason: String(r.reason),
-    detail: str(r.detail),
-    createdBy: str(r.created_by),
-    createdAt: Number(r.created_at),
-  }));
 }

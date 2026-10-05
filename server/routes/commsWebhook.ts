@@ -4,9 +4,15 @@
  *
  * The provider tells the village what became of each email it accepted:
  * delivered, bounced, complained, failed. This route proves a report came
- * from the provider, stores it ONCE, and answers 200. Applying it to the
- * message it is about, and writing the suppressions a bounce or a complaint
- * calls for, is the post office lane's (B1), from the stored row.
+ * from the provider, stores it ONCE, applies it from the stored row to the
+ * email it is about (with the suppression a bounce or a complaint calls for),
+ * and answers 200. Applying is `processStoredReport` in
+ * server/lib/comms/webhook.ts, which says what each report does.
+ *
+ * A REPORT IS APPLIED ONCE. Delivered again, a report already applied changes
+ * nothing; one that was stored and never applied (the server died between the
+ * two) is applied when the provider delivers it again. If applying fails, the
+ * route answers 500 so the provider does deliver it again.
  *
  * ── WHERE THIS IS REGISTERED, AND WHY IT MUST STAY THERE ───────────────────
  *
@@ -32,13 +38,14 @@
  *   401  the signature does not prove the provider sent it. One answer for
  *        every way that fails, so a forger learns nothing from it.
  *   400  a signed body that is not a delivery report.
- *   200  stored, or already stored under the same delivery id. A redelivery
- *        is a success: the provider is retrying because it did not hear us.
- *   500  the store failed, so the provider retries.
+ *   200  stored and applied, or already stored under the same delivery id. A
+ *        redelivery is a success: the provider is retrying because it did not
+ *        hear us.
+ *   500  the store or the apply failed, so the provider retries.
  */
 import express, { type Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { readDeliveryReport, verifySvix } from "../lib/comms/webhook";
+import { processStoredReport, readDeliveryReport, verifySvix } from "../lib/comms/webhook";
 import { secretValue } from "../lib/secrets";
 import { storeProviderEvent } from "../repos/commsMessages";
 
@@ -98,19 +105,28 @@ export function register(app: Express, deps: Deps): void {
       const report = readDeliveryReport(payload);
       if (!report) return res.status(400).json({ error: "That is not a delivery report." });
 
+      let stored: boolean;
       try {
-        const { stored } = await storeProviderEvent(getPool(), {
+        ({ stored } = await storeProviderEvent(getPool(), {
           id: verdict.id,
           type: report.type,
           providerMessageId: report.providerMessageId,
           messageId: report.messageId,
           payload,
-        });
-        res.json({ ok: true, stored });
+        }));
       } catch (err) {
         console.error("[comms] a delivery report could not be stored, so the provider will retry it", err);
-        res.status(500).json({ error: "The report could not be stored. Retry it." });
+        return res.status(500).json({ error: "The report could not be stored. Retry it." });
       }
+      try {
+        // Applied from the STORED row, whether this delivery stored it or an
+        // earlier one did and never got as far as applying it.
+        await processStoredReport(getPool(), verdict.id);
+      } catch (err) {
+        console.error("[comms] a stored delivery report could not be applied, so the provider will retry it", err);
+        return res.status(500).json({ error: "The report was kept and could not be applied yet. Retry it." });
+      }
+      res.json({ ok: true, stored });
     },
   );
 }

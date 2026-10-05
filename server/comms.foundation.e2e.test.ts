@@ -230,7 +230,7 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the foundation", () => {
     expect(JSON.parse(again.body)).toEqual({ ok: true, stored: false });
 
     const [stored] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
-      "SELECT id, type, provider_message_id, message_id, processed_at FROM comms_provider_events",
+      "SELECT id, type, provider_message_id, message_id, processed_at, outcome FROM comms_provider_events",
     );
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({
@@ -239,9 +239,15 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the foundation", () => {
       provider_message_id: providerId,
       // Tied to our own row by the tag every send carries.
       message_id: messageId,
-      // Applying it is the post office lane's; the foundation only keeps it.
-      processed_at: null,
+      // Applied once, from the stored row (server/lib/comms/webhook.ts).
+      outcome: "delivered",
     });
+    expect(stored[0].processed_at).not.toBeNull();
+    const [row] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+      "SELECT status FROM comms_messages WHERE id = ?",
+      [messageId],
+    );
+    expect(row[0]?.status).toBe("delivered");
   });
 
   it("answers the events module's 404 on a gathering's comms route while events is off, and the route once it is on", async () => {
