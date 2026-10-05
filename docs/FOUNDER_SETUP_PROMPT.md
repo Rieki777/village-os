@@ -8,7 +8,7 @@ assistant explains every step and runs a command only after you say yes.
 ---
 
 I am a community founder. I want to run my own village on **Village OS**, the
-free, open source village platform at <https://github.com/Rieki777/village-os>.
+free, open source village platform at <https://github.com/ReGen-Civics/village-os>.
 I may never have used a terminal. Please be my guide and do the technical
 typing, under these rules.
 
@@ -34,7 +34,7 @@ never run the `:edge` image for my village, and never run
 ## First, find the release, then read its guides
 
 Everything below uses ONE version of Village OS: the latest release. If you
-can read web pages, open <https://github.com/Rieki777/village-os/releases/latest>
+can read web pages, open <https://github.com/ReGen-Civics/village-os/releases/latest>
 and note its version, for example `v1.2.0`. Call it VERSION, and use it for
 every file, download and image from here on, so nothing mixes two releases.
 
@@ -42,8 +42,8 @@ Then read these two files at that version and follow them. They are the
 source of truth, and if they disagree with this prompt they win, and you
 should tell me:
 
-- `https://raw.githubusercontent.com/Rieki777/village-os/VERSION/AGENTS.md`, your rules
-- `https://raw.githubusercontent.com/Rieki777/village-os/VERSION/START_HERE.md`, the steps
+- `https://raw.githubusercontent.com/ReGen-Civics/village-os/VERSION/AGENTS.md`, your rules
+- `https://raw.githubusercontent.com/ReGen-Civics/village-os/VERSION/START_HERE.md`, the steps
 
 If you cannot read web pages, ask me to open the releases page and tell you
 the version. The steps below match the guides.
@@ -68,7 +68,7 @@ Wait for all five answers before doing anything else.
 
 2. **Get the files, at VERSION.** Either download the starter kit zip
    attached to that release and unzip it, or
-   `git clone --branch VERSION https://github.com/Rieki777/village-os.git`.
+   `git clone --branch VERSION https://github.com/ReGen-Civics/village-os.git`.
    Open the folder.
 
 3. **Write the settings.** Run
@@ -83,7 +83,7 @@ Wait for all five answers before doing anything else.
      start takes a few minutes while it builds the database. Then check
      `http://localhost:3000/health` says `"status":"ok"`.
    - On a hosting provider: walk me through creating a MySQL service, a
-     service running the image `ghcr.io/rieki777/village-os:` followed by
+     service running the image `ghcr.io/regen-civics/village-os:` followed by
      VERSION without its `v` (for `v1.2.0`, the tag `1.2.0`), and a
      volume mounted at `/app/data`. I copy each line of `.env` into the
      service's variables myself, with `DATABASE_URL` set to the MySQL
@@ -119,5 +119,5 @@ Wait for all five answers before doing anything else.
 11. **Wrap up.** In a few plain sentences: what is running and where, what I
     still have to do myself, where my backups are, how to upgrade
     (`docs/UPGRADING.md`), and where to ask for help:
-    <https://github.com/Rieki777/village-os/issues> and
+    <https://github.com/ReGen-Civics/village-os/issues> and
     <https://regencivics.earth/village-os>.

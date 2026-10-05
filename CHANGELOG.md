@@ -38,6 +38,52 @@ made at the time.
 
 ---
 
+## 1.2.1 (2026-10-06)
+
+**Village OS moved to the ReGen Civics organisation.** The code is now at
+github.com/ReGen-Civics/village-os, and the image is published as
+`ghcr.io/regen-civics/village-os`. Links to the old address redirect.
+
+### What changed for your village
+
+- **A new image address.** From this release, pull
+  `ghcr.io/regen-civics/village-os:1.2.1`. Releases 1.2.0 and older stay where
+  they were, at `ghcr.io/rieki777/village-os`, unchanged and still pullable.
+- **The setup prompt follows one release.** The prompt you give your AI
+  assistant now has it find the latest release once and use that version for
+  the guides, the download and the image, so nothing mixes two releases.
+- **The Living Map:** a second round of fixes from a full QA sweep, 79 of the
+  80 confirmed defects.
+- **Saberra villages** get a setup panel, a Sync now button and the service's
+  own names for its kinds.
+- **Dependency updates,** including the test runner, with no change a member
+  sees.
+
+### What you must do
+
+- **On one computer with `docker-compose.yml`:** set `VILLAGE_OS_IMAGE` in
+  `.env` to `ghcr.io/regen-civics/village-os:1.2.1`, then
+  `docker compose pull && docker compose up -d` (`docs/UPGRADING.md`).
+- **On a hosting provider:** change the image to
+  `ghcr.io/regen-civics/village-os:1.2.1` and redeploy.
+- **If you forked the repository:** point your `upstream` remote at
+  `https://github.com/ReGen-Civics/village-os.git`. The old address redirects,
+  but it is better not to depend on that.
+
+### Does it touch your data
+
+No. There is no database change between 1.2.0 and 1.2.1.
+
+### For operators
+
+- `release.yml` refuses a tag whose `docker-compose.yml` starts a different
+  image, because the starter kit carries that file, and prints the two values
+  the regencivics.earth card pins (`docs/RELEASING.md`, step 8).
+- `scripts/setup-prompt-contract.test.mjs` holds the setup prompt's single
+  `---` line, which that card's copy button depends on.
+
+---
+
 ## 1.2.0 (2026-10-03)
 
 **The release that makes a village yours to run.** Village OS is now public,

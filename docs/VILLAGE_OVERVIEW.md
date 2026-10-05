@@ -249,7 +249,7 @@ It is never a fact about your village.
 The short version; `START_HERE.md` at the repository root is the guide and
 `FORK_RUNBOOK.md` the long reference.
 
-Run the published image, pinned to a release (`ghcr.io/rieki777/village-os:1.2.0`),
+Run the published image, pinned to a release (`ghcr.io/regen-civics/village-os:1.2.1`),
 on one machine with `docker-compose.yml` or on a hosting provider such as
 Railway, with `DATABASE_URL` set. Nobody needs access to the repository for
 that; a village forks it only to change the code. Migrations run at boot and fail

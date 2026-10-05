@@ -19,7 +19,7 @@ Two paths exist and both end at the same running platform:
   relationships with your members, not ReGen's.
 
 Every instance runs the same published image,
-`ghcr.io/rieki777/village-os`, pinned to a release such as `1.2.0`. Nobody
+`ghcr.io/regen-civics/village-os`, pinned to a release such as `1.2.0`. Nobody
 needs access to the repository to run one, and nobody forks it unless their
 village means to change the code. What makes your instance yours is its own
 database, its own domain, and its own environment variables, set in the steps
@@ -71,7 +71,7 @@ pass through the assistant (`AGENTS.md`).
 **Self-host:** create a Railway account if you do not have one, then create
 a new project. Your service runs the published image, so it needs access to
 no repository, and nobody asks ReGen Civics or anybody else for access to
-`Rieki777/village-os`. A village that means to change the code forks the
+`ReGen-Civics/village-os`. A village that means to change the code forks the
 repository and deploys its own fork instead (step 5).
 
 **ReGen-hosted:** ReGen Civics creates the Railway project for you. Confirm
@@ -81,7 +81,7 @@ the deploy settings in step 2.
 ## 2. Add MySQL, the app service and a volume
 
 In your Railway project: add a MySQL database service; add an app service
-that runs the image `ghcr.io/rieki777/village-os:1.2.0` (name a release,
+that runs the image `ghcr.io/regen-civics/village-os:1.2.1` (name a release,
 never `:edge`, which is the untested tip of `main`); and add a volume to the
 app service mounted at `/app/data` (this is where member uploads live;
 `server/seeds/` in the repository is never touched at deploy time). Connect
@@ -419,7 +419,7 @@ result.
 ## Which version you are running, and how to hold still
 
 The platform ships as numbered releases, each one a container image published
-at `ghcr.io/rieki777/village-os`. The package is open, so a self-hosted
+at `ghcr.io/regen-civics/village-os`. The package is open, so a self-hosted
 village can pull and run a named version with no account and no access token.
 
 - `CHANGELOG.md` says what each release contains, in plain language. Its
