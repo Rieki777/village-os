@@ -867,7 +867,7 @@ describe.skipIf(!configured)("people on journeys", () => {
 /**
  * Every file a module loads at runtime, following relative imports and
  * skipping type-only ones (they are erased). Read with the TypeScript parser,
- * so a multi-line import and a dynamic `import()` are both edges.
+ * so a multi-line import and a dynamic import call are both edges.
  */
 function runtimeReach(entry: string): Set<string> {
   const ROOT = path.resolve(import.meta.dirname, "../../..");
