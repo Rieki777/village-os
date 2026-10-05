@@ -77,12 +77,12 @@ function ConsentedReward({ claim, decimals }: { claim: QuestClaim; decimals: num
             intensity="moment"
             size={88}
             seed={granted}
-            message={`Your quest was consented. ${show(credited)} released.`}
+            message={`Quest complete! +${show(credited)}`}
           />
         </span>
       )}
       <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
-        <CheckCircle2 className="w-4 h-4" /> Completed{credited ? ` · +${show(shown)}` : ""}
+        <CheckCircle2 className="w-4 h-4" /> Complete{credited ? ` · +${show(shown)}` : ""}
       </span>
       {/* The bonus is information, so it stays after the drawing has gone. A
           badge holder was previously told the pre-multiplier grant and never
@@ -130,7 +130,7 @@ export default function QuestActions({
           href="/register"
           className="flex items-center min-h-[44px] text-sm font-semibold text-teal-deep hover:text-teal transition-colors"
         >
-          Sign in to claim this quest
+          Sign in to take this Quest
         </Link>
       </div>
     );
@@ -143,7 +143,7 @@ export default function QuestActions({
       const res = await gameFetch(`/api/game/quests/${questId}/claim`, { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(d.message ?? d.error ?? "Could not claim");
+        setError(d.message ?? d.error ?? "That didn't go through. Try again.");
         // And the claim is read again. The likeliest refusal is a claim this
         // member already holds, from a second tap or another tab.
         onChanged();
@@ -151,7 +151,7 @@ export default function QuestActions({
         onChanged();
       }
     } catch {
-      setError("Could not claim. Try again.");
+      setError("That didn't go through. Try again.");
     }
     setBusy(false);
   };
@@ -167,7 +167,7 @@ export default function QuestActions({
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(d.message ?? d.error ?? "Could not submit");
+        setError(d.message ?? d.error ?? "That didn't go through. Try again.");
         // And the claim is read again, with the form left open on what was
         // typed. The likeliest refusal is a claim a steward decided meanwhile,
         // and the page should show that decision.
@@ -177,7 +177,7 @@ export default function QuestActions({
         onChanged();
       }
     } catch {
-      setError("Could not submit. Try again.");
+      setError("That didn't go through. Try again.");
     }
     setBusy(false);
   };
@@ -190,7 +190,7 @@ export default function QuestActions({
           disabled={busy}
           className="inline-flex items-center gap-2 text-sm font-semibold bg-teal-deep text-white px-4 py-2 rounded-lg hover:bg-teal-deep-dark disabled:opacity-50 transition-colors pointer-coarse:min-h-11"
         >
-          <Sparkles className="w-4 h-4" /> {busy ? "Claiming..." : "Claim this quest"}
+          <Sparkles className="w-4 h-4" /> {busy ? "Taking it…" : "Take this Quest"}
         </button>
       ) : claim.status === "claimed" ? (
         showSubmit ? (
@@ -211,7 +211,7 @@ export default function QuestActions({
             />
             <div className="flex gap-2">
               <button type="submit" disabled={busy} className="inline-flex items-center gap-1.5 text-sm font-semibold bg-teal-deep text-white px-3 py-1.5 rounded-lg hover:bg-teal-deep-dark disabled:opacity-50 transition-colors pointer-coarse:min-h-11">
-                <Send className="w-3.5 h-3.5" /> Submit
+                <Send className="w-3.5 h-3.5" /> Turn it in
               </button>
               <button type="button" onClick={() => setShowSubmit(false)} className="text-sm text-muted-foreground px-2 pointer-coarse:min-h-11 pointer-coarse:px-3">
                 Cancel
@@ -223,12 +223,12 @@ export default function QuestActions({
             onClick={() => setShowSubmit(true)}
             className="inline-flex items-center gap-2 text-sm font-semibold bg-amber text-foreground px-4 py-2 rounded-lg hover:bg-amber/90 transition-colors pointer-coarse:min-h-11"
           >
-            <Send className="w-4 h-4" /> Submit your work
+            <Send className="w-4 h-4" /> Turn in your work
           </button>
         )
       ) : claim.status === "submitted" ? (
         <span className="inline-flex items-center gap-2 text-sm font-medium text-blue-700">
-          <Send className="w-4 h-4" /> Submitted, awaiting circle consent
+          <Send className="w-4 h-4" /> Turned in. Waiting on the circle's yes.
         </span>
       ) : (
         <ConsentedReward claim={claim} decimals={decimals} />

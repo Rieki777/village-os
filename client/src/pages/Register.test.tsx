@@ -80,7 +80,7 @@ describe("Register", () => {
     // text assertion this replaced passed just as happily while a screen
     // reader said nothing.
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/passwords do not match/i);
+    expect(alert).toHaveTextContent(/passwords don't match/i);
     expect(registerMock).not.toHaveBeenCalled();
   });
 
@@ -95,7 +95,7 @@ describe("Register", () => {
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     // Same role="alert" guarantee as above.
-    expect(await screen.findByRole("alert")).toHaveTextContent(/select at least one path/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/choose a path to continue/i);
     expect(registerMock).not.toHaveBeenCalled();
   });
 
@@ -175,7 +175,7 @@ describe("Register, in a village that joins by invitation", () => {
 
   it("holds somebody with no link at the door, and shows them the two ways forward", async () => {
     renderRegister();
-    expect(await screen.findByRole("heading", { name: /is by invitation/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /need an invitation/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/^name$/i), "no form to fill in").toBeNull();
     expect(screen.getByRole("link", { name: /ask to join/i })).toHaveAttribute("href", "/request-membership");
     expect(screen.getByRole("link", { name: /see calls and events/i })).toHaveAttribute("href", "/events");
@@ -190,7 +190,10 @@ describe("Register, in a village that joins by invitation", () => {
     const user = userEvent.setup();
     renderRegister();
 
-    expect(await screen.findByText(/Wren invited you/)).toHaveTextContent(/12 more days/);
+    // R47: twelve days left is not news, so the line carries the next step and no countdown.
+    const invited = await screen.findByText(/Wren invited you/);
+    expect(invited).toHaveTextContent(/create your account to step inside/i);
+    expect(invited).not.toHaveTextContent(/days/);
     expect(fetchMock).toHaveBeenCalledWith("/api/invites/check?token=TOKEN-FROM-WREN");
 
     await user.type(screen.getByLabelText(/^name$/i), "Juno");
@@ -203,13 +206,21 @@ describe("Register, in a village that joins by invitation", () => {
     expect(registerMock).toHaveBeenCalledWith("Juno", "juno@example.com", "hunter2", ["resident"], "TOKEN-FROM-WREN");
   });
 
+  it("counts the days down only when the invitation is about to end (R47)", async () => {
+    window.history.replaceState({}, "", "/register?invite=TOKEN-FROM-WREN");
+    linkChecksAs({ inviteOnly: true, valid: true, invitedBy: "Wren", daysLeft: 2 });
+    renderRegister();
+
+    expect(await screen.findByText(/Wren invited you/)).toHaveTextContent(/this invitation ends in 2 days/i);
+  });
+
   it("tells somebody whose link no longer works why, in place of the form", async () => {
     window.history.replaceState({}, "", "/register?invite=SPENT");
     linkChecksAs({ inviteOnly: true, valid: false, error: "This invitation has already been used. Ask the person who sent it for a new one." });
     renderRegister();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/already been used/);
-    expect(screen.getByRole("heading", { name: /is by invitation/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /need an invitation/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/^name$/i)).toBeNull();
   });
 });

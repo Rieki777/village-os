@@ -163,7 +163,9 @@ export const NAV: readonly NavEntry[] = [
     label: "Guides",
     items: [
       { href: "/co-creators-guide", brochure: true, label: "Co-Creators Guide" },
-      { href: "/first-walk", label: "Your First Walk" },
+      // Founders and admins only (R47): every stop stands on a practice
+      // example and the page ends at the settings, so it is the team's tour.
+      { href: "/first-walk", label: "Your First Walk", roles: ["admin", "founder"] },
       { href: "/game-mechanics", label: "Game Mechanics" },
       { href: "/good-neighbor", brochure: true, label: "Good Neighbor" },
       { href: "/training", label: "Training" },

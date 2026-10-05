@@ -205,11 +205,14 @@ export default function GratitudeWall() {
             same one, because what it says is still the thing a newcomer most
             needs to know about this economy.
           */}
-          <p className="mb-10 max-w-prose text-muted-foreground">
-            Appreciation, spoken out loud. Naming what is good is how the village grows
-            more of it, and every thanks on this wall becomes{" "}
+          {/* R47: the Trail line first, the Lore line last and quiet. */}
+          <p className="mb-2 max-w-prose text-muted-foreground">
+            Thank someone for something they did. Every thanks on this wall becomes{" "}
             <InfoTip tip={`Each cycle every member receives a budget of ${currency.toLowerCase()} to send. Sending is thanks for real contributions, never pay, and the wall keeps every word.`}>{currency.toLowerCase()}</InfoTip>{" "}
             in the hands of the member it names.
+          </p>
+          <p className="mb-10 max-w-prose text-sm italic text-muted-foreground">
+            Naming what is good is how the village grows more of it.
           </p>
 
           {/* The clock the economy runs on: lunation, season, the four turnings. */}
@@ -237,9 +240,9 @@ export default function GratitudeWall() {
                     <InfoTip tip="Your sending budget refills when the cycle turns. Sending moves it from your budget to their wall; it never costs you anything you earned." label="How the budget works" />
                   </span>
                 ) : budget && budget.total <= 0 ? (
-                  <span className="text-xs italic text-muted-foreground">Your sending budget unlocks as you progress</span>
+                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the Path of Growth.</span>
                 ) : (
-                  <span className="text-xs italic text-muted-foreground">We couldn't load your budget, reload to see it</span>
+                  <span className="text-xs italic text-muted-foreground">Your budget didn't load. Reload to see it.</span>
                 )}
               </div>
 

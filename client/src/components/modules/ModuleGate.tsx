@@ -247,8 +247,8 @@ export function ModuleOff({ name }: { name: string }) {
   return (
     <GateShell name={name}>
       <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-        {project} hasn't enabled this module. Only the team running the village can
-        turn it on, so ask them if you would like it open.
+        {project} hasn't opened this room yet. Only the team running the village can
+        open it, so ask them if you'd like it open.
       </p>
       <Link href="/" className={`${DOOR_PRIMARY} mb-6`}>
         Back to the village
@@ -274,8 +274,7 @@ function CatalogUnread({ name }: { name: string }) {
   return (
     <GateShell name={name}>
       <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-        This village's list of modules could not be read just now, so this page cannot say whether
-        {" "}{name} is open. The village is still there.
+        {name} didn't load. Try again in a moment.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <button type="button" onClick={refresh} className={DOOR_PRIMARY}>

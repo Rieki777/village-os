@@ -15,7 +15,7 @@ const paths = (villageName: string) => [
   {
     id: "investor",
     label: "Investor",
-    description: `Support ${villageName}'s vision through financial investment`,
+    description: "Plant capital in a project built to last.",
     // text-amber-ink, not text-amber: --color-amber is derived only to carry
     // ink AS a background chip, never checked as small foreground text on a
     // light surface. This pill measured 1.43:1 with text-amber; amber-ink
@@ -26,7 +26,7 @@ const paths = (villageName: string) => [
   {
     id: "steward",
     label: "Village Steward",
-    description: "Help govern and guide our community's evolution",
+    description: "Hold a role, join a circle, and keep the whole village running.",
     // text-sage is already a static, measured-safe foreground colour
     // (5.21:1 on this pill's tint) - unchanged.
     color: "bg-sage/10 border-sage/30 text-sage hover:bg-sage/20",
@@ -34,7 +34,7 @@ const paths = (villageName: string) => [
   {
     id: "resident",
     label: "Resident",
-    description: `Make ${villageName} your home and live the village vision`,
+    description: `Make ${villageName} your home. Find a place to live, join the waitlist, and belong.`,
     // text-teal-deep, not text-teal (brand-soft): brand-soft is a decorative
     // tint, never checked as foreground text. text-teal measured 2.33:1 here.
     // teal-deep is safe by construction instead: shared/brandTokens.ts
@@ -48,7 +48,7 @@ const paths = (villageName: string) => [
   {
     id: "prosperity-creator",
     label: "Prosperity Creator",
-    description: "Build businesses and enterprises that thrive",
+    description: "Launch or grow your business inside the village, and share in what you build.",
     // Same fix as "resident": text-teal-light (brand-mid) measured 4.20:1,
     // below AA. text-teal-deep is safe by construction (see above), 9.18:1
     // in this specific tint under the neutral default.
@@ -90,15 +90,14 @@ function InvitationNeeded({ villageName, reason }: { villageName: string; reason
         </p>
       )}
       <h2 id="invitation-needed" className="text-2xl font-display font-bold text-teal-deep">
-        Joining {villageName} is by invitation
+        You need an invitation to join {villageName}
       </h2>
       <p className="text-stone-600">
-        Everybody here arrives because somebody already in the village knows them. If a member has sent you an
-        invitation link, open that link to make your account.
+        Got an invitation link? Open it to create your account.
       </p>
       <p className="text-stone-600">
-        No link yet? Ask to join, and someone from the village will be in touch. Coming to a community call or an
-        event is the best way to get to know us.
+        No link yet? Ask to join, and someone from the village will reach out. A community call is a good
+        first step.
       </p>
       <div className="flex flex-col gap-3 sm:flex-row">
         <a
@@ -191,11 +190,11 @@ export default function Register() {
     setError("");
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords don't match.");
       return;
     }
     if (selectedPaths.length === 0) {
-      setError("Please select at least one path");
+      setError("Choose a path to continue.");
       return;
     }
 
@@ -209,7 +208,7 @@ export default function Register() {
       // worst. `first` only changes the copy and adds the way out.
       navigate("/profile/characters?first=1");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      setError(err instanceof Error ? err.message : "We couldn't create your account. Try again.");
     } finally {
       setLoading(false);
     }
@@ -229,7 +228,11 @@ export default function Register() {
               <h1 className="text-4xl font-display font-bold text-teal-deep mb-2">
                 Join {villageName}
               </h1>
-              <p className="text-gray-600">Begin your village journey and choose your path</p>
+              {/* R47: only the reader who can act on it sees it. Somebody held
+                  at the door needs an invitation first, and the card says so. */}
+              {!deciding && !heldAtTheDoor && (
+                <p className="text-gray-600">Create your account and choose your path.</p>
+              )}
             </div>
 
             {deciding ? (
@@ -243,8 +246,10 @@ export default function Register() {
               {goodLink && (
                 <p className="p-4 bg-teal-deep/5 border border-teal-deep/20 rounded-lg text-teal-deep text-sm">
                   {check?.invitedBy ? `${check.invitedBy} invited you. ` : "You were invited. "}
-                  This link makes one account, and it works for {check?.daysLeft ?? 0} more{" "}
-                  {check?.daysLeft === 1 ? "day" : "days"}.
+                  Create your account to step inside.
+                  {/* R47: the expiry is only news when it is close. */}
+                  {(check?.daysLeft ?? 0) <= 3 &&
+                    ` This invitation ends in ${check?.daysLeft ?? 0} ${check?.daysLeft === 1 ? "day" : "days"}.`}
                 </p>
               )}
               {invite !== "" && check?.valid === false && check.error && (
@@ -359,7 +364,7 @@ export default function Register() {
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-4">
-                  Choose Your Path(s)
+                  Choose your path. Pick more than one if you like.
                 </label>
                 <div className="grid gap-3">
                   {PATHS.map((path) => (
@@ -397,7 +402,7 @@ export default function Register() {
                 type="submit"
                 className="w-full bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? "Creating Account..." : "Create Account"}
+                {loading ? "Creating your account…" : "Create account"}
                 {!loading && <ArrowRight className="w-5 h-5" />}
               </motion.button>
 
@@ -439,7 +444,7 @@ export default function Register() {
                 href="/login"
                 className="inline-flex items-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
               >
-                Sign In
+                Sign in
                 <ArrowRight className="w-5 h-5" />
               </motion.a>
             </div>

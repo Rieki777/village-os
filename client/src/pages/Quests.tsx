@@ -208,14 +208,12 @@ export default function Quests() {
               <Compass className="w-8 h-8 text-teal-700" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Community Quests
+              The Quest Board
             </h1>
-            {/* R46 enchant-first: the surface line carries the invitation;
-                the reward mechanics live in the tooltip. */}
+            {/* R47: the Trail line leads, the reward word keeps its tooltip,
+                and the Lore line comes last, after the numbers. */}
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-              Real work, on real land, beside people becoming your people.
-              Every quest you finish grows the village a little, and the
-              village says thank you in{" "}
+              Take a Quest, do the work, turn it in. The village thanks you in{" "}
               <InfoTip tip={`${currencyName} is thanks for work, never pay. A finished quest carries its thank-you, released when the circle consents the work is done.`}>{currencyName}</InfoTip>.
             </p>
             <ExamplesBanner moduleId="quests" noun="quest" />
@@ -226,6 +224,9 @@ export default function Quests() {
                 .toLocaleString()}{" "}
               {currencyName} available
               <InfoTip tip="Every open quest names its own thank-you; this number is all of them added together." label="Where this number comes from" />
+            </p>
+            <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
+              Real work, on real land, beside people becoming your people.
             </p>
 
           </motion.div>
@@ -262,8 +263,8 @@ export default function Quests() {
                             </span>
                             <span className="block text-xs text-muted-foreground">
                               {c.status === "claimed"
-                                ? "In progress: submit your work when it's done"
-                                : "Submitted, awaiting circle consent"}
+                                ? "In progress. Turn in your work when it's done."
+                                : "Turned in. Waiting on the circle's yes."}
                             </span>
                           </span>
                           <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
@@ -332,7 +333,7 @@ export default function Quests() {
             ))}
           </div>
           <div className="flex gap-2 items-center overflow-x-auto flex-nowrap" data-scroll-contain>
-            <span className="text-sm text-muted-foreground ml-5 flex-shrink-0">Level:</span>
+            <span className="text-sm text-muted-foreground ml-5 flex-shrink-0">Difficulty:</span>
             {(["All", "Beginner", "Intermediate", "Advanced"] as const).map(
               (d) => (
                 <button
@@ -384,7 +385,7 @@ export default function Quests() {
                 Don't see your gift here?
               </h2>
               <p className="text-sm text-muted-foreground">
-                Anyone with an idea to add value can propose their own unique quest.
+                Post your own Quest. Anyone can propose one.
                 Tell us what you want to bring and what you'd need to make it real.
               </p>
             </div>
@@ -470,10 +471,10 @@ export default function Quests() {
               <Compass className="w-12 h-12 mx-auto mb-4 opacity-30" />
               <p>
                 {boardFailed
-                  ? "The quest board couldn't be loaded just now. Reload to try again."
+                  ? "The Quest Board didn't load. Reload to try again."
                   : quests.length === 0
-                    ? "There are no quests on the board yet."
-                    : "No quests match those filters. Try a different combination."}
+                    ? "No Quests posted yet. Post the first one."
+                    : "No Quests match. Clear a filter to see more."}
               </p>
             </div>
           )}
@@ -511,12 +512,11 @@ export default function Quests() {
           <div className="max-w-3xl mx-auto text-center bg-gradient-to-br from-teal/10 to-sage/10 p-8 rounded-2xl border border-teal/10">
             <Star className="w-12 h-12 text-primary mx-auto mb-4" />
             <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-4">
-              Ready to Take on a Quest?
+              Find your first Quest
             </h2>
             <p className="text-muted-foreground mb-6">
-              Quests are open to anyone who has signed the Love Letter membership
-              covenant. Join a community call to meet the circles and find your
-              first quest.
+              Meet the circles on a community call, then come back and take a
+              Start here Quest.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {/* A fork with no events page shows no button rather than a dead

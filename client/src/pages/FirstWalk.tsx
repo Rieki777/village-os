@@ -1,5 +1,5 @@
 /**
- * Meet your village: the guided first walk.
+ * Your First Walk: the founder's guided tour of the standing examples.
  *
  * The standing examples demonstrate every module and still wait to be found.
  * This is the page that sends a founder to look at them, one specific stop at
@@ -17,6 +17,7 @@
  */
 import Layout from "@/components/Layout";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
 import { CheckCircle2, Circle, Compass, X } from "lucide-react";
 import { useExampleModules } from "@/components/ExamplesBanner";
@@ -42,14 +43,13 @@ export default function FirstWalk() {
     <Layout>
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
-          <h1 className="font-display text-4xl font-bold text-foreground mb-3">Meet your village</h1>
+          <h1 className="font-display text-4xl font-bold text-foreground mb-3">Your First Walk</h1>
           <p className="text-muted-foreground max-w-xl mx-auto">
             {/* Counted, never hard-coded: stops drop off as modules publish
                 real content, and a village that seeds its own circles never
                 sees the map stop at all. */}
-            {steps.length > 0 ? `${steps.length} short stops` : "A short walk"} through what
-            the modules already show you. Each one takes a minute and teaches
-            one rule this place runs on.
+            {steps.length > 0 ? `${steps.length} stops` : "A short walk"}, a minute each. Each one
+            shows you one thing your village can do.
           </p>
         </div>
       </section>
@@ -63,8 +63,8 @@ export default function FirstWalk() {
               <Compass className="w-6 h-6 text-teal-deep mx-auto mb-3" />
               <p className="text-sm text-foreground font-medium mb-1">This village speaks for itself already.</p>
               <p className="text-sm text-muted-foreground">
-                The walk visits the standing examples, and yours have retired.
-                What is here now, your village made.
+                The practice examples are gone. Everything here now, your
+                village made.
               </p>
             </div>
           )}
@@ -74,10 +74,10 @@ export default function FirstWalk() {
               <div className="bg-card border border-border rounded-xl px-5 py-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-medium text-foreground">
-                    {progress.done} of {progress.total} seen
+                    {progress.done}/{progress.total} stops
                   </p>
                   {progress.done === progress.total && (
-                    <p className="text-xs text-teal-deep font-medium">That is the whole walk.</p>
+                    <p className="text-xs text-teal-deep font-medium">Walk complete</p>
                   )}
                 </div>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -131,25 +131,21 @@ export default function FirstWalk() {
                   disappears. Say so where the founder has just finished. */}
               {progress.done === progress.total && (
                 <div className="rounded-xl border border-teal-deep/30 bg-teal-deep/5 p-5">
-                  <p className="font-semibold text-sm text-foreground">Now make one of your own</p>
+                  <p className="font-semibold text-sm text-foreground">Now plant your own</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Every stop here rests on an example. Publish the first real
-                    thing in a module and its examples retire that moment, the
-                    stop leaves this list, and the page goes when the last one
-                    does. Nothing needs clearing by hand.
+                    Publish your first real post, event or item. That room's
+                    examples clear on their own, and this walk retires when the
+                    last one goes.
                   </p>
                   <Link
                     href="/admin"
                     className="inline-block mt-3 text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-deep-dark"
                   >
-                    Open the admin
+                    Open Village Settings
                   </Link>
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground text-center pt-2">
-                Ticks live in this browser only. Nothing here is reported to anyone.
-              </p>
             </>
           )}
         </div>
@@ -167,13 +163,16 @@ export default function FirstWalk() {
  */
 export function FirstWalkInvite() {
   const { modules, loaded } = useExampleModules();
+  // The walk is the team's tour (R47), so the invitation is too.
+  const { user } = useAuth();
+  const isTeam = user?.role === "admin" || user?.role === "founder";
   const [dismissed, setDismissed] = useState(() => isWalkDismissed());
   const [done, setDone] = useState<string[]>(() => getDoneSteps());
 
   // Re-read on mount so returning from a stop shows the new count.
   useEffect(() => { setDone(getDoneSteps()); }, []);
 
-  if (!loaded || dismissed) return null;
+  if (!loaded || dismissed || !isTeam) return null;
   const progress = walkProgress(modules, done);
   if (progress.total === 0 || progress.done >= progress.total) return null;
 
@@ -182,11 +181,11 @@ export function FirstWalkInvite() {
       <Compass className="w-4 h-4 text-teal-deep mt-0.5 shrink-0" />
       <div className="flex-1 text-sm">
         <p className="text-foreground">
-          Your village is showing worked examples.{" "}
+          Your village still shows practice examples.{" "}
           <Link href="/first-walk" className="text-teal-deep font-medium hover:underline">
-            Take the short walk
-          </Link>{" "}
-          and see what each one is teaching:{" "}
+            Take Your First Walk
+          </Link>
+          :{" "}
           {progress.total - progress.done === 1
             ? "one stop left"
             : `${progress.total - progress.done} stops, a minute each`}.
