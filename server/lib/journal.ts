@@ -76,6 +76,7 @@ import {
   FEEDBACK_PER_RECIPIENT_WEEKLY,
   JOURNAL_ANSWER_MAX,
   JOURNAL_ANSWERS_MAX,
+  JOURNAL_DEFAULT_PRIVACY,
   JOURNAL_REFLECTION_MAX,
   PULSE_FLOOR_DEFAULT,
   PULSE_METRICS,
@@ -373,7 +374,8 @@ export function cleanEntryInput(raw: unknown, now: Date = new Date()): Checked<J
       scores,
       writtenAt: writtenAt.toISOString(),
       localHour,
-      privacy: (b.privacy as JournalPrivacy | undefined) ?? "private",
+      // Shared unless the author kept it private (ruling 2026-10-05).
+      privacy: (b.privacy as JournalPrivacy | undefined) ?? JOURNAL_DEFAULT_PRIVACY,
       meta: cleanMeta(b.meta) ?? undefined,
       reflection,
     },
@@ -872,7 +874,9 @@ export async function saveEntry(
       clientId: input.clientId,
       ...columns,
       writtenAt,
-      privacy: input.privacy ?? "private",
+      // Explicit on every insert: the column's own DEFAULT is 'private' from
+      // 0227, and the platform default moved to shared on 2026-10-05.
+      privacy: input.privacy ?? JOURNAL_DEFAULT_PRIVACY,
     });
     const rows = await entryRowByClientId(conn, uid, input.clientId);
     if (!rows[0]) throw new Error("journal entry did not save");

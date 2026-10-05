@@ -11,6 +11,7 @@
 import {
   JOURNAL_ANSWER_MAX,
   JOURNAL_ANSWERS_MAX,
+  JOURNAL_DEFAULT_PRIVACY,
   JOURNAL_REFLECTION_MAX,
   PULSE_METRICS,
   fillVillage,
@@ -50,6 +51,12 @@ export interface Sitting {
   reflection: string;
   guide: GuideMessage[];
   startedAt: string;
+  /**
+   * The member chose to keep this entry in the village. Unset means shared
+   * with organisational memory (ruling 2026-10-05). A draft saved before this
+   * field existed reads as unset, which is the new default.
+   */
+  keepPrivate: boolean;
 }
 
 export type Step =
@@ -71,6 +78,7 @@ export function newSitting(practice: JournalPractice, depth: JournalDepth, clien
     reflection: "",
     guide: [],
     startedAt: new Date().toISOString(),
+    keepPrivate: false,
   };
 }
 
@@ -144,6 +152,9 @@ export function entryFrom(s: Sitting, village: string, now: Date = new Date()): 
     writtenAt: now.toISOString(),
     localHour: now.getHours(),
     reflection: s.reflection.trim() ? s.reflection.trim().slice(0, JOURNAL_REFLECTION_MAX) : null,
+    // Always explicit, so what the member saw on the review step is what is
+    // stored, whatever the server's default becomes.
+    privacy: s.keepPrivate === true ? "private" : JOURNAL_DEFAULT_PRIVACY,
   };
   if (s.practice === "pulse" && Object.keys(s.scores).length > 0) entry.scores = { ...s.scores };
   if (s.practice === "debrief") {
