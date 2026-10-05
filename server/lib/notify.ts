@@ -432,9 +432,8 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
    * stamped as emailed and counted against the member's daily cap for an
    * email that never existed.
    */
-  if (mail.accepted) {
-    await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [n.id]);
-  }
+  if (!mail.accepted) return;
+  await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [n.id]);
 }
 
 /**
@@ -593,12 +592,10 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
           userId: user.id,
         });
         // Counted and stamped only when the post office took it.
-        if (mail.accepted) {
-          if (inserted.id) {
-            await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [inserted.id]);
-          }
-          summary.emailed += 1;
+        if (inserted.id && mail.accepted) {
+          await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [inserted.id]);
         }
+        if (mail.accepted) summary.emailed += 1;
       } catch (e) {
         console.error("[brief] email failed (in-app row stands)", e);
       }

@@ -141,7 +141,8 @@ beforeAll(async () => {
       DATA_DIR: dataDir,
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
-      AUTH_TOKEN_SECRET: "comms-postoffice-secret",
+      // Short on purpose: a throwaway test value, and the intake scan reads lengths.
+      AUTH_TOKEN_SECRET: "comms-b1-token",
       // The fake provider stands in for the real one. Nothing here can reach it.
       RESEND_API_BASE: fake.url,
       RESEND_API_KEY: PROVIDER_KEY,
