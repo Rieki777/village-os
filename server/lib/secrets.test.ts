@@ -24,6 +24,10 @@ import {
   secretStatus,
   secretValue,
   villageSecretsConfigured,
+  villageSecretsKeyProblem,
+  villageSecretsKeyStatus,
+  villageSecretsLaunchCheck,
+  villageSecretsRefusal,
 } from "./secrets";
 
 const KEY_A = "a1".repeat(32);
@@ -62,6 +66,49 @@ describe("villageSecretsConfigured", () => {
   it("is exactly whether a usable key is present", () => {
     expect(villageSecretsConfigured(withA)).toBe(true);
     expect(villageSecretsConfigured(withNone)).toBe(false);
+  });
+});
+
+/**
+ * A key set in the wrong shape is not a key nobody set (2026-10-02). These
+ * pin what an operator reads in each case: the Integrations 503's `message`,
+ * the status the Integrations screen reads before anybody types, and the
+ * launch journey's detail. The shapes themselves are pinned in sealedBox.test.ts.
+ */
+describe("naming what is wrong with the key", () => {
+  const quoted = { [VILLAGE_SECRETS_ENV]: `"${KEY_A}"` } as NodeJS.ProcessEnv;
+
+  it("the 503 message names the problem, and the verb fits it", () => {
+    const malformed = villageSecretsRefusal(quoted);
+    expect(malformed).toContain(`${VILLAGE_SECRETS_ENV} is set, but it is 66 characters with quotes around it.`);
+    expect(malformed).toContain("Correct it in this deployment's environment, then restart and save the key again.");
+    expect(malformed).not.toContain("is not set");
+    const missing = villageSecretsRefusal(withNone);
+    expect(missing).toContain(`${VILLAGE_SECRETS_ENV} is not set`);
+    expect(missing).toContain("Set it in this deployment's environment");
+    // What the founder does after the fix is the caller's to say.
+    expect(villageSecretsRefusal(withNone, "add the calendar again")).toContain("then restart and add the calendar again.");
+    // The verbatim `error` sentence is untouched, and tested elsewhere as such.
+    expect(NO_VILLAGE_SECRETS_KEY_SENTENCE).toBe("this deployment has no village-secrets key; ask your operator");
+    // And never the value, refusal or not.
+    for (const said of [malformed, missing]) expect(said).not.toContain(KEY_A.slice(0, 8));
+  });
+
+  it("the status agrees with the gate, and carries a sentence only when there is a problem", () => {
+    for (const e of [withA, withNone, quoted, { [VILLAGE_SECRETS_ENV]: ` ${KEY_A} ` } as NodeJS.ProcessEnv]) {
+      const st = villageSecretsKeyStatus(e);
+      expect(st.configured).toBe(villageSecretsConfigured(e));
+      expect(st.problem === null).toBe(st.configured);
+      expect(st.problem).toBe(villageSecretsKeyProblem(e));
+    }
+    expect(villageSecretsKeyStatus(quoted).problem).toContain("quotes around it");
+  });
+
+  it("the launch check reads ok only for a usable key, and its detail names the shape", () => {
+    expect(villageSecretsLaunchCheck(withA).state).toBe("ok");
+    expect(villageSecretsLaunchCheck(withNone)).toMatchObject({ state: "missing" });
+    expect(villageSecretsLaunchCheck(withNone).detail).toContain("is not set");
+    expect(villageSecretsLaunchCheck(quoted).detail).toContain("quotes around it");
   });
 });
 
@@ -224,6 +271,23 @@ describe.skipIf(!configured)("the store against a real schema", () => {
     // The correct key still opens it, so the row was never damaged.
     await loadSecrets(pool, withA);
     expect(secretValue("basescan_api_key", withA)).toBe("bs_key_wxyz");
+  });
+
+  it("names a malformed key in the boot warning, never calling it unset", async () => {
+    // The live report: the variable WAS set, with quotes around it, and the
+    // boot line said "not set". It now says what is wrong with it.
+    await seedPlaintext("resend_api_key", "re_LEGACY_plain_5678");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const quoted = { [VILLAGE_SECRETS_ENV]: `"${KEY_A}"` } as NodeJS.ProcessEnv;
+    await loadSecrets(pool, quoted);
+    const said = warn.mock.calls.map((c) => c.map(String).join(" ")).join("\n");
+    expect(said).toContain("with quotes around it");
+    expect(said).not.toContain("is not set");
+    expect(said).not.toContain("re_LEGACY_plain_5678");
+    expect(said).not.toContain(KEY_A.slice(0, 8));
+    // Nothing was sealed under a key the gate refuses.
+    expect(plaintextSecretKeys()).toEqual(["resend_api_key"]);
+    warn.mockRestore();
   });
 
   it("lets an operator with no key delete an exposed plaintext value", async () => {

@@ -41,6 +41,7 @@ import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
 import { governingPurpose } from "./governingPurpose";
+import { villageSecretsLaunchCheck } from "./secrets";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -49,6 +50,9 @@ import { governingPurpose } from "./governingPurpose";
  * and nowhere else.
  */
 const GPS_CHECK_KEY = "gps-written";
+
+/** The sealing key's row, resolved by name for the same reason. */
+const SECRETS_KEY_CHECK_KEY = "village-secrets-key";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { normalizeSeasonConfig } from "./seasonCalendar";
 
@@ -65,6 +69,8 @@ export interface LaunchDeps {
   checks: Record<string, () => Promise<LaunchCheckResult> | LaunchCheckResult>;
   /** Effective lifecycle for appliesWhenModule gating. */
   moduleLifecycle: (id: string) => string;
+  /** The environment the env-reading checks read. Absent means `process.env`; tests pass their own. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface LaunchItemStatus extends LaunchRequirement {
@@ -262,6 +268,19 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
      */
     if (req.checkKey.startsWith("village:")) {
       const read = await villageFactFor(pool, req.checkKey.slice("village:".length));
+      items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
+    /*
+     * THE SEALING KEY, read from the environment HERE, and for the same reason
+     * as the two branches above: it needs no cache from server/index.ts, and
+     * that file only ever gets smaller. The detail is the sentence naming what
+     * is wrong (unset, or set with quotes, a pasted NAME=, base64, the wrong
+     * length), never "not set" for a key that is set in the wrong shape.
+     */
+    if (req.checkKey === SECRETS_KEY_CHECK_KEY) {
+      const read = villageSecretsLaunchCheck(deps.env ?? process.env);
       items.push({ ...req, state: read.state, detail: read.detail });
       continue;
     }
