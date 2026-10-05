@@ -685,6 +685,10 @@ with no document the bar draws its five example numbers, each one saying
 "example", until a founder points a chip at a source. The sources and what each
 counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
 module (Events, Village Health) is drawn only for a viewer who can open it.
+The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+`gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
+and is drawn only for a member the village has admitted, or an admin: a
+visitor and a signed-in guest get no chip and no number. Nothing to provision.
 
 ### Promises made on the map (0062)
 

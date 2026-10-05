@@ -17,8 +17,10 @@ import type { ReactNode } from "react";
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+/** Who is signed in; a case can sign somebody in or out between renders. */
+let signedIn: { id: string; role: string } | null = null;
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: null, token: null, loading: false }),
+  useAuth: () => ({ user: signedIn, token: null, loading: false }),
   useIsAdmin: () => false,
 }));
 vi.mock("@/lib/gameApi", async (importOriginal) => ({
@@ -68,6 +70,7 @@ function answer(url: string): Response {
 }
 
 beforeEach(() => {
+  signedIn = null;
   configAnswers = true;
   draftAnswer = {};
   configExtra = {};
@@ -195,6 +198,27 @@ describe("the cover over the land while it loads (F66, F47)", () => {
     await aMoment();
     const chips = post.mock.calls.map(([m]) => m as { type?: string; chips?: unknown }).filter((m) => m.type === "chips");
     expect(chips).toEqual([{ type: "chips", chips: CHIPS }]);
+  });
+
+  /*
+   * The treasury (Rye, 2026-10-05: "Treasury balance shown to members only").
+   * The server answers the chips per viewer, so a member who signs out with
+   * the map open must not leave their bar behind for the next minute.
+   */
+  it("asks for the chips again the moment the member signs out", async () => {
+    signedIn = { id: "u-ada", role: "member" };
+    const view = arrive("/map#/place/greenhouse");
+    await waitFor(() => expect(frame()).toBeTruthy());
+    const post = vi.fn();
+    Object.defineProperty(frame()!.contentWindow!, "postMessage", { configurable: true, value: post });
+    fromMap({ type: "grounds-ready" });
+    await aMoment();
+    const pushes = () => post.mock.calls.filter(([m]) => (m as { type?: string }).type === "chips").length;
+    expect(pushes(), "the boot push").toBe(1);
+    signedIn = null;
+    view.rerender(<Router><LivingMap /></Router>);
+    await aMoment();
+    expect(pushes(), "asked again for the signed-out viewer").toBe(2);
   });
 });
 

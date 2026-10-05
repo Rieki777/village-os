@@ -59,8 +59,9 @@ describe("the chips document", () => {
   });
 
   it("falls back to an example for a source it does not know, and keeps a known one", () => {
+    // `crowdpool` was asked about and is still not a source: see the registry's header.
     const doc = sanitiseMapChips({
-      chips: [chip({ id: "a", source: "treasury" as any }), chip({ id: "b", source: "members" })],
+      chips: [chip({ id: "a", source: "crowdpool" as any }), chip({ id: "b", source: "members" })],
     });
     expect(doc.chips.map((c) => c.source)).toEqual(["none", "members"]);
   });
@@ -229,5 +230,53 @@ describe("the source list is held to what the village keeps", () => {
 
   it("starts every default chip as an example", () => {
     expect(DEFAULT_MAP_CHIPS.every((c) => c.source === "none")).toBe(true);
+  });
+});
+
+describe("the treasury (Rye, 2026-10-05: treasury balance shown to members only)", () => {
+  const reading = (n: number, sub?: string) => ({ ok: true as const, n, countedAt: "2026-10-05T12:00:00.000Z", ...(sub ? { sub } : {}) });
+
+  it("is a source on the list, read from the ledger's core accounts and never a module", () => {
+    expect(STAT_SOURCE_KEYS).toContain("treasury");
+    const def = STAT_SOURCES.treasury;
+    expect(def.module).toBeNull();
+    expect(STAT_SOURCE_GROUPS).toContain(def.group);
+    expect(CHIP_ICONS).toContain(def.icon);
+  });
+
+  it("is the one source kept to members, whatever a module's lifecycle says", () => {
+    expect(STAT_SOURCE_KEYS.filter((k) => STAT_SOURCES[k].membersOnly)).toEqual(["treasury"]);
+  });
+
+  it("survives a save as itself, never falling back to an example", () => {
+    const doc = sanitiseMapChips({ chips: [chip({ id: "money", source: "treasury" })] });
+    expect(doc.chips[0].source).toBe("treasury");
+  });
+
+  it("draws a member's reading with the token's own name under the number", () => {
+    const [r] = resolveChips([chip({ id: "money", source: "treasury" })], {
+      treasury: reading(4321, "Village Credits held in the treasury"),
+    });
+    expect(r).toMatchObject({ state: "live", value: "4,321", sub: "Village Credits held in the treasury" });
+  });
+
+  it("keeps the registry's words under the number when a reading names nothing", () => {
+    const [r] = resolveChips([chip({ id: "money", source: "treasury" })], { treasury: reading(12) });
+    expect(r.sub).toBe(STAT_SOURCES.treasury.sub);
+  });
+
+  it("is unavailable, with no number and no sample, for a viewer it is withheld from", () => {
+    // `people` is one of the five the map has its own sample for. A withheld
+    // treasury on that id must still never draw the sample.
+    const [r] = resolveChips([chip({ id: "people", source: "treasury" })], {
+      treasury: { ok: false, why: "Treasury is for members only, so a visitor or a guest does not see this chip." },
+    });
+    expect(r.state).toBe("unavailable");
+    expect(r.value).toBeNull();
+  });
+
+  it("starts a chip pointed at it with no unit and a door to the wallet", () => {
+    const c = chipWithSource(chip({ id: "c", label: "", icon: "star", source: "none" }), "treasury", "2026-10-05");
+    expect(c).toMatchObject({ label: "Treasury", unit: "", link: "/wallet", manual: null });
   });
 });

@@ -37,6 +37,8 @@ import {
   type MapChipsDoc,
   type ResolvedChip,
 } from "../../shared/mapStatChips";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { createStatReader, sourceHiddenFrom, type StatViewer } from "../lib/mapStats";
 import { dbDocument } from "../repos/store-db";
@@ -66,15 +68,25 @@ export function register(app: Express, deps: Deps): void {
   };
   const stats = createStatReader({ getPool, seasonState, lapseContext });
 
-  /** Who is asking, read once. A stranger costs no admin lookup. */
+  /**
+   * Who is asking, read once. A stranger costs no admin lookup.
+   *
+   * `member` is the village's own answer, on the same ladder the stage
+   * computation climbs (`GAME_CONFIG.stages`): `authedUser` hands back the
+   * member's record, which carries the steward's grant and any rung placed by
+   * hand. A guest is signed in and is not a member, so a `membersOnly` source
+   * stays withheld from them.
+   */
   async function viewerOf(req: express.Request): Promise<StatViewer> {
     const user = await authedUser(req);
-    return { authed: !!user, admin: user ? await isAdmin(req) : false };
+    if (!user) return { authed: false, admin: false, member: false };
+    return { authed: true, admin: await isAdmin(req), member: isAdmitted(user, GAME_CONFIG.stages) };
   }
 
   /**
    * What the map draws. Same answer for every visitor except where a source's
-   * module is closed to them, and then that chip is left out.
+   * module is closed to them, or the source is for members only and they are
+   * not one, and then that chip is left out: no value, no reason, no trace.
    */
   app.get("/api/map/chips", async (req, res) => {
     const chips = await chipsNow();
@@ -89,7 +101,7 @@ export function register(app: Express, deps: Deps): void {
    * makes a chip that will not draw for the public visible before it ships.
    */
   async function editorView(chips: MapChipsDoc["chips"]) {
-    const visitor: StatViewer = { authed: false, admin: false };
+    const visitor: StatViewer = { authed: false, admin: false, member: false };
     const readings = await stats.readings(neededSources(chips), visitor);
     return {
       chips,

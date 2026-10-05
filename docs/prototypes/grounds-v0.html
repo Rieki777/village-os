@@ -4892,6 +4892,13 @@ function chipRows(){
       example:false,link:c.link,live:true,asOf:c.asOf,countedAt:c.countedAt}
     :own(c.id,c.label,c.icon,c.link))}
 window.chipRows=chipRows;
+/* The Village Health door's rows, one per chip, from chipRows(). A function
+   of its own because two things draw them: the door when it opens, and
+   applyChips when a push changes the chips while the door is open. */
+function healthChipRows(){const rows=chipRows();
+  return rows.map(r=>`<div class="mrow"><span><b>${escq(r.label)}</b><small>${escq(r.sub)}${r.example?' · example':''}</small></span><span><b>${escq(r.v)}</b></span></div>`).join('')
+    +(rows.some(r=>r.example)?'<div class="lastv">a row marked example is a stand-in. It reads the village once the founder chooses its source in Village settings</div>':'')}
+window.healthChipRows=healthChipRows;
 function rebuildVitals(){const w=$('vitals');
   const rows=chipRows();
   w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+rows.map(r=>
@@ -4925,12 +4932,21 @@ function applyChips(list){
     value:c.value==null?null:str(c.value),sub:str(c.sub),how:str(c.how),asOf:str(c.asOf),countedAt:str(c.countedAt),link:str(c.link),source:str(c.source)}));
   const sig=JSON.stringify(clean);if(sig===CHIPS_SIG)return;
   CHIPS_SIG=sig;window.CHIPS=clean;rebuildVitals();
+  /* NOTHING A PUSH DROPS STAYS DRAWN (the treasury, Rye 2026-10-05: "Treasury
+     balance shown to members only"). A chip left out of a push is the server
+     withholding it from whoever is looking now, a member who signed out with
+     the map open among them. So the Village Health door's rows are redrawn
+     from this push, open or not, and a reading that is closed, or whose chip
+     is gone, keeps none of its old words in the page. */
+  const card=$('moduleCard'),held=card&&card.querySelector('.chiprows');
+  if(held)held.innerHTML=healthChipRows();
   /* An open reading follows its chip, unless somebody is typing in it. A
      keyboard reader on one of its doors stays on the same door. */
-  const dp=$('vdrop');if(!dp.classList.contains('show')||!window.VDROP_FROM)return;
+  const dp=$('vdrop');if(!dp.classList.contains('show')){dp.innerHTML='';return}
+  if(!window.VDROP_FROM)return;
   const k=window.VDROP_FROM.dataset.k;
   const el=[...document.querySelectorAll('#vitals .vital')].find(e=>e.dataset.k===k);
-  if(!el){dp.classList.remove('show');return}
+  if(!el){dp.classList.remove('show');dp.innerHTML='';return}
   window.VDROP_FROM=el;
   const a=document.activeElement,inside=dp.contains(a);
   if(inside&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
@@ -8768,9 +8784,7 @@ const MODULES={
      under "The same truth the crown banner reads". */
   health:{name:'Village Health',icon:'☀',route:'/village-health',
     blurb:'The numbers behind the map, the same ones the crown banner reads.',
-    sample:ctx=>{const rows=chipRows();
-      return rows.map(r=>`<div class="mrow"><span><b>${escq(r.label)}</b><small>${escq(r.sub)}${r.example?' · example':''}</small></span><span><b>${escq(r.v)}</b></span></div>`).join('')
-        +(rows.some(r=>r.example)?'<div class="lastv">a row marked example is a stand-in. It reads the village once the founder chooses its source in Village settings</div>':'')}},
+    sample:ctx=>`<div class="chiprows">${healthChipRows()}</div>`},
   events:{name:'Events',icon:MICON.events,route:'/events',
     blurb:'Feasts, build days, ceremonies. Every event is a place and a time on the land, and its lantern burns brighter as the day comes near.',
     sample:ctx=>EVENTS.map(e=>`<div class="mrow"><span><b>✦ ${e.title}</b><small>${e.when} · at ${escq(e.at.map(k=>BY[k]?BY[k].name:k).join(' + '))} · sample</small></span>

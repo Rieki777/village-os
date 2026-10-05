@@ -56,6 +56,8 @@ interface SourceOption {
   icon: ChipIcon;
   link: string;
   group: string;
+  /** Drawn only for members the village has let in (the treasury, Rye 2026-10-05). */
+  membersOnly?: boolean;
   /** Why a visitor would not see this source's chip, or null. */
   hiddenFromVisitors: string | null;
 }
@@ -228,7 +230,9 @@ export default function MapChipsPanel() {
                     {STAT_SOURCE_GROUPS.map((g) => (
                       <optgroup key={g} label={g}>
                         {sources.filter((s) => s.group === g).map((s) => (
-                          <option key={s.key} value={s.key}>{s.label}: {s.sub}</option>
+                          <option key={s.key} value={s.key}>
+                            {s.label}: {s.sub}{s.membersOnly ? ", members only" : ""}
+                          </option>
                         ))}
                       </optgroup>
                     ))}
@@ -292,8 +296,10 @@ export default function MapChipsPanel() {
               </div>
 
               {src && <p className="text-[11px] text-gray-400 mt-2">{src.how}</p>}
+              {/* A members-only source says so in every state, saved or not. */}
+              {src?.membersOnly && <p className="text-[11px] text-gray-600 mt-1">Only members see this chip.</p>}
               {/* Before a save, the warning; after it, the preview says the same thing once. */}
-              {dirty && src?.hiddenFromVisitors && (
+              {dirty && src?.hiddenFromVisitors && !src.membersOnly && (
                 <p className="text-[11px] text-amber-700 mt-1">{src.hiddenFromVisitors}</p>
               )}
               {!dirty && shown && <p className="text-[11px] text-gray-600 mt-1">{previewLine(shown)}</p>}

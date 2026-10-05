@@ -21,7 +21,7 @@
  * Every failure is silent and costs only freshness: the map keeps drawing what
  * it drew, which on a first failure is its own five examples, each marked.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { gameFetch } from "@/lib/gameApi";
 import { MAP_CHIPS_REFRESH_MS, MAP_CHIPS_SAVED_EVENT, MAP_CHIPS_SAVED_KEY } from "@shared/mapStatChips";
 
@@ -46,8 +46,29 @@ export async function pushChips(win: Window | null | undefined): Promise<boolean
  * `push` is the caller's own pushChips bound to its frame; `active` is
  * whether the artifact has said it is ready, because a message posted to a
  * map that has not wired its listener yet is lost.
+ *
+ * `viewer` is who is signed in, by id, or null for nobody. The server answers
+ * the chips per viewer, so when that changes, a sign-out above all, the bar is
+ * asked again AT ONCE instead of keeping the last person's chips until the
+ * next minute. That is what makes a members-only chip (the treasury, Rye
+ * 2026-10-05: "Treasury balance shown to members only") leave the map with
+ * the member it was for; the artifact's `applyChips` then takes it out of the
+ * bar, an open reading and an open Village Health door.
  */
-export function useChipsCadence(push: () => void, active: boolean, everyMs: number = MAP_CHIPS_REFRESH_MS): void {
+export function useChipsCadence(
+  push: () => void,
+  active: boolean,
+  everyMs: number = MAP_CHIPS_REFRESH_MS,
+  viewer: string | null = null,
+): void {
+  const lastViewer = useRef(viewer);
+  useEffect(() => {
+    if (lastViewer.current === viewer) return;
+    lastViewer.current = viewer;
+    // Before the map has booted there is no bar to correct: the push that
+    // follows the boot reads whoever is signed in by then.
+    if (active) push();
+  }, [viewer, active, push]);
   useEffect(() => {
     if (!active) return;
     const visible = () => typeof document === "undefined" || document.visibilityState !== "hidden";

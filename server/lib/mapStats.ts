@@ -12,7 +12,11 @@
  * (server/index.ts): public for anyone, members for anyone signed in, preview
  * for an admin, off for nobody. A source on core data needs nothing more than
  * the map itself, whose own gate (`requireModule("map")`) already stands in
- * front of every route that serves these.
+ * front of every route that serves these. ONE EXCEPTION, read first: a source
+ * marked `membersOnly` (the treasury, Rye 2026-10-05: "Treasury balance shown
+ * to members only") is drawn only for a member the village has let in, or an
+ * admin. A visitor, and a guest with an account the village has not admitted,
+ * get the chip withheld exactly as a closed module's chip is withheld.
  *
  * WHAT IT COSTS. The map refreshes its chips every minute, so every open map
  * asks. Each reading is held for MAP_STATS_TTL_MS and concurrent asks share
@@ -32,7 +36,9 @@ import { MODULES } from "../../shared/modules";
 import { zonedTimeToUtc } from "../../shared/lunar";
 import { effectiveLifecycle } from "./modules";
 import { currentCycle } from "./gratitude-cycles";
-import { villageId } from "./economy";
+import { fromLedgerUnits, villageId } from "./economy";
+import { TREASURY, balanceOf, tokenDef } from "./ledger";
+import { stringVar } from "./variables";
 import { listOrgAssignments, listOrgRoles, seatState, type LapseContext } from "./orgChart";
 import { listGatherings } from "./gatherings";
 import { regenTotals } from "./health";
@@ -49,10 +55,18 @@ export interface MapStatsDeps {
   now?(): Date;
 }
 
-/** Who is asking, as far as a module's lifecycle cares. */
+/** Who is asking, as far as a module's lifecycle and a members-only source care. */
 export interface StatViewer {
+  /** Signed in, with any account. What a module at `members` asks for. */
   authed: boolean;
   admin: boolean;
+  /**
+   * Signed in AND let in by the village: `isAdmitted` (server/lib/admission.ts),
+   * the house's one answer to "is this person a member", which is a steward's
+   * grant or a rung placed by hand at Member or above. A guest has an account
+   * and is not a member. What a `membersOnly` source asks for.
+   */
+  member: boolean;
 }
 
 const moduleName = (id: string) => MODULES.find((m) => m.id === id)?.name ?? id;
@@ -62,7 +76,11 @@ const moduleName = (id: string) => MODULES.find((m) => m.id === id)?.name ?? id;
  * The sentence is for the founder's editor; the public read never sends it.
  */
 export function sourceHiddenFrom(key: StatSourceKey, viewer: StatViewer): string | null {
-  const id = STAT_SOURCES[key].module;
+  const def = STAT_SOURCES[key];
+  if (def.membersOnly && !viewer.member && !viewer.admin) {
+    return `${def.label} is for members only, so a visitor or a guest does not see this chip.`;
+  }
+  const id = def.module;
   if (!id) return null;
   const lc = effectiveLifecycle(id);
   if (lc === "public") return null;
@@ -101,8 +119,50 @@ export function openPlaces(
   return Math.max(1, seats - current);
 }
 
+/**
+ * What the village treasury holds of the village's value token, in WHOLE tokens.
+ *
+ * ONE ACCOUNT, ONE TOKEN, never a sum. The account is `sys:treasury`
+ * (`TREASURY`), the one the exchange sells from and seat fees settle into. The
+ * token is the one `gratitude.pool_token` names, the same rule the cycle
+ * close, `/api/game/config` (`currency.value`) and the launch check
+ * `pool-token-spendable` read for "the value token". The health snapshot's
+ * `treasury_balance` is not reused: it adds every token in this account
+ * together, kinds and scales mixed.
+ *
+ * READ THROUGH THE LEDGER. `balanceOf` is the ledger's own read of the
+ * `token_balances` cache, which postings recompute and nothing here writes.
+ * It answers MINOR units; `fromLedgerUnits` scales them by the registry's
+ * `decimals` for this token, so no number of places is assumed here. The
+ * fraction is then left off (truncated toward zero), so the chip shows whole
+ * tokens and never more than the account holds.
+ *
+ * A dial pointed at something that is not a platform token this ledger
+ * moves, or at recognition, has no treasury balance a chip could honestly
+ * show, and says why for the founder's editor.
+ */
+export async function treasuryReading(pool: Pool): Promise<{ n: number; sub: string } | { why: string }> {
+  const slug = String(stringVar("gratitude.pool_token") ?? "").trim();
+  const def = slug ? tokenDef(slug) : undefined;
+  if (!def) {
+    return { why: `The cycle pool is set to pay "${slug}", which is not a token this village issues, so there is no treasury balance to show.` };
+  }
+  if (def.governance !== "platform") {
+    return { why: `${def.name} is kept on another ledger, so this village's treasury holds none of it here.` };
+  }
+  if (def.kind === "recognition") {
+    return { why: `${def.name} is recognition, which carries no value of its own, so there is no treasury balance to show.` };
+  }
+  const units = await balanceOf(pool, TREASURY, def.slug);
+  const whole = Math.trunc(fromLedgerUnits(def.slug, units)) || 0;
+  return { n: whole, sub: `${def.name} held in the treasury` };
+}
+
 /** Count one source. Throws when the data cannot be read; the cache turns that into a reason. */
-export async function countSource(key: StatSourceKey, deps: MapStatsDeps): Promise<number | { why: string }> {
+export async function countSource(
+  key: StatSourceKey,
+  deps: MapStatsDeps,
+): Promise<number | { n: number; sub: string } | { why: string }> {
   const pool = deps.getPool();
   const now = deps.now?.() ?? new Date();
   const cycle = () => {
@@ -174,6 +234,8 @@ export async function countSource(key: StatSourceKey, deps: MapStatsDeps): Promi
       const totals = await regenTotals(pool);
       return Number(totals[REGEN_SOURCE_METRIC[key]]?.total ?? 0);
     }
+    case "treasury":
+      return treasuryReading(pool);
   }
 }
 
@@ -198,9 +260,12 @@ export function createStatReader(deps: MapStatsDeps, ttlMs = MAP_STATS_TTL_MS) {
       let reading: StatReading;
       try {
         const n = await countSource(key, deps);
+        const countedAt = new Date(clock()).toISOString();
         reading = typeof n === "number"
-          ? { ok: true, n, countedAt: new Date(clock()).toISOString() }
-          : { ok: false, why: n.why };
+          ? { ok: true, n, countedAt }
+          : "why" in n
+            ? { ok: false, why: n.why }
+            : { ok: true, n: n.n, sub: n.sub, countedAt };
       } catch (e) {
         console.error(`[map chips] could not count ${key}:`, e);
         reading = { ok: false, why: "This could not be counted just now." };

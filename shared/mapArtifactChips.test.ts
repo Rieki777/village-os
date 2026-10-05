@@ -359,3 +359,74 @@ describe("the crown bar once the village has pushed its chips", () => {
     expect(m.uncaught).toEqual([]);
   });
 });
+
+/*
+ * A CHIP WITHHELD FROM THIS VIEWER (the treasury, Rye 2026-10-05: "Treasury
+ * balance shown to members only"). The server leaves a withheld chip out of
+ * the push altogether (server/routes/mapChips.ts, `forVisitors`), so the map
+ * is never handed its number. What is left to prove is the map's side: that
+ * nothing it draws from a push can carry a number the push did not, the bar,
+ * a chip's reading and the Village Health door alike, including a reading or
+ * a door that was open on the number when the push that dropped it arrived,
+ * which is a member signing out with the map open.
+ */
+describe("a chip withheld from this viewer leaves no trace on the map", () => {
+  const TREASURY_CHIP = {
+    id: "money", label: "Treasury", icon: "star", state: "live", value: "4,321", sub: "Village Credits held in the treasury",
+    how: "What the village treasury holds of the token the cycle pool pays out, in whole tokens.", asOf: "",
+    countedAt: "2026-10-05T12:00:00.000Z", link: "/wallet", source: "treasury",
+  };
+  const MEMBER = [PUSHED[0], TREASURY_CHIP];
+  const VISITOR = [PUSHED[0]];
+  const traces = ["4,321", "Treasury", "Village Credits"];
+  /** Every place on the map a chip's number is drawn, shown or hidden, as markup. */
+  const regions = (m: Booted) => ({
+    "the bar": m.doc.getElementById("vitals")?.innerHTML ?? "",
+    "the reading": m.doc.getElementById("vdrop")?.innerHTML ?? "",
+    "the Village Health door": m.doc.getElementById("moduleCard")?.innerHTML ?? "",
+  });
+  const noTrace = (m: Booted) => {
+    for (const [where, markup] of Object.entries(regions(m))) {
+      for (const t of traces) expect(markup, `${t} in ${where}`).not.toContain(t);
+    }
+  };
+
+  it("draws nothing of it for a visitor, whose push never carried it", async () => {
+    const m = boot();
+    try {
+      await settle(200);
+      m.post({ type: "chips", chips: VISITOR });
+      await settle(20);
+      expect(bar(m).map((c) => c.k)).toEqual(["members"]);
+      dropFor(m, "members");
+      expect(healthRows(m).join(" ")).not.toContain("4,321");
+      noTrace(m);
+      expect(m.uncaught).toEqual([]);
+    } finally {
+      m.close();
+    }
+  });
+
+  it("takes it off the bar, out of an open reading and out of an open Village Health door when the next push drops it", async () => {
+    const m = boot();
+    try {
+      await settle(200);
+      m.post({ type: "chips", chips: MEMBER });
+      await settle(20);
+      expect(bar(m).find((c) => c.k === "money")?.value, "a member sees it").toBe("4,321");
+      // The Village Health door open, and the treasury's own reading open over it.
+      m.run("openDoor('health',{})");
+      [...m.doc.querySelectorAll<HTMLElement>("#vitals .vital")].find((c) => c.dataset.k === "money")?.click();
+      expect(m.doc.getElementById("vdrop")?.textContent).toContain("4,321");
+      expect(m.doc.getElementById("moduleCard")?.textContent).toContain("4,321");
+
+      m.post({ type: "chips", chips: VISITOR });
+      await settle(20);
+      expect(bar(m).map((c) => c.k)).toEqual(["members"]);
+      noTrace(m);
+      expect(m.uncaught).toEqual([]);
+    } finally {
+      m.close();
+    }
+  });
+});

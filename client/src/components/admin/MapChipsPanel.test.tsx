@@ -151,6 +151,19 @@ describe("the chips editor", () => {
     expect(within(rows()[3]).getByText("Village Health is switched off, so this chip is not drawn.")).toBeTruthy();
   });
 
+  it("lists the treasury with a plain note that only members see it (Rye, 2026-10-05)", async () => {
+    hidden = { treasury: "Treasury is for members only, so a visitor or a guest does not see this chip." };
+    await open();
+    const option = Array.from(sourceOf(rows()[0]).querySelectorAll("option")).find((o) => o.value === "treasury");
+    expect(option?.textContent).toBe(`Treasury: ${STAT_SOURCES.treasury.sub}, members only`);
+    // Chosen, the row says so in words before anything is saved, and keeps saying it after.
+    fireEvent.change(sourceOf(rows()[0]), { target: { value: "treasury" } });
+    expect(within(rows()[0]).getByText("Only members see this chip.")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save the chips" })); });
+    await waitFor(() => expect(within(rows()[0]).getByText("Only members see this chip.")).toBeTruthy());
+    expect(sent.find((s) => s.method === "PUT")!.body.chips[0]).toMatchObject({ source: "treasury", link: "/wallet" });
+  });
+
   it("stops adding at the six a phone's bar can hold", async () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Add a chip" }));

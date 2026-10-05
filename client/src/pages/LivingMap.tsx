@@ -52,6 +52,7 @@ import { walkPush } from "@shared/mapAddress";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
 import { gameFetch } from "@/lib/gameApi";
+import { useAuth } from "@/contexts/AuthContext";
 import VillageSettingsDoor, { settingsAsked, takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
 import { useMapHistory } from "@/components/map/mapHistory";
@@ -456,9 +457,12 @@ export default function LivingMap() {
    */
   const { pushLens } = useOrgFollow({ frame, live: groundsReady });
 
-  /* The crown bar's chips, and their refresh: components/map/statChips.ts. */
+  /* The crown bar's chips, and their refresh: components/map/statChips.ts.
+     Asked again the moment who is signed in changes, so a members-only chip
+     leaves the bar with the member who signed out. */
   const pushChipsNow = useCallback(() => { void pushChips(frame.current?.contentWindow); }, []);
-  useChipsCadence(pushChipsNow, groundsReady);
+  const viewerId = useAuth().user?.id ?? null;
+  useChipsCadence(pushChipsNow, groundsReady, undefined, viewerId);
 
   /**
    * The map asking the village to keep, publish, discard or roll back its

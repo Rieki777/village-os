@@ -89,6 +89,26 @@ describe("the cadence the bar is refreshed on", () => {
     expect(push).toHaveBeenCalledTimes(2);
   });
 
+  it("asks at once when the person signed in changes, so a sign-out takes a members-only chip with it", () => {
+    // The treasury (Rye, 2026-10-05: "Treasury balance shown to members only").
+    // The server answers per viewer, so the bar a member was shown must not
+    // outlive their session by the minute the clock would otherwise take.
+    const push = vi.fn();
+    const hook = renderHook(({ on, who }) => useChipsCadence(push, on, MAP_CHIPS_REFRESH_MS, who), {
+      initialProps: { on: true, who: "u-ada" as string | null },
+    });
+    expect(push, "nobody changed yet").not.toHaveBeenCalled();
+    hook.rerender({ on: true, who: null });
+    expect(push, "signed out").toHaveBeenCalledTimes(1);
+    hook.rerender({ on: true, who: null });
+    expect(push, "the same nobody").toHaveBeenCalledTimes(1);
+    hook.rerender({ on: true, who: "u-bo" });
+    expect(push, "signed in again").toHaveBeenCalledTimes(2);
+    // Before the map has booted there is no bar to correct; the boot push reads the session then.
+    hook.rerender({ on: false, who: null });
+    expect(push).toHaveBeenCalledTimes(2);
+  });
+
   it("stops asking when the map closes", () => {
     vi.useFakeTimers();
     const { push, hook } = mount(true);

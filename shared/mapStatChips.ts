@@ -115,11 +115,20 @@ export const STAT_SOURCE_KEYS = [
   "water_protected",
   "hectares_restored",
   "carbon_sequestered",
+  "treasury",
 ] as const;
 export type StatSourceKey = (typeof STAT_SOURCE_KEYS)[number];
 
 /** How the editor's picker groups the sources, in the order it lists them. */
-export const STAT_SOURCE_GROUPS = ["People", "Work", "Gratitude", "Roles and circles", "Calendar", "The land, from Village Health"] as const;
+export const STAT_SOURCE_GROUPS = [
+  "People",
+  "Work",
+  "Gratitude",
+  "Roles and circles",
+  "Calendar",
+  "The land, from Village Health",
+  "The treasury",
+] as const;
 export type StatSourceGroup = (typeof STAT_SOURCE_GROUPS)[number];
 
 export interface StatSourceDef {
@@ -141,21 +150,45 @@ export interface StatSourceDef {
    * the same rule `/api/modules` applies to the module itself.
    */
   module: string | null;
+  /**
+   * Drawn only for a MEMBER: somebody signed in whom the village has let in
+   * (`isAdmitted`, server/lib/admission.ts), or an admin. Stricter than a
+   * module at `members`, which opens to any signed-in account, a guest
+   * included. `sourceHiddenFrom` (server/lib/mapStats.ts) reads it before the
+   * module rule, and a viewer it hides the chip from is never counted for.
+   */
+  membersOnly?: boolean;
 }
 
 /**
  * EVERY SOURCE HERE IS COUNTED FROM ROWS THE VILLAGE ALREADY KEEPS, and
- * server/lib/mapStats.ts is where each one is counted. Two that were asked
- * about and are not here, and why:
+ * server/lib/mapStats.ts is where each one is counted. One that was asked
+ * about and is not here, and why:
  *
- *   treasury   No route publishes the treasury's balance today. The one
- *              figure that does travel (the health snapshot's
- *              `treasury_balance`) is summed across tokens of different
- *              kinds, which is not a number a chip can put a unit on.
  *   crowdpool  Its totals belong to a remote hub, carry a currency each, and
  *              mean different things under the hub's two contract versions
  *              (server/lib/crowdpool.ts). One figure across campaigns would
  *              add currencies together.
+ *
+ * THE TREASURY, which was on that list, and what changed. Rye, 2026-10-05:
+ * "Treasury balance shown to members only." It was left out because nothing
+ * published a single-token figure: the health snapshot's `treasury_balance`
+ * adds tokens of different kinds together, which is not a number a chip can
+ * put a unit on, and it is NOT what this reads. This reads ONE account in ONE
+ * token: `sys:treasury` (`TREASURY`, server/lib/ledger.ts), in the village's
+ * value token, which is whatever token `gratitude.pool_token` names (`credits`
+ * by default, drizzle/0007). That is the rule the economics code already
+ * keeps for "the value token": the cycle close pays it, `/api/game/config`
+ * publishes it as `currency.value`, and Journey to Launch's
+ * `pool-token-spendable` check reads it. A token that dial names which is not
+ * a platform token, or is recognition, gives no reading. The balance is the
+ * ledger's own read (`balanceOf`), scaled by that token's own `decimals`
+ * through `fromLedgerUnits`, and counted in WHOLE tokens with any fraction
+ * left off, so the chip never shows more than the treasury holds. Whole
+ * numbers for display is the house rule, and Rye's reason for it is written
+ * beside the seeded amounts in server/lib/economySeed.ts (2026-08-11): whole
+ * numbers read better on a chip than 0.1 does. Members only, by
+ * `membersOnly` above.
  *
  * "This cycle" and not "this moon": a village can vote to keep a calendar
  * clock (`cycle.mode`), and the cycle is whichever the village keeps.
@@ -300,6 +333,21 @@ export const STAT_SOURCES: Record<StatSourceKey, StatSourceDef> = {
     icon: "leaf",
     link: "/village-health",
     module: "health",
+  },
+  treasury: {
+    group: "The treasury",
+    label: "Treasury",
+    // The reading says which token, by the name the registry gives it today
+    // (server/lib/mapStats.ts). These words are for when it cannot.
+    sub: "held in the village treasury",
+    how: "What the village treasury holds of the token the cycle pool pays out, in whole tokens.",
+    unit: "",
+    icon: "star",
+    // Where a member holds, sends and spends that token. Not Village Health:
+    // its treasury figure adds tokens of different kinds together.
+    link: "/wallet",
+    module: null,
+    membersOnly: true,
   },
 };
 
@@ -489,9 +537,15 @@ export function chipWithSource(chip: MapChip, next: ChipSource, day: string): Ma
 
 // ── Readings and what the map draws ───────────────────────────────────────
 
-/** One source counted by the server, or the reason it could not be. */
+/**
+ * One source counted by the server, or the reason it could not be.
+ *
+ * `sub`, when a count carries it, replaces the source's own words under the
+ * number. The treasury's does, to name its token as the registry calls it
+ * today; a static string here could not follow a rename.
+ */
 export type StatReading =
-  | { ok: true; n: number; countedAt: string }
+  | { ok: true; n: number; countedAt: string; sub?: string }
   | { ok: false; why: string };
 
 export type ChipState = "live" | "manual" | "example" | "unavailable";
@@ -616,7 +670,7 @@ export function resolveChips(
       ...base,
       state: "live" as const,
       value: formatStat(r.n, c.format, c.unit),
-      sub: def.sub,
+      sub: r.sub || def.sub,
       how: def.how,
       countedAt: r.countedAt,
     };
