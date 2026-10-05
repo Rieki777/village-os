@@ -71,10 +71,12 @@ interface MechanicsVariable {
   choices: Array<{ value: string; label: string; hint?: string }> | null;
   default: string;
   value: string;
-  parsed: number | boolean | string;
+  parsed: number | boolean | string | null;
   isDefault: boolean;
   ring: "open" | "founder";
   applyTiming: "instant" | "cycle-close";
+  /** The server held the value back because it can carry a key (shared/gameVariables.ts). */
+  withheld?: boolean;
 }
 
 /**
@@ -978,7 +980,7 @@ export default function GameMechanics() {
                                       {/* A paragraph renders as text with its
                                           line breaks kept and its http(s)
                                           addresses linked, never as markup. */}
-                                      {v.type === "longtext" ? <LongText text={v.value} /> : displayValue(v, v.value)}
+                                      {v.withheld ? "set, kept private" : v.type === "longtext" ? <LongText text={v.value} /> : displayValue(v, v.value)}
                                       {stagedValue !== undefined && (
                                         <span className="ml-2 text-amber-700 font-semibold">→ {displayValue(v, stagedValue)}</span>
                                       )}
