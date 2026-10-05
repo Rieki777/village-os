@@ -86,12 +86,13 @@ export type MergeValues = Record<string, MergeValue>;
 export type MergeFieldType = "text" | "url" | "markdown" | "links";
 
 /** The groups the picker shows, each a family of facts one kind of email knows. */
-export const MERGE_GROUPS = ["common", "action", "gathering", "poll", "recap", "nextGathering", "path", "letter"] as const;
+export const MERGE_GROUPS = ["common", "action", "lettersConfirm", "gathering", "poll", "recap", "nextGathering", "path", "letter"] as const;
 export type MergeGroup = (typeof MERGE_GROUPS)[number];
 
 export const MERGE_GROUP_LABELS: Record<MergeGroup, string> = {
   common: "Every email",
-  action: "The confirm link",
+  action: "The seat confirmation",
+  lettersConfirm: "The letters confirmation",
   gathering: "The gathering",
   poll: "The time vote",
   recap: "The recap",
@@ -126,12 +127,18 @@ const f = (
 
 /**
  * Every field there is. The groups and the first names come from the spec's
- * table (5.5). Six fields were added because the emails the spec names cannot
- * be written without them: `links.confirm` (the guest's and the letters'
- * one-click confirmation), `gathering.recapLink` (the host nudge links straight
- * to the composer), `recap.missedNote` (the note for people who missed it,
- * which `event_recaps.missed_note_md` holds), and the letter's own subject and
- * preheader.
+ * table (5.5). Seven fields were added because the emails the spec names
+ * cannot be written without them: `links.confirm` (a guest's one-click
+ * confirmation of their seat), `links.lettersConfirm` (the letters double
+ * opt-in, under the name the people lane posts it with), `gathering.recapLink`
+ * (the host nudge links straight to the composer), `recap.missedNote` (the note
+ * for people who missed it, which `event_recaps.missed_note_md` holds), and the
+ * letter's own subject and preheader.
+ *
+ * THE TWO CONFIRM LINKS ARE SEPARATE FIELDS IN SEPARATE GROUPS on purpose. Each
+ * confirmation email can use only its own, so a village editing the letters
+ * confirmation cannot put the guest's link in it, which would render empty for
+ * every reader and leave them no way to say yes.
  */
 export const MERGE_FIELDS: readonly MergeField[] = [
   // Every email.
@@ -142,8 +149,11 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   f("links.preferences", "common", "url", "Email choices link", "The reader's own page for choosing which emails they get. Every footer carries it already.", "", true),
   f("footer.address", "common", "text", "Postal address", "The postal address from Comms Settings. Every footer carries it already.", "", true),
 
-  // A one-click confirmation.
-  f("links.confirm", "action", "url", "Confirm link", "The one-click link that confirms what the reader asked for.", ""),
+  // A guest's one-click confirmation of their seat.
+  f("links.confirm", "action", "url", "Confirm link", "The one-click link that confirms the guest's seat. Make it the email's button.", ""),
+
+  // The letters double opt-in.
+  f("links.lettersConfirm", "lettersConfirm", "url", "Confirm letters link", "The one-click link that says yes to letters. Make it the email's button.", ""),
 
   // The gathering.
   f("gathering.title", "gathering", "text", "Title", "The gathering's name.", "the gathering"),
@@ -208,7 +218,7 @@ export function groupsForTemplate(templateKey: string): MergeGroup[] {
   if (key.startsWith("poll.")) return ["common", "gathering", "poll"];
   if (key.startsWith("path.")) return ["common", "path", "nextGathering"];
   if (key.startsWith("member.") || key.startsWith("joining.")) return ["common", "nextGathering"];
-  if (key === "letters.confirm") return ["common", "action"];
+  if (key === "letters.confirm") return ["common", "lettersConfirm"];
   if (key.startsWith("letter.")) return ["common", "letter"];
   return ["common"];
 }
@@ -535,6 +545,7 @@ export function sampleValues(input: {
     "person.name": full,
     "links.preferences": at("/email/preferences?t=sample"),
     "links.confirm": action,
+    "links.lettersConfirm": action,
     "gathering.title": "Community supper",
     "gathering.when": "Saturday at 6:00 PM",
     "gathering.whenLocal": "Saturday at 7:00 PM",

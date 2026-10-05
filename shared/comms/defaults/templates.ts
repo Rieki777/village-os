@@ -547,8 +547,11 @@ const LETTERS: DefaultTemplate[] = [
     "Confirm your letters from {{village.name}}",
     "One click to say yes. Ignore this if it wasn't you.",
     HI,
-    "Someone asked for letters from {{village.name}} to come to this address. If that was you, press the button to confirm.",
-    "[Yes, send me letters]({{links.confirm}})",
+    "Someone asked for letters from {{village.name}} to come to this address. Letters are our news, written by the people here.",
+    "If that was you, press the button to start them.",
+    // `links.lettersConfirm` is the signed confirm link the people lane posts
+    // this email with (the letters double opt-in). It is the email's one button.
+    "[Yes, send me village news]({{links.lettersConfirm}})",
     "If it wasn't you, ignore this email and nothing changes. No letters come until the button is pressed.",
   ),
   // The frame around every letter. The letter brings its own subject, preview

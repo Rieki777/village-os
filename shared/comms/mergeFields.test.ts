@@ -135,6 +135,10 @@ describe("the catalogue", () => {
     expect(groupsForTemplate("poll.invite")).toContain("poll");
     expect(groupsForTemplate("path.resident.welcome")).toEqual(["common", "path", "nextGathering"]);
     expect(groupsForTemplate("letter.layout")).toEqual(["common", "letter"]);
+    // Each confirmation email knows only its own confirm link.
+    expect(groupsForTemplate("letters.confirm")).toEqual(["common", "lettersConfirm"]);
+    expect(fieldProblems("letters.confirm", "{{links.confirm}} {{links.lettersConfirm}}")).toEqual({ unknown: [], unavailable: ["links.confirm"] });
+    expect(fieldProblems("gathering.guest_confirm", "{{links.lettersConfirm}} {{links.confirm}}")).toEqual({ unknown: [], unavailable: ["links.lettersConfirm"] });
     expect(fieldsForTemplate("member.welcome.day0").some((f) => f.group === "path")).toBe(false);
     expect(fieldProblems("path.resident.welcome", "{{poll.options}} {{path.nmae}} {{path.name}}")).toEqual({
       unknown: ["path.nmae"],

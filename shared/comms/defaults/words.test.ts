@@ -155,6 +155,16 @@ describe("every default email", () => {
     }
   });
 
+  it("makes the letters confirmation's one button the signed link the people lane posts as links.lettersConfirm", () => {
+    const link = "https://sample.example/email/a?t=letters-token";
+    const email = render(platformTemplate("letters.confirm")!, { "links.lettersConfirm": link });
+    const buttonHrefs = Array.from(email.html.matchAll(/<td align="center" bgcolor=[^>]*><a href="([^"]+)"/g)).map((m) => m[1]);
+    expect(buttonHrefs).toEqual([link]);
+    expect(email.text).toContain(`Yes, send me village news: ${link}`);
+    expect(platformTemplate("letters.confirm")!.bodyMd).toContain("({{links.lettersConfirm}})");
+    expect(platformTemplate("letters.confirm")!.bodyMd).not.toContain("{{links.confirm}}");
+  });
+
   it("lists every default in exactly one group of the Words screen", () => {
     const grouped = templateGroups().flatMap((g) => g.keys);
     expect(new Set(grouped).size).toBe(grouped.length);
