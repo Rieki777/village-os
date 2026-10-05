@@ -317,8 +317,11 @@ export default function WordsEditor({
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <div className="space-y-4">
+      {/* grid-cols-1 (a minmax(0, 1fr) track) and min-w-0 on both children: on a
+          phone the single implicit track grew to the preview's width and the
+          whole screen scrolled sideways, 211px at 390px wide (measured). */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="min-w-0 space-y-4">
           <div>
             <label htmlFor="words-subject" className="mb-1 block text-sm font-medium text-gray-700">Subject</label>
             <input

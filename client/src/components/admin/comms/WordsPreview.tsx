@@ -41,7 +41,7 @@ export default function WordsPreview({ preview, loading, error }: { preview: Pre
   const [showText, setShowText] = useState(false);
 
   return (
-    <section aria-label="Preview" className="rounded-xl border border-gray-200 bg-white">
+    <section aria-label="Preview" className="min-w-0 rounded-xl border border-gray-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Preview</p>
