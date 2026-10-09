@@ -173,11 +173,29 @@ describe("the notification catalogue", () => {
     }
   });
 
-  it("gives every batched line somewhere to put the count", () => {
+  /*
+   * Every kind but one. A canvas_revisit row is one block asked about in one
+   * moment and moon, never one thing that happened, so a count of its rows is
+   * no count of anything a member would recognise: it read "16 canvas
+   * answers" to a founder whose village had adopted none (audit of Wave 4,
+   * 2026-10-01). Adding a kind to this set is a decision that its rows do not
+   * count anything, and it is made here, in sight.
+   */
+  const UNCOUNTED = new Set(["canvas_revisit"]);
+
+  it("gives every batched line somewhere to put the count, except a kind whose rows count nothing", () => {
     for (const [type, k] of Object.entries(NOTIFICATION_KINDS)) {
-      expect(k.many, `${type} has no {n}`).toContain("{n}");
+      if (UNCOUNTED.has(type)) expect(k.many, `${type} states a count`).not.toContain("{n}");
+      else expect(k.many, `${type} has no {n}`).toContain("{n}");
       expect(k.blurb.length, `${type} blurb is too short to say anything`).toBeGreaterThan(20);
     }
+  });
+
+  it("folds the canvas's key moments into a line with no number in it, in the bell and the digest alike", () => {
+    for (const n of [2, 4, 12, 16, 40]) {
+      expect(manyLine("canvas_revisit", n), String(n)).not.toMatch(/\d/);
+    }
+    expect(manyLine("canvas_revisit", 16)).not.toMatch(/answers/);
   });
 
   it("uses no dash characters the voice rules refuse", () => {

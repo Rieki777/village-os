@@ -69,6 +69,7 @@ import {
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
 
 export interface SubjectThresholds {
   /**
@@ -443,6 +444,22 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * A WRITTEN AGREEMENT, from the proposal wizard (Wave 4; audit of Wave 4,
+   * 2026-10-01). The design gives every written agreement, the conflict
+   * agreement included, the structural tier (design_conflict-evolution.md,
+   * the Evolve step: "By power; structural tier (80/50)"), and the route
+   * first priced it at the village's routine bar, so an agreement could
+   * cover the conflict agreement's ground for less. Same shape as the entry
+   * above, and `custom` for the same reason.
+   */
+  [AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    method: "custom",
+    why: "An adopted agreement binds the village exactly as written, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
 };
 

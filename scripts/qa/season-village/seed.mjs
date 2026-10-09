@@ -151,7 +151,7 @@ const DECLINE_NOTE = "A month is too long for small things; we keep the Saturday
  */
 const FUNDING_BLOCKS = ["power", "resourcing", "legal", "impact"];
 const FUNDING_TITLE = "Before you raise: look at Power again.";
-const CLAIMED_TITLE = "Something new is starting. Does our Power answer still hold?";
+const CLAIMED_TITLE = "Something new is starting. Look at Power again.";
 /*
  * The companion. Resourcing's one brief section, written at the administrators'
  * audience, which is the default an answer adopted on the canvas keeps: the shape

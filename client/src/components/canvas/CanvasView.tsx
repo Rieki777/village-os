@@ -32,6 +32,36 @@ const headers = (): Record<string, string> => {
   return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 };
 
+/**
+ * THE BLOCK A LINK NAMES (audit of Wave 4, 2026-10-01). Every key-moment
+ * notice opens `/journey-to-launch?view=canvas#canvas-block-<id>`. A browser
+ * honours a hash only against markup that exists when the page loads, and the
+ * cards mount after three reads (the season, the moon and the canvas), each of
+ * which moves them when it lands, so a notice opened from the bell landed at
+ * the top of the view with its block 5,000px further down. The view jumps to
+ * the block once all three have answered, and again whenever the address
+ * names a block afresh while the view is open: a wouter link pushes state and
+ * fires no hashchange, so `pushState` is listened for too (wouter dispatches
+ * it), beside `hashchange` and Back (WalletCard.tsx does the same for #wallet).
+ */
+const BLOCK_HASH = "#canvas-block-";
+const ADDRESS_EVENTS = ["hashchange", "popstate", "pushState"] as const;
+function useJumpToNamedBlock(settled: boolean): void {
+  useEffect(() => {
+    if (!settled) return;
+    const jump = () => {
+      const hash = window.location.hash;
+      if (!hash.startsWith(BLOCK_HASH)) return;
+      document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: "start" });
+    };
+    jump();
+    for (const e of ADDRESS_EVENTS) window.addEventListener(e, jump);
+    return () => {
+      for (const e of ADDRESS_EVENTS) window.removeEventListener(e, jump);
+    };
+  }, [settled]);
+}
+
 /** Why a read of the season failed, in words, and whether asking again could help. */
 function seasonReadFailure(status: number | null, error: unknown): { message: string; retry: boolean } {
   if (status === 401 || error === "auth_required") return { message: "Sign in to read the season.", retry: false };
@@ -63,17 +93,23 @@ export function CanvasView() {
   // The canvas moon (plan 4.4). A read that fails leaves the card off the
   // page and the rest of the view as it was: the moon is a courtesy.
   const [moon, setMoon] = useState<CanvasMoonPayload | null>(null);
+  const [moonAnswered, setMoonAnswered] = useState(false);
   const loadMoon = useCallback(() => {
     fetch("/api/canvas/moon", { headers: headers() })
       .then(async (r) => {
         if (!r.ok) return;
         setMoon((await r.json().catch(() => null)) as CanvasMoonPayload | null);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setMoonAnswered(true));
   }, []);
   useEffect(() => {
     loadMoon();
   }, [loadMoon]);
+
+  const [canvasRead, setCanvasRead] = useState(false);
+  const markCanvasRead = useCallback(() => setCanvasRead(true), []);
+  useJumpToNamedBlock(canvasRead && moonAnswered && (payload !== null || failed !== null));
 
   const offerMoon = async (): Promise<MoonOfferAnswer> => {
     try {
@@ -140,7 +176,12 @@ export function CanvasView() {
           onRemove={remove}
         />
         <CanvasMoon payload={moon} onOffer={offerMoon} />
-        <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+        <CanvasBaseline
+          focus={focus}
+          focusLabel={phase === "before" ? "First up" : "This week"}
+          season={season}
+          onRead={markCanvasRead}
+        />
       </div>
     </CompanionProvider>
   );

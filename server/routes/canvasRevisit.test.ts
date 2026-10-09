@@ -27,7 +27,8 @@ import { recordEvent } from "../lib/events";
 import { loadModuleSettings } from "../lib/modules";
 import { setCanvasMoonProvider } from "../lib/calendarBrief";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
-import { CANVAS_MOON_KEY, MOON_CALENDAR_OFF, MOON_OFFER_REFUSAL, register, revisitDepsFrom } from "./canvasRevisit";
+import { updateGathering } from "../lib/gatherings";
+import { CANVAS_MOON_KEY, MOON_CALENDAR_OFF, MOON_OFFERED, MOON_OFFER_REFUSAL, register, revisitDepsFrom } from "./canvasRevisit";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[canvasRevisit.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -229,5 +230,27 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     const r = await call("GET", "/api/canvas/moon", "keeper");
     expect(r.body.gathering).toBeNull();
     expect(r.body.mayOffer).toBe(true);
+  });
+
+  /*
+   * The calendar's visible action for a published gathering is Cancel, which
+   * keeps the row (audit of Wave 4, 2026-10-01). A cancelled series read as
+   * "on the village calendar" to every member and refused a fresh offer.
+   */
+  it("treats a cancelled canvas moon as not offered, and offers it again", async () => {
+    const made = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    expect(made.body.message).toBe(MOON_OFFERED);
+    // What the Calendar tab's Cancel does (PUT /api/admin/events/:id with a status).
+    expect(await updateGathering(pool, made.body.gathering.id, { status: "cancelled" })).toBeTruthy();
+
+    const read = await call("GET", "/api/canvas/moon", "member");
+    expect(read.body.gathering, "a cancelled series is not on the calendar").toBeNull();
+    expect((await call("GET", "/api/canvas/moon", "keeper")).body.mayOffer).toBe(true);
+
+    const again = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+    expect(again.body.gathering.id).not.toBe(made.body.gathering.id);
+    expect((await call("GET", "/api/canvas/moon", "member")).body.gathering).toEqual({ id: again.body.gathering.id, status: "draft" });
   });
 });

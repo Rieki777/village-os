@@ -3875,6 +3875,7 @@ What it may be set to:
 
 The generator reads these and fails loudly if any of them moves:
 
+- `shared/agreements.ts`
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
 - `shared/conflictAgreement.ts`

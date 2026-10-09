@@ -28,6 +28,26 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
+/**
+ * The offered gathering, in words true of its status (audit of Wave 4,
+ * 2026-10-01): every status but a draft used to read "on the village
+ * calendar", a cancelled series included. The server no longer answers a
+ * cancelled one (server/routes/canvasRevisit.ts `offered`), and the card
+ * still says it plainly if one ever arrives.
+ */
+function gatheringLine(status: string): string {
+  switch (status) {
+    case "draft":
+      return "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it.";
+    case "postponed":
+      return "The canvas moon gathering is on the village calendar, marked postponed.";
+    case "cancelled":
+      return "The canvas moon gathering was cancelled.";
+    default:
+      return "The canvas moon is on the village calendar.";
+  }
+}
+
 export function CanvasMoon({
   payload,
   onOffer,
@@ -74,9 +94,7 @@ export function CanvasMoon({
 
       {payload?.gathering && (
         <p className="mt-3 text-sm text-stone-700" data-testid="canvas-moon-gathering">
-          {payload.gathering.status === "draft"
-            ? "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it."
-            : "The canvas moon is on the village calendar."}
+          {gatheringLine(payload.gathering.status)}
         </p>
       )}
 
@@ -91,7 +109,8 @@ export function CanvasMoon({
             {busy ? "Offering" : "Offer a canvas moon gathering"}
           </button>
           <p className="mt-1.5 text-xs text-stone-600">
-            It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it there.
+            It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until somebody who
+            manages events publishes it from the Calendar tab in the admin pages.
           </p>
         </div>
       )}

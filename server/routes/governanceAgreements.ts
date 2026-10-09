@@ -17,15 +17,25 @@
  * Opening follows the advisory route's door, `proposal.open` asked of the one
  * gate, because until today a member who wanted an agreement put it to the
  * village as a practice vote through exactly that door. The vote is conducted
- * the way `POST /api/governance/purpose-changes` conducts one: the village's
- * own method and dials through `thresholdsFor`, its own weights, its own
- * electorate, frozen at the open. An agreement asks nothing of its own above
- * the village's bar, so it carries no floor in `SUBJECT_THRESHOLDS`.
+ * the way `POST /api/governance/purpose-changes` conducts one: `thresholdsFor`
+ * over the village's dials, its own weights, its own electorate, frozen at the
+ * open.
  *
- * ── ONE AGREEMENT, ONE VOTE ────────────────────────────────────────────────
+ * AT THE STRUCTURAL TIER (audit of Wave 4, 2026-10-01). The design for this
+ * route gives a written agreement, the conflict agreement included, the
+ * structural tier, 80 and 50 (design_conflict-evolution.md, the Evolve step),
+ * and an agreement binds exactly as written. This route first priced it at the
+ * village's routine bar, so a generic agreement could cover the conflict
+ * agreement's ground at a lower bar than the conflict agreement itself.
+ * `SUBJECT_THRESHOLDS[AGREEMENT]` now names the tier, as it does for
+ * `conflict_agreement`, and moves with the village's structural setting.
+ *
+ * ── ONE AGREEMENT, ONE VOTE, ONE AT A TIME ─────────────────────────────────
  *
  * Each agreement is its own subject (`agreement:<id>`), so the village can
- * weigh two agreements at once. The words go beside the ballot in their own
+ * weigh two agreements at once, from two members: one member has one
+ * agreement out at a time, the advisory door's rule, because every vote rings
+ * the whole roll twice and has to reach quorum. The words go beside the ballot in their own
  * document (server/lib/agreements.ts) and never back out of the markdown. If
  * that write fails the vote is called off before anybody casts one, the way
  * the purpose change does it.
@@ -40,6 +50,7 @@ import { numberVar, stringVar } from "../lib/variables";
 import { openBallot, withdrawBallot } from "../lib/ballots";
 import { decisionLink, notifyRollRows } from "../lib/ballotNotices";
 import { listAgreements, recordAgreement } from "../lib/agreements";
+import { countOpenBallotsBy } from "../repos/openBallotsByOpener";
 import { hasCapability } from "../../shared/capabilities";
 import { AGREEMENT, agreementDoc, parseAgreement, type StoredAgreement } from "../../shared/agreements";
 import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
@@ -60,8 +71,19 @@ type Deps = Pick<
   villageTimezone: () => string;
 };
 
-/** What a member without `proposal.open` is told. */
-export const AGREEMENT_OPEN_REFUSAL = "Putting an agreement to the whole village is for a proposal.open holder";
+/**
+ * What a member without `proposal.open` is told, from their side of the
+ * screen and with a next step (audit of Wave 4, 2026-10-01): it named a
+ * capability id and stopped there. The wizard now locks the card for such a
+ * member (TypeCards.tsx); this is what a draft written before that, or any
+ * other caller, still meets.
+ */
+export const AGREEMENT_OPEN_REFUSAL =
+  "Putting an agreement to the whole village takes the power to open votes, and your account does not hold it. A member who holds it can carry this agreement to the village for you.";
+
+/** What a member who already has an agreement out to the village is told. */
+export const AGREEMENT_ONE_AT_A_TIME =
+  "You have an agreement still being voted on. Let the village answer that one first, and then put the next one to it.";
 
 /** The village's own date, `YYYY-MM-DD`, for the review date's floor. */
 function todayIn(timeZone: string, now = new Date()): string {
@@ -111,6 +133,10 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const ctx = await capabilityCtx(user);
     if (!hasCapability("proposal.open", ctx)) return res.status(403).json({ error: AGREEMENT_OPEN_REFUSAL });
+    // One at a time, per member, as the advisory door it came through asks.
+    if ((await countOpenBallotsBy(getPool(), AGREEMENT, String(user.id))) > 0) {
+      return res.status(409).json({ error: AGREEMENT_ONE_AT_A_TIME });
+    }
 
     const parsed = parseAgreement(req.body, {
       today: todayIn(deps.villageTimezone()),

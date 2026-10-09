@@ -103,6 +103,7 @@ import {
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 
 // ── The shape ──────────────────────────────────────────────────────────────
@@ -280,6 +281,7 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
   [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
+  [AGREEMENT]: "Adopting a written agreement",
 };
 
 /** The votes that move a power or a seat, which carry no floor of their own. */

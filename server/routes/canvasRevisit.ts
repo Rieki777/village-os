@@ -62,6 +62,10 @@ export const CANVAS_MOON_KEY = "canvas-moon";
 /** What a person who may not manage events is told. */
 export const MOON_OFFER_REFUSAL = "Offering a gathering is for whoever manages the village's calendar.";
 
+/** What the person who offered the gathering is told. */
+export const MOON_OFFERED =
+  "The canvas moon is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it from the Calendar tab in the admin pages.";
+
 /** What anybody is told while the calendar is off. */
 export const MOON_CALENDAR_OFF = "The calendar is switched off in this village, so there is nowhere to offer the gathering yet.";
 
@@ -118,13 +122,24 @@ async function startOf(deps: CanvasRevisitRouteDeps, newMoon: Date): Promise<{ s
   return { startsAt: zonedTimeToUtc(day.year, day.month, day.day, hour, minute, timeZone), timeZone };
 }
 
-/** The offered gathering, if one was offered and is still on the calendar. */
+/**
+ * The offered gathering, if one was offered and is still on the calendar.
+ *
+ * A CANCELLED one is not (audit of Wave 4, 2026-10-01). The calendar's
+ * visible action for a published gathering is Cancel, which keeps the row
+ * with status `cancelled`, and reading it as offered told every member "The
+ * canvas moon is on the village calendar" and answered a fresh offer 409
+ * until somebody found the row and deleted it. A cancelled series stays on
+ * the calendar marked cancelled, as the calendar keeps it, and the moon can
+ * be offered again.
+ */
 async function offered(deps: CanvasRevisitRouteDeps): Promise<{ id: string; status: string } | null> {
   const doc = await readConfigDocument<{ eventId?: unknown }>(deps.getPool(), CANVAS_MOON_KEY);
   const id = typeof doc?.eventId === "string" ? doc.eventId : "";
   if (!id) return null;
   const g = await getGathering(deps.getPool(), id);
-  return g ? { id: g.id, status: String(g.status) } : null;
+  if (!g || String(g.status) === "cancelled") return null;
+  return { id: g.id, status: String(g.status) };
 }
 
 export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
@@ -188,7 +203,10 @@ export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
     });
     res.status(201).json({
       gathering: { id: created.id, status: String(created.status) },
-      message: "The canvas moon is on the calendar's list as a draft. Set its place and publish it there when it suits the village.",
+      // Who publishes, and where, said of whoever pressed: a role can hold
+      // event.manage without an admin account, and the Calendar tab is inside
+      // the admin pages (audit of Wave 4, 2026-10-01).
+      message: MOON_OFFERED,
       publishAt: "/admin?tab=events-admin",
     });
   });

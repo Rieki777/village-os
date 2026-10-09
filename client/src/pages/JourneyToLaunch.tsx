@@ -22,7 +22,7 @@ import { TestRun } from "@/components/journey/TestRun";
 import { ViewTab } from "@/components/canvas/CanvasBaseline";
 import { CanvasView } from "@/components/canvas/CanvasView";
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken, fetchGameMe } from "@/lib/gameApi";
 import {
@@ -268,10 +268,16 @@ const JOURNEY_VIEWS: readonly string[] = ["launch", "economics", "canvas"] satis
  * The open view lives in the address (`?view=canvas`), so Back from the canvas
  * workbook, a reload and a shared link all land on the tab they left. It is
  * REPLACED, never pushed: moving between tabs is not a page in the history.
+ *
+ * It is read on EVERY change of the address, not once on arrival (audit of
+ * Wave 4, 2026-10-01). A key-moment notice links to
+ * `/journey-to-launch?view=canvas#canvas-block-<id>`, and a founder opens it
+ * from the bell while already on this page: the address moved and the screen
+ * stayed on Launch readiness, with the notice already marked read.
  */
-function viewFromAddress(): JourneyView {
+function viewFromAddress(search: string = window.location.search): JourneyView {
   try {
-    const wanted = new URLSearchParams(window.location.search).get("view") ?? "";
+    const wanted = new URLSearchParams(search).get("view") ?? "";
     return JOURNEY_VIEWS.includes(wanted) ? (wanted as JourneyView) : "launch";
   } catch {
     return "launch";
@@ -291,10 +297,12 @@ function writeViewToAddress(view: JourneyView): void {
 
 /**
  * A row whose fix is another view of THIS page (the canvas row links to
- * `?view=canvas`). The view is read from the address once, on arrival, so a
- * link to the page it is already on would change the address and leave the
- * screen where it was. Such a row switches the view in place instead. From any
- * other page the same address opens the view, which is what the link says.
+ * `?view=canvas`). Such a row switches the view in place, with no history
+ * entry, as the tabs do. It was written when the view was read from the
+ * address once, on arrival, and a link to the page it was already on left the
+ * screen where it was; the view now follows the address too, and the row
+ * still switches in place so it adds nothing to Back. From any other page the
+ * same address opens the view, which is what the link says.
  */
 const JOURNEY_PATH = "/journey-to-launch";
 function viewOfFixAt(fixAt: string): JourneyView | null {
@@ -309,11 +317,17 @@ export default function JourneyToLaunch() {
   const [status, setStatus] = useState<any>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState("");
-  const [view, setViewState] = useState<JourneyView>(viewFromAddress);
+  const [view, setViewState] = useState<JourneyView>(() => viewFromAddress());
   const setView = (next: JourneyView) => {
     setViewState(next);
     writeViewToAddress(next);
   };
+  // A link to this page while on it (the bell, a moon card) moves the address
+  // and remounts nothing, so the view follows the address here.
+  const search = useSearch();
+  useEffect(() => {
+    setViewState(viewFromAddress(search));
+  }, [search]);
   /**
    * Has the village admitted this signed-in member? The canvas is for members
    * (server/routes/canvas.ts answers an account it has not admitted with 403),

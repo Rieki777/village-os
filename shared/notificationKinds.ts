@@ -498,13 +498,21 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
    * One of the canvas's four key moments came round (shared/canvasRevisit.ts):
    * something new started, a partner arrived, the conflict pathway was used,
    * or the village is about to raise money. The notice names a block and asks
-   * whether its answer still holds. It carries nobody's words, no name and no
+   * the village to look at it again. It carries nobody's words, no name and no
    * count, and it goes out in the daily digest and never at once.
+   *
+   * THE ONE `many` LINE WITH NO {n} (audit of Wave 4, 2026-10-01). A row here
+   * is one block asked about in one moment and moon, never one thing that
+   * happened: a fresh instance's claim writes twelve while the village has
+   * adopted no answer at all, and two moments in one moon wrote sixteen, more
+   * than the canvas has blocks. "{n} canvas answers" stated a false number in
+   * the bell and as the digest's subject, so the folded line states none (plan
+   * 4.2: no content, no count). `manyLine` leaves a line without {n} as it is.
    */
   canvas_revisit: {
     group: "village",
-    blurb: "A key moment came round, and the canvas asks whether one of the village's answers still holds.",
-    many: "{n} canvas answers are worth another look.",
+    blurb: "A key moment came round, and the canvas asks the village to look at one of its blocks again.",
+    many: "The canvas asks the village to take another look.",
     celebrate: false,
   },
   exit_opened: {

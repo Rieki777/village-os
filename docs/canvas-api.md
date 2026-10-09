@@ -330,7 +330,9 @@ moment never adds a block here: its notice reaches the care holder alone.
 The offer is made once and never seeded: it writes one DRAFT gathering that recurs every new moon
 (`{ freq: "lunar", on: "new_moon" }`) at the season's session time, or 18:00 in the village's
 timezone, and remembers it under the `canvas-moon` app_config key. Publishing it is a second act in
-the calendar's own admin list. The weekly brief and the moon digest carry the same moon as one line
+the calendar's own admin list (the Calendar tab in the admin pages). A remembered gathering that was
+cancelled counts as not offered: `gathering` reads `null`, `mayOffer` opens again, and a fresh offer
+writes a new draft. The weekly brief and the moon digest carry the same moon as one line
 of block titles (`canvasMoonLine`, shared/canvasRevisit.ts).
 
 The four key moments themselves have no route: each is raised where it happens

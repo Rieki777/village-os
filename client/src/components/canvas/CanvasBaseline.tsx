@@ -83,13 +83,19 @@ export function CanvasBaseline({
   focus = NO_FOCUS,
   focusLabel = "This week",
   season = null,
+  onRead,
 }: {
   focus?: readonly CanvasBlockId[];
   focusLabel?: string;
   /** The loaded season, when there is one: each card's week line is read from it. */
   season?: Pick<CanvasSeason, "name" | "weeks"> | null;
+  /** Told once the cards are on the page, so CanvasView can jump to a block a link names. */
+  onRead?: () => void;
 } = {}) {
   const [data, setData] = useState<CanvasPayload | null>(null);
+  useEffect(() => {
+    if (data) onRead?.();
+  }, [data, onRead]);
   /** Why the read failed, and whether asking again could help: a refusal (401, 403) gets the same answer twice. */
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 

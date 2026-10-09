@@ -22,7 +22,7 @@ import { AGREEMENT } from "../../shared/agreements";
 import { ballotById } from "../lib/ballots";
 import { listAgreements, readAgreement } from "../lib/agreements";
 import { agreementCloser } from "../lib/agreementCloser";
-import { AGREEMENT_OPEN_REFUSAL, register } from "./governanceAgreements";
+import { AGREEMENT_ONE_AT_A_TIME, AGREEMENT_OPEN_REFUSAL, register } from "./governanceAgreements";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 
 const configured = testDbConfigured();
@@ -30,6 +30,9 @@ if (!configured) console.warn("[governanceAgreements] TEST_DATABASE_URL not set 
 
 const PEOPLE: Record<string, { id: string; name: string; role: string; caps: string[]; membershipGranted: boolean }> = {
   opener: { id: "agr-opener", name: "Wren Halloway", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
+  // Two more who may open a vote: one member has one agreement out at a time.
+  second: { id: "agr-second", name: "Sage Ito", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
+  third: { id: "agr-third", name: "Tomas Reyes", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
   member: { id: "agr-member", name: "Ash Brook", role: "member", caps: ["ballot.vote"], membershipGranted: true },
   stranger: { id: "agr-stranger", name: "Rook Talbot", role: "member", caps: [], membershipGranted: false },
 };
@@ -124,9 +127,11 @@ describe.skipIf(!configured)("the agreements route", () => {
     await db?.drop();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     told.length = 0;
     pulse.length = 0;
+    // One member has one agreement out at a time, so every case starts with none open.
+    await pool.query("UPDATE ballots SET status = 'withdrawn' WHERE subject_type = 'agreement' AND status = 'open'"); // module-review-ok: standing the scratch schema's open votes down between cases
   });
 
   it("refuses a visitor, and a member without proposal.open in the route's sentence", async () => {
@@ -163,6 +168,12 @@ describe.skipIf(!configured)("the agreements route", () => {
 
     const ballot = await ballotById(pool, r.body.ballot.id);
     expect(ballot).toMatchObject({ subjectType: AGREEMENT, subjectRef: id, status: "open", openedBy: PEOPLE.opener.id });
+    // The structural tier the design names for a written agreement, at least 80 and 50
+    // (audit of Wave 4, 2026-10-01). This village keeps the default dials, 80 and 20, so
+    // the quorum is the number the tier moves: it opened at 20 before.
+    expect(ballot!.method).toBe("custom");
+    expect(ballot!.unityPct).toBeGreaterThanOrEqual(80);
+    expect(ballot!.quorumPct).toBeGreaterThanOrEqual(50);
     expect(ballot!.docMarkdown).toContain("Between ten at night");
     expect(ballot!.docMarkdown).toContain("Circle: Hearth.");
 
@@ -175,23 +186,48 @@ describe.skipIf(!configured)("the agreements route", () => {
     expect(pulse).toEqual(["The village is deciding whether to adopt an agreement: Quiet hours in the common house"]);
   });
 
-  it("lets two agreements be voted on at once, each its own subject", async () => {
+  it("lets two agreements be voted on at once, each its own subject, from two members", async () => {
     const a = await call("POST", "/api/governance/agreements", "opener", good({ title: "Tools go back to the shed" }));
-    const b = await call("POST", "/api/governance/agreements", "opener", good({ title: "Dogs on leads near the goats", reviewAt: null }));
+    const b = await call("POST", "/api/governance/agreements", "second", good({ title: "Dogs on leads near the goats", reviewAt: null }));
     expect([a.status, b.status]).toEqual([201, 201]);
     expect(a.body.ballot.id).not.toBe(b.body.ballot.id);
     expect((await readAgreement(pool, b.body.id))?.reviewAt).toBeNull();
   });
 
+  /*
+   * The advisory door an agreement used to go through allows one open vote
+   * per member, because a vote rings the whole roll twice and must reach
+   * quorum; the binding door lost that (audit of Wave 4, 2026-10-01).
+   */
+  it("lets one member have one agreement out at a time, and says so in words", async () => {
+    const first = await call("POST", "/api/governance/agreements", "opener", good({ title: "Bikes live in the barn" }));
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    // The first one's roll line is not awaited by the route; let it land before counting.
+    for (let i = 0; i < 50 && !told.length; i++) await new Promise((res) => setTimeout(res, 20));
+    expect(told.length, "the first one rang the roll").toBeGreaterThan(0);
+    told.length = 0;
+    const again = await call("POST", "/api/governance/agreements", "opener", good({ title: "Bikes live in the shed instead" }));
+    expect(again.status).toBe(409);
+    expect(again.body).toEqual({ error: AGREEMENT_ONE_AT_A_TIME });
+    const [[n]] = await pool.query<any[]>( // module-review-ok: reading the scratch schema this suite provisioned
+      "SELECT COUNT(*) AS n FROM ballots WHERE subject_type = 'agreement' AND opened_by = ? AND status = 'open'",
+      [PEOPLE.opener.id],
+    );
+    expect(Number(n.n), "the refused one opened nothing").toBe(1);
+    expect(told, "and rang nobody").toEqual([]);
+    // Another member may put theirs to the village meanwhile.
+    expect((await call("POST", "/api/governance/agreements", "second", good({ title: "Bikes live in the shed instead" }))).status).toBe(201);
+  });
+
   it("adopts at the landing, and says no, or stands down, in the closer's own words", async () => {
-    const make = async (title: string) => {
-      const r = await call("POST", "/api/governance/agreements", "opener", good({ title }));
+    const make = async (title: string, as: keyof typeof PEOPLE) => {
+      const r = await call("POST", "/api/governance/agreements", as, good({ title }));
       expect(r.status).toBe(201);
       return { id: String(r.body.id), ballot: (await ballotById(pool, r.body.ballot.id))! };
     };
-    const carried = await make("Meals are shared on Sundays");
-    const failed = await make("Nobody parks by the gate");
-    const pulled = await make("Every circle meets once a moon");
+    const carried = await make("Meals are shared on Sundays", "opener");
+    const failed = await make("Nobody parks by the gate", "second");
+    const pulled = await make("Every circle meets once a moon", "third");
     const c = closer();
 
     // Carried: nothing at the close, the words at the landing.
@@ -207,7 +243,7 @@ describe.skipIf(!configured)("the agreements route", () => {
 
     // Not carried.
     const no = await c.settle(failed.ballot, "failed", "Too many of us park there already.", "agr-member");
-    expect(no.proposerTold).toBe(PEOPLE.opener.id);
+    expect(no.proposerTold).toBe(PEOPLE.second.id);
     expect((await readAgreement(pool, failed.id))?.status).toBe("not-adopted");
 
     // Withdrawn.

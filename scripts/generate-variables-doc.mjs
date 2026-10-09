@@ -95,6 +95,10 @@ export const SOURCES = [
   // `shared/ballotSubjects.ts` imports the `conflict_agreement` subject
   // constant from here.
   "shared/conflictAgreement.ts",
+  // Added when a written agreement took the structural tier (audit of Wave 4,
+  // 2026-10-01), for the same reason: `shared/ballotSubjects.ts` imports the
+  // `agreement` subject constant from here.
+  "shared/agreements.ts",
 ];
 
 /** The one file the walk starts from. Everything else is discovered. */

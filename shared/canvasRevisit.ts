@@ -102,8 +102,8 @@ export function blocksForRaise(moment: KeyMoment, scope?: readonly string[] | nu
 /**
  * THE POWER A MOMENT'S NOTICE FOLLOWS.
  *
- * The notice asks whether a canvas answer still holds, and changing a canvas
- * answer's words is the prose pen, `story.tell` (plan 2.3; `server/routes/
+ * The notice asks the village to look at a canvas block again, and changing a
+ * canvas answer's words is the prose pen, `story.tell` (plan 2.3; `server/routes/
  * canvas.ts` records readings through the same key). So three moments follow
  * that power: its live holder hears it, every member hears it once the
  * village holds it, and the admins hear it before the handover.
@@ -137,16 +137,23 @@ export const ANYONE_MAY_RAISE = "The village holds this power, so anyone may rai
  * The title, per moment. It is also the whole of what the digest email
  * shows, so it names the block and asks the moment's question, and nothing
  * else.
+ *
+ * Every title but the partners line reads true of a BLANK block (audit of
+ * Wave 4, 2026-10-01). The claim moment fires on a brand-new instance, whose
+ * canvas is empty by construction, and asked the founder twelve times whether
+ * "our Purpose answer" still held; a circle or a peer does the same for any
+ * block nobody has answered, and the conflict line named an agreement that
+ * may not exist. The partners line keeps the plan's own words (plan 4.2).
  */
 export function revisitTitle(moment: KeyMoment, block: CanvasBlockId): string {
   const name = CANVAS_BLOCKS[block].name;
   switch (moment) {
     case "collaboration":
-      return `Something new is starting. Does our ${name} answer still hold?`;
+      return `Something new is starting. Look at ${name} again.`;
     case "partners":
       return `A new partner arrived. Does our ${name} answer still hold?`;
     case "conflict":
-      return `Is the pathway holding? Look at the ${name} answer again.`;
+      return `Is the pathway holding? Look at ${name} again.`;
     case "funding":
       return `Before you raise: look at ${name} again.`;
   }
@@ -157,7 +164,7 @@ export function revisitBody(moment: KeyMoment, audience: RevisitAudience): strin
   const lines: string[] = [];
   switch (moment) {
     case "collaboration":
-      lines.push("When a village starts something new, the canvas asks it to look at its answers again.");
+      lines.push("When a village starts something new, the canvas asks it to look at its blocks again, answered or not.");
       break;
     case "partners":
       lines.push(

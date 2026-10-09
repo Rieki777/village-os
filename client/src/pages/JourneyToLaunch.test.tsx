@@ -25,7 +25,7 @@
  * This file's subject is who sees what, not the shell around it.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -420,6 +420,67 @@ describe("the canvas view", () => {
     await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
     expect(window.location.search).toBe("?view=canvas");
     expect(screen.queryByText("Put every canvas block on record")).toBeNull();
+  });
+
+  /*
+   * A KEY-MOMENT NOTICE NAMES A BLOCK (audit of Wave 4, 2026-10-01). Every
+   * canvas_revisit row links to `?view=canvas#canvas-block-<id>`, and the bell
+   * opens it with a wouter Link, which PUSHES the address and remounts
+   * nothing. The view used to be read once, on arrival, so a founder already
+   * on this page stayed on Launch readiness; and the cards mount after their
+   * reads, so the hash met no block and the view opened at the top. jsdom has
+   * no layout, so the jump is recorded by id instead of measured.
+   */
+  describe("opened from a notice that names a block", () => {
+    let scrolledTo: string[] = [];
+    beforeEach(() => {
+      scrolledTo = [];
+      (Element.prototype as any).scrollIntoView = function (this: Element) {
+        scrolledTo.push(this.id);
+      };
+    });
+    afterEach(() => {
+      delete (Element.prototype as any).scrollIntoView;
+    });
+    const asFounder = () => {
+      auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+      answer({
+        "/api/admin/launch": { status: 200, body: STATUS },
+        "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+        "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+        "/api/canvas/season": { status: 200, body: NO_SEASON },
+        "/api/canvas/moon": { status: 200, body: NO_MOON },
+      });
+    };
+
+    it("opens the Canvas view and its block when the link is followed from this page's own launch view", async () => {
+      asFounder();
+      draw();
+      await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+      // What the bell's Link does: push the notice's address onto the page it is on.
+      act(() => window.history.pushState({}, "", "/journey-to-launch?view=canvas#canvas-block-impact"));
+      await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+      expect(screen.queryByText(/Take one backup/i), "the launch view stepped aside").toBeNull();
+      await waitFor(() => expect(scrolledTo).toContain("canvas-block-impact"));
+    });
+
+    it("jumps to the block once the cards are on the page, on arrival from anywhere else", async () => {
+      asFounder();
+      window.history.replaceState({}, "", "/journey-to-launch?view=canvas#canvas-block-legal");
+      draw();
+      await waitFor(() => expect(scrolledTo).toEqual(["canvas-block-legal"]));
+      expect(screen.getByTestId("canvas-block-legal")).toBeTruthy();
+    });
+
+    it("jumps to a second block while the Canvas view is already open", async () => {
+      asFounder();
+      window.history.replaceState({}, "", "/journey-to-launch?view=canvas");
+      draw();
+      await waitFor(() => expect(screen.getByTestId("canvas-block-power")).toBeTruthy());
+      expect(scrolledTo, "no block is named, so nothing moves").toEqual([]);
+      act(() => window.history.pushState({}, "", "/journey-to-launch?view=canvas#canvas-block-power"));
+      await waitFor(() => expect(scrolledTo).toEqual(["canvas-block-power"]));
+    });
   });
 });
 

@@ -72,7 +72,25 @@ describe("what a notice says", () => {
       }
     }
     expect(revisitTitle("funding", "legal")).toBe("Before you raise: look at Legal again.");
-    expect(revisitTitle("conflict", "conflict")).toBe("Is the pathway holding? Look at the Conflict answer again.");
+    expect(revisitTitle("conflict", "conflict")).toBe("Is the pathway holding? Look at Conflict again.");
+    expect(revisitTitle("collaboration", "purpose")).toBe("Something new is starting. Look at Purpose again.");
+  });
+
+  /*
+   * A claimed instance's canvas is empty by construction, and the claim is a
+   * collaboration moment, so these words reach a founder about blocks nobody
+   * has answered: they may not presume an answer exists (audit of Wave 4,
+   * 2026-10-01). The partners line is the plan's own wording and stays.
+   */
+  it("presumes no answer exists, outside the partners line the plan words", () => {
+    for (const moment of KEY_MOMENTS.filter((m) => m !== "partners")) {
+      for (const block of MOMENT_BLOCKS[moment]) {
+        expect(revisitTitle(moment, block), `${moment} ${block}`).not.toMatch(/answer/i);
+      }
+      for (const audience of AUDIENCES) {
+        expect(revisitBody(moment, audience), `${moment} ${audience}`).not.toMatch(/its answers again|still holds?/i);
+      }
+    }
   });
 
   it("carries no digit and no dash anywhere, so no count and no date can hide in one", () => {
