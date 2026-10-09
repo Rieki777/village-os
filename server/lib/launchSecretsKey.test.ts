@@ -30,6 +30,14 @@ import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { VILLAGE_SECRETS_ENV } from "./secrets";
+import { normalizeExitPolicy } from "./exitPolicy";
+import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
+import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
+import { recordCanvasReading } from "../repos/canvasReadings";
+import { writeConfigDocument } from "../repos/appConfigDocs";
+import { insertRoleIfAbsent } from "../repos/stewardRoles";
+import { insertHoldingIfAbsent } from "../repos/permissionHoldings";
+import { usersRepo } from "../repos/users";
 
 const ID = "village-secrets-key";
 const KEY = "c3".repeat(32);
@@ -77,7 +85,9 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
       if (r.checkKey.startsWith("manual:") || r.checkKey.startsWith("decide:")) continue;
       checks[r.checkKey] = () => ({ state: answer, detail: "not in this test" });
     }
-    return { checks, moduleLifecycle: () => "off", env };
+    // Governance open to members, since `governance-on-for-members` is a
+    // blocking row read from this lifecycle; every other module is off.
+    return { checks, moduleLifecycle: (id) => (id === "governance" ? "members" : "off"), env };
   };
 
   const item = async (env: NodeJS.ProcessEnv) => {
@@ -120,6 +130,45 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
      */
     const wrote = await writeGoverningPurpose(pool, { statement: PURPOSE_EXAMPLE, writtenBy: "founder-1" });
     expect(wrote.ok, JSON.stringify(wrote)).toBe(true);
+
+    /*
+     * The canvas build's governance rows are blocking too, and each resolves
+     * from the database rather than the stubbed `deps.checks`, so they are
+     * answered here the way server/lib/launchGovernance.db.test.ts answers
+     * them: every canvas block read, a conflict door held by a live intake
+     * role with a promised reply among three admitted members who are not
+     * founders, and an adopted closing statement.
+     */
+    const users = usersRepo(pool);
+    await users.add({ id: "founder-1", name: "Ida Founder", email: "ida@example.test", role: "founder", membershipGranted: true });
+    for (const n of [1, 2, 3]) {
+      await users.add({ id: `member-${n}`, name: `Member ${n}`, email: `m${n}@example.test`, role: "member", membershipGranted: true });
+    }
+    await insertRoleIfAbsent(pool, { id: "care", name: "Care", description: "", capabilitiesJson: "[]", sortOrder: 1 });
+    await insertHoldingIfAbsent(pool, { id: "rh-care-1", roleId: "care", userId: "member-1", grantedBy: "test", termEndsAt: null, seasonId: null });
+    await writeConfigDocument(pool, "exit-policy", {
+      ...normalizeExitPolicy({
+        placeholder: false,
+        voluntary: { noticePeriodDays: 21, valuationMethod: "Hours are honoured at the rate the circle agreed.", unwindSteps: ["Hand back the keys"] },
+        involuntary: { decidingDomainId: "", appealDomainId: "", process: "Two stewards sit with the person first." },
+        restorative: { intakeContactRole: "care", steps: ["Somebody who was not involved hears both people"], replyHours: 48 },
+      }),
+      closing: {
+        policyId: "proportional-closing-balance",
+        statement: PROPORTIONAL_CLOSING_STATEMENT,
+        adoptedBy: "founder-1",
+        adoptedAt: new Date().toISOString(),
+      },
+    } as any);
+    for (const blockId of CANVAS_BLOCK_IDS) {
+      await recordCanvasReading(pool, {
+        blockId,
+        level: 1,
+        sentence: "Not decided yet, because we have not sat down with it together.",
+        moment: "baseline",
+        recordedBy: "founder-1",
+      });
+    }
   }, 180_000);
 
   beforeEach(async () => {
