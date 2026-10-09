@@ -132,7 +132,8 @@ export default function CommsPeople({ password }: { password: string }) {
   const [rows, setRows] = useState<PersonRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [listError, setListError] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  // `?person=<contactId>` opens one person, the link the day 21 hand-off carries (5.11).
+  const [openId, setOpenId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("person")?.match(/^[A-Za-z0-9_-]{1,64}$/)?.[0] ?? null);
   const [detail, setDetail] = useState<PersonDetail | null>(null);
   const [detailError, setDetailError] = useState("");
   const [note, setNote] = useState("");

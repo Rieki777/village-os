@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import JourneyWalk from "./JourneyWalk";
+import PathJourneyOptions from "./PathJourneyOptions";
 import {
   fetchJourney,
   saveStep,
@@ -247,6 +248,7 @@ export default function JourneyDetail({ password, journeyKey, onChanged }: { pas
           The reminder times follow the dials in Comms Settings until you change a step here.
         </p>
       )}
+      <PathJourneyOptions password={password} journeyKey={detail.key} onChanged={load} />
 
       <section aria-label="Timeline">
         <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Timeline</h4>
