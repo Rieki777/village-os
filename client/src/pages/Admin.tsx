@@ -8850,7 +8850,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           <li>
             <p className="font-medium text-gray-900">1. Run the published image</p>
             <p className="text-gray-500 mb-1">On one computer, docker compose up -d from the starter kit. On a host such as Railway, a service running:</p>
-            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">ghcr.io/rieki777/village-os:&lt;version&gt;</pre>
+            <pre className="bg-gray-900 text-green-300 text-xs rounded-lg p-3 overflow-x-auto">ghcr.io/regen-civics/village-os:&lt;version&gt;</pre>
           </li>
           <li>
             <p className="font-medium text-gray-900">2. Add a persistent data volume</p>

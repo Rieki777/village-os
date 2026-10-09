@@ -38,6 +38,71 @@ made at the time.
 
 ---
 
+## 1.2.1 (2026-10-09)
+
+**Village OS moved to the ReGen Civics organisation.** The code is now at
+github.com/ReGen-Civics/village-os, and the image is published as
+`ghcr.io/regen-civics/village-os`. Links to the old address redirect.
+
+### What changed for your village
+
+- **A new image address.** From this release, pull
+  `ghcr.io/regen-civics/village-os:1.2.1`. Releases 1.2.0 and older stay where
+  they were, at `ghcr.io/rieki777/village-os`, unchanged and still pullable.
+- **The setup prompt follows one release.** The prompt you give your AI
+  assistant now has it find the latest release once and use that version for
+  the guides, the download and the image, so nothing mixes two releases.
+- **The words on every page were rewritten** so the village guides a member
+  through it like a game, and **the Trail** shows a member their next step on
+  every page.
+- **Role cards.** Each seat has a card on `/roles`, `/circles`, the setup
+  wizard and `/review`, and a link (`/roles?seat=<id>`) opens one seat's card.
+- **The Living Map:**
+  - a second round of fixes from a full QA sweep, 79 of the 80 confirmed defects
+  - the land draws the village's own circles and seats, live
+  - founders choose the crown bar's chips and what each one counts, in Village settings
+  - a village with no published map shows a blank slate, and its founder's
+    agent can draft one from the village's masterplan for the founder to publish
+  - members see a treasury chip
+- **Clearer setup errors.** A malformed `VILLAGE_SECRETS_KEY` is now named, with what is wrong
+  with it, before anything else.
+- **The web server framework (express) moved to 5.3.0**, which fixes a critical advisory in
+  how it reads proxy addresses (GHSA-jqcg-44mw-7w3h).
+- **Two security fixes in the village itself:**
+  - The public rules feed listed the blockchain RPC address together with its key. It now
+    withholds the key. If your village set one, rotate it.
+  - The page a member returns to after signing in now passes one strict rule
+    everywhere, so a crafted link cannot send them outside the village.
+- **Saberra villages** get a setup panel, a Sync now button and the service's
+  own names for its kinds.
+- **Dependency updates,** including the test runner, with no change a member
+  sees.
+
+### What you must do
+
+- **On one computer with `docker-compose.yml`:** set `VILLAGE_OS_IMAGE` in
+  `.env` to `ghcr.io/regen-civics/village-os:1.2.1`, then
+  `docker compose pull && docker compose up -d` (`docs/UPGRADING.md`).
+- **On a hosting provider:** change the image to
+  `ghcr.io/regen-civics/village-os:1.2.1` and redeploy.
+- **If you forked the repository:** point your `upstream` remote at
+  `https://github.com/ReGen-Civics/village-os.git`. The old address redirects,
+  but it is better not to depend on that.
+
+### Does it touch your data
+
+No. There is no database change between 1.2.0 and 1.2.1.
+
+### For operators
+
+- `release.yml` refuses a tag whose `docker-compose.yml` starts a different
+  image, because the starter kit carries that file, and prints the two values
+  the regencivics.earth card pins (`docs/RELEASING.md`, step 8).
+- `scripts/setup-prompt-contract.test.mjs` holds the setup prompt's single
+  `---` line, which that card's copy button depends on.
+
+---
+
 ## 1.2.0 (2026-10-03)
 
 **The release that makes a village yours to run.** Village OS is now public,

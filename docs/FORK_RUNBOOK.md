@@ -8,7 +8,7 @@ what, where, what breaks without it.
 ## Provisioning
 
 - Two self-host paths, both running the same image
-  (`ghcr.io/rieki777/village-os:<version>`; a village pins a release such as
+  (`ghcr.io/regen-civics/village-os:<version>`; a village pins a release such as
   `1.2.0`, `:stable` is the newest release, `:edge` is `main` and never for a
   village). **One machine:** `docker-compose.yml` (app + MySQL 8.4 + a volume
   at `/app/data`), `node scripts/fork-init.mjs --compose --village-name "..."
@@ -17,7 +17,7 @@ what, where, what breaks without it.
   the image, a volume at `/app/data`, and the values from `.env` pasted into
   the provider's variables by hand (`docs/PROVISIONING.md`). Seeds live in
   `server/seeds/`, never in `data/` (the volume shadows the image).
-- Nobody needs collaborator or write access to `Rieki777/village-os`. A
+- Nobody needs collaborator or write access to `ReGen-Civics/village-os`. A
   village that changes code forks it and deploys its fork; Railway then builds
   the repository's `Dockerfile` (`railway.toml`: `builder = "DOCKERFILE"`).
 - MySQL service on the private network; `DATABASE_URL` referenced on the app
@@ -1522,7 +1522,7 @@ code. Where a step needs a technical helper, that is called out.
 1. **Confirm the backup runs from a private repository.** The encrypted
    backup workflow (template `ops/backup/db-backup.yml`) uploads its dumps as
    workflow artifacts, and on a public repository anybody can download those
-   and read the logs. `Rieki777/village-os` is public on purpose, so the
+   and read the logs. `ReGen-Civics/village-os` is public on purpose, so the
    backup belongs in a private repository of the village's own. Check which it
    is: GitHub, that repository's page, Settings, General, "Danger Zone",
    "Change repository visibility". If the backup has been running from a

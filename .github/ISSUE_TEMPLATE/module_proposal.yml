@@ -9,9 +9,9 @@ body:
         week one is worth more than a polite queue.
 
         The binding document is
-        [the module library contract](https://github.com/Rieki777/village-os/blob/main/docs/MODULE_LIBRARY_CONTRACT.md).
+        [the module library contract](https://github.com/ReGen-Civics/village-os/blob/main/docs/MODULE_LIBRARY_CONTRACT.md).
         When you are ready to submit code, use the
-        [module listing pull request template](https://github.com/Rieki777/village-os/compare?template=module-listing.md).
+        [module listing pull request template](https://github.com/ReGen-Civics/village-os/compare?template=module-listing.md).
 
   - type: input
     id: capability

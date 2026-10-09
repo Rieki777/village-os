@@ -3,7 +3,7 @@
 # The contract other lanes code against, and it does not change without a note
 # in the fleet ledger (the maintainers' private operations repository):
 #
-#   image   ghcr.io/rieki777/village-os
+#   image   ghcr.io/regen-civics/village-os
 #   :<semver>   one immutable tag per release, e.g. :1.4.0. Cut by pushing an
 #               annotated git tag v1.4.0.
 #   :stable     moves to the newest non-prerelease semver. What a village
@@ -82,7 +82,7 @@ jobs:
       - id: decide
         name: Decide the tags
         env:
-          IMAGE: ghcr.io/rieki777/village-os
+          IMAGE: ghcr.io/regen-civics/village-os
           EVENT: ${{ github.event_name }}
           GIT_TAG: ${{ github.ref_name }}
           TAG_SHA: ${{ github.sha }}
@@ -170,10 +170,10 @@ jobs:
           fi
           # The starter kit carries docker-compose.yml, so its default image is
           # what a founder who unzips this release actually starts.
-          compose=$(grep -oE 'ghcr\.io/rieki777/village-os:[0-9A-Za-z.+-]+' docker-compose.yml | head -1 | cut -d: -f2)
+          compose=$(grep -oE 'ghcr\.io/regen-civics/village-os:[0-9A-Za-z.+-]+' docker-compose.yml | head -1 | cut -d: -f2)
           echo "docker-compose.yml default image ${compose}"
           if [ "$compose" != "$WANT" ]; then
-            echo "::error::docker-compose.yml starts ghcr.io/rieki777/village-os:${compose}, but this tag is ${WANT}. Set its default image to ${WANT}, let ci pass, and tag that commit."
+            echo "::error::docker-compose.yml starts ghcr.io/regen-civics/village-os:${compose}, but this tag is ${WANT}. Set its default image to ${WANT}, let ci pass, and tag that commit."
             exit 1
           fi
 
@@ -602,7 +602,7 @@ jobs:
             echo ""
             echo "**Run it yourself:** download \`${KIT}\` below, unzip it, and open START_HERE.md, or give FOUNDER_SETUP_PROMPT.md to your own AI assistant."
             echo ""
-            echo "**Image:** \`ghcr.io/rieki777/village-os:${VERSION}\`"
+            echo "**Image:** \`ghcr.io/regen-civics/village-os:${VERSION}\`"
           } >> notes.md
 
       - name: Publish the release

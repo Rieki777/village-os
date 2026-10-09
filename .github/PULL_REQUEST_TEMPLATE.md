@@ -1,6 +1,6 @@
 <!--
 Adding or changing a MODULE LISTING? Use the module template instead:
-https://github.com/Rieki777/village-os/compare?template=module-listing.md
+https://github.com/ReGen-Civics/village-os/compare?template=module-listing.md
 
 New here? CONTRIBUTING.md. Security problem? Do not open this. See SECURITY.md.
 -->

@@ -123,10 +123,10 @@ export const GO_LIVE_PREREQS: readonly GoLivePrereq[] = [
     when: "your village changes the platform's code",
     what:
       "Most villages never need this. Railway runs the published image, " +
-      "ghcr.io/rieki777/village-os pinned to a release, which needs no account and no access " +
+      "ghcr.io/regen-civics/village-os pinned to a release, which needs no account and no access " +
       "to any repository. A village that changes the code forks the public repository and " +
       "deploys its fork, and Railway then builds the repository's Dockerfile. Nobody needs " +
-      "access to Rieki777/village-os, and nobody asks ReGen Civics for it.",
+      "access to ReGen-Civics/village-os, and nobody asks ReGen Civics for it.",
     cost: "Free.",
     where: "github.com",
     certainty: "verified",
@@ -286,7 +286,7 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "Civics creates it and holds the deploy settings. Both paths end at the same running " +
       "platform.",
     points: [
-      "Create a Railway project. Its app service runs the published image, ghcr.io/rieki777/village-os, pinned to a release such as 1.2.0. Never :edge, which is the untested tip of the platform's main branch.",
+      "Create a Railway project. Its app service runs the published image, ghcr.io/regen-civics/village-os, pinned to a release such as 1.2.0. Never :edge, which is the untested tip of the platform's main branch.",
       "Nobody needs access to the platform repository for this. A village that changes the code forks the repository and connects its own fork as the service's source instead.",
       "On the ReGen-hosted path, confirm with them that the project exists before you go further.",
     ],

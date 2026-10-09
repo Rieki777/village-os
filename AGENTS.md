@@ -43,7 +43,7 @@ Three limits follow from the rule, and none of them bends:
 
 Never, whatever you are asked:
 
-- ask anybody for write access to `github.com/Rieki777/village-os`, or push to
+- ask anybody for write access to `github.com/ReGen-Civics/village-os`, or push to
   it. Nobody needs it to run a village. Changes to the platform are offered
   back by pull request from the founder's own fork.
 - run the `:edge` image for a village. It is the untested tip, for the
@@ -55,7 +55,7 @@ Never, whatever you are asked:
 
 - One Node 22 server and one MySQL 8 database. Photographs and documents live
   on a volume mounted at `/app/data`.
-- Published as one container image: `ghcr.io/rieki777/village-os:<version>`.
+- Published as one container image: `ghcr.io/regen-civics/village-os:<version>`.
   `:stable` is the newest release. Every village runs the same image; what
   differs is its database and its settings.
 - **The server applies every database migration itself, at boot, before it
@@ -78,7 +78,7 @@ Never, whatever you are asked:
 |---|---|---|
 | Good for | trying it on a laptop, or a small VPS you rent | a village that should stay up without a computer of its own |
 | Needs | Docker, Node 22 for one setup script, about 2 GB of memory | an account with the provider, a MySQL service, a volume |
-| Starts with | `docker compose up -d` | the image `ghcr.io/rieki777/village-os:1.2.0` |
+| Starts with | `docker compose up -d` | the image `ghcr.io/regen-civics/village-os:1.2.1` |
 | Guide | `START_HERE.md`, part A | `START_HERE.md`, part B, then `docs/PROVISIONING.md` |
 
 Either way the founder pays their own provider, if anybody. The software is
@@ -136,6 +136,6 @@ placeholders for its name, legal entity, data controller and contact, is in
 - `docs/UPGRADING.md`, `docs/RUNBOOK.md`: upgrades, and what to do when
   something is red.
 - `.env.example`: every setting, what it does, what breaks without it.
-- Questions and bugs: <https://github.com/Rieki777/village-os/issues>. Say what
+- Questions and bugs: <https://github.com/ReGen-Civics/village-os/issues>. Say what
   you did, what you expected and what you saw, never a secret.
 - About the project: <https://regencivics.earth/village-os>.

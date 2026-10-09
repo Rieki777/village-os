@@ -27,8 +27,8 @@ Amora is the first village to run on it. It is developed with ReGen Civics.
   into your own AI assistant and it guides you through every step.
 - **[AGENTS.md](AGENTS.md)**: the rules that assistant follows.
 - The starter kit (`village-os-starter-<version>.zip`), and the image
-  `ghcr.io/rieki777/village-os:<version>`, are on the
-  [releases page](https://github.com/Rieki777/village-os/releases).
+  `ghcr.io/regen-civics/village-os:<version>`, are on the
+  [releases page](https://github.com/ReGen-Civics/village-os/releases).
 
 A village runs one published image with its own database, domain and settings.
 Its name, words, pictures and modules are set in its own Admin after the first
@@ -49,7 +49,7 @@ reach villages in one of two ways:
 
 ## Get help
 
-- Questions, bugs and ideas: [GitHub issues](https://github.com/Rieki777/village-os/issues).
+- Questions, bugs and ideas: [GitHub issues](https://github.com/ReGen-Civics/village-os/issues).
   Say what you did and what you saw. Never paste a password or a key.
 - About the project: <https://regencivics.earth/village-os>.
 - A security problem: [SECURITY.md](SECURITY.md) has the private route. A
