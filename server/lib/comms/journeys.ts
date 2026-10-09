@@ -77,6 +77,7 @@ import {
   buildStepContent,
   factsProvidersFor,
   mergeFacts,
+  stepPostedHooksFor,
   type ContactView,
   type EnrollmentView,
   type GatheredFacts,
@@ -95,12 +96,15 @@ import { loadEmailVillage, renderTemplate, type EmailVillage } from "./render";
  */
 export {
   registerFactsProvider,
+  registerStepPosted,
   registerVarsBuilder,
   type EventFacts,
   type FactsProvider,
   type GatheredFacts,
   type JourneyContext,
   type StepContent,
+  type StepPostedContext,
+  type StepPostedHook,
   type VarsBuilder,
   type VarsContext,
 } from "./journeyRegistry";
@@ -411,7 +415,14 @@ async function advance(deps: TickDeps, row: EnrollmentRow, now: Date, cache: Tic
         expiresAt: expiryOf(definition, facts, due.at),
         urgent: due.step.urgent === true,
       });
-      if (result.status !== "duplicate") summary.posted += 1;
+      if (result.status !== "duplicate") {
+        summary.posted += 1;
+        for (const hook of stepPostedHooksFor(definition.kind)) {
+          await Promise.resolve(hook({ ...ctx, facts, step: due.step, village, result })).catch((err) =>
+            console.error(`[comms] after journey step ${definition.key}/${due.key} for enrollment ${row.id}, a hook failed`, err),
+          );
+        }
+      }
     } catch (err) {
       fault = true;
       console.error(`[comms] journey step ${definition.key}/${due.key} for enrollment ${row.id} could not be posted, so it is tried again shortly`, err);

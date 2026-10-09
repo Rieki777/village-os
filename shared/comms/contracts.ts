@@ -114,7 +114,16 @@ export type CommsTrigger =
     }
   | { type: "form_submitted"; formType: string; submissionId: string; email: string | null; name: string | null; consentPaths: boolean }
   | { type: "submission_status"; submissionId: string; formType: string; status: string }
-  | { type: "housing_status"; reservationId: string; status: string; email: string | null }
+  | {
+      type: "housing_status";
+      reservationId: string;
+      status: string;
+      email: string | null;
+      /** The name on a new request, for the path's welcome (5.11). */
+      name?: string | null;
+      /** A new request whose "walk me through the next steps" box was ticked. */
+      consentPaths?: boolean;
+    }
   | { type: "member_joined"; userId: string }
   | { type: "member_admitted"; userId: string }
   | { type: "stage_advanced"; userId: string; stage: string };
@@ -328,6 +337,14 @@ export interface JourneyDefinition {
   version: number;
   steps: JourneyStep[];
   stops: StopKey[];
+  /**
+   * Path journeys only (5.11), both off unless a village turns them on.
+   * `includeExisting`: members already on the path when comms arrived (the
+   * backfill) are walked through it too. `rungEmails`: a move up the path's
+   * ladder posts "you reached X, here is the next step".
+   */
+  includeExisting?: boolean;
+  rungEmails?: boolean;
 }
 
 // ── What an enrollment is about ─────────────────────────────────────────────

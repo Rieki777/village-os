@@ -30,6 +30,7 @@
 import type { Express } from "express";
 import { register as registerMembers, type MemberDeps } from "./commsMembers";
 import { registerPublic as registerPeoplePublic, type PublicDeps } from "./commsPeople";
+import { registerPublic as registerPathsPublic } from "./commsPaths";
 
 type Deps = PublicDeps & MemberDeps;
 
@@ -39,4 +40,7 @@ export function register(app: Express, deps: Deps): void {
   // (5.13). Unlike the routes above it is module-gated, one route at a time,
   // because it shows the automations themselves (server/routes/commsMembers.ts).
   registerMembers(app, deps);
+
+  // The paths lane's public reads: the consent words a path form shows (server/routes/commsPaths.ts).
+  registerPathsPublic(app, deps);
 }

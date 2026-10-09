@@ -579,6 +579,22 @@ const LETTERS: DefaultTemplate[] = [
   words("letter.layout", "{{letter.subject}}", "{{letter.preheader}}", "{{letter.body}}"),
 ];
 
+/**
+ * A step up a path's ladder (5.11, rung emails). Sent only where a village
+ * turns rung emails on for a path, and only for a move up.
+ */
+const PATH_RUNG: DefaultTemplate[] = [
+  words(
+    "path.rung",
+    "You reached {{path.rung}} on the {{path.name}} path",
+    "Here's the next step.",
+    HI,
+    "You've reached {{path.rung}} on the {{path.name}} path. Here's the next step: {{path.nextStep}}.",
+    "[Take the next step]({{path.nextStepLink}})",
+    "If a question comes up, reply to this email and {{path.contactName}} will write back.",
+  ),
+];
+
 export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
   ...GATHERINGS,
   ...TIME_VOTES,
@@ -588,6 +604,7 @@ export const DEFAULT_TEMPLATES: readonly DefaultTemplate[] = [
   ...PROSPERITY,
   ...MEMBERS,
   ...LETTERS,
+  ...PATH_RUNG,
 ];
 
 export const DEFAULT_TEMPLATES_BY_KEY: Readonly<Record<string, DefaultTemplate>> = Object.fromEntries(
@@ -755,6 +772,7 @@ export function templateGroups(pathIds: readonly string[] = DEFAULT_PATH_IDS): T
     ...pathIds.map((id) => ({ id: `path.${id}`, title: `${pathTitle(id)} path`, journeyKey: `path.${id}`, keys: pathSteps(id) })),
     { id: "member.welcome", title: "New members", journeyKey: "member.welcome", keys: ["member.welcome.day0", "member.welcome.first_quest", "member.welcome.meet_us", "member.welcome.check_in"] },
     { id: "joining.request", title: "Asking to join", journeyKey: "joining.request", keys: ["joining.received", "joining.meet_us", "joining.check_in"] },
+    { id: "path.rung", title: "A step up a path", journeyKey: null, keys: ["path.rung"] },
     { id: "letters", title: "Letters", journeyKey: null, keys: ["letters.confirm", "letter.layout"] },
   ];
 }
@@ -785,6 +803,7 @@ export function templateLabel(key: string): string {
     "joining.check_in": "Day 14, still with us",
     "letters.confirm": "Confirm letters",
     "letter.layout": "Every letter",
+    "path.rung": "A step up a path",
   };
   if (fixed[key]) return fixed[key];
   const step = key.match(PATH_KEY)?.[2] as PathStepKey | undefined;

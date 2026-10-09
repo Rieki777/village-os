@@ -23,6 +23,8 @@ const SPEC_TEMPLATE_KEYS = [
   "member.welcome.day0", "member.welcome.first_quest", "member.welcome.meet_us", "member.welcome.check_in",
   "joining.received", "joining.meet_us", "joining.check_in",
   "letters.confirm", "letter.layout",
+  // 5.11, rung emails: "you reached X, here is the next step".
+  "path.rung",
 ];
 
 /**

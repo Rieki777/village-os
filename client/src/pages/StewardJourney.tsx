@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import { useVillageLinks } from "@/lib/gameApi";
 import { altOr, useBrandImages } from "@/lib/gameApi";
 import FaqSection from "@/components/FaqSection";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
@@ -663,6 +664,7 @@ function StewardNextStepForm() {
   // would-be steward to a different village's calendar.
   const { eventsUrl } = useVillageLinks();
   const [form, setForm] = useState({ name: "", email: "", gifts: "", question: "" });
+  const [consent, setConsent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -675,7 +677,7 @@ function StewardNextStepForm() {
       const res = await fetch("/api/forms/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "steward-interest", data: form }),
+        body: JSON.stringify({ type: "steward-interest", data: { ...form, [FORM_CONSENT_FIELD]: consent } }),
       });
       if (!res.ok) throw new Error("Submission failed");
       setSubmitted(true);
@@ -783,6 +785,8 @@ function StewardNextStepForm() {
           placeholder="Share what resonated, what you're looking for, or any questions on your heart..."
         />
       </div>
+
+      <PathConsentBox checked={consent} onChange={setConsent} />
 
       <AnimatePresence>
         {error && (

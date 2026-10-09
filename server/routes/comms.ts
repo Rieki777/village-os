@@ -41,10 +41,11 @@ import { register as registerSentMailRoutes } from "./commsSent";
 import { register as registerJourneys, journeysTickDeps } from "./commsJourneys";
 import { runTimePollsNow, timePollDepsOf } from "./commsPolls";
 import { register as registerLetters, runLettersNow } from "./commsLetters";
+import { register as registerPaths } from "./commsPaths";
 
 type Deps = Pick<
   AppDeps,
-  "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice" | "members" | "adminActor"
+  "authedUser" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice" | "members" | "adminActor" | "notify" | "lapseContext"
 > &
   Omit<CommsSettingsDeps, "jobs">;
 
@@ -126,4 +127,6 @@ export function register(app: Express, deps: Deps): void {
 
   // Letters, and each journey step's outcomes (server/routes/commsLetters.ts).
   registerLetters(app, deps);
+  // Paths: the path journeys' options, and the paths lane's rules, values and hand-off (server/routes/commsPaths.ts).
+  registerPaths(app, deps);
 }

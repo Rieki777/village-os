@@ -49,6 +49,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
+import { FORM_CONSENT_FIELD } from "../../shared/comms/contracts";
 import {
   allHomeTypes,
   allRows as housingRows,
@@ -399,7 +400,7 @@ export function register(app: Express, deps: Deps): void {
       userId: user?.id ?? null,
     });
     // A new reservation is written as `new` (drizzle/0077's default).
-    commsSink.fire({ type: "housing_status", reservationId: id, status: "new", email });
+    commsSink.fire({ type: "housing_status", reservationId: id, status: "new", email, name, consentPaths: b[FORM_CONSENT_FIELD] === true });
 
     /*
      * The village's own history. Audience 'admin', because the text carries a
