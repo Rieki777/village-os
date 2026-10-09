@@ -36,6 +36,7 @@ import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
 // Village Comms (5.8, 5.9): a visitor's guest door, and the host's recap after it begins.
 import GuestRsvpForm from "@/components/comms/GuestRsvpForm";
 import HostRecapPanel, { hostToolsFor, recapLinkIn } from "@/components/comms/HostRecapPanel";
+import TimePollPanel from "@/components/comms/TimePollPanel";
 import {
   DEFAULT_ANCHOR,
   addDays,
@@ -309,6 +310,7 @@ export default function Events() {
           )}
         </div>
         {g.description && <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{g.description}</p>}
+        {g.timePoll && <TimePollPanel item={g} onChanged={reload} />}
         {rsvpButtons(g)}
         {/* Village Comms: shown only to people who manage gatherings. */}
         {(g.kind === "gathering" || g.kind === "festival") && <GatheringEmailSettings eventId={g.id} />}

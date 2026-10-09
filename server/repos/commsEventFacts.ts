@@ -49,12 +49,3 @@ export async function recapSentFor(pool: Pool, eventId: string, occurrenceKey: s
   );
   return rows[0] ? String(rows[0].state) === "sent" : false;
 }
-
-/** The gathering's time vote while it is open, or null when there is none or it has closed. */
-export async function openTimePollOf(pool: Pool, eventId: string): Promise<{ mode: string; freezeHours: number } | null> {
-  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: one poll by its unique event key
-    "SELECT mode, freeze_hours FROM event_time_polls WHERE event_id = ? AND state = 'open' LIMIT 1",
-    [eventId],
-  );
-  return rows[0] ? { mode: String(rows[0].mode), freezeHours: Number(rows[0].freeze_hours) } : null;
-}

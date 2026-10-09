@@ -356,7 +356,11 @@ async function confirmationHold(run: Run, g: GatheringSnapshot, promoted: boolea
   if (promoted) return "promoted";
   if (!notEnded(g, run.now)) return "over";
   if (!(await journeyIsOn(run.pool, GATHERING_GOING_JOURNEY))) return "journey_off";
-  if (await openTimePollMode(run.pool, g.eventId)) return "time_still_being_voted";
+  // A one-off vote holds it: the time is not known yet, and the vote's "the
+  // time is set" email goes to everybody who said yes when it locks. A weekly
+  // vote never locks, so holding would mean no confirmation at all; it goes
+  // now, and a move sends its own email with the new time.
+  if ((await openTimePollMode(run.pool, g.eventId)) === "once") return "time_still_being_voted";
   return null;
 }
 
@@ -609,9 +613,13 @@ export async function onGatheringChanged(
   run: Run,
   eventId: string,
   fields: ReadonlyArray<"time" | "place" | "online" | "title">,
+  cause?: "time_vote",
 ): Promise<{ touched: number; changed: number; cancelledEvenings: number }> {
   const touched = await touch({ getPool: () => run.pool }, subjectRef.eventPrefix(eventId));
   const result = { touched, changed: 0, cancelledEvenings: 0 };
+  // A vote moved it: everybody is re-planned above, and the vote's own "the
+  // time is set" email (server/lib/comms/timePolls.ts) is the one they get.
+  if (cause === "time_vote") return result;
   const row = await getCalendarRow(run.pool, eventId);
   if (!row || (row.status !== "scheduled" && row.status !== "postponed")) return result;
   if (!fields.includes("time") && !fields.includes("place")) return result;
@@ -758,7 +766,7 @@ export async function handleGatheringTrigger(deps: EventEmailDeps, t: GatheringT
     case "waitlist_promoted":
       return onWaitlistPromoted(run, t.eventId, t.occurrenceKey, t.personKey);
     case "gathering_changed":
-      return onGatheringChanged(run, t.eventId, t.fields);
+      return onGatheringChanged(run, t.eventId, t.fields, t.cause);
     case "gathering_cancelled":
       return onGatheringCancelled(run, t.eventId);
     case "gathering_published":

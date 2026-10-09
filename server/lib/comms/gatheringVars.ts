@@ -32,6 +32,7 @@ import type { Pool } from "mysql2/promise";
 import type { MergeValues } from "../../../shared/comms/mergeFields";
 import { gatheringWhen } from "../../../shared/comms/mergeFields";
 import { contactIdOfGuestKey } from "../../../shared/comms/kinds";
+import { recapComposerPath } from "../../../shared/comms/recap";
 import type { AttendanceMode, CalendarKind, CalendarLayer, EventStatus } from "../../../shared/gatherings";
 import { zonedTimeToUtc } from "../../../shared/lunar";
 import { expandOccurrences, getCalendarRow, type CalendarRow, type Occurrence } from "../calendar";
@@ -277,7 +278,8 @@ export async function gatheringValues(pool: Pool, g: GatheringSnapshot, input: G
     "gathering.calendarLinks": { links: calendarLinks(icsGatheringOf(g, input.origin, input.villageZone)) },
     "gathering.hostName": hostName ?? "",
     "gathering.description": g.description && g.description.trim() ? { markdown: g.description } : null,
-    "gathering.recapLink": page,
+    // The host's composer for this very evening (C3's panel opens from it).
+    "gathering.recapLink": `${bare(input.origin)}${recapComposerPath(g.eventId, g.occurrenceKey)}`,
   };
   if (input.personKey) {
     const link = cantMakeItLink(input.origin, { ...g, personKey: input.personKey }, input.now);

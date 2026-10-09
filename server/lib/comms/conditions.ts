@@ -36,9 +36,10 @@
 import type { ConditionKey, StopKey } from "../../../shared/comms/contracts";
 import { signedUpLate } from "../../../shared/comms/journeyPlan";
 import { PERMISSION_KINDS, type PermissionKind, type PermissionState } from "../../../shared/comms/kinds";
-import { goingCountOf, openTimePollOf, recapSentFor, rsvpStatusOf } from "../../repos/commsEventFacts";
+import { goingCountOf, recapSentFor, rsvpStatusOf } from "../../repos/commsEventFacts";
 import type { GatheredFacts, JourneyContext } from "./journeyRegistry";
 import { isSuppressed } from "./suppressions";
+import { timeStillBeingVoted } from "./timePollSummary";
 
 /** A person's answer about one kind of email, as the people lane reads it (`answerFor`). */
 export interface PermissionView {
@@ -111,8 +112,6 @@ export async function answerConditions<K extends RuleKey>(keys: readonly K[], ct
 
 // ── The answers this lane gives ─────────────────────────────────────────────
 
-const HOUR = 3_600_000;
-
 /** The gathering occurrence the event provider found, or null for a journey about something else. */
 const eventOf = (ctx: ConditionContext) => ctx.facts.event ?? null;
 
@@ -125,11 +124,8 @@ const eventOf = (ctx: ConditionContext) => ctx.facts.event ?? null;
 registerCondition("time_still_being_voted", async (ctx) => {
   const ev = eventOf(ctx);
   if (!ev || !ev.found) return false;
-  const poll = await openTimePollOf(ctx.getPool(), ev.eventId);
-  if (!poll) return false;
-  if (poll.mode !== "weekly") return true;
-  if (!ev.startsAt) return true;
-  return ev.startsAt.getTime() > ctx.now.getTime() + Math.max(0, poll.freezeHours) * HOUR;
+  // One rule for the whole build: the time vote lane's (server/lib/comms/timePollSummary.ts).
+  return timeStillBeingVoted(ctx.getPool(), { eventId: ev.eventId, startsAt: ev.startsAt, now: ctx.now });
 });
 
 /** They said yes less than 36 hours before the start, so the day-before reminder is noise. */

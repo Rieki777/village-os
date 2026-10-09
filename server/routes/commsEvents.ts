@@ -3,10 +3,11 @@
  * the time vote, the recap, attendance, and the gathering's own email
  * settings (the comms build spec 5.7 to 5.10).
  *
- * STUBS FROM THE FOUNDATION LANE, each answering 501 with a sentence. The
- * event email lane (C2), the guests and recaps lane (C3) and the time vote
- * lane (C4) fill them in, here. Guests, attendance and the recap are
- * server/routes/commsGuests.ts, registered first below.
+ * Each lane's routes live in their own file and register from here, behind
+ * the same gate: the gathering's email settings (C2,
+ * server/routes/commsGatherings.ts), guests, attendance and the recap (C3,
+ * server/routes/commsGuests.ts), and the time vote (C4,
+ * server/routes/commsPolls.ts).
  *
  * ── WHERE THIS IS REGISTERED, AND WHY IT MUST STAY THERE ───────────────────
  *
@@ -25,30 +26,21 @@
  * per-address one with the form, 5.8). Every other write here is a member's
  * or a host's, so it refuses somebody signed out before anything else.
  */
-import type { Express, Response } from "express";
+import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { register as registerGatheringRoutes, type GatheringRoutesDeps } from "./commsGatherings";
 import { register as registerGuestRoutes, type CommsGuestsDeps } from "./commsGuests";
+import { register as registerTimePolls, type PollRouteDeps } from "./commsPolls";
 
-type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & GatheringRoutesDeps & CommsGuestsDeps;
-
-const notYet = (res: Response, what: string) =>
-  res.status(501).json({ error: `${what} for a gathering is being built.` });
-
-const signedOut = (res: Response) => res.status(401).json({ error: "Sign in first" });
+type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & GatheringRoutesDeps & CommsGuestsDeps & PollRouteDeps;
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser } = deps;
-
   // A gathering's own email settings, its join link, and "can't make it" (lane C2).
   registerGatheringRoutes(app, deps);
 
   // Guests, attendance and the recap (the guests and recaps lane, C3).
   registerGuestRoutes(app, deps);
 
-  app.get("/api/events/:id/time-poll", (_req, res) => notYet(res, "Voting on a time"));
-  app.post("/api/events/:id/time-poll", async (req, res) => {
-    if (!(await authedUser(req))) return signedOut(res);
-    notYet(res, "Voting on a time");
-  });
+  // The live time vote (C4, 5.10).
+  registerTimePolls(app, deps);
 }

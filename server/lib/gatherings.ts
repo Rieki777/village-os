@@ -245,11 +245,17 @@ export async function createGathering(
 /**
  * Patch a gathering. Only keys actually present are written, so a caller
  * sending `{status}` cannot blank a description it never loaded.
+ *
+ * `opts.cause` names who made the edit when it was not a person at the
+ * editor: the live time vote passes `time_vote`, and the comms trigger
+ * carries it, so the vote's moves are ordinary edits for the seat fees, the
+ * queue and the calendar while the vote sends its own words about them.
  */
 export async function updateGathering(
   pool: Pool,
   id: string,
   patch: Partial<GatheringInput>,
+  opts: { cause?: "time_vote" } = {},
 ): Promise<CalendarItem | null> {
   const sets: string[] = [];
   const params: any[] = [];
@@ -338,7 +344,7 @@ export async function updateGathering(
     }
   }
   const after = await getGathering(pool, id);
-  for (const t of gatheringTriggers(id, before, after)) commsSink.fire(t);
+  for (const t of gatheringTriggers(id, before, after, opts.cause)) commsSink.fire(t);
   return after;
 }
 

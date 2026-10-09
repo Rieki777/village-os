@@ -214,6 +214,10 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // before it does. Same family, same preference; it clears the daily cap
     // (`clearsDailyEmailCap`) and nothing else.
     case "season_ending":
+    // Village Comms 5.10: a host asked you to pick the times you can make for
+    // a gathering. A vote you are invited to is the same conversation as a
+    // ballot opening, so it rides the same preference and needs no new knob.
+    case "time_poll_open":
       return p.governanceEmail;
     // A lunation's pool landed in somebody's wallet. Fixed daily for the
     // same reason stage_advanced is: welcome, never urgent, and nobody is

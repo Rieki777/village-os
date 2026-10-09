@@ -89,7 +89,18 @@ export interface PostResult {
 export type CommsTrigger =
   | { type: "rsvp_changed"; eventId: string; occurrenceKey: string; personKey: string; status: "going" | "maybe" | "declined" | "withdrawn" }
   | { type: "waitlist_joined" | "waitlist_promoted"; eventId: string; occurrenceKey: string; personKey: string }
-  | { type: "gathering_changed"; eventId: string; fields: Array<"time" | "place" | "online" | "title"> }
+  | {
+      type: "gathering_changed";
+      eventId: string;
+      fields: Array<"time" | "place" | "online" | "title">;
+      /**
+       * Set when the gathering's live time vote moved it (5.10). The vote
+       * sends its own words ("the time is set", "new time"), so a handler
+       * that writes "changed" to everyone going skips a change carrying this,
+       * and still re-plans reminders and bumps the calendar sequence.
+       */
+      cause?: "time_vote";
+    }
   | { type: "gathering_cancelled" | "gathering_published"; eventId: string }
   | {
       type: "path_joined" | "path_left";
@@ -171,8 +182,15 @@ export interface GatheringShape {
  *
  * A draft edited and left a draft says nothing: nobody has been told it
  * exists.
+ *
+ * `cause` rides on a `changed` trigger when the time vote made the edit.
  */
-export function gatheringTriggers(eventId: string, before: GatheringShape | null, after: GatheringShape | null): CommsTrigger[] {
+export function gatheringTriggers(
+  eventId: string,
+  before: GatheringShape | null,
+  after: GatheringShape | null,
+  cause?: "time_vote",
+): CommsTrigger[] {
   if (!before || !after) return [];
   const live = (s: string) => s === "scheduled" || s === "postponed";
   if (after.status === "cancelled" && before.status !== "cancelled") return [{ type: "gathering_cancelled", eventId }];
@@ -193,7 +211,8 @@ export function gatheringTriggers(eventId: string, before: GatheringShape | null
   }
   if (!same(before.onlineUrl, after.onlineUrl) || before.attendanceMode !== after.attendanceMode) fields.push("online");
   if (before.title !== after.title) fields.push("title");
-  return fields.length ? [{ type: "gathering_changed", eventId, fields }] : [];
+  if (!fields.length) return [];
+  return [cause ? { type: "gathering_changed", eventId, fields, cause } : { type: "gathering_changed", eventId, fields }];
 }
 
 // ── Journeys ────────────────────────────────────────────────────────────────
