@@ -174,6 +174,17 @@ export function reminderStepsOf(def: Pick<JourneyDefinition, "steps">): JourneyS
   return def.steps.filter((s) => s.anchor === "event_start" && s.offsetMinutes < 0);
 }
 
+/**
+ * The reminder times a journey's own steps carry, in minutes before the start.
+ * This is what "default" means for a gathering: the village's journey. While
+ * the village has not edited the journey, the engine builds those steps from
+ * the reminder dial (`withReminderDials`, ./journeySteps.ts), so the dial is
+ * heard; once an admin edits a reminder on the Journeys screen, the edit is.
+ */
+export function journeyReminderMinutes(def: Pick<JourneyDefinition, "steps">): number[] {
+  return sortedReminders(reminderStepsOf(def).map((s) => -s.offsetMinutes));
+}
+
 /** One extra reminder, for a time none of the journey's own steps sits at. */
 export function extraReminderStep(minutes: number): JourneyStep {
   const soon = minutes <= SOON_REMINDER_MAX_MINUTES;

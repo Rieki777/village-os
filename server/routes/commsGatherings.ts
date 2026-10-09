@@ -26,6 +26,8 @@ import { capabilityDecision } from "../../shared/capabilities";
 import {
   effectiveGuests,
   effectiveReminders,
+  GATHERING_GOING_JOURNEY,
+  journeyReminderMinutes,
   guestSettingFromColumn,
   guestSettingToColumn,
   reminderSettingFromColumn,
@@ -38,6 +40,7 @@ import { canViewRow, getCalendarRow } from "../lib/calendar";
 import { registerAction } from "../lib/comms/actions";
 import { cantMakeItAction } from "../lib/comms/cantMakeIt";
 import { afterSettingsChange, villageReminderMinutes } from "../lib/comms/eventEmails";
+import { journeyStatus } from "../lib/comms/journeyDefinitions";
 import { gatheringUrl, hostUserIdOf, memberName } from "../lib/comms/gatheringVars";
 import { effectiveLifecycle } from "../lib/modules";
 import { boolVar } from "../lib/variables";
@@ -80,7 +83,9 @@ export function register(app: Express, deps: GatheringRoutesDeps): void {
     const stored = await readEventComms(pool, eventId);
     const reminders = reminderSettingFromColumn(stored.reminders);
     const guests = guestSettingFromColumn(stored.guests);
-    const villageMinutes = villageReminderMinutes();
+    // The village's times are its journey's: the dial until an admin edits a reminder on the Journeys screen.
+    const going = await journeyStatus({ getPool }, GATHERING_GOING_JOURNEY);
+    const villageMinutes = going ? journeyReminderMinutes(going.definition) : villageReminderMinutes();
     const villageGuests = boolVar("comms.guests_default");
     const host = await hostUserIdOf(pool, eventId);
     const candidates = [

@@ -202,7 +202,7 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the foundation", () => {
     const run = await call("POST", "/api/admin/comms/run", { body: { job: "drain" } });
     expect(run.status, JSON.stringify(run.json)).toBe(200);
     expect(run.json).toMatchObject({ job: "drain", summary: { sent: 0, failed: 0, skipped: 0, expired: 0, requeued: 0 } });
-    expect((await call("POST", "/api/admin/comms/run", { body: { job: "journeys" } })).json?.summary).toEqual({ checked: 0, posted: 0, stopped: 0 });
+    expect((await call("POST", "/api/admin/comms/run", { body: { job: "journeys" } })).json?.summary).toMatchObject({ checked: 0, posted: 0, stopped: 0 });
     expect((await call("POST", "/api/admin/comms/run", { body: { job: "everything" } })).status).toBe(400);
     expect((await call("POST", "/api/admin/comms/run", { body: { job: "drain" }, token: null })).status).toBe(403);
   });

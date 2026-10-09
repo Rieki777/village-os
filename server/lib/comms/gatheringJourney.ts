@@ -31,6 +31,7 @@ import { addressOfSender } from "../../../shared/comms/address";
 import {
   effectiveReminders,
   GATHERING_GOING_JOURNEY,
+  journeyReminderMinutes,
   reminderPlan,
   reminderSettingFromColumn,
   type GatheringReminderFacts,
@@ -62,6 +63,7 @@ export interface VarsContextLike extends JourneyContextLike {
 }
 
 export interface GatheringFactsAnswer {
+  [field: string]: unknown;
   stepOverrides?: Record<string, GatheringStepOverride>;
   extraSteps?: JourneyStep[];
   personKey?: string | null;
@@ -75,8 +77,6 @@ export interface StepContentLike {
 export interface GatheringJourneyDeps {
   getPool(): Pool;
   postOffice: Pick<PostOfficeDeps, "origin" | "sender">;
-  /** The village's reminder times in minutes: `villageReminderMinutes` in ./eventEmails.ts reads the dial. */
-  reminderMinutes(): number[];
 }
 
 /** `event:<id>:<occ>` read back into its two parts, or null for another subject. */
@@ -90,9 +90,13 @@ const personKeyOf = (ctx: JourneyContextLike & { facts?: Record<string, unknown>
   return typeof from === "string" && from ? from : null;
 };
 
-/** The gathering's reminder times and the waitlist's confirmation skip, for one enrollment. */
+/**
+ * The gathering's reminder times and the waitlist's confirmation skip, for one
+ * enrollment. A gathering on "default" keeps the journey's own reminder times
+ * (`journeyReminderMinutes`): the dial while the journey is unedited, the
+ * admin's edit once it is. "Off" and "custom" are the host's, and win.
+ */
 export async function gatheringFactsFor(
-  deps: Pick<GatheringJourneyDeps, "reminderMinutes">,
   pool: Pool,
   definition: Pick<JourneyDefinition, "key" | "steps">,
   subject: string,
@@ -101,7 +105,7 @@ export async function gatheringFactsFor(
   const ev = eventSubjectOf(subject);
   if (!ev || definition.key !== GATHERING_GOING_JOURNEY) return { stepOverrides: {}, extraSteps: [] };
   const setting = reminderSettingFromColumn((await readEventComms(pool, ev.eventId)).reminders);
-  const plan = reminderPlan(effectiveReminders(setting, deps.reminderMinutes()), definition);
+  const plan = reminderPlan(effectiveReminders(setting, journeyReminderMinutes(definition)), definition);
   if (stored.promoted === true) plan.stepOverrides.confirm = { skip: true };
   return plan;
 }
@@ -110,7 +114,7 @@ export async function gatheringFactsFor(
 export function gatheringFactsProvider(deps: GatheringJourneyDeps) {
   return async (ctx: JourneyContextLike): Promise<GatheringFactsAnswer> => {
     if (ctx.definition.key !== GATHERING_GOING_JOURNEY) return {};
-    const plan = await gatheringFactsFor(deps, ctx.getPool(), ctx.definition, ctx.enrollment.subjectRef, ctx.enrollment.stored);
+    const plan = await gatheringFactsFor(ctx.getPool(), ctx.definition, ctx.enrollment.subjectRef, ctx.enrollment.stored);
     return { ...plan, personKey: personKeyOf(ctx) };
   };
 }

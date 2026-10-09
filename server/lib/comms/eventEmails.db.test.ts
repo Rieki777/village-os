@@ -296,7 +296,7 @@ describe.skipIf(!configured)("event emails", () => {
       expect(f.extraSteps).toEqual([]);
     }
     // And the live provider says the same to the engine.
-    const provide = gatheringFactsProvider({ getPool: () => pool, postOffice: office(), reminderMinutes: () => [1440, 120] });
+    const provide = gatheringFactsProvider({ getPool: () => pool, postOffice: office() });
     const answer = await provide({
       getPool: () => pool,
       now: new Date(),
@@ -309,7 +309,7 @@ describe.skipIf(!configured)("event emails", () => {
   });
 
   it("gives the journey engine every gathering field, and the .ics with the confirmation", async () => {
-    const build = gatheringVarsBuilder({ getPool: () => pool, postOffice: office(), reminderMinutes: () => [1440, 120] });
+    const build = gatheringVarsBuilder({ getPool: () => pool, postOffice: office() });
     const ctx = {
       getPool: () => pool,
       now: new Date(),

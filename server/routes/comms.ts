@@ -38,6 +38,7 @@ import { register as registerCommsSettings, type CommsSettingsDeps } from "./com
 import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
 import { register as registerWords } from "./commsWords";
 import { register as registerSentMailRoutes } from "./commsSent";
+import { register as registerJourneys, journeysTickDeps } from "./commsJourneys";
 
 type Deps = Pick<
   AppDeps,
@@ -57,7 +58,7 @@ export function register(app: Express, deps: Deps): void {
 
   const runners: Record<CommsJob, () => Promise<Record<string, number>>> = {
     drain: () => drain(commsPostOffice),
-    journeys: () => tick({ getPool }),
+    journeys: () => tick(journeysTickDeps(deps)),
     // The time vote lane (C4) supplies the real job; until then it has nothing to lock.
     polls: async () => ({ locked: 0, applied: 0 }),
   };
@@ -116,4 +117,7 @@ export function register(app: Express, deps: Deps): void {
 
   // Words: every email's words, versions, preview and test (server/routes/commsWords.ts).
   registerWords(app, deps);
+
+  // Journeys: the timeline, on and off, step edits, walk-through, and the tick's job (server/routes/commsJourneys.ts).
+  registerJourneys(app, deps);
 }

@@ -636,6 +636,8 @@ import { createPermissionFor, suppressionsPortFor } from "./lib/comms/permission
 import { sweepCommsRetention } from "./lib/comms/retention";
 import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
+import { registerGatheringJourneyParts } from "./lib/comms/gatheringJourney";
+import { registerFactsProvider, registerVarsBuilder } from "./lib/comms/journeys";
 import { formSubmittedTrigger } from "../shared/comms/contracts";
 import { backfillContacts } from "./lib/comms/backfill";
 import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
@@ -1301,6 +1303,7 @@ const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, cop
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
 const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
 commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice }));
+registerGatheringJourneyParts({ registerFactsProvider, registerVarsBuilder }, { getPool, postOffice: commsPostOffice });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
 /**

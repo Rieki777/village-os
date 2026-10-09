@@ -6,6 +6,7 @@ import {
   extraReminderStep,
   guestSettingFromColumn,
   guestSettingToColumn,
+  journeyReminderMinutes,
   parseReminderDial,
   reminderLabel,
   reminderListProblem,
@@ -65,6 +66,18 @@ describe("a gathering's reminder times, as the planner reads them", () => {
     const plan = reminderPlan([2880, 120], edited);
     expect(plan.stepOverrides).toEqual({ day: { skip: false }, soon: { skip: false } });
     expect(plan.extraSteps).toEqual([]);
+  });
+
+  it("keeps an admin's edited reminder for a gathering on default, where the dial would have moved it", () => {
+    // The dial says 1440,120; the village moved its day-before reminder to two days on the Journeys screen.
+    const edited = { steps: going.steps.map((s) => (s.key === "day" ? { ...s, offsetMinutes: -2880 } : s)) };
+    expect(journeyReminderMinutes(edited)).toEqual([2880, 120]);
+    const plan = reminderPlan(effectiveReminders({ mode: "default" }, journeyReminderMinutes(edited)), edited);
+    expect(plan.stepOverrides).toEqual({ day: { skip: false }, soon: { skip: false } });
+    expect(plan.extraSteps).toEqual([]);
+    // A host's own choice still wins over the journey.
+    const off = reminderPlan(effectiveReminders({ mode: "off" }, journeyReminderMinutes(edited)), edited);
+    expect(off.stepOverrides).toEqual({ day: { skip: true }, soon: { skip: true } });
   });
 
   it("offers only times whose words fit them in the picker", () => {
