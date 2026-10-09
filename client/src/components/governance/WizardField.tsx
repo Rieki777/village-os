@@ -45,6 +45,8 @@ export interface MechanicsVariableLite {
   choices: Array<{ value: string; label: string }> | null;
   value: string;
   ring: "open" | "founder";
+  /** The server held the value back because it can carry a key. */
+  withheld?: boolean;
 }
 
 const inputClass =
@@ -458,7 +460,7 @@ function ChangeSetField({
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs text-stone-600">
-                    now <strong className="tabular-nums text-stone-800">{dial?.value ?? "?"}</strong>
+                    now <strong className="tabular-nums text-stone-800">{dial?.withheld ? "kept private" : dial?.value ?? "?"}</strong>
                     {dial?.unit ? ` ${dial.unit}` : ""}
                   </span>
                   <span className="text-xs text-stone-400" aria-hidden="true">

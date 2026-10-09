@@ -136,7 +136,9 @@ export function searchHits(data: Pick<PowerData, "circles" | "roles">, query: st
        * `holders` arrives empty for a reader without `map.viewPeople`, so the
        * name half is absent rather than wrong, and the count carries it.
        */
-      const named = s.holders.map((h) => h.name).filter(Boolean) as string[];
+      // An agent's row carries a vendor's product name, so it is "an agent"
+      // here, the words the seat card uses, and never a person's name.
+      const named = s.holders.map((h) => (h.isAgent ? "an agent" : h.name)).filter(Boolean) as string[];
       const where = s.circleId ? circleName.get(s.circleId) : null;
       const who = s.vacant
         ? "open call"
@@ -155,7 +157,9 @@ export function searchHits(data: Pick<PowerData, "circles" | "roles">, query: st
       });
     }
     for (const h of s.holders) {
-      if (!h.name) continue;
+      // A person hit filters the map to whoever it names; an agent is not a
+      // person, and its served name is a vendor's.
+      if (!h.name || h.isAgent) continue;
       if (h.name.toLowerCase().includes(q)) {
         scored.push({
           score: h.name.toLowerCase().startsWith(q) ? 3 : 2,

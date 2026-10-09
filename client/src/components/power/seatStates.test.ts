@@ -28,6 +28,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { SEAT_STATES } from "@shared/roleSheet";
 import { SEAT_TALLY_BUCKETS } from "./Legend";
 
 const ROOT = path.resolve(__dirname, "../../../..");
@@ -59,12 +60,14 @@ describe("the power legend counts every state a seat can be in", () => {
   });
 
   it("the client's own copy of the union still matches the server's", () => {
-    // `SeatStateWord` in ./types is a hand-kept duplicate of `SeatState`. Two
-    // declarations of one fact drift, and this is the cheap place to catch it.
+    // The client's copy of `SeatState` is `SEAT_STATES` in shared/roleSheet.ts,
+    // a runtime list the state words are keyed by; ./types re-exports its type
+    // from there. Two declarations of one fact drift, and this is the cheap
+    // place to catch it.
+    expect([...SEAT_STATES].sort()).toEqual([...seatStatesFromServer()].sort());
+    // And ./types keeps no hand-kept duplicate beside the re-export.
     const client = fs.readFileSync(path.join(ROOT, "client/src/components/power/types.ts"), "utf8");
-    const m = client.match(/export type SeatStateWord\s*=\s*((?:"[a-z_]+"\s*\|\s*)+"[a-z_]+")\s*;/);
-    if (!m) throw new Error("export type SeatStateWord was not found in client/src/components/power/types.ts");
-    const mirrored = [...m[1].matchAll(/"([^"]+)"/g)].map((v) => v[1]);
-    expect([...mirrored].sort()).toEqual([...seatStatesFromServer()].sort());
+    expect(client).toMatch(/import \{[^}]*type SeatStateWord[^}]*\} from "@shared\/roleSheet"/);
+    expect(client).not.toMatch(/export type SeatStateWord\s*=/);
   });
 });

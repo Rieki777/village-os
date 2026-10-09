@@ -37,13 +37,18 @@ class ErrorBoundary extends Component<Props, State> {
                 goes on the heading and not the wrapper on purpose: the
                 wrapper holds the stack trace, and reading a stack aloud
                 helps nobody. */}
-            <h2 role="alert" className="text-xl mb-4">An unexpected error occurred.</h2>
+            <h2 role="alert" className="text-xl mb-4">This page didn't load. Reload to try again.</h2>
 
-            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
-              <pre className="text-sm text-muted-foreground whitespace-break-spaces">
-                {this.state.error?.stack}
-              </pre>
-            </div>
+            {/* R47: a player needs the way forward, not the stack. It stays
+                one tap away for whoever reports the bug. */}
+            <details className="w-full mb-6">
+              <summary className="cursor-pointer text-sm text-muted-foreground mb-2">Details for a bug report</summary>
+              <div className="p-4 w-full rounded bg-muted overflow-auto">
+                <pre className="text-sm text-muted-foreground whitespace-break-spaces">
+                  {this.state.error?.stack}
+                </pre>
+              </div>
+            </details>
 
             <button
               onClick={() => window.location.reload()}
@@ -54,7 +59,7 @@ class ErrorBoundary extends Component<Props, State> {
               )}
             >
               <RotateCcw size={16} />
-              Reload Page
+              Reload
             </button>
           </div>
         </div>

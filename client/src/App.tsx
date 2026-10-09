@@ -97,7 +97,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/map": "Village map",
   "/map/circles": "Circles and roles",
   "/events": "Village Calendar",
-  "/first-walk": "Meet your village",
+  "/first-walk": "Your First Walk",
   "/stay": "Stays",
   "/library": "Material library",
   "/badges": "Badges & skills",

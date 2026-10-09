@@ -100,7 +100,7 @@ describe("ProfileHero", () => {
     routing(async (p) => (p.includes("archetypes") ? ok(archetypes) : boom));
     const { container } = draw();
 
-    await waitFor(() => expect(container.textContent).toContain("Couldn't load your paths"));
+    await waitFor(() => expect(container.textContent).toContain("Your paths didn't load"));
     expect(container.textContent).not.toContain("No path chosen yet");
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
@@ -169,7 +169,7 @@ describe("ProfileHero", () => {
 
     await waitFor(() =>
       expect(container.querySelector("[aria-live='polite']")?.textContent).toContain(
-        "could not be fronted",
+        "That didn't go through",
       ),
     );
   });

@@ -78,6 +78,32 @@ describe("villageFactFor", () => {
     expect((await villageFactFor(pool, "currency")).state).toBe("missing");
   });
 
+  /*
+   * THE VILLAGE'S OWN WALK (Rye, 2026-10-02). The map offers no walk until the
+   * village writes one, so the journey asks for it and reads the answer from
+   * the walk's own document. The wording of every answer is pinned in
+   * shared/mapWalkDocument.test.ts; this pins which document is read.
+   */
+  it("reads the walk from the map_walk document, and a fresh village has written none", async () => {
+    const { pool, asked } = poolWith({});
+    const answer = await villageFactFor(pool, "walk");
+    expect(asked).toEqual(["map_walk"]);
+    expect(answer.state).toBe("missing");
+    expect(answer.detail).toContain("offers no walk");
+  });
+
+  it("counts a written walk with a place as the answer", async () => {
+    const { pool } = poolWith({
+      map_walk: {
+        en: [{ id: "a", structure_key: "gate", title: "Come in", body: "Our gate.", gesture: "none" }],
+        welcome: { en: "Welcome home." },
+      },
+    });
+    const answer = await villageFactFor(pool, "walk");
+    expect(answer.state).toBe("ok");
+    expect(answer.detail).toBe("Written, 1 stop and your own welcome");
+  });
+
   it("says a missing resolver is a platform bug rather than answering for it", async () => {
     const { pool } = poolWith({});
     const answer = await villageFactFor(pool, "elevation");

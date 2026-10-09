@@ -89,8 +89,8 @@ describe("GameDashboard", () => {
     expect(await screen.findByText("Continue your community training")).toBeTruthy();
     expect(screen.getByText("Tend the orchard")).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
-    expect(screen.getByText("Awaiting consent")).toBeTruthy();
-    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Turned in")).toBeTruthy();
+    expect(screen.getByText("Complete")).toBeTruthy();
   });
 
   /**
@@ -113,7 +113,7 @@ describe("GameDashboard", () => {
   });
 
   /**
-   * WHY THE "Not accepted" CHIP IS NOT ASSERTED ABOVE.
+   * WHY THE "Returned" CHIP IS NOT ASSERTED ABOVE.
    *
    * Its colours were audited at 4.41:1 and are fixed in the source, but the
    * chip cannot currently reach a screen from this card: the list is built
@@ -129,7 +129,7 @@ describe("GameDashboard", () => {
 
     expect(await screen.findByText("Tend the orchard")).toBeTruthy();
     expect(container.textContent).not.toContain("Raise the barn");
-    expect(container.textContent).not.toContain("Not accepted");
+    expect(container.textContent).not.toContain("Returned");
   });
 
   it("says it is loading rather than rendering an empty sheet", () => {
@@ -146,10 +146,10 @@ describe("GameDashboard", () => {
     const { container } = draw();
 
     const line = await screen.findByRole("status");
-    expect(line.textContent).toContain("Couldn't load your next step");
+    expect(line.textContent).toContain("Your next step didn't load");
     // The whole point: this is NOT an empty sheet. Nothing that would be
     // drawn from a real payload is on screen claiming to be a fact.
-    expect(container.textContent).not.toContain("You haven't claimed a quest yet");
+    expect(container.textContent).not.toContain("No Quests yet");
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 

@@ -1,7 +1,7 @@
 /**
  * THE JOURNEYS WALK THEIR OWN STEPS, AT THE VISITOR'S PACE, AND ONLY WHILE SHE CAN BE SEEN.
  *
- * The Welcome Walk is switched off (WELCOME_WALK_ON, #402), and the Resident,
+ * The Welcome Walk is the village's own or none (welcomeWalkOn), and the Resident,
  * Steward and Investor journeys still walk on the same engine: playJourney in
  * the map artifact flies the camera stop by stop and writes each stop into
  * Maia's log with a row of answers under it. A QA sweep on 2026-10-01 found
@@ -31,11 +31,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -243,7 +243,7 @@ function boot(
     get said() {
       return said;
     },
-    run: <T,>(src: string) => window.eval(src) as T,
+    run: <T,>(src: string) => evalIn<T>(window, src),
     close: () => window.close(),
   };
 }
@@ -257,7 +257,7 @@ const live = (bs: HTMLButtonElement[]) => bs.filter((x) => !x.disabled);
 /** A tap on a button in her log, as a browser takes it: nothing when disabled. */
 function press(b: Booted, button: HTMLButtonElement | undefined): boolean {
   if (!button || button.disabled) return false;
-  b.window.eval(button.getAttribute("onclick") ?? "");
+  evalIn(b.window, button.getAttribute("onclick") ?? "");
   return true;
 }
 const walking = (b: Booted) => b.run<{ id: string; i: number; paused: boolean } | null>("JWALK");
@@ -290,7 +290,7 @@ const narration = (stop: HTMLElement) =>
 it("reads the artifact this file is about (the positive control)", () => {
   expect(JDWELL, "the dwell, read off the file").toBe(6500);
   expect(html).toContain("function playJourney(");
-  expect(html).toContain("const WELCOME_WALK_ON=false;");
+  expect(html).toContain("function welcomeWalkOn(){");
 });
 
 /* F43. Rows from stops already passed stayed live. Every row calls the same
@@ -368,7 +368,7 @@ describe("each journey says its own steps (F37)", () => {
         const b = boot("#skipIntro", DESK);
         await settle(200);
         walkLines = b.run<string[]>("Object.values(MAIA_STOPS)");
-        control = b.run("({gate:MAIA_STOPS.gate,council:MAIA_STOPS.council,mine:jLine({at:'council'},BY.council)})");
+        control = b.run("({gate:MAIA_STOPS.gate,council:jLine({at:'council'}),mine:jLine({at:'council',line:'Our own words.'})})");
         const total = b.run<(id: string) => number>("(id=>jById(id).steps.filter(st=>st.at&&BY[st.at]).length)")(id);
         b.run<(id: string) => void>("playJourney")(id);
         const stops: { title: string; said: string; more: boolean }[] = [];
@@ -419,9 +419,13 @@ describe("each journey says its own steps (F37)", () => {
     expect(all.some((s) => /\d+ open seats belong to this place/.test(s)), "the plural form is said somewhere").toBe(true);
   });
 
-  it("still gives the Welcome Walk its own words (the control: the monologue is kept, for its walk)", () => {
+  it("gives the village's walk its own words and never the monologue (the control: the monologue is still on the page)", () => {
+    // The seed's lines are still there to be heard, which is what makes the
+    // negative checks above mean something. jLine, the walk's voice, says the
+    // stop's own line and nothing else (Rye, 2026-10-02).
     expect(control.gate).toMatch(/^I am Maia\./);
-    expect(control.mine, "jLine at the council fire").toBe(control.council);
+    expect(control.council, "jLine at the council fire with no words of its own").toBe("");
+    expect(control.mine, "jLine at the council fire with the village's words").toBe("Our own words.");
   });
 });
 
@@ -776,5 +780,100 @@ describe("with her voice on, every stop is heard to its end (F04)", () => {
     expect(await until(() => (walking(b)?.i ?? 0) >= 1, real(ceiling) * 0.8), "walked on well before the ceiling").toBe(true);
     expect(Date.now() - t).toBeLessThan(real(ceiling) * 0.8);
     b.close();
+  });
+});
+
+/* N09. A hand that took the map back stopped the walk with "tap Resume the
+   walk whenever you want to carry on", and with the Welcome Walk switched
+   off guideAffordance kept that button down for every journey, so nothing
+   on screen was called Resume the walk and the walk could only start again
+   from its first stop. */
+describe("a walk stopped by a hand can be resumed where it stopped (N09)", () => {
+  const gresume = (b: Booted) =>
+    b.run<{ on: boolean; label: string }>("({on:$('gresume').classList.contains('on'),label:$('gresumeLab').textContent})");
+  const said = (b: Booted) => lastLine(b)?.textContent ?? "";
+
+  it("offers Resume the walk after a later stop, and it carries on from that stop", async () => {
+    const b = boot("#skipIntro", DESK);
+    await settle(200);
+    b.run("playJourney('j2')");
+    await landed(b, 1);
+    expect(await until(() => (walking(b)?.i ?? 0) >= 1, 10000), "the walk reached its second stop").toBe(true);
+    await landed(b, 2);
+    b.run("GUIDE.hand()"); // a drag, a wheel or a tap on the land: the one cancel path
+    expect(walking(b), "the walk stopped").toBeNull();
+    expect(gresume(b)).toEqual({ on: true, label: "Resume the walk" });
+    expect(said(b)).toContain("Resume the walk");
+    (b.doc.getElementById("gresumeGo") as HTMLElement).click();
+    expect(walking(b)).toMatchObject({ id: "j2", i: 1 });
+    expect(b.uncaught).toEqual([]);
+    b.close();
+  });
+
+  it("names no button that is not there when the walk stopped at its first stop", async () => {
+    const b = boot("#skipIntro", DESK);
+    await settle(200);
+    b.run("playJourney('j3')");
+    await landed(b, 1);
+    b.run("GUIDE.hand()");
+    expect(gresume(b).on, "nothing to resume from the first stop").toBe(false);
+    expect(said(b)).not.toContain("Resume the walk");
+    expect(said(b)).toContain("Ask me for a journey");
+    expect(b.uncaught).toEqual([]);
+    b.close();
+  });
+});
+
+/* N18. Help covers her on a phone, so the walk waits (F39). Help also closes
+   on a tap outside it, and that tap on the land then reached the land's
+   cancel and ENDED the walk it had just paused: JWALK null, the address
+   cleared, and her line promising a Resume button. */
+describe("a finger on the land that puts Help away keeps the walk (N18)", () => {
+  let b: Booted;
+  const fire = (target: Element, type: string, pts: [number, number][]) => {
+    const ev = new b.window.Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "touches", { value: pts.map(([clientX, clientY]) => ({ clientX, clientY })) });
+    target.dispatchEvent(ev);
+  };
+  beforeAll(async () => {
+    b = boot("#hud=pocket&skipIntro", PHONE);
+    await settle(200);
+    b.run("playJourney('j2')");
+    await landed(b, 1);
+    (b.doc.getElementById("pbAttn") as HTMLElement).click();
+    await settle(50);
+  });
+  afterAll(() => b?.close());
+
+  it("has Help up over a walk that waits (the case is the one it says)", () => {
+    expect(b.doc.getElementById("help")?.classList.contains("show")).toBe(true);
+    expect(walking(b)).toMatchObject({ id: "j2", paused: true });
+  });
+
+  it("puts Help away and keeps the walk, and offers it back", async () => {
+    const scene = b.doc.getElementById("scene") as HTMLElement;
+    scene.dispatchEvent(
+      new b.window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", isPrimary: true, clientX: 195, clientY: 300 }),
+    );
+    fire(scene, "touchstart", [[195, 300]]);
+    fire(scene, "touchend", []);
+    scene.dispatchEvent(new b.window.PointerEvent("pointerup", { bubbles: true, pointerType: "touch", isPrimary: true, clientX: 195, clientY: 300 }));
+    scene.dispatchEvent(new b.window.MouseEvent("click", { bubbles: true, clientX: 195, clientY: 300 }));
+    await settle(50);
+    expect(b.doc.getElementById("help")?.classList.contains("show"), "Help is away").toBe(false);
+    expect(walking(b), "the walk is still there").toMatchObject({ id: "j2", paused: true });
+    expect(b.run<boolean>("GUIDE.on"), "and the guide still holds it").toBe(true);
+    expect(b.doc.body.classList.contains("msheet"), "her sheet is back").toBe(true);
+    const offer = lines(b).filter((d) => (d.textContent ?? "").includes("Say the word and we walk on.")).pop();
+    expect(offer, "the walk offered again").toBeTruthy();
+    expect(b.uncaught).toEqual([]);
+  });
+
+  it("still ends the walk on the next tap on the land, with Help away", () => {
+    const scene = b.doc.getElementById("scene") as HTMLElement;
+    scene.dispatchEvent(
+      new b.window.PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", isPrimary: true, clientX: 195, clientY: 300 }),
+    );
+    expect(walking(b), "a hand on the land takes the map").toBeNull();
   });
 });

@@ -349,6 +349,8 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "not deploy on its own.",
     points: [
       "Railway, your app service, the Variables tab. Open .env yourself and paste in each value. Secrets go in by your own hand, never through an assistant.",
+      "Paste each value alone: no quotes, no spaces, no NAME= in front. VILLAGE_SECRETS_KEY is exactly 64 characters of 0-9 and a-f. If Admin, Integrations refuses it anyway, its banner and the [identity] line in the deploy log name what is wrong with the value.",
+      "Railway holds a changed variable as a staged change until you press Deploy, and the old deployment keeps answering until the new one reads Active.",
       "Do not set JOURNEY_PASSWORD. The old version of this screen asked for it; .env.example records it as retired, gating a screen that no longer exists.",
       "The variable table further down says which ones the server refuses to start without.",
     ],

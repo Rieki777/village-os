@@ -32,11 +32,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -138,7 +138,7 @@ function boot(viewport: { width: number; height: number }): Booted {
       stubTheMissingPlatform(w);
     },
   });
-  return { window, uncaught, run: <T,>(src: string) => window.eval(src) as T, close: () => window.close() };
+  return { window, uncaught, run: <T,>(src: string) => evalIn<T>(window, src), close: () => window.close() };
 }
 
 /** left, top, width, height, as Chromium reported them. */

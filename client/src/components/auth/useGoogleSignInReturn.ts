@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from "react";
 import { TOKEN_KEY, useCatalyst } from "@/lib/gameApi";
+import { internalPath } from "@/lib/internalPath";
 import { writeStored } from "@/lib/safeStorage";
 import { SIGN_IN_STORAGE_BLOCKED, sessionWriteRefused } from "@/lib/signInStorage";
 
@@ -117,11 +118,9 @@ export function useGoogleSignInReturn(): GoogleReturnState {
           if (alive) setState({ status: "failed", message: SIGN_IN_STORAGE_BLOCKED });
           return;
         }
-        const next = params.get("next");
-        // Same rule the server applies to the destination, applied again here
-        // because this value came back through a URL a member could edit.
-        const safe = next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/profile";
-        window.location.replace(safe);
+        // Checked again here, because this value came back through a URL a
+        // member could edit, and this line loads whatever it is given.
+        window.location.replace(internalPath(params.get("next")) ?? "/profile");
       } catch {
         if (alive) {
           setState({ status: "failed", message: "Could not reach the village to finish signing in. Try again." });

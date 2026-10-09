@@ -409,12 +409,20 @@ export function ExamplesBanner({
  * with examples, and /map draws circles, roles and quests from three modules
  * that retire independently. Small on purpose — it says which row, and the
  * banner above says what that means.
+ *
+ * `tone="night"` is for a `.sheet-night` surface such as the role card. The
+ * day chip's amber classes are fixed Tailwind colours that no night token
+ * reaches (and that `.circle-lens` rewrites under the map), so a cream chip
+ * would sit on the night panel as a light patch. The night chip is drawn in
+ * the sheet's own tokens instead, at the card's 11px floor for a label.
  */
-export function ExampleChip({ className = "" }: { className?: string }) {
+export function ExampleChip({ className = "", tone = "day" }: { className?: string; tone?: "day" | "night" }) {
+  const look =
+    tone === "night"
+      ? "border border-dashed border-border text-[11px] text-muted-foreground"
+      : "border border-amber-300/70 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100";
   return (
-    <span
-      className={`inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100 ${className}`}
-    >
+    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 font-medium ${look} ${className}`}>
       example
     </span>
   );

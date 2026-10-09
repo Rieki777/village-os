@@ -134,6 +134,14 @@ with "this deployment has no village-secrets key", and each of those keys has
 to be set in Railway instead. Clearing a key from the panel keeps working
 either way, so a value you need to remove is never stuck.
 
+Put it on the app service as the 64 characters alone: no quotes, no spaces,
+no `VILLAGE_SECRETS_KEY=` in front. Press Deploy if Railway shows staged
+changes, and wait for the new deployment to read Active. If the panel still
+refuses, its banner and the `[identity]` line in the deploy log name what is
+wrong with the value without printing any of it. `docs/FORK_RUNBOOK.md`,
+"Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still
+refused", gives the fix for each answer.
+
 **Self-host:** you generate it in this step and you hold it. A copy of your
 database carries none of your integration keys in a usable form.
 
@@ -361,7 +369,7 @@ Two of these are worth knowing about early, because their failure is quiet:
   and no third-party licence. Unset, the land page says nothing is configured
   rather than showing a picture of somewhere else.
 - **`BACKUP_EXPORT_TOKEN`** is what authenticates the uploads half of the
-  encrypted GitHub Actions backup (`.github/workflows/db-backup.yml`,
+  encrypted GitHub Actions backup (`ops/backup/db-backup.yml`,
   `docs/RUNBOOK.md`). `fork-init` generates it with the other secrets. Without
   it the database dump keeps succeeding and looks healthy while your members'
   uploaded files are in no backup at all. Run that workflow only from a

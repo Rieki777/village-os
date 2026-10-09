@@ -47,7 +47,7 @@ import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sig
 import type { Pool } from "mysql2/promise";
 import { seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
-import { VILLAGE_SECRETS_ENV } from "./secrets";
+import { VILLAGE_SECRETS_ENV, villageSecretsKeyProblem } from "./secrets";
 import { DECIDES_BY, DOMAINS, SHAPES } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
 
@@ -310,6 +310,7 @@ export async function ensureSigningKey(
       // the only surface the missing half actually gates.
       console.error(
         `[identity] the signing key is sealed and this deployment cannot open it. ` +
+          (key ? "" : `${villageSecretsKeyProblem(env)} `) +
           `Set ${VILLAGE_SECRETS_ENV} to the value used when it was sealed. ` +
           "The SIGNED documents (/.well-known/village.json, /api/public/org.json, /api/platform/module-usage) " +
           "will refuse until then; the /org/**.md mirror carries no proof block and keeps serving. " +
@@ -342,10 +343,12 @@ export async function ensureSigningKey(
       }
     } else {
       // The honest floor. A fresh village with no key set boots and publishes
-      // exactly as it did yesterday, and every boot says what that costs.
+      // exactly as it did yesterday, and every boot says what that costs. The
+      // reason is NAMED, never "not set" for a key that is set in the wrong
+      // shape: that sentence sent a founder back to a step already done.
       console.warn(
-        `[identity] the signing key is stored in PLAINTEXT because ${VILLAGE_SECRETS_ENV} is not set. ` +
-          "It travels in every database dump. Set it (openssl rand -hex 32) and restart; " +
+        `[identity] the signing key is stored in PLAINTEXT. ${villageSecretsKeyProblem(env)} ` +
+          "It travels in every database dump. Set a valid key (openssl rand -hex 32) and restart; " +
           "this boot will seal the existing key in place, with no change visible to peers.",
       );
     }

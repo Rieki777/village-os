@@ -26,7 +26,7 @@
  * called on the way to the provider and nowhere else.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
+import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { guardOutboundUrl } from "./toolcheck";
 
 export type { Sealed };
@@ -60,6 +60,16 @@ export function memberSecretsKey(env: NodeJS.ProcessEnv = process.env): Buffer |
 
 export function memberSecretsConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return memberSecretsKey(env) !== null;
+}
+
+/**
+ * For the OPERATOR: what is wrong with this deployment's key, or null when it
+ * is usable. Says "not set" only about a key that is not set, and names the
+ * shape of a malformed one (`sealedBox.ts`, `describeKeyEnv`). Never shown to a
+ * member, who reads `NO_MEMBER_SECRETS_KEY_SENTENCE` and cannot fix it.
+ */
+export function memberSecretsKeyProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  return keyEnvProblem(MEMBER_SECRETS_ENV, env);
 }
 
 /**

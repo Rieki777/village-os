@@ -56,7 +56,7 @@ export default function Library() {
       .then(async (r) => {
         const { ok, data: d, refusal } = await readRefusal(r);
         if (refusal && itemId) { setRefusedItem({ id: itemId, message: refusal }); return; }
-        if (!ok) throw new Error(d?.error || "Request failed");
+        if (!ok) throw new Error(d?.error || "That didn't go through. Try again.");
         if (d.escrow != null) setNotice(`Reserved. ${d.escrow} credit(s) set aside while you borrow.`);
         if (d.released != null) setNotice(`Cancelled. ${d.released} credit(s) released back to you.`);
         load();
@@ -73,14 +73,17 @@ export default function Library() {
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Material Library</h1>
-          {/* R46 enchant-first: the shelf image carries the surface; the
-              lending mechanics live in the tooltip. */}
+          {/* R47: the Trail line leads and the tooltip defines the credits.
+              The shelf line is the Lore, last and quiet. */}
           <p className="text-muted-foreground max-w-xl mx-auto">
-            One shelf, many hands. What you no longer need becomes what a
-            neighbor was missing, and the shelf remembers every gift in{" "}
+            Borrow what you need with{" "}
             <InfoTip tip="Library credits are earned by donating items and set aside as a deposit while you borrow. The deposit comes back at return, minus wear.">library credits</InfoTip>.
           </p>
           <ExamplesBanner moduleId="library" noun="donation" />
+          <p className="mt-2 text-sm italic text-muted-foreground max-w-xl mx-auto">
+            One shelf, many hands. What you no longer need becomes what a
+            neighbor was missing.
+          </p>
         </div>
       </section>
 
@@ -105,7 +108,7 @@ export default function Library() {
                   </span>
                 )}
                 {data.mine.strikes > 0 && (
-                  <span className="text-xs text-amber-700 ml-2">({data.mine.strikes} no-show{data.mine.strikes > 1 ? "s" : ""} on record)</span>
+                  <span className="text-xs text-amber-700 ml-2">({data.mine.strikes} no-show{data.mine.strikes > 1 ? "s" : ""})</span>
                 )}
               </p>
               {/* WHY THE TWO NUMBERS DIFFER, one line per thing holding a
@@ -178,7 +181,7 @@ export default function Library() {
                       {i.minStage && (
                         <>
                           {" "}·{" "}
-                          <InfoTip tip={`This item opens at the ${i.minStage} stage of the membership path. The ladder lives on your profile.`}>from {i.minStage}</InfoTip>
+                          <InfoTip tip={`This item opens at the ${i.minStage} stage of the Path of Growth. See where you stand on your profile.`}>from {i.minStage}</InfoTip>
                         </>
                       )}
                     </p>
@@ -205,10 +208,10 @@ export default function Library() {
           {data && visibleItems.length === 0 && (
             <p className="text-center text-sm text-muted-foreground py-12">
               <Package className="w-6 h-6 mx-auto mb-2 text-muted-foreground/50" />
-              The shelves are waiting for their first donation.
+              No items on the shelf yet.
             </p>
           )}
-          {!user && <p className="text-center text-xs text-muted-foreground">Sign in to borrow. Donations are recorded with a steward.</p>}
+          {!user && <p className="text-center text-xs text-muted-foreground">Sign in to borrow. To donate, talk to a steward.</p>}
         </div>
       </section>
     </Layout>

@@ -34,7 +34,7 @@ export default function ProposeQuest() {
    * platform's first tenant's name was what every founder's page showed on
    * first paint, whatever they had called their own village. The word is
    * chosen for the sentences that interpolate it, which already carry their
-   * own article: "It moves to the {projectName} team".
+   * own article: "the {projectName} team will reach out".
    *
    * S3 pages lane: a previous pass fixed only the loading-state flash. Three
    * PERMANENT sentences still shipped the literal, and unlike a flash they
@@ -81,14 +81,14 @@ export default function ProposeQuest() {
     e.preventDefault();
     setError("");
     if (!form.name.trim() || !form.email.trim() || !form.whatYouWantToDo.trim()) {
-      setError("Please share your name, email, and what you'd like to do.");
+      setError("Add your name, email, and what you'd like to do.");
       return;
     }
     setSubmitting(true);
     const ok = await submitProposal("quest-proposal", form, hp);
     setSubmitting(false);
     if (ok) setSubmitted(true);
-    else setError("Something went wrong sending your proposal. Please try again.");
+    else setError("That didn't send. Try again.");
   };
 
   if (submitted) {
@@ -105,17 +105,17 @@ export default function ProposeQuest() {
                 <CheckCircle2 className="w-8 h-8 text-teal-700" />
               </div>
               <h1 className="font-display text-3xl font-bold text-foreground mb-3">
-                Your quest idea is in.
+                Your Quest idea is in.
               </h1>
               <p className="text-muted-foreground mb-8">
-                Thank you for bringing your gift. The {projectName} team will review your
-                proposal and reach out to explore it with you. Every quest starts as
-                someone caring enough to imagine it.
+                Thank you for bringing your gift. The {projectName} team will reach out
+                to explore it with you. Every Quest starts as someone caring enough to
+                imagine it.
               </p>
               <div className="flex flex-wrap justify-center gap-3">
                 <Link href="/quests">
                   <a className="px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
-                    Back to Quests
+                    Back to the Quest Board
                   </a>
                 </Link>
                 <button
@@ -133,7 +133,7 @@ export default function ProposeQuest() {
                   }}
                   className="px-5 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors"
                 >
-                  Propose Another
+                  Propose another
                 </button>
               </div>
             </motion.div>
@@ -159,7 +159,7 @@ export default function ProposeQuest() {
             <Link href="/quests">
               <a className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
                 <ArrowLeft className="w-4 h-4" />
-                Back to Quests
+                Back to the Quest Board
               </a>
             </Link>
             <div className="w-16 h-16 rounded-full bg-amber/15 flex items-center justify-center mx-auto mb-6">
@@ -169,9 +169,8 @@ export default function ProposeQuest() {
               Propose a Quest
             </h1>
             <p className="text-xl text-muted-foreground">
-              This is for everyone with an idea to bring value to the community. Tell
-              us what you want to create. It moves to the {projectName} team as a
-              proposal, and we'll reach out to explore it with you.
+              Tell us about the Quest you want to create. Anyone can propose one, and
+              the {projectName} team will reach out to explore it with you.
             </p>
           </motion.div>
         </div>
@@ -295,7 +294,7 @@ export default function ProposeQuest() {
                 rows={4}
                 value={form.whatYouWantToDo}
                 onChange={(e) => set("whatYouWantToDo", e.target.value)}
-                placeholder="Describe the quest: what you'd create, and the value it brings to the village."
+                placeholder="Describe the Quest: what you'd create, and what it brings to the village."
                 className={`${field} resize-y`}
               />
             </div>
@@ -344,7 +343,7 @@ export default function ProposeQuest() {
 
             <div>
               <label htmlFor="quest-timeline" className="block text-sm font-medium text-foreground mb-2">
-                Execution timeline &amp; payment milestones, if any
+                Timeline &amp; payment milestones, if any
               </label>
               <textarea
                 id="quest-timeline"
@@ -366,7 +365,7 @@ export default function ProposeQuest() {
               className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition disabled:opacity-50"
             >
               <Sparkles className="w-5 h-5" />
-              {submitting ? "Sending…" : "Submit Your Quest Proposal"}
+              {submitting ? "Sending…" : "Send your Quest proposal"}
             </button>
             <p className="text-xs text-muted-foreground text-center">
               Your proposal goes straight to the {projectName} team. No idea is too small. The
