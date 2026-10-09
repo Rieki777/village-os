@@ -793,12 +793,18 @@ function gatheringVars(deps: TimePollDeps, row: CalendarRow, r: Recipient, when:
 async function sendOne(
   deps: TimePollDeps,
   village: EmailVillage,
-  input: { templateKey: "poll.invite" | "poll.locked" | "poll.moved"; recipient: Recipient; vars: MergeValues; idempotencyKey: string; ics?: string | null },
+  /**
+   * `messageKey` is the email's idempotency key in the post office's ledger.
+   * Named apart from `idempotencyKey` on purpose: the economics doc's reader
+   * takes every `idempotencyKey` property that is not on an email object as a
+   * ledger posting, and this object is not an email yet.
+   */
+  input: { templateKey: "poll.invite" | "poll.locked" | "poll.moved"; recipient: Recipient; vars: MergeValues; messageKey: string; ics?: string | null },
 ): Promise<boolean> {
   try {
     const email = await renderTemplate(input.templateKey, input.vars, { getPool: deps.getPool, village, contactId: input.recipient.contactId, kind: "events" });
     const result = await post(deps.postOffice, {
-      idempotencyKey: input.idempotencyKey,
+      idempotencyKey: input.messageKey,
       kind: "events",
       origin: input.templateKey,
       to: { email: input.recipient.email, name: input.recipient.name, userId: input.recipient.userId, contactId: input.recipient.contactId },
@@ -914,7 +920,7 @@ async function sendLocked(deps: TimePollDeps, pollId: string): Promise<number> {
     const r = await recipientFor(deps, key);
     if (!r) continue;
     const vars = gatheringVars(deps, row, r, { start, weekly: slot });
-    if (await sendOne(deps, village, { templateKey: "poll.locked", recipient: r, vars, idempotencyKey: `poll:${poll.id}:locked:${poll.lockedAt ?? nowMs}:${key}`, ics })) sent += 1;
+    if (await sendOne(deps, village, { templateKey: "poll.locked", recipient: r, vars, messageKey: `poll:${poll.id}:locked:${poll.lockedAt ?? nowMs}:${key}`, ics })) sent += 1;
   }
   return sent;
 }
@@ -938,7 +944,7 @@ async function sendMoved(
     const r = await recipientFor(deps, key);
     if (!r) continue;
     const vars = gatheringVars(deps, row, r, { start: firstMoved, weekly: slot });
-    if (await sendOne(deps, village, { templateKey: "poll.moved", recipient: r, vars, idempotencyKey: `poll:${poll.id}:moved:${sequence}:${key}` })) sent += 1;
+    if (await sendOne(deps, village, { templateKey: "poll.moved", recipient: r, vars, messageKey: `poll:${poll.id}:moved:${sequence}:${key}` })) sent += 1;
   }
   return sent;
 }
@@ -986,7 +992,7 @@ export async function invite(deps: TimePollDeps, eventId: string, input: InviteI
         "poll.closesAt": lock == null ? null : gatheringWhen(new Date(lock), tz, r.timezone).when,
         "poll.leading": leader ? optionLabel(leader, tz) : null,
       };
-      if (await sendOne(deps, village, { templateKey: "poll.invite", recipient: r, vars, idempotencyKey: `poll:${poll.id}:invite:${key}` })) emailed += 1;
+      if (await sendOne(deps, village, { templateKey: "poll.invite", recipient: r, vars, messageKey: `poll:${poll.id}:invite:${key}` })) emailed += 1;
     }
   }
   let notified = 0;
