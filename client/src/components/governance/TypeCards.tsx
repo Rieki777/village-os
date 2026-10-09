@@ -32,6 +32,15 @@
  * plain locked sentence, because at that point saying nothing more IS the
  * honest answer.
  *
+ * A TYPE WHOSE ROUTE OPENS THE VOTE ITSELF (`opensVote`: an agreement, a seat,
+ * the purpose statement) is live only for a member who may open one, which
+ * the server sends as `mayOpenBallot` (audit of Wave 4, 2026-10-01). When the
+ * agreement became conductable its card went live for every member, and one
+ * without `proposal.open` wrote the whole agreement and was refused at the
+ * last step. The village CAN open these, so the locked card says who carries
+ * one instead of the plain locked sentence, and still says no member is not
+ * allowed.
+ *
  * ACCESSIBILITY. The cards are toggle buttons in a named group, not a
  * radiogroup: a radiogroup promises roving focus, where Tab reaches the group
  * and arrows move within it, and every card here stays individually reachable
@@ -48,6 +57,7 @@ export default function TypeCards({
   conductable,
   advisory,
   mayOpenAdvisory,
+  mayOpenBallot,
   onChoose,
   onPractice,
 }: {
@@ -58,6 +68,8 @@ export default function TypeCards({
   advisory: string[];
   /** Whether THIS member may open one. */
   mayOpenAdvisory: boolean;
+  /** Whether THIS member may open a binding vote, which every `opensVote` type's route asks. */
+  mayOpenBallot: boolean;
   onChoose: (id: WizardType) => void;
   onPractice: (id: WizardType) => void;
 }) {
@@ -72,7 +84,11 @@ export default function TypeCards({
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {types.map((t) => {
                 const Icon = t.icon;
-                const available = conductable.includes(t.id);
+                // A type whose route opens the vote itself asks the opener
+                // for proposal.open; without it the card is carried by
+                // somebody else, and says so.
+                const carried = conductable.includes(t.id) && !!t.opensVote && !mayOpenBallot;
+                const available = conductable.includes(t.id) && !carried;
                 // A kind this member can put to the whole village as a
                 // practice vote. Both halves come from the server: the list
                 // is what has no executor yet, the permission is this
@@ -122,7 +138,9 @@ export default function TypeCards({
                       )}
                       {!live && (
                         <span className="mt-1.5 block text-xs font-medium text-stone-500">
-                          This village cannot open that kind of decision yet.
+                          {carried
+                            ? "A member who holds the power to open votes puts this one to the village. Ask one of them to carry it."
+                            : "This village cannot open that kind of decision yet."}
                         </span>
                       )}
                     </span>

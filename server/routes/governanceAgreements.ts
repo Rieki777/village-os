@@ -60,8 +60,15 @@ type Deps = Pick<
   villageTimezone: () => string;
 };
 
-/** What a member without `proposal.open` is told. */
-export const AGREEMENT_OPEN_REFUSAL = "Putting an agreement to the whole village is for a proposal.open holder";
+/**
+ * What a member without `proposal.open` is told, from their side of the
+ * screen and with a next step (audit of Wave 4): it named a capability id and
+ * stopped there. The wizard locks the card for such a member
+ * (client/src/components/governance/TypeCards.tsx); this is what a draft
+ * written before that, or any other caller, still meets.
+ */
+export const AGREEMENT_OPEN_REFUSAL =
+  "Putting an agreement to the whole village takes the power to open votes, and your account does not hold it yet. A member who holds that power can carry this agreement to the village for you.";
 
 /** The village's own date, `YYYY-MM-DD`, for the review date's floor. */
 function todayIn(timeZone: string, now = new Date()): string {
