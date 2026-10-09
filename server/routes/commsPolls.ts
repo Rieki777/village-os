@@ -71,6 +71,9 @@ export type PollRouteDeps = Pick<
   "authedUser" | "isAdmin" | "guardCapability" | "mayStillSee" | "getPool" | "commsPostOffice" | "members" | "isPresent" | "notify" | "overLimit" | "clientIp"
 >;
 
+/** The refusal a signed-in member without the power reads. */
+const HOST_ONLY = { status: 403, body: { error: "Only the people who run the calendar can change a gathering's vote." } };
+
 const READ_PER_IP = 240;
 const VOTE_PER_IP = 60;
 const WINDOW_MS = 10 * 60 * 1000;
@@ -183,7 +186,7 @@ export function register(app: Express, deps: PollRouteDeps): void {
   };
 
   app.post("/api/events/:id/time-poll", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const user = await authedUser(req);
     const b = req.body ?? {};
     const made = await createPoll(polls, {
@@ -200,7 +203,7 @@ export function register(app: Express, deps: PollRouteDeps): void {
   });
 
   app.put("/api/events/:id/time-poll", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const b = req.body ?? {};
     const result = await updatePoll(polls, eventId(req), {
       closesAt: b.closesAt,
@@ -213,21 +216,21 @@ export function register(app: Express, deps: PollRouteDeps): void {
   });
 
   app.post("/api/events/:id/time-poll/options", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const result = await addPollOptions(polls, eventId(req), Array.isArray(req.body?.options) ? req.body.options : []);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     res.json(await hostView(req));
   });
 
   app.delete("/api/events/:id/time-poll/options/:optionId", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const result = await removePollOption(polls, eventId(req), String(req.params.optionId ?? ""));
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     res.json(await hostView(req));
   });
 
   app.post("/api/events/:id/time-poll/pin", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const optionId = req.body?.optionId;
     if (optionId !== null && typeof optionId !== "string") return res.status(400).json({ error: "Name the time to pin, or null to clear the pin." });
     const result = await pinPollOption(polls, eventId(req), optionId);
@@ -236,14 +239,14 @@ export function register(app: Express, deps: PollRouteDeps): void {
   });
 
   app.post("/api/events/:id/time-poll/lock", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const result = await lockNow(polls, eventId(req));
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     res.json(await hostView(req));
   });
 
   app.post("/api/events/:id/time-poll/reopen", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const closesAt = typeof req.body?.closesAt === "string" && req.body.closesAt ? req.body.closesAt : null;
     const result = await reopenPoll(polls, eventId(req), closesAt);
     if (!result.ok) return res.status(result.status).json({ error: result.error });
@@ -251,7 +254,7 @@ export function register(app: Express, deps: PollRouteDeps): void {
   });
 
   app.post("/api/events/:id/time-poll/invite", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const asked = req.body?.members;
     let members: string[] = [];
     if (asked === "all") {
@@ -264,7 +267,7 @@ export function register(app: Express, deps: PollRouteDeps): void {
   });
 
   app.delete("/api/events/:id/time-poll", async (req, res) => {
-    if (!(await guardCapability(req, res, "event.manage"))) return;
+    if (!(await guardCapability(req, res, "event.manage", HOST_ONLY))) return;
     const result = await closePoll(polls, eventId(req));
     answer(res, result, () => ({ success: true }));
   });
