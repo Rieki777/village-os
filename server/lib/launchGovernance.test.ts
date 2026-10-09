@@ -220,9 +220,21 @@ describe("the three rows on the registry", () => {
     for (const id of ["canvas-on-record", "conflict-door", "governance-on-for-members"]) {
       expect(row(id).severity, id).toBe("blocking");
       expect(row(id).group, id).toBe("governance");
-      // A row the governance module's own switch could withdraw would hide the refusal it exists to show.
-      expect(row(id).appliesWhenModule, id).toBeUndefined();
     }
+    // A row the governance module's own switch could withdraw would hide the refusal it exists to show.
+    expect(row("governance-on-for-members").appliesWhenModule).toBeUndefined();
+  });
+
+  /*
+   * Rye's module ruling, 2026-10-01: the canvas and Conflict Evolution are two
+   * optional modules, off by default, and each launch row applies ONLY while
+   * its module is on. The closing policy and governance-for-members stay
+   * platform-wide.
+   */
+  it("belong to their optional modules, the canvas row to the canvas and the door to Conflict Evolution", () => {
+    expect(row("canvas-on-record").appliesWhenModule).toBe("canvas");
+    expect(row("conflict-door").appliesWhenModule).toBe("conflict-evolution");
+    expect(row("closing-policy-named").appliesWhenModule).toBeUndefined();
   });
 
   it("every canvas: and governance: key on the list has a resolver here", () => {

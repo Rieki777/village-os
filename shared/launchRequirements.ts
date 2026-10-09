@@ -26,6 +26,18 @@
  */
 import { MODULES } from "./modules";
 
+/**
+ * THE TWO OPTIONAL GOVERNANCE MODULES' IDS, as Rye's module ruling of
+ * 2026-10-01 names them: "Governance Canvas" (`canvas`) and "Conflict
+ * Evolution" (`conflict-evolution`), both off by default. The launch rows
+ * that belong to them name them here. The modules themselves are not in the
+ * catalogue yet (shared/modules.ts); until they are, `effectiveLifecycle`
+ * reads an unknown id as off, so their rows apply to no village, which is
+ * what the ruling asks of a module nobody has switched on.
+ */
+export const CANVAS_MODULE_ID = "canvas";
+export const CONFLICT_EVOLUTION_MODULE_ID = "conflict-evolution";
+
 export type LaunchGroup =
   | "identity" // who runs this village: admins, handles, the shared-password exit
   | "brand" // name, tagline, copy — the overlay that de-Amoras a fork
@@ -506,6 +518,14 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
      */
     why: "Before the village is asked to start, each of the twelve governance canvas blocks carries at least one reading, so the village starts as it actually is. A reading of \"not decided yet, because...\" is enough: Absent, with one sentence saying why.",
     severity: "blocking",
+    /*
+     * ONLY WHILE THE GOVERNANCE CANVAS MODULE IS ON (Rye's module ruling,
+     * 2026-10-01: the canvas ships as an optional module, off by default, and
+     * this row applies only when it is on). A village that never chose the
+     * canvas is not told the canvas blocks its launch. Until the module is in
+     * the catalogue it reads off everywhere, so the row withdraws everywhere.
+     */
+    appliesWhenModule: CANVAS_MODULE_ID,
     checkKey: "canvas:on-record",
     fixAt: "/journey-to-launch?view=canvas",
     fixLabel: "Open the Canvas",
@@ -561,6 +581,8 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
      */
     why: "A member with a conflict needs somebody to bring it to, and to know when they will hear back. That means a person who holds the intake role today, or a named contact outside the village, and a reply time in hours the village chose. With fewer than three members who are not founders, the outside contact is required, so nobody has to take a conflict to the people it may be about.",
     severity: "blocking",
+    // Only while Conflict Evolution is on, by the same ruling as the canvas row.
+    appliesWhenModule: CONFLICT_EVOLUTION_MODULE_ID,
     checkKey: "governance:conflict-door",
     fixAt: "/admin?tab=exits-admin",
     fixLabel: "Open Departures",

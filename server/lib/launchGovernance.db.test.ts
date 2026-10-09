@@ -22,7 +22,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { confirmManual, launchStatus, launchVoteBlocked, type LaunchDeps } from "./launch";
 import { writeGoverningPurpose } from "./governingPurpose";
 import { normalizeExitPolicy } from "./exitPolicy";
-import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
+import { CANVAS_MODULE_ID, CONFLICT_EVOLUTION_MODULE_ID, LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { CANVAS_BLOCK_IDS } from "../../shared/governanceCanvas";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
@@ -45,14 +45,32 @@ let pool: Pool;
 let governance = "members";
 
 /**
+ * The two optional modules the canvas and conflict rows belong to (Rye's
+ * module ruling, 2026-10-01). On for every case that is about those rows, and
+ * switched off by the cases that show a village without them is not asked.
+ */
+const optional: Record<string, string> = { [CANVAS_MODULE_ID]: "members", [CONFLICT_EVOLUTION_MODULE_ID]: "members" };
+
+/**
  * Every check server/index.ts would wire reads ok, and every module but
- * governance is off, so the only rows that can refuse are the ones this file
- * is about and the ones it answers for real.
+ * governance and the two above is off, so the only rows that can refuse are
+ * the ones this file is about and the ones it answers for real.
  */
 const deps = (): LaunchDeps => {
   const checks: LaunchDeps["checks"] = {};
   for (const r of LAUNCH_REQUIREMENTS) checks[r.checkKey] = () => ({ state: "ok" as const, detail: "stubbed ok" });
-  return { checks, moduleLifecycle: (id) => (id === "governance" ? governance : "off") };
+  return { checks, moduleLifecycle: (id) => (id === "governance" ? governance : (optional[id] ?? "off")) };
+};
+
+/** Runs `body` with one optional module switched off, and puts it back. */
+const withModuleOff = async (id: string, body: () => Promise<void>) => {
+  const was = optional[id];
+  optional[id] = "off";
+  try {
+    await body();
+  } finally {
+    optional[id] = was;
+  }
 };
 
 const title = (id: string): string => {
@@ -166,6 +184,18 @@ describe.skipIf(!configured)("the governance rows on the launch vote", () => {
     expect((await item("canvas-on-record")).detail).toContain("Still without a reading: Impact.");
   });
 
+  it("asks nothing of the canvas while the Governance Canvas module is off, and leaves the row off the journey", async () => {
+    // The same village, Impact still unread: the row belongs to the module (ruling of 2026-10-01).
+    await withModuleOff(CANVAS_MODULE_ID, async () => {
+      expect(await launchVoteBlocked(pool, deps())).toBeNull();
+      const ids = (await launchStatus(pool, deps())).items.map((i) => i.id);
+      expect(ids).not.toContain("canvas-on-record");
+      expect(ids).toContain("closing-policy-named");
+      expect(ids).toContain("governance-on-for-members");
+    });
+    expect(await launchVoteBlocked(pool, deps()), "on again, the unread block refuses again").toEqual(refusedOn("canvas-on-record"));
+  });
+
   it("lets the vote through once every block has a reading, and a reading of Absent counts", async () => {
     await readBlock("impact");
     expect(await launchVoteBlocked(pool, deps())).toBeNull();
@@ -181,6 +211,11 @@ describe.skipIf(!configured)("the governance rows on the launch vote", () => {
     await writePolicy(policy({ replyHours: null }) as any);
     expect(await launchVoteBlocked(pool, deps())).toEqual(refusedOn("conflict-door"));
     expect((await item("conflict-door")).detail).toBe("No reply time is promised yet. Say within how many hours a member hears back");
+    // With Conflict Evolution off the same unanswered door asks nothing, and the row is not on the journey.
+    await withModuleOff(CONFLICT_EVOLUTION_MODULE_ID, async () => {
+      expect(await launchVoteBlocked(pool, deps())).toBeNull();
+      expect((await launchStatus(pool, deps())).items.map((i) => i.id)).not.toContain("conflict-door");
+    });
     await writePolicy(policy() as any);
     expect(await launchVoteBlocked(pool, deps())).toBeNull();
   });
