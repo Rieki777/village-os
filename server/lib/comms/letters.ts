@@ -427,7 +427,8 @@ export async function testLetter(
     html: email.html,
     text: email.text,
     preheader: email.preheader,
-    source: { templateKey: email.templateKey, ...(email.version !== null ? { templateVersion: email.version } : {}), letterId: id },
+    // No letter id: a test is not one of the letter's sends, and History counts only those.
+    source: { templateKey: email.templateKey, ...(email.version !== null ? { templateVersion: email.version } : {}) },
     urgent: true,
   });
   return { ok: true, result, sentTo: to };
@@ -555,7 +556,13 @@ export async function sendLetter(
 
   const window = await lettersWindow(pool);
   const cap = capProblem(window.today, window.minutesSinceLast, perDay(deps));
-  if (cap) return refuse(409, cap);
+  if (cap) {
+    // The same confirmation pressed twice at once: the first press's claim is
+    // what filled the window, so this one answers it rather than the limit.
+    const now = await letterById(pool, id);
+    if (now && now.idempotencyKey === key && !(EDITABLE_LETTER_STATES as readonly LetterState[]).includes(now.state)) return duplicateOf(now);
+    return refuse(409, cap);
+  }
   const claim = await claimLetter(pool, id, { from: EDITABLE_LETTER_STATES, to: "sending", idempotencyKey: key, bodyHash: hash, count: verdict.n });
   if (claim !== "claimed") return afterLostClaim(pool, id, claim);
   const claimed = (await letterById(pool, id)) as LetterRow;
