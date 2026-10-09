@@ -226,7 +226,8 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the live time vote", () => {
   });
 
   it("a tie keeps the current leader", async () => {
-    expect((await call("PUT", `/api/events/${onceId}/time-poll/vote`, { body: { optionIds: [options[2].id] }, token: member.b.token })).status).toBe(200);
+    // A tie with the time listed FIRST, so "the first listed wins" would move the gathering.
+    expect((await call("PUT", `/api/events/${onceId}/time-poll/vote`, { body: { optionIds: [options[0].id] }, token: member.b.token })).status).toBe(200);
     expect(await startOf(onceId)).toBe(B);
     await run("polls");
     expect(await startOf(onceId)).toBe(B);
@@ -234,6 +235,7 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the live time vote", () => {
 
   it("settle 60 waits an hour before moving", async () => {
     expect((await call("PUT", `/api/events/${onceId}/time-poll`, { body: { settleMinutes: 60 } })).status).toBe(200);
+    expect((await call("PUT", `/api/events/${onceId}/time-poll/vote`, { body: { optionIds: [options[2].id] }, token: member.b.token })).status).toBe(200);
     expect((await call("PUT", `/api/events/${onceId}/time-poll/vote`, { body: { optionIds: [options[2].id] } })).status).toBe(200);
     const view = await call("GET", `/api/events/${onceId}/time-poll`);
     expect(view.json.poll.options[2]).toMatchObject({ count: 2, leading: true, applied: false });

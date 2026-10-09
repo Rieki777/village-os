@@ -115,8 +115,9 @@ describe.skipIf(!configured)("a one-off gathering's live time vote", () => {
 
   it("keeps the current leader through a tie", async () => {
     const poll = (await pollForEvent(pool, eventId))!;
-    const [, , c] = (await pollView(deps(), eventId, { personKey: null, signedIn: false, canManage: false }))!.options;
-    await vote(deps(), poll.id, "u-2", { add: c.id });
+    // A tie with a time listed BEFORE the leader, so "the first listed wins" would move it.
+    const [a] = (await pollView(deps(), eventId, { personKey: null, signedIn: false, canManage: false }))!.options;
+    await vote(deps(), poll.id, "u-2", { add: a.id });
     expect(await startOf(eventId)).toBe(B);
     expect((await pollForEvent(pool, eventId))!.leaderOptionId).toBe(poll.leaderOptionId);
   });
@@ -125,6 +126,7 @@ describe.skipIf(!configured)("a one-off gathering's live time vote", () => {
     expect(await updatePoll(deps(), eventId, { settleMinutes: 60 })).toEqual({ ok: true, value: null });
     const poll = (await pollForEvent(pool, eventId))!;
     const [, , c] = (await pollView(deps(), eventId, { personKey: null, signedIn: false, canManage: false }))!.options;
+    await vote(deps(), poll.id, "u-2", { set: [c.id] });
     await vote(deps(), poll.id, "u-3", { add: c.id });
     const led = (await pollForEvent(pool, eventId))!;
     expect(led.leaderOptionId).toBe(c.id);
