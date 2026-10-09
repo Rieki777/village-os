@@ -490,7 +490,8 @@ nothing had ever read the column).
   holds ONLY uploaded images (`data/uploads/`) plus historical JSON kept as
   an archive. `scripts/import-json-to-mysql.ts` remains the restore/cutover
   tool for that archive format.
-- **Automated:** `.github/workflows/db-backup.yml` dumps the production
+- **Automated:** the backup workflow (template `ops/backup/db-backup.yml`, run
+  from a PRIVATE repository of the village's own; see `docs/RUNBOOK.md`) dumps the production
   schema daily (09:17 UTC), keeps 30 days of artifacts, and — on every run —
   RESTORES the dump into a scratch MySQL and asserts row counts plus an
   exact round-tripped timestamp against a manifest taken at dump time. A red
@@ -677,6 +678,19 @@ The founder's own words for roads, water and zones live in the
 a line, with the colour and glyph it is drawn in) and `phases` (what a build
 phase is called, keyed by the number the scene stores).
 
+The numbers across the top of the map (the crown bar's chips) live in the
+`map_chips` document in `app_config`, written by `PUT /api/admin/map/chips` from
+the Village settings drawer on the map, and served resolved for each viewer at
+`GET /api/map/chips` (both behind the `map` module's gate). Nothing to provision:
+with no document the bar draws its five example numbers, each one saying
+"example", until a founder points a chip at a source. The sources and what each
+counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
+module (Events, Village Health) is drawn only for a viewer who can open it.
+The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+`gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
+and is drawn only for a member the village has admitted, or an admin: a
+visitor and a signed-in guest get no chip and no number. Nothing to provision.
+
 ### Promises made on the map (0062)
 
 `quests.map_key` and `events.map_key`: varchar(190), nullable, UNIQUE. The name
@@ -719,12 +733,18 @@ hidden and leaves the last strip behind the address bar). Leaving happens two
 ways that run the same code: the artifact's own exit posts `{type:'exit'}`,
 and the browser Back button pops a marker history entry pushed on open.
 
-`GET /api/map/config` returns `{skin, walk, vocabulary}` in one call, and the
-shell pushes it as a single `{type:'config'}` message on `grounds-ready`. The
-walk lives in a `map_walk` document keyed by language (`en` default);
-**an absent or empty walk means the artifact runs its own seed**, which is why
-the shell omits the key instead of sending `[]`. Edit it in Admin, Make This
-Yours, step 5, which can preview a draft on a real map without saving.
+`GET /api/map/config` returns `{skin, walk, welcome, vocabulary, scene}` in one
+call, and the shell pushes it as a single `{type:'config'}` message on
+`grounds-ready`. The walk and the village's own welcome live in a `map_walk`
+document keyed by language (`en` default; the welcome under `welcome`).
+**An absent or empty walk means the map offers no walk at all, and an absent
+welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+the founders' to write). The seed's example walk is offered to nobody. Once the
+fetch has answered, the shell sends both keys, null included; it leaves them
+out only after a failed fetch, which tells the map to keep what it has. Write
+both on the map under Village settings, which can preview a draft on a real
+map without saving. The Journey to Launch asks for them as a recommended item,
+`welcome-walk`, linking to `/map?settings=walk`.
 `GET /api/admin/map/structures` feeds the step picker from addresses the
 village has actually set (0060).
 
@@ -1264,7 +1284,8 @@ the directory. `/health` reports the volume totals.
 
 ## Backup encryption, the uploads volume gap, and after a suspected exposure (2026-08-30)
 
-**What was found.** `.github/workflows/db-backup.yml` dumped the whole
+**What was found.** The backup workflow (then at .github/workflows/db-backup.yml
+in this public repository, now the template `ops/backup/db-backup.yml`) dumped the whole
 production schema daily, gzipped it, and uploaded it as a plain GitHub
 Actions artifact. Actions artifact download follows repository read access.
 It is not a separate permission. On a repository set to public, that made
@@ -1499,7 +1520,7 @@ have reached someone who should not have had it. It does not require reading
 code. Where a step needs a technical helper, that is called out.
 
 1. **Confirm the backup runs from a private repository.** The encrypted
-   backup workflow (`.github/workflows/db-backup.yml`) uploads its dumps as
+   backup workflow (template `ops/backup/db-backup.yml`) uploads its dumps as
    workflow artifacts, and on a public repository anybody can download those
    and read the logs. `Rieki777/village-os` is public on purpose, so the
    backup belongs in a private repository of the village's own. Check which it
@@ -1621,7 +1642,8 @@ should not be done.
 
 Storage in this document used to be plaintext JSON, by a written decision on
 2026-07-27 that named its own revisit condition: revisit if backups start
-leaving the deployment's trust boundary. `.github/workflows/db-backup.yml`
+leaving the deployment's trust boundary. The backup workflow (then in this
+repository's .github/workflows folder)
 mysqldumps the whole database and uploads it as a GitHub Actions artifact kept
 for 30 days, and the repository was public while those artifacts were produced,
 so the condition had already fired. The repository was made private on
@@ -1821,3 +1843,80 @@ disabled, which is why it owns this.
 Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
+
+## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
+
+Admin, Integrations seals every key it saves with `VILLAGE_SECRETS_KEY` (the
+section above says what it protects). `scripts/fork-init.mjs` writes one into a
+fork's `.env` as bare hex, so a key that goes wrong is nearly always a key typed
+or pasted by hand into a host's variable screen. That is where this section
+starts.
+
+### 1. Make the key
+
+- Mac or Linux: `openssl rand -hex 32`
+- Windows PowerShell, which has no openssl:
+  `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+Either prints one line of exactly 64 characters, using only 0-9 and a-f.
+
+### 2. Save it in a password manager first
+
+Before it goes anywhere else. Losing it, or changing it later, makes every key
+saved in Admin, Integrations unreadable, and each one has to be typed again.
+The database backup does not bring it back.
+
+### 3. Set it on Railway
+
+1. Open the project.
+2. Open the **web service**: the one serving the village's address. Never the
+   database service. A variable set on the database service never reaches the
+   server.
+3. Open **Variables**, then **New Variable**.
+4. The name is `VILLAGE_SECRETS_KEY`. The value is ONLY the 64 characters: no
+   quotes, no spaces, and no `VILLAGE_SECRETS_KEY=` in front of it.
+5. If Railway shows staged changes, press **Deploy**. A staged variable reaches
+   nothing until a deploy runs.
+6. Wait for the new deployment to read **Active**. The previous one keeps
+   answering until then, and it has no key.
+7. Open Admin, Integrations. The amber banner at the top is gone once the key
+   is usable, and every Save works. Save your keys.
+
+### 4. On any other host
+
+Set the same environment variable for the process that runs the server, and
+restart it.
+
+### When it is set and Admin, Integrations still refuses
+
+Since 2026-10-02 every message about the key names what is wrong with it, and
+never any part of its value, so it is safe to paste into a support thread. Read
+it in any of three places:
+
+- the deploy log, on the lines starting `[identity]` and `[secrets]`;
+- the amber banner at the top of Admin, Integrations;
+- the Journey to Launch row "Set VILLAGE_SECRETS_KEY so Integrations can save
+  keys".
+
+| The sentence says | What happened | What to do |
+|---|---|---|
+| `VILLAGE_SECRETS_KEY is not set, or is empty, in the environment this server started with.` | The server answering requests never received it. The variable is on another service (the database, or a second web service), the deploy carrying it has not gone Active, or the value was saved blank. | Put it on the web service, press Deploy if changes are staged, and wait for Active. |
+| `... is set, but it is 66 characters with quotes around it.` | Quotes were pasted with the value. | Remove the quotes. |
+| `... with the name VILLAGE_SECRETS_KEY= in front of the key.` | The whole `.env` line went into the value box. | Keep only the 64 characters after the `=`. |
+| `... it is 44 characters in base64.` | It was made with `openssl rand -base64 32`. | Make a new one with `openssl rand -hex 32`, and save that one in the password manager. |
+| `... it is 63 characters.` (or any length other than 64) | A character was lost or added while copying. | Copy the whole key again from the password manager. |
+| `... with a space or line break inside it` | The value wrapped while being copied. | Paste it again as one line. |
+| `... with 1 character that is not 0-9 or a-f` | A stray character, often a lookalike picked up from a chat or a document. | Copy it again from the password manager. |
+
+Every sentence ends with the rule itself: exactly 64 characters, using only 0-9
+and a-f, with nothing else in the value.
+
+A key the server refused never sealed anything, so correcting it costs nothing:
+fix the value, deploy, and save the keys. The exception is a variable that
+WORKED and then changed. Keys saved under the old value open only with the old
+value, so put the exact old value back from the password manager; a new key
+cannot open them.
+
+`MEMBER_SECRETS_KEY` takes the same shape and is set the same way, as its own
+variable with its own value. When members' agents miss deliveries for want of
+it, Admin, What's Failing names what is wrong with it in the same words.

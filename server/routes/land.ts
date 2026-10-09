@@ -204,6 +204,64 @@ function removeFromVolume(uploadsDir: string, fileName: string): boolean {
 const imageryUrl = (row: LandRow): string | null =>
   row.imageryFilename ? `/api/uploads/${row.imageryFilename}` : null;
 
+/**
+ * What a visitor may know, as `GET /api/land` answers it.
+ *
+ * A function so a second reader can take the SAME answer: the founder's agent
+ * reads where the village stands when it drafts a map (server/routes/agentMap.ts),
+ * and it is handed exactly what a stranger may know, with `publicPoint` applied
+ * here once. A second copy of this projection would be a second chance to leak.
+ */
+export async function publicLand(pool: Pool) {
+  const all = await readParcels(pool);
+  const row = all[0] ?? EMPTY;
+  const point = publicPoint(row.centre, row.visibility);
+  return {
+    /*
+     * The top-level fields are the FIRST parcel and they keep the shape
+     * they had. The Living Map shell reads them, and a shell deployed
+     * before parcels existed must keep working against a server that has
+     * them: the parcel list is additive and an older reader ignores it.
+     */
+    configured: row.centre !== null,
+    visibility: row.visibility,
+    centre: point,
+    spanM: row.spanM,
+    imageryUrl: imageryUrl(row),
+    attribution: row.imageryAttribution ?? "",
+    /*
+     * WHETHER THIS PICTURE SHOWS THE SEED'S OWN RECTANGLE, as one yes-or-no.
+     *
+     * The map needs this to know whether the seed's surround, place names
+     * and caption still describe the ground under them. It cannot work it
+     * out itself: that takes the centre, and at "hidden" the centre is the
+     * one thing this route withholds. So the comparison happens here, and
+     * only its answer crosses the wire. `spanM` crosses too, because the map
+     * needs the scale, and a width on its own names no place.
+     */
+    seedFrame: isSeedFrame(row.centre, row.spanM),
+    /*
+     * Every parcel, each with its OWN ground. Each is its own map: they are
+     * not offered as one picture, because two pieces of land in different
+     * places share no coordinate space and joining them would draw ground
+     * that is not there.
+     *
+     * `publicPoint` is applied per parcel, so "hidden" hides every parcel's
+     * coordinates and not just the first one's.
+     */
+    parcels: all.map((p) => ({
+      slug: p.slug,
+      label: p.label,
+      configured: p.centre !== null,
+      centre: publicPoint(p.centre, p.visibility),
+      spanM: p.spanM,
+      imageryUrl: imageryUrl(p),
+      attribution: p.imageryAttribution ?? "",
+      seedFrame: isSeedFrame(p.centre, p.spanM),
+    })),
+  };
+}
+
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, authedUser, guardCapability, getPool, uploadsDir } = deps;
 
@@ -223,53 +281,7 @@ export function register(app: Express, deps: Deps): void {
    * different act with a different button.
    */
   app.get("/api/land", async (_req, res) => {
-    const all = await readParcels(getPool());
-    const row = all[0] ?? EMPTY;
-    const point = publicPoint(row.centre, row.visibility);
-    res.json({
-      /*
-       * The top-level fields are the FIRST parcel and they keep the shape
-       * they had. The Living Map shell reads them, and a shell deployed
-       * before parcels existed must keep working against a server that has
-       * them: the parcel list is additive and an older reader ignores it.
-       */
-      configured: row.centre !== null,
-      visibility: row.visibility,
-      centre: point,
-      spanM: row.spanM,
-      imageryUrl: imageryUrl(row),
-      attribution: row.imageryAttribution ?? "",
-      /*
-       * WHETHER THIS PICTURE SHOWS THE SEED'S OWN RECTANGLE, as one yes-or-no.
-       *
-       * The map needs this to know whether the seed's surround, place names
-       * and caption still describe the ground under them. It cannot work it
-       * out itself: that takes the centre, and at "hidden" the centre is the
-       * one thing this route withholds. So the comparison happens here, and
-       * only its answer crosses the wire. `spanM` crosses too, because the map
-       * needs the scale, and a width on its own names no place.
-       */
-      seedFrame: isSeedFrame(row.centre, row.spanM),
-      /*
-       * Every parcel, each with its OWN ground. Each is its own map: they are
-       * not offered as one picture, because two pieces of land in different
-       * places share no coordinate space and joining them would draw ground
-       * that is not there.
-       *
-       * `publicPoint` is applied per parcel, so "hidden" hides every parcel's
-       * coordinates and not just the first one's.
-       */
-      parcels: all.map((p) => ({
-        slug: p.slug,
-        label: p.label,
-        configured: p.centre !== null,
-        centre: publicPoint(p.centre, p.visibility),
-        spanM: p.spanM,
-        imageryUrl: imageryUrl(p),
-        attribution: p.imageryAttribution ?? "",
-        seedFrame: isSeedFrame(p.centre, p.spanM),
-      })),
-    });
+    res.json(await publicLand(getPool()));
   });
 
   app.get("/api/admin/land", async (req, res) => {

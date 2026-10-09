@@ -340,6 +340,7 @@
   .seatrow .nm b{display:block;font-size:13px;color:#3a2b12;font-weight:bold}
   .seatrow .nm span{font-size:11px;color:#6b4d1e}
   .seatrow .nm .why{display:block;font-style:italic;color:#8a7347;margin-top:2px}
+  .seatrow .nm .who{display:block;color:#4a5a24;margin-top:2px}
   .seatrow .held{font-size:11px;letter-spacing:.09em;font-variant:small-caps;color:#4d7c2a;border:1px solid #9cb27a;border-radius:11px;padding:2px 10px;white-space:nowrap}
   .doorbtn{display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:9px;text-align:left;
     padding:11px 14px;border-radius:7px;border:1px solid #8a6a33;cursor:pointer;font-family:inherit;
@@ -494,6 +495,13 @@
      edge at 176, 12px of air, and half the 212px button with room for a
      wider badge. It only binds under about 1014px, so a laptop never sees it. */
   body.embed:has(#panel.open) #attention,body.embed:has(#inspect.open) #attention{left:max(calc(50% - 207px),300px)}
+  /* SHE STOPS SHORT OF THE SHELL'S DOOR TOO (N06). Stepped aside to
+     right:414 her left edge is the window less 744px, which at 900 wide is
+     156, under Leave the map (its right edge 176) along the bottom where her
+     text box is: MEASURED, 3 of 27 points of her input reached the page
+     above instead. Below about 932px she narrows to keep 12px of air, and
+     never below the 230 she is when minimised. */
+  body.embed:has(#panel.open) #maia:not(.min),body.embed:has(#inspect.open) #maia:not(.min){width:max(230px,min(330px,calc(100vw - 602px)))}
   /* ---------- toasts / ripples ---------- */
   #toasts{position:absolute;top:var(--band-t-toasts,64px);left:50%;transform:translateX(-50%);z-index:65;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;
     width:min(92vw,420px)}
@@ -523,6 +531,7 @@
   .wallrow{padding:7px 8px;border-radius:6px;cursor:pointer;line-height:1.35}
   button.wallrow{display:block;width:100%;margin:0;text-align:left;background:none;border:0;font:inherit;line-height:1.35;color:inherit}
   div.wallrow{cursor:default}
+  a.wallrow{display:block;color:inherit;text-decoration:none}
   .wallrow:focus-visible{outline:2px solid #e8c877;outline-offset:-2px}
   .wallrow:hover{background:rgba(236,208,138,.1)}
   .wallrow b{color:#fff;font-weight:normal}
@@ -721,6 +730,9 @@
   body.can-edit #skin .srow[data-village],body.can-edit #skin [data-village]{display:flex}
   #skin #skSave,#skin #skReset{display:none}
   body.can-edit #skin #skSave,body.can-edit #skin #skReset{display:inline-block}
+  /* Inside the village Reset lets go of the person's own view (D11), which
+     every visitor has, so every visitor gets it. */
+  body.view-reset #skin #skReset{display:inline-block}
   #skin .vhead{flex-direction:column;gap:2px;margin-top:6px;padding-top:9px;
     border-top:1px solid rgba(201,162,94,.3)}
   #skin .vhead b{font-variant:small-caps;letter-spacing:.14em;font-weight:normal;
@@ -812,6 +824,10 @@
   #roleKey .role-part{border:1.6px solid var(--gold);
     background:linear-gradient(90deg,rgba(28,20,11,.86) 50%,var(--gold) 50%)}
   #roleKey .role-full{background:var(--gold);border:1.6px solid var(--gold)}
+  /* D3: the village's seats the lens cannot draw yet, as a door to the list. */
+  #roleKey #roleUnplaced{font:inherit;color:inherit;background:none;border:0;border-left:1px solid rgba(236,208,138,.4);
+    padding:0 0 0 9px;margin:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:24px}
+  #roleKey #roleUnplaced[hidden]{display:none}
   /* The chart covers the whole viewport at z 28 and the lens bar sits at
      z 30 on top of it, so the lens could be toggled with nothing behind
      it to see. Both of these come AFTER the rule that shows the key, so
@@ -1016,16 +1032,23 @@
   #vdrop .vfact{color:#d8cba2;font-size:11.5px}
   #vdrop .btn{font-size:11px;padding:4px 11px}
   #vdrop .vsample{font-size:10.5px;letter-spacing:.08em;color:#e8c877}
-  /* A SAMPLE READING WEARS ITS MARK ON THE CHIP. The chips read 24, 62kg,
-     96, 76% and 132 on every village with nothing on them to say no one
-     counted those. The bar has no room for a word at the widths it is drawn
-     at (the labels are already hidden under 1500 px and on a phone), so the
-     number itself is underlined in dots and the drop-down it opens leads
-     with "Sample reading". rebuildVitals ends each chip's data-tip with the
-     number's source, so a source that names a sample ("module sample",
-     "drawn land + sample") is what this keys on, and a number the founder
-     set or the drawn land measured loses the mark by itself. */
-  .vital[data-tip$="sample"] b{text-decoration:underline dotted #e8c877;text-decoration-thickness:1.5px;text-underline-offset:2px}
+  /* AN EXAMPLE SAYS SO ON THE CHIP, IN THE WORD. Rye ruled on F29
+     (2026-10-02): the five sample numbers stay, labelled as examples, and
+     the label goes once a founder sets the chip. The dotted underline this
+     replaces said "sample" only to someone who already knew what a dotted
+     underline meant. Where the small labels show, the word rides at the
+     end of the label ("People · example"); where they are hidden (under
+     1500 px, a tight fit, and every phone) it gets a line of its own under
+     the number, so it is never the thing that gets shed. rebuildVitals sets
+     data-example from chipRows(), the one place that decides, and a chip
+     that is counted, measured or held by the founder's word has no mark. */
+  .vital small i{font-style:normal;color:#e8c877}
+  /* The word sits in the chip's own bottom edge, across its full width, so
+     it costs the bar a few pixels of height and none of width. As a line in
+     the flow it widened every chip to the word: MEASURED at 390px, five
+     chips went from 70 to 88px and the bar ran 43px off each side of the
+     phone, and at 1280 the bar grew from 498 to 599px. */
+  .vital .vex{display:none;position:absolute;left:0;right:0;bottom:3px;text-align:center;font-style:normal;font-size:7.5px;letter-spacing:.14em;text-transform:uppercase;color:#e8c877;line-height:1;pointer-events:none}
   .vital{cursor:pointer}
   /* THE BAR SHEDS IN STEPS, AND topFit PICKS THE STEP. These three widths
      were a guess at when the bar fits between the buttons, and every one of
@@ -1034,10 +1057,12 @@
      page where the fit has not run, which is what :not([data-fit]) says.
      The steps are the same three, in the same order: the small labels, then
      the village name's second line with tighter cells, then the name. */
-  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} }
+  @media (max-width:1500px){ #vitals:not([data-fit]) .vital small{display:none} #vitals:not([data-fit]) .vital .vex{display:block} #vitals:not([data-fit]) .vital[data-example]{padding-bottom:13px} }
   @media (max-width:1290px){ #vitals:not([data-fit]) #villageName small{display:none} #vitals:not([data-fit]) .vital{padding:6px 8px} }
   @media (max-width:1160px){ #vitals:not([data-fit]) #villageName{display:none} }
   #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital small{display:none}
+  #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital .vex{display:block}
+  #vitals:is([data-fit="1"],[data-fit="2"],[data-fit="3"]) .vital[data-example]{padding-bottom:13px}
   #vitals:is([data-fit="2"],[data-fit="3"]) #villageName small{display:none}
   #vitals:is([data-fit="2"],[data-fit="3"]) .vital{padding:6px 8px}
   #vitals[data-fit="3"] #villageName{display:none}
@@ -1120,6 +1145,8 @@
     #skin .srow select{min-width:0;flex:1 1 0}}
   @media (prefers-reduced-motion:reduce){body.pocket #skin{transition:none}}
   body.pocket #vitals .vital small{display:none}
+  body.pocket #vitals .vital .vex{display:block}
+  body.pocket #vitals .vital[data-example]{padding-bottom:13px}
   /* A pinch that lands a few pixels high, on the strip instead of the land,
      is still a pinch at the map. These two bars sit over the canvas and take
      nothing but taps, so nothing is lost by refusing the browser here too. */
@@ -1373,6 +1400,13 @@
     border:1px solid #8a6a33;border-radius:14px;color:var(--parch);
     box-shadow:0 12px 34px rgba(0,0,0,.6);overflow:hidden}
   #help.show{display:flex}
+  /* A LANDSCAPE PHONE GETS THE HEIGHT IT HAS (N10). 42vh is 42% of the short
+     edge there: MEASURED, a 164px sheet at 844x390 with a 73px list, one of
+     thirteen threads in view and a sliver of the next. Below 500px tall the
+     sheet may rise to 60px under the top of the window, which keeps the
+     vitals strip and a band of land to tap it away by, and it still yields
+     to the band's own cap, which counts the walk card and the rest. */
+  @media (max-height:500px){body.pocket #help{max-height:min(calc(100vh - var(--band-b-help,70px) - 60px),var(--band-b-help-max,100vh))}}
   .help-head{display:flex;align-items:baseline;gap:8px;padding:10px 14px 8px;border-bottom:1px solid #4a3a22;flex:0 0 auto}
   .help-head h4{font-variant:small-caps;letter-spacing:.18em;font-weight:normal;color:var(--gold-b);font-size:12px}
   .help-sub{font-size:10px;color:#8f855f;font-style:italic}
@@ -1687,7 +1721,7 @@
 <div id="layers">
   <button id="lyNow" class="on">Now</button><button id="lyVision">Vision</button><button id="lyOrg">Org</button><button id="lyFlows">Flows</button>
 </div>
-<div id="roleKey"><span class="role-k role-open"></span>open<span class="role-k role-part"></span>part filled<span class="role-k role-full"></span>full</div>
+<div id="roleKey"><span class="role-k role-open"></span>open<span class="role-k role-part"></span>part filled<span class="role-k role-full"></span>full<button type="button" id="roleUnplaced" hidden onclick="openWall()"></button></div>
 <!-- EACH DOOR CARRIES ITS NAME. The icon is all a sighted person sees and
      the tooltip lives in data-tip, which no screen reader reads, so the seven
      doors were announced as "button" seven times. The label is the first
@@ -1762,8 +1796,8 @@
       made in more detail. The dressing rows below it stay below it. -->
  <div id="maskLook"></div>
  <div class="srow" data-dup="1"><span class="slbl">your land, in words</span><input type="text" id="skWords" placeholder="e.g. volcanic coast, mango gold"></div>
- <div class="srow"><span class="slbl">accent</span><input type="color" id="skAccent" value="#e8a13c"><span class="amv">Amora's value: #e8a13c</span></div>
- <div class="srow"><span class="slbl">parchment</span><input type="color" id="skParch" value="#f3e6c8"><span class="amv">Amora's value: #f3e6c8</span></div>
+ <div class="srow"><span class="slbl">accent</span><input type="color" id="skAccent" value="#e8a13c"><span class="amv">House value: #e8a13c</span></div>
+ <div class="srow"><span class="slbl">parchment</span><input type="color" id="skParch" value="#f3e6c8"><span class="amv">House value: #f3e6c8</span></div>
  <div class="srow"><span class="slbl">label size</span><input type="range" id="skLbl" min="80" max="130" value="100"><b id="skLblV" style="font-weight:normal;font-size:11px;width:36px;text-align:right">100%</b></div>
  <div class="srow"><span class="slbl">label style</span><select id="skLabelStyle"><option value="ribbon">ribbon · dark plate, parchment letters</option><option value="tablet">tablet · gold plaque, etched</option></select></div>
  <div class="srow"><span class="slbl">flow marks</span><select id="skFlow"><option value="glyph">a mark for every kind</option><option value="gold">one golden orb</option><option value="medium">a coloured dot</option></select></div>
@@ -1790,7 +1824,7 @@
       paint on the land. -->
  <div style="display:flex;gap:8px;margin-top:3px">
   <button class="btn" id="skSave" style="font-size:11px;padding:5px 13px">Save map skin</button>
-  <button class="btn ghostbtn" id="skReset" style="font-size:11px;padding:5px 13px">Reset to Amora</button>
+  <button class="btn ghostbtn" id="skReset" style="font-size:11px;padding:5px 13px">Reset to the house look</button>
   <button class="btn ghostbtn" id="skClose" style="font-size:11px;padding:5px 13px;margin-left:auto">✕</button>
  </div>
  <!-- This sentence is about where the VILLAGE's styling is administered, so
@@ -2172,7 +2206,91 @@ function worldToLatLon(x,y){const n=Math.pow(2,GEOREF.z)*256;
 SCENE.bound=[[350,240],[700,150],[1060,110],[1420,130],[1660,160],[1980,300],[2260,520],[2200,780],[2100,980],[1990,1230],[1830,1400],[1600,1500],[1280,1560],[1000,1470],[820,1300],[640,1050],[500,800],[400,600],[360,420]].map(p=>TP(p[0],p[1]));
 const BY={}; SCENE.structures.forEach(s=>BY[s.key]=s);
 const questsAt=k=>SCENE.quests.filter(q=>q.at===k);
-const seatsAt=k=>SCENE.seats.filter(s=>s.at===k);
+/* ---------- THE VILLAGE'S OWN ORG, LIVE (Rye, D3) ----------
+   "We need to wire it up so the map can realtime update to new seats, and
+   circle structures, etc." The shell pushes the village's circles and every
+   active seat on the `lens` message, and pushes them again whenever they
+   change while this map is open (client/src/components/map/orgFollow.ts).
+
+   WHERE A LIVE SEAT SITS. A seat the scene already draws under the same name
+   is that seat: roleApplyLive has always joined the two on the name, and the
+   scene's address for it is a person's placement. Every other seat sits at
+   its circle's HOME, and a circle's home is the first place on the land
+   whose circle names it, by the circle's id or by its name. That is the
+   founder's word, given in build mode with the inspector's circle picker and
+   published with the land, so nothing here guesses. A circle no place names
+   has no home yet, and its seats are listed as not yet placed rather than put
+   anywhere: the map may not invent where a circle lives.
+
+   NEVER WRITTEN INTO THE SCENE. These seats are their own list, so a publish
+   cannot freeze a live holder count into the land a founder drew, and a seat
+   the org tools remove leaves on the next push with nothing to clean up.
+
+   IN THE FIRST SCRIPT, AND READING ONLY ITS OWN VARS, because seatsAt is
+   asked during the boot of the third script, before that script's `let` and
+   `const` lines have run. Nothing below touches a later binding until a lens
+   message has arrived, and that cannot happen before the boot is over. */
+var ORG_ROWS=null,ORG_CIRCLES=null;
+/* Keyed by circle id and by folded name. No prototype: both keys are words a
+   village typed, and `constructor` is a word. */
+var ORG_INK=Object.create(null),ORG_BY=Object.create(null);
+/* One object per role id, kept across pushes, so a row a reader has open is
+   the same row after the next push and an index taken from it stays true. */
+var ORG_SEAT_BY=new Map();
+function orgFold(v){return String(v==null?'':v).trim().toLowerCase()}
+/* A live circle by its id or its name, or null. */
+function orgCircle(k){if(!ORG_CIRCLES||k==null||k==='')return null;
+  return ORG_BY['id:'+String(k)]||ORG_BY['nm:'+orgFold(k)]||null}
+/* Does this place's circle name that live circle? */
+function orgNames(s,c){return !!(s&&s.circle&&c&&(s.circle===c.id||orgFold(s.circle)===orgFold(c.name)))}
+/* A live circle's home: the first place on the land whose circle names it. */
+function orgHome(c){if(!c)return null;
+  for(const s of SCENE.structures)if(orgNames(s,c))return s.key;
+  return null}
+window.orgHome=orgHome;
+/* The village's live seats the scene does not already draw. */
+function orgSeats(){
+  if(!ORG_ROWS||!ORG_ROWS.length)return [];
+  const drawn=Object.create(null);
+  for(const x of SCENE.seats)drawn[orgFold(x.s)]=1;
+  const out=[],seen=Object.create(null);
+  for(const r of ORG_ROWS){
+    if(!r||typeof r.name!=='string'||!r.name.trim()||drawn[orgFold(r.name)])continue;
+    const key=(typeof r.id==='string'&&r.id)?'id:'+r.id:'nm:'+orgFold(r.name);
+    if(seen[key])continue;seen[key]=1;
+    const c=orgCircle(r.circleId);
+    let x=ORG_SEAT_BY.get(key);if(!x){x={};ORG_SEAT_BY.set(key,x)}
+    const say=String(r.description||'').replace(/\s+/g,' ').trim();
+    x.s=r.name.trim().slice(0,120);x.c=c?c.name:'';x.at=c?orgHome(c):null;
+    x.note=say.length>160?say.slice(0,157).trimEnd()+'...':say;
+    x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);
+    if(typeof orgWhoOnto==='function')orgWhoOnto(x,r);
+    x._live=true;x._org=true;x._rid=key;x.addr='creator';x.src='village';
+    out.push(x)}
+  /* A seat the village no longer keeps lets go of its object. */
+  for(const k of Array.from(ORG_SEAT_BY.keys()))if(!seen[k])ORG_SEAT_BY.delete(k);
+  return out}
+window.orgSeats=orgSeats;
+/* Every seat the map shows and offers: the scene's own, then the village's
+   live ones it does not draw. Build mode and the export keep reading
+   SCENE.seats, because those are the land's document and these are not. */
+function seatList(){const o=orgSeats();return o.length?SCENE.seats.concat(o):SCENE.seats}
+window.seatList=seatList;
+/* The ink a circle draws in: the village's own colour for a live circle, the
+   map's palette for one of its own words, or nothing. Reads CIRCLE_COL off
+   window, which is unset until the third script declares it. */
+function circleInk(c){if(!c)return '';
+  const o=ORG_INK['id:'+c]||ORG_INK['nm:'+orgFold(c)];if(o)return o;
+  const a=window.CIRCLE_COL;return (a&&a[c])||''}
+window.circleInk=circleInk;
+/* A circle's name as a sentence says it. The map's own circles are one word
+   ("Land") and read "Land circle"; a village's are usually named in full
+   ("Hearth Council") and would read "Hearth Council circle". */
+function circleWords(c){const o=orgCircle(c),n=String((o&&o.name)||c||'').trim();
+  if(!n)return 'no circle yet';
+  return /\b(circle|council|board|bodies|body|team|guild|crew|assembly|committee|collective|group)\b/i.test(n)?n:n+' circle'}
+window.circleWords=circleWords;
+const seatsAt=k=>seatList().filter(s=>s.at===k);
 const STATE_LABEL={blueprint:"Blueprint · in the Vision",funding:"Gathering the pool",building:"Under construction",active:"Alive",thriving:"Thriving",dormant:"Resting"};
 /* state is DERIVED, never stored: a pure function of phase + pool + declared activity (§4.4 L1) */
 function derivedState(s){
@@ -2516,7 +2634,15 @@ let satPlate=null,paintPlate=null,paintF=null,paintT=null,paintReady=false,brush
    read first rather than by overwriting the seed, so a seed image that
    decodes late cannot land on top of a village's ground. */
 let vilCore=null,vilSur=null,vilSurRect=null;
-const groundCore=()=>vilCore||satPlate;
+/* ANOTHER PLACE'S GROUND IS ON ITS WAY (N19). Set the moment a village
+   standing anywhere but the seed's own rectangle announces its picture, and
+   not when the picture decodes: until then the seed's photograph, coast and
+   caption are invented geography under that village, so the honest vector
+   floor shows instead. A village on the seed's own rectangle keeps the seed
+   until its own picture lands, because there the seed is true. */
+let GROUND_ELSEWHERE=false,VIL_CORE_URL=null;
+/* The seed's own plate only where the seed's geography is true; see below. */
+const groundCore=()=>vilCore||(seedGeography()?satPlate:null);
 /* THE SEED'S GEOGRAPHY BELONGS TO THE SEED'S RECTANGLE. Its surround, its
    place names and its coordinate caption describe one piece of the Earth.
    Under a village standing on that same piece they are true and they stay,
@@ -2532,7 +2658,20 @@ const SEED_GEOREF=Object.freeze({lat:GEOREF.lat,lon:GEOREF.lon,z:GEOREF.z,
   pinW:Object.freeze(GEOREF.pinW.slice()),mPerUnit:GEOREF.mPerUnit});
 const SEED_M_PER_UNIT=M_PER_UNIT;
 let vilFrame=null;
-const seedGeography=()=>!vilCore||!!(vilFrame&&vilFrame.seed);
+/* WHERE THE VILLAGE STANDS, WHEN IT HAS NO PICTURE OF ITS OWN. The answer
+   above came only with a village's own plate, so a village without one was
+   drawn on the seed's satellite, coast, place names and district names,
+   which is the seed's land presented as its own. The shell now says, in
+   every config, whether this village stands on the seed's rectangle
+   (`seedGround`, the server's `seedFrame`). False takes all of it down and
+   the vector floor shows, with the seed's own coast left off that too. Null
+   is "nobody said", which is a standalone open and every file:// QA run, and
+   it keeps the seed exactly as before. */
+let SEED_HERE=null;
+const seedGeography=()=>vilCore?!!(vilFrame&&vilFrame.seed):(!GROUND_ELSEWHERE&&SEED_HERE!==false);
+function seedVerdict(v){if(typeof v!=='boolean'||v===SEED_HERE)return;
+  SEED_HERE=v;paintReady=false;mmDirty=true;paintTerrain();applySeedGeography();
+  if(v&&window.bakePainted)bakePainted()}
 /* Whether the map knows where its own ground is, so it may print coordinates.
    The seed always does. A village elsewhere does only when its visibility
    let the centre cross the wire. */
@@ -2543,8 +2682,8 @@ const activePlate=()=>terrainMode==='paint'?groundCore():(terrainMode==='sat'?gr
 /* A plate that fails to load leaves the map exactly as it was. There is no
    broken-image state and no empty frame: the vector floor drawn by
    paintTerrain() is already the honest answer for "no photograph yet". */
-function loadPlate(url,onto){try{const im=new Image();im.decoding='async';
-  im.onload=()=>{try{onto(im)}catch(_){}};im.onerror=()=>{};im.src=url}catch(_){}}
+function loadPlate(url,onto,failed){try{const im=new Image();im.decoding='async';
+  im.onload=()=>{try{onto(im)}catch(_){}};im.onerror=()=>{try{failed&&failed()}catch(_){}};im.src=url}catch(_){failed&&failed()}}
 /* What a pushed frame means for the map's scale and coordinates.
 
    THE SEED'S RECTANGLE: the seed georeference is exactly right, so it is put
@@ -2578,21 +2717,34 @@ function applySeedGeography(){try{const el=$('mmLabel');if(el)el.style.display=s
    what a QA run asserts on. A message carrying neither url is not an error:
    it is a village that has not placed itself yet, and it means "keep the
    seed", which is the same answer /api/land gives with configured:false. */
-function setGround(g){
-  if(!g||typeof g!=='object')return false;
+/* `drawn` is called once, when the village's own picture has decoded or
+   failed, or at once when there is none to wait for: the config handler holds
+   the shell's cover on it (N19). The shell sends the picture on its own as
+   soon as it knows it, so the download starts early, and again inside the
+   config, which is what the cover waits on: the same picture is never loaded
+   twice, and a caller that asks while it is still loading waits for it. */
+let VIL_CORE_WAIT=null; // the callers waiting while VIL_CORE_URL loads, or null
+function setGround(g,drawn){
+  let told=false;const done=()=>{if(!told&&drawn){told=true;drawn()}};
+  if(!g||typeof g!=='object'){done();return false}
   const core=g.core&&typeof g.core.url==='string'&&g.core.url?g.core.url:null;
   const sur=g.surround&&typeof g.surround.url==='string'&&g.surround.url?g.surround.url:null;
   const r=g.surround&&g.surround.rect;
   const rect=Array.isArray(r)&&r.length===4&&r.every(n=>typeof n==='number'&&isFinite(n))?r.slice():null;
   const frame=g.frame&&typeof g.frame==='object'?g.frame:null;
-  if(core)loadPlate(core,im=>{vilCore=im;vilFrame=adoptFrame(frame);
-    paintReady=false;mmDirty=true;applySeedGeography();
-    window.bakePainted&&bakePainted()});
+  if(core&&core===VIL_CORE_URL){if(VIL_CORE_WAIT)VIL_CORE_WAIT.push(done);else done()}
+  else if(core){VIL_CORE_URL=core;VIL_CORE_WAIT=[...(VIL_CORE_WAIT||[]),done];
+    GROUND_ELSEWHERE=!(frame&&frame.seed===true);mmDirty=true;applySeedGeography();
+    const told2=()=>{if(VIL_CORE_URL!==core)return;const w=VIL_CORE_WAIT||[];VIL_CORE_WAIT=null;w.forEach(f=>f())};
+    loadPlate(core,im=>{if(VIL_CORE_URL===core){vilCore=im;vilFrame=adoptFrame(frame);
+      paintReady=false;mmDirty=true;applySeedGeography();
+      window.bakePainted&&bakePainted()}told2()},told2)}
+  else done();
   if(sur)loadPlate(sur,im=>{vilSur=im;vilSurRect=rect;mmDirty=true});
   return !!(core||sur);
 }
 window.setGround=setGround;
-window.groundSource=()=>vilCore?'village':(satPlate?'seed':'vector');
+window.groundSource=()=>vilCore?'village':(groundCore()?'seed':'vector');
 /* QA hook, in the same spirit as window.camBounds and window.minZoom: what
    the map would actually draw, asked from outside. */
 window.groundHas=()=>{const s=groundSurround();return {core:!!groundCore(),village:!!vilCore,surround:!!s,rect:s?s.rect.slice():null,
@@ -2618,6 +2770,10 @@ function paintTerrain(){
     tx.fillStyle=rand()<.5?'rgba(160,190,90,.5)':'rgba(120,150,60,.45)';tx.fillRect(x,y,2.2,1.2)}
   // ---- the world beyond the boundary (real geography: 9.2320°N 83.8343°W, hills above Dominicalito) ----
   tx.lineCap='round';tx.lineJoin='round';
+  /* The seed's coast, beach, highway, houses and falls are the seed's
+     geography, drawn only where it is true (seedGeography). */
+  const seedCoast=seedGeography();
+  if(seedCoast){
   const shoreX=y=>150+Math.sin(y*.006)*18+Math.sin(y*.017)*8;
   const og=tx.createLinearGradient(0,0,200,0);og.addColorStop(0,'#16455e');og.addColorStop(.6,'#2e7d99');og.addColorStop(1,'#63b3c9');
   tx.beginPath();tx.moveTo(0,0);for(let y=0;y<=H;y+=80)tx.lineTo(shoreX(y),y);tx.lineTo(0,H);tx.closePath();tx.fillStyle=og;tx.fill();
@@ -2636,6 +2792,7 @@ function paintTerrain(){
     tx.fillStyle='rgba(10,20,10,.25)';tx.beginPath();tx.ellipse(1,6,10,3.4,0,0,7);tx.fill();
     tx.fillStyle='#9c8d78';tx.fillRect(-8,-5,16,10);
     tx.fillStyle='#b0492f';tx.beginPath();tx.moveTo(-10,-5);tx.lineTo(0,-12);tx.lineTo(10,-5);tx.closePath();tx.fill();tx.restore()}
+  }
   // water areas + roads + water lines — one renderer, phase-honest (Fix 12 retired here)
   drawFeatures(tx,{target:'bake',layer:'water-areas'});
   drawFeatures(tx,{target:'bake',layer:'roads'});
@@ -2644,7 +2801,7 @@ function paintTerrain(){
   // forest stamps — only PHASE-1 land clears forest; planned land stays wild under its ghost outline
   const carveR=SCENE.features.filter(f=>(f.kind==='road'||(f.kind==='water'&&f.geom==='line'))&&f.phase<=1).map(f=>f.points);
   for(let i=0;i<5200;i++){const x=rand()*W,y=rand()*H;
-    if(x<235||zoneCarves(x,y)||nearPath(x,y,carveR,16))continue;
+    if((seedCoast&&x<235)||zoneCarves(x,y)||nearPath(x,y,carveR,16))continue;
     const r=2.6+rand()*7,sh=.16+rand()*.2;
     tx.fillStyle=`rgba(8,22,12,${sh})`;tx.beginPath();tx.arc(x+r*.45,y+r*.5,r,0,7);tx.fill();
     const t=rand();const col=t<.55?'#2f6b3d':(t<.85?'#3a7a46':'#57945a');
@@ -2655,11 +2812,11 @@ function paintTerrain(){
   tx.setLineDash([14,10]);tx.strokeStyle='rgba(236,208,138,.45)';tx.lineWidth=3;
   tx.beginPath();BOUND.forEach((p,i)=>i?tx.lineTo(p[0],p[1]):tx.moveTo(p[0],p[1]));tx.closePath();tx.stroke();tx.setLineDash([]);
   // Poza Azul falls — the real waterfall NW of the land, feeding the west creek to the sea
-  tx.fillStyle='#5a6b5a';tx.beginPath();tx.ellipse(302,242,16,9,-.4,0,7);tx.fill();
+  if(seedCoast){tx.fillStyle='#5a6b5a';tx.beginPath();tx.ellipse(302,242,16,9,-.4,0,7);tx.fill();
   tx.strokeStyle='rgba(230,246,252,.9)';tx.lineWidth=2;
   for(let i=-1;i<=1;i++){tx.beginPath();tx.moveTo(298+i*4,232);tx.quadraticCurveTo(300+i*4,242,302+i*5,250);tx.stroke()}
   tx.fillStyle='rgba(180,225,240,.85)';tx.beginPath();tx.ellipse(303,254,10,5,0,0,7);tx.fill();
-  tx.fillStyle='rgba(255,255,255,.5)';tx.beginPath();tx.ellipse(303,252,5,2.4,0,0,7);tx.fill();
+  tx.fillStyle='rgba(255,255,255,.5)';tx.beginPath();tx.ellipse(303,252,5,2.4,0,0,7);tx.fill()}
   mmDirty=true;
 }
 paintTerrain();
@@ -2680,10 +2837,19 @@ paintTerrain();
    a desk took 18 s and a phone at 4x never finished. The end is unchanged:
    paintReady, buildPaintMix, then the chip and the dials appear. A newer
    ground (setGround) supersedes a bake still running, which used to run both
-   to the end. */
-let BAKE_GEN=0,BAKE_SRC=null;
+   to the end.
+   AND IT WAITS TO BE ASKED (D31). Off the thread it still cost every visit
+   about 1.5 s of CPU on a desk and about 7 s on a phone at 4x, battery
+   included, for a terrain that sits behind a hidden chip in a sheet most
+   visitors never open. So the first opening of Your view, where the terrain
+   switch lives, asks for it (askPaint), and the plate's arrival only bakes
+   once somebody has. The Painted chip appears a moment after that opening,
+   when the bake is done, exactly as it always appeared when the bake was. */
+let BAKE_GEN=0,BAKE_SRC=null,PAINT_ASKED=false;
 const BAKE_W=1200,BAKE_H=800;
-function bakePainted(){if(paintReady||!groundCore())return;
+function askPaint(){if(PAINT_ASKED)return;PAINT_ASKED=true;bakePainted()}
+window.askPaint=askPaint;
+function bakePainted(){if(!PAINT_ASKED||paintReady||!groundCore())return;
   const src=groundCore();if(BAKE_SRC===src)return;
   const gen=++BAKE_GEN;BAKE_SRC=src;
   const live=()=>gen===BAKE_GEN;
@@ -3033,6 +3199,14 @@ function frameVillage(top,bottom){
   cam.x=(x0+x1)/2;cam.y=(y0+y1)/2-(top-bottom)/2/cam.z;cam.vx=cam.vy=0;
   clampCam();return true}
 window.frameVillage=frameVillage;
+/* The pocket's own framing: the strip between the vitals and the bottom bar,
+   measured now. Remembers the camera it set, so the hand-over can tell
+   whether anybody or anything has moved it since (D16). */
+let POCKET_FRAME=null;
+function framePocket(){const v=$('vitals'),b=$('pbar');
+  const top=v?v.getBoundingClientRect().bottom:0,r=b?b.getBoundingClientRect():null;
+  const ok=frameVillage(Math.max(0,top),r&&r.height?Math.max(0,innerHeight-r.top):0);
+  POCKET_FRAME=ok?{x:cam.x,y:cam.y,z:cam.z}:null;return ok}
 /* ANY FLIGHT NOBODY GUIDED ENDS THE GUIDE, and this line closes a hole a probe
    found rather than one anybody predicted. The gesture hooks below are bound
    to #scene, and the marks that sit OVER the land are their own DOM elements:
@@ -3109,9 +3283,23 @@ const GUIDE={
        she does not do is hold the bottom of the screen after somebody has
        just taken the map back. */
     window.jHalt&&jHalt(false);
-    if(GUIDE.why==='hand'&&window.maiaSay)
-      maiaSay('You have the map. I stopped the walk right here; tap <b>Resume the walk</b> whenever you want to carry on.');
     window.guideAffordance&&guideAffordance();
+    /* SHE NAMES ONLY A WAY BACK THAT IS THERE (N09). This line promised
+       "Resume the walk" on every stop by a hand, and with the Welcome Walk
+       switched off guideAffordance kept that button down for every journey,
+       so the Resident, Steward and Investor journeys ended on a promise of a
+       control nobody could find. It reads the offer guideAffordance just
+       set, and where there is none (a walk stopped at its first stop, or an
+       offer the visitor put away) it names one that is always there. On a
+       phone her sheet is already down, so the line raises the badge on ask
+       maia, as her welcome does. */
+    if(GUIDE.why==='hand'&&window.maiaSay){
+      const rb=document.getElementById('gresume');
+      maiaSay(rb&&rb.classList.contains('on')
+        ?'You have the map. I stopped the walk right here; tap <b>Resume the walk</b> whenever you want to carry on.'
+        :'You have the map. I stopped the walk right here. Ask me for a journey whenever you want to walk again.');
+      const bc=document.body.classList;
+      if(bc.contains('pocket')&&!bc.contains('msheet')&&window.maiaUnread)maiaUnread(true)}
     return true},
   /* EVERY INTERACTION ARRIVES HERE, from the gesture entry points the touch
      lane already owns. A `kind` is passed only by the two branches that ARE
@@ -3139,11 +3327,25 @@ window.GUIDE=GUIDE;
    deny-list would have to keep finding every panel that is not the land.
    pointerdown alone, because it fires for a mouse, a pen and a finger, and
    because calling the cancel twice is the same as calling it once. */
+/* A TAP THAT PUTS HELP AWAY IS THAT AND NOTHING MORE (N18). On a phone Help
+   closes on a tap anywhere outside it, and over a walk it covers her, so
+   the walk waits (F39). The same tap then reached GUIDE.hand here, on the
+   canvas's click and in touchNav's touchstart, and ENDED the walk it had
+   just paused: MEASURED at 390x844, JWALK null, the address cleared, and her
+   line promising a Resume button. So a gesture that begins on the land with
+   Help up is the putting away: it hands nothing over, its click opens
+   nothing, and Help's closer gives her sheet back with the walk on offer.
+   A finger that goes on to drag still pans, and a pan is taking the map. */
+let SHEET_TAP=false;
 (function handOnTheLand(){
   const LAND=['scene','icons','banners','badges','minimapWrap'];
+  const onLand=t=>LAND.some(id=>{const el=document.getElementById(id);return !!el&&(el===t||el.contains(t))});
   document.addEventListener('pointerdown',e=>{
-    for(const id of LAND){const el=document.getElementById(id);
-      if(el&&(el===e.target||el.contains(e.target))){GUIDE.hand();return}}},true)})();
+    const h=document.getElementById('help');
+    SHEET_TAP=!!(h&&h.classList.contains('show')&&onLand(e.target));
+    if(!SHEET_TAP&&onLand(e.target))GUIDE.hand()},true);
+  document.addEventListener('click',e=>{if(!SHEET_TAP)return;SHEET_TAP=false;
+    if(onLand(e.target)){e.stopPropagation();e.preventDefault()}},true)})();
 /* MOUSE AND PEN ONLY, PAST THIS LINE. This path was written for a mouse and
    fires for every finger as well, so on a phone it panned the same camera the
    pocket touch handler was already panning, from the same fingers. MEASURED
@@ -3339,7 +3541,25 @@ function addSparkle(x,y,col){for(let i=0;i<14;i++)sparkles.push({x,y,vx:(Math.ra
 let mistSeeds=[...Array(14)].map((_,i)=>({x:1600+rand()*400,y:840+rand()*300,r:60+rand()*80,ph:rand()*7}));
 
 /* ---------- render ---------- */
-function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=ts;
+/* A STILL PHONE PAINTS AT 30 (N21). frame() repaints the whole land on every
+   animation frame, sea, ground, features, shimmer, birds, plates and all,
+   whether or not anything under it changed, so a phone nobody was touching
+   spent most of its main thread on the land: MEASURED at 390x844 with the
+   CPU at 4x, 38 to 43 frames a second and 14.6 s of frame script in a 30 s
+   window. The ambient life (shimmer, surf, birds, the day) is slow and reads
+   the same at 30, so on the phone profile or a coarse pointer, while nothing
+   moves the camera, a frame that comes sooner than 32 ms after the last
+   painted one paints nothing. A drag, a pinch, a flight or a camera still
+   coasting paints every frame, as before. frame() at the foot of this block
+   decides, and stays the one place that schedules the next frame. */
+let IDLE_PAINT=0;
+const COARSE=(()=>{try{return matchMedia('(pointer:coarse)').matches}catch(_){return false}})();
+function stillFrame(ts){
+  if((COARSE||document.body.classList.contains('pocket'))&&!dragging&&!travel
+    &&Math.abs(cam.vx)+Math.abs(cam.vy)<.01&&ts-IDLE_PAINT<32)return true;
+  IDLE_PAINT=ts;return false}
+function paintLand(ts){
+  const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=ts;
   if(!dragging&&!travel){cam.x+=cam.vx;cam.y+=cam.vy;cam.vx*=.9;cam.vy*=.9;clampCam()}
   if(travel){travel.t+=dt*1.6;const k=travel.t>=1?1:(1-Math.pow(1-travel.t,3));
     cam.x=travel.sx+(travel.tx-travel.sx)*k;cam.y=travel.sy+(travel.ty-travel.sy)*k;cam.z=travel.sz+(travel.tz-travel.sz)*k;
@@ -3361,7 +3581,7 @@ function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=
     drawFeatures(cx,{target:'live',mode})}
   // water shimmer
   cx.fillStyle='rgba(220,245,255,.5)';
-  for(let i=0;i<40;i++){const c=SCENE.water.creeks[i%SCENE.water.creeks.length];const pt=c[(i*7)%c.length];
+  if(seedGeography())for(let i=0;i<40;i++){const c=SCENE.water.creeks[i%SCENE.water.creeks.length];const pt=c[(i*7)%c.length];
     if(Math.sin(t*3+i*2.7)>0.55)cx.fillRect(pt[0]+Math.sin(i*9)*6,pt[1]+Math.cos(i*5)*6,2.4,1.4)}
   // surf breathing on the shore
   cx.fillStyle='rgba(255,255,255,.5)';
@@ -3452,7 +3672,7 @@ function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=
   for(const b of birds){b.p+=b.sp*dt*60/16;if(b.p>1.15)b.p=-.15;const bx=b.p*W,by=b.y+Math.sin(b.p*9)*b.amp;
     const f=Math.sin(t*9+b.y);cx.beginPath();cx.moveTo(bx-5,by-2*f);cx.quadraticCurveTo(bx,by+2*f,bx+5,by-2*f);cx.stroke()}
   // dream-mist over phase 3 (Now mode) — OFF by default for a clean site map; founders flip it in the skin step
-  if(mode==='now'&&window.SKIN&&window.SKIN.mist){for(const m of mistSeeds){const mx=m.x+Math.sin(t*.14+m.ph)*22,my=m.y+Math.cos(t*.1+m.ph)*12;
+  if(mode==='now'&&(window.lookOf?lookOf('mist'):(window.SKIN&&window.SKIN.mist))){for(const m of mistSeeds){const mx=m.x+Math.sin(t*.14+m.ph)*22,my=m.y+Math.cos(t*.1+m.ph)*12;
     const fg=cx.createRadialGradient(mx,my,4,mx,my,m.r);fg.addColorStop(0,'rgba(214,228,214,.5)');fg.addColorStop(1,'rgba(214,228,214,0)');
     cx.fillStyle=fg;cx.beginPath();cx.arc(mx,my,m.r,0,7);cx.fill()}}
   else{ // vision: blueprint sheen
@@ -3477,7 +3697,8 @@ function frame(ts){const t=ts/1000,dt=Math.min(.05,(ts-tPrev)/1000||.016);tPrev=
   if(dp>=1.7||dp<0.12){ // moonlight
     const mg=cx.createRadialGradient(cv.width*.75,cv.height*.2,20,cv.width*.75,cv.height*.2,cv.width*.5);
     mg.addColorStop(0,'rgba(200,220,255,.13)');mg.addColorStop(1,'rgba(0,0,0,0)');cx.fillStyle=mg;cx.fillRect(0,0,cv.width,cv.height)}
-  syncBanners();drawMinimap();
+  syncBanners();drawMinimap()}
+function frame(ts){if(!stillFrame(ts))paintLand(ts);
   requestAnimationFrame(frame)}
 </script>
 <script>
@@ -3572,6 +3793,10 @@ function themeFromWords(s){
   return{label:'Your Land',sub:s,wash:`hsla(${hue},40%,25%,.16)`,
     v:{'--t-surface':hslv(hue,30,17),'--t-ring':hslv((hue+38)%360,44,64),'--t-icon':hslv(hue,22,92),
        '--t-accent':hslv((hue+85)%360,58,54),'--gold':hslv((hue+38)%360,40,58),'--gold-b':hslv((hue+38)%360,52,74),'--parch':hslv((hue+40)%360,36,89)}}}
+/* A person's own palette, mixed on the theme under it: surface, ring and
+   accent are theirs, and gold follows the ring. */
+function paletteTheme(base,p){return{label:'Your Land',sub:'custom palette',wash:base.wash,
+  v:{...base.v,'--t-surface':p.surface,'--t-ring':p.ring,'--t-accent':p.accent,'--gold':p.ring}}}
 
 /* ---------- the emblem set: hand-drawn-stroke SVG icons, ReGen lineage ---------- */
 const ICONS={
@@ -3657,7 +3882,7 @@ function paintPoiArt(s,el){
     '<path class="lash" d="M14 12v-5"/><path class="pen" d="M14 5l11 3.2-11 3.4z"/>'+
     '</svg></span>');
   el.querySelector('.rm').onclick=e=>{e.stopPropagation();removeStructure(s)};
-  el.style.setProperty('--pring',s.circle?(CIRCLE_COL[s.circle]||'#9aa08f'):'#9aa08f')}
+  el.style.setProperty('--pring',s.circle?(circleInk(s.circle)||'#9aa08f'):'#9aa08f')}
 function makePoi(s){
   /* One element per key. A second call used to append a second element and
      overwrite pEls, so the first was orphaned on the land and survived every
@@ -3787,10 +4012,21 @@ function makeBadgeGroup(s){
   ($('badges')||iWrap).appendChild(g);bgEls[s.key]=g;return g;
 }
 for(const s of SCENE.structures) makeBadgeGroup(s);
+/* ONE GROUP PER BUILDING ON THE LAND, kept in step with the land. Groups
+   were made once, at boot, for the seed's buildings: a building placed,
+   duplicated or restored later had none, so its seals never showed, and a
+   restore that took the seed's buildings away left their groups standing
+   with their last seals, on a blank board and under another village's
+   draft. Asked on every refresh, which the tick runs every three seconds. */
+function syncBadgeGroups(){
+  const here=new Set(SCENE.structures.map(s=>s.key));
+  for(const k of Object.keys(bgEls))if(!here.has(k)){bgEls[k].remove();delete bgEls[k]}
+  for(const s of SCENE.structures)if(!bgEls[s.key])makeBadgeGroup(s)}
 
 /* Recompute every badge from the projections. Called on the tick, after an
    edit, and after a restore: never trusted to be in sync on its own. */
 function refreshBadges(){
+  syncBadgeGroups();
   for(const s of SCENE.structures){
     const g=bgEls[s.key];if(!g)continue;
     const qs=(typeof questsAt==='function')?questsAt(s.key):[];
@@ -3814,7 +4050,7 @@ function refreshBadges(){
       // No work here yet, so the door says there is room for some.
       marks.push({kind:'invite',tint:'',pips:0,rim:'r-open',braid:false,n:0});
     }
-    if(st.length&&badgeOn(s,'seat')) marks.push({kind:'seat',tint:(window.CIRCLE_COL&&window.CIRCLE_COL[st[0].c||s.circle])||'',
+    if(st.length&&badgeOn(s,'seat')) marks.push({kind:'seat',tint:circleInk(st[0].c||s.circle),
       rel:(typeof roleAny==='function')?roleAny(st):true,
       pips:0,rim:'r-silver r-open',braid:false,n:st.length});
     if(th.length&&badgeOn(s,'talk')) marks.push({kind:'talk',tint:'',pips:0,rim:'r-soft',braid:false,n:th.length});
@@ -4112,6 +4348,7 @@ $('badges').addEventListener('click',e=>{
 function inviteHere(key){
   const s=BY[key];if(!s)return;
   if(document.body.classList.contains('pocket')){
+    DOOR_ADDR='';
     $('moduleCard').innerHTML=`<h2>⚑ ${escq(s.name)}</h2>
       <div class="route">This place has room for work.</div>
       <p>Nothing is asked for here yet. If you can see what wants doing, write it and the village will meet you at it.</p>
@@ -4540,7 +4777,7 @@ function homeSheet(key){
      query is added after: realRoute returns the bare path and would drop it. */
   const page=realRoute(room?'/stay':'/reserve');
   const route=!page?'':room?page:page+'?from=map&hamlet='+encodeURIComponent(key);
-  setHash('#/place/'+key);
+  DOOR_ADDR='#/place/'+key;setHash(DOOR_ADDR);
   $('moduleCard').innerHTML=`<h2>⌂ Request a home at ${escq(s.name)}</h2>
     <div class="route">${line}</div>
     ${(lot&&housingNote(key))?`<p style="margin:4px 0 0;font-size:11.5px;color:#a3703d">${housingNote(key)}</p>`:''}
@@ -4575,7 +4812,16 @@ const VICON={people:'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 0114 0z',
   food:'M12 2c1 4-3 5-3 9a3 3 0 006 0c0-4-4-5-3-9zM7 20h10',
   water:'M12 3s6 7 6 11a6 6 0 01-12 0c0-4 6-11 6-11z',
   canopy:'M12 3l7 8h-4l4 6H5l4-6H5l7-8zM12 17v4',
-  hearts:'M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z'};
+  hearts:'M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z',
+  /* The icons a founder can give a chip of their own in Village settings.
+     shared/mapStatChips.ts carries the same paths for the editor's picker,
+     and shared/mapArtifactChips.test.ts holds the two tables equal. */
+  quests:'M6 21V4m0 0h10l-2 4 2 4H6',
+  seats:'M7 4v9h10V4M5 13h14M7 13v7m10-7v7',
+  circles:'M12 4a8 8 0 100 16 8 8 0 000-16zm0 4a4 4 0 100 8 4 4 0 000-8z',
+  events:'M5 6h14v14H5zM5 10h14M9 3v5m6-5v5',
+  leaf:'M5 19c0-8 5-14 14-14 0 9-6 14-14 14zm0 0l7-7',
+  star:'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z'};
 /* THE MOON IS TODAY'S MOON. The chip was a fixed waxing gibbous, "cycle
    closes in 6 days", on every day of the year, over a drop-down that names
    its source as the lunar calendar. lunation() is Meeus's formula for the
@@ -4612,11 +4858,51 @@ function moonToday(when){
     name:(today?today[1]:NAMES[j])+' · '+next[1]+(n===1?' tomorrow':' in '+n+' days')}}
 window.moonToday=moonToday;
 {const m=moonToday();SCENE.moon=m.moon;SCENE.moonName=m.name}
+/* THE CHIPS ARE THE VILLAGE'S (F29, Rye 2026-10-02): "Mark them as examples
+   and wire them to admin ... Label as example - this label goes away once
+   set." The shell pushes {type:'chips'}: the founder's list from Village
+   settings, in order, each one already resolved by the server
+   (shared/mapStatChips.ts). A chip with a source carries its reading. A chip
+   nobody has set is an EXAMPLE: one of the five this map has always drawn
+   keeps its own number from vitalsData() (sample, the drawn land, or a number
+   held by the founder's word), and any other draws a question mark. Either
+   way the chip says "example" until somebody sets it.
+   Standalone, with no shell, CHIPS stays null and the bar is the five it
+   always was, so every QA run and every file:// open reads the same. */
+window.CHIPS=window.CHIPS||null;
+/* The five this map has always carried. Only these have a number of the
+   map's own; any other id is the founder's word and is never looked up in a
+   table by it ("constructor" is a good id, and every object answers it). */
+const LEGACY_CHIPS=['people','food','water','canopy','hearts'];
+const chipIcon=k=>Object.prototype.hasOwnProperty.call(VICON,k)?VICON[k]:VICON.star;
+/* One row per chip, in the order the bar draws them. Everything that shows a
+   chip's number (the bar, its drop-down, the Village Health door) reads this,
+   so none of them can say a different thing about the same chip. */
+function chipRows(){
+  const D=(typeof vitalsData==='function')?vitalsData():{};
+  const seed=k=>SCENE.vitals.find(v=>v.k===k);
+  const own=(k,label,icon,link)=>{const legacy=LEGACY_CHIPS.includes(k);
+    const d=!legacy?null:(D[k]||(seed(k)?{...seed(k),how:seed(k).sub}:null));
+    if(!d)return{k,label,icon,v:'?',sub:'',how:'An example. The founder has not chosen what this chip reads yet.',src:'example',example:true,link,live:false};
+    /* A held number or a measured one is the village's; only a sample is an example. */
+    return{k,label,icon,v:d.v,sub:d.sub,how:d.how,src:d.src,example:/sample/.test(String(d.src||'')),link,live:false}};
+  if(!Array.isArray(window.CHIPS))return SCENE.vitals.map(v=>own(v.k,v.label,v.k,''));
+  return window.CHIPS.map(c=>(c.state==='live'||c.state==='manual')
+    ?{k:c.id,label:c.label,icon:c.icon,v:c.value,sub:c.sub,how:c.how,src:c.state==='manual'?'founder-set':'live',
+      example:false,link:c.link,live:true,asOf:c.asOf,countedAt:c.countedAt}
+    :own(c.id,c.label,c.icon,c.link))}
+window.chipRows=chipRows;
+/* The Village Health door's rows, one per chip, from chipRows(). A function
+   of its own because two things draw them: the door when it opens, and
+   applyChips when a push changes the chips while the door is open. */
+function healthChipRows(){const rows=chipRows();
+  return rows.map(r=>`<div class="mrow"><span><b>${escq(r.label)}</b><small>${escq(r.sub)}${r.example?' · example':''}</small></span><span><b>${escq(r.v)}</b></span></div>`).join('')
+    +(rows.some(r=>r.example)?'<div class="lastv">a row marked example is a stand-in. It reads the village once the founder chooses its source in Village settings</div>':'')}
+window.healthChipRows=healthChipRows;
 function rebuildVitals(){const w=$('vitals');
-  const D=(typeof vitalsData==='function')?vitalsData():null;
-  w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+SCENE.vitals.map(v=>{
-    const d=(D&&D[v.k])||{v:v.v,sub:v.sub,src:v.src,how:v.sub};
-    return `<button type="button" class="vital" data-k="${escq(v.k)}" aria-label="${escq(v.label)}: ${escq(d.v)}, ${escq(vitalProv(d.src))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(d.how)} · ${escq(d.src)}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${VICON[v.k]}"/></svg><span><b>${escq(d.v)}</b><small>${escq(v.label)}</small></span></button>`}).join('')
+  const rows=chipRows();
+  w.innerHTML=`<div id="villageName">Amora<small>the living map</small></div>`+rows.map(r=>
+    `<button type="button" class="vital" data-k="${escq(r.k)}"${r.example?' data-example="1"':''} aria-label="${escq(r.label)}: ${escq(r.v)}, ${escq(vitalProv(r))}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(r.how)} · ${escq(vitalSrcWord(r))}"><svg viewBox="0 0 24 24" fill="none" stroke="#e8c877" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="${chipIcon(r.icon)}"/></svg><span><b>${escq(r.v)}</b><small>${escq(r.label)}${r.example?'<i> · example</i>':''}</small>${r.example?'<em class="vex" aria-hidden="true">example</em>':''}</span></button>`).join('')
    +`<button type="button" class="vital" data-k="moon" aria-label="The Moon: ${escq(SCENE.moonName)}" aria-expanded="false" aria-controls="vdrop" data-tip="${escq(SCENE.moonName)}"><span id="moon">${escq(SCENE.moon)}</span></button>`;
   /* A KEY CAN OPEN A READING. The chips were divs with an onclick, so the
      drop-downs, and the doors inside them, were mouse only. A click that
@@ -4628,9 +4914,47 @@ function rebuildVitals(){const w=$('vitals');
     if(e.detail===0){const f=$('vdrop').querySelector('button,a[href],input');if(f)f.focus({preventScroll:true})}})}
 /* What a chip says its number is, in the words its own drop-down uses. The
    small label is hidden below 1500 px wide, so the chip's name is the only
-   place a screen reader learns which reading it is, and that it is sample. */
-function vitalProv(src){src=String(src||'');
-  return src==='founder-set'?'set by the founder':(src==='drawn land'?'measured from the drawn land':'sample reading')}
+   place a screen reader learns which reading it is, and that it is an
+   example. */
+function vitalProv(r){if(r.example)return 'example. The founder has not set this yet';
+  return r.src==='live'?'counted by the village':r.src==='drawn land'?'measured from the drawn land':'set by the founder'}
+/* The last word of a chip's tip: where its number comes from. */
+function vitalSrcWord(r){return r.example?'example':r.src==='live'?'counted live':r.src==='founder-set'?'set by the founder':String(r.src||'')}
+/* A push from the shell. Strings only, so nothing in a chip can become
+   markup or code, and drawn through escq like every founder value. The bar
+   is redrawn only when something changed, because the shell asks every
+   minute and a redraw resizes the bar under a reader's pointer. */
+let CHIPS_SIG='';
+function applyChips(list){
+  const str=v=>v==null?'':String(v);
+  const clean=list.filter(c=>c&&typeof c==='object'&&typeof c.id==='string'&&c.id).slice(0,12).map(c=>({
+    id:str(c.id),label:str(c.label),icon:str(c.icon),state:['live','manual','example'].includes(c.state)?c.state:'example',
+    value:c.value==null?null:str(c.value),sub:str(c.sub),how:str(c.how),asOf:str(c.asOf),countedAt:str(c.countedAt),link:str(c.link),source:str(c.source)}));
+  const sig=JSON.stringify(clean);if(sig===CHIPS_SIG)return;
+  CHIPS_SIG=sig;window.CHIPS=clean;rebuildVitals();
+  /* NOTHING A PUSH DROPS STAYS DRAWN (the treasury, Rye 2026-10-05: "Treasury
+     balance shown to members only"). A chip left out of a push is the server
+     withholding it from whoever is looking now, a member who signed out with
+     the map open among them. So the Village Health door's rows are redrawn
+     from this push, open or not, and a reading that is closed, or whose chip
+     is gone, keeps none of its old words in the page. */
+  const card=$('moduleCard'),held=card&&card.querySelector('.chiprows');
+  if(held)held.innerHTML=healthChipRows();
+  /* An open reading follows its chip, unless somebody is typing in it. A
+     keyboard reader on one of its doors stays on the same door. */
+  const dp=$('vdrop');if(!dp.classList.contains('show')){dp.innerHTML='';return}
+  if(!window.VDROP_FROM)return;
+  const k=window.VDROP_FROM.dataset.k;
+  const el=[...document.querySelectorAll('#vitals .vital')].find(e=>e.dataset.k===k);
+  if(!el){dp.classList.remove('show');dp.innerHTML='';return}
+  window.VDROP_FROM=el;
+  const a=document.activeElement,inside=dp.contains(a);
+  if(inside&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  const doors=()=>[...dp.querySelectorAll('button,a[href],input')];
+  const at=inside?doors().indexOf(a):-1;
+  openVitalDrop(k,el);
+  if(at>=0){const f=doors()[at];if(f)f.focus({preventScroll:true})}}
+window.applyChips=applyChips;
 window.rebuildVitals=rebuildVitals;rebuildVitals();
 
 /* banners */
@@ -4658,7 +4982,7 @@ for(const d of SCENE.districts){const el=document.createElement('div');el.classN
 const GEO=[{t:'Pacific Ocean',x:200,y:840,cls:' ocean'},{t:'Dominicalito',x:610,y:430,cls:''},{t:'Poza Azul falls',x:1160,y:168,cls:''},{t:'Costanera Sur',x:560,y:1120,cls:''}];
 GEO.forEach((g,i)=>{const el=document.createElement('div');el.className='banner geo'+g.cls;el.textContent=g.t;
   bWrap.appendChild(el);bEls['g_'+i]=el});
-function bannerHTML(s){return `<span class="dot" style="background:${s.circle?(CIRCLE_COL[s.circle]||'#9aa08f'):'#9aa08f'}"></span>${escq(s.name)}<span class="cnt"></span>`}
+function bannerHTML(s){return `<span class="dot" style="background:${s.circle?(circleInk(s.circle)||'#9aa08f'):'#9aa08f'}"></span>${escq(s.name)}<span class="cnt"></span>`}
 function refreshBanner(s){const el=bEls[s.key];if(el)el.innerHTML=bannerHTML(s)}
 function makeBanner(s){if(bEls[s.key])bEls[s.key].remove(); // one per key, as makePoi
   const el=document.createElement('div');el.className='banner';
@@ -4713,7 +5037,7 @@ function syncBanners(){
      delete names for districts with a building plainly on the screen. */
   const KIN_R=k*43;
   for(const d of SCENE.districts){const el=bEls['d_'+d.id];const[sx,sy]=worldToScreen(d.x,d.y-46);
-    const hideD=(zoomed||!roomy);el.style.display=hideD?'none':'block';if(hideD)continue;
+    const hideD=(zoomed||!roomy||!seedGeography());el.style.display=hideD?'none':'block';if(hideD)continue; // the seed's district names are seed geography
     const dw=el.offsetWidth||140,dh=el.offsetHeight||22;
     /* Never silent at this zoom, because the district names are the only
        words on the land, so it takes the cheapest spot in its table rather
@@ -4957,8 +5281,12 @@ function syncBanners(){
 
 /* hover card */
 const hc=$('hovercard');let hoverPin=null;
+/* Where a building stands, in words. The seed's district names are seed
+   geography, so they are only said where the seed's geography is true. */
+function districtWord(s){if(!seedGeography())return 'the land';
+  return s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name}
 function showHover(s,anchor){const q=questsAt(s.key).length,st=seatsAt(s.key).filter(seatOpen).length;
-  hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(s.circle)+' circle':'needs a steward'} · ${escq(s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name)}</div>
+  hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(circleWords(s.circle)):'needs a steward'} · ${escq(districtWord(s))}</div>
   <div class="state">${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
   <div class="row"><span>⚑ <b>${q}</b> quest${q===1?'':'s'}</span><span>⛨ <b>${st}</b> seat${st===1?'':'s'} open</span></div>
   ${s.event?`<div class="row"><span>✦ ${escq(s.event)}</span></div>`:''}
@@ -4987,7 +5315,7 @@ function openPanel(key,tab,item){const s=BY[key];if(!s){toast('That place is no 
   [...$('tabs').children].forEach(b=>b.onclick=()=>renderTab(+b.dataset.i));
   renderTab(tab||0);maiaContext(s);if(item)focusItem(item)}
 function panelHead(s){
-  $('panelHead').innerHTML=`<h2>${escq(s.name)}</h2><div class="sub">${s.circle?escq(s.circle)+' circle':'needs a steward'} · ${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
+  $('panelHead').innerHTML=`<h2>${escq(s.name)}</h2><div class="sub">${s.circle?escq(circleWords(s.circle)):'needs a steward'} · ${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
     <span class="statepill">${s.event?('✦ '+escq(s.event)):escq(phaseName(s.phase))}</span>`}
 /* THE LAND CHANGED UNDER AN OPEN DOOR. restoreScene rebuilds every place,
    quest and seat from the scene it is handed, and the panel is DOM that
@@ -5000,7 +5328,7 @@ function panelHead(s){
 function refreshPanel(){
   if(!panelKey||!$('panel').classList.contains('open'))return;
   const s=BY[panelKey];
-  if(!s){$('panel').classList.remove('open');panelKey=null;setHash('');toast('That place is no longer on the map.');return}
+  if(!s){$('panel').classList.remove('open');panelKey=null;setHash(viewHash());toast('That place is no longer on the map.');return}
   panelHead(s);
   const on=[...$('tabs').children].findIndex(b=>b.classList.contains('on'));
   renderTab(on<0?0:on);
@@ -5012,7 +5340,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     const fin=SCENE.flows.filter(f=>f.to===s.key),fout=SCENE.flows.filter(f=>f.from===s.key);
     const onland=fin.filter(f=>f.from).length,loop=fin.length?Math.round(onland/fin.length*100):null;
     const facts=(window.FACTS||[]).filter(f=>f.at===s.key);
-    const dn=s.district==='heart'?'Village Heart':(SCENE.districts.find(d=>d.id===s.district)||{name:'the land'}).name;
+    const dn=districtWord(s);
     const fchip=(f,dir)=>{const o=dir==='in'?(f.from?BY[f.from]:null):(f.to?BY[f.to]:null);
       return `<span style="display:inline-flex;align-items:center;gap:5px;margin:0 5px 5px 0;padding:2px 9px;border:1px solid #c8ab6f;border-radius:11px;font-size:11px;background:#fdf6e0"><i style="width:8px;height:8px;border-radius:50%;background:${escq(mediaColor(f.medium))};display:inline-block"></i>${o?escq(o.name):(dir==='in'?'imported ⚠':'off-land')}</span>`};
     const vchip=f2=>`<span style="display:inline-block;margin:0 5px 5px 0;padding:2px 9px;border:1px solid #c8ab6f;border-radius:11px;font-size:11px;background:#fdf6e0">${escq(f2.payload.label)}: <b>${escq(f2.payload.value)}</b></span>`;
@@ -5054,9 +5382,13 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
      is posted to the seat, so the button takes the reader there, through
      siteNav like every other door to the site. See seatOpen for which
      seats carry it. */
+  /* The village's own seats first, and the map's unmatched words after them:
+     a reader looking for a seat to take reads the real ones before the list
+     of things the map drew. Stable, so each group keeps its own order. */
   if(i===2){const circ='/map/circles',any=st.some(x=>!seatUnlisted(x)&&roleState(x)!=='full');
-    body.innerHTML=st.length?st.map(x=>{const full=roleState(x)==='full',unl=seatUnlisted(x);
-      return `<div class="seatrow" data-item="${escq(itemAddr('seat',x))}"><div class="nm"><b>${escq(x.s)}</b><span>${escq(x.c)} circle · ${escq(x.note)}</span>${unl?`<span class="why">Drawn on this map. Not one of the village's roles yet.</span>`:''}</div>
+    const ordered=st.filter(x=>!seatUnlisted(x)).concat(st.filter(seatUnlisted));
+    body.innerHTML=ordered.length?ordered.map(x=>{const full=roleState(x)==='full',unl=seatUnlisted(x);
+      return `<div class="seatrow" data-item="${escq(itemAddr('seat',x))}"><div class="nm"><b>${escq(x.s)}</b><span>${escq(circleWords(x.c))}${x.note?' · '+escq(x.note):''}</span>${seatWho(x)}${unl?`<span class="why">Drawn on this map. Not one of the village's roles yet.</span>`:''}</div>
       ${full?`<span class="held">held</span>`:unl?'':`<a class="btn" href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">Raise a hand ↗</a>`}</div>`}).join('')+
       `<div class="lastv">${any?'Raise a hand opens':'The village keeps its roles on'} <a href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">the circles view</a>${any?'. That is where the village keeps its roles, and where a member\'s raised hand reaches the seat.':'.'}</div>`
     :`<p>No seats are drawn at this place.</p>`}
@@ -5069,7 +5401,16 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
       `<div class="lastv">Adding one, flagging one, or asking for a photograph of yourself to come down all happen through that door.</div>`}
   if(i===4)body.innerHTML=((s.modules&&s.modules.length)?s.modules.map((m,mi)=>`<button class="doorbtn" onclick="openDoorHere(${mi})"><span><b>${escq(doorLabel(m))}</b><br><span>${escq(doorRoute(m))}</span></span><span class="arr">➤</span></button>`).join(''):`<p>No doors here yet. The founder opens them in build mode.</p>`)+
     `<div class="lastv">Every door is also a page. The same room, reachable from the menu or from the land.</div>`}
-$('panelClose').onclick=()=>{$('panel').classList.remove('open');panelKey=null;setHash('')};
+/* Who sits in a live seat, on the tier the village shows names to. A reader
+   without that tier is told how many, which is the shape of the village and
+   is public wherever the map is. */
+function seatWho(x){if(!x||!x._live||x._held==null)return '';
+  const names=x._holders||[],held=x._held||0,seats=x._seats||1;
+  if(!held)return `<span class="who">${seats>1?seats+' seats, all open':'Nobody holds this seat yet'}</span>`;
+  const left=Math.max(0,seats-held);
+  return `<span class="who">${names.length?'Held by '+escq(names.join(', ')):held+' of '+seats+' held'}${left&&names.length?' · '+left+' open':''}</span>`}
+window.seatWho=seatWho;
+$('panelClose').onclick=()=>{$('panel').classList.remove('open');panelKey=null;setHash(viewHash())};
 function claimQuest(q,at){
   const id=questId(q),on=!QUEST_CLAIM[id];
   if(on)QUEST_CLAIM[id]=1;else delete QUEST_CLAIM[id];
@@ -5104,7 +5445,7 @@ function toast(msg){const box=$('toasts');
 const mm=$('minimap'),mmx=mm.getContext('2d');let mmBase=null;
 function drawMinimap(){if(mmDirty){mmBase=document.createElement('canvas');mmBase.width=240;mmBase.height=160;
     const b=mmBase.getContext('2d');b.drawImage(activePlate()||terrain,0,0,240,160);
-    if(terrainMode==='paint'&&paintPlate&&brushVal>0){b.globalAlpha=brushVal;b.drawImage(paintPlate,0,0,240,160);b.globalAlpha=1}
+    if(terrainMode==='paint'&&paintPlate&&brushVal>0&&groundCore()){b.globalAlpha=brushVal;b.drawImage(paintPlate,0,0,240,160);b.globalAlpha=1}
     b.fillStyle='rgba(10,16,10,.25)';b.fillRect(0,0,240,160);mmDirty=false}
   mmx.drawImage(mmBase,0,0);
   for(const s of SCENE.structures){if(mode==='now'&&s.state==='blueprint')continue;
@@ -5121,13 +5462,14 @@ mm.addEventListener('click',e=>{const r=mm.getBoundingClientRect();
 $('lyNow').onclick=()=>setMode('now');$('lyVision').onclick=()=>setMode('vision');
 $('lyOrg').onclick=()=>{orgOn=!orgOn;$('lyOrg').classList.toggle('on',orgOn);
   document.body.classList.toggle('org-lens',orgOn); // the key rides the same switch
+  lensMoved();
   toast(orgOn?'Org lens: a halo where each circle lives, and one satellite for every role.':'Org lens off')};
 let flowsSeen=false;
-$('lyFlows').onclick=()=>{flowsOn=!flowsOn;$('lyFlows').classList.toggle('on',flowsOn);
+$('lyFlows').onclick=()=>{flowsOn=!flowsOn;$('lyFlows').classList.toggle('on',flowsOn);lensMoved();
   toast(flowsOn?'Flows lens on. Every kind of moving thing wears its own mark: a droplet for water, a bowl for a cooked meal, a leaf for compost.':'Flows lens off');
   if(flowsOn&&!flowsSeen){flowsSeen=true;
     maiaSay(`The <b>Flows lens</b>: the village as one body. Spring to tank to beds; garden to kitchen; kitchen back to soil as compost. The dashed falls are <b>imports</b>, and every one is a quest waiting to be written. Close the loop and the map will show it.`)}};
-function setMode(m){mode=m;$('lyNow').classList.toggle('on',m==='now');$('lyVision').classList.toggle('on',m==='vision');
+function setMode(m){mode=m;$('lyNow').classList.toggle('on',m==='now');$('lyVision').classList.toggle('on',m==='vision');lensMoved();
   if(m==='vision'){maiaSay(`This is the <b>Vision</b>, the whole masterplan at full build-out. The blue ghosts are the gap between today and the dream, and every one of them is fundable and questable. The southern dream-lands? Just the future, waiting for ground to break.`)}
   mmDirty=true}
 /* Once a person has set the hour, the glyph is the state, so the name
@@ -5182,13 +5524,25 @@ function buildWall(){
      not listed here, and a drawn seat the village does not keep is listed
      under its own heading, so the founder can still find it to fix it. */
   `<div class="wallhead">open seats</div>`+
-  SCENE.seats.filter(seatOpen).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · ${escq(x.c)} circle</span></button>`).join('')+
+  seatList().filter(x=>seatOpen(x)&&x.at&&BY[x.at]).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at].name)} · ${escq(circleWords(x.c))}</span></button>`).join('')+
+  /* D3: the village's seats with no place on the land yet. Real roles, so
+     they are listed; no place, so a row opens the circles view, where the
+     village keeps them, and not a building. */
+  wallUnplaced()+
   (SCENE.seats.some(seatUnlisted)?`<div class="wallhead">seats on the map, not the village's roles yet</div>`+
     SCENE.seats.filter(seatUnlisted).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · drawn here, matched to no role</span></button>`).join(''):'')+
   `<div class="wallhead">open quests</div>`+
   SCENE.quests.map(x=>{const go=!!(x.at&&BY[x.at]),tag=go?'button':'div';
     return `<${tag} class="wallrow"${go?` type="button" onclick="wallGo('${escj(x.at)}',1)"`:''}><b>⚑ ${escq(x.q)}</b><span>${go?escq(BY[x.at].name)+' · ':'Quest Board · not yet placed · '}${escq(x.r)}</span></${tag}>`}).join('')}
 
+function wallUnplaced(){if(typeof orgUnplaced!=='function'||!ORG_CIRCLES)return '';
+  const u=orgUnplaced(),circ='/map/circles';
+  const go=`href="${escq(siteHref(circ))}" onclick="return siteNav(event,'${circ}')"`;
+  return (u.seats.length?`<div class="wallhead">the village's seats, not placed on the land yet</div>`+
+    u.seats.map(x=>`<a class="wallrow" ${go}><b>⛨ ${escq(x.s)}</b><span>${escq(circleWords(x.c))} · ${seatOpen(x)?'open':'held'} · no place on the map yet</span></a>`).join(''):'')+
+    (u.circles.length?`<div class="wallhead">circles with no home on the land yet</div>`+
+    u.circles.map(c=>`<div class="wallrow"><b>◎ ${escq(c.name)}</b><span>${buildMode?'choose it as the circle of a place, in that place\'s inspect card':'a founder gives it a home in build mode'}</span></div>`).join(''):'')}
+window.wallUnplaced=wallUnplaced;
 /* theme panel */
 /* The rich swatches this built now come out of renderSkinThemes(), into the
    merged panel's own theme row, so this host no longer exists and this
@@ -5213,25 +5567,76 @@ document.querySelectorAll('[data-tm]').forEach(b=>b.onclick=()=>{terrainMode=b.d
        'Vector floor. The drawn land every village gets on day one.')});
 $('pBrush').oninput=e=>{brushVal=+e.target.value/100;$('pBrushV').textContent=e.target.value+'%';mmDirty=true};
 $('pPal').oninput=e=>{palVal=+e.target.value/100;$('pPalV').textContent=e.target.value+'%';buildPaintMix()};
-document.querySelectorAll('[data-im]').forEach(b=>b.onclick=()=>{iconMode=b.dataset.im;
+document.querySelectorAll('[data-im]').forEach(b=>b.onclick=()=>{
+  /* The person's own (D11): kept in their browser through pickIcon. */
+  if(!(window.pickIcon&&pickIcon(b.dataset.im)))iconMode=b.dataset.im;
   document.querySelectorAll('[data-im]').forEach(x=>x.classList.toggle('on',x===b));
   maiaSay(b.dataset.im==='painted'?'Painted sprites: the village in oils. Families without an approved sprite keep their emblem, honestly.':b.dataset.im==='iso'?'Isometric everywhere: the village in the round.':b.dataset.im==='flat'?'Emblems everywhere: the cartographer\'s view.':'Auto: emblems from afar, buildings up close.')});
-$('cApply').onclick=()=>{applyTheme({label:'Your Land',sub:'custom palette',wash:THEME.wash,
-  v:{...THEME.v,'--t-surface':$('cSurface').value,'--t-ring':$('cRing').value,'--t-accent':$('cAccent').value,'--gold':$('cRing').value}},
-  `Custom palette applied. Surface, ring, and accent are yours; I tuned the rest to match. Upload a full brand kit on the site and the whole map wears it.`)};
+/* The custom palette is the person's own (D11) and was kept nowhere: it was
+   gone on the next reload. It goes in the mask, over the theme it was mixed
+   on, and a palette's accent replaces any accent chosen before it. */
+$('cApply').onclick=()=>{const p={surface:$('cSurface').value,ring:$('cRing').value,accent:$('cAccent').value};
+  if(window.keepLook)keepLook({palette:p,accent:null});
+  applyTheme(paletteTheme(THEME,p),
+  `Custom palette applied. Surface, ring, and accent are yours; I tuned the rest to match. Upload a full brand kit on the site and the whole map wears it.`);
+  if(window.applySkinOverrides)applySkinOverrides();if(window.syncLookControls)syncLookControls()};
 $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
-  keepLook({words:w,theme:null});
+  keepLook({words:w,theme:null,palette:null});
   applyTheme(themeFromWords(w),`I read “${escq(w)}” and wove a palette from it. Same words, same colors, every time. The full art direction arrives with the platform build; this weave is the honest floor.`);
   $('themePanel').classList.remove('show')};
+
+/* WHAT NEEDS HANDS STANDS ABOVE HER WHEN THERE IS NO ROOM BESIDE HER (N06).
+   With a place or the inspector open, the land left of the 400px panel holds
+   the shell's door, this button and Maia side by side only from about
+   1280px. Below that the button (z 36 there, so its card stays on top) sat
+   on her text box: MEASURED with the Greenhouse open, 11% of her input
+   reachable at 900x900, 33% at 960x1040, 56% at 1024x768, 78% at 1180x800,
+   and a click on the left of her box opened What needs hands. So when the
+   two would meet, the button steps left if the bottom edge has the room,
+   and otherwise stands just above her measured top, under her z, and right
+   of the build bar when that is up, which the lifted button would meet. Measured, never assumed: her height is her
+   log's and her rows', and she glides to right:414 over .28s, so this runs
+   again when that glide ends. */
+(function attnClearOfMaia(){
+  const a=$('attention'),m=$('maia');if(!a||!m)return;
+  let raf=0;
+  const fit=()=>{raf=0;
+    a.style.removeProperty('bottom');a.style.removeProperty('z-index');a.style.removeProperty('left');
+    const bc=document.body.classList;
+    if(bc.contains('pocket')||bc.contains('intro'))return;
+    const shown=id=>{const el=$(id);return !!el&&el.classList.contains('open')};
+    if(!shown('panel')&&!shown('inspect'))return;
+    const ar=a.getBoundingClientRect(),mr=m.getBoundingClientRect();
+    if(!ar.width||!mr.width||getComputedStyle(m).display==='none')return;
+    if(ar.right+8<=mr.left||ar.left>=mr.right+8)return;
+    /* A few px of overlap and room on its left: it steps left, staying on
+       the bottom edge, clear of the shell's door (188) or the window's edge,
+       and of the minimap where that stands on the same row. */
+    const need=ar.right+8-mr.left;let floor=bc.contains('embed')?188:14;
+    const mm=$('minimapWrap'),mmr=mm&&getComputedStyle(mm).display!=='none'?mm.getBoundingClientRect():null;
+    if(mmr&&mmr.width&&mmr.top<ar.bottom&&mmr.bottom>ar.top)floor=Math.max(floor,mmr.right+8);
+    if(ar.left-need>=floor){a.style.left=Math.floor(ar.left-need+ar.width/2)+'px';return}
+    a.style.bottom=Math.ceil(innerHeight-mr.top+10)+'px';a.style.zIndex='30';
+    const bb=$('buildBar');
+    if(bb&&getComputedStyle(bb).display!=='none'){const br=bb.getBoundingClientRect(),nr=a.getBoundingClientRect();
+      if(nr.left<br.right+8&&nr.top<br.bottom&&nr.bottom>br.top)a.style.left=Math.ceil(br.right+8+nr.width/2)+'px'}};
+  const soon=()=>{if(!raf)raf=requestAnimationFrame(fit)};
+  const mo=new MutationObserver(soon);
+  for(const id of ['panel','inspect','maia'])if($(id))mo.observe($(id),{attributes:true,attributeFilter:['class']});
+  mo.observe(document.body,{attributes:true,attributeFilter:['class']});
+  m.addEventListener('transitionend',soon);
+  if(typeof ResizeObserver==='function')new ResizeObserver(soon).observe(m);
+  addEventListener('resize',soon);soon()})();
 
 /* attention cycle */
 let attnIdx=0;
 const attnItems=()=>[
-  ...SCENE.seats.filter(x=>x.at&&BY[x.at]&&seatOpen(x)).map(x=>({k:'seat',at:x.at,h:`⛨ Seat open: ${x.s}`,p:`${x.c} circle needs a steady hand. ${x.note}.`,tab:2})),
+  ...seatList().filter(x=>x.at&&BY[x.at]&&seatOpen(x)).map(x=>({k:'seat',at:x.at,h:`⛨ Seat open: ${x.s}`,p:`${circleWords(x.c)} needs a steady hand.${x.note?' '+x.note.replace(/[.\s]+$/,'')+'.':''}`,tab:2})),
   ...SCENE.quests.filter(q=>/Saturday|tonight|Thu/.test(q.r+q.need)).filter(q=>!q.at||BY[q.at]).map(x=>({k:'quest',at:(x.at&&BY[x.at])?x.at:null,h:`⚑ ${x.q}`,p:`${x.r} · ${x.need}. Real hands, real soil.`,tab:1})),
 ];
 $('attnBadge').textContent=attnItems().length;
 function refreshWork(){$('attnBadge').textContent=attnItems().length;
+  if(typeof orgKeyLine==='function')orgKeyLine();
   if($('wall').classList.contains('show'))buildWall()}
 $('attnBtn').onclick=()=>{const items=attnItems();if(!items.length)return toast('Nothing needs hands right now. A beautiful problem.');
   const it=items[attnIdx++%items.length];const s=it.at?BY[it.at]:null;
@@ -5575,24 +5980,49 @@ function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key).filter(seatOpe
   if(s.event)bits.push(`<b>${escq(s.event)}</b>`);
   maiaSay(`${escq(s.name)}: ${escq(s.blurb.split('.')[0].toLowerCase())}. ${bits.length?('Right now: '+bits.join(' · ')+'.'):''} ${s.state==='funding'?`The pool is at <b>${Math.round(s.fund*100)}%</b>, and every pledge raises real walls.`:''}`)}
 
-/* THE WELCOME WALK IS OFF. Rye, 2026-10-01: "Get rid of the maia walkthrough
-   for now, it's not great, we'll have to make one." Every door into it reads
-   this one switch: Maia's chip, the t key, her concierge and the links in her
-   own sentences, the pocket offer and its drawer cell, the welcomes that
-   offered it, the Journeys door, the Loom, and a #/journey/ address. The
-   journey engine stays because the other journeys walk on it, and WALK_SEED
-   stays because the pocket gesture hint reads its two lines. The walk itself
-   is welcomeJourney(), so a fork whose scene has no j1 loses its own first
-   journey from the offers too, which is the same walk under another name. */
-const WELCOME_WALK_ON=false;
-const isWelcomeWalk=id=>!!id&&id===welcomeJourney();
-/** The journeys the map offers a visitor: every one, less the walk while it is off. */
-function offeredJourneys(){return SCENE.journeys.filter(j=>WELCOME_WALK_ON||!isWelcomeWalk(j.id))}
+/* THE WELCOME WALK IS THE VILLAGE'S OWN, OR THERE IS NONE.
+   Rye, 2026-10-01: "Get rid of the maia walkthrough for now, it's not great,
+   we'll have to make one." Then, 2026-10-02: "Onboarding is something that
+   founders should do and really personalize and put their spirit into it.
+   So just add this to a journey to launch that's suggested remove the
+   example journey for now."
+   So the walk is on exactly when this village has written one. The founder
+   writes it under Village settings (the Journey to Launch links there), the
+   shell pushes it from the map_walk document in {type:'config'}, and it
+   arrives here as window.WALK. Every door into the walk asks welcomeWalkOn():
+   Maia's chip, the t key, her concierge and the links in her own sentences,
+   the pocket offer and its drawer cell, the welcomes that offer it, the
+   Journeys door and a #/journey/ address.
+   THE EXAMPLE IS OFFERED TO NOBODY. j1 is the seed's Welcome Walk, Maia's
+   monologue about another village's land (MAIA_STOPS, WALK_SEED), and it is
+   never played, whether or not this village has written its own. Its data
+   stays, because the ruling says "for now" and the gesture hint reads two of
+   WALK_SEED's lines.
+   THE VILLAGE'S WALK IS A JOURNEY BUILT FROM ITS OWN STEPS, so it walks on
+   the engine the other journeys use and says only the village's words. A
+   stop with no words of its own says what is true at the place (jDeep), and
+   never a seed line. A stop whose place is not on the land is passed by, as
+   on any journey, and a walk with no stop on the land is not offered. */
+const EXAMPLE_WALK_ID='j1',VILLAGE_WALK_ID='walk';
+/** The village's own walk as a journey, or null when it has written none. Built fresh, so it follows the land. */
+function villageWalk(){const w=Array.isArray(window.WALK)?window.WALK.filter(x=>x&&typeof x==='object'):[];
+  if(!w.length)return null;
+  return{id:VILLAGE_WALK_ID,name:'The Welcome Walk',src:'village',blurb:'',
+    steps:w.map((x,si)=>({t:String(x.title||''),at:(x.structure_key&&BY[x.structure_key])?x.structure_key:null,
+      line:String(x.body||''),wid:String(x.id||('step-'+(si+1))),addr:'creator'}))}}
+window.villageWalk=villageWalk;
+/** Is there a walk to offer: has this village written one, with a stop on the land? */
+function welcomeWalkOn(){const j=villageWalk();return !!j&&j.steps.some(st=>st.at)}
+window.welcomeWalkOn=welcomeWalkOn;
+const isWelcomeWalk=id=>id===VILLAGE_WALK_ID;
+const isExampleWalk=id=>id===EXAMPLE_WALK_ID;
+/** The journeys the map offers a visitor: the village's own walk when there is one, then every journey but the example. */
+function offeredJourneys(){return[...(welcomeWalkOn()?[villageWalk()]:[]),...SCENE.journeys.filter(j=>!isExampleWalk(j.id))]}
 
 /* deterministic concierge (zero-token first, per platform doctrine) */
 const LEX=[
-  {re:/tour|show me around|walk me around/i,fn:()=>WELCOME_WALK_ON?startTour()
-    :maiaSay(`The guided walk is being made again. Until it is back, tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
+  {re:/tour|show me around|walk me around/i,fn:()=>welcomeWalkOn()?startTour()
+    :maiaSay(`There is no guided walk here yet. Tap any building to open its door, or open <b>What needs hands</b> to find somewhere to help.`)},
   /* ON A PHONE THE ANSWER IS THE LIST. The desk answer cycles the attention
      banner, and body.pocket hides that banner outright: MEASURED at 390x844,
      the chip flew the camera to the Greenhouse, the card it filled measured
@@ -5622,7 +6052,7 @@ function aliveNow(){
   const on=SCENE.structures.filter(s=>s.event).slice(0,3).map(s=>`<b>${escq(s.event)}</b> at ${escq(the(s.name))}`);
   const pools=SCENE.structures.filter(s=>s.state==='funding'&&s.fund>0).sort((a,b)=>b.fund-a.fund).slice(0,2)
     .map(s=>`a pool at <b>${Math.round(s.fund*100)}%</b> for ${escq(the(s.name))}`);
-  const q=SCENE.quests.filter(x=>x.at&&BY[x.at]).length,st=SCENE.seats.filter(x=>x.at&&BY[x.at]&&seatOpen(x)).length;
+  const q=SCENE.quests.filter(x=>x.at&&BY[x.at]).length,st=seatList().filter(x=>x.at&&BY[x.at]&&seatOpen(x)).length;
   const bits=[...on,...pools];
   /* A phone has no Space key, and body.pocket hides the banner it would cycle,
      so there the way in is Get Involved, which its More drawer carries. */
@@ -5654,7 +6084,7 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   for(const s of SCENE.structures){const words=[s.key,...s.name.toLowerCase().split(/[^a-z]+/)].filter(w=>w.length>3);
     for(const w of words)if(t.includes(w)){openPanel(s.key);done('structure',s.key);return maiaSay(`Walking you to the <b>${escq(s.name)}</b> now.`)}}
   {const qb=questBest();if(qb.best&&qb.bs>=2)return sayQuest(qb)}
-  const seat=SCENE.seats.find(x=>{const first=x.s.toLowerCase().split(' ')[0];return first.length>4&&t.includes(first)});
+  const seat=seatList().find(x=>{const first=x.s.toLowerCase().split(' ')[0];return first.length>4&&t.includes(first)});
   /* Tab 2 is Seats; 1 is Quests, which is where this used to open. And the
      seat is called open only when seatOpen says it is. */
   if(seat&&seat.at){done('role',seat.s);openPanel(seat.at,2);
@@ -5669,13 +6099,21 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   /* A phone has no Space key and hides the banner it cycles, so there the
      way to what needs hands is Get Involved, as in What's alive? above. */
   const hands=document.body.classList.contains('pocket')?'open <b>Get Involved</b>':'press <b>Space</b>';
-  maiaSay(`Nothing on the land matches that yet. ${WELCOME_WALK_ON?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
+  maiaSay(`Nothing on the land matches that yet. ${welcomeWalkOn()?'Try <button type="button" class="linkish" onclick="startTour()">the tour</button>, or name':'Name'} any building and I will walk you there, or ${hands} to see what needs hands.`)}
 /* What the visitor typed is shown as text: escaped before her log treats it as
    markup (maiaClean strips handlers, but a question is never HTML). */
 $('maiaSend').onclick=()=>{const v=$('maiaText').value.trim();if(!v)return;$('maiaText').value='';maiaSay(escq(v),'me');setTimeout(()=>conciergeMatch(v),350)};
 $('maiaText').addEventListener('keydown',e=>{if(e.key==='Enter')$('maiaSend').click();if(e.key==='Escape')e.target.blur();e.stopPropagation()});
 document.querySelectorAll('#maiaActions .chip').forEach(ch=>ch.onclick=()=>{maiaSay(ch.dataset.say,'me');setTimeout(()=>conciergeMatch(ch.dataset.say),300)});
-if(!WELCOME_WALK_ON)document.querySelectorAll('#maiaActions .chip[data-say="tour"]').forEach(c=>c.remove());
+/* THE TOUR CHIP COMES AND GOES WITH THE WALK. It is in the markup, and it is
+   off until the village's walk arrives from the shell, so it leaves the dock
+   here and comes back in syncWalkDoors(). Kept by reference, so the handler
+   wired above travels with it. */
+const TOUR_CHIP=document.querySelector('#maiaActions .chip[data-say="tour"]');
+function syncTourChip(){const box=$('maiaActions');if(!TOUR_CHIP||!box)return;
+  if(!welcomeWalkOn()){TOUR_CHIP.remove();return}
+  if(!TOUR_CHIP.isConnected)box.insertBefore(TOUR_CHIP,box.firstChild)}
+syncTourChip();
 $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
 /* The minimise button says what it will do, and whether Maia is open, from
    one place. .min is set and cleared at four sites (the header, a question
@@ -5696,7 +6134,7 @@ $('maiaHead').onclick=e=>{$('maia').classList.toggle('min')};
    intro's nine-second nudge asks tourI whether she is already walking someone.
    The journey writes them; nothing reads them to decide anything. */
 let TOUR=[],tourI=-1,tourTimer=null;
-function startTour(){if(!WELCOME_WALK_ON)return;const id=welcomeJourney();if(id)playJourney(id)}
+function startTour(){if(!welcomeWalkOn())return;const id=welcomeJourney();if(id)playJourney(id)}
 
 /* pulse replay → ripples + narration
    ONLY WHAT A FEED SENT. The seed's six are sample copy, and they played as
@@ -5767,7 +6205,7 @@ addEventListener('keydown',e=>{
     /* The X and "Back to the land" clear the address and this key did not,
        so a reload reopened what Escape had closed. Only a place or a door
        address: Escape closing something else must not clear #/loom. */
-    if(/^#\/(place|module)\//.test(location.hash))setHash(viewHash())}
+    if(/^#\/(place|module)\//.test(routeNow()))setHash(viewHash())}
   if(back&&back.isConnected)back.focus({preventScroll:true});
   clampCam()});
 
@@ -6022,12 +6460,14 @@ function buildExportJSON(status){
        made the published scene and the draft share it, so holding a number
        wrote it into the live map's copy too. */
     vital_overrides:JSON.parse(JSON.stringify(window.VITAL_OVR||{})),
-    walk:{steps:(window.WALK||window.WALK_SEED||[]),log:(window.WALK_LOG||[]).slice(),note:'walk steps are village data — the seed is Amora’s voice; overrides come from /api/map/config'},
+    walk:{steps:(window.WALK||[]),log:(window.WALK_LOG||[]).slice(),note:'the village\'s own walk, from /api/map/config; empty when it has written none, and never the seed'},
     counts:'computed on read, never stored — recompute, never increment (§5.2 scaling contract)'};
   return out}
 $('exportBtn').onclick=()=>{const out=buildExportJSON();
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));
-  a.download='amora-scene.json';a.click();
+  /* Named after the village the scene is, so a fork's export carries its
+     own name; the seed's name gives the file its old name back. */
+  a.download=(slugify(SCENE.name||'')||'village')+'-scene.json';a.click();
   maiaSay(`Scene exported: <b>${out.map_structures.length} buildings</b>, <b>${out.map_flows.length} flows</b>, <b>${out.map_zones.length-1} features</b>, <b>${EDITS.length} edits remembered</b>. This one file is the land's whole memory, and ${inShell()?'your draft in the village keeps the same story':'autosave keeps the same story in this browser'}.`)};
 addEventListener('keydown',e=>{if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
   if(e.key==='Escape'&&placing){placing=null;document.body.classList.remove('placing');$('ghostPoi').style.display='none'}
@@ -6675,6 +7115,9 @@ function roleReapplyLive(){
 window.roleReapplyLive=roleReapplyLive;
 function roleApplyLive(rows){
   ROLE_LIVE=Array.isArray(rows)?rows:null;
+  /* D3: every row, for the seats the scene does not draw (orgSeats). Capped,
+     because a list this long is a broken sender and not a village. */
+  ORG_ROWS=Array.isArray(rows)?rows.slice(0,600):null;
   /* KEYED ON NAMES THIS FILE DID NOT CHOOSE, so the map may not inherit
      anything. On a plain object `by['constructor']` is truthy before a row
      arrives, so a seat called "constructor" or "valueOf" matches a phantom,
@@ -6687,16 +7130,73 @@ function roleApplyLive(rows){
   let n=0;
   for(const x of SCENE.seats){
     const r=by[String(x.s||'').trim().toLowerCase()];
-    if(!r){delete x._state;delete x._tags;delete x._live;continue}
-    x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);x._live=true;n++}
+    if(!r){delete x._state;delete x._tags;delete x._live;delete x._holders;delete x._held;delete x._seats;continue}
+    x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);x._live=true;
+    /* D3: who sits in it, when the village said. Read but never saved, like
+       the two above. An older shell sends no count, and then nothing is said. */
+    orgWhoOnto(x,r);n++}
   /* Whether the village has said anything about its roles at all. An empty
      list is no answer: the shell sends one both for a village with no roles
      and for a reader /api/map refused, and those two must not read alike. */
   window.ROLE_HEARD=Array.isArray(rows)&&rows.length>0;
   if(typeof refreshBadges==='function')refreshBadges();
   if(typeof refreshWork==='function')refreshWork();
+  /* An open place shows the seats as they are now, on the tab it is on: a
+     seat created or filled while somebody reads the Seats tab appears there
+     without a click. The Loom and the inspector are a founder's editing
+     surfaces over the scene and are left exactly as they are. */
+  if(typeof refreshPanel==='function'&&typeof panelKey!=='undefined'&&panelKey)refreshPanel();
+  orgKeyLine();
   return n}
 window.roleApplyLive=roleApplyLive;
+/* The village's circles, checked at the door the way a scene's are: an id and
+   a name that are strings and a colour that is a hex, or the row is dropped.
+   An array, even an empty one, means the village has said what its circles
+   are, and from then on the lens draws those and none of the map's own. */
+function orgSetCircles(list){
+  if(!Array.isArray(list))return 0;
+  const keep=[];
+  for(const c of list.slice(0,400)){
+    if(!c||typeof c.id!=='string'||!c.id||typeof c.name!=='string'||!c.name.trim())continue;
+    keep.push({id:c.id.slice(0,80),name:c.name.trim().slice(0,120),
+      parentCircleId:typeof c.parentCircleId==='string'?c.parentCircleId:null,
+      status:typeof c.status==='string'?c.status:'active',
+      colour:/^#[0-9a-f]{6}$/i.test(String(c.colour||''))?String(c.colour):'#9aa08f'})}
+  for(const k of Object.keys(ORG_INK))delete ORG_INK[k];
+  for(const k of Object.keys(ORG_BY))delete ORG_BY[k];
+  for(const c of keep){ORG_BY['id:'+c.id]=c;ORG_BY['nm:'+orgFold(c.name)]=c;
+    ORG_INK['id:'+c.id]=c.colour;ORG_INK['nm:'+orgFold(c.name)]=c.colour}
+  ORG_CIRCLES=keep;
+  window.ORG_HEARD=true;
+  /* A place carrying a village circle wears its colour: its ring and its
+     banner dot were painted before the colours arrived. */
+  for(const s of SCENE.structures)if(s.circle&&orgCircle(s.circle)){
+    if(typeof paintPoiArt==='function'&&pEls[s.key])paintPoiArt(s,pEls[s.key]);
+    if(typeof refreshBanner==='function')refreshBanner(s)}
+  return keep.length}
+window.orgSetCircles=orgSetCircles;
+/* The village's circles with no home on the land, and its seats with no
+   place, for the Wall and for the lens's own key. */
+function orgUnplaced(){
+  const circles=(ORG_CIRCLES||[]).filter(c=>!orgHome(c));
+  const seats=orgSeats().filter(x=>!x.at||!roleBuilding(x.at));
+  return {circles,seats}}
+window.orgUnplaced=orgUnplaced;
+/* The holders, the count and the seats of a live row, onto the seat that
+   stands for it. Absent when the row carries no count, so a seat is never
+   said to be empty on the word of a sender that did not count. */
+function orgWhoOnto(x,r){
+  if(typeof r.holderCount!=='number'){delete x._holders;delete x._held;delete x._seats;return x}
+  x._holders=Array.isArray(r.holders)?r.holders.filter(h=>typeof h==='string'&&h).slice(0,12).map(h=>h.slice(0,60)):[];
+  x._seats=Math.max(1,Number(r.seats)||1);x._held=Math.max(0,r.holderCount);
+  return x}
+/* One line on the lens's key, so a lens with nothing drawn says why instead
+   of looking broken: a village that has not yet placed its circles has seats
+   and no rings on the land. A button, because what it names is a list. */
+function orgKeyLine(){const b=$('roleUnplaced');if(!b)return;
+  const n=ORG_CIRCLES?orgUnplaced().seats.length:0;
+  b.hidden=!n;b.textContent=n?n+' '+(n===1?'seat':'seats')+' not placed yet':''}
+window.orgKeyLine=orgKeyLine;
 /* An untagged row belongs to everyone, and "tagged for nobody" has to read
    the same way as "not tagged at all". That is the server's own law in
    server/lib/characters.ts, written here so the two cannot drift. */
@@ -6729,6 +7229,7 @@ function roleBuilding(k){
 window.roleBuilding=roleBuilding;
 function roleHome(x){
   if(!x)return null;
+  if(x._org)return (x.at&&roleBuilding(x.at))?x.at:null;
   const own=(x.at&&roleBuilding(x.at))?x.at:null;
   if(own&&(typeof classify!=='function'||classify(x)==='creator'))return own;
   /* A GOVERNING ROLE NOBODY PLACED GATHERS AT ITS CIRCLE'S HOME. Not at one
@@ -6775,10 +7276,17 @@ window.seatOpen=seatOpen;window.seatUnlisted=seatUnlisted;
    eight overlapping pairs a flat 46 produced. Recomputed per frame on
    purpose, because build mode drags buildings and a cached radius would go
    stale mid-drag; ten homes is forty-five distances. */
+/* Which circle lives where. The map's own eleven until the village has said
+   what its circles are, and from then on the village's: a ring around a
+   building that says "the Land circle lives here" is a claim, and the map
+   may only make the village's. */
+function roleCirclePairs(){
+  if(ORG_CIRCLES)return ORG_CIRCLES.map(c=>[c.name,orgHome(c)]).filter(p=>p[1]);
+  return Object.keys(CIRCLE_COL).map(c=>[c,CIRCLE_HOMES[c]])}
 function roleHomes(mode){
   const seen=Object.create(null),out=[];
-  for(const c of Object.keys(CIRCLE_COL)){
-    const k=CIRCLE_HOMES[c],s=k&&roleBuilding(k);
+  for(const [c,k] of roleCirclePairs()){
+    const s=k&&roleBuilding(k);
     if(!s)continue;
     if(mode==='now'&&s.state==='blueprint')continue;
     if(seen[k]){seen[k].circles.push(c);continue}
@@ -6795,8 +7303,13 @@ window.roleHomes=roleHomes;
 /* NO PROTOTYPE: `k` is roleHome()'s answer, which starts life as `x.at` in a
    scene file. On a plain object `m['constructor']` is the Object function and
    `(m[k]||(m[k]=[])).push(x)` throws rather than grouping. */
+/* ONCE THE VILLAGE HAS SAID WHICH ROLES IT KEEPS, a drawn seat it does not
+   keep is not drawn. A dashed hollow ring on the land says "an open seat is
+   here", and the Seats tab and the Wall already say this one is the map's
+   word and nobody's role; the lens was the one place still saying it as fact. */
 function roleSeatsBy(){const m=Object.create(null);
-  for(const x of SCENE.seats){const k=roleHome(x);if(!k)continue;(m[k]||(m[k]=[])).push(x)}
+  for(const x of seatList()){if(seatUnlisted(x))continue;
+    const k=roleHome(x);if(!k)continue;(m[k]||(m[k]=[])).push(x)}
   return m}
 window.roleSeatsBy=roleSeatsBy;
 /* One satellite. Solid is full, half is partial, and a dashed hollow ring is
@@ -6853,12 +7366,12 @@ function roleLens(cx,mode,t,scx){
   if(live)ROLE_LAST_SATS.length=0;
   const homes=roleHomes(mode),byHome=Object.create(null);
   for(const h of homes){byHome[h.k]=h;
-    const col=CIRCLE_COL[h.circles[0]]||'#9aa08f';
+    const col=circleInk(h.circles[0])||'#9aa08f';
     cx.fillStyle=col+'2e';cx.beginPath();cx.arc(h.x,h.y,h.r,0,7);cx.fill();
     cx.lineWidth=1.2;
     /* Two circles can share a home. Each gets its own ring, stepped inward,
        so the Community Center reads as two circles and not as one. */
-    h.circles.forEach((c,i)=>{cx.strokeStyle=(CIRCLE_COL[c]||'#9aa08f')+'aa';
+    h.circles.forEach((c,i)=>{cx.strokeStyle=(circleInk(c)||'#9aa08f')+'aa';
       cx.beginPath();cx.arc(h.x,h.y,Math.max(5,h.r-i*4),0,7);cx.stroke()})}
   const by=roleSeatsBy();
   for(const k of Object.keys(by)){
@@ -6920,7 +7433,7 @@ function roleLens(cx,mode,t,scx){
       if(live)ROLE_LAST_SATS.push({seat:x.s,circle:x.c,home:k,at:x.at||null,
         x:px,y:py,st:st,surface:sx2.canvas.id});
       roleSat(sx2,px,py,
-        CIRCLE_COL[x.c]||'#9aa08f',st,st==='open'&&!seatUnlisted(x)&&roleRelevant(x._tags||x.archetypes),t||0)})}
+        circleInk(x.c)||'#9aa08f',st,st==='open'&&!seatUnlisted(x)&&roleRelevant(x._tags||x.archetypes),t||0)})}
   cx.restore()}
 window.roleLens=roleLens;
 /* ONE CALL A FRAME, AND IT OWNS THE LENS PLANE.
@@ -7013,6 +7526,27 @@ function applyVocabulary(voc){
     rebuildMedia();flowSpriteReset();took.push('media')}
   return took}
 window.applyVocabulary=applyVocabulary;window.VOCAB_KEYS=VOCAB_KEYS;
+/* THE WORDS THE VILLAGE HOLDS IN VILLAGE SETTINGS (N29, the twin of F78).
+   The shell pushes the village's vocabulary after every scene, and
+   applyVocabulary puts it over the scene's: a zone list or a flow list
+   replaces the scene's, a named phase wins over the scene's name for it.
+   So a rename here of a word the village holds reached no visitor at all,
+   while it went on the publish card as a change every visitor would see.
+   And none of these editors is screen-only: a zone rename rewrites the
+   drawn zones, and media and phases live in the scene the publish carries.
+   So inside the village a word the village holds is not edited here, and
+   the editor says where it is. A word the village leaves to the scene
+   (an empty list, an unnamed phase) is still renamed here, where it wins. */
+let VILLAGE_VOCAB=null;
+function heldVocab(voc){if(!voc||typeof voc!=='object')return null;
+  const list=k=>Array.isArray(voc[k])&&voc[k].some(x=>k==='media'?!!(x&&x.key):!!vocabWord(x));
+  const ph=voc.phases&&typeof voc.phases==='object'&&!Array.isArray(voc.phases)?voc.phases:{};
+  return{zone:list('zone'),media:list('media'),
+    phases:Object.keys(ph).filter(n=>typeof ph[n]==='string'&&ph[n].trim()).map(String)}}
+function vocabHeld(k,n){if(!inShell()||!VILLAGE_VOCAB)return false;
+  return k==='phases'?VILLAGE_VOCAB.phases.includes(String(n)):!!VILLAGE_VOCAB[k]}
+const VOCAB_HOME='The words every visitor sees here are set in Village Settings, under The map\'s words.';
+window.vocabHeld=vocabHeld;
 let inspKey=null;
 function setDerived(s){s.state=derivedState(s);const el=pEls[s.key];if(el){
     el.className='poi st-'+s.state;
@@ -7174,8 +7708,29 @@ function escj(t){return escq(String(t==null?'':t)
   .replace(/\r/g,'\\r').replace(/\n/g,'\\n')
   .replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029'))}
 function structOpts(sel,excl){return SCENE.structures.filter(s=>s.key!==excl).map(s=>`<option value="${escq(s.key)}"${s.key===sel?' selected':''}>${escq(s.name)}</option>`).join('')}
+/* THE CIRCLE PICKER IS WHERE A FOUNDER PLACES THE VILLAGE'S CIRCLES (D3).
+   Once the village has said what its circles are, those are what is offered,
+   by id, so a renamed circle keeps its place. A place already carrying one of
+   the map's own words keeps it as an option, marked, so opening the card
+   never changes the land by itself. Before the village has answered, and in
+   a standalone file, the map's own eleven are all there is. */
+function inspCircleOpts(s){
+  const opt=(v,label,on)=>`<option value="${escq(v)}"${on?' selected':''}>${escq(label)}</option>`;
+  if(!ORG_CIRCLES)return Object.keys(CIRCLE_COL).map(c=>opt(c,c+' circle',s.circle===c)).join('');
+  const own=s.circle&&!orgCircle(s.circle)?opt(s.circle,s.circle+' (the map\'s own word, not one of the village\'s circles)',true):'';
+  return own+ORG_CIRCLES.map(c=>opt(c.id,c.name,orgNames(s,c))).join('')}
+/* What the choice does, said for the circle chosen. For a village circle that
+   is where its seats will gather: here, or at the place that already is its
+   home. */
+function inspCircleHelp(s){
+  if(!s.circle)return `Unowned: neutral ring, listed on the Wall as “needs a steward.”`;
+  const c=orgCircle(s.circle);
+  if(!c)return `Emblem ring and banner wear the ${escq(circleWords(s.circle))}'s color.`;
+  const home=orgHome(c),n=orgSeats().filter(x=>x.c===c.name).length+SCENE.seats.filter(x=>orgFold(x.c)===orgFold(c.name)).length;
+  return home===s.key?`This is the ${escq(c.name)}'s home on the land. Its seats gather here${n?` (${n} now)`:''}, and move with the village's roles.`
+    :`The ${escq(c.name)} already lives at ${escq(BY[home]?BY[home].name:home)}, the first place that names it. Its seats gather there.`}
 function seatRowH(x,here){const si=SCENE.seats.indexOf(x);
-  return `<label class="checkrow"><input type="checkbox" data-seat="${si}"${here?' checked':''}><span style="flex:1"><b style="font-weight:normal;color:#fff">⛨ ${escq(x.s)}</b><span style="display:block;font-size:10px;color:#b9cf9a">${escq(x.c)} circle · ${escq(x.note)}${here?'':' · at '+escq(BY[x.at]?BY[x.at].name:'?')}</span></span></label>`}
+  return `<label class="checkrow"><input type="checkbox" data-seat="${si}"${here?' checked':''}><span style="flex:1"><b style="font-weight:normal;color:#fff">⛨ ${escq(x.s)}</b><span style="display:block;font-size:10px;color:#b9cf9a">${escq(circleWords(x.c))} · ${escq(x.note)}${here?'':' · at '+escq(BY[x.at]?BY[x.at].name:'?')}</span></span></label>`}
 function questRowH(q){const qi=SCENE.quests.indexOf(q);
   return `<div style="margin-bottom:8px"><b style="font-weight:normal;color:#fff">⚑ ${escq(q.q)}</b>
    <span style="display:block;font-size:10px;color:#b9cf9a">${escq(q.r)} · ${escq(q.need)}</span>
@@ -7394,7 +7949,7 @@ function renderInspect(){const s=BY[inspKey];if(!s){closeInspect();return}
       <span style="font-size:10px;color:#b9af8f">state is derived, never stored</span></div>`;
   const cats={};REG.forEach(r=>{(cats[r[2]]=cats[r[2]]||[]).push(r)});
   const archSel=`<select id="iArch">`+Object.entries(cats).map(([cat,arr])=>`<optgroup label="${cat}">`+arr.map(r=>`<option value="${r[0]}"${r[0]===s.archetype?' selected':''}>${r[1]}</option>`).join('')+`</optgroup>`).join('')+`</select>`;
-  const circleSel=`<select id="iCircle"><option value="">unowned · needs a steward</option>`+Object.keys(CIRCLE_COL).map(c=>`<option value="${escq(c)}"${s.circle===c?' selected':''}>${escq(c)} circle</option>`).join('')+`</select>`;
+  const circleSel=`<select id="iCircle"><option value="">unowned · needs a steward</option>`+inspCircleOpts(s)+`</select>`;
   const seatsHere=SCENE.seats.filter(x=>x.at===s.key),otherSeats=SCENE.seats.filter(x=>x.at!==s.key);
   const qHere=SCENE.quests.filter(q=>q.at===s.key);
   const flowsIn=SCENE.flows.filter(f=>f.to===s.key),flowsOut=SCENE.flows.filter(f=>f.from===s.key);
@@ -7406,7 +7961,7 @@ function renderInspect(){const s=BY[inspKey];if(!s){closeInspect();return}
    <div class="irow"><span class="ilbl">origin</span><textarea id="iOrigin" rows="2" placeholder="How this place came to be. Its memory.">${escq(s.origin)}</textarea></div>
    <h5>circle · the steward</h5>
    <div class="irow">${circleSel}</div>
-   <div class="insp-help insp-h-circle">${s.circle?`Emblem ring and banner wear the ${escq(s.circle)} circle's color.`:`Unowned: neutral ring, listed on the Wall as “needs a steward.”`}</div>
+   <div class="insp-help insp-h-circle">${inspCircleHelp(s)}</div>
    <h5>phase &amp; pool</h5>
    <div class="irow"><span class="ilbl">phase</span>
      <span class="insp-tipwrap" data-tip="Phase says when this place happens. Planned fades the emblem, and with a full pool a Planned place reads as Blueprint, which visitors only see in the Vision.">${[1,2,3].map(ph=>`<label style="display:flex;gap:4px;align-items:center;font-size:12px;cursor:pointer"><input type="radio" name="iPhase" value="${ph}"${s.phase===ph?' checked':''} style="accent-color:var(--gold)">${escq(phaseName(ph))}</label>`).join('')}</span>
@@ -7506,7 +8061,7 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
   B.querySelector('#iOrigin').onchange=e=>{logEdit('origin','structure:'+s.key,{len:(s.origin||'').length});recordHeld(e.target)};
   B.querySelector('#iCircle').onchange=e=>{const b=placeSnap(s);s.circle=e.target.value||null;paintPoiArt(s,pEls[s.key]);refreshBanner(s);
     logEdit('circle','structure:'+s.key,{to:s.circle});placeRec(b);refreshWork();renderInspect();
-    toast(s.circle?`${s.name} now stewarded by the ${s.circle} circle.`:`${s.name} released. It needs a steward.`)};
+    toast(s.circle?`${s.name} now stewarded by the ${circleWords(s.circle)}.`:`${s.name} released. It needs a steward.`)};
   B.querySelectorAll('[name=iPhase]').forEach(r=>r.onchange=e=>{const b=placeSnap(s);s.phase=+e.target.value;setDerived(s);
     logEdit('phase','structure:'+s.key,{to:s.phase});placeRec(b);renderInspect()});
   B.querySelector('#iAct').onchange=e=>{const b=placeSnap(s);s.act=e.target.value;setDerived(s);logEdit('activity','structure:'+s.key,{to:s.act});placeRec(b);renderInspect()};
@@ -7791,6 +8346,8 @@ function restoreScene(J,opts){const quiet=!!(opts&&opts.quiet);try{
   if(am&&Array.isArray(am.approved)){for(const f of Object.keys(ICONS))window.SPRITE_OK[f]=am.approved.includes(f);
     (am.reroll||[]).forEach(f=>window.SPRITE_RR[f]=true)}
   strandedCheck(false);refreshWork();paintTerrain();mmDirty=true;
+  /* The seals follow the buildings now, not three seconds later. */
+  if(typeof refreshBadges==='function')refreshBadges();
   /* SCENE.seats is a NEW set of objects, so the live states merged onto the
      old ones are gone. Replayed here rather than left to whichever of the
      shell's two independent pushes happened to land second. */
@@ -7867,7 +8424,7 @@ function parseConn(cs){const p=cs.split(':');
   if(p[0]==='thread')return{kind:'thread',id:p[1],ai:(p[2]==='+'||p[2]==='g')?p[2]:+p[2]};
   return{kind:'step',j:p[1],si:+p[2]}}
 const thById=id=>SCENE.threads.find(t=>t.id===id);
-const jById=id=>SCENE.journeys.find(j=>j.id===id);
+const jById=id=>id===VILLAGE_WALK_ID?villageWalk():SCENE.journeys.find(j=>j.id===id);
 function connTarget(cs){const c=parseConn(cs);
   if(c.kind==='quest')return SCENE.quests[c.i]?SCENE.quests[c.i].at:null;
   if(c.kind==='seat')return SCENE.seats[c.i]?SCENE.seats[c.i].at:null;
@@ -7906,7 +8463,7 @@ function renderLoom(){
    SCENE.structures.map(s=>{const fam=famOf(s);
     const art=(window.SPRITES&&SPRITES[fam])?`<img src="${SPRITES[fam]}" alt="">`:`<svg viewBox="0 0 64 64"><g stroke="#e8d9a8" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">${ICONS[fam]||ICONS.hall}</g></svg>`;
     return `<div class="lrow" data-k="${escq(s.key)}"><span class="lart">${art}</span>
-     <span class="lname">${escq(s.name)}<small>${s.circle?escq(s.circle)+' circle':escq(s.district||'—')}</small></span>
+     <span class="lname">${escq(s.name)}<small>${s.circle?escq(circleWords(s.circle)):escq(s.district||'—')}</small></span>
      ${s.circle?`<span class="ldot" style="background:${CIRCLE_COL[s.circle]||'#9aa08f'}"></span>`:''}
      ${cnt[s.key]?`<span class="lcnt">${cnt[s.key]}</span>`:''}</div>`}).join('');
   const F=LOOMF;
@@ -7929,7 +8486,7 @@ function renderLoom(){
    html+=`<section class="lsec" data-sec="seat"><h4>⛨ Roles & seats<small>${rows.length} of ${SCENE.seats.length}</small></h4>`+
     rows.map(({x,i,p})=>`<div class="lcard pv-${p}">
      <span class="lgrip" data-conn="seat:${i}" title="drag onto a place">◉</span>
-     <div class="lmain"><b>${escq(x.s)}</b><small>${x.c?escq(x.c)+' circle':''}${x.note?' · '+escq(x.note):''}${x.src==='site'?' · from the live site':''}</small>
+     <div class="lmain"><b>${escq(x.s)}</b><small>${x.c?escq(circleWords(x.c)):''}${x.note?' · '+escq(x.note):''}${x.src==='site'?' · from the live site':''}</small>
       <span class="lto">${toLabel('seat:'+i)}</span>
       ${(x._why&&p!=='creator')?`<span class="lwhy">${escq(x._why)}</span>`:''}</div>${provChip(p)}</div>`).join('')+`</section>`}
   if(F.kind.thread){const rows=SCENE.threads.map(t=>({t,p:threadProv(t)}))
@@ -7949,7 +8506,7 @@ function renderLoom(){
       <div class="laddrs">${chips}${guess}<span class="lgrip achip add${ast?' staged':''}" data-conn="${escq(acs)}">${ast?'◉ '+escq(atName(LOOM_STAGED.get(acs))):'+ place'}</span></div>
       ${(t._res&&!(t.structures&&t.structures.length))?`<span class="lwhy">${escq(t._res.why)}</span>`:''}</div>${provChip(p)}</div>`}).join('')+`</section>`}
   if(F.kind.journey){html+=`<section class="lsec" data-sec="journey"><h4><svg viewBox='0 0 24 24' style='width:12px;height:12px;vertical-align:-1px'><g stroke='currentColor' stroke-width='2.4' fill='none' stroke-linecap='round'><path d='M5 19c6-1 2-6 8-7s3-5 6-7M15.5 5H19v3.5'/></g></svg> Journeys<small>each a numbered route. Drag any step</small></h4>`+
-   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small>${(WELCOME_WALK_ON||!isWelcomeWalk(j.id))?`<button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button>`:''}</div>
+   SCENE.journeys.map(j=>`<div class="ljcard"><div class="ljhead"><b>${escq(j.name)}</b><small>${escq(j.blurb||'')}${j.src==='site'?' · from the live site':''}</small>${!isExampleWalk(j.id)?`<button class="lchip" onclick="playJourney('${escj(j.id)}')">➹ walk it</button>`:''}</div>
     <div class="lsteps">${j.steps.map((st,si)=>{const cs=`step:${j.id}:${si}`;const p=classify(st);
       const dim=!(F.prov[p]||LOOM_STAGED.has(cs));
       return`<span class="lgrip lstep pv-${p}${dim?' provoff':''}" data-conn="${escq(cs)}"><i>${si+1}</i>${st.stage?`<em>${escq(st.stage)}</em>`:''}<span>${escq(st.t)}</span><u>${toLabel(cs)}</u></span>`}).join('')}</div></div>`).join('')+`</section>`}
@@ -8061,10 +8618,14 @@ document.querySelectorAll('.lfp').forEach(b=>b.onclick=()=>{LOOMF.prov[b.dataset
 $('lfCircle').innerHTML='<option value="">every circle</option>'+Object.keys(CIRCLE_COL).map(c=>`<option value="${c}">${c} circle</option>`).join('');
 $('lfCircle').onchange=()=>{LOOMF.circle=$('lfCircle').value;renderLoom()};
 $('loomEngineBtn').onclick=()=>$('loomEngine').classList.toggle('show');
-function openLoom(){document.body.classList.add('loom');setHash('#/loom');renderLoom();
+/* A DOOR CLOSES WHEN THE LOOM OPENS, the way setMapType closes the Loom.
+   The L key opened the Loom UNDER an open door (#module is z 60 over the
+   Loom's 50), so the Loom's X sat under the door's backdrop and the first
+   click on it closed the door instead (round 3, modes). */
+function openLoom(){$('module').classList.remove('show');document.body.classList.add('loom');setHash('#/loom');renderLoom();
   if(!window._loomSaid){window._loomSaid=1;
     toast('The Loom. Gold is your word, amber is a guess, gray waits at the Board. Drag any ◉ grip.')}}
-function closeLoom(){document.body.classList.remove('loom');if(location.hash==='#/loom')setHash(viewHash());
+function closeLoom(){document.body.classList.remove('loom');if(routeNow()==='#/loom')setHash(viewHash());
   if(LOOM_STAGED.size)toast(LOOM_STAGED.size+' staged rewire'+(LOOM_STAGED.size===1?'':'s')+' kept. Reopen the Loom to Save or Discard.')}
 window.openLoom=openLoom;window.closeLoom=closeLoom;window.renderLoom=renderLoom;
 $('loomBtn').onclick=()=>document.body.classList.contains('loom')?closeLoom():openLoom();
@@ -8217,15 +8778,13 @@ const MODULES={
     sample:ctx=>offeredJourneys().map(j=>{const placed=j.steps.filter(st=>st.at&&BY[st.at]).length;
       return `<div class="mrow"><span><b>${escq(j.name)}</b><small>${placed} of ${j.steps.length} steps placed</small></span>
        <span style="display:flex;gap:6px"><button class="btn" type="button" onclick="playJourney('${escj(j.id)}')">➹ walk it</button></span></div>`}).join('')},
-  /* Drawn from vitalsData(), the same answer the bar reads, so a number the
-     founder set or the land measured shows here as it does there, and a
-     sample says so on its row. It printed the seed's literals with no mark,
+  /* Drawn from chipRows(), the rows the bar itself draws, so the founder's
+     chips, their order and their readings show here as they do there, and an
+     example says so on its row. It printed the seed's literals with no mark,
      under "The same truth the crown banner reads". */
   health:{name:'Village Health',icon:'☀',route:'/village-health',
     blurb:'The numbers behind the map, the same ones the crown banner reads.',
-    sample:ctx=>{const D=vitalsData();const rows=SCENE.vitals.map(v=>({v,d:D[v.k]||v,smp:/sample/.test(String((D[v.k]||v).src||''))}));
-      return rows.map(({v,d,smp})=>`<div class="mrow"><span><b>${escq(v.label)}</b><small>${escq(d.sub)}${smp?' · sample':''}</small></span><span><b>${escq(d.v)}</b></span></div>`).join('')
-        +(rows.some(r=>r.smp)?'<div class="lastv">a row marked sample is a stand-in. It counts itself once the module behind it feeds the map</div>':'')}},
+    sample:ctx=>`<div class="chiprows">${healthChipRows()}</div>`},
   events:{name:'Events',icon:MICON.events,route:'/events',
     blurb:'Feasts, build days, ceremonies. Every event is a place and a time on the land, and its lantern burns brighter as the day comes near.',
     sample:ctx=>EVENTS.map(e=>`<div class="mrow"><span><b>✦ ${e.title}</b><small>${e.when} · at ${escq(e.at.map(k=>BY[k]?BY[k].name:k).join(' + '))} · sample</small></span>
@@ -8397,6 +8956,7 @@ function doorClickHere(k){return doorClick(panelKey,k)}
 window.doorClickHere=doorClickHere;
 function openDoor(a,ctx){
   const key=moduleAt(a)?a:null;
+  DOOR_ADDR=key?'#/module/'+key:'';
   if(!key){ /* A door that names a PAGE rather than a room on this map.
       This was a true dead end: the route was printed as inert text and the
       only button said "Back to the land". A page the site serves now opens.
@@ -8442,7 +9002,7 @@ function openDoor(a,ctx){
 window.openDoor=openDoor;
 /* A home request names its place's address (homeSheet), so a door can be
    holding either kind. What stays is the place underneath, when one is open. */
-function closeDoor(){$('module').classList.remove('show');if(/^#\/(module|place)\//.test(location.hash))setHash(viewHash())}
+function closeDoor(){$('module').classList.remove('show');if(/^#\/(module|place)\//.test(routeNow()))setHash(viewHash())}
 window.closeDoor=closeDoor;
 $('module').addEventListener('click',e=>{if(e.target===$('module'))closeDoor()});
 document.querySelectorAll('#dock button').forEach(b=>b.onclick=()=>openDoor(b.dataset.m,{}));
@@ -8477,34 +9037,32 @@ const MAIA_STOPS={
   community:'The Village Heart. Kitchen, library, council fire. We have no bosses. We are circles, and every circle keeps a home somewhere on this land.',
   ridgeA:'My roof is up there. This hamlet is being pooled into existence, so the gold ring fills as money turns into walls. Saturday is a build day and my back already knows it.',
   sanctuary:'South, under the mist, the Sanctuary is still a drawing. I like standing here. You can see what we have promised each other and have yet to build.',
-  council:'That is my village. Everything you walked past traces to something true: a funded build, a claimed quest, a filled seat. My whole job now is to get you off this map and onto the land. Where shall we start?'
+  council:'That is my village. My whole job now is to get you off this map and onto the land. Where shall we start?'
 };
 window.MAIA_STOPS=MAIA_STOPS;
 
-/* Which journey is the newcomer's. j1 is Amora's Welcome Walk; a fork that
-   imported its own journeys gets its first one, and a village with none gets
-   nothing rather than a broken call. */
-function welcomeJourney(){return (jById('j1')?'j1':((SCENE.journeys[0]||{}).id||null))}
+/* Which journey is the newcomer's: the village's own walk, when it has
+   written one with a stop on the land, and otherwise none. It used to be j1,
+   the seed's example, or a fork's first journey in its place. */
+function welcomeJourney(){return welcomeWalkOn()?VILLAGE_WALK_ID:null}
 window.welcomeJourney=welcomeJourney;
 
-/* The read-only view the old tour left behind. Built from the journey and
-   Maia's own lines, so qa/secB.js §14 now checks narration against the words
-   she actually says. Rebuilt on demand because SCENE.journeys is replaced
-   wholesale by restoreScene() on every shell push. */
+/* The read-only view the old tour left behind. Built from the village's own
+   walk and its own words, so qa/secB.js §14 checks narration against the
+   words she actually says. Rebuilt whenever the walk arrives. */
 function tourView(){const id=welcomeJourney(),j=id&&jById(id);
   return (j?j.steps:[]).filter(st=>st.at&&BY[st.at])
-    .map(st=>({at:st.at,z:1.25,txt:MAIA_STOPS[st.at]||st.t||''}))}
+    .map(st=>({at:st.at,z:1.25,txt:st.line||st.t||''}))}
 window.tourView=tourView;
 TOUR=tourView();
 
-/* Whose words, in order. The village's own push over the {type:'config'}
-   bridge wins, because a fork's guide is the fork's guide. Then Maia's line
-   for that place. Then the Welcome Walk seed the village already wrote. An
-   empty answer is honest and the caller falls back to live scene data. */
-function jLine(st,s){
-  const k=s?s.key:null;if(!k)return '';
-  const pick=arr=>{const w=(arr||[]).find(x=>x&&x.structure_key===k&&x.body);return w?w.body:''};
-  return pick(window.WALK)||MAIA_STOPS[k]||pick(window.WALK_SEED)||''}
+/* Whose words at a stop of the walk: the village's, for that stop, and
+   nobody else's. It used to fall back to Maia's line for the place and then
+   to the seed walk, which is another village's voice on this one's land. An
+   empty answer is honest and the caller falls back to live scene data. Read
+   off the stop, so a walk that comes back to a place says what the founder
+   wrote for that visit. */
+function jLine(st){return String(st&&st.line||'')}
 window.jLine=jLine;
 
 /* What is true at this place right now, read off the scene rather than
@@ -8577,7 +9135,7 @@ function jSheetOff(){document.body.classList.remove('jwalk');
 function jHalt(keepSheet){
   clearTimeout(JTMR);
   if(!JWALK)return false;
-  const w=JWALK;JWALK=null;tourI=-1;setHash('');jRowsOff();
+  const w=JWALK;JWALK=null;tourI=-1;setHash(viewHash());jRowsOff();
   document.body.classList.remove('jwalk');
   if(!keepSheet)jSheetOff();
   if(w.log&&typeof endWalk==='function')endWalk(false,w.i);
@@ -8594,17 +9152,17 @@ function jOffer(){if(!JWALK||!JWALK.paused)return;
   maiaSay(escq(say)+'<div class="jrow"><button class="btn" onclick="jNext()">▸ walk on</button>'
     +'<button class="btn ghostbtn" onclick="jEnd()">✕ stay here</button></div>',null,say)}
 
-/* Which id the run records for this stop. The Welcome Walk's seeded steps keep
-   their own ids so a village counting walk-log rows keeps counting the same
-   steps it always counted. */
-function jStepId(j,x){
-  const k=x.st.at;
-  const seed=k&&(window.WALK_SEED||[]).find(w=>w&&w.structure_key===k);
-  return seed?seed.id:(j.id+':'+x.si)}
+/* Which id the run records for this stop: the id the village's own step
+   carries, which is what the walk report joins back to the founder's step.
+   It used to look the place up in the seed walk and record the seed's id. */
+function jStepId(j,x){return x.st.wid||(j.id+':'+x.si)}
 
-function playJourney(id,opts){const j=jById(id);if(!j)return;
-  /* The walk is off (WELCOME_WALK_ON): an old #/journey/ link to it lands on the map instead. */
-  if(!WELCOME_WALK_ON&&isWelcomeWalk(id)){if(/^#\/journey\//.test(location.hash))setHash('');return}
+function playJourney(id,opts){
+  /* The example is offered to nobody, and the village's walk only once it
+     has one (welcomeWalkOn): an old #/journey/ link to either lands on the
+     map instead. */
+  if(isExampleWalk(id)||(isWelcomeWalk(id)&&!welcomeWalkOn())){if(/^#\/journey\//.test(routeNow()))setHash(viewHash());return}
+  const j=jById(id);if(!j)return;
   const o=opts||{};
   leaveIntro();closeLoom();$('panel').classList.remove('open');panelKey=null;
   $('module').classList.remove('show');closeInspect&&closeInspect();
@@ -8671,7 +9229,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
     spoken.then(()=>arm(Math.max(JDWELL-(Date.now()-t0),JBREATH)))};
   const step=()=>{if(!JWALK||JWALK.id!==id)return;
     JWALK.beat=(JWALK.beat|0)+1;
-    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash('');jRowsOff();
+    if(JWALK.i>=stops.length){const logged=JWALK.log,at=JWALK.i;JWALK=null;tourI=-1;setHash(viewHash());jRowsOff();
       /* HER SHEET STAYS UP FOR HER LAST LINE. Every other ending drops it
          (jHalt says why: a person who took the map back wants the screen),
          and this one used to as well, one line before she said where the
@@ -8688,6 +9246,8 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
       JSHEET=false;document.body.classList.remove('jwalk');
       GUIDE.finish();   // it ran to the end, so there is nothing to resume
       if(logged&&typeof endWalk==='function')endWalk(true,at);
+      /* The village's walk lives on the map alone, so it has no page to point at. */
+      if(isWelcomeWalk(id)){maiaSay('The walk ends here. Wander wherever you like, and say my name when you want me.');return}
       const route=SITE_ROUTES[id]||'/';
       maiaSay('The walk ends here. The whole of <b>'+escq(j.name)+'</b> lives at '
         +'<a href="'+safeHref(siteHref(route))+'" target="_blank" rel="noopener">'+escq(route)+'</a>. '
@@ -8727,7 +9287,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
          place already described says which stop that was, and `tell me
          more` reads the place out again for anyone who wants it. */
       const own=isWelcomeWalk(id);
-      const line=own?jLine(x.st,s):'';
+      const line=own?jLine(x.st):'';
       const was=own?0:(JWALK.told[s.key]|0);
       const deep=(line||(!own&&(x.st.body||was)))?null:jDeep(s);
       if(!own&&!x.st.body)JWALK.told[s.key]=JWALK.i+1;   // the latest stop here, so a third visit points at the second
@@ -8757,7 +9317,7 @@ function playJourney(id,opts){const j=jById(id);if(!j)return;
      nobody had asked for, so it returns before touching either. */
   window.jEnd=()=>{clearTimeout(JTMR);if(!JWALK)return;GUIDE.stop('end');
     const logged=!!(JWALK&&JWALK.log),at=JWALK?JWALK.i:-1;
-    JWALK=null;tourI=-1;setHash('');jSheetOff();jRowsOff();mvStop();
+    JWALK=null;tourI=-1;setHash(viewHash());jSheetOff();jRowsOff();mvStop();
     if(logged&&typeof endWalk==='function')endWalk(false,at);
     maiaSay('The walk ends here. Wander wherever you like, and say my name when you want me.')};
   JWALK.hold=hold;step()}
@@ -8830,7 +9390,7 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape'||!JWALK)return;
   maiaSay('The walk ends here. Wander wherever you like.')},true);
 /* ---------- the skin step: Make This Yours, for the land ---------- */
 const SKIN={theme:'Emerald Atlas',words:'',accent:null,parch:null,lbl:100,mist:false,glow:true,
-  flow_style:'glyph',label_style:'ribbon'};window.SKIN=SKIN; // 'glyph'|'gold'|'medium' · 'ribbon'|'tablet'
+  flow_style:'glyph',label_style:'ribbon',icon:iconMode};window.SKIN=SKIN; // 'glyph'|'gold'|'medium' · 'ribbon'|'tablet'
 /* THE ONE PLACE THE PAINT DIALS ARE ANSWERED. Called from the terrain
    switch, from the moment a bake completes, and once at boot, so the
    question is asked wherever either half of the answer can change.
@@ -8862,13 +9422,19 @@ window.maskRead=maskRead;window.maskWrite=maskWrite;
    house look before one arrives. A person who picks the village's own
    value again has no preference left to keep, and keeping one would hide
    whatever the village wears next. */
-const VILLAGE_LOOK={theme:SKIN.theme,words:'',label_style:SKIN.label_style,flow_style:SKIN.flow_style,scale:100};
+const VILLAGE_LOOK={theme:SKIN.theme,words:'',label_style:SKIN.label_style,flow_style:SKIN.flow_style,scale:100,
+  accent:null,parch:null,lbl:100,icon:SKIN.icon,mist:false,glow:true,palette:null};
 /* Who may dress SKIN itself, the village's record that Save map skin and
-   the scene export carry: the map running on its own, or a hand inside the
-   village that can edit. A visitor's choices are their view and nothing
-   else. */
-function dressesTheVillage(){return !inShell()||HAND.canEdit}
-function keepLook(p){const q={};for(const k in p)q[k]=(p[k]==null||p[k]===VILLAGE_LOOK[k])?null:p[k];maskWrite(q)}
+   the scene export carry: the map running on its own, where the file IS
+   the village and its export the outlet, and nobody else.
+   INSIDE THE VILLAGE EVERY CHOICE IN THIS SHEET IS THE PERSON'S OWN, the
+   founder's included (D12). The village's look has one home, Village
+   Settings, and the shell pushes it over SKIN after every scene anyway. An
+   editor who restyled here used to dress SKIN as well, so the scene export a
+   publish carries took one person's view along as the village's look. */
+function dressesTheVillage(){return !inShell()}
+const sameLook=(a,b)=>a===b||(!!a&&!!b&&typeof a==='object'&&JSON.stringify(a)===JSON.stringify(b));
+function keepLook(p){const q={};for(const k in p)q[k]=(p[k]==null||sameLook(p[k],VILLAGE_LOOK[k]))?null:p[k];maskWrite(q)}
 window.keepLook=keepLook;
 const DRESS_OK={label_style:['ribbon','tablet'],flow_style:['glyph','gold','medium']};
 /* The dress on screen: this person's own choice if they made one, else the
@@ -8876,6 +9442,49 @@ const DRESS_OK={label_style:['ribbon','tablet'],flow_style:['glyph','gold','medi
    map skin carry SKIN, and one person's view is not the village's look. */
 function dressOf(k){const v=MASK[k];return (v&&DRESS_OK[k].includes(v))?v:(SKIN[k]||DRESS_OK[k][0])}
 window.dressOf=dressOf;
+/* EVERY OTHER DIAL IN THE SHEET IS THE PERSON'S TOO (D11). The sheet opens
+   by promising that everything in it changes the map "to you, and to nobody
+   else", and the accent, the parchment, the label size, the icon style, the
+   dream mist, the village pulse and the custom palette broke that promise:
+   they wrote SKIN, the village's record, for every visitor, and went back to
+   the village's on the next reload, and the palette was kept nowhere at all.
+   They live in the mask now beside the theme and the dress, each held to the
+   range its own control can produce, so a hand-edited or stale value falls
+   back to the village's instead of drawing something no control can undo. */
+const HEX6=/^#[0-9a-f]{6}$/i;
+const LOOK_OK={accent:v=>typeof v==='string'&&HEX6.test(v),parch:v=>typeof v==='string'&&HEX6.test(v),
+  lbl:v=>typeof v==='number'&&v>=80&&v<=130,icon:v=>['auto','painted','iso','flat'].includes(v),
+  mist:v=>typeof v==='boolean',glow:v=>typeof v==='boolean',
+  palette:v=>!!v&&typeof v==='object'&&['surface','ring','accent'].every(k=>typeof v[k]==='string'&&HEX6.test(v[k]))};
+/* One of those on screen: the person's own, else the village's. */
+function lookOf(k){const v=MASK[k];if(v!=null&&LOOK_OK[k](v))return v;return k==='palette'?null:SKIN[k]}
+window.lookOf=lookOf;
+/* A palette brings its own accent; a separately chosen accent still wins. */
+function accentOn(){const a=MASK.accent;if(a!=null&&LOOK_OK.accent(a))return a;
+  const p=lookOf('palette');return p?p.accent:(SKIN.accent||null)}
+/* The theme under the person's palette: their own, else the village's. */
+function lookTheme(){
+  const t=MASK.theme&&Object.values(THEMES).find(x=>x.label===MASK.theme);if(t)return t;
+  const w=typeof MASK.words==='string'&&MASK.words.trim();if(w)return themeFromWords(w);
+  return Object.values(THEMES).find(x=>x.label===SKIN.theme)||(SKIN.words?themeFromWords(SKIN.words):THEME)}
+/* The controls read back what is on screen, so a person who comes back
+   finds the dial where they left it and not at the village's value. */
+function syncLookControls(){
+  const set=(id,f)=>{const el=$(id);if(el)f(el)};
+  set('skMist',el=>{el.checked=!!lookOf('mist')});
+  set('skGlow',el=>{el.checked=lookOf('glow')!==false});
+  const a=accentOn()||THEME.v['--t-accent'],pa=lookOf('parch')||THEME.v['--parch'],l=lookOf('lbl')||100;
+  set('skAccent',el=>{if(HEX6.test(a))el.value=a});
+  set('skParch',el=>{if(HEX6.test(pa))el.value=pa});
+  set('skLbl',el=>{el.value=l});set('skLblV',el=>{el.textContent=l+'%'});
+  set('skIcon',el=>{if([...el.options].some(o=>o.value===iconMode))el.value=iconMode});
+  document.querySelectorAll('[data-im]').forEach(x=>x.classList.toggle('on',x.dataset.im===iconMode));
+  const p=lookOf('palette');
+  if(p){set('cSurface',el=>{el.value=p.surface});set('cRing',el=>{el.value=p.ring});set('cAccent',el=>{el.value=p.accent})}}
+/* The icon style, from the sheet's select or the chips above it. */
+function pickIcon(v){if(!LOOK_OK.icon(v))return false;
+  iconMode=v;if(dressesTheVillage())SKIN.icon=v;keepLook({icon:v});syncLookControls();return true}
+window.pickIcon=pickIcon;
 /* THE MASK GOES ON LAST. The village's look arrives after boot, from the
    shell's config push, a restored scene and Village Settings, and each runs
    applySkinExport, which puts the village's theme and building size back.
@@ -8884,14 +9493,18 @@ window.dressOf=dressOf;
    config push set global_scale over it. So a person's own choices are laid
    over the village's here, at the end of every applySkinExport and once at
    boot, and never written into SKIN. The village's accent and parchment
-   still apply over a chosen theme, as they do when the swatch is pressed. */
+   still apply over a chosen theme, as they do when the swatch is pressed,
+   unless the person chose their own. The theme is resolved every time, the
+   village's when the person holds none, so letting every choice go (Reset)
+   puts the village's own look back. */
 function maskApply(){
-  const t=MASK.theme&&Object.values(THEMES).find(x=>x.label===MASK.theme);
-  const w=!t&&typeof MASK.words==='string'&&MASK.words.trim();
-  if(t)applyTheme(t);else if(w)applyTheme(themeFromWords(w));
-  if(t||w)applySkinOverrides();
+  const base=lookTheme(),p=lookOf('palette');
+  applyTheme(p?paletteTheme(base,p):base);
+  applySkinOverrides();
+  iconMode=lookOf('icon')||iconMode;
   applyDress();
   const v=Math.round(+MASK.scale);if(v>=50&&v<=300)setGScale(v,true);
+  syncLookControls();
   if($('skin').classList.contains('show'))renderSkinThemes()}
 window.maskApply=maskApply;
 /* ONE ROOM. The move is a single appendChild and it is what makes merging a
@@ -8909,6 +9522,9 @@ function openMask(){maskMount();
     if(window.closeHelp)closeHelp();
     document.body.classList.remove('msheet')}
   $('skin').classList.add('show');
+  /* The terrain switch is in here, so this is where the painted terrain is
+     first asked for (D31). Every later opening finds it asked already. */
+  if(window.askPaint)askPaint();
   /* OPEN AT THE TOP. The panel scrolls its own tail now, so it also KEPT a
      scroll position: read to the bottom, close, open again, and you
      arrived below the header with no heading, no first sentence and no way
@@ -8942,15 +9558,19 @@ function renderSkinThemes(){const h=$('skTheme');if(!h)return;
   `<i style="background:${t.v['--t-accent']}"></i></span>`+
   `<span><b>${t.label}</b><small>${t.sub}</small></span></button>`).join('');
   $('skTheme').querySelectorAll('.swb').forEach(b=>b.onclick=()=>{const t=Object.values(THEMES).find(x=>x.label===b.dataset.t);
-    if(t){if(dressesTheVillage()){SKIN.theme=t.label;SKIN.words=''}$('skWords').value='';applyTheme(t);applySkinOverrides();renderSkinThemes();
-      keepLook({theme:t.label,words:null})}})}
-function applySkinOverrides(){
-  if(SKIN.accent){document.documentElement.style.setProperty('--t-accent',SKIN.accent)}
-  if(SKIN.parch){document.documentElement.style.setProperty('--parch',SKIN.parch)}
-  document.documentElement.style.setProperty('--lblScale',(SKIN.lbl||100)/100);
+    if(t){if(dressesTheVillage()){SKIN.theme=t.label;SKIN.words=''}$('skWords').value='';
+      keepLook({theme:t.label,words:null,palette:null});applyTheme(t);applySkinOverrides();renderSkinThemes();syncLookControls()}})}
+/* The accent, parchment and label size on screen: the person's, else the
+   village's, else the theme's own, so letting one go puts the theme's back
+   instead of leaving the last override standing. */
+function applySkinOverrides(){const de=document.documentElement.style;
+  const a=accentOn(),pa=lookOf('parch');
+  de.setProperty('--t-accent',a||THEME.v['--t-accent']);
+  de.setProperty('--parch',pa||THEME.v['--parch']);
+  de.setProperty('--lblScale',(lookOf('lbl')||100)/100);
   mmDirty=true}
 function skinExport(){return{theme:SKIN.theme||THEME.label,words:SKIN.words||null,mist:!!SKIN.mist,glow:SKIN.glow!==false,global_scale:window.GSCALE||1,accent:SKIN.accent||null,
-  parchment:SKIN.parch||null,label_scale:(SKIN.lbl||100)/100,icon_mode:iconMode,
+  parchment:SKIN.parch||null,label_scale:(SKIN.lbl||100)/100,icon_mode:SKIN.icon||iconMode,
   flow_style:SKIN.flow_style||'glyph',label_style:SKIN.label_style||'ribbon',
   painterly:{brush:(typeof brushVal!=='undefined')?brushVal:null,palette:(typeof palVal!=='undefined')?palVal:null},
   note:'production home: Admin → Make This Yours (/admin?tab=setup), one styling story for site and land'}}
@@ -8977,7 +9597,7 @@ function applySkinExport(sk){if(!sk)return;
     if($('skPal')&&sk.painterly.palette!=null){$('skPal').value=Math.round(sk.painterly.palette*100);$('skPalV').textContent=Math.round(sk.painterly.palette*100)+'%'}}
   const t=Object.values(THEMES).find(x=>x.label===SKIN.theme);
   if(t)applyTheme(t);else if(SKIN.words)applyTheme(themeFromWords(SKIN.words));
-  if(sk.icon_mode&&['auto','painted','iso'].includes(sk.icon_mode))iconMode=sk.icon_mode;
+  if(sk.icon_mode&&['auto','painted','iso'].includes(sk.icon_mode))SKIN.icon=iconMode=sk.icon_mode;
   if(sk.flow_style&&['glyph','gold','medium'].includes(sk.flow_style))SKIN.flow_style=sk.flow_style;
   if(sk.label_style&&['ribbon','tablet'].includes(sk.label_style))SKIN.label_style=sk.label_style;
   applyDress();
@@ -8992,6 +9612,9 @@ function applySkinExport(sk){if(!sk)return;
   VILLAGE_LOOK.theme=sk.theme||VILLAGE_LOOK.theme;VILLAGE_LOOK.words=sk.words||'';
   for(const k of ['label_style','flow_style'])if(DRESS_OK[k].includes(sk[k]))VILLAGE_LOOK[k]=sk[k];
   if(sk.global_scale)VILLAGE_LOOK.scale=Math.round(sk.global_scale*100);
+  VILLAGE_LOOK.accent=sk.accent||null;VILLAGE_LOOK.parch=sk.parchment||null;
+  VILLAGE_LOOK.lbl=Math.round((sk.label_scale||1)*100);VILLAGE_LOOK.mist=!!sk.mist;VILLAGE_LOOK.glow=sk.glow!==false;
+  if(LOOK_OK.icon(sk.icon_mode))VILLAGE_LOOK.icon=sk.icon_mode;
   maskApply()}
 window.applySkinExport=applySkinExport;
 /* YOUR VIEW, AND INSIDE THE VILLAGE NOTHING MORE. These two wrote an entry
@@ -9033,60 +9656,107 @@ $('skinBtn').onclick=()=>toggleMask();
 $('skClose').onclick=()=>closeMask();
 if($('skX'))$('skX').onclick=()=>closeMask();
 $('skWords').addEventListener('change',()=>{const v=$('skWords').value.trim();if(!v)return;
-  if(dressesTheVillage()){SKIN.words=v;SKIN.theme=null}applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();keepLook({words:v,theme:null});
-  toast('A theme grown from your words. Save makes it yours.')});
-$('skAccent').oninput=()=>{SKIN.accent=$('skAccent').value;applySkinOverrides()};
-$('skParch').oninput=()=>{SKIN.parch=$('skParch').value;applySkinOverrides()};
-$('skLbl').oninput=()=>{SKIN.lbl=+$('skLbl').value;$('skLblV').textContent=SKIN.lbl+'%';applySkinOverrides()};
-$('skIcon').onchange=()=>{iconMode=$('skIcon').value;toast('Icon style: '+$('skIcon').value)};
-$('skMist').onchange=()=>{SKIN.mist=$('skMist').checked;toast(SKIN.mist?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
+  if(dressesTheVillage()){SKIN.words=v;SKIN.theme=null}keepLook({words:v,theme:null,palette:null});applyTheme(themeFromWords(v));applySkinOverrides();renderSkinThemes();syncLookControls();
+  toast(inShell()?'A theme grown from your words, kept on your screen.':'A theme grown from your words. Save makes it yours.')});
+/* D11: each of these is the person's own (the mask), and dresses SKIN only
+   where the map runs on its own. An editor inside the village is told where
+   the village's own look is set, as the label and flow toasts tell them. */
+const viewToast=said=>toast(inShell()&&HAND.canEdit?said+' '+SKIN_HERE:said);
+$('skAccent').oninput=()=>{const v=$('skAccent').value;if(dressesTheVillage())SKIN.accent=v;keepLook({accent:v});applySkinOverrides()};
+$('skParch').oninput=()=>{const v=$('skParch').value;if(dressesTheVillage())SKIN.parch=v;keepLook({parch:v});applySkinOverrides()};
+$('skLbl').oninput=()=>{const v=+$('skLbl').value;$('skLblV').textContent=v+'%';if(dressesTheVillage())SKIN.lbl=v;keepLook({lbl:v});applySkinOverrides()};
+$('skIcon').onchange=()=>{if(pickIcon($('skIcon').value))viewToast('Icon style: '+$('skIcon').value+'.')};
+$('skMist').onchange=()=>{const v=$('skMist').checked;if(dressesTheVillage())SKIN.mist=v;keepLook({mist:v});
+  viewToast(v?'Dream mist on. The unbuilt south breathes.':'Dream mist off. A clean site map.')};
 /* Save and Reset keep the rule written above the label and flow controls:
    in the shell the look stays on this screen and goes on no publish list. */
 $('skSave').onclick=()=>{
   if(inShell())return toast('✂ '+SKIN_HERE);
   logEdit('skin','map',skinExport());
   toast('✂ Skin saved. The land remembers it, and every export carries it.')};
-$('skReset').onclick=()=>{SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100;
-  document.documentElement.style.removeProperty('--t-accent');document.documentElement.style.removeProperty('--lblScale');
-  applyTheme(THEMES.emerald);applySkinOverrides();maskWrite({theme:null,words:null});
-  $('skAccent').value='#e8a13c';$('skParch').value='#f3e6c8';$('skLbl').value=100;$('skLblV').textContent='100%';$('skWords').value='';
-  renderSkinThemes();
-  /* The same rule: in the shell this resets the look on this screen, and the
-     village's own look is untouched. */
-  if(inShell())return toast('Back to the house look on your screen. '+SKIN_HOME);
-  logEdit('skin','map',{reset:'Amora'});toast('Back to Amora\'s values.')};
+/* RESET LETS GO OF EVERY CHOICE THIS PERSON MADE (D11), and inside the
+   village that puts the village's own look back: SKIN is the village's and
+   is not touched. It used to put the house theme on screen over the
+   village's, and let go of the theme and the words only, so the size, the
+   dress and every dial below them stayed. On its own the map is the
+   village, so there it also puts SKIN back to the house look. */
+const MASK_ALL={theme:null,words:null,palette:null,accent:null,parch:null,lbl:null,icon:null,mist:null,glow:null,
+  label_style:null,flow_style:null,scale:null};
+$('skReset').onclick=()=>{maskWrite(MASK_ALL);$('skWords').value='';
+  if(!inShell()){SKIN.theme='Emerald Atlas';SKIN.words='';SKIN.accent=null;SKIN.parch=null;SKIN.lbl=100}
+  setGScale(VILLAGE_LOOK.scale||100,true);maskApply();renderSkinThemes();
+  if(inShell())return toast(HAND.canEdit?'Back to the village\'s look on your screen. '+SKIN_HOME:'Back to the village\'s look.');
+  /* The house look, by name: this file is every village's map, and a fork's
+     founder pressing Reset read another village's name on it (N30). */
+  logEdit('skin','map',{reset:'house'});toast('Back to the house look.')};
+/* Inside the village the button is about the person's own view, which
+   everyone has, so everyone gets it and it says what it does there. */
+if(inShell()&&$('skReset')){$('skReset').textContent='Back to the village\'s look';document.body.classList.add('view-reset')}
 $('skin').addEventListener('keydown',e=>{if(e.key==='Escape'){$('skin').classList.remove('show')}
   if(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))e.stopPropagation()});
 /* ---------- hash router: every place, module, the Loom, the Circles and a journey has an address ----------
-   Lenses (Vision, Org, Flows) have none: a reload comes back on Now. */
+   AND SO DOES THE LENS (Rye, D7, 2026-10-02). Vision, Org and Flows ride on
+   the end of whatever is open, `#/place/greenhouse&lens=vision`, or alone,
+   `#lens=vision,flows`, so a reload or a shared link comes back seeing what
+   the visitor saw. Now is the plain land and writes nothing. */
 let HASHMUTE=false;
+/* The lens part of an address, and the rest of it. `routeOf` also drops the
+   shell's skipIntro token and a hud= layout hint, which name nothing open. */
+function hashParts(h){const s=String(h||'');return s.charAt(0)==='#'?s.slice(1).split('&'):[]}
+function lensOf(h){const p=hashParts(h).find(x=>/^lens=/i.test(x));return p?p.slice(5).toLowerCase():''}
+function routeOf(h){const r=hashParts(h).filter(x=>!/^(?:lens|hud)=|^skipIntro$/i.test(x)).join('&')
+    .replace(/[?&]skipIntro\b/ig,'').replace(/[?&]$/,'');
+  return r.length<1||r==='/'?'':'#'+r}
+function routeNow(){return routeOf(location.hash)}
+function lensNow(){const l=[];if(mode==='vision')l.push('vision');if(orgOn)l.push('org');if(flowsOn)l.push('flows');return l.join(',')}
+function withLens(r){const l=lensNow();if(!l)return r||'';return r?r+'&lens='+l:'#lens='+l}
+/* An address puts its lens on quietly: the lens buttons' own toasts and
+   Maia's Vision speech are for a person pressing them, and a reload that
+   talks is the map talking to nobody. Absent means Now, with Org and Flows
+   off, because the address names the whole view. */
+function applyLens(l){const w=String(l||'').split(','),v=w.includes('vision')?'vision':'now',o=w.includes('org'),fl=w.includes('flows');
+  if(mode!==v){mode=v;$('lyNow').classList.toggle('on',v==='now');$('lyVision').classList.toggle('on',v==='vision');mmDirty=true}
+  if(orgOn!==o){orgOn=o;$('lyOrg').classList.toggle('on',o);document.body.classList.toggle('org-lens',o)}
+  if(flowsOn!==fl){flowsOn=fl;$('lyFlows').classList.toggle('on',fl)}}
+/* A lens a person changed: the address keeps what is open and takes the new lens. */
+function lensMoved(){setHash(routeNow())}
+window.lensMoved=lensMoved;
 /* THE ADDRESS GOES TO THE SHELL TOO. Inside the shell this iframe's own URL
    is one nobody sees, so on its own it could not be copied, shared or
    reloaded, and Back had nothing to step through. The shell mirrors the
    route into the visible address bar and decides what Back does with it.
    `user` says whether a person's own click or key is behind this change
-   (transient activation), because only that earns a history entry: an entry
-   pushed with no activation is one Chrome later skips. Standalone,
-   shellPost does nothing. */
-function setHash(h){HASHMUTE=true;
-  try{history.replaceState(null,'',h||location.pathname+location.search)}catch(_){try{location.hash=h||''}catch(__){}}
+   (transient activation). The shell no longer spends it: the map is one page
+   and every address replaces the last (D6), but the flag costs nothing to
+   keep saying. `h` is what is open; the lens is added here, so no caller can
+   forget it. Standalone, shellPost does nothing. */
+function setHash(h){HASHMUTE=true;const a=withLens(routeOf(h));
+  try{history.replaceState(null,'',a||location.pathname+location.search)}catch(_){try{location.hash=a}catch(__){}}
   setTimeout(()=>{HASHMUTE=false},0);
-  shellPost({type:'route',hash:h||'',user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
+  shellPost({type:'route',hash:a,user:!!(navigator.userActivation&&navigator.userActivation.isActive)})}
 window.setHash=setHash;
-/* What is still on screen once the top layer goes, as an address. Closing
-   the Loom over a place, or a door opened from a place, used to clear the
-   address while the place stayed open, and the shell now shows that address
-   to people. */
+/* WHAT IS ON SCREEN, AS AN ADDRESS, top layer first. Every closer asks this,
+   so the address is whatever is still showing once the top layer goes.
+   It named only the Loom, the circles and a place, so closing the Loom over
+   an open door or a running walk wrote `/map` with the door or the walk still
+   in front of the visitor, and F5 dropped it (round 3, modes). The order is
+   the stacking order: a door (#module, z 60) over the Loom (z 50) over a
+   place's sheet (z 45) over the circles' chart (z 28), and a walk under all
+   of them, because a walk is a way of moving and not a sheet. DOOR_ADDR is
+   the address the open door was given, '' for a door with no room on the
+   map, which leaves the place under it named. */
+var DOOR_ADDR='';
+function walkAddr(){try{return JWALK&&JWALK.id?'#/journey/'+JWALK.id:''}catch(_){return''}}
 function viewHash(){
+  if(DOOR_ADDR&&$('module').classList.contains('show'))return DOOR_ADDR;
   if(document.body.classList.contains('loom'))return'#/loom';
-  if(document.body.classList.contains('circles'))return'#/circles';
   if(panelKey&&$('panel').classList.contains('open'))return'#/place/'+panelKey;
-  return''}
+  if(document.body.classList.contains('circles'))return'#/circles';
+  return walkAddr()}
 /* THE EMPTY ADDRESS CLOSES WHAT AN ADDRESS OPENED. The shell sends it when
-   Back returns to the map with nothing open, so Back closes the place, the
-   door, the Loom, the Circles or the walk before it leaves the map. The
-   order matters: the place goes first, so each closer after it finds
-   nothing underneath and none of them names an address on the way out. */
+   Forward lands on an entry of the map with nothing open. The order matters:
+   the place goes first, so each closer after it finds nothing underneath and
+   none of them names an address on the way out. */
 function closeAddressed(){
   /* A RUNNING WALK ENDS THROUGH THE ONE CANCEL PATH, as Escape and `stay
      here` end it. jHalt alone stopped the walk and left GUIDE.on true and her
@@ -9099,14 +9769,19 @@ function closeAddressed(){
   $('module').classList.remove('show');
   if(document.body.classList.contains('circles'))setMapType('living',true);
   if(document.body.classList.contains('loom'))closeLoom();
-  if(location.hash.length>1)setHash('')}
+  /* Only when the address still names something, or another lens: a bare
+     `#hud=` layout hint names nothing open and stays where it is. */
+  if(routeNow()||lensOf(location.hash)!==lensNow())setHash('')}
 function leaveIntro(){if(!document.body.classList.contains('intro'))return;
   document.body.classList.remove('intro');const ic=$('introCard');if(ic)ic.remove();
   shellPost({type:'intro-done'})}
 function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
-  /* Shell appends &skipIntro when it already showed its own gate; strip it so
-     #/circles and friends still match exactly. */
-  const h=(location.hash||'').replace(/[&?]skipIntro\b/ig,'').replace(/[?&]$/,'');
+  /* Shell appends &skipIntro when it already showed its own gate, and a lens
+     rides on the end of any address: the lens goes on first, then what is
+     left has to match #/circles and friends exactly. */
+  const raw=location.hash||'';
+  applyLens(lensOf(raw));
+  const h=routeOf(raw);
   if(h.length<2){closeAddressed();return}
   if(h==='#/circles'){leaveIntro();if(!document.body.classList.contains('circles'))setMapType('circles',true);return}
   if(h==='#/loom'){leaveIntro();if(document.body.classList.contains('circles'))setMapType('living',true);if(!document.body.classList.contains('loom'))openLoom();return}
@@ -9118,7 +9793,9 @@ function routeHash(){if(HASHMUTE||ROUTE_HELD)return;
   if(m[1]==='place'){if(BY[m[2]]){if(document.body.classList.contains('loom'))closeLoom();
       if(document.body.classList.contains('circles'))setMapType('living',true);
       openPanel(m[2],m[3]?ITAB[m[3].split(':')[0]]||0:0,m[3]||null)}
-    else if(SHELL_LANDED){toast('That place is no longer on the map.');setHash('')}}
+    /* The address names what stays on screen. It was cleared, which left a
+       place that was already open showing under an address of nothing. */
+    else if(SHELL_LANDED){toast('That place is no longer on the map.');setHash(viewHash())}}
   else if(m[1]==='module'&&moduleAt(m[2]))openDoor(m[2],{});
   else if(m[1]==='journey')setTimeout(()=>playJourney(m[2]),500)}
 /* THE SHELL'S ENTER TOKEN. LivingMap shows its own Enter the Land gate and
@@ -9190,7 +9867,7 @@ function setMapType(t,quiet){const circ=t==='circles';
   document.body.classList.toggle('circles',circ);
   $('msLiving').classList.toggle('on',!circ);$('msCircles').classList.toggle('on',circ);
   if(circ){$('panel').classList.remove('open');panelKey=null;closeDoor();hideHover();hoverPin=null;
-    buildOrgMap();setHash('#/circles')}else if(location.hash==='#/circles')setHash('');
+    buildOrgMap();setHash('#/circles')}else if(routeNow()==='#/circles')setHash(viewHash());
   if(!quiet)toast(circ?'◎ The Circles. The same village as an organism; click any node to walk to its door.':'🏞 The Living Map. The land itself.')}
 window.setMapType=setMapType;
 $('msLiving').onclick=()=>setMapType('living');
@@ -9211,16 +9888,18 @@ let OVB=[0,0,1600,1050],ODRAG=null,oMoved=0;
 function orgApplyVB(){$('orgSvg').setAttribute('viewBox',OVB.join(' '))}
 function buildOrgMap(){
   const CX=800,CY=540,RXe=500,RYe=360;
-  const CIR=Object.keys(CIRCLE_COL);const N=CIR.length;
-  const seatsBy=c=>SCENE.seats.filter(x=>x.c===c);
+  /* The village's circles once it has said what they are, the map's own
+     eleven until then: the same rule the lens follows. */
+  const CIR=ORG_CIRCLES?ORG_CIRCLES.map(c=>c.name):Object.keys(CIRCLE_COL);const N=CIR.length;
+  const seatsBy=c=>seatList().filter(x=>x.c===c&&!seatUnlisted(x));
   const questBy=c=>SCENE.quests.filter(q=>q.aff===c||(q.at&&BY[q.at]&&BY[q.at].circle===c));
   let edges='',orbits='',nodes='';
   CIR.forEach((c,i)=>{const a=-Math.PI/2+2*Math.PI*i/N;
     const x=CX+RXe*Math.cos(a),y=CY+RYe*Math.sin(a);
     const seats=seatsBy(c),quests=questBy(c);
     const R=15+5*Math.log2(1+seats.length+quests.length);
-    const col=CIRCLE_COL[c]||'#9aa08f';
-    const home=CIRCLE_HOMES[c];
+    const col=circleInk(c)||'#9aa08f';
+    const home=ORG_CIRCLES?orgHome(orgCircle(c)):CIRCLE_HOMES[c];
     edges+=`<line x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${col}" stroke-opacity=".35" stroke-width="1.4"/>`;
     orbits+=`<g transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
       ${seats.length?`<circle r="46" fill="none" stroke="${col}" stroke-opacity=".16" stroke-dasharray="2 6"/>`:''}
@@ -9252,9 +9931,17 @@ function buildOrgMap(){
   $('orgSvg').innerHTML=`<g id="orgRoot">${edges}${orbits}${nodes}</g>`;
   orgApplyVB()}
 window.buildOrgMap=buildOrgMap;
+/* THE NODE THE POINTER CAME DOWN ON (N12). The pointerdown below takes
+   pointer capture so a drag keeps the chart, and a captured mouse's click
+   goes to the common ancestor of where it went down and where it came up,
+   which is the svg: e.target.closest('.onode') found nothing and a click on
+   a node did nothing on a desk, every time (a finger's tap was retargeted
+   to the node and worked). So a click that did not move takes the node it
+   went down on. */
+let ODOWN=null;
 $('orgSvg').addEventListener('click',e=>{
   if(oMoved>6)return;
-  const g=e.target.closest('.onode');if(!g)return;
+  const g=e.target.closest('.onode')||ODOWN;ODOWN=null;if(!g)return;
   const go=g.dataset.go;
   if(!go||!BY[go]){toast(g.dataset.kind==='quest'?'⚑ Not placed yet. This quest lives at the Quest Board.':'No home on the land yet. The Loom awaits.');return}
   setMapType('living',true);
@@ -9298,6 +9985,7 @@ function orgSeat(){const p=[...OPTR.values()];ODRAG=null;OPINCH=null;
    held here is one whose up never arrived (capture can fail, and is caught
    below). Without this the next single touch would pinch against it. */
 $('orgSvg').addEventListener('pointerdown',e=>{if(e.isPrimary)OPTR.clear();if(!OPTR.size)oMoved=0;
+  ODOWN=OPTR.size?null:(e.target.closest&&e.target.closest('.onode'));
   OPTR.set(e.pointerId,{x:e.clientX,y:e.clientY});orgSeat();
   try{$('orgSvg').setPointerCapture(e.pointerId)}catch(_){}});
 $('orgSvg').addEventListener('pointermove',e=>{if(!OPTR.has(e.pointerId))return;
@@ -9354,46 +10042,81 @@ function vitalsData(){
 window.vitalsData=vitalsData;
 function openVitalDrop(k,anchor){
   const dp=$('vdrop');const D=vitalsData();
+  /* The same row the chip drew (chipRows), so the reading under a chip can
+     never say something the chip did not. A chip the founder has taken off
+     the bar since it was opened has no row, and nothing to show. */
+  const row=k==='moon'?null:chipRows().find(x=>x.k===k);
+  if(k!=='moon'&&!row){dp.classList.remove('show');return}
   const r=anchor.getBoundingClientRect();
   dp.style.left=Math.max(8,Math.min(innerWidth-300,r.left+r.width/2-144))+'px';
   const findQ=kws=>SCENE.quests.find(q=>kws.some(w=>(q.q+' '+(q.desc||'')).toLowerCase().includes(w)));
   const claimBtn=(kws,createLabel,home)=>{const q2=findQ(kws);
     return q2?`<button class="btn" onclick="claimQuest('${escj(q2.q)}','${escj(q2.at?nameOf(q2.at):'the Board')}');$('vdrop').classList.remove('show')">⚑ Claim: ${escq(q2.q)}</button>`
       :`<button class="btn" onclick="vitalQuest('${escj(createLabel)}','${escj(home)}')">⚑ Begin: ${escq(createLabel)}</button>`};
-  const body={
-    people:()=>`<div class="vfact"><b>${escq(D.people.v)}</b> members · ${escq(D.people.sub)}</div><div class="vhow">${escq(D.people.how)}</div>
-      <button class="btn" onclick="openDoor('journeys',{});$('vdrop').classList.remove('show')">➹ Begin a journey</button>`,
-    food:()=>`<div class="vfact"><b>${escq(D.food.v)}</b> · ${escq(D.food.sub)}</div><div class="vhow">${escq(D.food.how)}</div>
-      ${claimBtn(['harvest','garden','seed','plant'],'Feed the village','greenhouse')}`,
-    water:()=>`<div class="vfact"><b>${escq(D.water.v)}</b> · ${escq(D.water.sub)}</div><div class="vhow">${escq(D.water.how)}</div>
-      ${claimBtn(['water','creek','swale','drip','trail'],'Tend the waters','tank')}`,
-    canopy:()=>`<div class="vfact"><b>${escq(D.canopy.v)}</b> · ${escq(D.canopy.sub)}</div><div class="vfact">${D._pathKm.toFixed(1)} km of drawn paths thread the land</div><div class="vhow">${escq(D.canopy.how)}</div>
-      ${claimBtn(['tree','plant','mulch','forest'],'Plant toward the canopy','foodforest')}`,
-    hearts:()=>`<div class="vfact"><b>${escq(D.hearts.v)} ♥</b> · ${escq(D.hearts.sub)}</div><div class="vhow">${escq(D.hearts.how)}</div>
-      <a class="btn" style="text-align:center" href="${siteHref('/gratitude')}" target="_blank" rel="noopener" onclick="return siteNav(event,'/gratitude')">♥ Send gratitude ↗</a>`,
-    moon:()=>`<div class="vfact">${escq(SCENE.moonName)}</div><div class="vhow">the lunar cycle closes the books: gratitude settles, stewards are thanked, the pulse resets</div>
-      <button class="btn" onclick="openDoor('health',{});$('vdrop').classList.remove('show')">☀ Village Health</button>`};
-  const name={people:'People',food:'Food',water:'Water',canopy:'Canopy',hearts:'Hearts',moon:'The Moon'}[k]||k;
+  /* What the five chips this map has always carried say about their own
+     number while they draw it themselves (an example, the drawn land, or a
+     number held by the founder's word). */
+  const facts={
+    people:()=>`<div class="vfact"><b>${escq(D.people.v)}</b> members · ${escq(D.people.sub)}</div><div class="vhow">${escq(D.people.how)}</div>`,
+    food:()=>`<div class="vfact"><b>${escq(D.food.v)}</b> · ${escq(D.food.sub)}</div><div class="vhow">${escq(D.food.how)}</div>`,
+    water:()=>`<div class="vfact"><b>${escq(D.water.v)}</b> · ${escq(D.water.sub)}</div><div class="vhow">${escq(D.water.how)}</div>`,
+    canopy:()=>`<div class="vfact"><b>${escq(D.canopy.v)}</b> · ${escq(D.canopy.sub)}</div><div class="vfact">${D._pathKm.toFixed(1)} km of drawn paths thread the land</div><div class="vhow">${escq(D.canopy.how)}</div>`,
+    hearts:()=>`<div class="vfact"><b>${escq(D.hearts.v)} ♥</b> · ${escq(D.hearts.sub)}</div><div class="vhow">${escq(D.hearts.how)}</div>`};
+  /* And what each of them offers to DO about it. */
+  const offer={
+    people:()=>`<button class="btn" onclick="openDoor('journeys',{});$('vdrop').classList.remove('show')">➹ Begin a journey</button>`,
+    food:()=>claimBtn(['harvest','garden','seed','plant'],'Feed the village','greenhouse'),
+    water:()=>claimBtn(['water','creek','swale','drip','trail'],'Tend the waters','tank'),
+    canopy:()=>claimBtn(['tree','plant','mulch','forest'],'Plant toward the canopy','foodforest'),
+    hearts:()=>`<a class="btn" style="text-align:center" href="${siteHref('/gratitude')}" target="_blank" rel="noopener" onclick="return siteNav(event,'/gratitude')">♥ Send gratitude ↗</a>`};
+  /* The founder's own door for the chip, drawn only for a page the site
+     serves (realRoute), so a typo is a chip with no door and never a door
+     to nowhere. */
+  const route=row&&row.link?realRoute(row.link):'';
+  const door=route?`<a class="btn" style="text-align:center" href="${escq(siteHref(route))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${escj(route)}')">${escq(row.label)} ↗</a>`:'';
+  /* Village settings, where a chip is given its source. The shell answers
+     this route with its own settings drawer for a founder, over the land. */
+  const settings=`<a class="btn" style="font-size:10.5px;padding:3px 9px;text-align:center" href="${escq(siteHref('/admin?tab=setup'))}" target="_blank" rel="noopener" onclick="$('vdrop').classList.remove('show');return siteNav(event,'/admin?tab=setup')">Village settings</a>`;
+  let body;
+  if(k==='moon')body=`<div class="vfact">${escq(SCENE.moonName)}</div><div class="vhow">the lunar cycle closes the books: gratitude settles, stewards are thanked, the pulse resets</div>
+      <button class="btn" onclick="openDoor('health',{});$('vdrop').classList.remove('show')">☀ Village Health</button>`;
+  else if(!row.live&&LEGACY_CHIPS.includes(k))body=facts[k]()+(door||offer[k]());
+  else body=`<div class="vfact"><b>${escq(row.v)}</b>${row.sub?' · '+escq(row.sub):''}</div><div class="vhow">${escq(row.how)}</div>`+door;
+  const name=k==='moon'?'The Moon':row.label;
   /* Where this number comes from, said before anything is asked of you.
      "set value - founder's word" confused the founder who wrote it. */
   const held=!!(window.VITAL_OVR||{})[k];
-  const rawSrc=String((D[k]&&D[k].src)||'');
-  const prov=held?'held by your word':(/drawn/.test(rawSrc)?'measured from your drawn land':'sample reading');
-  const unit=(String((D[k]&&D[k].v)||'').match(/[^0-9.,\s]+$/)||[''])[0];
-  const ovr=(typeof buildMode!=='undefined'&&buildMode&&k!=='moon')?
-    `<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+  const rawSrc=String((row&&row.src)||'');
+  const unit=(String((row&&row.v)||'').match(/[^0-9.,\s]+$/)||[''])[0];
+  let ovr='';
+  if(typeof buildMode!=='undefined'&&buildMode&&k!=='moon'){
+    /* A chip with a source is the village's record, chosen in Village
+       settings, so build mode sends the founder there. Holding a number
+       here as well would put two founder controls on one chip. */
+    if(row.live)ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+       <div style="font-size:10px;letter-spacing:.06em;color:var(--gold-b)">${row.src==='founder-set'?'your number, from Village settings':'counted live from the village'}</div>
+       <div style="font-size:11px;color:#cfc7a8;margin:4px 0 5px">What this chip reads is chosen in Village settings.</div>${settings}</div>`;
+    /* A chip of the founder's own has no number of the map's to hold. */
+    else if(!LEGACY_CHIPS.includes(k))ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
+       <div style="font-size:10px;letter-spacing:.06em;color:#b9af8f">example</div>
+       <div style="font-size:11px;color:#cfc7a8;margin:4px 0 5px">Give it a source in Village settings, and it counts itself.</div>${settings}</div>`;
+    else{const prov=held?'held by your word':(row.example?'example':(/drawn/.test(rawSrc)?'measured from your drawn land':'example'));
+      ovr=`<div style="margin-top:8px;border-top:1px dashed #6b5430;padding-top:7px">
        <div style="font-size:10px;letter-spacing:.06em;color:${held?'var(--gold-b)':'#b9af8f'}">${prov}</div>
        ${held
          ? `<div style="font-size:11.5px;margin-top:4px">Held by your word · <a href="#" onclick="vitalClear('${escj(k)}');return false" style="color:var(--gold-b)">release</a></div>`
          : `<div style="font-size:11px;color:#cfc7a8;margin-top:4px">Know the real number? Set it here and the map holds your word until you release it.</div>
             <div style="display:flex;gap:6px;align-items:center;margin-top:5px">
               <input id="vOvr" type="text" placeholder="the true number" style="flex:1;background:rgba(44,33,20,.8);border:1px solid #6b5430;border-radius:6px;color:var(--parch);font-family:inherit;font-size:11px;padding:4px 8px">
-              ${unit?`<span style="font-size:11px;color:#b9af8f">${escq(unit)}</span>`:''}
+              ${unit&&unit!=='?'?`<span style="font-size:11px;color:#b9af8f">${escq(unit)}</span>`:''}
               <button class="btn" style="font-size:10.5px;padding:3px 9px" onclick="vitalSet('${escj(k)}')">Hold this number</button>
             </div>`}
-     </div>`:'';
-  dp.innerHTML=`<h5>${escq(name)}</h5>${/sample/.test(rawSrc)?'<div class="vsample">Sample reading. Nothing has counted this from the village yet.</div>':''}${(body[k]||(()=>''))()}${ovr}
-    <div class="vhow" style="opacity:.8">source: ${escq(k==='moon'?'the lunar calendar':(D[k]?D[k].src:'—'))} · live feeds from the bioregion can plug in here</div>`;
+       <div style="font-size:11px;color:#cfc7a8;margin:6px 0 5px">Or give it a source in Village settings, and it counts itself.</div>${settings}</div>`}}
+  const source=k==='moon'?'the lunar calendar'
+    :row.live?(row.src==='founder-set'?'the founder, in Village settings':'counted live from the village\'s own records')
+    :row.example?'an example. The founder has not chosen what it reads yet':rawSrc;
+  dp.innerHTML=`<h5>${escq(name)}</h5>${row&&row.example?'<div class="vsample">Example. The founder has not set this chip yet.</div>':''}${body}${ovr}
+    <div class="vhow" style="opacity:.8">source: ${escq(source)}</div>`;
   dp.classList.add('show')}
 window.openVitalDrop=openVitalDrop;
 function vitalQuest(label,home){SCENE.quests.push({q:label,at:home,addr:'resolver-guess',r:'20 ♥',need:'hands welcome',src:'vital'});
@@ -9417,7 +10140,7 @@ window.PULSE={};
 (function pulseBoot(){const rng=mulberry(4242);
   setInterval(()=>{if(document.body.classList.contains('intro'))return;
     if(typeof buildMode!=='undefined'&&buildMode)return;
-    if(window.SKIN&&SKIN.glow===false)return;
+    if((window.lookOf?lookOf('glow'):(window.SKIN&&SKIN.glow))===false)return;
     const withHome=SCENE.threads.filter(t2=>t2.structures&&t2.structures.length);
     const t2=withHome[Math.floor(rng()*withHome.length)];if(!t2)return;
     t2.structures.forEach(k2=>PULSE[k2]=performance.now()+8500)},31000)})();
@@ -9456,13 +10179,14 @@ $('skTerr').onchange=()=>{/* matched, not compiled (g6.05) — the fourth and la
   const v=$('skTerr').value;let b=null;
   document.querySelectorAll('[data-tm]').forEach(x=>{if(!b&&x.dataset.tm===v)b=x});
   if(b)b.click()};
-$('skGlow').onchange=()=>{SKIN.glow=$('skGlow').checked;
-  toast(SKIN.glow?'The pulse is on. The village shimmers where it talks.':'Pulse off. A still land.')};
+$('skGlow').onchange=()=>{const v=$('skGlow').checked;if(dressesTheVillage())SKIN.glow=v;keepLook({glow:v});
+  viewToast(v?'The pulse is on. The village shimmers where it talks.':'Pulse off. A still land.')};
 /* vocabulary — the founder's words for the land (Q1d) */
 function renderVocab(){const host=$('skVocab');if(!host)return;
   host.innerHTML=SUBTYPES.zone.map((z,i)=>`<button class="chip" data-vz="${i}" data-tip="Click to rename. Your land, your words; every drawn zone follows.">${escq(z)}</button>`).join('')
    +`<button class="chip" data-vz="+" style="border-style:dashed">+ word</button>`;
   host.querySelectorAll('[data-vz]').forEach(b=>b.onclick=()=>{
+    if(vocabHeld('zone'))return toast(VOCAB_HOME);
     const i=b.dataset.vz;
     const inp=document.createElement('input');inp.type='text';inp.value=i==='+'?'':SUBTYPES.zone[+i];
     inp.style.cssText='width:92px;background:rgba(44,33,20,.9);border:1px solid #c9a25e;border-radius:6px;color:#fff;font-family:inherit;font-size:10.5px;padding:3px 7px';
@@ -9846,6 +10570,14 @@ window.topFit=topFit;
     const r=el.getBoundingClientRect();const w=tp.offsetWidth,h=tp.offsetHeight;
     let x=Math.min(innerWidth-w-8,Math.max(8,r.left+r.width/2-w/2));
     let y=r.top-h-9;if(y<6)y=r.bottom+9;
+    /* NOT OVER THE TOP ROW (N07). A chip on the stat bar's second row has
+       room above it, so its tip went up over the first row's buttons and
+       hid Your view, the hour and the Loom while it showed: MEASURED at
+       1280x720, the Hearts tip over Your view by 114x31. A tip above that
+       would meet any of them goes below its anchor instead. */
+    else if(typeof TOP_ROW!=='undefined')for(const id of TOP_ROW.row1){const o=document.getElementById(id);
+      const q=o&&o.getBoundingClientRect();
+      if(q&&q.width&&x<q.right&&x+w>q.left&&y<q.bottom&&y+h>q.top){y=r.bottom+9;break}}
     /* A tip flipped below a vital lands in the top band, where the draft
        bar, the restore bar and the news line live. Push past the band, but
        only for an anchor the band can actually reach, or a tip on a
@@ -9880,7 +10612,7 @@ window.topFit=topFit;
   document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(el)show(el)});
   document.addEventListener('focusout',hide);
   addEventListener('scroll',hide,true);
-  const TIPS={lyNow:'Now: only what is. Every icon traces to something true.',
+  const TIPS={lyNow:'Now: the land as the map holds it today, with planned buildings left out.',
     lyVision:'Vision: the whole masterplan. Blueprint ghosts are the fundable gap.',
     lyOrg:'Org: a ring where each circle lives, and one satellite per role. Hollow is open, half is partly held, solid is filled.',
     lyFlows:'The village metabolism. Each kind of moving thing wears its own mark, and the line beneath it keeps that colour.',
@@ -9934,6 +10666,7 @@ function renderMediaVocab(){const host=$('skMedia');if(!host)return;
   host.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>mediaEditor(b,b.dataset.vm))}
 window.renderMediaVocab=renderMediaVocab;
 function mediaEditor(btn,idx){
+  if(vocabHeld('media'))return toast(VOCAB_HOME);
   const L=SCENE.vocabulary.media,add=idx==='+';
   const m=add?{key:'',name:'',color:'#e8c877',glyph:'seed'}:L[+idx];
   const used=add?0:SCENE.flows.filter(f=>mediaKey(f.medium)===m.key).length;
@@ -9979,6 +10712,7 @@ function renderPhaseVocab(){const host=$('skPhases');if(!host)return;
   host.innerHTML=[1,2,3].map(nn=>`<button class="chip" data-vp="${nn}" data-tip="Click to rename. Every surface that names a phase follows; the export keeps the number.">${escq(phaseName(nn))}</button>`).join('');
   host.querySelectorAll('[data-vp]').forEach(b=>b.onclick=()=>{
     const nn=+b.dataset.vp;
+    if(vocabHeld('phases',nn))return toast(VOCAB_HOME);
     const inp=document.createElement('input');inp.type='text';inp.value=phaseName(nn);
     inp.style.cssText='width:96px;background:rgba(44,33,20,.9);border:1px solid #c9a25e;border-radius:6px;color:#fff;font-family:inherit;font-size:10.5px;padding:3px 7px';
     b.replaceWith(inp);inp.focus();inp.select&&inp.select();
@@ -10636,6 +11370,7 @@ window.undoPublish=undoPublish;
 
 /* ---------- embed bridge — the site shell speaks, the map listens ----------
    parent → map: {type:'skin', skin:<art_manifest.skin shape>} applies Village Settings live;
+                 {type:'chips', chips:[...]} the crown bar's chips, read live (applyChips);
                  {type:'goto', hash:'#/place/kitchen'} routes the land.
    map → parent: {type:'grounds-ready', version} once on boot;
                  {type:'route', hash, user} whenever the address changes (setHash);
@@ -10646,6 +11381,8 @@ addEventListener('message',e=>{try{
   const d=e.data;if(!d||typeof d!=='object')return;
   if(d.type==='skin'&&d.skin){SHELL_SKIN=d.skin;applySkinExport(d.skin);toast('✂ Skin applied from Village Settings.')}
   if(d.type==='ground')setGround(d);
+  /* The founder's chips, resolved by the server (applyChips). */
+  if(d.type==='chips'&&Array.isArray(d.chips))applyChips(d.chips);
   /* REPLACED, never pushed. Assigning location.hash added an entry to this
      frame's history, and the browser's Back pops a frame's entry before the
      page's: the next Back only rewound this hash, nothing visible happened,
@@ -10685,6 +11422,8 @@ addEventListener('message',e=>{try{
      file:// QA run are exactly as they were. */
   if(d.type==='lens'){
     if(typeof roleSetParty==='function')roleSetParty(d.party);
+    /* D3: the circles first, so the seats that follow find their homes. */
+    if(Array.isArray(d.circles)&&typeof orgSetCircles==='function')orgSetCircles(d.circles);
     if(d.roles&&typeof roleApplyLive==='function')roleApplyLive(d.roles)}
   if(d.type==='scene-result'&&d.nonce)sceneResult(d);
 }catch(_){}});
@@ -10787,8 +11526,9 @@ window.hap=hap;
   function nowFlush(){if(raf){cancelAnimationFrame(raf);raf=0}flush()}
   listen('touchstart',e=>{
     /* THE SAME CANCEL PATH THE MOUSE USES, at the entry point this lane
-       already owns. A finger on the glass is a person taking the map. */
-    window.GUIDE&&GUIDE.hand();
+       already owns. A finger on the glass is a person taking the map,
+       unless it came down to put Help away (SHEET_TAP). */
+    if(!SHEET_TAP)window.GUIDE&&GUIDE.hand();
     if(!T){dragging=true;cv.classList.add('dragging');cam.vx=cam.vy=0;samp=[];
       /* A flight nobody guided still keeps its promise; a guided one was
          dropped above, callback and all, so no step lands late. */
@@ -10957,7 +11697,11 @@ try{new MutationObserver(()=>{if(document.body.classList.contains('msheet'))maia
   document.addEventListener('pointerdown',e=>{
     if(!el.classList.contains('show'))return;
     const t=e.target;if(t&&t.closest&&(t.closest('#help')||t.closest('#pbAttn')))return;
-    closeHelp()},true);
+    closeHelp();
+    /* Put away by a tap on the land, it gives her sheet back as its own
+       close does, and the walk it covered is offered again (N18). A tap on
+       the bar is left alone: ASK MAIA is about to toggle her itself. */
+    if(SHEET_TAP&&window.jSheetBack)jSheetBack()},true);
 
   if($('pbAttn'))$('pbAttn').onclick=()=>{toggleHelp();hap(8)};
 
@@ -10993,7 +11737,7 @@ function renderDrawer(){const d=$('pdrawer');if(!d)return;
    `</div><h4>ways in</h4><div class="pgrid">
     <button class="pcell" data-pa="wall">⚑ <span>Get Involved</span></button>
     <button class="pcell" data-pa="loom">⧉ <span>The Loom (view)</span></button>
-    ${WELCOME_WALK_ON?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
+    ${welcomeWalkOn()?'<button class="pcell" data-pa="walk">➹ <span>Take the walk again</span></button>':''}
     <button class="pcell" data-pa="mask">✦ <span>Your view</span></button>
     <button class="pcell" data-pa="exit">⏏ <span>Leave the map</span></button></div>
    <h4>lenses on the land</h4><div class="pgrid plens">`+
@@ -11020,7 +11764,7 @@ if($('pbExit'))$('pbExit').onclick=()=>{hap(8);exitMap()};
 function exitMap(){try{if(window.parent!==window){window.parent.postMessage({type:'exit'},'*');return}}catch(_){}
   toast('⏏ On the site, this returns you to the village menu.')}
 window.exitMap=exitMap;
-/* ---------- THE WELCOME WALK — village data, Amora's words as the seed ---------- */
+/* ---------- THE WELCOME WALK: the village's own, in window.WALK. The seed below is an example nobody is offered ---------- */
 window.WALK_SEED=[
  {id:'w1',structure_key:'gate',title:'Welcome to Amora',gesture:'pan',
   body:'Every story here walked in through this gate. Today that’s you. This map is the living land, 123 hectares on the Osa Peninsula, drawn from what is real.',
@@ -11039,7 +11783,7 @@ window.WALK_SEED=[
  {id:'w6',structure_key:'ridgeA',title:'Walls Rising',gesture:'none',
   body:'This hamlet is being pooled into existence. Watch the gold ring fill as funding becomes walls. The ✦ lantern burns brighter as build day comes near.'},
  {id:'w7',structure_key:'sanctuary',title:'Where the Land Still Dreams',gesture:'none',
-  body:'The Sanctuary is coming. Everything on this map traces to something true: a funded build, a claimed quest, a filled seat. Delete the map and no truth dies.'},
+  body:'The Sanctuary is coming. You can see what we have promised each other and have yet to build.'},
  {id:'w8',structure_key:'council',title:'Where Shall We Start?',gesture:'choice',
   body:'The whole point of this map is to get you off it and into the real one. Pick a door.'}];
 window.WALK=null;window.WGATE={};window.WALK_LOG=window.WALK_LOG||[];
@@ -11089,9 +11833,9 @@ window.endWalk=endWalk;
 /* nextWalk() and the #walkCard renderer stood here. The journey renders into
    the Maia dock on both profiles, so a second card that says the same things
    in a different voice is one surface too many.
-   WALK_SEED above is untouched: it is the village's own copy, jLine() reads it
-   as the third-choice source for a stop's words, and verify_badges.js reads
-   step w4. #walkCard's markup, CSS and band slot are still in the file and
+   WALK_SEED above is the seed's example, offered to nobody (welcomeWalkOn):
+   nothing speaks its words any more, the gesture hint reads two of its
+   gate_hint lines, and verify_badges.js reads step w4. #walkCard's markup, CSS and band slot are still in the file and
    nothing shows them; removing a band tenant belongs to whoever owns the
    band. */
 /* gates fed by real use */
@@ -11101,8 +11845,20 @@ addEventListener('message',e=>{
   if(location.protocol!=='file:'&&e.origin!==location.origin)return;
   const d=e.data;if(!d||d.type!=='config')return;
   /* Handed over on every path out of here, a throw included: the shell's
-     cover waits on it. Only a config from the shell gets this far. */
+     cover waits on it. Only a config from the shell gets this far.
+     AND NOT BEFORE THE VILLAGE'S OWN GROUND HAS DRAWN (N19). The config
+     carries it now, and the cover used to lift over the seed's coast and
+     caption while the village's picture was still decoding: MEASURED with
+     the picture held 8 s, 7.6 s of another place's geography in plain view.
+     A ground that fails, or takes longer than GROUND_WAIT_MS, hands over
+     anyway, onto the honest vector floor (GROUND_ELSEWHERE). */
+  let handOver=landHandedOver;
   try{
+  /* Where the village stands goes before the land, so the land is painted
+     once, on the right ground. Absent says nothing and changes nothing. */
+  if(typeof d.seedGround==='boolean')seedVerdict(d.seedGround);
+  if(d.ground&&typeof d.ground==='object'){
+    if(LAND_HANDED)setGround(d.ground);else handOver=holdForGround(d.ground)}
   /* The land first: everything below dresses what the scene puts down, and
      restoreScene rebuilds the vocabulary anyway. Applying the skin to a
      map that is about to be replaced wholesale is work thrown away. */
@@ -11110,7 +11866,15 @@ addEventListener('message',e=>{
   if(d.skin)SHELL_SKIN=d.skin;
   if(d.scene&&typeof d.scene==='object')applyScene(d.scene,d.sceneVersion);
   if(d.skin)applySkinExport(d.skin);
-  if(Array.isArray(d.walk)&&d.walk.length)window.WALK=d.walk;
+  /* The village's walk and welcome. A key that is present is the village's
+     answer, null included: null means it has written none, so no walk is
+     offered and the guide greets people plainly. A key that is absent, as in
+     the bare config the shell sends after a failed fetch, keeps what the map
+     already has. */
+  if('walk' in d)window.WALK=(Array.isArray(d.walk)&&d.walk.length)?d.walk:null;
+  if('welcome' in d)window.WELCOME=(typeof d.welcome==='string'&&d.welcome.trim())?d.welcome.trim().slice(0,600):null;
+  syncWalkDoors();
+  if(d.vocabulary)VILLAGE_VOCAB=heldVocab(d.vocabulary);
   if(d.vocabulary&&applyVocabulary(d.vocabulary).length){
     /* The land redraws itself every frame, but these are DOM and do not. */
     if(typeof renderMediaVocab==='function')renderMediaVocab();
@@ -11120,7 +11884,15 @@ addEventListener('message',e=>{
   /* Last, so an address held for the land is answered by the land that just
      arrived. See ROUTE_WAIT_MS. */
   landArrived();
-}catch(_){}finally{landHandedOver()}});
+}catch(_){}finally{handOver()}});
+/* The hand-over for a config that carries a ground: when the config is
+   applied AND the picture has drawn, or GROUND_WAIT_MS after the config,
+   whichever is first. Returns what the config handler calls when it is done. */
+const GROUND_WAIT_MS=8000;
+function holdForGround(g){let drawn=false,applied=false,tm=0;
+  const go=()=>{if(drawn&&applied){clearTimeout(tm);landHandedOver()}};
+  setGround(g,()=>{drawn=true;go()});
+  return ()=>{applied=true;if(!drawn)tm=setTimeout(()=>{drawn=true;go()},GROUND_WAIT_MS);go()}}
 /* THE SINGLE-POINTER PATH TO THE SAME TWO THINGS. One tap is one step, with
    no press-and-hold, because a step big enough to be worth pressing is better
    than a repeat rate to get wrong. Zoom is about the screen centre, which is
@@ -11187,9 +11959,14 @@ addEventListener('message',e=>{
    become markup however a fork edits them. */
 function guideAffordance(){
   const box=$('gresume'),lab=$('gresumeLab');if(!box||!lab)return;
-  if(!WELCOME_WALK_ON){box.classList.remove('on');return}
   const live=!!(window.GUIDE&&GUIDE.on);
   const back=!!(window.GUIDE&&GUIDE.ran&&GUIDE.at>0&&GUIDE.why!=='done');
+  /* THE WALK BEING OFF TAKES DOWN THE OFFER OF A NEW ONE, and only that
+     (N09). It took down the way back into a journey somebody was already
+     walking too, and every journey runs through GUIDE.start, so a Resident
+     walk stopped by a hand at stop three had to start again from stop one.
+     guideGo resumes any journey at the stop it reached. */
+  if(!welcomeWalkOn()&&!back){box.classList.remove('on');return}
   let done=false,hid=false;
   try{done=!!localStorage.getItem('amora-walk-done')}catch(_){}
   try{hid=sessionStorage.getItem('amora-walk-offer')==='off'}catch(_){}
@@ -11268,20 +12045,22 @@ if($('gresumeX'))$('gresumeX').onclick=()=>{
    village, and a #/circles reader who comes back to the land finds the
    village there, not the beach. */
 if(document.body.classList.contains('pocket')){
-  (()=>{const v=$('vitals'),b=$('pbar');
-    const top=v?v.getBoundingClientRect().bottom:0,r=b?b.getBoundingClientRect():null;
-    frameVillage(Math.max(0,top),r&&r.height?Math.max(0,innerHeight-r.top):0)})();
+  framePocket();
   setTimeout(()=>{leaveIntro();
-    if(!location.hash||location.hash.length<3||/hud=/.test(location.hash)){
-      guideAffordance();
+    if(!routeNow())
+      /* AFTER THE LAND, because the walk it offers and the welcome it says are
+         the village's, and inside the shell they arrive in {type:'config'}.
+         Said before that, the offer was always down and the welcome always
+         the platform's. Standalone, nothing is coming and it runs now. */
+      afterLand(()=>{guideAffordance();
       if(!localStorage.getItem('amora-walk-done'))
         /* NO TOAST HERE, AND THAT WAS MEASURED. A welcome toast sits in the
            bottom band at 390x844 and covered both the seed and the walk
            offer for its whole six seconds, which is to say it hid the very
            button it was pointing at. #ghint above already teaches the two
            gestures and this button already says what it does. */
-        {maiaSay('Welcome to the living map of <b>Amora</b>. The land is yours to move: drag it, pinch it, tap any building to open its door.'+(WELCOME_WALK_ON?' Tap <b>Take the walk</b> and I will show you around.':''));
-          if(!document.body.classList.contains('msheet'))maiaUnread(true)}}},700)}
+        {maiaSay(welcomeLine(true));
+          if(!document.body.classList.contains('msheet'))maiaUnread(true)}})},700)}
 
 
 /* intro
@@ -11308,8 +12087,8 @@ function arrivalLift(){
   const vy=parseFloat(document.documentElement.style.getPropertyValue('--top-vy'))||0;
   return Math.min(Math.max(0,vy),ARRIVAL_LIFT_MAX)}
 function arrivalWelcome(){
-  maiaSay(`Welcome to the living map of <b>Amora</b>. Everything you see traces to something true: a funded build, a claimed quest, a filled seat. Hover anything; click any building to open its door.${WELCOME_WALK_ON?' Want the short walk?':''}`);
-  setTimeout(()=>{if(!JWALK)maiaSay(WELCOME_WALK_ON?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)}
+  maiaSay(welcomeLine(false));
+  setTimeout(()=>{if(!JWALK)maiaSay(welcomeWalkOn()?`Whenever you're ready: <button type="button" class="linkish" onclick="startTour()">take the tour</button>, or press <b>Space</b> to see what needs hands.`:`Whenever you're ready, press <b>Space</b> to see what needs hands.`)},9000)}
 function arriveOnLand(){
   cam.x=430;cam.y=560;cam.z=1.15;travelTo(1440,670-arrivalLift()/0.84,0.84,arrivalWelcome)}
 /* THE LAND IS HANDED OVER ONCE. Inside the shell this file draws the seed
@@ -11337,14 +12116,69 @@ function arriveOnLand(){
    the cover, where nobody can see what a key does; a Tab there would have
    cost the visitor the arrival. A key that opens something is caught by the
    opener it calls. */
-let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false;
+let LAND_HANDED=false,ARRIVAL_WAITS=false,ARRIVAL_TAKEN=false,UNCOVERED=false;
+const LAND_WAITERS=[];
+/* THE COVER IS OFF FROM HERE ON, whether the land-ready below lifted it or
+   the shell's grace did (`uncovered`). Two things follow from the second,
+   which neither would see on its own:
+   - A PHONE IS NOT RE-AIMED AFTER THIS (D16). The re-aim on the village's
+     scene is for a frame nobody has seen yet; once the grace has lifted the
+     cover the visitor is looking at this one, and a scene that lands later
+     would make the land jump under them.
+   - WHAT WAITS FOR THE LAND RUNS NOW. The phone's welcome and walk offer wait
+     for the village's words (afterLand). With a config that is late or never
+     comes, the visitor would stand on the land with no greeting at all, the
+     defect the desk arrival had; the desk now glides and greets here, and the
+     phone greets plainly. Words that arrive later still raise the walk offer
+     (syncWalkDoors). */
 function arrivalNow(){
+  UNCOVERED=true;POCKET_FRAME=null;
   if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;arriveOnLand()}
-  else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}}
+  else if(ARRIVAL_TAKEN){ARRIVAL_TAKEN=false;arrivalWelcome()}
+  for(const fn of LAND_WAITERS.splice(0))try{fn()}catch(_){}}
 function arrivalTaken(){if(ARRIVAL_WAITS){ARRIVAL_WAITS=false;ARRIVAL_TAKEN=true}}
 function landHandedOver(){if(LAND_HANDED)return;LAND_HANDED=true;
+  /* A PHONE RE-AIMS ITS ARRIVAL ON THE VILLAGE'S OWN SCENE, UNDER THE COVER
+     (D16). The pocket frames the places before its first painted frame, and
+     inside the shell those are the seed's: the village's scene arrives here
+     later, and a place the seed does not have was left out of the frame,
+     MEASURED as the 23rd live place 40 px past the right edge at 390x844.
+     Reframing after paint was ruled out because a visitor would watch the
+     land jump. Inside the shell the opaque cover is still up at this line
+     and lifts on the land-ready below, so the frame is aimed again here and
+     nobody sees it move. Only a camera still where the pocket put it: a deep
+     link's flight, or any hand that moved it, is left alone. */
+  const pf=POCKET_FRAME;POCKET_FRAME=null;
+  if(pf&&inShell()&&!travel&&cam.x===pf.x&&cam.y===pf.y&&cam.z===pf.z)framePocket();
   arrivalNow();
   shellPost({type:'land-ready'})}
+/* Run once the village's own land and words are in: now, when they already
+   are or when nothing is coming (standalone), and otherwise on the handover,
+   or when the shell's grace lifts the cover first (arrivalNow). */
+function afterLand(fn){if(LAND_HANDED||UNCOVERED||!inShell())fn();else LAND_WAITERS.push(fn)}
+window.afterLand=afterLand;
+/* WHAT ARRIVES WITH THE WALK. The tour chip and the read-only tour view follow
+   it on every push, so a founder who saves a walk under Village settings sees
+   it offered on the map behind the panel. The pocket offer is decided once by
+   the boot above, after the land; a later push decides it again. */
+function syncWalkDoors(){syncTourChip();TOUR=tourView();
+  if((LAND_HANDED||UNCOVERED)&&document.body.classList.contains('pocket'))guideAffordance()}
+window.syncWalkDoors=syncWalkDoors;
+/* HER FIRST LINE ON THE MAP. It promised "Everything you see traces to
+   something true: a funded build, a claimed quest, a filled seat", over a
+   seed whose builds, quests and seats are samples. So it greets, says how the
+   map moves, and claims nothing about the land. A village that has written
+   its own welcome (window.WELCOME, pushed by the shell beside the walk) is
+   greeted in its own words, escaped, so a founder's sentence can never
+   become markup. */
+function welcomeLine(pocket){
+  const greet=window.WELCOME?escq(window.WELCOME)
+    :'Welcome to the living map of <b>'+escq(SCENE.name||'this village')+'</b>.';
+  const how=pocket?' The land is yours to move: drag it, pinch it, tap any building to open its door.'
+    :' Hover anything, and click any building to open its door.';
+  const walk=!welcomeWalkOn()?'':pocket?' Tap <b>Take the walk</b> and I will show you around.':' Want the short walk?';
+  return greet+how+walk}
+window.welcomeLine=welcomeLine;
 window.landHandedOver=landHandedOver;
 window.arrivalNow=arrivalNow;
 addEventListener('pointerdown',arrivalTaken,true);
@@ -11360,7 +12194,7 @@ if(SKIP_INTRO){leaveIntro();
   /* The shell's button stands in for this one, so pressing it earns the same
      arrival: the glide in and her welcome. Not on a deep link, which never had
      either, and not in the pocket, whose boot above keeps the camera still. */
-  if((!location.hash||location.hash.length<3||/hud=/.test(location.hash))&&!document.body.classList.contains('pocket')){
+  if(!routeNow()&&!document.body.classList.contains('pocket')){
     if(inShell()&&!LAND_HANDED)ARRIVAL_WAITS=true;else arriveOnLand()}}
 
 applyTheme(THEMES.emerald); // boot theme (sets every --t-* var before first paint)

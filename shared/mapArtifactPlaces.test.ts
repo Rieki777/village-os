@@ -26,11 +26,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -172,9 +172,9 @@ function boot(hash: string, opts: { shell?: boolean; width?: number; height?: nu
     everLit,
     posted,
     intervals,
-    run: <T>(src: string) => window.eval(src) as T,
+    run: <T>(src: string) => evalIn<T>(window, src),
     post(data) {
-      const own = window.eval("JSON").parse(JSON.stringify(data));
+      const own = ownCopy(window, data);
       window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
     },
     close: () => window.close(),
@@ -826,7 +826,7 @@ describe("Maia, on what is alive and on what she keeps", () => {
 });
 
 /**
- * A SAMPLE NUMBER IN THE CROWN BAR WEARS ITS MARK (F29).
+ * A SAMPLE NUMBER IN THE CROWN BAR WEARS ITS MARK (F29), AND THE MARK IS A WORD.
  *
  * The chips read 24 people, 62kg, 96, 76% and 132 hearts on every village,
  * all of them literals in vitalsData(), with nothing on the chip to say so.
@@ -835,7 +835,10 @@ describe("Maia, on what is alive and on what she keeps", () => {
  * same truth the crown banner reads". The moon was a fixed waxing gibbous
  * whose cycle closed "in 6 days" on every day of the year. Hiding the
  * samples would take four of five figures off the bar, which is Rye's call,
- * so they are marked.
+ * so they were marked, with a dotted underline. Rye then ruled (2026-10-02):
+ * mark them as EXAMPLES, wired to Village settings, the label going once a
+ * chip is set. So the mark is now the word itself; the founder's chips are
+ * shared/mapArtifactChips.test.ts.
  *
  * The chips' keyboard reach and their accessible names are F25's, in another
  * lane, so nothing here asks for a role or a tabindex.
@@ -847,12 +850,11 @@ describe("the crown bar's figures", () => {
       .filter((c) => c.dataset.k !== "moon")
       .map((c) => {
         const b = c.querySelector("b") as HTMLElement;
-        const deco = m.window.getComputedStyle(b);
         return {
           k: c.dataset.k ?? "",
           value: b.textContent ?? "",
-          /* jsdom keeps the shorthand as written and does not expand it. */
-          dotted: deco.textDecoration,
+          /* The word under the number, shown wherever the labels are not. */
+          example: c.querySelector(".vex")?.textContent ?? "",
         };
       });
   const healthRows = () => {
@@ -878,16 +880,16 @@ describe("the crown bar's figures", () => {
   });
   afterAll(() => m?.close());
 
-  it("underlines every sample number in dots, on the chip itself", () => {
+  it("says example on every sample number, on the chip itself", () => {
     const seen = chips();
     expect(seen.map((c) => c.k)).toEqual(["people", "food", "water", "canopy", "hearts"]);
-    for (const c of seen) expect(c.dotted, `${c.k} ${c.value}`).toMatch(/underline.*dotted|dotted.*underline/);
+    for (const c of seen) expect(c.example, `${c.k} ${c.value}`).toBe("example");
   });
 
   it("opens the drop-down on the word", () => {
     const people = dropFor("people");
     expect(people.shown).toBe(true);
-    expect(people.lead).toBe("Sample reading. Nothing has counted this from the village yet.");
+    expect(people.lead).toBe("Example. The founder has not set this chip yet.");
     expect(dropFor("moon").lead, "the moon is the calendar, never a sample").toBeNull();
   });
 
@@ -901,7 +903,7 @@ describe("the crown bar's figures", () => {
   it("labels each sample row on the Village Health door", () => {
     const { rows, text } = healthRows();
     expect(rows.length).toBe(5);
-    expect(rows.filter((r) => r.includes(" · sample")).length).toBe(5);
+    expect(rows.filter((r) => r.includes(" · example")).length).toBe(5);
     expect(text).not.toContain("same truth");
     expect(text).not.toContain("93.1");
   });
@@ -912,10 +914,10 @@ describe("the crown bar's figures", () => {
     m.post(config(s, 7));
     const people = chips().find((c) => c.k === "people");
     expect(people?.value).toBe("31");
-    expect(people?.dotted).not.toContain("dotted");
-    expect(chips().filter((c) => c.dotted.includes("dotted")).length, "the other four stay marked").toBe(4);
+    expect(people?.example).toBe("");
+    expect(chips().filter((c) => c.example === "example").length, "the other four stay marked").toBe(4);
     expect(dropFor("people").lead).toBeNull();
-    expect(healthRows().rows[0]).not.toContain("sample");
+    expect(healthRows().rows[0]).not.toContain("example");
   });
 
   /* Each instant below is the full or new moon itself, so its calendar day

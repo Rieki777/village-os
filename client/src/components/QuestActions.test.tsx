@@ -42,10 +42,10 @@ describe("a refused claim or submit reads the member's claim again", () => {
     const refusal = "This claim was already consented when this submission arrived, so nothing was changed.";
     answer(409, { error: refusal });
     render(<QuestActions questId="q-1" signedIn claim={CLAIMED} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: /Submit your work/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Turn in your work/ }));
     const words = screen.getByPlaceholderText("A few words about what you did") as HTMLTextAreaElement;
     fireEvent.change(words, { target: { value: "Dug the first ten metres." } });
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn it in" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(refusal));
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(words.value).toBe("Dug the first ten metres.");
@@ -54,7 +54,7 @@ describe("a refused claim or submit reads the member's claim again", () => {
   it("a refused claim says why, and reads the claim again", async () => {
     answer(409, { error: "Already claimed", claim: CLAIMED });
     render(<QuestActions questId="q-1" signedIn claim={undefined} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: /Claim this quest/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Take this Quest/ }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Already claimed"));
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
@@ -62,15 +62,15 @@ describe("a refused claim or submit reads the member's claim again", () => {
   it("a claim that never reached the server says so, and reads nothing", async () => {
     gameFetch.mockRejectedValueOnce(new Error("offline"));
     render(<QuestActions questId="q-1" signedIn claim={undefined} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: /Claim this quest/ }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Could not claim. Try again."));
+    fireEvent.click(screen.getByRole("button", { name: /Take this Quest/ }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("That didn't go through. Try again."));
     expect(onChanged).not.toHaveBeenCalled();
   });
 
   it("a claim that lands reads the claim again, as it always did", async () => {
     answer(200, CLAIMED);
     render(<QuestActions questId="q-1" signedIn claim={undefined} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: /Claim this quest/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Take this Quest/ }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("alert")).toBeNull();
   });

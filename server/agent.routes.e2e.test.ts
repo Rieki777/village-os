@@ -181,10 +181,10 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
-  it("serves the three skills and the OpenAPI slice to anyone", async () => {
+  it("serves the four skills and the OpenAPI slice to anyone", async () => {
     const skills = await call("GET", "/api/agent/v1/skills", undefined, "");
     expect(skills.status).toBe(200);
-    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-directory", "village-intents"]);
+    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-directory", "village-intents", "village-map"]);
     const one = await call("GET", "/api/agent/v1/skills/village-calendar/SKILL.md", undefined, "");
     expect(one.status).toBe(200);
     expect(one.text).toContain("name: village-calendar");
@@ -471,5 +471,76 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     const [rows] = await pool.query<any[]>("SELECT actor_kind, audience, text FROM health_events WHERE kind = 'agent_token'");
     expect(rows.length).toBeGreaterThanOrEqual(4);
     for (const r of rows) { expect(r.actor_kind).toBe("agent"); expect(r.audience).toBe("admin"); }
+  });
+});
+
+/**
+ * THE MAP DRAFT, THROUGH A REAL TOKEN (round 4, blank slate). The route module
+ * has its own suite (server/routes/agentMap.test.ts) with a stand-in resolver;
+ * this is the one place the real `resolveAgent`, the real scope list, the real
+ * gate and the real draft route the map reads all meet.
+ */
+describe.skipIf(!DB_CONFIGURED)("the founder's agent drafts the map", () => {
+  const scene = {
+    map_scene: { key: "village-grounds", name: "", status: "draft", version: "v0.8-masterplan" },
+    map_structures: [{
+      key: "common-house", name: "Common House", archetype: "bighall", anchor: { x: 1210, y: 790 }, phase: 1,
+      circle_id: null, blurb: "", origin_story: "", state_inputs: { fund: null, activity: "steady", event: null }, bindings: { doors: [] },
+    }],
+    map_zones: [{ id: "f1", kind: "road", geom: "line", path: [[900, 600], [1200, 780]], subtype: "track", phase: 1, owner_structure_key: null, name: "Main track" }],
+    map_flows: [],
+    map_edits: [{ seq: 1, actor: "agent", action: "place", target: "structure:Common House", diff: {}, at: "2026-10-02T10:00:00.000Z" }],
+    boundary: { scene_units: [[600, 400], [1800, 400], [1800, 1200], [600, 1200]] },
+    org_roles: [], quests: [], journeys: [], forum_threads: [], events: [],
+  };
+
+  it("mints a token for it, and hands that token the brief", async () => {
+    const minted = await call("POST", "/api/agent/tokens", { name: "map maker", scopes: ["map.draft"] });
+    expect(minted.status).toBe(200);
+    vat.mapMaker = String(minted.json.token);
+    const brief = await call("GET", "/api/agent/v1/map", undefined, vat.mapMaker);
+    expect(brief.status).toBe(200);
+    expect(String(brief.json.method)).toMatch(/^# /);
+    expect(brief.json.live).toEqual({ version: 0 });
+    expect(brief.json.schema.version).toBe("v0.8-masterplan");
+  });
+
+  it("refuses the agent of a member who may not draft the land", async () => {
+    const minted = await call("POST", "/api/agent/tokens", { name: "guest map", scopes: ["map.draft"] }, ana.token);
+    expect(minted.status).toBe(200);
+    vat.anaMap = String(minted.json.token);
+    const brief = await call("GET", "/api/agent/v1/map", undefined, vat.anaMap);
+    expect(brief.status).toBe(403);
+    expect(brief.json.error).toBe("map_edit_required");
+  });
+
+  it("refuses a token without the scope", async () => {
+    const r = await call("GET", "/api/agent/v1/map", undefined, vat.founder);
+    expect(r.status).toBe(403);
+    expect(r.json.error).toBe("agent_scope_missing");
+  });
+
+  it("keeps the draft only after the yes, where the founder's map finds it, and publishes nothing", async () => {
+    const first = await call("POST", "/api/agent/v1/map/draft", { scene }, vat.mapMaker);
+    expect(first.status).toBe(202);
+    const before = await call("GET", "/api/map/draft");
+    expect(before.json.draft, "nothing before the yes").toBeNull();
+    const second = await call("POST", "/api/agent/v1/map/draft", {
+      scene, confirm: true, confirmToken: first.json.confirmToken, echo: first.json.echo,
+    }, vat.mapMaker);
+    expect(second.status).toBe(200);
+    const after = await call("GET", "/api/map/draft");
+    expect(after.json.liveVersion, "nothing was published").toBe(0);
+    expect(after.json.canEdit).toBe(true);
+    expect(JSON.parse(after.json.draft.scene)).toEqual(scene);
+    expect(after.json.draft.baseVersion).toBe(0);
+    const config = await call("GET", "/api/map/config", undefined, "");
+    expect(config.json.scene, "the live map is untouched").toBeNull();
+  });
+
+  it("is refused anywhere outside the agent surface, the masterplan's file included", async () => {
+    const r = await call("GET", "/api/uploads/masterplan-1790000000000-abcde.pdf", undefined, vat.mapMaker);
+    expect(r.status).toBe(401);
+    expect(r.json.error).toBe("agent_token_scope");
   });
 });

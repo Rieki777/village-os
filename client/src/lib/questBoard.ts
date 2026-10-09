@@ -9,6 +9,7 @@
  */
 
 import { hashString, sceneStopsFor, type SceneStop } from "@shared/questScenes";
+import type { StageRule } from "@shared/gameConfig";
 
 export interface BoardQuest {
   id: string;
@@ -240,13 +241,42 @@ export function gateLabel(
 ): string | null {
   if (q.minStage) {
     const s = (stages ?? []).find((x) => x.id === q.minStage);
-    return `Opens at the ${s?.name ?? q.minStage} stage`;
+    return `Opens at ${s?.name ?? q.minStage}`;
   }
   if (q.requiresRole) {
     return q.roleRequired ? `Held for: ${q.roleRequired}` : "Held for a village role";
   }
   if (q.roleRequired) return `Asks for: ${q.roleRequired}`;
   return null;
+}
+
+/**
+ * R47: a lock names its fix. The one step that reaches a quest's stage, for
+ * the rules a member can act on, or null when there is no step to name: a
+ * stage the village grants, a rule this client does not know, or a quest
+ * with no stage floor at all.
+ */
+export function gateFix(
+  q: Pick<BoardQuest, "minStage">,
+  stages: { id: string; rule?: StageRule }[] | null | undefined,
+  commitment: string = "membership agreement",
+): string | null {
+  if (!q.minStage) return null;
+  const rule = (stages ?? []).find((x) => x.id === q.minStage)?.rule;
+  switch (rule?.type) {
+    case "account":
+      return "Create your account to get there.";
+    case "training-complete":
+      return "Finish community training to get there.";
+    case "membership":
+      return `Sign the ${commitment} to get there.`;
+    case "quests":
+      return `Complete ${rule.min} ${rule.min === 1 ? "Quest" : "Quests"} to get there.`;
+    case "granted":
+      return "The village grants this stage.";
+    default:
+      return null;
+  }
 }
 
 /** Textarea lines → list: trimmed, blanks dropped. The admin editor's parser. */

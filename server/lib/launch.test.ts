@@ -226,4 +226,29 @@ describe.skipIf(!configured)("the issuance cap on the launch journey", () => {
     expect(status.items.find((i) => i.id === "backups-drilled")!.state).toBe("ok");
     expect(status.items.find((i) => i.id === "backups-drilled")!.confirmedBy).toBe("usr-founder");
   }, 60_000);
+
+  it("asks for the village's welcome and walk while the map runs, and reads the answer from the walk's document", async () => {
+    /*
+     * Rye, 2026-10-02: onboarding is the founders' to write, and the journey
+     * suggests it. Recommended, so it never moves `readyToLaunch`; withdrawn
+     * for a village that does not run the map, where there is nowhere to
+     * write a walk or walk it. Against a real `app_config`, because the
+     * resolver reads the row the editor's PUT writes.
+     */
+    const withMap: LaunchDeps = { ...deps(), moduleLifecycle: (id) => (id === "map" ? "public" : "off") };
+    const row = async (d: LaunchDeps) => (await launchStatus(pool, d)).items.find((i) => i.id === "welcome-walk");
+    await pool.query("DELETE FROM app_config WHERE config_key = 'map_walk'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(await row(deps()), "withdrawn while the map is off").toBeUndefined();
+    const before = await row(withMap);
+    expect(before?.state).toBe("missing");
+    expect(before?.severity).toBe("recommended");
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO app_config (config_key, value) VALUES ('map_walk', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [JSON.stringify({ en: [{ id: "a", structure_key: "gate", title: "Our gate", body: "", gesture: "none" }] })],
+    );
+    const after = await row(withMap);
+    expect(after?.state).toBe("ok");
+    expect(after?.detail).toBe("Written, 1 stop. The guide greets people plainly until you write a welcome");
+    await pool.query("DELETE FROM app_config WHERE config_key = 'map_walk'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  }, 60_000);
 });

@@ -75,10 +75,15 @@ export default function Crowdpool() {
       <section className="py-8 md:py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container max-w-3xl text-center">
           <h1 className="font-display text-4xl font-bold mb-3">Our raisings</h1>
+          {/* R47: the Trail line leads and the tooltip defines the word. The
+              ring line is the Lore, last and quiet. */}
           <p className="text-muted-foreground">
-            What this village is gathering through the hub's{" "}
-            <InfoTip tip="A crowdpool gathers pledges of money, goods, tools and hands for one build. Nothing moves through this page; every claim finishes on the hub's own page.">crowdpool</InfoTip>.
-            Each ring fills as the pool does; open one to watch it become walls.
+            Open a ring to see what its{" "}
+            <InfoTip tip="A crowdpool gathers pledges of money, goods, tools and hands for one build. Nothing moves through this page; every claim finishes on the hub's own page.">crowdpool</InfoTip>{" "}
+            still needs.
+          </p>
+          <p className="mt-2 text-sm italic text-muted-foreground">
+            Each ring fills as the pool does, and the pool becomes walls.
           </p>
         </div>
       </section>
@@ -87,14 +92,14 @@ export default function Crowdpool() {
           {cards === null && (
             <div className="cp-board p-8 flex flex-col items-center gap-2">
               <BreathingLoader label="Reading the ledger" size={48} />
-              <p className="cp-smallcaps text-sm">Reading the ledger</p>
+              <p className="cp-smallcaps text-sm">Reading the ledger…</p>
             </div>
           )}
           {cards !== null && cards.length === 0 && (
             <div className="cp-board p-8 text-center">
               <p className="cp-smallcaps text-sm mb-2">No raisings yet</p>
               <p className="text-sm" style={{ color: "#e4d3ae" }}>
-                When this village links a campaign, its ring appears here.
+                When this village opens a raising, its ring appears here.
               </p>
             </div>
           )}
@@ -133,7 +138,7 @@ export default function Crowdpool() {
               <div key={c.key} className="cp-board p-5">
                 <p className="cp-smallcaps text-sm mb-1">{c.key}</p>
                 <p className="text-sm" style={{ color: "#e4d3ae" }}>
-                  The hub is out of reach and nothing has been kept for this one yet.
+                  This raising didn't load. Reload to try again.
                 </p>
               </div>
             ),

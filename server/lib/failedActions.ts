@@ -90,7 +90,7 @@ import { resumeErasure, type ErasureDeps } from "./erasure";
 import { keysFor as seatChargeLedgerKeys } from "./eventSeats";
 import { isExampleUser } from "./examples";
 import { feedbackIsShared } from "./feedback";
-import { memberSecretsConfigured } from "./memberSecrets";
+import { memberSecretsConfigured, memberSecretsKeyProblem } from "./memberSecrets";
 import { registeredJobs, TICK_MS } from "./scheduler";
 import { halfErasedMembers } from "./subjectRefs";
 import { landingStatusesFor, scheduledLandings } from "../repos/ballotLandings";
@@ -782,7 +782,7 @@ export function defaultSources(pool: Pool, now: () => number = Date.now): Failur
               key: "no-secrets-key",
               title: `${n} ${plural(n, "delivery", "deliveries")} to members' agents ${plural(n, "was", "were")} dropped in the last 30 days, and this deployment still has no member-secrets key`,
               advice:
-                "Set MEMBER_SECRETS_KEY for this deployment, as docs/FORK_RUNBOOK.md describes. Until then members' agents receive nothing. Dropped deliveries are not sent again, and a member whose inbox switched itself off saves its address again to turn it back on.",
+                `${memberSecretsKeyProblem()} Set it for this deployment, as docs/FORK_RUNBOOK.md describes, and restart. Until then members' agents receive nothing. Dropped deliveries are not sent again, and a member whose inbox switched itself off saves its address again to turn it back on.`,
             })),
     },
     {

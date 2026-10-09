@@ -127,8 +127,8 @@ export default function WorkWithUs() {
             <CheckCircle2 className="w-14 h-14 text-amber-on-band mx-auto mb-6" />
             <h1 className="font-display text-4xl font-bold mb-4">Your proposal is with us</h1>
             <p className="text-white text-lg">
-              Thank you for offering your gifts to {projectName}. We review every proposal with care.
-              Please allow up to a month for a thoughtful response, and room for conversation and revision.
+              Thank you for offering your gifts to {projectName}. A reply can take up to a month,
+              and there's room to talk it through and revise.
             </p>
           </div>
         </section>
@@ -149,7 +149,7 @@ export default function WorkWithUs() {
           </h1>
           <p className="text-white text-lg max-w-2xl leading-relaxed">
             {wwu?.intro ??
-              `${projectNameSentenceStart} grows through the people who bring their gifts to it. We welcome ideas, offerings, and ventures: a garden, a piece of infrastructure, a service, a craft, a program, or something we haven't yet imagined. Propose it here.`}
+              `Propose an idea, an offering, or a venture: a garden, a piece of infrastructure, a service, a craft, a program, or something we haven't imagined yet. ${projectNameSentenceStart} grows through the people who bring their gifts to it.`}
           </p>
         </div>
       </section>
@@ -235,24 +235,24 @@ function ProposalForm({
       fd.append("file", file);
       const res = await fetch("/api/work-with-us/attachment", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) setError(data.message ?? data.error ?? "Could not attach that file.");
+      if (!res.ok) setError(data.message ?? data.error ?? "That file didn't attach. Try again.");
       else setForm({ ...form, attachment: data.filename, attachmentName: data.originalName || file.name });
     } catch {
-      setError("Could not attach that file.");
+      setError("That file didn't attach. Try again.");
     }
     setUploading(false);
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim()) { setError("Your name and email are needed so we know who we're speaking with."); return; }
-    for (const f of PROPOSAL_FIELDS) if (f.required && !String(form[f.key]).trim()) { setError(`Please answer: ${f.label}.`); return; }
+    if (!form.name.trim() || !form.email.trim()) { setError("Add your name and email so we know who we're speaking with."); return; }
+    for (const f of PROPOSAL_FIELDS) if (f.required && !String(form[f.key]).trim()) { setError(`Answer this to continue: ${f.label}.`); return; }
     if (form.reciprocity.length === 0) { setError("Choose at least one form of reciprocity that fits."); return; }
     setError("");
     setSubmitting(true);
     const ok = await submitProposal("work-with-us", form, hp);
     setSubmitting(false);
-    if (ok) onSubmitted(); else setError("Something went wrong sending your proposal. Please try again.");
+    if (ok) onSubmitted(); else setError("That didn't send. Try again.");
   };
 
   // The field key doubles as the control's id, so the label this helper
@@ -313,7 +313,7 @@ function ProposalForm({
 
       {/* Reciprocity */}
       <div>
-        <h2 className="font-display text-xl font-bold text-teal-deep mb-1">The exchange</h2>
+        <h2 className="font-display text-xl font-bold text-teal-deep mb-1">Reciprocity</h2>
         <p className="text-sm text-muted-foreground mb-4">
           {projectName} is built on reciprocity, and there's more than one way to be valued here. Select any that fit. <span className="text-red-500">*</span>
         </p>
@@ -377,7 +377,7 @@ function ProposalForm({
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors">
-        {submitting ? "Sending…" : "Submit proposal"} <ArrowRight className="w-4 h-4" />
+        {submitting ? "Sending…" : "Send proposal"} <ArrowRight className="w-4 h-4" />
       </button>
       <p className="text-xs text-stone-500">Your answers save as you go, so you can come back and finish later.</p>
     </form>

@@ -71,8 +71,10 @@ export default function MapPeek() {
             See the village
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Every building traces to something true: a funded build, a claimed quest, a
-            filled role. Open the map and walk it.
+            {/* It promised every building traced to something true, the same
+                promise the map's own guide made over sample data, and both
+                were taken back on 2026-10-02. The map says how it moves. */}
+            The village drawn as a map you can walk. Step in and tap any building to open its door.
           </p>
         </div>
 

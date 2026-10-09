@@ -583,12 +583,12 @@ export const GAME_CONFIG: GameConfig = {
   },
 
   nextActions: [
-    { id: "training", when: "no-training", label: "Continue your community training", href: "/training" },
+    { id: "training", when: "no-training", label: "Finish your community training", href: "/training" },
     { id: "membership", when: "no-membership", label: "Sign the {commitment}", href: "/love-letter" },
-    { id: "first-quest", when: "no-quest-claimed", label: "Claim your first quest", href: "/quests" },
-    { id: "finish-quest", when: "quest-in-progress", label: "Finish your active quest", href: "/quests" },
-    { id: "send-gratitude", when: "gratitude-unspent", label: "Send gratitude to someone this month", href: "/gratitude" },
-    { id: "explore", when: "always", label: "Explore open quests", href: "/quests" },
+    { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
+    { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },
+    { id: "send-gratitude", when: "gratitude-unspent", label: "Thank someone this cycle", href: "/gratitude" },
+    { id: "explore", when: "always", label: "Find your next Quest", href: "/quests" },
   ],
 
   season: {

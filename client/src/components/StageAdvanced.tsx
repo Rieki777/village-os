@@ -52,7 +52,9 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
   const fromIndex = stages.findIndex((s) => s.id === advance.fromStage);
   const toIndex = stages.findIndex((s) => s.id === advance.toStage);
   const reached = stages[toIndex]?.name ?? advance.toStage;
-  const left = stages[fromIndex]?.name ?? advance.fromStage;
+  // R47: a finish names the next step. The stage after this one, or null on
+  // the last rung the village has named.
+  const next = toIndex >= 0 ? stages[toIndex + 1]?.name ?? null : null;
 
   // The rung climbs on mount. Starting at the old value and setting the new
   // one in an effect is what gives the terminator something to ease between;
@@ -88,10 +90,10 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <Sunrise className="w-4 h-4 text-amber" />
-            You advanced to {reached}
+            New stage: {reached}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            One rung on from {left}.
+            {next ? `Next on your Path of Growth: ${next}.` : "You stand on the last stage this village has named."}
           </p>
         </div>
         {showing && (
@@ -101,13 +103,13 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
               intensity="moment"
               size={72}
               seed={toIndex}
-              message={`You advanced to ${reached}.`}
+              message={`New stage: ${reached}.`}
             />
           </span>
         )}
       </div>
 
-      {advance.unlocked.length > 0 ? (
+      {advance.unlocked.length > 0 && (
         <div className="mt-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You can now</p>
           <ul className="mt-1.5 space-y-1">
@@ -119,10 +121,6 @@ export default function StageAdvanced({ advance, stages, onClose }: StageAdvance
             ))}
           </ul>
         </div>
-      ) : (
-        <p className="mt-3 text-sm text-muted-foreground">
-          This rung opens no new doors on its own. It counts toward the ones ahead.
-        </p>
       )}
     </div>
   );

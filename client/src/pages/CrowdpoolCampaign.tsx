@@ -202,7 +202,7 @@ export default function CrowdpoolCampaign() {
             <div className="cp-board p-8 text-center">
               <p className="cp-smallcaps text-sm mb-2">The ledger sleeps</p>
               <p className="text-sm" style={{ color: "#e4d3ae" }}>
-                The hub is out of reach and nothing has been kept to show yet. Come back in a little while.
+                This raising didn't load. Come back in a little while.
               </p>
             </div>
           )}

@@ -104,14 +104,14 @@ describe("the exchange names the rung this village voted", () => {
   it("says Member when the village left the rung where the platform put it", async () => {
     serve({ buyOpensAt: "member" });
     render(<Wallet />);
-    expect(await caption()).toBe("Buying opens at the Member stage");
+    expect(await caption()).toBe("Buying opens at Member");
   });
 
   it("says Co-Creator when the village moved the rung up the ladder", async () => {
     serve({ buyOpensAt: "co-creator" });
     render(<Wallet />);
     const text = await caption();
-    expect(text).toBe("Buying opens at the Co-Creator stage");
+    expect(text).toBe("Buying opens at Co-Creator");
     expect(text).not.toContain("Member");
   });
 
@@ -123,7 +123,7 @@ describe("the exchange names the rung this village voted", () => {
   it("falls back to the rung's own id when the ladder does not name it", async () => {
     serve({ buyOpensAt: "elder" });
     render(<Wallet />);
-    expect(await caption()).toBe("Buying opens at the elder stage");
+    expect(await caption()).toBe("Buying opens at elder");
   });
 
   it("stops claiming a stage at all when the village opened buying by role", async () => {

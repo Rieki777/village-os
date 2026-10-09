@@ -250,8 +250,66 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixAt: "/admin?tab=setup",
     fixLabel: "Open Project Settings",
   },
+  {
+    id: "welcome-walk",
+    group: "brand",
+    title: "Write your village's welcome and walk",
+    /*
+     * RYE'S RULING, 2026-10-02: "Onboarding is something that founders should
+     * do and really personalize and put their spirit into it. So just add this
+     * to a journey to launch that's suggested remove the example journey for
+     * now."
+     *
+     * SUGGESTED, SO RECOMMENDED. A village launches perfectly well without a
+     * walk: the map offers none and the guide greets people plainly. The seed's
+     * example walk is never offered in its place, which is the other half of
+     * the ruling and lives in the map artifact.
+     *
+     * A REAL CHECK, read from the walk's own document (`village:walk` in
+     * server/lib/launch.ts, `welcomeWalkCheck` in shared/mapAddress.ts): done
+     * once the walk the map is served has a stop with a place. The editor lives
+     * on the map under Village settings, so the link opens that door.
+     */
+    why: "The first words a newcomer reads on the map, and the short walk the guide takes them on. The map offers no walk until the village writes its own, and the guide greets people plainly until you give it your words.",
+    severity: "recommended",
+    checkKey: "village:walk",
+    fixAt: "/map?settings=walk",
+    fixLabel: "Write it on the map",
+    // The walk lives on the map, so a village that does not run the map has
+    // nothing to write it on, and the link would land on a module gate.
+    appliesWhenModule: "map",
+  },
 
   // ── Integrations: keys, each honest about what stops without it ──────────
+  {
+    id: "village-secrets-key",
+    group: "integrations",
+    title: "Set VILLAGE_SECRETS_KEY so Integrations can save keys",
+    /*
+     * FIRST IN ITS GROUP, because every row below it that says "Open
+     * Integrations" sends a founder to a screen that refuses to save while
+     * this is missing. On 2026-10-02 a founder set it in the wrong shape and
+     * every message said "not set"; the check's detail now names the shape.
+     *
+     * RECOMMENDED, NEVER BLOCKING, because villages are already live. Nothing
+     * reads this list to decide whether a village IS launched: `launchedAt` is
+     * written once by the launch ballot and never derived from the checks.
+     * What a blocking row CAN do is hold `readyToLaunch` false, which closes
+     * the launch vote on a village that is running its Game without having
+     * held one yet. A recommended row moves only `recommendedOpen`, so adding
+     * it changes no village's launch state, and server/lib/
+     * launchSecretsKey.test.ts holds that against a launched village and an
+     * unlaunched one. Every key also still reads from its environment
+     * variable without this, so a village with no key loses the Admin screen
+     * and not a working integration.
+     */
+    why: "Every key saved under Integrations is locked with it, and until it is set that screen refuses to save one. Generate it with openssl rand -hex 32 and keep a copy in a password manager. On Railway, open the web service, then Variables, then New Variable: the name is VILLAGE_SECRETS_KEY and the value is only the 64 characters, with no quotes. Deploy, wait for Active, then save your keys.",
+    severity: "recommended",
+    checkKey: "village-secrets-key",
+    fixAt: "/admin?tab=integrations",
+    fixLabel: "Open Integrations",
+    runbookAnchor: "setting-village_secrets_key-on-railway-and-when-it-is-set-but-still-refused",
+  },
   {
     id: "resend-key",
     group: "integrations",

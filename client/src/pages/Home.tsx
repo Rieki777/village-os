@@ -28,6 +28,7 @@ import {
 import { useState } from "react";
 import { Image } from "@/components/Image";
 import { useVillageLocation, useVillageName } from "@/hooks/useVillageName";
+import { useModule } from "@/modules/ModuleProvider";
 
 
 
@@ -83,7 +84,7 @@ const journeyCards = (villageName: string) => [
     id: "investor",
     title: "Investor",
     subtitle: "Capital Contributor",
-    description: "Plant capital in a project built to last. Your investment grows the village while community ownership stays intact, returns and values that move in the same direction.",
+    description: "Plant capital in a project built to last. The village grows, community ownership stays intact, and returns and values move in the same direction.",
     icon: TrendingUp,
     href: "/investor",
     color: "bg-amber",
@@ -93,7 +94,7 @@ const journeyCards = (villageName: string) => [
     id: "steward",
     title: "Village Steward",
     subtitle: "Co-Creator",
-    description: "Coordinate and execute for the success of the whole village. Join circles, take on roles, and help shape our regenerative community.",
+    description: "Hold a role, join a circle, and keep the whole village running.",
     icon: Users,
     href: "/steward",
     color: "bg-sage",
@@ -103,7 +104,7 @@ const journeyCards = (villageName: string) => [
     id: "resident",
     title: "Resident",
     subtitle: "Co-Creator",
-    description: `Make ${villageName} your home. Explore housing options, join the waitlist, and become part of a loving village where all beings belong.`,
+    description: `Make ${villageName} your home. Find a place to live, join the waitlist, and belong.`,
     icon: HomeIcon,
     href: "/resident",
     color: "bg-teal",
@@ -113,7 +114,7 @@ const journeyCards = (villageName: string) => [
     id: "prosperity",
     title: "Prosperity Creator",
     subtitle: "Business Builder",
-    description: "Launch or grow your business inside the village. Your work aligns with community values, and you share in what you build.",
+    description: "Launch or grow your business inside the village, and share in what you build.",
     icon: Sparkles,
     href: "/prosperity",
     color: "bg-teal-light",
@@ -138,6 +139,9 @@ export default function Home() {
   // omits the place rather than naming somebody else's.
   const location = useVillageLocation();
   const brand = useBrandImages();
+  // R47: the hero holds one door forward, plus the map when this village has
+  // one. An off module would only answer the door with its closed card.
+  const mapOn = !!useModule("map");
   return (
     <Layout>
       {/* Hero Section.
@@ -250,7 +254,7 @@ export default function Home() {
             >
               A regenerative village{location ? ` in ${location}` : ""} where all beings{" "}
               <span className="font-semibold text-white">belong</span> and{" "}
-              <span className="font-semibold text-white">thrive</span>. Find your path to participation.
+              <span className="font-semibold text-white">thrive</span>. Start here: pick your path.
             </motion.p>
 
             <motion.div
@@ -289,15 +293,17 @@ export default function Home() {
                 href="#choose-path"
                 className="px-8 py-4 bg-white text-teal-band rounded-lg font-semibold text-lg hover:bg-cream transition-all duration-200 flex items-center gap-2"
               >
-                Find Your Path
+                Pick your path
                 <ArrowRight className="w-5 h-5" />
               </a>
-              <Link
-                href="/co-creators-guide"
-                className="px-8 py-4 bg-white/20 backdrop-blur-sm border border-white/40 text-white rounded-lg font-semibold text-lg hover:bg-white/30 transition-all duration-200"
-              >
-                Read the Co-Creators Guide
-              </Link>
+              {mapOn && (
+                <Link
+                  href="/map"
+                  className="px-8 py-4 bg-white/20 backdrop-blur-sm border border-white/40 text-white rounded-lg font-semibold text-lg hover:bg-white/30 transition-all duration-200"
+                >
+                  Walk the map
+                </Link>
+              )}
             </motion.div>
           </div>
         </div>
@@ -388,7 +394,7 @@ export default function Home() {
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
             >
-              Choose Your Path
+              Choose your path
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -397,7 +403,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-xl text-muted-foreground max-w-2xl mx-auto"
             >
-              Four unique journeys to participate in the {villageName} community. Each path leads to belonging.
+              Four ways into {villageName}. Pick the one that fits you today. You can add more later.
             </motion.p>
           </div>
 
@@ -435,7 +441,7 @@ export default function Home() {
                         {card.description}
                       </p>
                       <div className="flex items-center text-primary font-medium group-hover:gap-3 gap-2 transition-all duration-200">
-                        <span>Begin your journey</span>
+                        <span>Choose {card.title}</span>
                         <ArrowRight className="w-4 h-4" />
                       </div>
                     </div>
@@ -582,7 +588,7 @@ export default function Home() {
                   ?.scrollIntoView({ behavior: "smooth" });
               }}
             >
-              Find your path <ArrowRight className="w-4 h-4" />
+              Pick your path <ArrowRight className="w-4 h-4" />
             </a>
           </div>
         </div>

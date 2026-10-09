@@ -48,6 +48,7 @@ vi.mock("@/components/mobile/MobileTabBar", () => ({
   isBareRoute: () => false,
 }));
 vi.mock("@/components/mobile/MobileFab", () => ({ default: () => null }));
+vi.mock("@/components/NextStepTrail", () => ({ default: () => null }));
 
 import Layout from "@/components/Layout";
 

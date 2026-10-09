@@ -123,7 +123,7 @@ describe("MaturityLadder", () => {
 
   it("says so plainly on the last rung instead of pointing at nothing", () => {
     render(<MaturityLadder stages={stages} stageIndex={6} consentedQuests={9} />);
-    expect(screen.getByText(/last rung this village has named/)).toBeTruthy();
+    expect(screen.getByText(/last stage this village has named/)).toBeTruthy();
   });
 });
 

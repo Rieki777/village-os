@@ -56,7 +56,9 @@ describe("the power map's words about a term that reached its date", () => {
     // nothing, or reads the wrong place, this is the assertion that says so
     // instead of the loop below passing over an empty list.
     expect(files.length, "no power surfaces were read").toBeGreaterThan(10);
-    expect(files.map((f) => path.basename(f))).toContain("HolderCard.tsx");
+    // The seat card is the surface that prints a holder's term, so the walk
+    // must reach it. Its files sit flat in this directory for exactly this.
+    expect(files.map((f) => path.basename(f))).toContain("SeatTradingCard.tsx");
 
     const guilty: string[] = [];
     for (const file of files) {
@@ -71,10 +73,11 @@ describe("the power map's words about a term that reached its date", () => {
   it("says instead what the seat is waiting for, in the same words in every place", () => {
     // Three surfaces read the same state and said it three ways. One word,
     // true of a term that reached its date AND of a seating made in a season
-    // that has turned, because `lapsed` covers both.
-    const holderCard = fs.readFileSync(path.join(DIR, "HolderCard.tsx"), "utf8");
+    // that has turned, because `lapsed` covers both. The seat card's words
+    // live in the view model it draws, `shared/roleSheet.ts`.
+    const roleSheet = fs.readFileSync(path.join(DIR, "../../../../shared/roleSheet.ts"), "utf8");
     const legend = fs.readFileSync(path.join(DIR, "Legend.tsx"), "utf8");
-    expect(holderCard).toContain("ready to be re-chosen");
+    expect(roleSheet).toContain("ready to be re-chosen");
     expect(legend).toContain("ready to be re-chosen");
   });
 });

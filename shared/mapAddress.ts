@@ -181,13 +181,19 @@ export interface WalkStep {
  *
  * Stored as `{ [lang]: WalkStep[] }` with `en` the default, so a village that
  * hosts in two languages does not have to choose which newcomers get a guided
- * arrival. An EMPTY walk for a language means "use the artifact's own seed",
- * which is why the shell omits the key instead of pushing `[]`: the artifact
- * reads a non-empty array as a replacement, and an empty one as a walk with
- * no steps, which is a very short and confusing welcome.
+ * arrival.
+ *
+ * AN EMPTY WALK MEANS NO WALK. It used to mean "run the artifact's own seed",
+ * and the seed was another village's monologue. Rye, 2026-10-02: "Onboarding
+ * is something that founders should do and really personalize and put their
+ * spirit into it." So the map offers a walk only once the village has written
+ * one, and the seed's example walk is offered to nobody.
  */
 export const DEFAULT_WALK_LANG = "en";
 export type MapWalk = Record<string, WalkStep[]>;
+
+/** A walk language: two letters, and an optional region or script. */
+const WALK_LANG = /^[a-z]{2}(-[A-Za-z0-9]{2,8})?$/;
 
 /**
  * Coerce stored or submitted walk data into steps the artifact can run.
@@ -200,7 +206,7 @@ export function sanitiseWalk(input: unknown): MapWalk {
   const byLang = (input ?? {}) as Record<string, unknown>;
   const out: MapWalk = {};
   for (const [lang, steps] of Object.entries(byLang)) {
-    if (!/^[a-z]{2}(-[A-Za-z0-9]{2,8})?$/.test(lang) || !Array.isArray(steps)) continue;
+    if (!WALK_LANG.test(lang) || !Array.isArray(steps)) continue;
     const clean: WalkStep[] = [];
     for (const raw of steps.slice(0, 40)) {
       const s = (raw ?? {}) as Record<string, unknown>;
@@ -222,6 +228,135 @@ export function sanitiseWalk(input: unknown): MapWalk {
     if (clean.length) out[lang] = clean;
   }
   return out;
+}
+
+/**
+ * THE VILLAGE'S OWN WELCOME: the first thing the guide says on the map.
+ *
+ * It was a platform sentence that told every visitor "Everything you see
+ * traces to something true", over a map whose seed is sample data. The guide
+ * now opens with a plain greeting that promises nothing, and a village that
+ * has written a welcome is greeted in its own words.
+ *
+ * Kept in the walk's document under this key, per language like the walk,
+ * because a founder writes the two in one panel and saves them with one press.
+ * The key is not a language code, so `sanitiseWalk` passes over it.
+ */
+export const WALK_WELCOME_KEY = "welcome";
+/** The welcome's length cap, the same as a walk step's body. */
+export const WALK_WELCOME_MAX = 600;
+export type WalkWelcome = Record<string, string>;
+
+/** Trimmed and capped per language. A blank welcome is no welcome, so it is dropped. */
+export function sanitiseWalkWelcome(input: unknown): WalkWelcome {
+  const out: WalkWelcome = {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) return out;
+  for (const [lang, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!WALK_LANG.test(lang) || typeof raw !== "string") continue;
+    const words = raw.trim().slice(0, WALK_WELCOME_MAX).trim();
+    if (words) out[lang] = words;
+  }
+  return out;
+}
+
+/** The welcome stored beside a walk, read off the stored document. */
+export function storedWalkWelcome(doc: unknown): WalkWelcome {
+  const d = doc && typeof doc === "object" ? (doc as Record<string, unknown>) : {};
+  return sanitiseWalkWelcome(d[WALK_WELCOME_KEY]);
+}
+
+/**
+ * WHAT A SAVE STORES: the walk the founder sent, and the welcome beside it.
+ *
+ * A body with no `welcome` key keeps the welcome already stored, so a client
+ * that only knows about the walk cannot wipe a welcome it never showed. A
+ * body that carries one, even an empty one, is the founder's answer.
+ */
+export function walkDocumentFrom(
+  stored: unknown,
+  body: unknown,
+): { walk: MapWalk; welcome: WalkWelcome; doc: Record<string, unknown> } {
+  const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const walk = sanitiseWalk(b.walk ?? b);
+  const welcome = WALK_WELCOME_KEY in b ? sanitiseWalkWelcome(b[WALK_WELCOME_KEY]) : storedWalkWelcome(stored);
+  const doc: Record<string, unknown> = { ...walk };
+  if (Object.keys(welcome).length) doc[WALK_WELCOME_KEY] = welcome;
+  return { walk, welcome, doc };
+}
+
+/**
+ * WHAT THE MAP IS SERVED for one language: the steps and the welcome, each
+ * falling back to the default language and each null when the village wrote
+ * none. Null means "no walk" and "the plain welcome". It never means the seed.
+ */
+export function servedWalk(stored: unknown, lang: string): { walk: WalkStep[] | null; welcome: string | null } {
+  const walk = sanitiseWalk(stored);
+  const welcome = storedWalkWelcome(stored);
+  const steps = walk[lang] ?? walk[DEFAULT_WALK_LANG] ?? null;
+  return {
+    walk: steps && steps.length ? steps : null,
+    welcome: welcome[lang] ?? welcome[DEFAULT_WALK_LANG] ?? null,
+  };
+}
+
+/**
+ * THE WALK'S HALF OF THE MAP'S `{type:'config'}` PUSH, from an answer shaped
+ * like /api/map/config's (or the editor's draft, shaped the same).
+ *
+ * Both keys are ALWAYS present, null included, because null is the village's
+ * answer: it has written no walk, or no welcome, so the map offers no walk and
+ * greets plainly. The map treats an ABSENT key as "keep what you have", which
+ * is what the shell's bare push after a failed fetch relies on, so a caller
+ * that has no answer sends neither key and never calls this.
+ */
+export function walkPush(body: unknown): { walk: WalkStep[] | null; welcome: string | null } {
+  const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return {
+    walk: Array.isArray(b.walk) && b.walk.length ? (b.walk as WalkStep[]) : null,
+    welcome: typeof b.welcome === "string" && b.welcome.trim() ? b.welcome.trim() : null,
+  };
+}
+
+/**
+ * HAS THIS VILLAGE WRITTEN ITS OWN WALK? The Journey to Launch asks it, as a
+ * recommendation, because a village launches fine without one and the map
+ * simply offers no walk.
+ *
+ * It reads the walk the map is SERVED, which is the default language's: the
+ * shell asks for the map's config with no language, so a walk written only in
+ * Spanish reaches nobody yet, and counting it would say the map offers a walk
+ * it does not. And a stop needs a place, because the walk goes from place to
+ * place: a walk where no stop names one has nowhere to take anybody.
+ */
+export function welcomeWalkCheck(stored: unknown): { state: "ok" | "missing"; detail: string } {
+  const walk = sanitiseWalk(stored);
+  const steps = walk[DEFAULT_WALK_LANG] ?? [];
+  const stops = (n: number) => `${n} stop${n === 1 ? "" : "s"}`;
+  if (!steps.length) {
+    const others = Object.keys(walk);
+    return {
+      state: "missing",
+      detail: others.length
+        ? `Written in ${others.join(", ")} only. The map offers the ${DEFAULT_WALK_LANG} walk, so nobody is offered one yet`
+        : "Nothing is written yet, so the map offers no walk",
+    };
+  }
+  const placed = steps.filter((s) => s.structure_key.trim()).length;
+  if (!placed) {
+    return {
+      state: "missing",
+      detail: `${stops(steps.length)} written, and none names a place on the map, so the walk has nowhere to go`,
+    };
+  }
+  const unplaced = steps.length - placed;
+  const welcome = !!storedWalkWelcome(stored)[DEFAULT_WALK_LANG];
+  return {
+    state: "ok",
+    detail:
+      `Written, ${stops(steps.length)}${welcome ? " and your own welcome" : ""}` +
+      (unplaced ? `. ${unplaced} name${unplaced === 1 ? "s" : ""} no place, so the walk passes ${unplaced === 1 ? "it" : "them"} by` : "") +
+      (welcome ? "" : ". The guide greets people plainly until you write a welcome"),
+  };
 }
 
 /**

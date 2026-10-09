@@ -14,8 +14,8 @@
  * CTA link, not the site shell it renders inside (nav, footer, mobile menu -
  * covered by their own future tests, not duplicated here).
  */
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
@@ -70,7 +70,7 @@ describe("Login", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Wrong password");
   });
 
-  it("keeps the Create Account link off the failing text-amber token (contrast regression guard)", () => {
+  it("keeps the Create an account link off the failing text-amber token (contrast regression guard)", () => {
     // The exact defect this lane measured and fixed: text-amber on this
     // page's background reads 1.32:1 against the real body colour, nowhere
     // near AA's 4.5:1 floor. amber-ink (index.css) is the replacement,
@@ -78,9 +78,42 @@ describe("Login", () => {
     // if `text-amber` (without `-ink`) ever comes back on this link, this
     // test fails before a person has to notice with a contrast meter.
     renderLogin();
-    const createAccount = screen.getByRole("link", { name: /create account/i });
+    const createAccount = screen.getByRole("link", { name: /create an account/i });
     const classes = createAccount.className.split(/\s+/);
     expect(classes).toContain("text-amber-ink");
     expect(classes).not.toContain("text-amber");
+  });
+});
+
+/**
+ * Where a sign-in lands. `next` comes from the address bar, so it is the one
+ * value on this page a stranger writes. A tab in it used to pass the inline
+ * startsWith check and parse offsite, because the URL parser drops the tab;
+ * lib/internalPath.ts now decides, and these pin that this page asks it.
+ */
+describe("Login, where a sign-in lands", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  async function signInFrom(search: string) {
+    window.history.replaceState({}, "", `/login${search}`);
+    loginMock.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    renderLogin();
+    await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+  }
+
+  it("returns to the members-only page the sign-in started on", async () => {
+    await signInFrom(`?${new URLSearchParams({ next: "/forum?thread=7" })}`);
+    await waitFor(() => expect(`${window.location.pathname}${window.location.search}`).toBe("/forum?thread=7"));
+  });
+
+  it("lands on /profile when next carries a tab that would parse offsite", async () => {
+    await signInFrom(`?${new URLSearchParams({ next: "/\t/evil.example" })}`);
+    await waitFor(() => expect(window.location.pathname).toBe("/profile"));
+    expect(window.location.host).not.toBe("evil.example");
   });
 });

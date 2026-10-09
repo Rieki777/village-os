@@ -65,13 +65,8 @@ import { useModules } from "@/modules/ModuleProvider";
 import { useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { gateLine, nameList } from "./gateCopy";
+import { internalPath } from "@/lib/internalPath";
 
-/** Internal paths only: anything else falls back to home. The backslash
- *  variant is refused too, so this stays safe even in front of a consumer
- *  that normalises "/\" the way location.href would. */
-function safeNext(path: string): string {
-  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
-}
 
 const DOOR =
   "inline-flex items-center justify-center min-h-[44px] px-5 rounded-lg font-semibold" +
@@ -112,7 +107,7 @@ export function SignInDoors({
   align?: "center" | "start";
 }) {
   const [location] = useLocation();
-  const target = safeNext(next ?? location);
+  const target = internalPath(next ?? location) ?? "/";
   return (
     <div
       className={`flex flex-col sm:flex-row gap-3 ${align === "start" ? "sm:justify-start" : "justify-center"}`}
@@ -180,7 +175,7 @@ export function SignInToSee({
 }) {
   const [location] = useLocation();
   const { user, loading } = useAuth();
-  const target = safeNext(next ?? location);
+  const target = internalPath(next ?? location) ?? "/";
   const line = behind ?? gateLine(moduleId);
 
   // The session is still being read. Claiming anything about this reader here
@@ -247,8 +242,8 @@ export function ModuleOff({ name }: { name: string }) {
   return (
     <GateShell name={name}>
       <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-        {project} hasn't enabled this module. Only the team running the village can
-        turn it on, so ask them if you would like it open.
+        {project} hasn't opened this room yet. Only the team running the village can
+        open it, so ask them if you'd like it open.
       </p>
       <Link href="/" className={`${DOOR_PRIMARY} mb-6`}>
         Back to the village
@@ -274,8 +269,7 @@ function CatalogUnread({ name }: { name: string }) {
   return (
     <GateShell name={name}>
       <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-        This village's list of modules could not be read just now, so this page cannot say whether
-        {" "}{name} is open. The village is still there.
+        {name} didn't load. Try again in a moment.
       </p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <button type="button" onClick={refresh} className={DOOR_PRIMARY}>

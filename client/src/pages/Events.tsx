@@ -153,14 +153,14 @@ export default function Events() {
       const body = await res.json().catch(() => ({}));
       // The server owns capacity, so its refusal is the truth. Showing the
       // reason beats a button that silently does nothing.
-      if (!res.ok) setProblem(body?.error ?? "That did not work");
+      if (!res.ok) setProblem(body?.error ?? "That didn't go through. Try again.");
       else {
         // 0092: say what moved. A seat fee taken with no word about it is the
         // one thing a member would find out later, in their ledger.
         if (body?.charged > 0) setNotice(`${body.charged} ${body.tokenName} held for your place.`);
         reload();
       }
-    } catch { setProblem("That did not work"); }
+    } catch { setProblem("That didn't go through. Try again."); }
     setBusy(null);
   };
 
@@ -323,11 +323,11 @@ export default function Events() {
       <section className="py-10 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Village Calendar</h1>
+          {/* R47: the Trail line leads, the tooltip defines the moons, and
+              the two clocks line is the Lore, last and quiet. */}
           <p className="text-muted-foreground max-w-xl mx-auto">
-            The village keeps two clocks: the twelve months everyone shares,
-            and the{" "}
-            <InfoTip tip="The moons are the lunar months the land turns by. The wheel and the grid show them beside the civil calendar, and the village's cycles close when the moon does.">moons</InfoTip>{" "}
-            the land turns by. Everything dated lives here, side by side.
+            Pick a day to see what's on, by month or by{" "}
+            <InfoTip tip="The moons are the lunar months the land turns by. The wheel and the grid show them beside the civil calendar, and the village's cycles close when the moon does.">moon</InfoTip>.
           </p>
           {lunar && (
             <p className="mt-3 inline-flex items-center gap-2 text-sm text-foreground bg-card border border-border rounded-full px-3 py-1.5">
@@ -356,6 +356,10 @@ export default function Events() {
               Seasonal Festivals
             </Link>{" "}
             page.
+          </p>
+          <p className="mt-3 text-sm italic text-muted-foreground max-w-xl mx-auto">
+            The village keeps two clocks: the twelve months everyone shares,
+            and the moons the land turns by.
           </p>
         </div>
       </section>
@@ -401,7 +405,7 @@ export default function Events() {
             )}
           </div>
 
-          {payload === null && <p className="text-center text-muted-foreground py-16">Loading...</p>}
+          {payload === null && <p className="text-center text-muted-foreground py-16">Opening the calendar…</p>}
 
           {payload && cursor && tab === "wheel" && (
             <div>

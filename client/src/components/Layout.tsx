@@ -11,6 +11,7 @@ import { NAV, ACCOUNT_MENU, isGroup, type NavLink, type NavGroup } from "@/confi
 import { useTokenName } from "@/hooks/useTokenNames";
 import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
+import NextStepTrail from "./NextStepTrail";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -264,7 +265,7 @@ export default function Layout({ children }: LayoutProps) {
                           title="Sign out everywhere"
                         >
                           <LogOut className="w-4 h-4" />
-                          Sign Out Everywhere
+                          Sign out everywhere
                         </button>
                       </motion.div>
                     )}
@@ -274,7 +275,7 @@ export default function Layout({ children }: LayoutProps) {
             ) : (
               <Link href="/login" className="flex items-center gap-2 px-3 py-1.5 bg-black/10 hover:bg-black/20 rounded-lg text-sm transition-colors whitespace-nowrap">
                 <User className="w-4 h-4" />
-                Sign In
+                Sign in
               </Link>
             )}
 
@@ -398,7 +399,7 @@ export default function Layout({ children }: LayoutProps) {
                         onClick={() => { setMobileMenuOpen(false); logout(); }}
                         className="block text-white hover:opacity-80 transition-opacity text-sm py-2 text-left"
                       >
-                        Sign Out Everywhere
+                        Sign out everywhere
                       </button>
                     </>
                   ) : (
@@ -407,7 +408,7 @@ export default function Layout({ children }: LayoutProps) {
                       className="block text-white hover:underline transition-colors text-sm py-2"
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      Sign In / Register
+                      Sign in or join
                     </Link>
                   )}
                 </div>
@@ -429,6 +430,8 @@ export default function Layout({ children }: LayoutProps) {
       </nav>
 
       {/* Main Content */}
+      {/* R47: the Trail, a member's one next step, on every page. */}
+      <NextStepTrail />
       <main id="main" tabIndex={-1} className="flex-1">
         {children}
       </main>

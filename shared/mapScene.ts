@@ -146,6 +146,17 @@ export const SCENE_BLOCKS: readonly string[] = [
  * pasted the wrong file is told that and not told about a version.
  */
 export function sceneProblem(scene: unknown): string | null {
+  return sceneEnvelopeProblem(scene) ?? sceneKeyProblem(scene as Record<string, unknown>);
+}
+
+/**
+ * The envelope alone: is this a scene at all, and one this deployment reads.
+ * `draftSceneProblems` (mapFromMasterplan.ts) stops here, and then lists the
+ * rows itself, every fault in one answer, including a repeated key in its own
+ * words, so an agent fixes them all in one pass. Every other caller asks
+ * `sceneProblem`, which adds the key rule below.
+ */
+export function sceneEnvelopeProblem(scene: unknown): string | null {
   if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
     return "That is not a scene: expected a JSON object.";
   }
@@ -165,6 +176,10 @@ export function sceneProblem(scene: unknown): string | null {
       "Publishing an unknown version would draw the land from fields that have moved."
     );
   }
+  return null;
+}
+
+function sceneKeyProblem(s: Record<string, unknown>): string | null {
   /*
    * ONE PLACE PER KEY. The map looks every place up by its key, so a second
    * place with the same key is drawn over the first and one of them is
@@ -173,7 +188,7 @@ export function sceneProblem(scene: unknown): string | null {
    * against a direct call or a future bug.
    */
   const seen = new Set<string>();
-  for (const place of s.map_structures) {
+  for (const place of s.map_structures as unknown[]) {
     const key = place && typeof place === "object" ? (place as { key?: unknown }).key : undefined;
     if (typeof key !== "string") continue;
     if (seen.has(key)) return `Two places in this scene share the key "${key}", so one of them would vanish from the map.`;
