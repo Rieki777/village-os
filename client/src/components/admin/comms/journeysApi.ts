@@ -121,43 +121,42 @@ async function read<T>(res: Response, fallback: string): Promise<Answer<T>> {
 }
 
 const json = (password: string) => authHeaders(password, { "Content-Type": "application/json" });
-const base = `${API_BASE}/admin/comms/journeys`;
 const keyPath = (key: string) => encodeURIComponent(key);
 
 export async function fetchJourneys(password: string): Promise<Answer<{ journeys: JourneySummary[] }>> {
-  return read(await fetch(base, { headers: authHeaders(password) }), "The journeys could not be read");
+  return read(await fetch(`${API_BASE}/admin/comms/journeys`, { headers: authHeaders(password) }), "The journeys could not be read");
 }
 
 export async function fetchJourney(password: string, key: string): Promise<Answer<JourneyDetail>> {
-  return read(await fetch(`${base}/${keyPath(key)}`, { headers: authHeaders(password) }), "This journey could not be read");
+  return read(await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}`, { headers: authHeaders(password) }), "This journey could not be read");
 }
 
 export async function setJourneyOn(password: string, key: string, on: boolean): Promise<Answer<{ state: "on" | "off"; adopted: string[] }>> {
-  const res = await fetch(`${base}/${keyPath(key)}/state`, { method: "POST", headers: json(password), body: JSON.stringify({ state: on ? "on" : "off" }) });
+  const res = await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}/state`, { method: "POST", headers: json(password), body: JSON.stringify({ state: on ? "on" : "off" }) });
   return read(res, on ? "The journey could not be turned on" : "The journey could not be turned off");
 }
 
 export async function saveStep(password: string, key: string, step: string, edit: StepEdit): Promise<Answer<{ version: number }>> {
-  const res = await fetch(`${base}/${keyPath(key)}/steps/${encodeURIComponent(step)}`, { method: "PUT", headers: json(password), body: JSON.stringify(edit) });
+  const res = await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}/steps/${encodeURIComponent(step)}`, { method: "PUT", headers: json(password), body: JSON.stringify(edit) });
   return read(res, "The step could not be saved");
 }
 
 export async function testStep(password: string, key: string, step: string): Promise<Answer<{ status: string; reason: string | null; sentTo: string }>> {
-  const res = await fetch(`${base}/${keyPath(key)}/steps/${encodeURIComponent(step)}/test`, { method: "POST", headers: json(password), body: "{}" });
+  const res = await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}/steps/${encodeURIComponent(step)}/test`, { method: "POST", headers: json(password), body: "{}" });
   return read(res, "The test email could not be sent");
 }
 
 export async function walk(password: string, key: string, request: WalkRequest): Promise<Answer<WalkView>> {
-  const res = await fetch(`${base}/${keyPath(key)}/walk`, { method: "POST", headers: json(password), body: JSON.stringify(request) });
+  const res = await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}/walk`, { method: "POST", headers: json(password), body: JSON.stringify(request) });
   return read(res, "The walk-through could not be made");
 }
 
 export async function fetchSubjects(password: string, key: string): Promise<Answer<{ subjects: Array<{ subjectRef: string; label: string; startsAt: string | null }> }>> {
-  return read(await fetch(`${base}/${keyPath(key)}/subjects`, { headers: authHeaders(password) }), "The list could not be read");
+  return read(await fetch(`${API_BASE}/admin/comms/journeys/${keyPath(key)}/subjects`, { headers: authHeaders(password) }), "The list could not be read");
 }
 
 export async function stopEnrollment(password: string, id: string): Promise<Answer<{ stopped: string }>> {
-  const res = await fetch(`${base}/enrollments/${encodeURIComponent(id)}/stop`, { method: "POST", headers: json(password), body: "{}" });
+  const res = await fetch(`${API_BASE}/admin/comms/journeys/enrollments/${encodeURIComponent(id)}/stop`, { method: "POST", headers: json(password), body: "{}" });
   return read(res, "The journey could not be stopped");
 }
 
