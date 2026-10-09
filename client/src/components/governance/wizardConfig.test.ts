@@ -47,6 +47,8 @@ const completeAnswersFor = (typeId: string): Record<string, unknown> => {
       if (f.kind === "changeSet") answers[f.key] = [{ key: "governance.sensing_days", to: "10" }];
       else if (f.kind === "percent") answers[f.key] = 50;
       else if (f.kind === "number") answers[f.key] = 12;
+      // A seat's terms: an empty set is valid terms, every group not set.
+      else if (f.kind === "seatSettings") answers[f.key] = { v: 1 };
       /*
        * WORDS AND NOT ONE LONG TOKEN. `"x".repeat(80)` satisfied every
        * character-length validator this config had and is a single word, so
@@ -215,12 +217,14 @@ describe("validation across the whole walk", () => {
     expect(readyToPublish(null, {})).toBe(false);
   });
 
-  it("holds percentages to 0 through 100", () => {
+  it("holds a seat's terms to the shared parser", () => {
+    // The old percentage fields left with the move to roleApplicationType.ts;
+    // the terms are one object now, and its refusals reach the review step.
     const answers = completeAnswersFor("role_application");
-    expect(problemsFor("role_application", { ...answers, commitmentPct: 101 })).toHaveLength(1);
-    expect(problemsFor("role_application", { ...answers, commitmentPct: -1 })).toHaveLength(1);
-    expect(problemsFor("role_application", { ...answers, commitmentPct: 0 })).toEqual([]);
-    expect(problemsFor("role_application", { ...answers, commitmentPct: 100 })).toEqual([]);
+    expect(problemsFor("role_application", { ...answers, seatSettings: { v: 1, voice: 3 } }).map((p) => p.field)).toEqual([
+      "seatSettings",
+    ]);
+    expect(problemsFor("role_application", { ...answers, seatSettings: { v: 1, pay: { kind: "none" } } })).toEqual([]);
   });
 });
 
