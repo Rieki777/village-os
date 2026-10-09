@@ -66,7 +66,9 @@ github.com/ReGen-Civics/village-os, and the image is published as
   - members see a treasury chip
 - **Clearer setup errors.** A malformed `VILLAGE_SECRETS_KEY` is now named, with what is wrong
   with it, before anything else.
-- **Two security fixes:**
+- **The web server framework (express) moved to 5.3.0**, which fixes a critical advisory in
+  how it reads proxy addresses (GHSA-jqcg-44mw-7w3h).
+- **Two security fixes in the village itself:**
   - The public rules feed listed the blockchain RPC address together with its key. It now
     withholds the key. If your village set one, rotate it.
   - The page a member returns to after signing in now passes one strict rule
