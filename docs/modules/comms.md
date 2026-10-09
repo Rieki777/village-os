@@ -81,8 +81,10 @@ while Journeys and Words follow the module.
 `comms.manage`, a power the village can hand to a role and hold: turning automations on and
 off, changing their words and steps, and sending letters to people who agreed to get them. It is
 transferable, so it is in the handover set. A look at any Comms screen asks `mayStillSee`, and a
-change asks `guardCapability`. The provider key, the sending domain and the sender stay with the
-admin in the secrets plane.
+change asks `guardCapability`. Its consequence line also says what holding it shows: the
+village's address book and every email the village still keeps, who it went to, its subject,
+whether it arrived, and its words. The provider key, the sending domain and the sender stay with
+the admin in the secrets plane.
 
 Members see every journey and dial, and may propose a change to any of them (below).
 
@@ -415,10 +417,13 @@ The routes are `server/routes/commsMembers.ts`, gated by the module one route at
 
 - Every table holding an address or a person joins erasure (`server/lib/erasure.ts`), the
   profile export, and the retention sweep.
-- **Retention** (`server/lib/comms/retention.ts`): the words of every email are cleared after 30
-  days, keeping the row; rows are deleted after `comms.retention_months` (18 by default); raw
-  delivery reports are deleted after 30 days. A row still waiting to go keeps its words.
-- **Erasure** deletes the person's contact, permissions, journeys, path enrollments, guest
+- **Retention** (`server/lib/comms/retention.ts`, Rye's ruling of 2026-10-09): an email's words
+  live with its row and are deleted with it, under the one dial `comms.retention_months` (18 by
+  default), so whoever runs the village's email can read what was said for as long as the record
+  is kept. A row still waiting to go is never deleted. Raw delivery reports are deleted after 30
+  days; what they said is already on the rows they were applied to.
+- **Essential mail's words are never stored**, whatever the dial says.
+- **Erasure** clears a person's words at once, ahead of the dial: it deletes the person's contact, permissions, journeys, path enrollments, guest
   requests, votes, attendance and feedback, and blanks their message rows' address, subject and
   words. It keeps no suppression, because a suppression is the address under another name.
 - **Sensitive notices** (restorative intake, conflict) never carry content into an email. They
