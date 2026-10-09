@@ -54,7 +54,7 @@ export const BLOCKED_WORDS: Record<SuppressionReason, string> = {
     "Email to this address stopped after one of our emails was marked as spam. Ask a person at the village if you want it back.",
   unsubscribed_all: "You asked us to stop every email to this address.",
   manual: "A person at the village stopped email to this address. Ask them if you want it back.",
-  erased: "This address was removed from the village's records.",
+  erased: "This address was erased from the village, so no email goes to it.",
 };
 
 /** One kind's switch, as the page draws it. */
