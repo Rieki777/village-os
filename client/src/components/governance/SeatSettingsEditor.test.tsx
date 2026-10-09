@@ -91,10 +91,52 @@ describe("SeatSettingsEditor", () => {
     expect(within(groupBox("term")).queryByRole("alert")).toBeNull();
   });
 
-  it("reads an empty group as Not set and carries the money line on set money groups", () => {
-    render(<Harness start={{ v: 1, pay: { kind: "none" } }} seen={() => {}} />);
+  it("reads an empty group as Not set and carries the money line only where money is recorded", () => {
+    render(<Harness start={{ v: 1, pay: { kind: "fixed", per: "month" }, bonus: { kind: "none" } }} seen={() => {}} />);
     expect(within(groupBox("allowance")).getByText("Not set")).toBeInTheDocument();
     expect(within(groupBox("pay")).getByText("Recorded here. Paid outside the platform.")).toBeInTheDocument();
     expect(within(groupBox("allowance")).queryByText("Recorded here. Paid outside the platform.")).toBeNull();
+    // No bonus records no money, so it says nothing about paying.
+    expect(within(groupBox("bonus")).queryByText("Recorded here. Paid outside the platform.")).toBeNull();
+  });
+
+  /*
+   * Visual QA, 2026-10-09 (HIGH): typing 12.5 as a dollar amount rewrote the
+   * box to 0.125 and the headline to US$0.13 a month, because the decimal was
+   * stored as raw minor units and shown divided by 100. What a person types
+   * stays in the box exactly, the parser refuses it, and no figure is rescaled.
+   */
+  it("keeps a decimal amount exactly as typed, refuses it, and never rescales it", () => {
+    const seen = vi.fn();
+    render(<Harness start={{ v: 1, pay: { kind: "fixed", currency: "USD", per: "month" } }} seen={seen} />);
+    const box = within(groupBox("pay"));
+    fireEvent.click(box.getByRole("button", { name: /^Edit\s*Pay$/ }));
+    const amount = box.getByLabelText("Amount, in USD") as HTMLInputElement;
+
+    fireEvent.change(amount, { target: { value: "12.5" } });
+    expect(amount.value).toBe("12.5");
+    expect(box.getByRole("alert")).toHaveTextContent("Whole numbers only.");
+    expect(groupBox("pay").textContent).not.toMatch(/0\.13|0\.125/);
+    const stored: SeatSettings = seen.mock.calls.at(-1)![0];
+    expect(typeof stored.pay!.amountMinor).not.toBe("number");
+
+    // Control: a whole amount is scaled to minor units and read back as typed.
+    fireEvent.change(amount, { target: { value: "12" } });
+    expect(amount.value).toBe("12");
+    expect(seen.mock.calls.at(-1)![0].pay.amountMinor).toBe(1200);
+    expect(box.getByText("US$12 a month")).toBeInTheDocument();
+    expect(box.queryByRole("alert")).toBeNull();
+  });
+
+  it("names the opened preset sheet and shows no preview that repeats a card's title", () => {
+    render(<Harness start={{ v: 1 }} seen={() => {}} />);
+    const box = within(groupBox("pay"));
+    fireEvent.click(box.getByRole("button", { name: /^Change\s*Pay$/ }));
+    const sheet = box.getByRole("group", { name: "Choose a pay preset" });
+    const unpaid = within(sheet).getByRole("button", { name: /Unpaid/ });
+    expect(within(unpaid).getAllByText("Unpaid")).toHaveLength(1);
+    // Control: a card whose preview says something new still shows it.
+    const fixed = within(sheet).getByRole("button", { name: /Fixed monthly stipend/ });
+    expect(fixed).toHaveTextContent("A fixed stipend a month, amount not set");
   });
 });

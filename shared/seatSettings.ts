@@ -663,7 +663,7 @@ export interface SettingsRow {
   set: boolean;
   headline: string;
   lines: string[];
-  /** MONEY_LINE on a set money group, else null. */
+  /** MONEY_LINE on a set money group that records money (kind not none or honorary), else null. */
   moneyLine: string | null;
   /** The preset this group started from, by id, or null. */
   presetId: string | null;
@@ -688,8 +688,19 @@ export function minorDigits(currency: string | undefined): number {
   }
 }
 
-/** Whole minor units, written as money. An unknown or absent currency is said plainly. */
+/** Said where an amount was typed that is not a whole number. Never a rescaled figure. */
+export const AMOUNT_NOT_WHOLE = "amount not a whole number";
+/** Appended once to a money headline whose amounts carry no currency. */
+export const NO_CURRENCY = " (currency not set)";
+
+/**
+ * Whole minor units, written as money. An unknown currency is said by its
+ * code; an absent one prints the bare figure, and the headline says once,
+ * at its end, that the currency is not set.
+ */
 export function moneyWords(minor: number, currency: string | undefined, locale = "en-GB"): string {
+  // Mid-edit text or a fraction: say so, never print a figure it does not mean.
+  if (typeof minor !== "number" || !Number.isInteger(minor)) return AMOUNT_NOT_WHOLE;
   const digits = minorDigits(currency);
   const major = minor / 10 ** digits;
   if (currency && currencyKnown(currency) !== false) {
@@ -700,7 +711,7 @@ export function moneyWords(minor: number, currency: string | undefined, locale =
     }
   }
   const n = new Intl.NumberFormat(locale, { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(major);
-  return currency ? `${currency} ${n}` : `${n}, currency not set`;
+  return currency ? `${currency} ${n}` : n;
 }
 
 export function dateWords(iso: string, locale = "en-GB"): string {
@@ -781,6 +792,8 @@ function payWords(p: PaySettings, locale: string): Pick<SettingsRow, "headline" 
       // Mid-edit, before a kind is picked. Parsed settings never reach here.
       headline = "Kind not set";
   }
+  const anyAmount = p.amountMinor !== undefined || p.minMinor !== undefined || p.maxMinor !== undefined;
+  if (anyAmount && !p.currency) headline += NO_CURRENCY;
   const lines = p.note ? [p.note] : [];
   return { headline, lines };
 }
@@ -796,7 +809,7 @@ function allowanceWords(a: AllowanceSettings, locale: string): Pick<SettingsRow,
           ? "Kind not set"
           : a.amountMinor === undefined
           ? `A flat allowance${per}, amount not set`
-          : `A flat allowance of ${moneyWords(a.amountMinor, a.currency, locale)}${per}`;
+          : `A flat allowance of ${moneyWords(a.amountMinor, a.currency, locale)}${per}${a.currency ? "" : NO_CURRENCY}`;
   return { headline, lines: a.note ? [a.note] : [] };
 }
 
@@ -854,6 +867,17 @@ function endingWords(e: EndingSettings): Pick<SettingsRow, "headline" | "lines">
 }
 
 /**
+ * True when a set group records money, so its row carries MONEY_LINE. A money
+ * group whose kind is "none" (unpaid, no allowance, no bonus) or "honorary"
+ * records nothing, and a line about paying would say something untrue.
+ */
+function recordsMoney(group: SettingsGroup, value: unknown): boolean {
+  if (!MONEY_GROUPS.includes(group)) return false;
+  const kind = (value as { kind?: unknown } | undefined)?.kind;
+  return kind !== "none" && kind !== "honorary";
+}
+
+/**
  * Every group, in season-card order, as a headline and its lines. A group
  * that is absent comes back with `set: false` and the headline NOT_SET. The
  * drawer and the editor both print these, so the words cannot differ.
@@ -897,7 +921,7 @@ export function settingsWords(settings: SeatSettings | null | undefined, ctx: Wo
       ...base,
       set: true,
       ...words,
-      moneyLine: MONEY_GROUPS.includes(group) ? MONEY_LINE : null,
+      moneyLine: recordsMoney(group, value) ? MONEY_LINE : null,
     };
   });
 }

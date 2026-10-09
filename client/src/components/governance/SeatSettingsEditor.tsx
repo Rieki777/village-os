@@ -27,8 +27,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import {
   GROUP_LABELS,
-  MONEY_GROUPS,
-  MONEY_LINE,
   SETTINGS_GROUPS,
   emptySettings,
   parseSeatSettings,
@@ -60,6 +58,7 @@ export const EDITOR_WORDS = {
   customised: "customised",
   startedFrom: "Started from",
   noPreset: "No preset",
+  choosePreset: (group: string) => `Choose a ${group.toLowerCase()} preset`,
   payHelp: "Recorded here and settled off the platform. Money never flows out of this village through this software.",
 } as const;
 
@@ -69,10 +68,11 @@ const quietButton =
 const asSettings = (v: unknown): SeatSettings =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as SeatSettings) : emptySettings();
 
-/** A preset's own headline, for its card. */
-const previewOf = (preset: SeatPreset): string => {
+/** A preset's own headline, for its card. Null when it would only repeat the title. */
+const previewOf = (preset: SeatPreset): string | null => {
   const row = settingsWords({ v: 1, [preset.group]: preset.values } as SeatSettings).find((r) => r.group === preset.group);
-  return row?.headline ?? "";
+  const headline = row?.headline ?? "";
+  return headline && headline.trim().toLowerCase() !== preset.label.trim().toLowerCase() ? headline : null;
 };
 
 function GroupRow({
@@ -97,7 +97,6 @@ function GroupRow({
   const preset = presetFor(settings, group, villagePresets);
   const customised = isCustomised(settings, group, villagePresets);
   const options = presetsFor(group, villagePresets);
-  const money = MONEY_GROUPS.includes(group);
 
   return (
     <section aria-labelledby={headId} className="rounded-xl border border-stone-200 bg-white p-3" data-settings-group={group}>
@@ -107,7 +106,7 @@ function GroupRow({
             {GROUP_LABELS[group]}
           </h4>
           <p className={`mt-0.5 text-sm ${row.set ? "text-stone-900" : "text-stone-500"}`}>{row.headline}</p>
-          {money && row.set && <p className="mt-0.5 text-xs text-stone-600">{MONEY_LINE}</p>}
+          {row.moneyLine && <p className="mt-0.5 text-xs text-stone-600">{row.moneyLine}</p>}
           <p className="mt-0.5 text-xs text-stone-500">
             {preset ? `${EDITOR_WORDS.startedFrom} ${preset.label}` : EDITOR_WORDS.noPreset}
             {customised && (
@@ -156,7 +155,10 @@ function GroupRow({
         </div>
       </div>
 
-      <div id={presetsId} hidden={panel !== "presets"} className="mt-3">
+      <div id={presetsId} role="group" aria-labelledby={`${presetsId}-head`} hidden={panel !== "presets"} className="mt-3">
+        <p id={`${presetsId}-head`} className="mb-2 text-sm font-semibold text-stone-900">
+          {EDITOR_WORDS.choosePreset(GROUP_LABELS[group])}
+        </p>
         <ul className="grid gap-2 sm:grid-cols-2">
           {options.map((o) => {
             const current = preset?.id === o.id;
@@ -178,7 +180,7 @@ function GroupRow({
                     {current && <Check className="size-4 text-teal-deep" aria-hidden="true" />}
                   </span>
                   <span className="mt-0.5 text-xs text-stone-600">{o.blurb}</span>
-                  <span className="mt-1 text-xs font-medium text-stone-800">{previewOf(o)}</span>
+                  {previewOf(o) && <span className="mt-1 text-xs font-medium text-stone-800">{previewOf(o)}</span>}
                 </button>
               </li>
             );

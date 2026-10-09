@@ -199,6 +199,29 @@ describe("settingsWords", () => {
     expect(`${pay.headline}${allowance.headline}`).not.toMatch(/\b0\b/);
   });
 
+  it("says a missing currency once, at the end of the headline", () => {
+    const rows = settingsWords({ v: 1, pay: { kind: "fixed", amountMinor: 100000, per: "month" }, allowance: { kind: "flat", amountMinor: 5000, per: "moon" } });
+    expect(rows.find((r) => r.group === "pay")!.headline).toBe("1,000 a month (currency not set)");
+    expect(rows.find((r) => r.group === "allowance")!.headline).toBe("A flat allowance of 50 a moon (currency not set)");
+    expect(settingsWords({ v: 1, pay: { kind: "range", minMinor: 50000, maxMinor: 90000, per: "month" } })[3].headline).toBe(
+      "Between 500 and 900 a month (currency not set)",
+    );
+  });
+
+  it("never prints a rescaled figure for an amount that is not whole", () => {
+    const pay = settingsWords({ v: 1, pay: { kind: "fixed", currency: "USD", amountMinor: "12.5" as any, per: "month" } })[3];
+    expect(pay.headline).toBe("amount not a whole number a month");
+    expect(pay.headline).not.toMatch(/0\.1/);
+  });
+
+  it("drops the money line where nothing is recorded: kind none or honorary", () => {
+    const rows = settingsWords({ v: 1, pay: { kind: "none" }, allowance: { kind: "none" }, bonus: { kind: "none" } });
+    for (const g of ["pay", "allowance", "bonus"]) expect(rows.find((r) => r.group === g)!.moneyLine, g).toBeNull();
+    expect(settingsWords({ v: 1, pay: { kind: "honorary" } })[3].moneyLine).toBeNull();
+    // Control: a blank shape that will record money keeps the line.
+    expect(settingsWords({ v: 1, pay: { kind: "range", per: "month" } })[3].moneyLine).toBe(MONEY_LINE);
+  });
+
   it("puts the money line on every set money row and on nothing else", () => {
     const rows = settingsWords(FULL);
     for (const r of rows) {

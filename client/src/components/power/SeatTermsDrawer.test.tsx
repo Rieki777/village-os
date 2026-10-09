@@ -86,6 +86,12 @@ describe("SeatTermsDrawer", () => {
     expect(lines).toHaveTextContent(DRAWER_WORDS.customised);
   });
 
+  it("gives the adoption link a 44px tap target", () => {
+    render(<SeatTermsDrawer settings={TERMS} defaultOpen adopted={{ how: "vote", on: "2026-10-09", href: "/decisions/b-1" }} />);
+    const link = screen.getByRole("link", { name: "Adopted by vote, 9 Oct 2026" });
+    expect(link.className.split(/\s+/)).toContain("min-h-11");
+  });
+
   it("says when terms could not be read instead of guessing", () => {
     render(<SeatTermsDrawer unreadable defaultOpen />);
     expect(screen.getByText(DRAWER_WORDS.unreadable)).toBeInTheDocument();

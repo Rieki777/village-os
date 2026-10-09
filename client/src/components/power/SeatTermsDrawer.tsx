@@ -237,7 +237,11 @@ export default function SeatTermsDrawer({
         {adopted && (
           <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">
             {adopted.href ? (
-              <a href={adopted.href} className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring">
+              // One quiet line to the eye, a 44px target to the thumb.
+              <a
+                href={adopted.href}
+                className="inline-flex min-h-11 items-center underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              >
                 {adoptedWords(adopted)}
               </a>
             ) : (

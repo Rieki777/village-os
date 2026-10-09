@@ -148,10 +148,21 @@ function DateBox({ label, value, onChange }: { label: string; value: unknown; on
   );
 }
 
-/** An amount typed in whole units of the currency, stored as whole minor units. */
-function Amount({ label, minor, currency, onChange }: { label: string; minor: unknown; currency: string | undefined; onChange: (v: number | undefined) => void }) {
+/**
+ * An amount typed in whole units of the currency, stored as whole minor units.
+ *
+ * Only digits are ever scaled. Anything else ("12.5", "1e3") is stored as the
+ * exact text typed, so the box keeps showing it, the parser refuses it with
+ * "Whole numbers only.", and no headline ever shows a rescaled figure.
+ */
+function Amount({ label, minor, currency, onChange }: { label: string; minor: unknown; currency: string | undefined; onChange: (v: number | string | undefined) => void }) {
   const digits = minorDigits(currency);
-  const shown = typeof minor === "number" && Number.isFinite(minor) ? String(minor / 10 ** digits) : "";
+  const shown =
+    typeof minor === "string"
+      ? minor
+      : typeof minor === "number" && Number.isInteger(minor)
+        ? String(minor / 10 ** digits)
+        : "";
   return (
     <Field label={currency ? `${label}, in ${currency}` : label}>
       {(id) => (
@@ -164,10 +175,9 @@ function Amount({ label, minor, currency, onChange }: { label: string; minor: un
           min={0}
           value={shown}
           onChange={(e) => {
-            const n = wholeFrom(e.target.value);
-            if (n === undefined) return onChange(undefined);
-            // A whole amount becomes minor units; anything else is kept for the parser to refuse.
-            onChange(Number.isInteger(n) ? n * 10 ** digits : n);
+            const typed = e.target.value.trim();
+            if (typed === "") return onChange(undefined);
+            onChange(/^\d+$/.test(typed) ? Number(typed) * 10 ** digits : typed);
           }}
         />
       )}
