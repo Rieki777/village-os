@@ -228,7 +228,11 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the journeys", () => {
     expect(detail.json.enrollments[0]).toMatchObject({ id: guest.enrollmentId, email: guest.email });
 
     const offRun = await run("journeys");
-    expect(offRun.json.summary).toMatchObject({ checked: 1, posted: 0, waiting: 1 });
+    // The member who signed up above is on their path's journey and the new
+    // members' journey too (the paths lane enrolls sign-ups), both off: so
+    // the guest is one of several looked at, and nothing is posted.
+    expect(offRun.json.summary).toMatchObject({ posted: 0 });
+    expect(offRun.json.summary.checked).toBe(offRun.json.summary.waiting);
     expect(await posted()).toEqual([]);
 
     const on = await call("POST", `${J}/gathering.going/state`, { body: { state: "on" } });
