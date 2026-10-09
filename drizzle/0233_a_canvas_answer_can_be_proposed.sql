@@ -1,4 +1,4 @@
--- 0223: anybody in a village may suggest how it answers a canvas block, and
+-- 0233: anybody in a village may suggest how it answers a canvas block, and
 -- the village keeps the human half of its Decision Matrix.
 --
 -- Plan section 2.3 ("Text-bearing objects", "Three pens"), Wave 3a of the

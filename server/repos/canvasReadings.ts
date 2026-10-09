@@ -1,6 +1,6 @@
 /**
  * THE CANVAS READINGS: every level a village has given a governance canvas
- * block, and the sentence that came with it (0222).
+ * block, and the sentence that came with it (0232).
  *
  * ALL of the SQL for `canvas_readings` lives here. The raw-SQL burn-down
  * register is at its ceiling, so the route module and server/index.ts hold

@@ -1,4 +1,4 @@
--- 0222: a village reads itself against the governance canvas, one block at a
+-- 0232: a village reads itself against the governance canvas, one block at a
 -- time, and every reading is kept.
 --
 -- Rye, 2026-09-24: every canvas block must be on record before a village's

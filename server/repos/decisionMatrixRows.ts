@@ -1,5 +1,5 @@
 /**
- * THE DECISION MATRIX'S HUMAN COLUMNS (0223).
+ * THE DECISION MATRIX'S HUMAN COLUMNS (0233).
  *
  * The platform writes the other half of the matrix on every read, from the
  * rules it enforces (shared/decisionMatrix.ts), and stores none of it. These

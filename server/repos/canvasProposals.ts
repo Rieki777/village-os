@@ -1,6 +1,6 @@
 /**
  * THE CANVAS SUGGESTIONS: what anybody in the village has proposed as an
- * answer to a canvas block, and what the pen did with it (0223).
+ * answer to a canvas block, and what the pen did with it (0233).
  *
  * ALL of the SQL for `canvas_proposals` lives here. The raw-SQL burn-down
  * register is at its ceiling, so the route module holds none, and this file is

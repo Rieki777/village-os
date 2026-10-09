@@ -1,5 +1,5 @@
 /**
- * THE GOVERNANCE CANVAS: reading it, and recording a reading (0222).
+ * THE GOVERNANCE CANVAS: reading it, and recording a reading (0232).
  *
  *   GET  /api/canvas            every member: each block's newest reading and its history
  *   POST /api/canvas/readings   the canvas pen: one new reading of one block
