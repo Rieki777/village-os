@@ -28,6 +28,7 @@ on:
   pull_request:
     paths:
       - "shared/modules.ts"
+      - "shared/guilds.ts"
       - "shared/capabilities.ts"
       - "shared/draftKinds.ts"
       - "server/lib/modules.ts"

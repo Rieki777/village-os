@@ -302,6 +302,7 @@ const RENDERED = {
   capabilities: "the Capabilities row",
   variableKeys: "the Variable keys row",
   apiPrefixes: "the API prefixes row",
+  guild: "the What a village plants row, by seed id from shared/guilds.ts",
   hyphaLinks: "the Hypha links row",
   legalReview: "the Legal review row",
   hyphaOnly: "the Display only row",
@@ -520,6 +521,7 @@ export async function collectFacts(root = ROOT) {
     capabilities: [...m.capabilities],
     variableKeys: [...m.variableKeys],
     apiPrefixes: [...m.apiPrefixes],
+    guild: m.guild ? [...m.guild] : null,
     hyphaLinks: m.hyphaLinks ? [...m.hyphaLinks] : [],
     legalReview: !!m.legalReview,
     hyphaOnly: !!m.hyphaOnly,
@@ -645,6 +647,7 @@ function moduleSection(m, f) {
     ["Capabilities it adds", codeList(m.capabilities, "none")],
     ["Variable keys it owns", codeList(m.variableKeys, "none")],
     ["API prefixes", codeList(m.apiPrefixes, "none")],
+    ["What a village plants", m.guild === null ? "not declared" : codeList(m.guild, "nothing beyond the platform's own layers")],
     ["Contract doc", docCell(m)],
   ];
   if (m.requiredBy.length) {

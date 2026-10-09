@@ -48,6 +48,13 @@ export const STAGE_RULES = [
     patterns: ["vendor record present", "support URL and support email both set"],
   },
   {
+    // Before data and legal, because a guild is what a founder consents to
+    // and every later stage reads it.
+    stage:
+      "Stage 2 (guild): the module does not fully declare what a village plants for it. Every seed needs a consequence line, an undo line, a live check and compost steps (docs/modules/GUILD_MANIFEST.md).",
+    patterns: ["guild problems for the selected module(s)"],
+  },
+  {
     stage:
       "Stage 3 (data and legal): a member-pii listing must register a member driver, so a deletion reaches outside.",
     patterns: ["member driver somewhere under server/"],

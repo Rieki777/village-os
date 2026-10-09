@@ -125,6 +125,7 @@ The contribution board: post work, claim it, submit it, consent to release recog
 | Capabilities it adds | `quest.consent` |
 | Variable keys it owns | `quest.consent_cap_mode`, `quest.consent_cap_multiplier`, `quest.require_submission_before_consent` |
 | API prefixes | `/api/quests`, `/api/game/quests` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [quests.md](modules/quests.md) |
 
 ### Gratitude
@@ -144,6 +145,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Capabilities it adds | none |
 | Variable keys it owns | `cycle.mode`, `cycle.settlement_mode`, `cycle.settlement_vote_days`, `feed.max_hearts_per_recipient_per_cycle`, `health.alert_change_pct` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
 ### Stages & Roles
@@ -163,6 +165,7 @@ The path from guest to co-creator: stages, capabilities, and appointed roles.
 | Capabilities it adds | `proposal.open`, `proposal.decide` |
 | Variable keys it owns | none |
 | API prefixes | `/api/game/progression`, `/api/roles` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [progression.md](modules/progression.md) |
 
 ### Profiles
@@ -182,6 +185,7 @@ Member identity: handles, journeys, balances, and each member's own ledger.
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/profile` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [profiles.md](modules/profiles.md) |
 
 ## Coordinate
@@ -207,6 +211,7 @@ The weekly call becomes assigned work, not content distribution: recordings in, 
 | Capabilities it adds | none |
 | Variable keys it owns | `assistant.synthesis_batch` |
 | API prefixes | `/api/recordings` |
+| What a village plants | `riverside-webhook-secret`, `anthropic-api-key` |
 | Contract doc | none yet |
 | Config it seeds | `youtubeChannelId`, `maxReadyQueue`, `forumCategory` |
 
@@ -227,6 +232,7 @@ An audience-aware registry of the village's tools: one place to find the chat, t
 | Capabilities it adds | none |
 | Variable keys it owns | `tools.click_tracking`, `tools.link_check_days` |
 | API prefixes | `/api/tools` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [tools-hub.md](modules/tools-hub.md) |
 | Config it seeds | `categories` |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
@@ -248,6 +254,7 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 | Capabilities it adds | `event.rsvp`, `event.manage` |
 | Variable keys it owns | `events.rsvp_enabled`, `events.upcoming_days`, `events.past_visible_days`, `calendar.year_anchor`, `calendar.hemisphere`, `calendar.cross_quarters` |
 | API prefixes | `/api/events`, `/api/admin/events` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [events.md](modules/events.md) |
 
 ## Recognise
@@ -273,6 +280,7 @@ Recognition of who people are and what they can do: self-declared skills, badges
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/badges` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [badges.md](modules/badges.md) |
 
 ## Host and earn
@@ -296,6 +304,7 @@ Accommodation on stay credits: rooms post credit (and optional USD) prices per a
 | Capabilities it adds | `stay.member_rate` |
 | Variable keys it owns | `stay.guest_booking_enabled`, `stay.autopay_default`, `stay.autopay_post_hour`, `stay.low_balance_warn_nights`, `stay.grace_nights`, `stay.max_purchase_nights`, `stay.credit_expiry_days`, `stay.credits_transferable`, `stay.work_exchange_tag`, `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd` |
 | API prefixes | `/api/stays` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | [stays.md](modules/stays.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 | Sells | `stay-credit`, and it is the only module allowed to sell that slug |
@@ -317,6 +326,7 @@ The village's shared tools and goods: donate an item and earn library credits (a
 | Capabilities it adds | none |
 | Variable keys it owns | `library.intake_award_pct`, `library.intake_member_cycle_cap`, `library.intake_dual_signoff_over`, `library.escrow_pct`, `library.usage_fee_pct`, `library.loan_days_default`, `library.dispute_deadline_days`, `library.intake_stall_days` |
 | API prefixes | `/api/library` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [material-library.md](modules/material-library.md) |
 | Config it seeds | `creditSaleEnabled` |
 
@@ -337,6 +347,7 @@ Buy the village's own platform tokens for fiat, out of a stocked treasury, buy-o
 | Capabilities it adds | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | Variable keys it owns | `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd`, `governance.weight_mode`, `governance.weight_token` |
 | API prefixes | `/api/exchange` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | [internal-exchange.md](modules/internal-exchange.md) |
 | Config it seeds | `tradingEnabled` |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
@@ -358,6 +369,7 @@ A member asks for tokens they hold to become something real off the platform: ca
 | Capabilities it adds | `redemption.confirm` |
 | Variable keys it owns | `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days`, `redemption.currencies`, `redemption.rate_source`, `redemption.rate_per_token`, `redemption.fee_pct`, `redemption.fee_fixed`, `redemption.min_amount`, `redemption.max_per_request`, `redemption.max_per_member_per_cycle`, `redemption.max_village_per_cycle`, `redemption.process_text` |
 | API prefixes | `/api/redemptions`, `/api/admin/redemptions` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [redemption.md](modules/redemption.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 
@@ -378,6 +390,7 @@ Every payment your project issues or receives, as products you define: applicati
 | Capabilities it adds | none |
 | Variable keys it owns | `payments.donation_max_usd` |
 | API prefixes | `/api/products` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | none yet |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 
@@ -402,6 +415,7 @@ The living org chart: circles, the roles that orbit them, who holds each seat, w
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
 | Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
 
@@ -422,6 +436,7 @@ A declared map of how money and resources are governed: who may spend what, with
 | Capabilities it adds | none |
 | Variable keys it owns | `map.public_structure`, `ledger.admin_mint_cosign_over` |
 | API prefixes | `/api/resources` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [how-resources-flow.md](modules/how-resources-flow.md) |
 | Config it seeds | `requestCategory`, `measuredVisibleTo`, `labels` |
 
@@ -442,6 +457,7 @@ Village conversations: threads by circle-of-life category, @mentions, thread fol
 | Capabilities it adds | `forum.post`, `forum.moderate` |
 | Variable keys it owns | `feed.category_slug` |
 | API prefixes | `/api/forum` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 | Switching it off is blocked by | `feed`, which requires it while non-off |
 | Config it seeds | `categories` |
@@ -463,6 +479,7 @@ The village's vital signs: per-lunation snapshots frozen at each cycle close, th
 | Capabilities it adds | `health.record` |
 | Variable keys it owns | `gratitude.base_budget` |
 | API prefixes | `/api/health` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [health-dashboard.md](modules/health-dashboard.md) |
 
 ### Journal
@@ -482,6 +499,7 @@ A private journal for each member: morning and evening practices, a weekly pulse
 | Capabilities it adds | none |
 | Variable keys it owns | `journal.pulse_floor` |
 | API prefixes | `/api/journal` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [journal.md](modules/journal.md) |
 
 ### Governance
@@ -501,6 +519,7 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | Capabilities it adds | `ballot.vote`, `member.vouch` |
 | Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method` |
 | API prefixes | `/api/governance`, `/api/admin/governance` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 
 ### Hypha Bridge
@@ -520,6 +539,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Capabilities it adds | none |
 | Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
+| What a village plants | `governance-hub-secret`, `basescan-api-key`, `hypha-voice-webhook-secret` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
@@ -541,6 +561,7 @@ An outside service reads your meetings and records, and suggests changes to your
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/saberra` |
+| What a village plants | `saberra-api-secret` |
 | Contract doc | [organisational-memory.md](modules/organisational-memory.md) |
 | Config it seeds | `apiUrl`, `dashboardUrl` |
 | Counterparty | Saberra LLC, https://saberra.com, support hello@saberra.com |
@@ -568,6 +589,7 @@ The everyday stream: microposts, events and announcements from one forum categor
 | Capabilities it adds | `feed.announce` |
 | Variable keys it owns | `feed.category_slug`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle` |
 | API prefixes | `/api/feed` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [gratitude-feed.md](modules/gratitude-feed.md) |
 
 ### Messages
@@ -587,6 +609,7 @@ Private conversations between members: one to one, or a named group carrying its
 | Capabilities it adds | `message.send` |
 | Variable keys it owns | `messaging.sends_per_minute`, `messaging.max_members` |
 | API prefixes | `/api/messages`, `/api/admin/messages` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [messaging.md](modules/messaging.md) |
 | Switching it off is blocked by | `introductions`, which requires it while non-off |
 
@@ -607,6 +630,7 @@ Federation with other villages running this platform: publish your needs and off
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/network` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 
 ### Crowdpool
@@ -626,6 +650,7 @@ The village's hub crowdpool, told in the living map's own language: a gold fundi
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/crowdpool` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [crowdpool.md](modules/crowdpool.md) |
 | Config it seeds | `villageCampaigns` |
 
@@ -646,6 +671,7 @@ Members say in plain words what they seek, confirm offers the village already kn
 | Capabilities it adds | none |
 | Variable keys it owns | `introductions.recipient_daily_cap`, `introductions.match_floor`, `introductions.opportunity_days`, `introductions.retention_days` |
 | API prefixes | `/api/intents` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 
 ## What depends on what

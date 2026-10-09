@@ -347,6 +347,18 @@ export interface ModuleDef {
    * the module's own tables (`server/lib/modules.ts`).
    */
   readiness?: () => Promise<ModuleReadiness>;
+  /**
+   * THE GUILD: every seed this module needs planted before it works, by id
+   * from the closed catalog in `shared/guilds.ts` (secrets, OAuth clients, DNS
+   * records, hosting variables). The setup game plants exactly these for a
+   * village that chooses this module, and nothing else.
+   *
+   * A module with nothing to plant says so with `[]`. Absent is refused:
+   * `guildProblems` fails it at intake and in `shared/guilds.test.ts`.
+   * Optional in the TYPE only so test fixtures stay small, the same rule as
+   * `group`. Every `vendor.secretKeys` slot must be planted by a seed here.
+   */
+  guild?: readonly string[];
   /** The named counterparty. Required at connected and managed, absent at included. */
   vendor?: ModuleVendor;
   /**
@@ -489,6 +501,7 @@ export const MODULES: ModuleDef[] = [
   //    honest about what exists; not disableable in v1. ──────────────────────
   {
     id: "quests",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -504,6 +517,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "gratitude",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -542,6 +556,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "progression",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -557,6 +572,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "profiles",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -575,6 +591,7 @@ export const MODULES: ModuleDef[] = [
   //    per-deployment admin act. ──────────────────────────────────────────────
   {
     id: "map",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -610,6 +627,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "resources",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -653,6 +671,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "forum",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -693,6 +712,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "feed",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -709,6 +729,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "messaging",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -730,6 +751,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "stays",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -764,6 +786,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "automation",
+    guild: ["riverside-webhook-secret", "anthropic-api-key"],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -789,6 +812,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "health",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -811,6 +835,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "library",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -854,6 +879,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "badges",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -871,6 +897,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "exchange",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -913,6 +940,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "redemption",
+    guild: [],
     tier: "included",
     // A redemption row names the member who asked, what they asked for, and
     // who decided. That is a named person's financial request.
@@ -973,6 +1001,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "commerce",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -993,6 +1022,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "network",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "connect",
@@ -1008,6 +1038,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "crowdpool",
+    guild: [],
     tier: "included",
     // The cache holds hub-public campaign content and the public names its
     // feed already shows. No member of THIS village appears in it at all.
@@ -1049,6 +1080,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "tools",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1087,6 +1119,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "events",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1140,6 +1173,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "introductions",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -1162,6 +1196,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "journal",
+    guild: [],
     tier: "included",
     // Entries are one person's words about their own life, and feedback names
     // its recipient. Nothing here is village content: every row is a member's.
@@ -1184,6 +1219,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "governance",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -1211,6 +1247,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "hypha",
+    guild: ["governance-hub-secret", "basescan-api-key", "hypha-voice-webhook-secret"],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
@@ -1306,6 +1343,7 @@ export const MODULES: ModuleDef[] = [
    */
   {
     id: "saberra",
+    guild: ["saberra-api-secret"],
     tier: "connected",
     dataClass: "village-content",
     group: "know-and-decide",

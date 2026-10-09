@@ -64,6 +64,7 @@ recommends    soft dependencies: the panel warns, never blocks
 capabilities  keys added to the ONE gate in shared/capabilities.ts
 variableKeys  the namespaced game variables your module owns
 apiPrefixes   the route prefixes mounted behind requireModule(id)
+guild         seed ids from shared/guilds.ts: everything a village plants first. [] if none
 ```
 
 And the optional ones that matter:
@@ -80,6 +81,13 @@ pricing       what it costs. Section 7
 withdrawn     set when it stops being offered. Section 8
 vendor        the named counterparty. Required at connected and managed, refused at included
 ```
+
+### The guild: what a village plants for you
+
+Every module names its guild, the secrets, OAuth clients, DNS records and hosting variables the
+setup game plants before the module works. The seeds and their consent text live in the closed
+catalog in `shared/guilds.ts`, and intake refuses a module without a guild. The full guide is
+`docs/modules/GUILD_MANIFEST.md`.
 
 ### Copy in this file is shipped copy
 

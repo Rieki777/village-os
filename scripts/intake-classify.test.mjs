@@ -80,6 +80,16 @@ check(
   STAGE("Stage 1"),
 );
 check(
+  "an incomplete guild blocks at stage 2",
+  classify({ listingText: violation("  guild problems for the selected module(s): 1"), listingExit: 1 }).stage,
+  STAGE("Stage 2"),
+);
+check(
+  "a clean guild line does not block",
+  classify({ listingText: `${CLEAN}\n  guild problems for the selected module(s): 0  OK`, listingExit: 0 }).blocked,
+  false,
+);
+check(
   "a missing member driver blocks at stage 3",
   classify({ listingText: violation("  member-pii listing registers a member driver somewhere under server/"), listingExit: 1 }).stage,
   STAGE("Stage 3"),
@@ -162,6 +172,7 @@ function STAGE(prefix) {
   const all = [
     "Stage 0 (intake): this repository could not report its own facts. A source file the framework depends on is missing.",
     "Stage 1 (diligence): the counterparty this listing needs is incomplete.",
+    "Stage 2 (guild): the module does not fully declare what a village plants for it. Every seed needs a consequence line, an undo line, a live check and compost steps (docs/modules/GUILD_MANIFEST.md).",
     "Stage 3 (data and legal): a member-pii listing must register a member driver, so a deletion reaches outside.",
     "Stage 5 (tier and commercials): the price, the licence slot and the pool rule are not consistent.",
     "Stage 6 (build and security review): the diff contains a pattern contract clause 13 refuses.",
