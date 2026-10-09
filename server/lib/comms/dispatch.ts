@@ -18,6 +18,8 @@
 import type { Pool } from "mysql2/promise";
 import type { CommsTrigger } from "../../../shared/comms/contracts";
 import type { PostOfficeDeps } from "./postOffice";
+// Event emails (lane C2): one function per gathering trigger.
+import { handleGatheringTrigger, isGatheringTrigger } from "./eventEmails";
 
 /** What the lanes that fill this in will reach. Grows one entry per lane. */
 export interface CommsDispatchDeps {
@@ -25,8 +27,13 @@ export interface CommsDispatchDeps {
   postOffice: PostOfficeDeps;
 }
 
-export function createCommsDispatcher(_deps: CommsDispatchDeps): (t: CommsTrigger) => Promise<void> {
+export function createCommsDispatcher(deps: CommsDispatchDeps): (t: CommsTrigger) => Promise<void> {
   return async (t: CommsTrigger): Promise<void> => {
+    // Event emails (lane C2): answers, the waitlist, and the gathering itself.
+    if (isGatheringTrigger(t)) {
+      await handleGatheringTrigger({ getPool: deps.getPool, postOffice: deps.postOffice }, t);
+      return;
+    }
     switch (t.type) {
       default:
         console.debug(`[comms] ${t.type} fired; nothing is listening to it yet`);

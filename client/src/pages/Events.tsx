@@ -32,6 +32,7 @@ import MonthView, { type GridMode } from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 import CalendarFeedCard from "@/components/calendar/CalendarFeedCard";
+import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
 import {
   DEFAULT_ANCHOR,
   addDays,
@@ -305,6 +306,8 @@ export default function Events() {
         </div>
         {g.description && <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{g.description}</p>}
         {rsvpButtons(g)}
+        {/* Village Comms: shown only to people who manage gatherings. */}
+        {(g.kind === "gathering" || g.kind === "festival") && <GatheringEmailSettings eventId={g.id} />}
       </li>
     );
   };
