@@ -232,10 +232,17 @@ export const POWERS: readonly PowerEntry[] = [
   {
     capability: "comms.manage",
     title: "The village's email",
-    surface: "Which automations run, what they say, and letters to the people who agreed to get them",
-    // The two routes the foundation built. The lanes adding the Comms screens
-    // add their routes here as they land.
-    routes: ["/api/admin/comms/status", "/api/admin/comms/run"],
+    surface: "Which automations run, what they say, letters to the people who agreed to get them, and the address book and sent mail behind them",
+    // The doors that matter most to somebody handing this over: the address
+    // book (and its export) and the words of what was sent, beside the controls.
+    routes: [
+      "/api/admin/comms/status",
+      "/api/admin/comms/run",
+      "/api/admin/comms/journeys",
+      "/api/admin/comms/people",
+      "/api/admin/comms/people-export",
+      "/api/admin/comms/messages/:id",
+    ],
   },
   {
     capability: "ballot.vote",
