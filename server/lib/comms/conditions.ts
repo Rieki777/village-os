@@ -34,8 +34,11 @@
  * server/repos/, never here.
  */
 import type { ConditionKey, StopKey } from "../../../shared/comms/contracts";
-import type { PermissionKind, PermissionState } from "../../../shared/comms/kinds";
+import { signedUpLate } from "../../../shared/comms/journeyPlan";
+import { PERMISSION_KINDS, type PermissionKind, type PermissionState } from "../../../shared/comms/kinds";
+import { goingCountOf, openTimePollOf, recapSentFor, rsvpStatusOf } from "../../repos/commsEventFacts";
 import type { GatheredFacts, JourneyContext } from "./journeyRegistry";
+import { isSuppressed } from "./suppressions";
 
 /** A person's answer about one kind of email, as the people lane reads it (`answerFor`). */
 export interface PermissionView {
@@ -105,3 +108,86 @@ export async function answerConditions<K extends RuleKey>(keys: readonly K[], ct
   }
   return out;
 }
+
+// ── The answers this lane gives ─────────────────────────────────────────────
+
+const HOUR = 3_600_000;
+
+/** The gathering occurrence the event provider found, or null for a journey about something else. */
+const eventOf = (ctx: ConditionContext) => ctx.facts.event ?? null;
+
+/**
+ * The gathering's time vote is open, so its emails wait (5.6). A one-off vote
+ * holds every step until it locks. A weekly vote never locks, so it holds an
+ * occurrence only while that occurrence can still move: once it is inside the
+ * vote's freeze window its time is settled and its emails go (5.10).
+ */
+registerCondition("time_still_being_voted", async (ctx) => {
+  const ev = eventOf(ctx);
+  if (!ev || !ev.found) return false;
+  const poll = await openTimePollOf(ctx.getPool(), ev.eventId);
+  if (!poll) return false;
+  if (poll.mode !== "weekly") return true;
+  if (!ev.startsAt) return true;
+  return ev.startsAt.getTime() > ctx.now.getTime() + Math.max(0, poll.freezeHours) * HOUR;
+});
+
+/** They said yes less than 36 hours before the start, so the day-before reminder is noise. */
+registerCondition("signed_up_within_36_hours", (ctx) => {
+  const start = ctx.facts.eventStart ?? eventOf(ctx)?.startsAt ?? null;
+  if (!start) return null;
+  return signedUpLate(ctx.enrollment.enrolledAt, start);
+});
+
+/** The host already sent this occurrence's recap. */
+registerCondition("recap_already_sent", async (ctx) => {
+  const ev = eventOf(ctx);
+  if (!ev) return null;
+  if (!ev.found) return false;
+  return recapSentFor(ctx.getPool(), ev.eventId, ev.occurrenceKey);
+});
+
+/** Nobody said they are going to this occurrence. */
+registerCondition("nobody_answered", async (ctx) => {
+  const ev = eventOf(ctx);
+  if (!ev) return null;
+  if (!ev.found) return true;
+  return (await goingCountOf(ctx.getPool(), ev.eventId, ev.occurrenceKey)) === 0;
+});
+
+/** The person's answer is no longer `going`: taken back, declined, or changed to maybe. */
+registerCondition("withdrew", async (ctx) => {
+  const ev = eventOf(ctx);
+  const personKey = ctx.facts.personKey;
+  if (!ev || !ev.found || !personKey) return null;
+  return (await rsvpStatusOf(ctx.getPool(), ev.eventId, ev.occurrenceKey, personKey)) !== "going";
+});
+
+/** The gathering, or this one occurrence of it, was called off. */
+registerCondition("gathering_cancelled", (ctx) => {
+  const ev = eventOf(ctx);
+  if (!ev) return null;
+  return ev.found && (ev.status === "cancelled" || ev.occurrenceCancelled);
+});
+
+/** The gathering was deleted, marked removed, or this occurrence taken out of its series. */
+registerCondition("gathering_removed", (ctx) => {
+  const ev = eventOf(ctx);
+  if (!ev) return null;
+  return !ev.found || ev.removed;
+});
+
+/** The person said no to this journey's kind of email (a stored no, never a derived one). */
+registerCondition("unsubscribed", async (ctx) => {
+  const kind = ctx.definition.emailKind;
+  if (!ctx.permission || !(PERMISSION_KINDS as readonly string[]).includes(kind)) return null;
+  const answer = await ctx.permission(kind as PermissionKind);
+  if (!answer) return null;
+  return answer.state === "no" && !answer.derived;
+});
+
+/** The address bounced, complained, or asked to stop everything. */
+registerCondition("suppressed", async (ctx) => {
+  if (!ctx.contact) return null;
+  return isSuppressed(ctx.getPool(), ctx.contact.email);
+});

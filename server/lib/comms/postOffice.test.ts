@@ -855,7 +855,8 @@ describe.skipIf(!configured)("people on journeys", () => {
     expect(await touch(deps, "event:ev-4")).toBe(1);
     expect((await enrollmentById(pool, a.enrollmentId))!.nextCheckAt!).toBeLessThan(later);
     expect(await touch(deps, "event:ev-40")).toBe(0);
-    expect(await tick(deps)).toEqual({ checked: 0, posted: 0, stopped: 0 });
+    // The module is off, how every module ships, so the tick reads nothing (journeys.db.test.ts drives it on).
+    expect(await tick({ ...deps, postOffice: office(), lifecycle: () => "off" })).toMatchObject({ checked: 0, posted: 0, stopped: 0 });
   });
 
   it("refuses a malformed enrollment as a caller's bug", async () => {
