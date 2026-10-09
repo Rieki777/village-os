@@ -38,6 +38,7 @@ import { register as registerCommsSettings, type CommsSettingsDeps } from "./com
 import { registerAdmin as registerPeopleAdmin } from "./commsPeople";
 import { register as registerWords } from "./commsWords";
 import { register as registerSentMailRoutes } from "./commsSent";
+import { runTimePollsNow, timePollDepsOf } from "./commsPolls";
 
 type Deps = Pick<
   AppDeps,
@@ -58,8 +59,8 @@ export function register(app: Express, deps: Deps): void {
   const runners: Record<CommsJob, () => Promise<Record<string, number>>> = {
     drain: () => drain(commsPostOffice),
     journeys: () => tick({ getPool }),
-    // The time vote lane (C4) supplies the real job; until then it has nothing to lock.
-    polls: async () => ({ locked: 0, applied: 0 }),
+    // The live time vote's job (server/routes/commsPolls.ts registers it on the scheduler).
+    polls: () => runTimePollsNow(timePollDepsOf(deps)),
   };
 
   // The post office's drain on the scheduler, beside the button that runs it now.

@@ -79,6 +79,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes opened, and you are on the roll for each one.",
     celebrate: false,
   },
+  /*
+   * Village Comms 5.10: a host asked you to pick the times you can make for
+   * a gathering. Decisions, because the time with the most picks becomes the
+   * gathering's time.
+   */
+  time_poll_open: {
+    group: "decisions",
+    blurb: "Pick the times you can make. The time with the most picks becomes the gathering's time.",
+    many: "{n} gatherings are choosing a time.",
+    celebrate: false,
+  },
   ballot_closing: {
     group: "decisions",
     blurb: "The window is closing and your vote is still owed. Quorum is measured against everyone on the roll.",

@@ -5,7 +5,8 @@
  *
  * STUBS FROM THE FOUNDATION LANE, each answering 501 with a sentence. The
  * event email lane (C2), the guests and recaps lane (C3) and the time vote
- * lane (C4) fill them in, here.
+ * lane (C4) fill them in, here. The time vote's routes live in
+ * server/routes/commsPolls.ts and register from here, behind the same gate.
  *
  * ── WHERE THIS IS REGISTERED, AND WHY IT MUST STAY THERE ───────────────────
  *
@@ -26,8 +27,9 @@
  */
 import type { Express, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
+import { register as registerTimePolls, type PollRouteDeps } from "./commsPolls";
 
-type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp">;
+type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & PollRouteDeps;
 
 const GUEST_PER_IP = 20;
 const GUEST_WINDOW_MS = 10 * 60 * 1000;
@@ -46,11 +48,8 @@ export function register(app: Express, deps: Deps): void {
     }
     notYet(res, "Saying yes without an account");
   });
-  app.get("/api/events/:id/time-poll", (_req, res) => notYet(res, "Voting on a time"));
-  app.post("/api/events/:id/time-poll", async (req, res) => {
-    if (!(await authedUser(req))) return signedOut(res);
-    notYet(res, "Voting on a time");
-  });
+  // The live time vote (C4, 5.10): server/routes/commsPolls.ts.
+  registerTimePolls(app, deps);
   app.get("/api/events/:id/recap", (_req, res) => notYet(res, "The recap"));
   app.post("/api/events/:id/recap", async (req, res) => {
     if (!(await authedUser(req))) return signedOut(res);
