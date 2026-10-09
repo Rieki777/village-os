@@ -548,6 +548,12 @@ export interface RsvpRow {
   at: string;
   /** Which evening, for a recurring gathering; "" for a one-off. */
   occurrenceKey: string;
+  /**
+   * True for somebody with no account (`guest:<contactId>`, shared/comms/kinds.ts).
+   * Their name is the one they gave, read from `comms_contacts`; their address
+   * never leaves the address book.
+   */
+  guest: boolean;
 }
 
 /**
@@ -561,17 +567,24 @@ export interface RsvpRow {
  * Emails are deliberately absent. An organiser needs to know who is coming;
  * a downloadable address list is a different feature with its own consent
  * question.
+ *
+ * A GUEST (`guest:<contactId>`, the comms build spec 5.8) has no `users` row,
+ * so their name comes from the address book, and the row says `guest` so the
+ * list can mark them. The join keys on the contact's primary key: the prefix
+ * is six characters, and the id is what follows it.
  */
 export async function listRsvps(pool: Pool, eventId: string, occurrenceKey?: string): Promise<RsvpRow[]> {
   const params: any[] = [eventId];
   let occ = "";
   if (occurrenceKey !== undefined) { occ = " AND r.occurrence_key = ?"; params.push(occurrenceKey); }
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.user_id, r.status, r.created_at, r.occurrence_key, u.name
+    `SELECT r.user_id, r.status, r.created_at, r.occurrence_key, COALESCE(u.name, c.name) AS name,
+            (r.user_id LIKE 'guest:%') AS is_guest
        FROM event_rsvps r
        LEFT JOIN users u ON u.id = r.user_id
+       LEFT JOIN comms_contacts c ON r.user_id LIKE 'guest:%' AND c.id = SUBSTRING(r.user_id, 7)
       WHERE r.event_id = ?${occ}
-      ORDER BY r.occurrence_key, FIELD(r.status,'going','maybe','declined'), u.name IS NULL, u.name`,
+      ORDER BY r.occurrence_key, FIELD(r.status,'going','maybe','declined'), COALESCE(u.name, c.name) IS NULL, COALESCE(u.name, c.name)`,
     params,
   );
   return rows.map((r) => ({
@@ -580,6 +593,7 @@ export async function listRsvps(pool: Pool, eventId: string, occurrenceKey?: str
     status: String(r.status) as RsvpStatus,
     at: iso(r.created_at),
     occurrenceKey: String(r.occurrence_key ?? ""),
+    guest: Number(r.is_guest) === 1,
   }));
 }
 

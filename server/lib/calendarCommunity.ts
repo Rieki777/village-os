@@ -26,6 +26,7 @@ import { cleanRecurrence, iso } from "./calendar";
 import { chargeForPlace, refundPlace } from "./eventSeats";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "./commsSink";
+import { isGuestKey } from "../../shared/comms/kinds";
 
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -52,12 +53,18 @@ export function setPromotionSink(sink: PromotionSink | null): void {
  *
  * Comms hears every promotion whether or not the notification sink is set,
  * which is why its line comes before the early return.
+ *
+ * A GUEST IS NOT HANDED TO THE NOTIFICATION SINK. A guest's key
+ * (`guest:<contactId>`, the comms build spec 5.8) names no account, so an
+ * in-app notification for it would be a row nobody can ever read; the comms
+ * email that `waitlist_promoted` sends is how a guest hears.
  */
 export async function firePromotionSink(promoted: PromotedEntry[]): Promise<void> {
   for (const p of promoted) commsSink.fire({ type: "waitlist_promoted", eventId: p.eventId, occurrenceKey: p.occurrenceKey, personKey: p.userId });
-  if (!promoted.length || !promotionSink) return;
+  const members = promoted.filter((p) => !isGuestKey(p.userId));
+  if (!members.length || !promotionSink) return;
   try {
-    await promotionSink(promoted);
+    await promotionSink(members);
   } catch (e) {
     console.error("[waitlist] promotion sink failed (promotion stands)", e);
   }

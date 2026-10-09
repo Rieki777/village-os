@@ -56,18 +56,22 @@ export const GUEST_REFUSALS = [
 ] as const;
 export type GuestRefusal = (typeof GUEST_REFUSALS)[number];
 
-/** What each refusal says to the person at the door. Keyed by the union, so a new reason is a compile error here. */
+/**
+ * What each refusal says to the person at the door. Keyed by the union, so a
+ * new reason is a compile error here. Each one is a Signal in the copy key's
+ * R47 voice: what is blocked, then the fix, and never how it was checked.
+ */
 export const GUEST_REFUSAL_WORDS: Record<GuestRefusal, string> = {
-  not_found: "We could not find that gathering.",
-  not_a_gathering: "This is not something you can say you are coming to.",
-  comms_closed: "This village is not taking guests by email yet.",
-  calendar_closed: "This calendar is not open to visitors.",
-  rsvp_closed: "This village is not taking answers to its gatherings right now.",
-  not_public: "This gathering is for members of the village.",
-  not_open: "This gathering is not taking answers.",
-  started: "This gathering has already begun.",
-  priced: "A place at this gathering has a price, so it needs an account.",
-  guests_off: "The host is keeping this one to members of the village.",
+  not_found: "This gathering isn't on the calendar. Pick another one there.",
+  not_a_gathering: "This isn't a gathering. Pick one from the calendar.",
+  comms_closed: "Guests can't sign up here yet. Ask a member to bring you.",
+  calendar_closed: "This calendar is for members. Ask a member to bring you.",
+  rsvp_closed: "Answers are closed for now. Check back soon.",
+  not_public: "This one is for members. Ask a member to bring you.",
+  not_open: "This gathering isn't taking answers. Pick another on the calendar.",
+  started: "This one has already begun. Pick another on the calendar.",
+  priced: "This one has a seat price. Create an account to come.",
+  guests_off: "This one is for members. Ask a member to bring you.",
 };
 
 /** The facts `guestRefusal` reads, gathered by whoever holds them. */
@@ -127,8 +131,7 @@ export function guestNameProblem(name: unknown): string | null {
 }
 
 /** What the request answers, whatever happened: a stranger learns nothing about an address from it. */
-export const GUEST_CHECK_YOUR_EMAIL =
-  "Check your email. We sent you a link, and your place is saved when you press it. The link works for two days.";
+export const GUEST_CHECK_YOUR_EMAIL = "Check your email. Press the link inside to save your place. It works for two days.";
 
 /** What the gathering's card asks a visitor (GET /api/events/:id/guest-rsvp). */
 export interface GuestDoor {

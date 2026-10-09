@@ -58,11 +58,11 @@ describe("when a recap may go", () => {
   });
 
   it("refuses a recap already sent, an empty one, a switched-off module, an early one and a late one", () => {
-    expect(recapSendRefusal(facts({ state: "sent" }))).toContain("already gone out");
+    expect(recapSendRefusal(facts({ state: "sent" }))).toBe("Already sent.");
     expect(recapSendRefusal(facts({ bodyMd: "  \n " }))).toContain("Write the recap first");
     expect(recapSendRefusal(facts({ state: null, bodyMd: "" }))).toContain("Write the recap first");
-    expect(recapSendRefusal(facts({ commsLifecycle: "off" }))).toContain("switched off");
-    expect(recapSendRefusal(facts({ startsAt: T + H, endsAt: T + 2 * H }))).toContain("once the gathering has begun");
+    expect(recapSendRefusal(facts({ commsLifecycle: "off" }))).toContain("Turn on Village Comms");
+    expect(recapSendRefusal(facts({ startsAt: T + H, endsAt: T + 2 * H }))).toBe("Opens once the gathering begins.");
     expect(recapSendRefusal(facts({ now: T - H + 3 * 86_400_000 + 1 }))).toContain("has passed");
   });
 

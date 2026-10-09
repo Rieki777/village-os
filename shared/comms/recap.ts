@@ -85,11 +85,11 @@ export interface RecapSendFacts {
 
 /** Why the recap cannot go now, in words for the host, or null when it can. */
 export function recapSendRefusal(f: RecapSendFacts): string | null {
-  if (f.state === "sent") return "This recap has already gone out.";
+  if (f.state === "sent") return "Already sent.";
   if (!f.bodyMd.trim()) return "Write the recap first.";
-  if (f.commsLifecycle === "off") return "Village Comms is switched off, so recaps cannot be sent. Turn it on in Admin.";
-  if (f.now < f.startsAt) return "You can send the recap once the gathering has begun.";
-  if (f.now > recapWindowClosesAt(f)) return "The time for sending this recap has passed.";
+  if (f.commsLifecycle === "off") return "Village email is off. Turn on Village Comms to send recaps.";
+  if (f.now < f.startsAt) return "Opens once the gathering begins.";
+  if (f.now > recapWindowClosesAt(f)) return "The time to send this recap has passed.";
   return null;
 }
 
