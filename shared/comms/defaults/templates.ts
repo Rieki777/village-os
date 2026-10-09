@@ -4,6 +4,11 @@
  * These are the words every village is born with, so they are written for all
  * of them at once:
  *
+ *   - THE NEXT STEP FIRST (R47, docs/COPY_STYLE_KEY.md "the four voices",
+ *     approved 2026-10-05). After the greeting, an email names the one thing
+ *     to do next. It says what happens, never how the village does it (no
+ *     servers, admins, records, or how a thing is checked). Warmth goes where a
+ *     reply reaches a person, and an email ends with at most one Lore line.
  *   - WARM, DIRECT, SPECIFIC. Second person to the reader, "we" for the
  *     village, contractions where a person would use them, short paragraphs.
  *   - ONE CLEAR BUTTON per email: a line that is only a link becomes the button,
@@ -72,6 +77,19 @@ const words = (key: string, subject: string, preheader: string | null, ...paragr
   layout: "plain",
 });
 
+/**
+ * Words rewritten in the R47 copy pass (docs/COPY_STYLE_KEY.md, "the four
+ * voices", approved 2026-10-05), at version 2. Each one leads with its one next
+ * step, says what happens and never how it is done, keeps a person's warmth for
+ * the lines a reply can answer, and ends with at most one Lore line. Raising the
+ * version is what shows a village "an improved version is available" on its
+ * Words screen; nothing changes a village's own copy by itself.
+ */
+const revised = (key: string, subject: string, preheader: string | null, ...paragraphs: string[]): DefaultTemplate => ({
+  ...words(key, subject, preheader, ...paragraphs),
+  version: 2,
+});
+
 const list = (...items: string[]): string => items.map((item) => `- ${item}`).join("\n");
 
 const HI = "Hi {{person.firstName}},";
@@ -92,32 +110,38 @@ const SAVE_A_SEAT = "[Save me a seat]({{nextGathering.rsvpLink}})";
 const NEXT_GATHERING = "Our next public gathering is {{nextGathering.title}}, {{nextGathering.when}}. You're welcome to come.";
 const EVERY_GATHERING = "You'll find every gathering on [the calendar]({{village.url}}/events).";
 const PATH_PAGE = "[Read about the {{path.name}} path]({{path.pageUrl}})";
+/** The investor path's closing line, kept word for word until its words are reviewed (5.11). */
 const LAST_EMAIL =
   "It's been three weeks since you chose the {{path.name}} path, and this is the last email in the series. From here, a person takes over.";
+/** Every other path's closing line, after the next step it leads with. */
+const LAST_OF_SERIES = "This is the last email in the series. Three weeks on the {{path.name}} path, and from here a person takes over.";
+/** The one Lore line the platform's words carry, on the emails that show the Gratitude wall. */
+const LORE_GRATITUDE = "Naming what is good is how a village grows more of it.";
+const GRATITUDE_WALL = "[Read the Gratitude wall]({{village.url}}/gratitude)";
 
 // ── The words ───────────────────────────────────────────────────────────────
 
 const GATHERINGS: DefaultTemplate[] = [
-  words(
+  revised(
     "gathering.confirm",
     "You're coming to {{gathering.title}}",
-    "{{gathering.when}}. The details are inside, and so is how to change your answer.",
+    "{{gathering.when}}. Your seat is saved.",
     HI,
-    "You said yes to {{gathering.title}}, so your place is saved.",
+    "Your seat at {{gathering.title}} is saved. Next: put it in your calendar with the file attached.",
     DETAILS,
-    "The file attached puts it in your calendar.",
     "You can also add it to {{gathering.calendarLinks}}.",
     SEE_GATHERING,
-    "If your plans change, [tell us you can't make it]({{gathering.cantMakeIt}}) and we'll free your seat for someone else.",
+    "If your plans change, [tell us you can't make it]({{gathering.cantMakeIt}}) and your seat goes to someone else.",
   ),
-  words(
+  revised(
     "gathering.guest_confirm",
     "Confirm your place at {{gathering.title}}",
     "One click and you're on the list.",
     HI,
-    "You asked to come to {{gathering.title}}. Press the button to confirm and we'll save you a seat. If it's full by then, you'll go on the waitlist and we'll write the moment a seat opens.",
+    "Press the button to confirm your seat at {{gathering.title}}.",
     DETAILS,
     "[Confirm my place]({{links.confirm}})",
+    "If it's full by then, you go on the waitlist, and we'll write the moment a seat opens.",
     "The link works for two days. If you didn't ask for this, ignore this email and nothing happens.",
   ),
   words(
@@ -140,35 +164,33 @@ const GATHERINGS: DefaultTemplate[] = [
     SEE_GATHERING,
     "If you can't make it after all, [tell us]({{gathering.cantMakeIt}}) so nobody waits for you.",
   ),
-  words(
+  revised(
     "gathering.changed",
     "Changed: {{gathering.title}}",
-    "Here's the new plan. Your place is still saved.",
+    "Here's the new plan. Your seat is still saved.",
     HI,
-    "The plan for {{gathering.title}} has changed. You said you're coming, so here's where things stand now:",
+    "{{gathering.title}} has a new plan, and your seat is still saved. Here it is:",
     DETAILS,
-    "Your place is still saved, and the file attached updates your calendar.",
+    "The file attached updates your calendar.",
     SEE_GATHERING,
-    "If the new plan doesn't work for you, [tell us you can't make it]({{gathering.cantMakeIt}}) and we'll free your seat for someone else.",
+    "If the new plan doesn't work for you, [tell us you can't make it]({{gathering.cantMakeIt}}) and your seat goes to someone else.",
   ),
-  words(
+  revised(
     "gathering.cancelled",
     "Cancelled: {{gathering.title}}",
     "We're sorry. You don't need to do anything.",
     HI,
-    "We've had to cancel {{gathering.title}}, which was planned for {{gathering.when}}. We're sorry to call it off.",
-    "You don't need to do anything. The file attached takes it out of your calendar.",
-    "If it gets a new date, you'll find it on the calendar.",
+    "{{gathering.title}}, planned for {{gathering.when}}, is cancelled. We're sorry to call it off.",
+    "You don't need to do anything: the file attached takes it out of your calendar. If it gets a new date, you'll find it on the calendar.",
     "[See what's coming up]({{village.url}}/events)",
   ),
-  words(
+  revised(
     "gathering.waitlisted",
     "You're on the waitlist for {{gathering.title}}",
     "We'll write the moment a seat opens.",
     HI,
-    "{{gathering.title}} is full right now, so we've put you on the waitlist.",
+    "{{gathering.title}} is full right now, so you're on the waitlist. You don't need to check back: the moment a seat is yours, we'll email you.",
     DETAILS,
-    "When someone gives their seat back, it goes to the next person on the list, and we'll email you the moment it's yours. You don't need to check back.",
     SEE_GATHERING,
   ),
   words(
@@ -181,14 +203,13 @@ const GATHERINGS: DefaultTemplate[] = [
     SEE_GATHERING,
     "If you can't make it any more, [give the seat back]({{gathering.cantMakeIt}}) and it goes to the next person waiting.",
   ),
-  words(
+  revised(
     "gathering.host_nudge",
     "Write the recap for {{gathering.title}}",
     "A few lines while it's fresh. Everyone who said yes will hear from you.",
     HI,
-    "{{gathering.title}} has ended. Thank you for hosting it.",
-    "While it's fresh, write a short recap: what happened, anything people should know, and the recording if there is one. Everyone who said yes gets it, and you can add a note just for the people who missed it.",
-    "Mark who came first if you can. Then the right version reaches the right people.",
+    "Thank you for hosting {{gathering.title}}. Next: write the recap while it's fresh.",
+    "A few lines are plenty: what happened, anything people should know, and the recording if there is one. Tick who came first, and the people who missed it get their own version.",
     "[Write the recap]({{gathering.recapLink}})",
   ),
   words(
@@ -221,15 +242,14 @@ const GATHERINGS: DefaultTemplate[] = [
 ];
 
 const TIME_VOTES: DefaultTemplate[] = [
-  words(
+  revised(
     "poll.invite",
     "Help choose a time for {{gathering.title}}",
     "Pick every time you could make. It takes a minute.",
     HI,
-    "We're choosing a time for {{gathering.title}}, and we'd like your say.",
-    "Pick every time you could make:",
+    "Pick every time you could make for {{gathering.title}}:",
     "{{poll.options}}",
-    "The time with the most votes wins. While the vote is open, the gathering's time follows whichever time is ahead, so it may move as people vote.",
+    "The time with the most votes wins. Until the vote closes, the gathering shows whichever time is ahead, so it may move as people vote.",
     "Right now the leader is {{poll.leading}}.",
     "You can change your answers until the vote closes on {{poll.closesAt}}.",
     "[See the vote]({{gathering.url}})",
@@ -260,53 +280,53 @@ const TIME_VOTES: DefaultTemplate[] = [
 
 /** The resident path: somebody thinking about living here. First step: a housing request or a visit. */
 const RESIDENT: DefaultTemplate[] = [
-  words(
+  revised(
     "path.resident.welcome",
     "Welcome to the {{path.name}} path",
-    "What happens next, and who you'll hear from.",
+    "Start with the path page. Here's what happens next.",
     HI,
-    "You chose the {{path.name}} path with {{village.name}}, which tells us you're thinking about living here. We're glad you're looking.",
-    "Here's what happens next. Over the next three weeks we'll send a few short emails: a first step to take, a gathering where you can meet people, and a look at daily life here. After that, {{path.contactName}} will write to you personally.",
-    "Start with the path page. It explains how living here works and what it asks of you.",
+    "Start with the {{path.name}} path page. It shows how living here works and what it asks of you.",
     PATH_PAGE,
+    "You chose this path with {{village.name}}, so you're thinking about living here. We're glad you're looking.",
+    "What happens next: over the next three weeks we'll send a few short emails with a first step, a gathering where you can meet people, and a look at daily life here. Then {{path.contactName}} writes to you personally.",
   ),
-  words(
+  revised(
     "path.resident.first_step",
     "Your first step toward living here",
     "Tell us what you're looking for. A person reads it and writes back.",
     HI,
-    "The best first step is to tell us what you're looking for: when you'd like to come, for how long, and who'd come with you. It helps us answer honestly about what's possible, and it commits you to nothing.",
+    "Your next step: tell us what you're looking for. When you'd like to come, for how long, and who'd come with you. It commits you to nothing.",
     "[Tell us what you're looking for]({{path.nextStepLink}})",
-    "If you'd like to see the place first, [ask about a visit]({{village.url}}/visit). Either way, a person reads what you send and writes back.",
+    "To see the place first, [ask about a visit]({{village.url}}/visit). Either way, a person reads what you send and writes back.",
   ),
-  words(
+  revised(
     "path.resident.meet_us",
     "Come and meet us",
-    "The best way to know a place is to spend time in it.",
+    "Save a seat at the next gathering.",
     HI,
-    "Pages and emails only go so far. The best way to know whether {{village.name}} is right for you is to meet the people who live here.",
+    "Your next step: come and meet the people who live here. It's the best way to know whether {{village.name}} is right for you.",
     NEXT_GATHERING,
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  words(
+  revised(
     "path.resident.stories",
     "What daily life here looks like",
     "People here thank each other in public. It's the clearest picture we have.",
     HI,
-    "Ten days in, here's a look at daily life in {{village.name}}.",
-    "People here thank each other in public for the work they do: a fence mended, a meal cooked, a meeting run well. It all goes on the gratitude wall, and it's the clearest picture we have of what living here is like.",
-    "[Read the gratitude wall]({{village.url}}/gratitude)",
+    "Spend ten minutes on the Gratitude wall. People here thank each other there in public for the work they do: a fence mended, a meal cooked, a meeting run well. It's the clearest picture we have of daily life in {{village.name}}.",
+    GRATITUDE_WALL,
     "If a question comes up while you read, reply to this email. A person will answer.",
+    LORE_GRATITUDE,
   ),
-  words(
+  revised(
     "path.resident.check_in",
     "Three weeks on the {{path.name}} path",
     "From here, a person takes over.",
     HI,
-    LAST_EMAIL,
-    "{{path.contactName}} will write to you in the next few days. If you'd like to start the conversation yourself, reply and tell us where you're at: still curious, ready to visit, or ready to talk about moving.",
+    "{{path.contactName}} will write to you in the next few days. To start sooner, reply and tell us where you're at: still curious, ready to visit, or ready to talk about moving.",
     "[See the {{path.name}} path]({{path.pageUrl}})",
+    LAST_OF_SERIES,
   ),
 ];
 
@@ -370,144 +390,145 @@ const INVESTOR: DefaultTemplate[] = [
 
 /** The steward path: somebody who wants to help run the village. First step: a hand raised for a seat. */
 const STEWARD: DefaultTemplate[] = [
-  words(
+  revised(
     "path.steward.welcome",
     "Welcome to the {{path.name}} path",
-    "What holding a seat here involves, and what happens next.",
+    "Start with the path page. Here's what happens next.",
     HI,
-    "You chose the {{path.name}} path with {{village.name}}, which tells us you'd like to help run the place. Thank you. That's how a village keeps going.",
-    "Stewards hold seats: real responsibilities, like keeping the water running or the calendar full, held for a term and then handed on.",
-    "Over the next three weeks we'll send a few short emails: how to raise your hand for a seat, a gathering where you can meet the people you'd work with, and what holding a seat looks like. After that, {{path.contactName}} will write to you personally.",
+    "Start with the {{path.name}} path page. It shows what holding a seat here involves.",
     PATH_PAGE,
+    "You chose this path with {{village.name}}, so you'd like to help run the place. Thank you: that's how a village keeps going.",
+    "Stewards hold seats: real responsibilities, like keeping the water running or the calendar full, held for a term and then handed on.",
+    "What happens next: over the next three weeks we'll send a few short emails on raising your hand for a seat, meeting the people you'd work with, and what the work looks like. Then {{path.contactName}} writes to you personally.",
   ),
-  words(
+  revised(
     "path.steward.first_step",
     "Raise your hand for a seat",
     "Find a seat that fits and tell us you're interested.",
     HI,
-    "The first step is to find a seat that fits you and raise your hand for it. Raising your hand tells the village you're interested, and what follows is a conversation.",
-    "Each seat says what it's responsible for and how long the term runs, so you can see what you'd be taking on before you ask.",
+    "Your next step: find a seat that fits you and raise your hand for it. That says you're interested, and what follows is a conversation.",
+    "Each seat says what it's responsible for and how long the term runs, so you know what you'd take on before you ask.",
     "[Find a seat]({{path.nextStepLink}})",
     "If none of them fit yet, reply and tell us what you're good at. New seats open as the village grows.",
   ),
-  words(
+  revised(
     "path.steward.meet_us",
     "Meet the people you'd work with",
-    "The next gathering is a good place to start.",
+    "Save a seat at the next gathering.",
     HI,
-    "Stewarding is work you do with other people, so it helps to meet them first.",
-    "Our next public gathering is {{nextGathering.title}}, {{nextGathering.when}}. Come and say hello, and ask the people who hold seats now what the work is like.",
+    "Your next step: come and meet the people you'd work with. Stewarding is work you do together, so it helps to meet first.",
+    "Our next public gathering is {{nextGathering.title}}, {{nextGathering.when}}. Say hello, and ask the people who hold seats now what the work is like.",
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  words(
+  revised(
     "path.steward.stories",
     "What holding a seat looks like",
     "The work is public, and so is the thanks.",
     HI,
-    "Every seat in {{village.name}} is written down with what it's responsible for, so you can see the shape of the work before you take any of it on.",
-    "When someone does that work, people thank them in public on the gratitude wall. Ten minutes there tells you more about stewarding here than any description could.",
-    "[Read the gratitude wall]({{village.url}}/gratitude)",
+    "Spend ten minutes on the Gratitude wall. When someone does a seat's work, people thank them there in public, and it shows the shape of stewarding here better than any description.",
+    GRATITUDE_WALL,
+    LORE_GRATITUDE,
   ),
-  words(
+  revised(
     "path.steward.check_in",
     "Three weeks on the {{path.name}} path",
     "From here, a person takes over.",
     HI,
-    LAST_EMAIL,
-    "{{path.contactName}} will write to you in the next few days. If you'd like to start the conversation yourself, reply with the seat you have your eye on, or with what you'd like to help with.",
+    "{{path.contactName}} will write to you in the next few days. To start sooner, reply with the seat you have your eye on, or with what you'd like to help with.",
     "[See the seats]({{path.nextStepLink}})",
+    LAST_OF_SERIES,
   ),
 ];
 
 /** The prosperity creator path: somebody with work to bring. First step: a proposal. */
 const PROSPERITY: DefaultTemplate[] = [
-  words(
+  revised(
     "path.prosperity-creator.welcome",
     "Welcome to the {{path.name}} path",
-    "How bringing your work here goes, and what happens next.",
+    "Start with the path page. Here's what happens next.",
     HI,
-    "You chose the {{path.name}} path with {{village.name}}, which tells us you have something to bring: a business, a service, a craft or an idea. We'd like to hear it.",
-    "Over the next three weeks we'll send a few short emails: how to send us a proposal, a gathering where you can meet people, and a look at what others already do here. After that, {{path.contactName}} will write to you personally.",
+    "Start with the {{path.name}} path page. It shows how bringing your work here goes.",
     PATH_PAGE,
+    "You chose this path with {{village.name}}, so you have something to bring: a business, a service, a craft or an idea. We'd like to hear it.",
+    "What happens next: over the next three weeks we'll send a few short emails on sending us a proposal, a gathering where you can meet people, and what others already do here. Then {{path.contactName}} writes to you personally.",
   ),
-  words(
+  revised(
     "path.prosperity-creator.first_step",
     "Tell us what you'd like to bring",
     "A short proposal is the first step.",
     HI,
-    "The first step is a short proposal: what you'd like to bring, what you'd need from the village, and what you'd like in return. A few honest paragraphs are plenty.",
+    "Your next step: send a short proposal. What you'd like to bring, what you'd need from the village, and what you'd like in return. A few honest paragraphs are plenty.",
     "[Send a proposal]({{path.nextStepLink}})",
     "A person reads every proposal and writes back.",
   ),
-  words(
+  revised(
     "path.prosperity-creator.meet_us",
     "Come and meet us",
-    "A gathering is the quickest way to find out who you'd be working with.",
+    "Save a seat at the next gathering.",
     HI,
-    "The quickest way to find out whether your work fits {{village.name}} is to meet the people who'd use it, share it or work beside you.",
+    "Your next step: come and meet the people who'd use your work, share it or work beside you. It's the quickest way to know whether it fits {{village.name}}.",
     NEXT_GATHERING,
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  words(
+  revised(
     "path.prosperity-creator.stories",
     "What people already do here",
-    "The gratitude wall shows the work, and who it helped.",
+    "The Gratitude wall shows the work, and who it helped.",
     HI,
-    "Ten days in, here's a look at what people already bring to {{village.name}}.",
-    "When someone's work helps the village, people say so in public on the gratitude wall. It shows what's needed here, what's valued, and who you might work with.",
-    "[Read the gratitude wall]({{village.url}}/gratitude)",
+    "Spend ten minutes on the Gratitude wall. When someone's work helps the village, people say so there in public. It shows what's needed here, what's valued, and who you might work with.",
+    GRATITUDE_WALL,
     "If it sparks an idea, reply to this email. A person will answer.",
+    LORE_GRATITUDE,
   ),
-  words(
+  revised(
     "path.prosperity-creator.check_in",
     "Three weeks on the {{path.name}} path",
     "From here, a person takes over.",
     HI,
-    LAST_EMAIL,
-    "{{path.contactName}} will write to you in the next few days. If you'd like to start the conversation yourself, reply and tell us what you're working on and what you'd need to bring it here.",
+    "{{path.contactName}} will write to you in the next few days. To start sooner, reply and tell us what you're working on and what you'd need to bring it here.",
     PATH_PAGE,
+    LAST_OF_SERIES,
   ),
 ];
 
 const MEMBERS: DefaultTemplate[] = [
-  words(
+  revised(
     "member.welcome.day0",
     "Welcome to {{village.name}}",
-    "Your account is ready. Here's where to start.",
+    "You're in. First step: finish your profile.",
     HI,
-    "Welcome to {{village.name}}. Your account is ready, and we're glad you're here.",
-    "Start with your profile. A photo and a few lines about you help people know who they're meeting.",
-    "Over the next two weeks we'll send a few short emails to help you settle in: a first quest, a gathering to come to, and a check-in from a person.",
+    "You're in. Your first step: finish your profile. A photo and a few lines about you help people know who they're meeting.",
     "[Finish your profile]({{village.url}}/profile)",
+    "Welcome to {{village.name}}. We're glad you're here. Over the next two weeks we'll send a few short emails to help you settle in: a first Quest, a gathering to come to, and a check-in from a person.",
   ),
-  words(
+  revised(
     "member.welcome.first_quest",
-    "Your first quest",
+    "Your first Quest",
     "The simplest way in is a small piece of real work.",
     HI,
-    "The simplest way into {{village.name}} is a quest: a piece of work the village needs, small or large. When it's done, someone confirms it and the work is recognised.",
-    "Pick one that fits the time you have this week.",
-    "[Find a quest]({{village.url}}/quests)",
+    "Your next step: take a Quest that fits the time you have this week. A Quest is a piece of work the village needs, small or large, and when it's done, people thank you for it.",
+    "[Find a Quest]({{village.url}}/quests)",
+    "Real work, beside people becoming your people.",
   ),
-  words(
+  revised(
     "member.welcome.meet_us",
     "Come to a gathering",
-    "The quickest way to know people here is to spend time with them.",
+    "Save a seat at the next gathering.",
     HI,
-    "The quickest way to know people here is to spend time with them.",
-    "Our next gathering is {{nextGathering.title}}, {{nextGathering.when}}. Come and say hello.",
+    "Your next step: come to a gathering and say hello. It's the quickest way to know people here.",
+    "Our next gathering is {{nextGathering.title}}, {{nextGathering.when}}.",
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  words(
+  revised(
     "member.welcome.check_in",
     "Two weeks in",
     "Tell us how it's going. A person reads every reply.",
     HI,
-    "You've been part of {{village.name}} for two weeks now, and we'd like to know how it's going.",
-    "Reply to this email with anything: what's been good, what's been confusing, what you'd like to do next. A person reads every reply and writes back.",
+    "Reply to this email and tell us how it's going: what's been good, what's been confusing, what you'd like to do next. A person reads every reply and writes back.",
+    "You've been in {{village.name}} for two weeks now, and we'd like to know.",
     "[Open {{village.name}}]({{village.url}})",
   ),
   words(
@@ -520,12 +541,12 @@ const MEMBERS: DefaultTemplate[] = [
     "While you wait, you're welcome at our public gatherings.",
     "[See what's coming up]({{village.url}}/events)",
   ),
-  words(
+  revised(
     "joining.meet_us",
     "Come and meet us while you wait",
     "A gathering is a good way to meet the people reading your request.",
     HI,
-    "Your request to join is still with us. In the meantime, the best way to know {{village.name}} is to come and meet the people here.",
+    "While you wait, come and meet the people here. It's the best way to know {{village.name}}, and your request is still with us.",
     NEXT_GATHERING,
     SAVE_A_SEAT,
     EVERY_GATHERING,
@@ -542,17 +563,16 @@ const MEMBERS: DefaultTemplate[] = [
 ];
 
 const LETTERS: DefaultTemplate[] = [
-  words(
+  revised(
     "letters.confirm",
     "Confirm your letters from {{village.name}}",
     "One click to say yes. Ignore this if it wasn't you.",
     HI,
-    "Someone asked for letters from {{village.name}} to come to this address. Letters are our news, written by the people here.",
-    "If that was you, press the button to start them.",
+    "Press the button to start letters from {{village.name}}: our news, written by the people here.",
     // `links.lettersConfirm` is the signed confirm link the people lane posts
     // this email with (the letters double opt-in). It is the email's one button.
     "[Yes, send me village news]({{links.lettersConfirm}})",
-    "If it wasn't you, ignore this email and nothing changes. No letters come until the button is pressed.",
+    "Someone asked for them at this address. If it wasn't you, ignore this email and nothing changes: no letters come until the button is pressed.",
   ),
   // The frame around every letter. The letter brings its own subject, preview
   // line and words; a letter with no preview line opens with its first words.
@@ -582,51 +602,53 @@ export function defaultTemplate(key: string): DefaultTemplate | null {
 // ── A path a fork adds of its own ───────────────────────────────────────────
 
 const GENERIC_PATH: Record<PathStepKey, Omit<DefaultTemplate, "key">> = {
-  welcome: words(
+  welcome: revised(
     "",
     "Welcome to the {{path.name}} path",
-    "What happens next, and who you'll hear from.",
+    "Start with the path page. Here's what happens next.",
     HI,
-    "You chose the {{path.name}} path with {{village.name}}. We're glad you did.",
-    "Over the next three weeks we'll send a few short emails: a first step to take, a gathering where you can meet people, and a look at life here. After that, {{path.contactName}} will write to you personally.",
+    "Start with the {{path.name}} path page. It shows what the path asks of you and where it leads.",
     PATH_PAGE,
+    "You chose this path with {{village.name}}. We're glad you did.",
+    "What happens next: over the next three weeks we'll send a few short emails with a first step, a gathering where you can meet people, and a look at life here. Then {{path.contactName}} writes to you personally.",
   ),
-  first_step: words(
+  first_step: revised(
     "",
     "Your first step on the {{path.name}} path",
     "One thing to do this week.",
     HI,
-    "Here's a good first step: {{path.nextStep}}.",
+    "Your next step: {{path.nextStep}}.",
     "[Take the first step]({{path.nextStepLink}})",
     "If you get stuck, reply to this email. A person will answer.",
   ),
-  meet_us: words(
+  meet_us: revised(
     "",
     "Come and meet us",
-    "The best way to know a place is to spend time in it.",
+    "Save a seat at the next gathering.",
     HI,
-    "Pages and emails only go so far. The best way to know {{village.name}} is to meet the people here.",
+    "Your next step: come and meet the people here. It's the best way to know {{village.name}}.",
     NEXT_GATHERING,
     SAVE_A_SEAT,
     EVERY_GATHERING,
   ),
-  stories: words(
+  stories: revised(
     "",
     "A look at life in {{village.name}}",
     "People here thank each other in public. It's the clearest picture we have.",
     HI,
-    "People here thank each other in public for the work they do. It all goes on the gratitude wall, and it's the clearest picture we have of life in {{village.name}}.",
-    "[Read the gratitude wall]({{village.url}}/gratitude)",
+    "Spend ten minutes on the Gratitude wall. People here thank each other there in public for the work they do, and it's the clearest picture we have of life in {{village.name}}.",
+    GRATITUDE_WALL,
     "If a question comes up while you read, reply to this email. A person will answer.",
+    LORE_GRATITUDE,
   ),
-  check_in: words(
+  check_in: revised(
     "",
     "Three weeks on the {{path.name}} path",
     "From here, a person takes over.",
     HI,
-    LAST_EMAIL,
-    "{{path.contactName}} will write to you in the next few days. If you'd like to start the conversation yourself, reply to this email.",
+    "{{path.contactName}} will write to you in the next few days. To start sooner, reply to this email.",
     PATH_PAGE,
+    LAST_OF_SERIES,
   ),
 };
 

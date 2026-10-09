@@ -25,14 +25,35 @@ const SPEC_TEMPLATE_KEYS = [
   "letters.confirm", "letter.layout",
 ];
 
+/**
+ * The emails the R47 copy pass rewrote (docs/COPY_STYLE_KEY.md, 2026-10-05),
+ * written out by hand. Each moved to version 2, which is what shows a village
+ * "an improved version is available" beside its own copy.
+ */
+const R47_REWRITTEN = [
+  "gathering.confirm", "gathering.guest_confirm", "gathering.changed", "gathering.cancelled",
+  "gathering.waitlisted", "gathering.host_nudge", "poll.invite",
+  ...["resident", "steward", "prosperity-creator"].flatMap((p) =>
+    ["welcome", "first_step", "meet_us", "stories", "check_in"].map((s) => `path.${p}.${s}`),
+  ),
+  "member.welcome.day0", "member.welcome.first_quest", "member.welcome.meet_us", "member.welcome.check_in",
+  "joining.meet_us", "letters.confirm",
+];
+
 const DAY = 1440;
 
 describe("the default templates", () => {
-  it("hold exactly the keys the spec names, each once, each at version 1", () => {
+  it("hold exactly the keys the spec names, each once, at version 2 where the R47 copy pass rewrote them and 1 elsewhere", () => {
     const keys = DEFAULT_TEMPLATES.map((t) => t.key);
     expect(new Set(keys).size, "a key appears twice").toBe(keys.length);
     expect([...keys].sort()).toEqual([...SPEC_TEMPLATE_KEYS].sort());
-    for (const t of DEFAULT_TEMPLATES) expect(t.version, t.key).toBe(1);
+    for (const t of DEFAULT_TEMPLATES) expect(t.version, t.key).toBe(R47_REWRITTEN.includes(t.key) ? 2 : 1);
+  });
+
+  it("keep the investor path's words as they were, so nothing moves under the review they wait on", () => {
+    for (const s of ["welcome", "first_step", "meet_us", "stories", "check_in"]) {
+      expect(defaultTemplate(`path.investor.${s}`)?.version, s).toBe(1);
+    }
   });
 
   it("give every template a subject and a body, and only well-formed merge tokens", () => {

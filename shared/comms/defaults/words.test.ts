@@ -165,6 +165,38 @@ describe("every default email", () => {
     expect(platformTemplate("letters.confirm")!.bodyMd).not.toContain("{{links.confirm}}");
   });
 
+  it("says what happens and never how the village does it (R47 rule 1)", () => {
+    const machinery = [/\badmins?\b/i, /\bservers?\b/i, /\bledger\b/i, /\bdatabase\b/i, /\bthe system\b/i, /\bconfirms it\b/i, /\brecorded\b/i];
+    for (const t of ALL) {
+      const words = `${t.subject}\n${t.preheader ?? ""}\n${t.bodyMd}`;
+      for (const re of machinery) expect(words, `${t.key}: ${re}`).not.toMatch(re);
+    }
+  });
+
+  it("leads every path and new-member email with its next step, and ends with at most one Lore line (R47)", () => {
+    const paragraphs = (t: DefaultTemplate) => t.bodyMd.split("\n\n");
+    const rewritten = ALL.filter((t) => t.version === 2 && /^(path|member)\./.test(t.key));
+    expect(rewritten.length).toBeGreaterThan(15);
+    for (const t of rewritten) {
+      const lead = paragraphs(t)[1];
+      expect(lead, t.key).toMatch(/^(Start with|Your next step|Your first step|You're in\. Your first step|Spend ten minutes|Reply to this email|\{\{path\.contactName\}\} will write to you)/);
+    }
+    // The Lore line, where an email carries one, is the very last paragraph.
+    for (const t of ALL) {
+      const lore = paragraphs(t).filter((p) => p === "Naming what is good is how a village grows more of it.");
+      expect(lore.length, t.key).toBeLessThanOrEqual(1);
+      if (lore.length) expect(paragraphs(t).at(-1), t.key).toBe(lore[0]);
+    }
+  });
+
+  it("names Quests and Gratitude the way the lexicon does", () => {
+    for (const t of ALL) {
+      const words = `${t.subject}\n${t.preheader ?? ""}\n${t.bodyMd}`;
+      expect(words, t.key).not.toMatch(/(?<!\/)\bquests?\b/);
+      expect(words, t.key).not.toMatch(/\bgratitude wall\b/);
+    }
+  });
+
   it("lists every default in exactly one group of the Words screen", () => {
     const grouped = templateGroups().flatMap((g) => g.keys);
     expect(new Set(grouped).size).toBe(grouped.length);
