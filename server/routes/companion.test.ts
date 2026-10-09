@@ -319,6 +319,27 @@ describe.skipIf(!configured)("the member companion", () => {
       expect(String(upstream[0].body.system), "the note the line named is the note that went").toContain(NOTE);
     });
 
+    /*
+     * Audit of Wave 4: a yes given while the note stayed private covered the
+     * note once the member moved it to the assistant tier, and the note went
+     * upstream under a line that never named it.
+     */
+    it("asks again before a note written after the yes goes upstream", async () => {
+      expect((await call("DELETE", "/api/agent/companion/consent", "noted")).status).toBe(200);
+      expect((await saveAgentProfile(pool, PEOPLE.noted.id, { aboutTier: "private" })).ok).toBe(true);
+      const yes = await call("POST", "/api/agent/companion/consent", "noted", { provider: "Anthropic", operator: "Riverbend", source: "village" });
+      expect(yes.status, JSON.stringify(yes.body)).toBe(200);
+      await ask("noted", "how should we decide spending?", "power");
+      expect(upstream, "the yes covers the line it named").toHaveLength(1);
+      expect(String(upstream[0].body.system)).not.toContain("NOTE-SENTINEL");
+
+      expect((await saveAgentProfile(pool, PEOPLE.noted.id, { aboutTier: "assistant" })).ok).toBe(true);
+      const r = await ask("noted", "how should we decide spending?", "power");
+      expect(r.body.fromRecord).toBe("no-consent");
+      expect(r.body.consent.sentence).toContain("your note to your agent");
+      expect(upstream, "nothing more went upstream").toHaveLength(1);
+    });
+
     it("closes the door again when the member takes their yes back", async () => {
       const gone = await call("DELETE", "/api/agent/companion/consent", "member");
       expect(gone.status).toBe(200);

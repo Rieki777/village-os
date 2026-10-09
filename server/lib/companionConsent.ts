@@ -52,6 +52,12 @@ export interface CompanionDisclosure {
   source: KeySource;
   /** The one line. */
   sentence: string;
+  /**
+   * Whether the member's own note rides in the prompt, so the line names it.
+   * A yes given to a line without the note does not cover one with it (audit
+   * of Wave 4): the member never saw that their note would go upstream.
+   */
+  note?: boolean;
 }
 
 export interface CompanionConsent {
@@ -59,6 +65,8 @@ export interface CompanionConsent {
   operator: string;
   source: KeySource;
   at: string;
+  /** The line agreed to named the member's note. */
+  note?: boolean;
 }
 
 /** The member's own key, as far as the line needs it. */
@@ -114,6 +122,7 @@ export function companionDisclosure(
     provider,
     operator,
     source,
+    ...(carries.note ? { note: true } : {}),
     sentence: `To answer in its own words, the guide sends your question, ${carries.note ? "your note to your agent, " : ""}and what it reads from the village's record for you, to ${provider}, on ${key}.`,
   };
 }
@@ -128,7 +137,7 @@ export function readConsents(prefs: unknown): CompanionConsent[] {
     const o = c as Record<string, unknown>;
     if (typeof o.provider !== "string" || typeof o.operator !== "string" || typeof o.at !== "string") continue;
     if (o.source !== "member" && o.source !== "village" && o.source !== "platform") continue;
-    out.push({ provider: o.provider, operator: o.operator, source: o.source, at: o.at });
+    out.push({ provider: o.provider, operator: o.operator, source: o.source, at: o.at, ...(o.note === true ? { note: true } : {}) });
   }
   return out;
 }
@@ -137,16 +146,19 @@ function sameLine(c: { provider: string; operator: string; source: KeySource }, 
   return c.provider === d.provider && c.operator === d.operator && c.source === d.source;
 }
 
-/** The member's yes to exactly this line, or null. */
+/**
+ * The member's yes to exactly this line, or null. A line that carries the
+ * member's note is covered only by a yes given to a line that carried it.
+ */
 export function consentFor(prefs: unknown, d: CompanionDisclosure): CompanionConsent | null {
-  return readConsents(prefs).find((c) => sameLine(c, d)) ?? null;
+  return readConsents(prefs).find((c) => sameLine(c, d) && (!d.note || c.note === true)) ?? null;
 }
 
 /** Prefs with a yes to this line added, newest last, capped. Returns a new object. */
 export function withConsent(prefs: unknown, d: CompanionDisclosure, at: string): Record<string, unknown> {
   const base = prefs && typeof prefs === "object" && !Array.isArray(prefs) ? { ...(prefs as Record<string, unknown>) } : {};
   const kept = readConsents(base).filter((c) => !sameLine(c, d));
-  kept.push({ provider: d.provider, operator: d.operator, source: d.source, at });
+  kept.push({ provider: d.provider, operator: d.operator, source: d.source, at, ...(d.note ? { note: true } : {}) });
   base[CONSENT_PREFS_KEY] = kept.slice(-MAX_CONSENTS);
   return base;
 }
