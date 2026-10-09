@@ -267,8 +267,8 @@ export default function CommsSentMail({ password }: { password: string }) {
             <h2 className="text-xl font-semibold text-gray-900">Sent mail</h2>
             <p className="mt-2 text-sm text-gray-600">
               Every email the village writes is recorded here before it goes: password links, form replies, notices,
-              reminders and letters. Each one says what became of it. The words of an email are kept for 30 days, and
-              the words of essential mail are never kept.
+              reminders and letters. Each one says what became of it. An email and its words are kept for as long as
+              the village's email record setting says, and the words of essential mail are never kept.
             </p>
           </div>
           <button type="button" onClick={() => void load()} disabled={loading} className={button}>

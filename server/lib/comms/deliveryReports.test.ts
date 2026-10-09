@@ -231,7 +231,7 @@ describe.skipIf(!configured)("the suppression list", () => {
 });
 
 describe.skipIf(!configured)("retention", () => {
-  it("clears words after 30 days, deletes rows after the retention months, and raw reports after 30 days, never a row still waiting", async () => {
+  it("keeps an email's words as long as its row, deletes rows after the retention months, and raw reports after 30 days, never a row still waiting", async () => {
     const old = await sentRow({ to: "old@example.test" });
     const waiting = await sentRow({ to: "waiting@example.test", status: "queued" });
     const ancient = await sentRow({ to: "ancient@example.test" });
@@ -250,8 +250,10 @@ describe.skipIf(!configured)("retention", () => {
     );
 
     const parts = await sweepCommsRetention(pool, 18);
-    expect(parts.join(", ")).toMatch(/email body\(ies\)/);
-    expect(await row(old)).toMatchObject({ status: "sent", body_html: null, body_text: null, attachments: null });
+    expect(parts.join(", ")).not.toMatch(/body/);
+    expect(parts.join(", ")).toMatch(/email record\(s\)/);
+    // Rye, 2026-10-09: whoever runs the email reads what was said, so a month-old email keeps its words.
+    expect(await row(old), "past 30 days, still inside the retention months").toMatchObject({ status: "sent", body_html: "<p>News</p>" });
     expect(await row(waiting), "still waiting to go, so its words stay").toMatchObject({ body_html: "<p>News</p>" });
     expect(await row(ancient), "older than the retention months").toBeUndefined();
     expect(await row(fresh)).toMatchObject({ body_html: "<p>News</p>" });

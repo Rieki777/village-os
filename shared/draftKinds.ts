@@ -185,5 +185,5 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",
   "comms.manage":
-    "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and what each person was sent, including an email's words for 30 days",
+    "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",
 };

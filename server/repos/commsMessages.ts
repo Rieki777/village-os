@@ -485,7 +485,7 @@ export interface MessageListRow {
   attempts: number;
   lastError: string | null;
   rehearsalTo: string | null;
-  /** Whether the words are still kept: never for essential mail, and not after 30 days. */
+  /** Whether the words are kept: never for essential mail, otherwise as long as the row (comms.retention_months). */
   hasBody: boolean;
 }
 
@@ -663,21 +663,6 @@ export async function cancelQueued(pool: Pool, id: string): Promise<boolean> {
 }
 
 // ── Retention (the comms build spec 5.17) ───────────────────────────────────
-
-/**
- * The words of every row older than `days` are cleared; the row stays, so the
- * record of who was written to outlives the words. A row still waiting to go
- * keeps its words, because it cannot be sent without them. Bounded per run.
- */
-export async function clearMessageBodies(pool: Pool, days: number): Promise<number> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the retention sweep's body pass
-    "UPDATE comms_messages SET body_html = NULL, body_text = NULL, attachments = NULL " +
-      "WHERE village_id = ? AND created_at < CURRENT_TIMESTAMP - INTERVAL ? DAY AND status NOT IN ('queued', 'sending') " +
-      "AND (body_html IS NOT NULL OR body_text IS NOT NULL OR attachments IS NOT NULL) LIMIT 5000",
-    [VILLAGE, Math.max(1, Math.trunc(days))],
-  );
-  return res.affectedRows;
-}
 
 /** Rows older than `months` are deleted, except one still waiting to go. Bounded per run. */
 export async function deleteOldMessages(pool: Pool, months: number): Promise<number> {

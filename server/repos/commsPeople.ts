@@ -358,7 +358,7 @@ export async function housingAddresses(
  * Everything the comms tables hold about one person, for the data export.
  *
  * Read-only, one query per table. The words of each email are included while
- * the village still holds them (retention clears them after 30 days), because
+ * the village still holds them (as long as the row, `comms.retention_months`), because
  * the export promises everything held. A guest confirmation's token is never
  * included: only its hash is stored, and the hash is not the person's data.
  */

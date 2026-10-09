@@ -29,8 +29,8 @@
  * ── WHAT CANNOT BE DONE FROM HERE, AND THE ANSWER SAYS WHY ─────────────────
  *
  * A retry needs the email's words. Essential mail never keeps them (most of it
- * carries a link that acts for the person), and every other email's words are
- * cleared after 30 days. An email past its moment is not retried either: a
+ * carries a link that acts for the person); every other email keeps its words
+ * as long as its row. An email past its moment is not retried either: a
  * notice late by a day surprises more than a missed one.
  */
 import type { Express, Request, Response } from "express";
@@ -146,7 +146,7 @@ export function register(app: Express, deps: Deps): void {
           ? null
           : m.kind === "essential"
             ? "The words of essential mail are never kept: most of it carries a link that acts for the person."
-            : "The words of this email are no longer kept. They are cleared 30 days after it was written.",
+            : "The words of this email were not kept.",
       },
       reports: reports.map((r) => ({ ...r, receivedAt: when(r.receivedAt), processedAt: when(r.processedAt) })),
       canRetry: m.status === "failed" && m.kind !== "essential" && m.hasBody && (m.expiresAt == null || m.expiresAt * 1000 > Date.now()),

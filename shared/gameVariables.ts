@@ -1922,7 +1922,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Email and reminders",
     label: "How long the record of each email is kept",
     description:
-      "Months the record of a sent email is kept before it is deleted. The words of each email are cleared after 30 days whatever this says, and so are the provider's delivery reports.",
+      "Months the record of a sent email, its words included, is kept before it is deleted. Whoever runs the village's email reads those words. The words of essential mail are never kept, and the provider's delivery reports are cleared after 30 days whatever this says.",
     type: "integer",
     default: "18",
     min: 1,

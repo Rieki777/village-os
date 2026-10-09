@@ -2655,7 +2655,7 @@ How many letters can go out in one day. A letter also waits ten minutes after th
 
 ### How long the record of each email is kept
 
-Months the record of a sent email is kept before it is deleted. The words of each email are cleared after 30 days whatever this says, and so are the provider's delivery reports.
+Months the record of a sent email, its words included, is kept before it is deleted. Whoever runs the village's email reads those words. The words of essential mail are never kept, and the provider's delivery reports are cleared after 30 days whatever this says.
 
 | Fact | Value |
 | --- | --- |
