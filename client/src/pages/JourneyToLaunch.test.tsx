@@ -422,6 +422,37 @@ describe("the canvas view", () => {
     expect(window.location.search).toBe("?view=canvas");
     expect(screen.queryByText("Put every canvas block on record")).toBeNull();
   });
+
+  /*
+   * ONE PANEL IN THE CORNER (audit of Wave 4). The organizing guide and the
+   * companion use the same fixed box, and the guide, drawn later, covered the
+   * companion: Ask on the Canvas view looked like it did nothing.
+   */
+  it("closes the guide when Ask is pressed on the Canvas view, and the companion when the guide opens", async () => {
+    auth.current = { user: { id: "u1", name: "Rye", role: "admin" }, loading: false };
+    answer({
+      "/api/admin/launch": { status: 200, body: STATUS },
+      "/api/admin/launch/steward-candidates": { status: 200, body: { candidates: [], powerCount: 0 } },
+      "/api/canvas": { status: 200, body: EMPTY_CANVAS },
+      "/api/canvas/season": { status: 200, body: NO_SEASON },
+      "/api/canvas/moon": { status: 200, body: NO_MOON },
+      "/api/agent/companion": { status: 200, body: { connected: false, disclosure: null, consent: null } },
+    });
+    draw();
+    await waitFor(() => expect(screen.getByText(/Take one backup/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    await waitFor(() => expect(screen.getByTestId("canvas-radar")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /Ask the guide/ }));
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ask about the canvas" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Organizing" }), "the guide stepped out of the corner").toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Ask the guide/ }));
+    expect(screen.getByRole("button", { name: "Organizing" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog"), "the companion stepped out of the corner").toBeNull());
+  });
 });
 
 /*

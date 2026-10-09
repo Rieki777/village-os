@@ -12,7 +12,7 @@
  * reused somewhere without the panel never offers a door that opens onto
  * nothing.
  */
-import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { MessageCircle } from "lucide-react";
 import type { CanvasBlockId } from "@shared/governanceCanvas";
 
@@ -22,11 +22,36 @@ type OpenCompanion = (block: CanvasBlockId | null) => void;
 
 const CompanionContext = createContext<OpenCompanion | null>(null);
 
-export function CompanionProvider({ children }: { children: ReactNode }) {
+/**
+ * ONE PANEL IN THE CORNER AT A TIME (audit of Wave 4). The Journey page's
+ * organizing guide sits in the same fixed corner box as this panel, and drawn
+ * later it covered it: a founder pressed Ask and saw nothing while keystrokes
+ * went into the hidden field. `cornerTaken` closes this panel whenever the
+ * other one opens, and `onOpen` lets the page close the other one when Ask is
+ * pressed.
+ */
+export function CompanionProvider({
+  children,
+  cornerTaken = false,
+  onOpen,
+}: {
+  children: ReactNode;
+  cornerTaken?: boolean;
+  onOpen?: () => void;
+}) {
   // `turn` remounts the panel for each press, so asking about another block
   // starts a fresh conversation about that block.
   const [asking, setAsking] = useState<{ block: CanvasBlockId | null; turn: number } | null>(null);
-  const open = useCallback<OpenCompanion>((block) => setAsking((a) => ({ block, turn: (a?.turn ?? 0) + 1 })), []);
+  const open = useCallback<OpenCompanion>(
+    (block) => {
+      onOpen?.();
+      setAsking((a) => ({ block, turn: (a?.turn ?? 0) + 1 }));
+    },
+    [onOpen],
+  );
+  useEffect(() => {
+    if (cornerTaken) setAsking(null);
+  }, [cornerTaken]);
   return (
     <CompanionContext.Provider value={open}>
       {children}

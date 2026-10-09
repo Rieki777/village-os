@@ -353,6 +353,7 @@ export default function JourneyToLaunch() {
   const [powerCount, setPowerCount] = useState(0);
   const [slate, setSlate] = useState<string[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
+  const closeGuide = useCallback(() => setGuideOpen(false), []);
 
   const load = useCallback(() => {
     fetch("/api/admin/launch", { headers: headers() })
@@ -560,7 +561,8 @@ export default function JourneyToLaunch() {
       <div className="bg-stone-50 min-h-screen py-8">
         <div className="container max-w-3xl space-y-6">
           {view === "canvas" ? (
-            <CanvasView />
+            // The guide and the companion share one corner, so opening either closes the other.
+            <CanvasView cornerTaken={guideOpen} onAsk={closeGuide} />
           ) : view === "economics" ? (
             <EconomicsView headers={(extra) => ({ ...headers(), ...(extra ?? {}) })} />
           ) : failed ? (

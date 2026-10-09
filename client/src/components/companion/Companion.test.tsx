@@ -147,3 +147,62 @@ describe("the line before a model", () => {
     expect(askFailure(null, null)).toBe("That did not reach the server.");
   });
 });
+
+/*
+ * AUDIT OF WAVE 4. "Not now" hid the line for as long as the panel stayed
+ * open, while every later answer still said "agree to the line below"; and the
+ * Journey page's guide shares this panel's corner and covered it.
+ */
+describe("after Not now, and beside the guide", () => {
+  const NO_CONSENT = {
+    status: 200,
+    body: {
+      reply: "Nothing you ask goes to a model until you agree to the line below, so this answer comes straight from the village's record.",
+      consulted: { readers: ["canvas.answers"] },
+      path: "deterministic",
+      fromRecord: "no-consent",
+      consent: { required: true, ...LINE },
+    },
+  };
+
+  it("brings the line back with the next answer that asks for it", async () => {
+    answers["GET /api/agent/companion"] = [{ status: 200, body: { connected: true, disclosure: LINE, consent: null } }];
+    answers["POST /api/agent/ask"] = [NO_CONSENT];
+    draw(
+      <CompanionProvider>
+        <AskButton block="power" label="Ask" name="Ask about Power" />
+      </CompanionProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ask about Power" }));
+    await screen.findByRole("dialog", { name: "Ask about Power" });
+    const box = () => screen.getByRole("textbox", { name: "Your question" });
+    fireEvent.change(box(), { target: { value: "who decides here?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await screen.findByTestId("companion-line");
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByTestId("companion-line")).toBeNull();
+
+    fireEvent.change(box(), { target: { value: "and who keeps the money?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(calls.filter((c) => c.key === "POST /api/agent/ask")).toHaveLength(2));
+    expect((await screen.findByTestId("companion-line")).textContent).toContain(LINE.sentence);
+  });
+
+  it("closes when another panel takes the corner, and tells the page when Ask is pressed", async () => {
+    answers["GET /api/agent/companion"] = [{ status: 200, body: { connected: false, disclosure: null, consent: null } }];
+    const onOpen = vi.fn();
+    const ui = (cornerTaken: boolean) => (
+      <Router>
+        <CompanionProvider cornerTaken={cornerTaken} onOpen={onOpen}>
+          <AskButton block="power" label="Ask" name="Ask about Power" />
+        </CompanionProvider>
+      </Router>
+    );
+    const { rerender } = render(ui(false));
+    fireEvent.click(screen.getByRole("button", { name: "Ask about Power" }));
+    await screen.findByRole("dialog", { name: "Ask about Power" });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    rerender(ui(true));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Ask about Power" })).toBeNull());
+  });
+});

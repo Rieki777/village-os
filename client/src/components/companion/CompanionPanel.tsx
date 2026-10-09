@@ -127,6 +127,10 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
         : [];
       setTurns((t) => [...t, reply, ...extra]);
       setLine(d?.consent?.required ? { provider: d.consent.provider, operator: d.consent.operator, source: d.consent.source, sentence: d.consent.sentence } : null);
+      // Each answer that asks for a yes says "agree to the line below", so the
+      // line comes back with it: "Not now" holds for that answer only (audit of
+      // Wave 4; it used to hide the line until the panel was closed and opened).
+      if (d?.consent?.required) setNotNow(false);
     } catch {
       setTurns((t) => [...t, { role: "assistant", content: askFailure(null, null), local: true }]);
     } finally {

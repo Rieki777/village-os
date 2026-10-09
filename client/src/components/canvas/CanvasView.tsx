@@ -39,7 +39,15 @@ function seasonReadFailure(status: number | null, error: unknown): { message: st
   return { message: "The season could not be read just now.", retry: true };
 }
 
-export function CanvasView() {
+export function CanvasView({
+  cornerTaken = false,
+  onAsk,
+}: {
+  /** Another panel holds the fixed corner (the Journey page's guide), so the companion closes. */
+  cornerTaken?: boolean;
+  /** Told when somebody presses Ask, so the page can close whatever else is in the corner. */
+  onAsk?: () => void;
+} = {}) {
   const [payload, setPayload] = useState<CanvasSeasonPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 
@@ -126,7 +134,7 @@ export function CanvasView() {
   // break-word does not change that width; anywhere does. On ordinary text
   // the two lay out identically (the lane's live QA compares every element).
   return (
-    <CompanionProvider>
+    <CompanionProvider cornerTaken={cornerTaken} onOpen={onAsk}>
       <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
         <div className="flex justify-end">
           <AskButton block={null} label="Ask about the canvas" />
