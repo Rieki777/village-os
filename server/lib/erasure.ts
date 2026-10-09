@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberSessions } from "./liveSessions";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -565,6 +566,25 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Live Sessions (0232): the member leaves every room. Their people rows,
+       * answers and written entries are deleted, the actions they held go back
+       * to nobody, the hosts and adders they were read 0, and every closed
+       * record that named them has its minutes written again from what is
+       * left, so the name is gone from the text too. De-attribution is not
+       * erasure, which is why the minutes are rebuilt and not only the rows.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: every door
+       * writes for anybody signed in, and the tombstone is where the member's
+       * sessions die. The names the rebuilt minutes print are read live, and by
+       * now nothing in those records points at the leaver.
+       */
+      name: "sessions-after-tombstone",
+      run: async () => {
+        await forgetMemberSessions(pool, target.id, (id) => members.byId(id));
       },
     },
     {

@@ -1183,6 +1183,38 @@ export const MODULES: ModuleDef[] = [
     // entries stay in their tables and come back intact when it is turned on.
   },
   {
+    id: "sessions",
+    tier: "included",
+    // Every row names a person: who was in the room, the number each gave on
+    // arrival while the session was open, who holds each action, who wrote
+    // which note. Arrival words and numbers are erased at close, and the
+    // record that stays is read by the people who were there and by admins.
+    dataClass: "member-pii",
+    group: "coordinate",
+    // Works the day it is switched on. The place line falls back to a neutral
+    // sentence when a village has not written its own, and the usual length
+    // is a working default; both dials are there for a village that wants
+    // its own words and its own rhythm.
+    setup: "none",
+    name: "Live Sessions",
+    description:
+      "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+    requires: [],
+    // The close opens a gratitude round. Gratitude is core today, so this is
+    // always met; it is named so the dependency reads true if that changes.
+    recommends: ["gratitude"],
+    // None in v1. Each door is a member's own, the room's facilitator is a
+    // fact of the session itself, and an admin reads closed records through
+    // `isAdmin`. A facilitation capability can come later without a
+    // migration, because nothing stores one.
+    capabilities: [],
+    variableKeys: ["sessions.place_line", "sessions.default_minutes"],
+    apiPrefixes: ["/api/sessions"],
+    // No openStateCheck: a session holds no value anybody is owed. Off hides
+    // the surface, and closed records stay in their tables for when it is
+    // turned back on.
+  },
+  {
     id: "governance",
     tier: "included",
     dataClass: "member-pii",

@@ -68,8 +68,9 @@ describe("module images", () => {
   // the drawn fallback, and that costs nothing against the image budget. The
   // case above keeps this list honest: a module named here may not also ship
   // a file, and may not be a module that does not exist. `journal` joined on
-  // the same terms: a hue and the NotebookPen emblem, no file.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "journal"]);
+  // the same terms: a hue and the NotebookPen emblem, no file. `sessions`
+  // likewise: a hue and the Orbit emblem, no file.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "journal", "sessions"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

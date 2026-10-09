@@ -411,6 +411,23 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 28,
     emblem: "NotebookPen",
   },
+  sessions: {
+    promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
+    benefits: [
+      "Six stages the facilitator moves the room through: drop in, arrival, agenda, items, actions and close",
+      "An agenda built together, every item with an aim and its own clock, consented to before the work starts",
+      "Proposals decided in a consent round the whole room can see",
+      "Every action leaves with a person or a seat on it, and what nobody can hold waits in the backlog for next time",
+      "Feedback on the facilitation reaches the facilitator unsigned, and ideas for the tool land in your feedback inbox",
+    ],
+    forWhom: "Circles that meet often and want each call to end with clear decisions and actions somebody holds.",
+    setupSummary:
+      "Nothing to set up. Write your village's place line and choose a usual length when you want your own words and rhythm.",
+    dataSummary:
+      "Who took part, the agenda, notes, decisions and who holds each action. Arrival words and numbers are erased at close, and the record is read by the people who were there and your admins.",
+    hue: 140,
+    emblem: "Orbit",
+  },
   hypha: {
     promise: "Your DAO's real numbers from Base, on your own pages.",
     benefits: [
