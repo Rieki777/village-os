@@ -678,6 +678,19 @@ The founder's own words for roads, water and zones live in the
 a line, with the colour and glyph it is drawn in) and `phases` (what a build
 phase is called, keyed by the number the scene stores).
 
+The numbers across the top of the map (the crown bar's chips) live in the
+`map_chips` document in `app_config`, written by `PUT /api/admin/map/chips` from
+the Village settings drawer on the map, and served resolved for each viewer at
+`GET /api/map/chips` (both behind the `map` module's gate). Nothing to provision:
+with no document the bar draws its five example numbers, each one saying
+"example", until a founder points a chip at a source. The sources and what each
+counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
+module (Events, Village Health) is drawn only for a viewer who can open it.
+The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+`gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
+and is drawn only for a member the village has admitted, or an admin: a
+visitor and a signed-in guest get no chip and no number. Nothing to provision.
+
 ### Promises made on the map (0062)
 
 `quests.map_key` and `events.map_key`: varchar(190), nullable, UNIQUE. The name
@@ -720,12 +733,18 @@ hidden and leaves the last strip behind the address bar). Leaving happens two
 ways that run the same code: the artifact's own exit posts `{type:'exit'}`,
 and the browser Back button pops a marker history entry pushed on open.
 
-`GET /api/map/config` returns `{skin, walk, vocabulary}` in one call, and the
-shell pushes it as a single `{type:'config'}` message on `grounds-ready`. The
-walk lives in a `map_walk` document keyed by language (`en` default);
-**an absent or empty walk means the artifact runs its own seed**, which is why
-the shell omits the key instead of sending `[]`. Edit it in Admin, Make This
-Yours, step 5, which can preview a draft on a real map without saving.
+`GET /api/map/config` returns `{skin, walk, welcome, vocabulary, scene}` in one
+call, and the shell pushes it as a single `{type:'config'}` message on
+`grounds-ready`. The walk and the village's own welcome live in a `map_walk`
+document keyed by language (`en` default; the welcome under `welcome`).
+**An absent or empty walk means the map offers no walk at all, and an absent
+welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+the founders' to write). The seed's example walk is offered to nobody. Once the
+fetch has answered, the shell sends both keys, null included; it leaves them
+out only after a failed fetch, which tells the map to keep what it has. Write
+both on the map under Village settings, which can preview a draft on a real
+map without saving. The Journey to Launch asks for them as a recommended item,
+`welcome-walk`, linking to `/map?settings=walk`.
 `GET /api/admin/map/structures` feeds the step picker from addresses the
 village has actually set (0060).
 

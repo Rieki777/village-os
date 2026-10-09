@@ -31,7 +31,7 @@ export default function Login() {
       // bounce anyone offsite.
       navigate(internalPath(new URLSearchParams(window.location.search).get("next")) ?? "/profile");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Sign-in didn't work. Check your email and password.");
     } finally {
       setLoading(false);
     }
@@ -68,8 +68,7 @@ export default function Login() {
               */}
               <h1 className="text-4xl font-display font-bold text-teal-deep mb-2">Sign in</h1>
               <p className="text-gray-600">
-                Members sign in here. If you do not have an account yet, there is a link to
-                create one below.
+                Members sign in here.
               </p>
             </div>
 
@@ -156,7 +155,7 @@ export default function Login() {
                 type="submit"
                 className="w-full bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? "Signing in..." : "Sign In"}
+                {loading ? "Signing in…" : "Sign in"}
                 {!loading && <ArrowRight className="w-5 h-5" />}
               </motion.button>
 
@@ -176,13 +175,13 @@ export default function Login() {
             </form>
 
             <div className="mt-8 text-center">
-              <p className="text-gray-600 mb-4">Don't have an account?</p>
+              <p className="text-gray-600 mb-4">New here?</p>
               <motion.a
                 whileHover={{ scale: 1.05 }}
                 href="/register"
                 className="inline-flex items-center gap-2 px-6 py-3 border-2 border-amber-ink text-amber-ink font-semibold rounded-lg hover:bg-amber-ink/5 transition-colors"
               >
-                Create Account
+                Create an account
                 <ArrowRight className="w-5 h-5" />
               </motion.a>
               {/* The second way to ask to join (Rye, 2026-09-09): in a village

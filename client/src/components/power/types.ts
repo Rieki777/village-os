@@ -2,6 +2,12 @@
  * The power map's client-side data shapes (0083): what /api/map now serves,
  * written once here so ten components read one contract.
  */
+import { daysUntil, type SeatStateWord } from "@shared/roleSheet";
+
+// One source for both: the role card's view model owns the state words and
+// the term clock, and the map reads them from there.
+export { daysUntil };
+export type { SeatStateWord };
 
 export interface PowerGlossaryEntry {
   id: string;
@@ -41,8 +47,6 @@ export interface PowerHolder {
   termEndsAt?: string | null;
 }
 
-export type SeatStateWord = "open" | "filled" | "partial" | "forming" | "expired";
-
 export interface PowerSeat {
   id: string;
   name: string;
@@ -72,6 +76,12 @@ export interface PowerSeat {
   howChosenGloss?: string | null;
   /** Earliest live term on the seat, ISO. Structure tier: a date, no name. */
   termEnds?: string | null;
+  /** The classes this seat is tagged for: a suggestion, never a permission. */
+  archetypes?: string[];
+  criticality?: "normal" | "high";
+  recruiting?: boolean;
+  /** "declared": a state set by hand and still in force. "derived": from the seatings. */
+  stateSource?: "declared" | "derived";
   holders: PowerHolder[];
 }
 
@@ -175,14 +185,6 @@ export const NO_FILTERS: Filters = { open: false, mine: false, expiring: false, 
 
 export function anyFilterOn(f: Filters): boolean {
   return f.open || f.mine || f.expiring || f.circle !== null || f.person !== null;
-}
-
-/** Days until an ISO date, floored; negative when it has passed. */
-export function daysUntil(iso: string | null | undefined, now = new Date()): number | null {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.floor((t - now.getTime()) / 86400000);
 }
 
 /** The amber window (spec 9): a term inside 30 days reads as ending soon. */

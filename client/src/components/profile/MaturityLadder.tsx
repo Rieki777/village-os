@@ -38,7 +38,7 @@
  * 5.95:1 on white to 2.89:1 on `bg-card` at night, and amber-ink 5.60:1 to
  * 3.07:1. This card uses neither.
  */
-import { CheckCircle2, Circle } from "lucide-react";
+import LadderChip from "@/components/sheet/LadderChip";
 import type { GameStagePublic } from "@/lib/gameApi";
 import type { StageRule } from "@shared/gameConfig";
 
@@ -126,10 +126,10 @@ export default function MaturityLadder({
   return (
     <section aria-labelledby="maturity-h" className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
       <h2 id="maturity-h" className="font-display text-2xl font-bold text-card-foreground">
-        Maturity
+        Path of Growth
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Where you stand on this village's ladder, and what opens the next rung.
+        Where you stand, and how to reach the next stage.
       </p>
 
       {here ? (
@@ -151,7 +151,7 @@ export default function MaturityLadder({
         <>
       {next && here ? (
         <div aria-live="polite" className="mt-4 rounded-xl border border-border bg-muted p-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Next rung</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Next stage</p>
           <p className="mt-1 font-semibold text-foreground">{next.name}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {/* The distance when the rung counts something, the mechanic when
@@ -216,7 +216,7 @@ export default function MaturityLadder({
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
-          You stand on the last rung this village has named.
+          You stand on the last stage this village has named.
         </p>
       )}
         </>
@@ -236,30 +236,16 @@ export default function MaturityLadder({
           const current = i === stageIndex;
           return (
             <li key={s.id}>
-              <span
-                aria-current={current ? "step" : undefined}
+              {/* The icon carries the standing visually; `srWords` carries it
+                  to a reader who gets no icon, so the ladder is not colour and
+                  shape alone. */}
+              <LadderChip
+                look={current ? "inverted" : reached ? "lit" : "plain"}
+                current={current}
                 title={`${s.name}: ${s.description}`}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                  current
-                    ? "bg-foreground text-background"
-                    : reached
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {reached ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                ) : (
-                  <Circle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                )}
-                {s.name}
-                {/* The icon carries the standing visually. This carries it to
-                    a reader who gets no icon, so the ladder is not colour and
-                    shape alone. */}
-                <span className="sr-only">
-                  {current ? ", where you stand" : reached ? ", walked" : ", ahead of you"}
-                </span>
-              </span>
+                label={s.name}
+                srWords={current ? ", where you stand" : reached ? ", walked" : ", ahead of you"}
+              />
             </li>
           );
         })}

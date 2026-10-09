@@ -93,7 +93,7 @@ export default function Feed() {
     })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not post");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? "That didn't send. Try again.");
         setDraft("");
         // Drops the forum's label with it: the two are retired as a pair
         // server-side (RETIRE_TOGETHER), and the helper keeps that rule.
@@ -109,7 +109,7 @@ export default function Feed() {
       .then(async (r) => {
         const { ok, data: d, refusal } = await readRefusal(r);
         if (refusal) { setRefusedPost({ id: item.id, message: refusal }); return; }
-        if (!ok) throw new Error(d?.message ?? d?.error ?? "Could not send");
+        if (!ok) throw new Error(d?.message ?? d?.error ?? "That didn't send. Try again.");
         load();
       })
       .catch((e) => setError(e.message));
@@ -120,9 +120,16 @@ export default function Feed() {
       <section className="py-6 md:py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">Village Feed</h1>
-          <p className="text-muted-foreground">
-            Everyday life, woven with the village's milestones. A heart is a real
-            gift from your cycle budget.
+          {/* R47: the line a reader acts on first, the Lore line last and
+              quiet. Only a member can tap a heart, so only a member is told to. */}
+          {user && (
+            <p className="text-muted-foreground">
+              Tap a heart to thank someone. Each one is a real gift from your
+              sending budget.
+            </p>
+          )}
+          <p className="text-sm italic text-muted-foreground mt-1">
+            Everyday life, woven with the village's milestones.
           </p>
           {/* Introductions is where a member says what they are looking for and
               is matched with someone who has it, and the feed is where they are
@@ -287,7 +294,7 @@ export default function Feed() {
                   only offered to the reader who has the box to type in. This
                   is the shape Network.tsx already uses for its peers list. */}
               {kind || tag
-                ? "Nothing matches that filter."
+                ? "Nothing matches that filter. Clear it to see more."
                 : user
                   ? "Quiet so far. Share the first moment."
                   : "Quiet so far. Nothing has been posted here yet."}

@@ -125,6 +125,10 @@ import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
+import { register as registerMapChipsRoutes } from "./routes/mapChips";
+import { register as registerMapOrgRoutes } from "./routes/mapOrg";
+import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
+import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerBadgesRoutes } from "./routes/badges";
 import { register as registerMessagingRoutes } from "./routes/messaging";
 import { register as registerStaysRoutes } from "./routes/stays";
@@ -163,7 +167,7 @@ import {
   MAP_VOCABULARY_DOC,
   MAP_WALK_DOC,
   sanitiseMapKey,
-  sanitiseWalk,
+  servedWalk,
 } from "../shared/mapAddress";
 import { isPromiseKind, type PromiseReason, type PromiseResult } from "../shared/mapPromise";
 import { goingCountFor, missingReason, rowByMapKey } from "./lib/mapPromise";
@@ -690,7 +694,6 @@ import {
   listOrgRoles,
   expiringSeatings,
   releaseSeatingsForUser,
-  seatState,
   structuralLoad,
   circleDecidesProblem,
   declarableTargets,
@@ -699,9 +702,9 @@ import {
   villagePowerProblem,
   type DeclareContext,
   type LapseContext,
-  type OrgAssignment,
   type OrgRole,
 } from "./lib/orgChart";
+import { mapSeatTier, mapShowsStructureTo, orgSeatTier, projectSeats, villageWay } from "./lib/seatProjection";
 // ── Lane L3: how resources flow — declarations, never movements ─────────────
 import {
   answerFourQuestions,
@@ -6776,7 +6779,7 @@ async function startServer() {
    * The ceiling here is deliberately above MAX_SCENE_BYTES so the size
    * message a person reads is the one written in shared/mapScene.ts.
    */
-  app.use(["/api/map/draft", "/api/map/publish"], express.json({ limit: SCENE_BODY_LIMIT }));
+  app.use(["/api/map/draft", "/api/map/publish", "/api/agent/v1/map/draft"], express.json({ limit: SCENE_BODY_LIMIT }));
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -6820,7 +6823,7 @@ async function startServer() {
      */
     const AGENT_INTENT_WRITE = process.env.AGENT_INTENT_WRITE === "1";
     const SKILLS_DIR = path.join(process.cwd(), "docs", "skills");
-    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents"] as const;
+    const SKILL_NAMES = ["village-calendar", "village-directory", "village-intents", "village-map"] as const;
     const skillFile = (name: string) => path.join(SKILLS_DIR, name, "SKILL.md");
     const OPENAPI_FILE = path.join(SKILLS_DIR, "references", "openapi.json");
 
@@ -7061,6 +7064,7 @@ async function startServer() {
       return res.status(501).json({ error: "Not implemented", message: "Intents land with the introductions module" });
     });
 
+    registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     // Anything else under the agent surface is a 404, never a fall-through to
     // a route the map does not name.
     app.all(`${AGENT_V1}/{*splat}`, (_req, res) => res.status(404).json({ error: "Not found" }));
@@ -10114,12 +10118,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       listRelationTypes(getPool()),
       listRelations(getPool()),
     ]);
-    const heldBySeat = new Map<string, OrgAssignment[]>();
-    for (const a of orgAssignments) {
-      const list = heldBySeat.get(a.orgRoleId) ?? [];
-      list.push(a);
-      heldBySeat.set(a.orgRoleId, list);
-    }
 
     // Primary-character avatars for every holder on the page, one query
     // (0083, spec 4/5): faces ride the same viewPeople tier names do, so the
@@ -10142,63 +10140,14 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       }
     }
 
-    const roles = orgRoles
-      .filter((r) => r.active)
-      .map((r) => {
-        const held = heldBySeat.get(r.id) ?? [];
-        // The earliest live term on this seat: a DATE about the seat, so it
-        // rides the structure tier. The amber arc and the clock derive from
-        // it; who the date belongs to stays behind viewPeople.
-        const termDates = held
-          .map((h) => h.termEndsAt)
-          .filter((t): t is Date => !!t)
-          .sort((a, b) => a.getTime() - b.getTime());
-        return {
-          id: r.id,
-          name: r.name,
-          description: r.aim ?? "",
-          // A seat is its AIM (above, as `description`), what it DECIDES on,
-          // and WHY IT MATTERS. Each was read every request and dropped here.
-          domain: r.domain ?? null,
-          accountabilities: r.accountabilities ?? [],
-          whyItMatters: r.whyItMatters ?? null,
-          circleId: r.circleId ?? null,
-          seats: r.seats,
-          minStage: null,
-          holderCount: held.length,
-          // Still derived, and now derived from real seatings instead of
-          // from a permission group's membership.
-          vacant: held.length < r.seats,
-          state: seatState(r, held),
-          isExample: r.isExample,
-          // 0083: representation and succession, structure tier both.
-          representsCircle: r.representsCircle,
-          howChosen: r.howChosen,
-          howChosenGloss: r.howChosenGloss,
-          termEnds: termDates.length ? termDates[0].toISOString() : null,
-          // The classes this seat is tagged for. A tag is a suggestion about
-          // what to show first, never a permission, and it is the same answer
-          // for every reader, so it carries nothing about who is asking.
-          // Empty means every class; see the note on `OrgRole.archetypes`.
-          archetypes: r.archetypes,
-          holders: viewPeople
-            ? held.map((h) => ({
-                userId: h.userId,
-                // A documented holder is a real person with no account yet,
-                // so there is a name to show and no profile to link to.
-                name: h.holderKind === "member" && h.userId ? nameOf(h.userId) : h.displayName,
-                kind: h.holderKind,
-                // An agent is a documented holder, so `kind` alone reads the
-                // same for a machine and for a person with no account (0142).
-                isAgent: h.isAgent,
-                focus: h.focus,
-                lapsed: !!h.lapsed,
-                avatar: h.userId ? (avatarByUser.get(h.userId) ?? null) : null,
-                termEndsAt: h.termEndsAt ? h.termEndsAt.toISOString() : null,
-              }))
-            : [],
-        };
-      });
+    // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
+    const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople), {
+      route: "map",
+      now: new Date(),
+      nameOf,
+      firstName,
+      avatarOf: (id) => avatarByUser.get(id) ?? null,
+    });
 
     const seasonNow = seasonState();
     res.json({
@@ -19261,17 +19210,15 @@ ${inner}
    * `{type:'config'}` message, so the map applies all three in one pass with
    * no chance of a half-configured frame between two round trips.
    *
-   * `walk` is null when the village has written none for the requested
-   * language. Null is the instruction to use the artifact's own seed, and it
-   * is deliberately not an empty array: the artifact reads a non-empty array
-   * as a replacement and would treat `[]` as a walk with no steps.
+   * `walk` and `welcome` are null when the village has written none for the
+   * language: no walk is offered and the guide greets people plainly. Null
+   * never means the artifact's seed (Rye, 2026-10-02; shared/mapAddress.ts).
    */
   app.get("/api/map/config", async (req, res) => {
     const lang = typeof req.query.lang === "string" && /^[a-z]{2}$/.test(req.query.lang)
       ? req.query.lang
       : DEFAULT_WALK_LANG;
-    const walkDoc = sanitiseWalk(mapWalkRepo.get());
-    const steps = walkDoc[lang] ?? walkDoc[DEFAULT_WALK_LANG] ?? null;
+    const served = servedWalk(mapWalkRepo.get(), lang);
     /*
      * The published scene rides along (0063), for exactly the reason the walk
      * and the vocabulary do: one call, one push, no half-configured frame.
@@ -19303,7 +19250,7 @@ ${inner}
     const housingEntries = await housingPublicEntries(getPool());
     res.json({
       skin: getBrand().skin,
-      walk: steps && steps.length ? steps : null,
+      walk: served.walk, welcome: served.welcome,
       vocabulary: mapVocabRepo.get(),
       // JSON text, not an object: the bytes the map wrote are the bytes it
       // gets back. The shell parses it once, on its way into the frame.
@@ -19543,6 +19490,11 @@ ${inner}
     members,
     getPool,
   });
+  registerMapChipsRoutes(app, { isAdmin, authedUser, getPool, seasonState, lapseContext });
+
+  // The live org the open map polls for: server/routes/mapOrg.ts.
+  registerMapOrgRoutes(app, { authedUser, isAdmin, capabilityCtx, circlesRepo, members, firstName, lapseContext, getPool });
+  registerMapMasterplanRoutes(app, { authedUser, capabilityCtx, getPool, uploadsDir: UPLOADS_DIR });
 
   // The season list and its save, which moves every seat that ends with its season (server/routes/seasons.ts).
   registerSeasonRoutes(app, {
@@ -25529,7 +25481,7 @@ ${inner}
    *   MEMBER   — map.viewPeople: the holder rows as they have always been,
    *              carrying focus, note and lapse state.
    *   PUBLIC   — anyone, while `org.public_people` is on: a first name and
-   *              nothing else. See `publicHolder` below for why.
+   *              nothing else. See `publicHolder` in server/lib/seatProjection.ts.
    *
    * The lock moves NAMES. Structure answers a stranger at either setting,
    * because `holderCount` and `state` are what let somebody decide whether to
@@ -25552,7 +25504,20 @@ ${inner}
     // on never takes the people away from the members who were already
     // entitled to them.
     const peopleArePublic = boolVar("org.public_people");
-    const seesPeople = maySeePeople || peopleArePublic;
+    // Which holder row and which seat fields this caller reads. The seat
+    // fields `/api/map` already served reach a caller here only where the map
+    // would show them to that same caller (server/lib/seatProjection.ts).
+    const tier = orgSeatTier({
+      editing: admin,
+      viewPeople: maySeePeople,
+      peopleArePublic,
+      mapStructure: mapShowsStructureTo({
+        lifecycle: effectiveLifecycle("map"),
+        publicStructure: boolVar("map.public_structure"),
+        signedIn: !!viewer,
+        admin,
+      }),
+    });
 
     const [roles, assignments, allMembers] = await Promise.all([
       listOrgRoles(getPool()),
@@ -25561,51 +25526,6 @@ ${inner}
     ]);
     const nameOf = (id: string) =>
       firstName((allMembers as any[]).find((u: any) => u.id === id)?.name ?? "Member");
-
-    /*
-     * THE PUBLIC HOLDER ROW: a first name, and nothing riding along with it.
-     *
-     * Every other field on a holder is either a sentence somebody typed ABOUT
-     * a person or a handle that resolves to them elsewhere, and this repo has
-     * already paid for each one once:
-     *
-     *   userId       a stable id on a payload that answers anonymous callers
-     *                is the exact defect `regenNameFor` was written to stop,
-     *                and `buildOrgExport` refuses user ids by name.
-     *   note         "Away and inactive." is the string that leaked through
-     *                `/api/content/roles`, and `releaseSeatingsForUser` wipes
-     *                it on departure because it restates the person.
-     *   focus        `buildOrgExport` refuses it too, and the loop test
-     *                asserts "mornings only" out of the anonymous tier.
-     *   kind         says whether a named person has an account here.
-     *   lapsed       a judgement about somebody's mandate. The seat's own
-     *                `state` and `holderCount` already carry the vacancy
-     *                fact at this tier, and they name nobody.
-     *
-     * `displayName` goes through `firstName()` here and does NOT at the
-     * member tier above. A documented holder is a real person WITHOUT an
-     * account: they never signed up for anything, an admin typed their name,
-     * and this is the door their full name would otherwise leave by.
-     */
-    const publicHolder = (h: OrgAssignment) => ({
-      // AN AGENT PUBLISHES NO NAME (0142). Its display name is a vendor's
-      // product name, and the rule is that nothing about which commercial
-      // services a village uses goes out on a public surface. A generic word
-      // keeps this row consistent with the seat's own holderCount, which does
-      // count the agent, so the two cannot disagree at the anonymous tier.
-      name: h.isAgent
-        ? "An agent"
-        : h.holderKind === "member" && h.userId
-          ? nameOf(h.userId)
-          : firstName(h.displayName ?? ""),
-    });
-
-    const byRole = new Map<string, OrgAssignment[]>();
-    for (const a of assignments) {
-      const list = byRole.get(a.orgRoleId) ?? [];
-      list.push(a);
-      byRole.set(a.orgRoleId, list);
-    }
 
     // ONE projection, shared with `/api/map` (shared/circleView.ts). The
     // hand-picked object this replaces dropped `color` and `icon`, so the
@@ -25628,77 +25548,16 @@ ${inner}
        * signed in. What the page says about them is the page's business.
        */
       people: {
-        visible: seesPeople,
+        visible: tier.people !== "none",
         membersOnly: !peopleArePublic,
         signedIn: !!viewer,
       },
+      // How the village decides where a circle has not said, and its line for
+      // "Other": the block `/api/map` sends in `power`, at the seats' tier.
+      ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
-      roles: roles
-        .filter((r) => r.active)
-        .map((r) => {
-          const held = byRole.get(r.id) ?? [];
-          return {
-            id: r.id,
-            circleId: r.circleId,
-            name: r.name,
-            aim: r.aim,
-            domain: r.domain,
-            accountabilities: r.accountabilities,
-            whyItMatters: r.whyItMatters,
-            seats: r.seats,
-            criticality: r.criticality,
-            recruiting: r.recruiting,
-            // Derived, never stored. The card-shaped chart this replaced
-            // already carried two seats marked filled with nobody named.
-            state: seatState(r, held),
-            holderCount: held.length,
-            holders: !seesPeople
-              ? []
-              : !maySeePeople
-              ? held.map(publicHolder)
-              : held.map((h) => ({
-                  userId: h.userId,
-                  /*
-                   * The seating's own id, ADMIN ONLY.
-                   *
-                   * Without it no admin surface could address a seating, which
-                   * is why `DELETE /api/admin/org/seatings/:id` and its
-                   * `/forget` sibling shipped with a test suite and no door: a
-                   * village could seat somebody and never unseat them, and the
-                   * right-to-be-forgotten path was reachable only by curl. It
-                   * stops at the editing tier because a seating id is a handle
-                   * on a person's record.
-                   */
-                  ...(admin ? { assignmentId: h.id } : {}),
-                  // A documented holder is a real person without an account.
-                  name: h.holderKind === "member" && h.userId ? nameOf(h.userId) : h.displayName,
-                  kind: h.holderKind,
-                  focus: h.focus,
-                  note: h.note,
-                  // Derived: their term ran out, or the season they were
-                  // seated in has turned. They are still holding it.
-                  lapsed: !!h.lapsed,
-                  lapsedReason: h.lapsedReason ?? null,
-                })),
-            isExample: r.isExample,
-            // The recruitment pack, ADMIN ONLY. 0049 created these six columns
-            // and `WRITABLE` has accepted them ever since, while `ROLE_COLS`
-            // selected none: an admin could write a seat's pay reality through
-            // the API and never see it again. They are readable now, and they
-            // stop here. This is the editing tier, `compensationReality` is
-            // money, and the export two functions down carries neither.
-            ...(admin
-              ? {
-                  authority: r.authority,
-                  firstYearOutcomes: r.firstYearOutcomes,
-                  first90DayOutcomes: r.first90DayOutcomes,
-                  locationExpectations: r.locationExpectations,
-                  compensationReality: r.compensationReality,
-                  evidenceRequired: r.evidenceRequired,
-                }
-              : {}),
-          };
-        }),
+      // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
+      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName }),
     });
   });
 
@@ -25915,7 +25774,7 @@ ${inner}
    * thing is how two settings end up disagreeing.
    */
   const orgExportLive = () =>
-    effectiveLifecycle("map") === "public" && boolVar("map.public_structure");
+    mapShowsStructureTo({ lifecycle: effectiveLifecycle("map"), publicStructure: boolVar("map.public_structure"), signedIn: false, admin: false });
 
   const publicDoc = (res: any) => {
     // Any village, hub or agent may read these, and they carry no credentials

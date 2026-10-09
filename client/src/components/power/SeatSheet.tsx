@@ -15,6 +15,13 @@
  * list and its seat names all came out at 1.36:1, ten of ten text runs under
  * 4.5:1. `bg-card` is the surface the same cards stand on in the desktop
  * panel, so both widths now read one pairing.
+ *
+ * `className` is merged onto the panel. A host that passes its own horizontal
+ * padding (`px-3` for the role card, which needs the width more than the
+ * margin) gets it in place of the default `px-6`, never beside it: two
+ * padding utilities on one element are decided by stylesheet order, which no
+ * reader of this file can see. `/circles` passes `sheet-night` here too, so a
+ * night card on a light page sits on the night panel with no light frame.
  */
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
@@ -23,12 +30,16 @@ export default function SeatSheet({
   children,
   onClose,
   label,
+  className = "",
 }: {
   children: ReactNode;
   onClose: () => void;
   /** What a screen reader announces the dialog as: the seat's name, or the circle's. */
   label: string;
+  /** Merged onto the panel. Its own `px-*` replaces the default `px-6`. */
+  className?: string;
 }) {
+  const padX = /(^|\s)px-/.test(className) ? "" : "px-6";
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -50,7 +61,7 @@ export default function SeatSheet({
         aria-label={label}
         tabIndex={-1}
         data-scroll-contain
-        className="bg-card text-card-foreground border-t border-border w-full rounded-t-2xl px-6 pt-3 pb-[calc(1.5rem+var(--tabbar-h))] max-h-[80vh] overflow-y-auto shadow-2xl focus:outline-none"
+        className={`bg-card text-card-foreground border-t border-border w-full rounded-t-2xl ${padX} pt-3 pb-[calc(1.5rem+var(--tabbar-h))] max-h-[80vh] overflow-y-auto shadow-2xl focus:outline-none ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-end -mr-3">

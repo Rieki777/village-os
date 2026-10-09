@@ -34,6 +34,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import MapSkinPanel from "./MapSkinPanel";
 import WalkEditorPanel from "./WalkEditorPanel";
 import MapVocabularyPanel from "./admin/MapVocabularyPanel";
+import MapChipsPanel from "./admin/MapChipsPanel";
 
 let calls: string[];
 
@@ -51,6 +52,7 @@ const PANELS = {
   MapSkinPanel: <MapSkinPanel />,
   WalkEditorPanel: <WalkEditorPanel />,
   MapVocabularyPanel: <MapVocabularyPanel />,
+  MapChipsPanel: <MapChipsPanel />,
 };
 
 describe("a map editor with no AuthProvider above it", () => {

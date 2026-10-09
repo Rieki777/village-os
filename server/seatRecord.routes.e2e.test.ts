@@ -294,6 +294,63 @@ describe.skipIf(!DB_CONFIGURED)("the term a seating never carried", () => {
     expect(holder?.termEndsAt, "the holder carries their own term").toBeTruthy();
   });
 
+  it("ONE SEAT, TWO DOORS: /api/org carries the map's seat fields, and only to a caller the map would show them", async () => {
+    /*
+     * server/lib/seatProjection.ts is the seat object both routes send. The
+     * fields /api/org gained there are structure on /api/map, and /api/map
+     * answers a stranger only while the map module is public AND
+     * map.public_structure is on. /api/org answers a stranger whatever the map
+     * says, so those fields reach a stranger here only when the map would
+     * already show them. The case above left the map at `members`.
+     */
+    const GAINED = ["representsCircle", "howChosen", "howChosenGloss", "termEnds", "archetypes", "stateSource"];
+    const seatIn = (body: any) => (body?.roles ?? []).find((r: any) => r.id === SOON_SEAT);
+
+    expect((await call("GET", "/api/map", { token: null })).status, "the map turns a stranger away").toBe(401);
+    const dark = await call("GET", "/api/org", { token: null });
+    expect(dark.status).toBe(200);
+    const darkSeat = seatIn(dark.json);
+    expect(darkSeat, "the seat itself is public").toBeTruthy();
+    for (const k of GAINED) expect(darkSeat, `${k} stays off /api/org for a stranger the map turns away`).not.toHaveProperty(k);
+    expect(dark.json, "and so does the village's way of deciding").not.toHaveProperty("village");
+
+    // The control: a member reads every one of them, and each agrees with the map.
+    const map = await call("GET", "/api/map", { token: memberToken });
+    const org = await call("GET", "/api/org", { token: memberToken });
+    const onMap = seatIn(map.json);
+    const onOrg = seatIn(org.json);
+    for (const k of GAINED) {
+      expect(onOrg, `${k} reaches a member on /api/org`).toHaveProperty(k);
+      expect(onOrg[k], `${k} agrees with the map`).toEqual(onMap[k]);
+    }
+    expect(onOrg.termEnds, "the term date is the map's").toBeTruthy();
+    expect(onMap.criticality, "the map gained criticality").toBe(onOrg.criticality);
+    expect(onMap.recruiting, "and recruiting").toBe(onOrg.recruiting);
+    expect(org.json.village, "the village's way and its line, as the map's power block says them").toEqual({
+      decidesBy: map.json.power.decidesBy,
+      decidesByGloss: map.json.power.decidesByGloss,
+    });
+    expect(onOrg.holders.length, "the member tier has a holder row").toBeGreaterThan(0);
+    for (const h of onOrg.holders) expect(typeof h.isAgent, "the member row says whether it is an agent").toBe("boolean");
+
+    // Open the map to strangers: the same stranger now reads the same fields on both doors.
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", {
+      body: { lifecycle: "public", examples: false },
+    })).status).toBe(200);
+    const litMap = await call("GET", "/api/map", { token: null });
+    expect(litMap.status, JSON.stringify(litMap.json)).toBe(200);
+    const lit = await call("GET", "/api/org", { token: null });
+    const litSeat = seatIn(lit.json);
+    for (const k of GAINED) expect(litSeat[k], `${k} reaches the stranger the map shows it to`).toEqual(seatIn(litMap.json)[k]);
+    expect(litSeat.termEnds).toBeTruthy();
+    for (const h of litSeat.holders ?? []) expect(Object.keys(h), "the public row is still a name").toEqual(["name"]);
+
+    // Back to `members`, which is what every case below was written against.
+    expect((await call("PUT", "/api/admin/modules/map/lifecycle", {
+      body: { lifecycle: "members", examples: false },
+    })).status).toBe(200);
+  });
+
   it("carries the FOUR sentences a seat owes a reader, all the way to the wire", async () => {
     /*
      * Rye's ask for this map: a member should arrive and know what roles do

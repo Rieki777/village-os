@@ -25,7 +25,7 @@
  * the client already reads to attach its Bearer header. No new auth state.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -57,7 +57,13 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true }),
   useModule: (id: string) => ({ id, lifecycle: "public" }),
+  // /roles mounts the vendor drawer, which asks this; no vendor is on here.
+  useModuleOn: () => false,
 }));
+// /circles draws a scene per circle and a mini map, each its own subject and
+// neither a read this file is about.
+vi.mock("@/components/CircleScene", () => ({ default: () => null }));
+vi.mock("@/components/CirclesMiniMap", () => ({ default: () => null }));
 vi.mock("@/components/modules/ModuleGate", () => ({
   default: () => <p>module gate</p>,
   SignInToSee: ({ name }: { name: string }) => <p>Sign in to see {name}</p>,
@@ -97,6 +103,8 @@ import Review from "./Review";
 import Training from "./Training";
 import LivingMap from "./LivingMap";
 import Profile from "./Profile";
+import Roles from "./Roles";
+import Circles from "./Circles";
 import RedemptionQueue from "@/components/RedemptionQueue";
 
 /** Every URL the page asked for, through either `fetch` or `gameFetch`. */
@@ -124,7 +132,46 @@ const MEMBERS_ONLY = [
   // REQUESTING the admin route and reading the 401, so every member wallet
   // loaded red. It now asks the member route, which answers the hint.
   "/api/redemptions",
+  // 2026-10-02. A seat's history and its needs, asked by /roles and /circles
+  // whenever a card opened. Names are public by default (R57), so a stranger
+  // reads who holds a seat there and was then refused who held it before.
+  "/api/org/roles/",
 ];
+
+/**
+ * `/api/org` as each reader gets it. Names are public (the default), so a
+ * stranger reads first names and nothing else; a member reads member rows.
+ * `orgTier` "public" is a signed-in account below `map.viewPeople`.
+ */
+let orgTier: "member" | "public" = "member";
+function orgFor(signedIn: boolean) {
+  const member = signedIn && orgTier === "member";
+  return {
+    people: { visible: true, membersOnly: false, signedIn },
+    village: { decidesBy: "consent" },
+    circles: [{ id: "land", name: "Land & Water", purpose: "The ground and its water", decidesBy: null, color: "sage", status: "active" }],
+    roles: [
+      {
+        id: "seed-keeper",
+        name: "Seed Keeper",
+        circleId: "land",
+        aim: "Keep the seed library alive.",
+        domain: null,
+        accountabilities: [],
+        whyItMatters: null,
+        seats: 2,
+        holderCount: 1,
+        state: "partial",
+        criticality: "normal",
+        recruiting: false,
+        isExample: false,
+        holders: member
+          ? [{ userId: "u-ines", name: "Ines Moraes", kind: "member", focus: null, lapsed: false, isAgent: false, note: null }]
+          : [{ name: "Ines" }],
+      },
+    ],
+  };
+}
 
 /**
  * What the server would say, per route. A signed-out caller of a members-only
@@ -133,6 +180,11 @@ const MEMBERS_ONLY = [
  */
 function answer(url: string): Response {
   if (!session.token && MEMBERS_ONLY.some((p) => url.startsWith(p))) return json({ error: "auth_required" }, 401);
+  // The history asks for the member tier itself, so an account below it is refused too.
+  if (url.startsWith("/api/org/roles/") && url.endsWith("/history") && orgTier !== "member") return json({ error: "auth_required" }, 401);
+  if (url === "/api/org") return json(orgFor(!!session.token));
+  if (url.startsWith("/api/org/roles/") && url.endsWith("/history")) return json([]);
+  if (url.startsWith("/api/org/roles/") && url.endsWith("/needs")) return json({ needs: [] });
   if (url.startsWith("/api/messages")) return json({ conversations: [] });
   if (url.startsWith("/api/review/queue")) return json({ batches: [], quests: [], drops: [], counts: { proposals: 0, quests: 0 } });
   if (url.startsWith("/api/review/erasure")) return json({ count: 0, oldestSince: null, waitingOn: {} });
@@ -168,6 +220,7 @@ function signOut() {
   session.token = null;
   session.user = null;
   session.mayConfirm = false;
+  orgTier = "member";
 }
 
 beforeEach(() => {
@@ -263,9 +316,9 @@ describe("/map", () => {
     enter.click();
     await waitFor(() => expect(document.querySelector("iframe")).toBeTruthy());
     window.dispatchEvent(new MessageEvent("message", { origin: window.location.origin, data: { type: "grounds-ready" } }));
-    // `/api/map` is the lens's other read, made for everyone: seeing it proves
+    // `/api/map/org` is the lens's other read, made for everyone: seeing it proves
     // the lens ran, so the absence asserted below is not a lens that never started.
-    await waitFor(() => expect(asked).toContain("/api/map"));
+    await waitFor(() => expect(asked).toContain("/api/map/org"));
   }
 
   it("signed out, draws the lens without asking for a party", async () => {
@@ -283,6 +336,89 @@ describe("/map", () => {
   });
 });
 
+
+/*
+ * /roles AND /circles: A SEAT'S HISTORY AND ITS NEEDS.
+ *
+ * Both pages open a seat's card from `/api/org`, whose names are public by
+ * default (R57), and both mounted the seat's history under the card on
+ * `people.visible`, which is true for a stranger reading first names. The
+ * history route asks for `map.viewPeople`, so every stranger who opened a
+ * seat sent a refused request. The stranger still reads the history's offer
+ * to sign in, drawn without asking, which is the known positive each case
+ * waits on before it reads the requests.
+ */
+const SIGN_IN_FOR_HISTORY = "Sign in to see who has held this seat before.";
+const seatAsks = () => asked.filter((u) => u.startsWith("/api/org/roles/"));
+
+class NoopIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+
+async function openRolesRow() {
+  inRouter(<Roles />);
+  const row = (await screen.findByRole("heading", { level: 3, name: "Seed Keeper" })).closest("button")!;
+  fireEvent.click(row);
+}
+
+async function openCirclesSeat() {
+  inRouter(<Circles />);
+  fireEvent.click((await screen.findByRole("heading", { level: 3, name: "Land & Water" })).closest("button")!);
+  fireEvent.click(screen.getByRole("button", { name: "Seed Keeper" }));
+}
+
+describe("/roles", () => {
+  beforeEach(() => vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver));
+
+  it("signed out, offers the history's sign-in line and asks neither the history nor the needs", async () => {
+    signOut();
+    await openRolesRow();
+    expect(await screen.findByText(SIGN_IN_FOR_HISTORY)).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seatAsks()).toEqual([]);
+  });
+
+  it("signed in, still asks for both", async () => {
+    signIn();
+    await openRolesRow();
+    await waitFor(() => expect(asked).toContain("/api/org/roles/seed-keeper/history"));
+    await waitFor(() => expect(asked).toContain("/api/org/roles/seed-keeper/needs"));
+    expect(screen.queryByText(SIGN_IN_FOR_HISTORY)).toBeNull();
+  });
+
+  it("signed in below the member tier, asks for no history it would be refused, and still for the needs", async () => {
+    signIn();
+    orgTier = "public";
+    await openRolesRow();
+    // The needs route takes any account: asking it is the known positive that the card opened and asked what it may.
+    await waitFor(() => expect(asked).toContain("/api/org/roles/seed-keeper/needs"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(asked.filter((u) => u.endsWith("/history"))).toEqual([]);
+  });
+});
+
+describe("/circles", () => {
+  beforeEach(() => vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver));
+
+  it("signed out, opens a seat's card with the history's sign-in line and asks nothing members-only", async () => {
+    signOut();
+    await openCirclesSeat();
+    expect(await screen.findByText(SIGN_IN_FOR_HISTORY)).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seatAsks()).toEqual([]);
+  });
+
+  it("signed in, still asks for the seat's history", async () => {
+    signIn();
+    await openCirclesSeat();
+    await waitFor(() => expect(asked).toContain("/api/org/roles/seed-keeper/history"));
+  });
+});
 
 /**
  * THE TWO SURVIVORS, and why they outlived the sweep that found the first four.

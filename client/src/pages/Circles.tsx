@@ -22,11 +22,18 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import CircleScene from "@/components/CircleScene";
-import CirclesMiniMap, { type MiniCircle, type MiniSeat } from "@/components/CirclesMiniMap";
+import CirclesMiniMap from "@/components/CirclesMiniMap";
 import { cssColourForCircle } from "@shared/circleView";
 import InfoTip from "@/components/InfoTip";
-import { gameFetch } from "@/lib/gameApi";
+import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
+import SeatAction from "@/components/power/SeatAction";
+import SeatHistory from "@/components/power/SeatHistory";
+import SeatSheet from "@/components/power/SeatSheet";
+import SeatTradingCard from "@/components/power/SeatTradingCard";
+import { useClassNames } from "@/components/power/useClassNames";
+import { useModule } from "@/modules/ModuleProvider";
+import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 
 interface CircleEntry {
   id: string;
@@ -36,7 +43,8 @@ interface CircleEntry {
   description?: string;
   domain?: string;
   members?: string;
-  focus: string[];
+  /** The seats this circle carries, which are its focus areas. Each opens its card. */
+  seats: Array<{ id: string; name: string }>;
   icon?: string;
   color?: string;
   /** Optional scene override (motif id or /api/uploads/…); keywords otherwise. */
@@ -49,11 +57,13 @@ const ICONS: Record<string, React.ElementType> = {
   DollarSign, Users2, Lightbulb, Building2, Briefcase, Handshake, CircleDot,
 };
 
-function CircleCard({ circle, expanded, onToggle, index }: {
+function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
   circle: CircleEntry;
   expanded: boolean;
   onToggle: () => void;
   index: number;
+  /** A seat chip was pressed: open that seat's card. */
+  onOpenSeat: (seatId: string) => void;
 }) {
   const Icon = ICONS[circle.icon ?? ""] ?? CircleDot;
   /*
@@ -145,14 +155,23 @@ function CircleCard({ circle, expanded, onToggle, index }: {
                 )}
               </div>
 
-              {circle.focus.length > 0 && (
+              {circle.seats.length > 0 && (
                 <div>
                   <h4 className="font-semibold text-foreground mb-3">Key Focus Areas</h4>
+                  {/* Each seat opens its role card. These sit in the panel,
+                      outside the header button, so no button nests in another. */}
                   <div className="flex flex-wrap gap-2">
-                    {circle.focus.filter(Boolean).map((area) => (
-                      <span key={area} className="px-3 py-1 rounded-full text-xs font-medium text-foreground shadow-sm" style={{ background: hue }}>
-                        {area}
-                      </span>
+                    {circle.seats.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => onOpenSeat(s.id)}
+                        aria-haspopup="dialog"
+                        className="inline-flex min-h-11 items-center rounded-full px-3.5 text-xs font-medium text-foreground shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        style={{ background: hue }}
+                      >
+                        {s.name}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -174,13 +193,23 @@ function CircleCard({ circle, expanded, onToggle, index }: {
 export default function Circles() {
   const [expandedCircle, setExpandedCircle] = useState<string | null>(null);
   const [circles, setCircles] = useState<CircleEntry[] | null>(null);
-  // The rows as they arrived, kept for the mini map. The cards flatten a
-  // circle into prose (`focus`, `members`) and drop the nesting and the
-  // seat states, which are exactly what the picture is made of.
-  const [raw, setRaw] = useState<{ circles: MiniCircle[]; seats: MiniSeat[] }>({ circles: [], seats: [] });
+  // The rows as they arrived, kept whole for the mini map and the role card.
+  // The circle cards flatten a circle into prose (`members`) and drop the
+  // nesting and the seat states, which are exactly what both of those draw.
+  const [raw, setRaw] = useState<{ circles: any[]; seats: any[]; village?: unknown }>({ circles: [], seats: [] });
   const [failed, setFailed] = useState(false);
   const [people, setPeople] = useState<PeopleTier | null>(null);
   const [seatCounts, setSeatCounts] = useState({ seats: 0, held: 0 });
+  // The seat whose card is open in the sheet, by id.
+  const [openSeat, setOpenSeat] = useState<string | null>(null);
+  // The card's clock and the village's class names, one cached read each.
+  const season = useSeason();
+  const classNames = useClassNames();
+  // A raised hand posts under `/api/map`, which the map module gates, so the
+  // card offers one only while this reader's catalog lists that module as on.
+  // The contact relay is the map's alone and is never offered here.
+  const map = useModule("map");
+  const raiseHand = !!map && map.lifecycle !== "off";
 
   // Circles are rows now (0049). What a circle IS and who is in it are read
   // from its seats rather than from hand-typed prose, so the page cannot go
@@ -202,10 +231,7 @@ export default function Circles() {
           seatsByCircle.set(r.circleId, list);
         }
         setPeople(data.people ?? null);
-        setRaw({
-          circles: (data.circles as MiniCircle[]) ?? [],
-          seats: (data.roles as MiniSeat[]) ?? [],
-        });
+        setRaw({ circles: data.circles ?? [], seats: data.roles ?? [], village: data.village });
         setSeatCounts({
           seats: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.seats ?? 0), 0),
           held: (data.roles ?? []).reduce((n: number, r: any) => n + Number(r.holderCount ?? 0), 0),
@@ -213,8 +239,10 @@ export default function Circles() {
         setCircles(
           (data.circles as any[]).map((c: any, i: number) => {
             const seats = seatsByCircle.get(c.id) ?? [];
+            // An agent's member row carries a vendor's name, so it is listed
+            // as "An agent", the words the card and the public tier use.
             const heldBy = seats
-              .flatMap((s: any) => (s.holders ?? []).map((h: any) => h.name))
+              .flatMap((s: any) => (s.holders ?? []).map(orgHolderName))
               .filter(Boolean);
             /*
              * A LIE THIS PAGE HAS BEEN TELLING SINCE THE NAMES WERE TIERED.
@@ -244,7 +272,7 @@ export default function Circles() {
               // not yet started running, which is what "future" always meant.
               stage: String(c.status ?? "active") === "active" ? "today" : "future",
               // The seats a circle carries ARE its focus areas.
-              focus: seats.map((s: any) => s.name).filter(Boolean),
+              seats: seats.filter((s: any) => s.name).map((s: any) => ({ id: String(s.id), name: String(s.name) })),
               /*
                * These two travelled from the admin form into the database and
                * were then deleted by `/api/org`'s projection, one line before
@@ -278,6 +306,7 @@ export default function Circles() {
 
   const today = (circles ?? []).filter((c) => c.stage === "today");
   const future = (circles ?? []).filter((c) => c.stage === "future");
+  const openRow = openSeat ? (raw.seats.find((r) => String(r?.id) === openSeat) ?? null) : null;
 
   return (
     <Layout>
@@ -361,6 +390,7 @@ export default function Circles() {
                       expanded={expandedCircle === circle.id}
                       onToggle={() => toggle(circle.id)}
                       index={index}
+                      onOpenSeat={setOpenSeat}
                     />
                   ))}
                 </div>
@@ -383,10 +413,35 @@ export default function Circles() {
                       expanded={expandedCircle === circle.id}
                       onToggle={() => toggle(circle.id)}
                       index={index}
+                      onOpenSeat={setOpenSeat}
                     />
                   ))}
                 </div>
               </div>
+            )}
+
+            {/* The seat a chip opened, as the same role card the map draws,
+                in the phone sheet. `sheet-night` makes the sheet's own panel
+                the night ground, so the card sits in no light frame. The
+                sheet moves focus in, hands it back to the chip on close, and
+                closes on Escape and on the backdrop. On a wide screen the
+                sheet spans the window and the card keeps to this page's own
+                column, so it opens flat at the width /roles shows it. */}
+            {openRow && (
+              <SeatSheet label={String(openRow.name ?? "")} onClose={() => setOpenSeat(null)} className="sheet-night px-3">
+                <div className="mx-auto w-full max-w-4xl">
+                  <SeatTradingCard
+                    input={fromOrgSeat(openRow, raw.circles, people, raw.village, { raiseHand })}
+                    ctx={{ now: new Date(), season: seasonForSheet(season), classNames }}
+                    action={<SeatAction circleId={openRow.circleId ?? null} />}
+                  />
+                  {!openRow.isExample && (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <SeatHistory roleId={String(openRow.id)} canSeePeople={seatHistoryShown(people, raw.seats)} />
+                    </div>
+                  )}
+                </div>
+              </SeatSheet>
             )}
           </div>
 

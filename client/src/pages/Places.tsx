@@ -73,30 +73,33 @@ function PlacesPage() {
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
         <header className="space-y-2">
           <h1 className="font-serif text-3xl">Places, photographed</h1>
+          {/* R47: the Trail line leads, and the Lore line comes last. */}
           <p className="text-muted-foreground">
-            Every place on the land that somebody has stood in front of with a camera. Each photograph carries the name of
-            whoever took it and the month it was taken.
+            Open a place to see its photographs. Each one carries the name of whoever took it and the month it was
+            taken.
           </p>
           <nav aria-label="Every photograph">
             <Link href="/photographs" className="text-sm text-teal-deep underline inline-block py-1.5 min-h-[44px]">
               See every photograph on one page, newest first
             </Link>
           </nav>
+          <p className="text-sm italic text-muted-foreground">
+            Every place on the land that somebody has stood in front of with a camera.
+          </p>
         </header>
 
         {locked ? (
           <p className="rounded-xl border border-border bg-card p-6">
-            This village keeps its map to members.{" "}
             <Link href={`/login?next=${encodeURIComponent("/places")}`} className="text-teal-deep underline">
               Sign in
             </Link>{" "}
-            to see the places it has photographed.
+            to see the places this village has photographed.
           </p>
         ) : !data ? (
           <BreathingLoader label="Opening the places" />
         ) : data.places.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">
-            No place here has a photograph yet. The first one starts the record.
+            No photographs yet.
           </p>
         ) : (
           <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 list-none p-0">

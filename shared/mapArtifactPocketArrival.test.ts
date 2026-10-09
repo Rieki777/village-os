@@ -37,11 +37,11 @@ import fs from "fs";
 import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
 
-type ArtifactWindow = Window & typeof globalThis & { eval(src: string): unknown };
 interface Jsdom {
   JSDOM: new (
     markup: string,
@@ -166,7 +166,7 @@ function boot(hash = "#hud=pocket&skipIntro"): Booted {
       stubTheMissingPlatform(w);
     },
   });
-  const run = <T>(src: string) => window.eval(src) as T;
+  const run = <T>(src: string) => evalIn<T>(window, src);
   return { window, uncaught, camAtLoad: run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"), run, close: () => window.close() };
 }
 
@@ -499,5 +499,187 @@ describe("the phone's drawer reaches the lenses and the time of day (F58)", () =
     click(b, cell("now"));
     expect(state().mode).toBe("now");
     expect(b.uncaught).toEqual([]);
+  });
+});
+
+/* N12. The chart takes pointer capture on every pointerdown so a drag keeps
+   it, and a captured mouse's click goes to the svg, the common ancestor of
+   where it went down and where it came up. So on a desk a click on a node
+   opened nothing, ever; a finger's tap is retargeted and worked. This plays
+   the event order Chromium gives a captured mouse: down on the node, up and
+   click on the chart. */
+describe("a mouse click on a node of the in-file circles opens its place (N12)", () => {
+  let b: Booted;
+  let key: string;
+  const ptr = (el: Element, type: string, x: number) =>
+    el.dispatchEvent(new b.window.PointerEvent(type, { pointerId: 1, isPrimary: true, pointerType: "mouse", clientX: x, clientY: 300, bubbles: true }));
+  const click = (el: Element, x: number) => el.dispatchEvent(new b.window.MouseEvent("click", { clientX: x, clientY: 300, bubbles: true }));
+  beforeAll(async () => {
+    b = boot("#skipIntro");
+    await settle(SETTLE_MS);
+    b.run("setMapType('circles',true)"); // draws the chart
+    key = b.run<string>("([...document.querySelectorAll('#orgSvg .onode')].find(g=>BY[g.dataset.go])||{dataset:{}}).dataset.go||''");
+  });
+  afterAll(() => b?.close());
+  const svg = () => b.window.document.getElementById("orgSvg") as Element;
+  const node = () => b.window.document.querySelector(`#orgSvg .onode[data-go="${key}"]`) as Element;
+
+  it("has a node with a place behind it (the case is the one it says)", () => {
+    b.run("setMapType('circles',true)");
+    expect(key, "a node that opens a place").toBeTruthy();
+    expect(node()).not.toBeNull();
+  });
+
+  it("does not open anything when the pointer dragged the chart from a node", () => {
+    b.run("setMapType('circles',true)");
+    ptr(node(), "pointerdown", 300);
+    ptr(svg(), "pointermove", 340);
+    ptr(svg(), "pointerup", 340);
+    click(svg(), 340);
+    expect(b.run<string | null>("panelKey"), "a drag is not a click").toBeNull();
+    expect(body(b).contains("circles")).toBe(true);
+  });
+
+  it("opens the place a still click went down on", async () => {
+    await settle(80); // the drag's movement count clears 50 ms after the lift
+    b.run("setMapType('circles',true)");
+    ptr(node(), "pointerdown", 300);
+    ptr(svg(), "pointerup", 300);
+    click(svg(), 300);
+    expect(b.run<string | null>("panelKey")).toBe(key);
+    expect(body(b).contains("circles"), "back on the land, at its door").toBe(false);
+    expect(b.uncaught).toEqual([]);
+  });
+});
+
+/* D16, Rye's best-guess call. A phone frames the village before its first
+   painted frame (F05), from the seed scene the file ships with, and the rule
+   was that nothing reframes after paint. Inside the shell the village's own
+   scene arrives later in a config, under the opaque cover, and a place the
+   seed does not have was framed out: the 23rd live place landed 40 px past
+   the right edge at 390x844. So the arrival frame is aimed again on the
+   first scene applied, still under the cover, before land-ready lifts it. */
+describe("a phone re-aims its arrival on the village's own scene, under the cover (D16)", () => {
+  interface Shelled {
+    window: ArtifactWindow;
+    uncaught: unknown[];
+    run<T>(src: string): T;
+    post(data: Record<string, unknown>): void;
+    camAtLoad: Cam;
+    /** The camera at the moment the map said land-ready, which is when the cover lifts. */
+    camAtReady: () => Cam | null;
+    close(): void;
+  }
+  function bootInShell(hash = "#hud=pocket&skipIntro"): Shelled {
+    const uncaught: unknown[] = [];
+    let atReady: Cam | null = null;
+    let win: ArtifactWindow | null = null;
+    const parent = {
+      postMessage: (m: { type?: string }) => {
+        if (m && m.type === "land-ready" && win) atReady = evalIn<Cam>(win, "({x:cam.x,y:cam.y,z:cam.z})");
+      },
+    };
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on("jsdomError", (e) => {
+      if (e.type === "unhandled-exception") uncaught.push(e.cause ?? e);
+    });
+    const { window } = new JSDOM(html, {
+      runScripts: "dangerously",
+      pretendToBeVisual: true,
+      url: `http://localhost/grounds/index.html${hash}`,
+      virtualConsole,
+      beforeParse(w) {
+        w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
+        Object.assign(w, { innerWidth: PHONE.width, innerHeight: PHONE.height });
+        stubTheMissingPlatform(w);
+        Object.defineProperty(w, "parent", { configurable: true, get: () => parent });
+      },
+    });
+    win = window;
+    const run = <T>(src: string) => evalIn<T>(window, src);
+    return {
+      window,
+      uncaught,
+      run,
+      post(data) {
+        const own = ownCopy(window, data);
+        window.dispatchEvent(new window.MessageEvent("message", { data: own, origin: window.location.origin }));
+      },
+      camAtLoad: run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"),
+      camAtReady: () => atReady,
+      close: () => window.close(),
+    };
+  }
+  /** The village's scene: the seed with its eastmost place moved past the right edge of the view the phone opened on. */
+  const villageScene = (b: Shelled) =>
+    b.run<Record<string, unknown>>(`(()=>{const J=JSON.parse(JSON.stringify(buildExportJSON()));
+      const on=J.map_structures.filter(s=>{const x=BY[s.key];return x&&!(mode==='now'&&x.state==='blueprint')});
+      const east=on.reduce((a,s)=>s.anchor.x>a.anchor.x?s:a,on[0]);
+      const edge=cam.x+(innerWidth/2)/cam.z;
+      east.anchor.x=Math.round(Math.min(W-30,edge+(W-30-edge)/2));window.__east=east.key+' to '+east.anchor.x+', view edge '+Math.round(edge);return J})()`);
+  const offScreen = (b: Shelled, c: Cam) => {
+    const places = b.run<{ key: string; x: number; y: number }[]>(
+      "SCENE.structures.filter(s=>!(mode==='now'&&s.state==='blueprint')).map(s=>({key:s.key,x:s.x,y:s.y}))",
+    );
+    const top = MEASURED.vitals.top + MEASURED.vitals.height;
+    const bottom = MEASURED.pbar.top;
+    return places
+      .map((p) => ({ key: p.key, sx: (p.x - c.x) * c.z + PHONE.width / 2, sy: (p.y - c.y) * c.z + PHONE.height / 2 }))
+      .filter((p) => p.sx < 0 || p.sx > PHONE.width || p.sy < top || p.sy > bottom)
+      .map((p) => `${p.key} at ${Math.round(p.sx)},${Math.round(p.sy)}`);
+  };
+
+  it("frames every place of the village's own scene by the time the cover lifts, and moves no more after", async () => {
+    const b = bootInShell();
+    try {
+      await settle(SETTLE_MS);
+      expect(b.window.document.body.classList.contains("pocket"), "the pocket profile, inside the shell").toBe(true);
+      expect(b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"), "framed once at load, and still").toEqual(b.camAtLoad);
+      b.post({ type: "config", scene: villageScene(b), sceneVersion: 7 });
+      const ready = b.camAtReady();
+      expect(ready, "the map said land-ready").not.toBeNull();
+      expect(offScreen(b, b.camAtLoad).length, "a place the opening view leaves out (the case is the one it says)").toBeGreaterThan(0);
+      expect(offScreen(b, ready as Cam), `places off screen when the cover lifts (moved: ${b.run<string>("window.__east")})`).toEqual([]);
+      await settle(400);
+      expect(b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})"), "nothing moves once the cover is off").toEqual(ready);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.close();
+    }
+  });
+
+  /* The shell's grace lifts the cover 10 s after the frame loads when no
+     land-ready has come, and says `uncovered` (round 3). From then on the
+     visitor is looking at the phone's opening frame, so a scene that lands
+     later must not re-aim it: that is the jump D16 exists to keep out of
+     sight. */
+  it("does not re-aim once the shell's grace has lifted the cover before the scene came", async () => {
+    const b = bootInShell();
+    try {
+      await settle(SETTLE_MS);
+      b.post({ type: "uncovered" });
+      const seen = b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+      b.post({ type: "config", scene: villageScene(b), sceneVersion: 7 });
+      expect(b.camAtReady(), "the map said land-ready").not.toBeNull();
+      expect(offScreen(b, seen).length, "the scene would have been re-aimed (the case is the one it says)").toBeGreaterThan(0);
+      expect(b.camAtReady(), "the frame the visitor has been watching since the cover lifted").toEqual(seen);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.close();
+    }
+  });
+
+  it("leaves a camera somebody already moved where it is (the control)", async () => {
+    const b = bootInShell();
+    try {
+      await settle(SETTLE_MS);
+      b.run("cam.x+=60;clampCam()");
+      const moved = b.run<Cam>("({x:cam.x,y:cam.y,z:cam.z})");
+      b.post({ type: "config", scene: villageScene(b), sceneVersion: 7 });
+      expect(b.camAtReady()).toEqual(moved);
+      expect(b.uncaught).toEqual([]);
+    } finally {
+      b.close();
+    }
   });
 });

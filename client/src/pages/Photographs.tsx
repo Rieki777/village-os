@@ -181,7 +181,7 @@ function PhotographsPage() {
           <BreathingLoader label="Opening the village's photographs" />
         ) : photos.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">
-            Nobody has photographed anything here yet. The first picture starts the record.
+            No photographs yet.
           </p>
         ) : (
           <>

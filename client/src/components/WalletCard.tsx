@@ -106,13 +106,13 @@ export default function WalletCard() {
         <p className="text-sm text-muted-foreground">Loading your balances…</p>
       ) : status === "failed" ? (
         <p className="text-sm text-muted-foreground">
-          Couldn't load your balances.{" "}
+          Your balances didn't load.{" "}
           <button type="button" onClick={load} className="text-foreground font-medium hover:underline">
             Retry
           </button>
         </p>
       ) : Object.keys(balances).length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing yet. Contribution is where value starts.</p>
+        <p className="text-sm text-muted-foreground">No balances yet.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {Object.entries(balances).map(([slug, bal]) => (

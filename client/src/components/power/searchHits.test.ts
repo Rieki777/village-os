@@ -88,6 +88,30 @@ describe("a result says who and where", () => {
     expect(hit!.line).not.toMatch(/held by/);
   });
 
+  it("says an agent holds a seat, and never prints the vendor's name its row carries", () => {
+    const VENDOR = "Fieldnotes Assistant";
+    const withAgent = {
+      circles,
+      roles: [
+        seat({
+          id: "k4",
+          name: "Kitchen Lead",
+          seats: 2,
+          holderCount: 2,
+          holders: [{ userId: "u1", name: "Ana" }, { userId: null, name: VENDOR, kind: "documented", isAgent: true }] as any,
+        }),
+      ],
+    };
+    // Control: the vendor's name is in the payload the map served.
+    expect(JSON.stringify(withAgent)).toContain(VENDOR);
+    expect(searchHits(withAgent, "kitchen")[0]!.line).toBe("held by Ana and an agent, in Gathering Circle");
+    // Searching the vendor's name finds no person to filter the map to.
+    expect(searchHits(withAgent, "fieldnotes").filter((h) => h.kind === "holder")).toEqual([]);
+    // Control: a person's name still finds them.
+    expect(searchHits(withAgent, "ana").some((h) => h.kind === "holder" && h.title === "Ana")).toBe(true);
+    expect(JSON.stringify(searchHits(withAgent, "kitchen"))).not.toContain(VENDOR);
+  });
+
   it("names at most two holders and counts the rest", () => {
     const many = {
       circles,

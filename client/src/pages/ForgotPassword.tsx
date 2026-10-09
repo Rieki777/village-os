@@ -32,10 +32,10 @@ export default function ForgotPassword() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? data.error ?? "Could not send the link");
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "That didn't go through. Try again.");
       setSent(true);
     } catch (err: any) {
-      setError(err?.message || "Something went wrong. Please try again shortly.");
+      setError(err?.message || "That didn't go through. Try again.");
     }
     setBusy(false);
   };
