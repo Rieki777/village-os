@@ -38,7 +38,7 @@ made at the time.
 
 ---
 
-## 1.2.1 (2026-10-06)
+## 1.2.1 (2026-10-09)
 
 **Village OS moved to the ReGen Civics organisation.** The code is now at
 github.com/ReGen-Civics/village-os, and the image is published as
@@ -52,8 +52,25 @@ github.com/ReGen-Civics/village-os, and the image is published as
 - **The setup prompt follows one release.** The prompt you give your AI
   assistant now has it find the latest release once and use that version for
   the guides, the download and the image, so nothing mixes two releases.
-- **The Living Map:** a second round of fixes from a full QA sweep, 79 of the
-  80 confirmed defects.
+- **The words on every page were rewritten** so the village guides a member
+  through it like a game, and **the Trail** shows a member their next step on
+  every page.
+- **Role cards.** Each seat has a card on `/roles`, `/circles`, the setup
+  wizard and `/review`, and a link (`/roles?seat=<id>`) opens one seat's card.
+- **The Living Map:**
+  - a second round of fixes from a full QA sweep, 79 of the 80 confirmed defects
+  - the land draws the village's own circles and seats, live
+  - founders choose the crown bar's chips and what each one counts, in Village settings
+  - a village with no published map shows a blank slate, and its founder's
+    agent can draft one from the village's masterplan for the founder to publish
+  - members see a treasury chip
+- **Clearer setup errors.** A malformed `VILLAGE_SECRETS_KEY` is now named, with what is wrong
+  with it, before anything else.
+- **Two security fixes:**
+  - The public rules feed listed the blockchain RPC address together with its key. It now
+    withholds the key. If your village set one, rotate it.
+  - The page a member returns to after signing in now passes one strict rule
+    everywhere, so a crafted link cannot send them outside the village.
 - **Saberra villages** get a setup panel, a Sync now button and the service's
   own names for its kinds.
 - **Dependency updates,** including the test runner, with no change a member
