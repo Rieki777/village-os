@@ -26,8 +26,9 @@
  */
 import type { Express, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
+import { register as registerGatheringRoutes, type GatheringRoutesDeps } from "./commsGatherings";
 
-type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp">;
+type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & GatheringRoutesDeps;
 
 const GUEST_PER_IP = 20;
 const GUEST_WINDOW_MS = 10 * 60 * 1000;
@@ -39,6 +40,9 @@ const signedOut = (res: Response) => res.status(401).json({ error: "Sign in firs
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, overLimit, clientIp } = deps;
+
+  // A gathering's own email settings, its join link, and "can't make it" (lane C2).
+  registerGatheringRoutes(app, deps);
 
   app.post("/api/events/:id/guest-rsvp", async (req, res) => {
     if (await overLimit(`comms-guest:${clientIp(req)}`, GUEST_PER_IP, GUEST_WINDOW_MS)) {
@@ -60,10 +64,5 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/events/:id/attendance", async (req, res) => {
     if (!(await authedUser(req))) return signedOut(res);
     notYet(res, "Marking who came");
-  });
-  app.get("/api/events/:id/comms", (_req, res) => notYet(res, "Email settings"));
-  app.put("/api/events/:id/comms", async (req, res) => {
-    if (!(await authedUser(req))) return signedOut(res);
-    notYet(res, "Email settings");
   });
 }

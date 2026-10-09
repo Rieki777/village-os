@@ -258,10 +258,12 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the foundation", () => {
 
     const on = await call("PUT", "/api/admin/modules/events/lifecycle", { body: { lifecycle: "members", examples: false } });
     expect(on.status, JSON.stringify(on.json)).toBe(200);
-    // The same request reaches the route itself now, which is still being built.
+    // The same request reaches the route itself now (the event email lane's),
+    // which answers for a gathering that does not exist in its own words.
     const reached = await call("GET", "/api/events/ev-anything/comms");
-    expect(reached.status, JSON.stringify(reached.json)).toBe(501);
-    expect(String(reached.json?.error)).toContain("being built");
+    expect(reached.status, JSON.stringify(reached.json)).toBe(404);
+    expect(reached.json?.error).not.toBe("module_disabled");
+    expect(String(reached.json?.error)).toContain("isn't on the calendar");
   });
 
   it("keeps the fake provider out of the bundle that ships", () => {
