@@ -363,7 +363,7 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     expect(r.json.setup).toMatchObject({ ready: true, done: 6, total: 6, open: [] });
     expect(r.json.paused).toBe(true);
-    expect(r.json.jobs).toEqual(["drain", "journeys", "polls"]);
+    expect(r.json.jobs).toEqual(["drain", "journeys", "polls", "letters"]);
     expect(r.json.numbers.days).toBe(30);
     expect(r.json.numbers.byKind.essential).toBeGreaterThanOrEqual(2);
     expect(r.json.journeys.map((j: any) => j.key)).toContain("gathering.going");

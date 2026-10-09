@@ -191,7 +191,7 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the foundation", () => {
     expect(status.json).toMatchObject({
       module: { lifecycle: "off", ready: false },
       provider: { keySet: true, senderSet: true },
-      jobs: ["drain", "journeys", "polls"],
+      jobs: ["drain", "journeys", "polls", "letters"],
     });
     expect(status.json.messages.byStatus.sent).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(status.json), "no address and no key leave in a status").not.toContain("@");

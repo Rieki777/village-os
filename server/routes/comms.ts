@@ -40,6 +40,7 @@ import { register as registerWords } from "./commsWords";
 import { register as registerSentMailRoutes } from "./commsSent";
 import { register as registerJourneys, journeysTickDeps } from "./commsJourneys";
 import { runTimePollsNow, timePollDepsOf } from "./commsPolls";
+import { register as registerLetters, runLettersNow } from "./commsLetters";
 
 type Deps = Pick<
   AppDeps,
@@ -51,7 +52,7 @@ type Deps = Pick<
 const STATUS_DAYS = 30;
 
 /** The jobs "run now" can run, by the name the request gives. */
-export const COMMS_JOBS = ["drain", "journeys", "polls"] as const;
+export const COMMS_JOBS = ["drain", "journeys", "polls", "letters"] as const;
 export type CommsJob = (typeof COMMS_JOBS)[number];
 
 export function register(app: Express, deps: Deps): void {
@@ -62,6 +63,7 @@ export function register(app: Express, deps: Deps): void {
     journeys: () => tick(journeysTickDeps(deps)),
     // The live time vote's job (server/routes/commsPolls.ts registers it on the scheduler).
     polls: () => runTimePollsNow(timePollDepsOf(deps)),
+    letters: () => runLettersNow(deps),
   };
 
   // The post office's drain on the scheduler, beside the button that runs it now.
@@ -121,4 +123,7 @@ export function register(app: Express, deps: Deps): void {
 
   // Journeys: the timeline, on and off, step edits, walk-through, and the tick's job (server/routes/commsJourneys.ts).
   registerJourneys(app, deps);
+
+  // Letters, and each journey step's outcomes (server/routes/commsLetters.ts).
+  registerLetters(app, deps);
 }
