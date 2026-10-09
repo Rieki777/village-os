@@ -5,7 +5,8 @@
  *
  * STUBS FROM THE FOUNDATION LANE, each answering 501 with a sentence. The
  * event email lane (C2), the guests and recaps lane (C3) and the time vote
- * lane (C4) fill them in, here.
+ * lane (C4) fill them in, here. Guests, attendance and the recap are
+ * server/routes/commsGuests.ts, registered first below.
  *
  * ── WHERE THIS IS REGISTERED, AND WHY IT MUST STAY THERE ───────────────────
  *
@@ -27,11 +28,9 @@
 import type { Express, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { register as registerGatheringRoutes, type GatheringRoutesDeps } from "./commsGatherings";
+import { register as registerGuestRoutes, type CommsGuestsDeps } from "./commsGuests";
 
-type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & GatheringRoutesDeps;
-
-const GUEST_PER_IP = 20;
-const GUEST_WINDOW_MS = 10 * 60 * 1000;
+type Deps = Pick<AppDeps, "authedUser" | "overLimit" | "clientIp"> & GatheringRoutesDeps & CommsGuestsDeps;
 
 const notYet = (res: Response, what: string) =>
   res.status(501).json({ error: `${what} for a gathering is being built.` });
@@ -39,30 +38,17 @@ const notYet = (res: Response, what: string) =>
 const signedOut = (res: Response) => res.status(401).json({ error: "Sign in first" });
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, overLimit, clientIp } = deps;
+  const { authedUser } = deps;
 
   // A gathering's own email settings, its join link, and "can't make it" (lane C2).
   registerGatheringRoutes(app, deps);
 
-  app.post("/api/events/:id/guest-rsvp", async (req, res) => {
-    if (await overLimit(`comms-guest:${clientIp(req)}`, GUEST_PER_IP, GUEST_WINDOW_MS)) {
-      return res.status(429).set("Retry-After", "600").json({ error: "Too many requests. Try again in a few minutes." });
-    }
-    notYet(res, "Saying yes without an account");
-  });
+  // Guests, attendance and the recap (the guests and recaps lane, C3).
+  registerGuestRoutes(app, deps);
+
   app.get("/api/events/:id/time-poll", (_req, res) => notYet(res, "Voting on a time"));
   app.post("/api/events/:id/time-poll", async (req, res) => {
     if (!(await authedUser(req))) return signedOut(res);
     notYet(res, "Voting on a time");
-  });
-  app.get("/api/events/:id/recap", (_req, res) => notYet(res, "The recap"));
-  app.post("/api/events/:id/recap", async (req, res) => {
-    if (!(await authedUser(req))) return signedOut(res);
-    notYet(res, "The recap");
-  });
-  app.get("/api/events/:id/attendance", (_req, res) => notYet(res, "Marking who came"));
-  app.post("/api/events/:id/attendance", async (req, res) => {
-    if (!(await authedUser(req))) return signedOut(res);
-    notYet(res, "Marking who came");
   });
 }
