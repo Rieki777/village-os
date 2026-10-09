@@ -143,6 +143,8 @@ beforeAll(async () => {
       EMAIL_FROM: SENDER,
       RESEND_WEBHOOK_SECRET: makeWebhookSecret(),
       ANTHROPIC_API_KEY: "",
+      // No assistant either, so "Draft it for me" answers the plain draft this suite reads word for word.
+      PLATFORM_ASSISTANT_KEY: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

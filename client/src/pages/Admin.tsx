@@ -86,7 +86,7 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "
 // the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
 // membership-request is somebody with no invitation asking to join, from
 // RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact"] as const;
+const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact", "comms-change"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.

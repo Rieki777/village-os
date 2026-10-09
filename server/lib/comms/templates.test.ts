@@ -89,8 +89,8 @@ describe.skipIf(!configured)("a village's words, stored", () => {
     expect(await saveWords(pool, key, draft("First edit"), "u-1")).toBe(2);
     // The first save adopts the platform's words as version 1, then saves the edit.
     expect(await rowsOf(key)).toEqual([
-      { version: 1, state: "retired", subject: defaultTemplate(key)!.subject, platformVersion: 1, editedBy: null },
-      { version: 2, state: "live", subject: "First edit", platformVersion: 1, editedBy: "u-1" },
+      { version: 1, state: "retired", subject: defaultTemplate(key)!.subject, platformVersion: defaultTemplate(key)!.version, editedBy: null },
+      { version: 2, state: "live", subject: "First edit", platformVersion: defaultTemplate(key)!.version, editedBy: "u-1" },
     ]);
     expect(await saveWords(pool, key, draft("Second edit"), "u-2")).toBe(3);
     expect((await readLiveWords(pool, key))?.subject).toBe("Second edit");
@@ -129,7 +129,7 @@ describe.skipIf(!configured)("a village's words, stored", () => {
 
     const adopted = await adoptPlatformWords(pool, key, "u-1");
     const after = await wordsDetail(pool, key);
-    expect(after?.live).toMatchObject({ version: adopted, subject: defaultTemplate(key)!.subject, platformVersion: 1 });
+    expect(after?.live).toMatchObject({ version: adopted, subject: defaultTemplate(key)!.subject, platformVersion: defaultTemplate(key)!.version });
     expect(after?.upgradeAvailable).toBe(false);
     // Their own words are still in the history.
     expect(after?.versions.some((v) => v.subject === "Our own words")).toBe(true);
@@ -140,7 +140,7 @@ describe.skipIf(!configured)("a village's words, stored", () => {
     const copied = await ensureAdopted(pool, ["gathering.reminder_soon", "gathering.waitlisted", "no.such.template"]);
     expect(copied).toEqual(["gathering.waitlisted"]);
     expect((await readLiveWords(pool, "gathering.reminder_soon"))?.subject).toBe("Ours");
-    expect(await readLiveWords(pool, "gathering.waitlisted")).toMatchObject({ source: "village", version: 1, platformVersion: 1 });
+    expect(await readLiveWords(pool, "gathering.waitlisted")).toMatchObject({ source: "village", version: 1, platformVersion: defaultTemplate("gathering.waitlisted")!.version });
     expect(await ensureAdopted(pool, ["gathering.waitlisted"])).toEqual([]);
   });
 

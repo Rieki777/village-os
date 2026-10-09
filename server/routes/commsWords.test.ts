@@ -3,6 +3,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import type { PostOfficeDeps } from "../lib/comms/postOffice";
 import type { Transport, TransportMessage } from "../lib/comms/transport";
+import { defaultTemplate } from "../../shared/comms/defaults/templates";
 import { register } from "./commsWords";
 
 /**
@@ -182,7 +183,7 @@ describe.skipIf(!configured)("the Words routes", () => {
 
     const adopted = await call("POST", "/api/admin/comms/words/:key/adopt", { params: { key } });
     expect(adopted.body.adopted).toBe(3);
-    expect(adopted.body.detail.live).toMatchObject({ version: 3, platformVersion: 1 });
+    expect(adopted.body.detail.live).toMatchObject({ version: 3, platformVersion: defaultTemplate(key)!.version });
   });
 
   it("lists every email in its group, and tells the editor which fields each one may use", async () => {

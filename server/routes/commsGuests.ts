@@ -9,7 +9,7 @@
  *   POST /api/events/:id/attendance                tick who came, or everyone did
  *   GET  /api/events/:id/recap?occurrence=         the composer, the counts, the answers
  *   POST /api/events/:id/recap                     save the draft
- *   POST /api/events/:id/recap/draft               "Draft it for me", saving nothing
+ *   POST /api/events/:id/recap/draft               "Draft it for me", saving nothing (polished when the assistant is set)
  *   POST /api/events/:id/recap/send                send it to everybody who said yes
  *
  * ── WHERE THIS IS REGISTERED ───────────────────────────────────────────────
@@ -51,6 +51,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { registerAction } from "../lib/comms/actions";
 import { attendanceView, markAttendance } from "../lib/comms/attendance";
 import { guestConfirmAction, guestDoor, requestGuestSeat } from "../lib/comms/guests";
+import { assistantReady, polishRecap } from "../lib/comms/recapPolish";
 import { draftForMe, recapAnswerAction, recapView, rsvpNextAction, saveRecap, sendRecap, type RecapDeps } from "../lib/comms/recaps";
 import { recordEvent } from "../lib/events";
 import { isExampleUser } from "../lib/examples";
@@ -192,7 +193,16 @@ export function register(app: Express, deps: CommsGuestsDeps): void {
     if (!(await guardCapability(req, res, "event.manage"))) return;
     const out = await draftForMe(guests, req.params.id, occurrenceOf(req), req.body?.notes);
     if (!out.ok) return res.status(out.status).json({ error: out.error });
-    res.json({ bodyMd: out.bodyMd });
+    // With the assistant configured, the host's notes may come back polished (5.14).
+    // Twenty an hour per host; past that, or on any failure, the plain draft.
+    const host = await authedUser(req);
+    const uid = String(host?.id ?? "admin");
+    const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 5000) : "";
+    const polished =
+      notes.trim() && assistantReady() && !(await overLimit(`recap-polish:${uid}`, 20, 60 * 60 * 1000))
+        ? await polishRecap({ getPool: deps.getPool }, { draft: out.bodyMd, notes, userId: uid, clientIp: clientIp(req) })
+        : null;
+    res.json({ bodyMd: polished ?? out.bodyMd, polished: polished !== null });
   });
 
   app.post("/api/events/:id/recap/send", async (req, res) => {

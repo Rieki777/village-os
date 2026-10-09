@@ -28,10 +28,15 @@
  * RFC 8058 POST to `/api/comms/unsubscribe`.
  */
 import type { Express } from "express";
+import { register as registerMembers, type MemberDeps } from "./commsMembers";
 import { registerPublic as registerPeoplePublic, type PublicDeps } from "./commsPeople";
 
-type Deps = PublicDeps;
+type Deps = PublicDeps & MemberDeps;
 
 export function register(app: Express, deps: Deps): void {
   registerPeoplePublic(app, deps);
+  // The member's view of the village's email and its "Propose a change" door
+  // (5.13). Unlike the routes above it is module-gated, one route at a time,
+  // because it shows the automations themselves (server/routes/commsMembers.ts).
+  registerMembers(app, deps);
 }

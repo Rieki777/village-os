@@ -35,6 +35,7 @@ import { waitForHealth } from "./db/e2eBoot";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFree } from "./db/testDb";
 import { enroll } from "./lib/comms/journeys";
 import { upsertContact } from "./repos/commsContacts";
+import { defaultTemplate } from "../shared/comms/defaults/templates";
 import { startFakeResend, type FakeResend } from "./testkit/fakeResend";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -235,9 +236,12 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the journeys", () => {
     expect(on.status, JSON.stringify(on.json)).toBe(200);
     expect([...on.json.adopted].sort()).toEqual(["gathering.confirm", "gathering.reminder_day", "gathering.reminder_soon"]);
     const [words] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
-      "SELECT COUNT(*) AS n FROM comms_templates WHERE template_key LIKE 'gathering.%' AND state = 'live' AND platform_version = 1",
+      "SELECT template_key, platform_version FROM comms_templates WHERE template_key LIKE 'gathering.%' AND state = 'live' ORDER BY template_key",
     );
-    expect(Number(words[0].n)).toBe(3);
+    // Each copy remembers the platform version it was taken from.
+    expect(words.map((r) => [r.template_key, Number(r.platform_version)])).toEqual(
+      ["gathering.confirm", "gathering.reminder_day", "gathering.reminder_soon"].map((k) => [k, defaultTemplate(k)!.version]),
+    );
 
     const first = await run("journeys");
     expect(first.json.summary).toMatchObject({ posted: 1 });
