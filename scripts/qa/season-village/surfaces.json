@@ -12,7 +12,8 @@
     "Wave 3a public-lines (2026-09-28): /governance is \"How we work together\"; a visitor reads the public lines and the public matrix only, a member also the note that blocks open members' words, the founder the pen's controls; the seed's canvas reading ($canvasReading) must never render there.",
     "Wave 3a audit fix (2026-09-28): Departures tells the founder the truth about the outside contact, whose name and way of reaching them show to members only, and no longer says every field is public.",
     "Wave 3b canvas-frames-client (2026-09-28): each canvas block opens its five frames behind \"Open this block: <name>\". Views on the same page run in order and do not reset, so journey's canvas-power-* views open Power, then press each frame's button (Sense, See, Learn, Say, the matrix, Adopt). The Decision Matrix moved from the closed Power card into Power's Say frame, so decision-matrix opens Power and presses Say before the matrix button. $canvasSuggestion and $canvasSuggester are the seed's member suggestion on Power, made by a member the walk does not sign in as: the walk's member reads it with nothing to press, the founder with the pen's Adopt and Decline.",
-    "Wave 4 (2026-10-01), the companion and the key moments: the Canvas view shows the canvas moon card (the next new moon is a date in the sky, so the old rule against \"New moon\" now forbids only the season file's old label shape, \"New moon,\" with its comma) and the companion's door \"Ask about the canvas\". The events module is off in this village, so nobody is offered the canvas moon gathering. Power's Learn frame asks through the companion, and no longer says asking is not built. The companion surface opens the panel from each of its three doors (the view's header, Power's card, Power's Learn frame) and closes it between them. The guide stays on the founder's journey page. The seed checks the moments in the bell and what the companion says about a section closed to members through the routes; the walk cannot type a question."
+    "Wave 4 (2026-10-01), the companion and the key moments: the Canvas view shows the canvas moon card (the next new moon is a date in the sky, so the old rule against \"New moon\" now forbids only the season file's old label shape, \"New moon,\" with its comma) and the companion's door \"Ask about the canvas\". The events module is off in this village, so nobody is offered the canvas moon gathering. Power's Learn frame asks through the companion, and no longer says asking is not built. The companion surface opens the panel from each of its three doors (the view's header, Power's card, Power's Learn frame) and closes it between them. The guide stays on the founder's journey page. The seed checks the moments in the bell and what the companion says about a section closed to members through the routes; the walk cannot type a question.",
+    "Wave 4 main merge (2026-10-09, main b17db45, Village OS 1.2.0): a fresh village serves NO brochure pages (shared/brochure.ts; migration 0225 turns them on only where members already existed), so home shows the platform home (its own body is the three doors, How we decide among them) and /love-letter renders the soft 404 by design. love-letter is therefore not required on a fresh village; it is still walked and reported, and is required again on a village that switches the brochure pages on."
   ],
   "version": 1,
   "viewports": {
@@ -31,7 +32,7 @@
       "id": "home",
       "path": "/",
       "required": true,
-      "text": ["You figure out if $villageName fits your life"]
+      "text": ["Who holds which power, and how a proposal becomes a decision"]
     },
     {
       "id": "governance",
@@ -234,7 +235,7 @@
     {
       "id": "love-letter",
       "path": "/love-letter",
-      "required": true,
+      "required": false,
       "text": ["The $villageName Love Letter"]
     },
     {
