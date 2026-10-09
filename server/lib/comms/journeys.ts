@@ -16,6 +16,28 @@ import type { Pool } from "mysql2/promise";
 import { defaultJourney } from "../../../shared/comms/defaults/journeys";
 import { insertEnrollment, stopEnrollments, touchEnrollments, villageJourneyVersion } from "../../repos/commsJourneys";
 
+/*
+ * THE EXTENSION POINTS, re-exported so a lane can import everything it plugs
+ * into from the engine's own file. The registries live in ./journeyRegistry.ts
+ * (facts providers by journey kind, vars builders by kind and merge group) and
+ * ./conditions.ts (one answer per skip-if and stop key); the planner's
+ * `facts.stepOverrides` and `facts.extraSteps` are in
+ * shared/comms/journeyPlan.ts.
+ */
+export {
+  registerFactsProvider,
+  registerVarsBuilder,
+  type EventFacts,
+  type FactsProvider,
+  type GatheredFacts,
+  type JourneyContext,
+  type StepContent,
+  type VarsBuilder,
+  type VarsContext,
+} from "./journeyRegistry";
+export { registerCondition, type ConditionAnswer, type ConditionContext } from "./conditions";
+export type { PlanFacts, StepOverride } from "../../../shared/comms/journeyPlan";
+
 export interface JourneyDeps {
   getPool(): Pool;
 }
