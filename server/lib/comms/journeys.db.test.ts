@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { defaultTemplate } from "../../../shared/comms/defaults/templates";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { upsertContact } from "../../repos/commsContacts";
 import { enrollmentById } from "../../repos/commsJourneys";
@@ -142,9 +143,10 @@ describe.skipIf(!configured)("the journey engine", () => {
       "SELECT template_key, state, platform_version, edited_by FROM comms_templates WHERE template_key LIKE 'gathering.%' ORDER BY template_key",
     );
     expect(rows.map((r) => [r.template_key, r.state, Number(r.platform_version), r.edited_by])).toEqual([
-      ["gathering.confirm", "live", 1, "u-admin"],
-      ["gathering.reminder_day", "live", 1, "u-admin"],
-      ["gathering.reminder_soon", "live", 1, "u-admin"],
+      // Each copy remembers the platform version it was taken from.
+      ["gathering.confirm", "live", defaultTemplate("gathering.confirm")!.version, "u-admin"],
+      ["gathering.reminder_day", "live", defaultTemplate("gathering.reminder_day")!.version, "u-admin"],
+      ["gathering.reminder_soon", "live", defaultTemplate("gathering.reminder_soon")!.version, "u-admin"],
     ]);
     // Turning it on again copies nothing twice.
     expect((await setJourneyState(deps(), "gathering.going", "on", "u-admin"))?.adopted).toEqual([]);
