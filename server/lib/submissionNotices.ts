@@ -34,6 +34,7 @@ const WHAT_THEY_SENT: Record<string, string> = {
   // seat nobody is holding.
   "seat-claim": "your ask to be confirmed in a seat",
   "power-application": "your offer to take on a power",
+  "comms-change": "your proposed change to the village's email",
   "work-with-us": "your proposal to work together",
   "quest-proposal": "the quest you proposed",
   "visit-inquiry": "your request to visit",
