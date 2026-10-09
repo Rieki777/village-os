@@ -32,6 +32,7 @@ import MonthView, { type GridMode } from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 import CalendarFeedCard from "@/components/calendar/CalendarFeedCard";
+import TimePollPanel from "@/components/comms/TimePollPanel";
 import {
   DEFAULT_ANCHOR,
   addDays,
@@ -304,6 +305,7 @@ export default function Events() {
           )}
         </div>
         {g.description && <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{g.description}</p>}
+        {g.timePoll && <TimePollPanel item={g} onChanged={reload} />}
         {rsvpButtons(g)}
       </li>
     );
