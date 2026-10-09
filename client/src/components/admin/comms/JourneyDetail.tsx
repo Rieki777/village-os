@@ -7,6 +7,7 @@
  * Light-only, like every admin surface: fixed grays on fixed white.
  */
 import { useCallback, useEffect, useState } from "react";
+import JourneyOutcomes from "./JourneyOutcomes";
 import JourneyWalk from "./JourneyWalk";
 import {
   fetchJourney,
@@ -303,6 +304,7 @@ export default function JourneyDetail({ password, journeyKey, onChanged }: { pas
         )}
       </section>
 
+      <JourneyOutcomes password={password} journeyKey={detail.key} labels={Object.fromEntries(detail.steps.map((s) => [s.key, s.label]))} />
       <JourneyWalk key={walkFor ?? "none"} password={password} detail={detail} enrollmentId={walkFor} />
 
       <section aria-label="People on it">
