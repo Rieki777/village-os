@@ -83,10 +83,13 @@ export interface RecapSendFacts {
   commsLifecycle: ModuleLifecycle;
 }
 
+/** The refusal an empty draft gets. The composer saves before it sends, so it treats this one as no block. */
+export const RECAP_EMPTY = "Write the recap first.";
+
 /** Why the recap cannot go now, in words for the host, or null when it can. */
 export function recapSendRefusal(f: RecapSendFacts): string | null {
   if (f.state === "sent") return "Already sent.";
-  if (!f.bodyMd.trim()) return "Write the recap first.";
+  if (!f.bodyMd.trim()) return RECAP_EMPTY;
   if (f.commsLifecycle === "off") return "Village email is off. Turn on Village Comms to send recaps.";
   if (f.now < f.startsAt) return "Opens once the gathering begins.";
   if (f.now > recapWindowClosesAt(f)) return "The time to send this recap has passed.";

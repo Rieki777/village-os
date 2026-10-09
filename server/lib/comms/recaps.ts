@@ -42,6 +42,7 @@ import type { ActionDescription } from "../../../shared/comms/preferences";
 import {
   RECAP_ANSWER_MAX,
   RECAP_BODY_MAX,
+  RECAP_EMPTY,
   RECAP_EXPIRY_DAYS,
   RECAP_LINK_DAYS,
   RECAP_NOTE_MAX,
@@ -296,7 +297,7 @@ export async function sendRecap(deps: RecapDeps, eventId: string, occurrenceKey:
     windowDays: windowDays(deps),
     commsLifecycle: deps.commsLifecycle(),
   });
-  if (refusal || !recap) return { ok: false, status: 409, error: refusal ?? "Write the recap first." };
+  if (refusal || !recap) return { ok: false, status: 409, error: refusal ?? RECAP_EMPTY };
 
   const going = (await answersWithNames(pool, eventId, occ)).filter((a) => a.status === "going").map((a) => a.personKey);
   const { came, missed } = recapAudience(going, await attendanceMarks(pool, eventId, occ));

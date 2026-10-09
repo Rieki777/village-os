@@ -32,6 +32,9 @@ import MonthView, { type GridMode } from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import MoonGlyph from "@/components/calendar/MoonGlyph";
 import CalendarFeedCard from "@/components/calendar/CalendarFeedCard";
+// Village Comms (5.8, 5.9): a visitor's guest door, and the host's recap after it begins.
+import GuestRsvpForm from "@/components/comms/GuestRsvpForm";
+import HostRecapPanel, { hostToolsFor, recapLinkIn } from "@/components/comms/HostRecapPanel";
 import {
   DEFAULT_ANCHOR,
   addDays,
@@ -97,6 +100,7 @@ export default function Events() {
   const [problem, setProblem] = useState<string | null>(null);
   /** 0092: what a seat fee just did. Value moving deserves its own line. */
   const [notice, setNotice] = useState<string | null>(null);
+  const recapLink = useMemo(() => recapLinkIn(typeof window === "undefined" ? "" : window.location.search), []);
 
   const timezone = payload?.timezone ?? "UTC";
   const anchor = payload?.anchor ?? DEFAULT_ANCHOR;
@@ -305,6 +309,7 @@ export default function Events() {
         </div>
         {g.description && <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{g.description}</p>}
         {rsvpButtons(g)}
+        {authToken() ? hostToolsFor(g) && <HostRecapPanel eventId={g.id} occurrenceKey={g.occurrenceKey} /> : <GuestRsvpForm gathering={g} />}
       </li>
     );
   };
@@ -368,6 +373,8 @@ export default function Events() {
           {problem && (
             <p role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{problem}</p>
           )}
+          {/* The host nudge's link opens the composer here (recapComposerPath). */}
+          {authToken() && recapLink && <HostRecapPanel eventId={recapLink.eventId} occurrenceKey={recapLink.occurrenceKey} startOpen withTitle />}
 
           <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
             <div role="tablist" aria-label="Calendar views" className="inline-flex rounded-lg border border-border bg-card p-0.5">

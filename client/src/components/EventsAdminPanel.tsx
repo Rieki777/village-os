@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ATTENDANCE_MODES, CALENDAR_LAYERS, EVENT_STATUSES, type CalendarItem, type Recurrence } from "@shared/gatherings";
+import HostRecapPanel, { hostToolsFor } from "@/components/comms/HostRecapPanel";
 
 /**
  * Admin, The Game, Calendar: the village calendar's own surface (0059,
@@ -113,6 +114,8 @@ export default function EventsAdminPanel({ password }: { password: string }) {
   const [calBusy, setCalBusy] = useState<string | null>(null);
   // 0088: slots per gathering, and the weekly brief's settings.
   const [openSlots, setOpenSlots] = useState<string | null>(null);
+  /** Village Comms (5.9): the recap composer, for a gathering that has begun. Keyed by evening. */
+  const [openRecap, setOpenRecap] = useState<string | null>(null);
   const [slots, setSlots] = useState<Record<string, AdminSlot[]>>({});
   const [slotForm, setSlotForm] = useState(EMPTY_SLOT);
   const [brief, setBrief] = useState<{ enabled: boolean; day: number; hour: number } | null>(null);
@@ -597,6 +600,12 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                   className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
                   {openSlots === g.id ? "Hide slots" : "Slots"}
                 </button>
+                {hostToolsFor(g) && (
+                  <button onClick={() => setOpenRecap(openRecap === `${g.id}:${g.occurrenceKey}` ? null : `${g.id}:${g.occurrenceKey}`)}
+                    className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
+                    {openRecap === `${g.id}:${g.occurrenceKey}` ? "Hide recap" : "Recap"}
+                  </button>
+                )}
                 <button onClick={() => edit(g)}
                   className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">Edit</button>
                 {g.status === "draft" && (
@@ -622,13 +631,16 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                     <li key={`${r.userId}:${r.occurrenceKey ?? ""}`} className="flex items-center justify-between gap-3">
                       {/* A deleted member's answer still counts toward the room,
                           so it stays listed with the tombstone spelled out. */}
-                      <span>{r.name ?? "a member who has since left"}{r.occurrenceKey ? <span className="text-gray-400"> ({r.occurrenceKey})</span> : null}</span>
+                      {/* A guest (5.8) shows the name they gave, marked, and never an address. */}
+                      <span>{r.name ?? (r.guest ? "a guest" : "a member who has since left")}{r.guest && r.name ? " (guest)" : ""}{r.occurrenceKey ? <span className="text-gray-400"> ({r.occurrenceKey})</span> : null}</span>
                       <span className="text-gray-400">{r.status}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
+
+            {openRecap === `${g.id}:${g.occurrenceKey}` && <HostRecapPanel eventId={g.id} occurrenceKey={g.occurrenceKey} startOpen />}
 
             {/* 0088: what this gathering asks people to bring or hold. */}
             {openSlots === g.id && (
