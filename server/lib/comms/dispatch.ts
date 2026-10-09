@@ -20,11 +20,16 @@ import type { CommsTrigger } from "../../../shared/comms/contracts";
 import type { PostOfficeDeps } from "./postOffice";
 // Event emails (lane C2): one function per gathering trigger.
 import { handleGatheringTrigger, isGatheringTrigger } from "./eventEmails";
+// Paths, membership and joining (lane D1): server/lib/comms/paths.ts.
+import { handlePathTrigger, isPathTrigger } from "./paths";
+import type { MembersPort } from "./permissions";
 
 /** What the lanes that fill this in will reach. Grows one entry per lane. */
 export interface CommsDispatchDeps {
   getPool(): Pool;
   postOffice: PostOfficeDeps;
+  /** The members repository, for the paths lane. Absent: it reads the users table itself. */
+  members?: MembersPort;
 }
 
 export function createCommsDispatcher(deps: CommsDispatchDeps): (t: CommsTrigger) => Promise<void> {
@@ -32,6 +37,11 @@ export function createCommsDispatcher(deps: CommsDispatchDeps): (t: CommsTrigger
     // Event emails (lane C2): answers, the waitlist, and the gathering itself.
     if (isGatheringTrigger(t)) {
       await handleGatheringTrigger({ getPool: deps.getPool, postOffice: deps.postOffice }, t);
+      return;
+    }
+    // Paths, a new member, a request to join (lane D1).
+    if (isPathTrigger(t)) {
+      await handlePathTrigger({ getPool: deps.getPool, ...(deps.members ? { members: deps.members } : {}) }, t);
       return;
     }
     switch (t.type) {

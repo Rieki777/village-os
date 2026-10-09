@@ -638,8 +638,9 @@ import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
 import { registerGatheringJourneyParts } from "./lib/comms/gatheringJourney";
 import { registerFactsProvider, registerVarsBuilder } from "./lib/comms/journeys";
-import { formSubmittedTrigger } from "../shared/comms/contracts";
+import { FORM_CONSENT_FIELD, formSubmittedTrigger } from "../shared/comms/contracts";
 import { backfillContacts } from "./lib/comms/backfill";
+import { backfillPathEnrollments } from "./lib/comms/paths";
 import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
 import {
   confirmManual,
@@ -1302,7 +1303,7 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
 const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
-commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice }));
+commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice, members }));
 registerGatheringJourneyParts({ registerFactsProvider, registerVarsBuilder }, { getPool, postOffice: commsPostOffice });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
@@ -1896,6 +1897,7 @@ async function ensureDataFiles() {
   });
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
+  await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
   // rule the quest library follows, and the reason matters here: these are
@@ -17549,7 +17551,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({ success: true });
   });
-  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice, adminActor, members, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), projectName: () => mergedConfig().project.name, liveHoldersOf, emailConfigRepo });
+  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice, adminActor, members, notify, lapseContext, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), projectName: () => mergedConfig().project.name, liveHoldersOf, emailConfigRepo });
   registerCommsPublicRoutes(app, { overLimit, clientIp, authedUser, getPool, members, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
 
   // ── S63: Integrations — every third-party key, write-only ────────────────
@@ -18497,7 +18499,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       submittedAt: new Date().toISOString(),
     };
     await submissionsRepo.insert(entry);
-    commsSink.fire(formSubmittedTrigger("investor-doc-request", entry.id, entry.data));
+    commsSink.fire(formSubmittedTrigger("investor-doc-request", entry.id, { ...entry.data, [FORM_CONSENT_FIELD]: req.body?.[FORM_CONSENT_FIELD] === true }));
 
     /*
      * The origin comes from OUR configuration, never from the request.

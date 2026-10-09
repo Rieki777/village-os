@@ -57,7 +57,7 @@
  * takes the rest of the tick down.
  */
 import type { Pool } from "mysql2/promise";
-import type { JourneyDefinition, JourneyKind, JourneyStep, OutgoingEmail } from "../../../shared/comms/contracts";
+import type { JourneyDefinition, JourneyKind, JourneyStep, OutgoingEmail, PostResult } from "../../../shared/comms/contracts";
 import type { PlanFacts } from "../../../shared/comms/journeyPlan";
 import { groupsForTemplate, type MergeGroup, type MergeValues } from "../../../shared/comms/mergeFields";
 import type { EmailVillage } from "./render";
@@ -189,6 +189,31 @@ export function registerFactsProvider(kind: JourneyKind, provider: FactsProvider
 /** Add a vars builder under a journey kind or a merge group. See the header for the order they run in. */
 export function registerVarsBuilder(key: VarsKey, builder: VarsBuilder, name?: string): () => void {
   return add(varsBuilders, key, builder, name);
+}
+
+/**
+ * What a step-posted hook is handed: the step as it was rendered, and what
+ * the post office said. Called once per step the tick posts (never for a
+ * `duplicate`), after the post, so a hook can do the one thing a step means
+ * beyond its email: the paths lane asks a person to write at day 21 (5.11).
+ * A hook that throws is logged and changes nothing about the step.
+ */
+export interface StepPostedContext extends VarsContext {
+  result: PostResult;
+}
+
+export type StepPostedHook = (ctx: StepPostedContext) => Promise<void> | void;
+
+const stepPostedHooks: Array<Entry<StepPostedHook>> = [];
+
+/** Add a hook for the steps of one journey kind, called after each is posted. */
+export function registerStepPosted(kind: JourneyKind, hook: StepPostedHook, name?: string): () => void {
+  return add(stepPostedHooks, kind, hook, name);
+}
+
+/** The step-posted hooks for one kind, in registration order. */
+export function stepPostedHooksFor(kind: JourneyKind): StepPostedHook[] {
+  return stepPostedHooks.filter((e) => e.key === kind).map((e) => e.fn);
 }
 
 /** The providers for one kind, in registration order. */

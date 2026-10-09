@@ -29,9 +29,11 @@
  */
 import type { Express } from "express";
 import { registerPublic as registerPeoplePublic, type PublicDeps } from "./commsPeople";
+import { registerPublic as registerPathsPublic } from "./commsPaths";
 
 type Deps = PublicDeps;
 
 export function register(app: Express, deps: Deps): void {
   registerPeoplePublic(app, deps);
+  registerPathsPublic(app, deps);
 }

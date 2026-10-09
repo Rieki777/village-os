@@ -191,6 +191,7 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   f("path.pageUrl", "path", "url", "Path page", "The path's own page on your site.", "{{village.url}}"),
   f("path.contactName", "path", "text", "Who writes back", "The person who writes to people on this path, from Comms Settings.", "someone from our team"),
   f("path.contactEmail", "path", "text", "Their address", "That person's email address.", "", true),
+  f("path.rung", "path", "text", "Step reached", "The step on the path's ladder they just reached.", "a new step"),
 
   // The letter.
   f("letter.body", "letter", "markdown", "The letter", "The letter itself. Put it on a line of its own.", ""),
@@ -591,6 +592,7 @@ export function sampleValues(input: {
     "path.nextStep": "tell us what you're looking for",
     "path.contactName": "Jordan",
     "path.contactEmail": "jordan@example.org",
+    "path.rung": "Seated",
     "letter.body": {
       markdown:
         "The well is finished, and the water tested clean.\n\nThank you to everyone who carried pipe in the rain. We'll show it off at the next supper.",
