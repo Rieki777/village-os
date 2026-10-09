@@ -90,8 +90,14 @@ export default function Governance() {
           <h1 className="font-display text-4xl md:text-5xl font-bold mb-4">
             How we work together
           </h1>
+          {/* The sociocracy sentence is the first village's own story, so it
+              goes with the brochure (audit of Wave 4). Every other village is
+              told only what this page actually holds: its decision method is
+              a dial, and nothing here may presume which one it chose. */}
           <p className="text-white text-lg max-w-3xl leading-relaxed">
-            {villageName} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out.
+            {brochureOn
+              ? `${villageName} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out.`
+              : `How ${villageName} works, part by part, who decides what, and where a conflict goes.`}
           </p>
         </div>
       </section>
@@ -327,7 +333,11 @@ export default function Governance() {
         </div>
       </section>
 
-      {/* Hypha */}
+      {/* Hypha. Logging governance on Hypha is the first village's own
+          arrangement: the Hypha bridge is an optional module that needs a DHO
+          of the village's own, so on any other village this section was false
+          (audit of Wave 4). It goes with the brochure. */}
+      {brochureOn && (
       <section className="bg-white py-20">
         <div className="container max-w-3xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
@@ -339,16 +349,15 @@ export default function Governance() {
           <p className="text-stone-700 leading-relaxed mb-4">
             Governance is logged on Hypha, an open-source platform owned by its contributors. Every proposal, vote, and contribution is transparent and traceable. Value in, value out.
           </p>
-          {brochureOn && (
-            <Link
-              href="/co-creators-guide"
-              className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
-            >
-              Learn more in the Game Guide <ArrowRight className="w-4 h-4" />
-            </Link>
-          )}
+          <Link
+            href="/co-creators-guide"
+            className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
+          >
+            Learn more in the Game Guide <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
       </section>
+      )}
 
       {/* CTA. Both of its doors are brochure pages, so it goes with them. */}
       {brochureOn && (

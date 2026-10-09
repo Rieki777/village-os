@@ -37,6 +37,9 @@ vi.mock("@/components/Layout", () => ({
 // The live-votes band has its own suite and reaches for the module registry.
 vi.mock("@/components/governance/LiveDecisionsBand", () => ({ default: () => null }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
+// The brochure switch, off unless a case turns it on: a fresh village ships with it off.
+const brochure = vi.hoisted(() => ({ on: false as boolean | null }));
+vi.mock("@/lib/brochure", () => ({ useBrochurePages: () => brochure.on }));
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>("@/contexts/AuthContext");
   return { ...actual, useIsAdmin: () => adminViewer, useAuth: () => ({ user: viewer }) };
@@ -448,5 +451,36 @@ describe("the Governance page once the village has a conflict agreement", () => 
     routes["GET /api/conflict-agreement/public"] = () => ({ status: 500, body: {} });
     renderPage();
     expect(await screen.findByText(VILLAGE_STEPS[0])).toBeTruthy();
+  });
+});
+
+/*
+ * THE FIRST VILLAGE'S STORY GOES WITH THE BROCHURE (audit of Wave 4). This
+ * page is served by every village whatever its modules. Its hero said the
+ * village "uses sociocracy" and its Hypha section said governance "is logged
+ * on Hypha"; the decision method is a dial and the Hypha bridge is an optional
+ * module needing a DHO of the village's own, so both were false on a fresh
+ * village, which ships with the brochure off.
+ */
+describe("what a village without the brochure is told", () => {
+  afterEach(() => {
+    brochure.on = false;
+  });
+
+  it("names no governance system and no Hypha log while the brochure is off", async () => {
+    brochure.on = false;
+    renderPage();
+    await screen.findByTestId("public-line-purpose");
+    expect(screen.queryByText(/sociocracy/i)).toBeNull();
+    expect(screen.queryByText(/Hypha/)).toBeNull();
+    expect(screen.getByText("How Willowbrook works, part by part, who decides what, and where a conflict goes.")).toBeTruthy();
+  });
+
+  it("keeps the first village's own words where the brochure is on", async () => {
+    brochure.on = true;
+    renderPage();
+    await screen.findByTestId("public-line-purpose");
+    expect(screen.getByText(/Willowbrook uses sociocracy/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "The Hypha Platform" })).toBeTruthy();
   });
 });
