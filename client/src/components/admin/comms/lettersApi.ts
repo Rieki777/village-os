@@ -111,27 +111,26 @@ async function read<T>(res: Response, fallback: string): Promise<Answer<T>> {
 }
 
 const json = (password: string) => authHeaders(password, { "Content-Type": "application/json" });
-const L = `${API_BASE}/admin/comms/letters`;
-const one = (id: string) => `${L}/${encodeURIComponent(id)}`;
+const id$ = (id: string) => encodeURIComponent(id);
 
 export async function fetchLetters(password: string): Promise<Answer<LettersAnswer>> {
-  return read(await fetch(L, { headers: authHeaders(password) }), "The letters could not be read");
+  return read(await fetch(`${API_BASE}/admin/comms/letters`, { headers: authHeaders(password) }), "The letters could not be read");
 }
 
 export async function createLetter(password: string, input: LetterInput): Promise<Answer<{ letter: { id: string; state: LetterState } }>> {
-  return read(await fetch(L, { method: "POST", headers: json(password), body: JSON.stringify(input) }), "The letter could not be saved");
+  return read(await fetch(`${API_BASE}/admin/comms/letters`, { method: "POST", headers: json(password), body: JSON.stringify(input) }), "The letter could not be saved");
 }
 
 export async function saveLetter(password: string, id: string, input: LetterInput): Promise<Answer<{ letter: { id: string; state: LetterState } }>> {
-  return read(await fetch(one(id), { method: "PUT", headers: json(password), body: JSON.stringify(input) }), "The letter could not be saved");
+  return read(await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}`, { method: "PUT", headers: json(password), body: JSON.stringify(input) }), "The letter could not be saved");
 }
 
 export async function previewLetter(password: string, id: string): Promise<Answer<PreviewAnswer>> {
-  return read(await fetch(`${one(id)}/preview`, { method: "POST", headers: json(password), body: "{}" }), "The preview could not be made");
+  return read(await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}/preview`, { method: "POST", headers: json(password), body: "{}" }), "The preview could not be made");
 }
 
 export async function testLetter(password: string, id: string): Promise<Answer<{ status: string; reason: string | null; sentTo: string }>> {
-  return read(await fetch(`${one(id)}/test`, { method: "POST", headers: json(password), body: "{}" }), "The test could not be sent");
+  return read(await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}/test`, { method: "POST", headers: json(password), body: "{}" }), "The test could not be sent");
 }
 
 export async function sendLetter(
@@ -139,16 +138,16 @@ export async function sendLetter(
   id: string,
   input: { confirmToken: string; idempotencyKey: string; scheduledFor?: string | null },
 ): Promise<Answer<SendAnswer>> {
-  return read(await fetch(`${one(id)}/send`, { method: "POST", headers: json(password), body: JSON.stringify(input) }), "The letter could not be sent");
+  return read(await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}/send`, { method: "POST", headers: json(password), body: JSON.stringify(input) }), "The letter could not be sent");
 }
 
 export async function cancelLetter(password: string, id: string): Promise<Answer<{ state: "cancelled" }>> {
-  return read(await fetch(`${one(id)}/cancel`, { method: "POST", headers: json(password), body: "{}" }), "The letter could not be cancelled");
+  return read(await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}/cancel`, { method: "POST", headers: json(password), body: "{}" }), "The letter could not be cancelled");
 }
 
 export async function rescheduleLetter(password: string, id: string, scheduledFor: string): Promise<Answer<{ state: "scheduled"; scheduledFor: string }>> {
   return read(
-    await fetch(`${one(id)}/reschedule`, { method: "POST", headers: json(password), body: JSON.stringify({ scheduledFor }) }),
+    await fetch(`${API_BASE}/admin/comms/letters/${id$(id)}/reschedule`, { method: "POST", headers: json(password), body: JSON.stringify({ scheduledFor }) }),
     "The letter could not be moved",
   );
 }

@@ -42,7 +42,8 @@ export interface LetterRow {
   /** Epoch seconds. */
   scheduledFor: number | null;
   bodyHash: string | null;
-  idempotencyKey: string;
+  /** `comms_letters.idempotency_key`: a draft's own until a confirmation's send key replaces it. */
+  sendKey: string;
   recipientCount: number;
   postedCount: number;
   skippedCount: number;
@@ -67,7 +68,7 @@ const toLetter = (r: RowDataPacket): LetterRow => ({
   state: String(r.state) as LetterState,
   scheduledFor: epoch(r.scheduled_for),
   bodyHash: r.body_hash == null ? null : String(r.body_hash),
-  idempotencyKey: String(r.idempotency_key),
+  sendKey: String(r.idempotency_key),
   recipientCount: Number(r.recipient_count ?? 0),
   postedCount: Number(r.posted_count ?? 0),
   skippedCount: Number(r.skipped_count ?? 0),
@@ -84,8 +85,8 @@ export interface NewLetter {
   bodyMd: string;
   layout: LetterLayout;
   audience: LetterAudience;
-  /** A draft's key until a confirmation replaces it: `draft:<id>`, unique like every key. */
-  idempotencyKey: string;
+  /** The draft's own `idempotency_key` until a confirmation replaces it: `draft:<id>`, unique like every key. */
+  draftKey: string;
   createdBy: string;
 }
 
@@ -93,7 +94,7 @@ export async function insertLetter(pool: Pool, l: NewLetter): Promise<void> {
   await pool.query( // module-review-ok: the letters table's one writer of new rows
     "INSERT INTO comms_letters (id, village_id, subject, preheader, body_md, layout, audience, state, idempotency_key, created_by, updated_at) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, CURRENT_TIMESTAMP)",
-    [l.id, VILLAGE, l.subject, l.preheader, l.bodyMd, l.layout, JSON.stringify(l.audience), l.idempotencyKey, l.createdBy],
+    [l.id, VILLAGE, l.subject, l.preheader, l.bodyMd, l.layout, JSON.stringify(l.audience), l.draftKey, l.createdBy],
   );
 }
 
@@ -160,7 +161,7 @@ export type ClaimResult = "claimed" | "lost" | "key_taken";
 export async function claimLetter(
   pool: Pool,
   id: string,
-  input: { from: readonly LetterState[]; to: "sending" | "scheduled"; idempotencyKey: string; bodyHash: string; count: number; scheduledFor?: number | null },
+  input: { from: readonly LetterState[]; to: "sending" | "scheduled"; sendKey: string; bodyHash: string; count: number; scheduledFor?: number | null },
 ): Promise<ClaimResult> {
   const sending = input.to === "sending";
   try {
@@ -170,7 +171,7 @@ export async function claimLetter(
         "updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND state IN (?)",
       [
         input.to,
-        input.idempotencyKey,
+        input.sendKey,
         input.bodyHash,
         input.count,
         ...(sending ? [] : [input.scheduledFor ?? null]),

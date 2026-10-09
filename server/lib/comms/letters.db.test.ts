@@ -177,12 +177,12 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
   it("refuses a stale confirmation", async () => {
     const t0 = Date.now();
     const { id, p } = await previewed(EVERYONE, deps({ now: () => t0 }));
-    const late = await sendLetter(deps({ now: () => t0 + 16 * 60_000 }), id, { confirmToken: p.confirmToken, idempotencyKey: key() });
+    const late = await sendLetter(deps({ now: () => t0 + 16 * 60_000 }), id, { confirmToken: p.confirmToken, sendKey: key() });
     expect(late).toMatchObject({ ok: false, status: 409 });
     expect((late as any).error).toMatch(/ran out/);
     expect((await rows("SELECT state FROM comms_letters WHERE id = ?", [id]))[0].state).toBe("draft");
     // A forged one is refused too.
-    const forged = await sendLetter(deps(), id, { confirmToken: `${p.confirmToken}x`, idempotencyKey: key() });
+    const forged = await sendLetter(deps(), id, { confirmToken: `${p.confirmToken}x`, sendKey: key() });
     expect(forged).toMatchObject({ ok: false, status: 400 });
   });
 
@@ -190,7 +190,7 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
     const { id, p } = await previewed();
     // Changed behind the screen's back: the stored hash and count still match the preview.
     await exec("UPDATE comms_letters SET body_md = CONCAT(body_md, ' And bring a cup.') WHERE id = ?", [id]);
-    const changed = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: key() });
+    const changed = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: key() });
     expect(changed).toMatchObject({ ok: false, status: 409 });
     expect((changed as any).error).toMatch(/changed since the preview/);
 
@@ -198,7 +198,7 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
     const again = await previewLetter(deps(), id, { name: "Ada Admin" });
     if (!again.ok) throw new Error("preview");
     expect((await saveLetter(deps(), id, draft({ subject: "The well, finished" }))).ok).toBe(true);
-    const saved = await sendLetter(deps(), id, { confirmToken: again.confirmToken, idempotencyKey: key() });
+    const saved = await sendLetter(deps(), id, { confirmToken: again.confirmToken, sendKey: key() });
     expect(saved).toMatchObject({ ok: false, status: 409 });
     expect((await rows("SELECT COUNT(*) AS n FROM comms_messages WHERE letter_id = ?", [id]))[0].n).toBe(0);
   });
@@ -206,11 +206,11 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
   it("sends the same letter confirmed twice once", async () => {
     const { id, p } = await previewed();
     const k = key();
-    const first = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: k });
+    const first = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: k });
     expect(first).toMatchObject({ ok: true, state: "sent", duplicate: false, counts: { posted: 3, skipped: 0, pending: 0 } });
-    const second = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: k });
+    const second = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: k });
     expect(second).toMatchObject({ ok: true, duplicate: true, state: "sent" });
-    const third = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: key() });
+    const third = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: key() });
     expect(third).toMatchObject({ ok: true, duplicate: true });
     expect((await rows("SELECT COUNT(*) AS n FROM comms_messages WHERE letter_id = ? AND kind = 'letters'", [id]))[0].n).toBe(3);
   });
@@ -220,7 +220,7 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
     expect(p.count).toBe(3);
     const out = await unsubscribe(people, { contactId: cleo.id, kind: "letters", basis: "asked", source: "test" });
     expect(out.ok).toBe(true);
-    const done = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: key() });
+    const done = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: key() });
     expect(done).toMatchObject({ ok: true, counts: { posted: 2, skipped: 1, pending: 0 } });
     const snap = await rows("SELECT contact_id, status, skip_reason FROM comms_letter_recipients WHERE letter_id = ? AND contact_id = ?", [id, cleo.id]);
     expect(snap[0]).toMatchObject({ status: "skipped", skip_reason: "no_permission" });
@@ -231,7 +231,7 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
   it("matches History to what the provider was handed and what it reported", async () => {
     sent.length = 0;
     const { id, p } = await previewed();
-    await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: key() });
+    await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: key() });
     await drain(office);
     const ids = (await rows("SELECT id FROM comms_messages WHERE letter_id = ? ORDER BY id", [id])).map((r) => String(r.id));
     const handed = sent.filter((m) => ids.includes(m.id));
@@ -245,9 +245,9 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
 
   it("refuses a second letter inside ten minutes of the last", async () => {
     const a = await previewed();
-    expect((await sendLetter(deps(), a.id, { confirmToken: a.p.confirmToken, idempotencyKey: key() })).ok).toBe(true);
+    expect((await sendLetter(deps(), a.id, { confirmToken: a.p.confirmToken, sendKey: key() })).ok).toBe(true);
     const b = await previewed();
-    const soon = await sendLetter(deps(), b.id, { confirmToken: b.p.confirmToken, idempotencyKey: key() });
+    const soon = await sendLetter(deps(), b.id, { confirmToken: b.p.confirmToken, sendKey: key() });
     expect(soon).toMatchObject({ ok: false, status: 409 });
     expect((soon as any).error).toMatch(/10 minutes apart/);
   });
@@ -255,13 +255,13 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
   it("refuses the fourth letter in a day", async () => {
     for (let i = 0; i < 3; i += 1) {
       const l = await previewed();
-      const r = await sendLetter(deps(), l.id, { confirmToken: l.p.confirmToken, idempotencyKey: key() });
+      const r = await sendLetter(deps(), l.id, { confirmToken: l.p.confirmToken, sendKey: key() });
       expect(r.ok, JSON.stringify(r)).toBe(true);
       // Past the ten-minute gap, still inside the day.
       await exec("UPDATE comms_letters SET sent_at = sent_at - INTERVAL 11 MINUTE WHERE sent_at > CURRENT_TIMESTAMP - INTERVAL 1 DAY");
     }
     const fourth = await previewed();
-    const refused = await sendLetter(deps(), fourth.id, { confirmToken: fourth.p.confirmToken, idempotencyKey: key() });
+    const refused = await sendLetter(deps(), fourth.id, { confirmToken: fourth.p.confirmToken, sendKey: key() });
     expect(refused).toMatchObject({ ok: false, status: 409 });
     expect((refused as any).error).toMatch(/at most 3 letters a day/);
     expect((await rows("SELECT state FROM comms_letters WHERE id = ?", [fourth.id]))[0].state).toBe("draft");
@@ -270,7 +270,7 @@ describe.skipIf(!configured)("letters, against a provisioned schema", () => {
   it("sends a scheduled letter when it is due, and not before", async () => {
     const { id, p } = await previewed();
     const at = new Date(Date.now() + 5 * 60_000).toISOString();
-    const scheduled = await sendLetter(deps(), id, { confirmToken: p.confirmToken, idempotencyKey: key(), scheduledFor: at });
+    const scheduled = await sendLetter(deps(), id, { confirmToken: p.confirmToken, sendKey: key(), scheduledFor: at });
     expect(scheduled).toMatchObject({ ok: true, state: "scheduled" });
     expect(await runLettersJob(deps())).toMatchObject({ sent: 0 });
     await exec("UPDATE comms_letters SET scheduled_for = CURRENT_TIMESTAMP - INTERVAL 1 MINUTE WHERE id = ?", [id]);

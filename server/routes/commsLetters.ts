@@ -112,8 +112,6 @@ export function register(app: Express, deps: Deps): void {
     return true;
   }
 
-  const mayAct = (req: Request, res: Response) => guardCapability(req, res, "comms.manage", REFUSAL);
-
   /** The letter id from the path, refused with a 404 when it is not one. */
   function idFrom(req: Request, res: Response): string | null {
     const id = String(req.params.id ?? "");
@@ -140,7 +138,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const read = readLetterDraft(req.body);
     if ("problems" in read) return res.status(400).json({ error: read.problems[0], problems: read.problems });
     const user = await authedUser(req);
@@ -149,7 +147,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.put("/api/admin/comms/letters/:id", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const read = readLetterDraft(req.body);
@@ -160,7 +158,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters/:id/preview", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const user = await authedUser(req);
@@ -170,7 +168,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters/:id/test", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const user = await authedUser(req);
@@ -180,11 +178,11 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters/:id/send", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const b = req.body ?? {};
-    const answer = await sendLetter(letters, id, { confirmToken: b.confirmToken, idempotencyKey: b.idempotencyKey, scheduledFor: b.scheduledFor });
+    const answer = await sendLetter(letters, id, { confirmToken: b.confirmToken, sendKey: b.idempotencyKey, scheduledFor: b.scheduledFor });
     if (!answer.ok) return res.status(answer.status).json({ error: answer.error });
     res.json({
       state: answer.state,
@@ -195,7 +193,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters/:id/cancel", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const answer = await cancelLetter(letters, id);
@@ -204,7 +202,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.post("/api/admin/comms/letters/:id/reschedule", moduleGate, async (req, res) => {
-    if (!(await mayAct(req, res))) return;
+    if (!(await guardCapability(req, res, "comms.manage", REFUSAL))) return;
     const id = idFrom(req, res);
     if (!id) return;
     const answer = await moveLetter(letters, id, req.body?.scheduledFor);

@@ -20,11 +20,15 @@ export default function JourneyOutcomes({ password, journeyKey, labels = {} }: {
 
   useEffect(() => {
     let live = true;
-    fetchOutcomes(password, journeyKey).then((answer) => {
-      if (!live) return;
-      if (answer.ok) setData(answer.body);
-      else setError(answer.error);
-    });
+    fetchOutcomes(password, journeyKey)
+      .then((answer) => {
+        if (!live) return;
+        if (answer.ok) setData(answer.body);
+        else setError(answer.error);
+      })
+      .catch(() => {
+        if (live) setError("The numbers could not be read just now.");
+      });
     return () => {
       live = false;
     };

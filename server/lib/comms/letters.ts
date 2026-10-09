@@ -203,7 +203,7 @@ const draftOf = (l: LetterRow): LetterDraft | null =>
 
 export async function createLetter(deps: Pick<LettersDeps, "getPool">, draft: LetterDraft, by: string): Promise<LetterRow> {
   const id = `ltr_${crypto.randomBytes(12).toString("hex")}`;
-  await insertLetter(deps.getPool(), { id, ...draft, idempotencyKey: `draft:${id}`, createdBy: by });
+  await insertLetter(deps.getPool(), { id, ...draft, draftKey: `draft:${id}`, createdBy: by });
   return (await letterById(deps.getPool(), id)) as LetterRow;
 }
 
@@ -515,10 +515,10 @@ const duplicateOf = (l: LetterRow): SendAnswer => ({
 export async function sendLetter(
   deps: LettersDeps,
   id: string,
-  input: { confirmToken: unknown; idempotencyKey: unknown; scheduledFor?: unknown },
+  input: { confirmToken: unknown; sendKey: unknown; scheduledFor?: unknown },
 ): Promise<SendAnswer> {
   const pool = deps.getPool();
-  const key = typeof input.idempotencyKey === "string" ? input.idempotencyKey.trim() : "";
+  const key = typeof input.sendKey === "string" ? input.sendKey.trim() : "";
   if (!KEY_SHAPE.test(key)) return refuse(400, "The send carried no key. Preview again and confirm from there.");
   const letter = await letterById(pool, id);
   if (!letter) return NOT_FOUND;
@@ -549,7 +549,7 @@ export async function sendLetter(
   if (when !== null) {
     const problem = scheduleProblem(when, nowMs(deps));
     if (problem) return refuse(400, problem);
-    const claim = await claimLetter(pool, id, { from: EDITABLE_LETTER_STATES, to: "scheduled", idempotencyKey: key, bodyHash: hash, count: verdict.n, scheduledFor: Math.floor(when / 1000) });
+    const claim = await claimLetter(pool, id, { from: EDITABLE_LETTER_STATES, to: "scheduled", sendKey: key, bodyHash: hash, count: verdict.n, scheduledFor: Math.floor(when / 1000) });
     if (claim !== "claimed") return afterLostClaim(pool, id, claim);
     return { ok: true, state: "scheduled", duplicate: false, counts: null, scheduledFor: Math.floor(when / 1000) };
   }
@@ -560,10 +560,10 @@ export async function sendLetter(
     // The same confirmation pressed twice at once: the first press's claim is
     // what filled the window, so this one answers it rather than the limit.
     const now = await letterById(pool, id);
-    if (now && now.idempotencyKey === key && !(EDITABLE_LETTER_STATES as readonly LetterState[]).includes(now.state)) return duplicateOf(now);
+    if (now && now.sendKey === key && !(EDITABLE_LETTER_STATES as readonly LetterState[]).includes(now.state)) return duplicateOf(now);
     return refuse(409, cap);
   }
-  const claim = await claimLetter(pool, id, { from: EDITABLE_LETTER_STATES, to: "sending", idempotencyKey: key, bodyHash: hash, count: verdict.n });
+  const claim = await claimLetter(pool, id, { from: EDITABLE_LETTER_STATES, to: "sending", sendKey: key, bodyHash: hash, count: verdict.n });
   if (claim !== "claimed") return afterLostClaim(pool, id, claim);
   const claimed = (await letterById(pool, id)) as LetterRow;
   const counts = await dispatch(deps, claimed);
