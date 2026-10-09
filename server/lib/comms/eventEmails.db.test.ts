@@ -239,7 +239,9 @@ describe.skipIf(!configured)("event emails", () => {
     await deliver();
     await rsvp(pool, evening, kim.id, "going");
     await deliver();
-    const keys = (await messagesFor("journey")).filter((r) => r.to_email === kim.email).map((r) => String(r.idempotency_key));
+    const keys = (await messagesFor("journey")).filter((r) => r.to_email === kim.email).map((r) => String(r.idempotency_key))
+      // Two rows inside one second order by their random ids, so order them by what they say.
+      .sort((x, y) => x.length - y.length);
     expect(keys).toHaveLength(2);
     expect(keys[1]).toBe(`${keys[0]}:r1`);
   });
