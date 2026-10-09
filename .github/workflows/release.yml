@@ -1,7 +1,7 @@
 # Publish the village image.
 #
 # The contract other lanes code against, and it does not change without a note
-# in SEASON2_FLEET_LEDGER.md:
+# in the fleet ledger (the maintainers' private operations repository):
 #
 #   image   ghcr.io/rieki777/village-os
 #   :<semver>   one immutable tag per release, e.g. :1.4.0. Cut by pushing an
@@ -145,6 +145,37 @@ jobs:
 
           echo "publish=${publish} sha=${sha}"
           echo "${tags}"
+
+      - uses: actions/checkout@v7
+        if: github.event_name == 'push' && steps.decide.outputs.publish == 'true'
+        with:
+          ref: ${{ steps.decide.outputs.sha }}
+
+      - name: The tag, package.json and the platform version agree
+        # 1.1.0 stayed the answer of /api/platform/info for 236 commits after
+        # the tag, because nothing compared the three. A tag whose code still
+        # reports another version is refused here, before anything is built.
+        if: github.event_name == 'push' && steps.decide.outputs.publish == 'true'
+        env:
+          WANT: ${{ steps.decide.outputs.version }}
+        run: |
+          set -euo pipefail
+          pkg=$(node -p "require('./package.json').version")
+          plat=$(grep -oE 'PLATFORM_VERSION = "[^"]+"' server/lib/identity.ts | cut -d'"' -f2)
+          echo "tag ${WANT}, package.json ${pkg}, PLATFORM_VERSION ${plat}"
+          base="${WANT%%-*}"
+          if [ "$pkg" != "$base" ] || [ "$plat" != "$base" ]; then
+            echo "::error::Tag v${WANT} does not match package.json (${pkg}) and server/lib/identity.ts PLATFORM_VERSION (${plat}). Bump both to ${base} in a commit, let ci pass, and tag that commit."
+            exit 1
+          fi
+          # The starter kit carries docker-compose.yml, so its default image is
+          # what a founder who unzips this release actually starts.
+          compose=$(grep -oE 'ghcr\.io/rieki777/village-os:[0-9A-Za-z.+-]+' docker-compose.yml | head -1 | cut -d: -f2)
+          echo "docker-compose.yml default image ${compose}"
+          if [ "$compose" != "$WANT" ]; then
+            echo "::error::docker-compose.yml starts ghcr.io/rieki777/village-os:${compose}, but this tag is ${WANT}. Set its default image to ${WANT}, let ci pass, and tag that commit."
+            exit 1
+          fi
 
       - name: Require a green ci run on this commit
         # Tags only. The workflow_run path was already triggered BY a green
@@ -490,5 +521,112 @@ jobs:
             printf '%s\n' "${{ needs.plan.outputs.tags }}"
             echo "digest: ${{ steps.push.outputs.digest }}"
             echo "commit: ${{ needs.plan.outputs.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # The GitHub release, and the starter kit attached to it.
+  #
+  # Runs only for a version tag, and only after the image above booted and was
+  # pushed, so a release page never exists for an image that does not.
+  #
+  # THE STARTER KIT IS BUILT WITH `git archive` FROM THE TAG, NEVER FROM A
+  # WORKING TREE. A developer's checkout holds .env files, database URLs and a
+  # data/ folder of a live village's private records, and every one of those
+  # is invisible to git. `git archive` can only see what the tag committed, so
+  # it cannot pick any of them up whatever is lying around. The file list is
+  # explicit: a path missing at the tag fails the job instead of shipping a
+  # kit with a hole in it.
+  # ---------------------------------------------------------------------------
+  github-release:
+    needs: [plan, image]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.image.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Build the starter kit from the tag
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          kit="village-os-starter-${VERSION}"
+          files=(
+            AGENTS.md
+            START_HERE.md
+            README.md
+            LICENSE
+            .env.example
+            docker-compose.yml
+            scripts/fork-init.mjs
+            docs/FOUNDER_SETUP_PROMPT.md
+            docs/UPGRADING.md
+          )
+          git archive --format=zip --prefix="${kit}/" -o "${kit}.zip" "refs/tags/${TAG}" -- "${files[@]}"
+          # Every listed file must be in the kit. git archive refuses a path the
+          # tag lacks, and export-ignore could drop one silently, so count.
+          got=$(unzip -Z1 "${kit}.zip" | grep -vc '/$' || true)
+          if [ "$got" != "${#files[@]}" ]; then
+            echo "::error::the starter kit holds ${got} file(s), expected ${#files[@]}"
+            unzip -Z1 "${kit}.zip"
+            exit 1
+          fi
+          unzip -l "${kit}.zip"
+          # Belt and braces: nothing that looks like a secret or a village's data.
+          if unzip -Z1 "${kit}.zip" | grep -E '(^|/)(\.env$|\.env\.|data/|\.demo-db-url|\.qa-db-url)' | grep -vE '/\.env\.example$'; then
+            echo "::error::the starter kit carries a file it must never carry"
+            exit 1
+          fi
+          echo "KIT=${kit}.zip" >> "$GITHUB_ENV"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          awk -v v="${VERSION}" '
+            $0 ~ "^## " v "( |$)" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::CHANGELOG.md has no section headed \"## ${VERSION}\". Write it before tagging."
+            exit 1
+          fi
+          {
+            echo ""
+            echo "**Run it yourself:** download \`${KIT}\` below, unzip it, and open START_HERE.md, or give FOUNDER_SETUP_PROMPT.md to your own AI assistant."
+            echo ""
+            echo "**Image:** \`ghcr.io/rieki777/village-os:${VERSION}\`"
+          } >> notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pre=""
+          case "${VERSION}" in *-*) pre="--prerelease" ;; esac
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" "${KIT}" --clobber
+            gh release edit "${TAG}" --notes-file notes.md
+          else
+            gh release create "${TAG}" "${KIT}" --verify-tag --title "Village OS ${VERSION}" --notes-file notes.md ${pre}
+          fi
+          gh release view "${TAG}" --json url,assets --jq '{url, assets: [.assets[].name]}'
+          commit=$(git rev-parse "refs/tags/${TAG}^{}")
+          {
+            echo "### Tell the regencivics.earth card"
+            echo
+            echo "The Run it yourself card pins its links to a release (docs/RELEASING.md, step 8). Give whoever holds it:"
+            echo
+            echo '```'
+            echo "VILLAGE_OS_RELEASE = \"${VERSION}\""
+            echo "VILLAGE_OS_RELEASE_COMMIT = \"${commit}\""
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

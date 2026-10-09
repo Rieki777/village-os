@@ -126,8 +126,7 @@ export const MANAGED_LISTING_CAP = 2;
  * moment they need an answer, so it is the tier; who BUILT something is a
  * credit line and never a badge.
  *
- *   included   the platform bills (it is in the platform price) and supports
- *              it end to end. Credential is none, or the village's own
+ *   included   the platform supports it end to end. Credential is none, or the village's own
  *              upstream account where the village is the merchant of record.
  *              No pill in the catalog: included is the absence of a badge,
  *              the same way everything that is not core is silent today.
@@ -1162,6 +1161,28 @@ export const MODULES: ModuleDef[] = [
     apiPrefixes: ["/api/intents"],
   },
   {
+    id: "journal",
+    tier: "included",
+    // Entries are one person's words about their own life, and feedback names
+    // its recipient. Nothing here is village content: every row is a member's.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Journal",
+    description:
+      "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+    requires: [],
+    // The guide reads the gratitude a member received lately, and the evening
+    // practice asks who they would like to thank. Better with it, whole without it.
+    recommends: ["gratitude"],
+    capabilities: [],
+    variableKeys: ["journal.pulse_floor"],
+    apiPrefixes: ["/api/journal"],
+    // No openStateCheck, on purpose. That hook is for modules holding VALUE
+    // somebody is owed, and a journal holds none. Off hides the surface; the
+    // entries stay in their tables and come back intact when it is turned on.
+  },
+  {
     id: "governance",
     tier: "included",
     dataClass: "member-pii",
@@ -1261,6 +1282,93 @@ export const MODULES: ModuleDef[] = [
     // flag is a declaration beside two enforcements rather than instead of them.
     hyphaOnly: true,
     // readiness attached by the server at boot (needs the pool).
+  },
+  /**
+   * THE FIRST CONNECTED LISTING IN THIS REGISTRY.
+   *
+   * An outside service that keeps a village's organisational memory and can
+   * SUGGEST changes to its chart. Suggest is the whole word: nothing this
+   * module receives writes a seat. It lands in the review queue like any other
+   * outside claim and a steward decides, which is the path this platform
+   * already runs.
+   *
+   * `dataClass` is `village-content` and holding it there is deliberate work
+   * rather than a description. `server/lib/saberraRecords.ts` is the one door,
+   * an allow list per record kind, and every field that names a person is
+   * absent from it. The day one crosses, this becomes `member-pii` and may not
+   * go live without a signed processing agreement, a documented hard-delete
+   * endpoint and a `forgetMember` driver in the erasure sweep.
+   *
+   * `setup: "required"` because a village holds its own connection: its own
+   * subdomain at the vendor and its own token. There is nothing shared between
+   * two villages here, which is what `tier: "connected"` means in the first
+   * place.
+   */
+  {
+    id: "saberra",
+    tier: "connected",
+    dataClass: "village-content",
+    group: "know-and-decide",
+    setup: "required",
+    name: "Organisational Memory",
+    description:
+      "An outside service reads your meetings and records, and suggests changes to your circles and roles. Every suggestion is reviewed before anything changes.",
+    requires: [],
+    // Empty on purpose. The suggestions land in the review queue, which the org
+    // chart owns, and the org chart is CORE rather than a module: there is no
+    // `org` id to name. This said `["org"]` for a day and named a module that
+    // does not exist, which the generated-docs test caught and nothing else did.
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/saberra"],
+    vendor: {
+      legalName: "Saberra LLC",
+      url: "https://saberra.com",
+      supportUrl: "https://saberra.com/about/#contact",
+      supportEmail: "hello@saberra.com",
+      // They run no status page and said so plainly rather than send a link
+      // that would fail at the moment somebody needed it.
+      statusUrl: null,
+      termsUrl: "https://saberra.com/terms/",
+      // Lowercase here to match this store's convention; `envNameFor`
+      // uppercases it, which lands on the name the vendor uses internally.
+      secretKeys: ["sera_api_secret"],
+      // Their connector is PULLED by this module and never pushes, so silence
+      // between calls is normal and is not a failure signal. Their founder
+      // gave that reasoning and it is the right mode for a read-on-demand
+      // integration.
+      liveness: { mode: "on-demand" },
+      // A village needs nothing done inside the vendor's product beyond having
+      // a token issued. Every step here would be a permanent per-village human
+      // cost, so an empty list is the goal rather than an omission.
+      setupSteps: [],
+    },
+    /**
+     * A village holds its own connection: its own subdomain at the service and
+     * its own token. `apiUrl` is what the sync CALLS and `dashboardUrl` is what
+     * the big button opens; they are different addresses and both belong here
+     * rather than in a request, because a sync sends the village's sealed
+     * credential to whatever address it is given.
+     */
+    defaultConfig: { apiUrl: "", dashboardUrl: "" },
+    validateConfig: (config: unknown): string | null => {
+      const c = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+      const url = typeof c.dashboardUrl === "string" ? c.dashboardUrl.trim() : "";
+      // Empty is fine: the village has not been given its dashboard yet, and a
+      // module that refuses to save until every optional field is filled is a
+      // module nobody finishes setting up.
+      const api = typeof c.apiUrl === "string" ? c.apiUrl.trim() : "";
+      // Both are checked the same way, and the api address is the one that
+      // matters: a sync posts this village's key to it. `httpsAddress` is the
+      // rule the sync route applies at call time too, so a saved address is
+      // always one the sync will call.
+      for (const [label, value] of [["dashboard", url], ["service", api]] as const) {
+        if (value === "") continue;
+        if (httpsAddress(value) === null) return `The ${label} address has to be an https link.`;
+      }
+      return null;
+    },
   },
 ];
 
@@ -1440,6 +1548,33 @@ export function supportRoute(def: ModuleDef): SupportRoute {
 }
 
 const HTTPS = /^https:\/\/[^\s]+$/;
+
+/**
+ * THE ONE RULE FOR AN ADDRESS A VILLAGE'S KEY IS SENT TO: the https pattern
+ * above AND a real parse with an https scheme. Answers the address as the
+ * parser writes it, or null.
+ *
+ * It lives here so three callers ask the same question. The saberra listing's
+ * `validateConfig` refuses a save with it, `server/routes/saberra.ts` refuses a
+ * call with it, and the admin panel refuses in the browser by running that
+ * same `validateConfig`. Before this, the save took the pattern and the call
+ * took the parse, so `https://[x` saved cleanly and every sync then said the
+ * village had no address at all.
+ *
+ * No import, on purpose: several scripts transpile this file alone and import
+ * the result, so a runtime import here would break them.
+ */
+export function httpsAddress(raw: unknown): string | null {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!HTTPS.test(text)) return null;
+  try {
+    const u = new URL(text);
+    return u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 const EMAILISH = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;

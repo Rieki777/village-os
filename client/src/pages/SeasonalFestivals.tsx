@@ -10,8 +10,10 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useModule } from "@/modules/ModuleProvider";
 import { CalendarDays, Sparkles } from "lucide-react";
+import { useBrochurePages } from "@/lib/brochure";
 
 export default function SeasonalFestivals() {
+  const brochureOn = useBrochurePages() === true;
   const [season, setSeason] = useState<any>(null);
   /**
    * The calendar is the other half of this page: seasons say WHEN the year
@@ -115,9 +117,14 @@ export default function SeasonalFestivals() {
             <p className="text-xs text-muted-foreground mt-4">
               Festival dates ride the season turnings above. To take part in
               shaping one, start at{" "}
-              <Link href="/quests" className="text-teal-deep font-medium hover:underline">Quests</Link>{" "}
-              or say hello through{" "}
-              <Link href="/work-with-us" className="text-teal-deep font-medium hover:underline">Work With Us</Link>.
+              <Link href="/quests" className="text-teal-deep font-medium hover:underline">Quests</Link>
+              {brochureOn ? (
+                <>
+                  {" "}or say hello through{" "}
+                  <Link href="/work-with-us" className="text-teal-deep font-medium hover:underline">Work With Us</Link>
+                </>
+              ) : null}
+              .
               {eventsModule && (
                 <>
                   {" "}Everything already dated sits on the{" "}

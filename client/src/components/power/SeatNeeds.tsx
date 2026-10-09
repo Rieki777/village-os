@@ -24,7 +24,7 @@
  * state says which case it is.
  */
 import { useEffect, useState } from "react";
-import { gameFetch } from "@/lib/gameApi";
+import { authToken, gameFetch } from "@/lib/gameApi";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
 
@@ -41,6 +41,11 @@ export default function SeatNeeds({
   const [tags, setTags] = useState<NeedTag[] | null>(null);
 
   useEffect(() => {
+    // No session, no request: the route answers a caller with no account
+    // with a 401 every time, and this renders the same silence for a refusal
+    // as for no tags, so asking would change nothing on screen and put a
+    // refused request in a visitor's console.
+    if (!authToken()) return;
     let live = true;
     gameFetch(`/api/org/roles/${encodeURIComponent(roleId)}/needs`)
       .then(async (r) => {

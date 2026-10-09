@@ -29,7 +29,7 @@ import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
 import {
-  currentClaims, gateLabel, relativeWhen, statusIs,
+  currentClaims, gateFix, gateLabel, relativeWhen, statusIs,
   type BoardQuest, type FieldSigns,
 } from "@/lib/questBoard";
 
@@ -475,8 +475,10 @@ export default function QuestDetail() {
                   {gateText}
                 </p>
                 <p className="text-xs text-foreground/70 leading-relaxed">
+                  {/* R47: the lock names its fix where the stage has one. */}
                   {quest.minStage
-                    ? "Keep walking the Path of Growth and this opens on its own."
+                    ? (gateFix(quest, stages, cfg?.project?.commitmentName) ??
+                      "Keep walking the Path of Growth and this opens on its own.")
                     : "Ask a founder or the circle about stepping into it."}
                 </p>
               </div>

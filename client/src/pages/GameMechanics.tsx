@@ -71,10 +71,12 @@ interface MechanicsVariable {
   choices: Array<{ value: string; label: string; hint?: string }> | null;
   default: string;
   value: string;
-  parsed: number | boolean | string;
+  parsed: number | boolean | string | null;
   isDefault: boolean;
   ring: "open" | "founder";
   applyTiming: "instant" | "cycle-close";
+  /** The server held the value back because it can carry a key (shared/gameVariables.ts). */
+  withheld?: boolean;
 }
 
 /**
@@ -978,7 +980,7 @@ export default function GameMechanics() {
                                       {/* A paragraph renders as text with its
                                           line breaks kept and its http(s)
                                           addresses linked, never as markup. */}
-                                      {v.type === "longtext" ? <LongText text={v.value} /> : displayValue(v, v.value)}
+                                      {v.withheld ? "set, kept private" : v.type === "longtext" ? <LongText text={v.value} /> : displayValue(v, v.value)}
                                       {stagedValue !== undefined && (
                                         <span className="ml-2 text-amber-700 font-semibold">→ {displayValue(v, stagedValue)}</span>
                                       )}
@@ -1406,9 +1408,10 @@ export default function GameMechanics() {
       </section>
 
       {/* The proposal basket: staged changes become a proposal. Sticky above
-          the mobile tab bar (z-[70] modal ladder, bar is z-50). */}
+          the mobile tab bar (z-[70] modal ladder, bar is z-50). It spans the
+          bottom edge, so the shortcuts button steps out while it shows. */}
       {stagedCount > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-[70] bg-white border-t border-stone-200 shadow-lg pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+        <div data-hides-fab className="fixed bottom-0 inset-x-0 z-[70] bg-white border-t border-stone-200 shadow-lg pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           <div className="container max-w-3xl mx-auto px-4 pt-3">
             {!composerOpen ? (
               <div className="flex items-center justify-between gap-3">

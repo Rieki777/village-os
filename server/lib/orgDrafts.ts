@@ -43,7 +43,14 @@ import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
 
-export type DraftOp = "create_seat" | "update_seat" | "rest_seat" | "seat_holder" | "end_holding" | "move_circle";
+export type DraftOp =
+  | "create_seat"
+  | "create_circle"
+  | "update_seat"
+  | "rest_seat"
+  | "seat_holder"
+  | "end_holding"
+  | "move_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -840,6 +847,24 @@ export function previewLoadedDraft(
   // a draft can create a seat and then put somebody in it.
   const willExist = new Set(draft.changes.filter((c) => c.op === "create_seat").map((c) => c.orgRoleId));
 
+  /*
+   * CIRCLES THIS DRAFT CREATES, for the same reason seats are tracked above and
+   * it is the whole point of `create_circle` existing.
+   *
+   * An outside reading of a village arrives as circles AND the seats inside
+   * them, in one batch. Without this set, every seat naming a circle the same
+   * draft creates would block on "that circle does not exist", and a structure
+   * could only ever land in two passes with a human making circles by hand in
+   * between. Ids are stored with the `circle:` prefix on the change, and bare
+   * here, because that is how a seat's payload names one.
+   */
+  const circlesWillExist = new Set(
+    draft.changes
+      .filter((c) => c.op === "create_circle")
+      .map((c) => (c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId)),
+  );
+  const circleKnown = (id: string): boolean => circleIds.has(id) || circlesWillExist.has(id);
+
   // The circles as this draft moves them, for the move_circle lines below.
   const working = context.circles.map((x) => ({ ...x }));
   const lines: PreviewLine[] = [];
@@ -908,6 +933,45 @@ export function previewLoadedDraft(
       continue;
     }
 
+    if (c.op === "create_circle") {
+      /*
+       * A CIRCLE A DRAFT MAKES.
+       *
+       * Structure, so a machine may propose it, exactly as it may propose a
+       * seat. What a machine may NOT do is take one away: there is no
+       * `rest_circle` and this file does not grow one here, because removing a
+       * circle moves every seat inside it and that is a human decision for the
+       * same reason resting a seat is.
+       *
+       * The id carries the `circle:` prefix on the change, matching
+       * `move_circle`, so one convention answers "which circle" everywhere.
+       */
+      const circleId = c.orgRoleId.startsWith("circle:")
+        ? c.orgRoleId.slice("circle:".length)
+        : c.orgRoleId;
+      const circleName = primitiveText(c.payload?.name) ?? circleId;
+      reads = `Create the circle "${circleName}"`;
+      const reasons: string[] = [];
+      if (circleId.trim() === "") reasons.push("A circle needs an id");
+      if (circleIds.has(circleId)) reasons.push("A circle with that id already exists");
+      if ((primitiveText(c.payload?.name) ?? "").trim() === "") reasons.push("A circle needs a name");
+      // 120 is the column, and a value one over it is a refused INSERT on this
+      // server rather than a truncation, so it is caught here where a steward
+      // can read why instead of at publish where the whole draft fails.
+      if ((primitiveText(c.payload?.name) ?? "").length > 120) reasons.push("That name is too long for a circle");
+      const parent = primitiveText(c.payload?.parentCircleId);
+      if (parent && !circleKnown(parent)) {
+        reasons.push("The circle it would sit inside does not exist, and this draft does not create it");
+      }
+      blocked = reasons.length ? reasons.join(". ") : null;
+      // A circle that will exist is one later changes may name, even if this
+      // line is blocked for another reason, so the working copy is only
+      // extended when the line can actually publish.
+      if (!blocked) working.push({ id: circleId, name: circleName, parentCircleId: parent ?? null } as never);
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
+      continue;
+    }
+
     if (c.op === "create_seat") {
       reads = `Create the seat "${primitiveText(c.payload?.name) ?? c.orgRoleId}"`;
       /*
@@ -970,8 +1034,12 @@ export function previewLoadedDraft(
       // seat could publish at all before anybody is asked to make a circle.
       // For the same reason, a line that already has a reason states the
       // circle's problem without asking anybody to make one (circleNameBlock).
-      if (hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
-        reasons.push("That circle does not exist. A draft cannot create circles");
+      if (hasCircleId(circleIdOf(c.payload)) && !circleKnown(primitiveText(circleIdOf(c.payload)) ?? "")) {
+        // This used to read "A draft cannot create circles", which stopped
+        // being true when `create_circle` landed. A draft that creates the
+        // circle earlier satisfies `circleKnown`, so reaching this line now
+        // means no such circle exists and none is being made.
+        reasons.push("That circle does not exist, and this draft does not create it");
       } else {
         const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
         if (circle) reasons.push(circle);
@@ -999,8 +1067,8 @@ export function previewLoadedDraft(
           const v = primitiveNumber(n2);
           if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
         }
-        if (!blocked && hasCircleId(circleIdOf(c.payload)) && !circleIds.has(primitiveText(circleIdOf(c.payload)) ?? "")) {
-          blocked = "That circle does not exist. A draft cannot create circles";
+        if (!blocked && hasCircleId(circleIdOf(c.payload)) && !circleKnown(primitiveText(circleIdOf(c.payload)) ?? "")) {
+          blocked = "That circle does not exist, and this draft does not create it";
         }
       }
       if (c.op === "rest_seat") reads = `Rest ${name}, so it stops appearing on the chart`;
@@ -1177,6 +1245,8 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   if (c.op === "create_seat") return null;
+  // Nothing existed to capture, exactly as for a seat.
+  if (c.op === "create_circle") return null;
   if (c.op === "seat_holder") return null;
   if (c.op === "end_holding") {
     const [[row]] = await conn.query<any[]>(
@@ -1223,6 +1293,33 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
     const circleId = c.orgRoleId.slice("circle:".length);
     const parentId = typeof p.parentCircleId === "string" && p.parentCircleId ? p.parentCircleId : null;
     await conn.query("UPDATE circles SET parent_circle_id = ? WHERE id = ? AND is_example = 0", [parentId, circleId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return null;
+  }
+  if (c.op === "create_circle") {
+    /*
+     * RAW SQL INSIDE THE TRANSACTION, then a cache reload after commit, for
+     * the reason `move_circle` states above: `circlesRepo.all()` never
+     * re-reads, so this stays invisible until the publish route reloads it,
+     * and the version bump in the SAME transaction stops a writer holding an
+     * older snapshot from writing over it.
+     *
+     * `status` takes the value the column already defaults to. Naming it is
+     * deliberate: this collection is written elsewhere through a spec that
+     * lists every column, and a default never applies to those writes.
+     */
+    const newId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
+    await conn.query( // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+      "INSERT INTO circles (id, name, purpose, parent_circle_id, status, sort_order) VALUES (?,?,?,?,?,?)",
+      [
+        newId,
+        String(p.name ?? newId).slice(0, 120),
+        p.purpose ?? null,
+        typeof p.parentCircleId === "string" && p.parentCircleId ? p.parentCircleId : null,
+        "active",
+        Number(p.sortOrder ?? 0),
+      ],
+    );
     await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return null;
   }
@@ -1377,6 +1474,21 @@ export async function revertDraft(
           const moved = nowCircles.find((x) => x.id === circleId);
           if (moved) moved.parentCircleId = back;
         }
+      } else if (c.op === "create_circle") {
+        /*
+         * DORMANT RATHER THAN DELETED, which mirrors what reverting a created
+         * SEAT does: that one sets `active = 0` and leaves the row.
+         *
+         * A delete would be the obvious move and it is the wrong one twice
+         * over. Seats created in the same draft carry this circle's id, and a
+         * child circle may name it as a parent, so removing the row leaves
+         * those pointing at nothing. And this file's own rule about a
+         * re-seating applies: the past is not rewritten to look as though the
+         * circle was never made.
+         */
+        const revertId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
+        await conn.query("UPDATE circles SET status = 'dormant' WHERE id = ?", [revertId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {

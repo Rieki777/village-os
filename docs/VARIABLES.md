@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 175 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 176 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 190 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 191 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-216 dials in 32 categories. 127 carry a minimum and a maximum. By type: 90 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 34 text, 1 longtext.
+217 dials in 33 categories. 128 carry a minimum and a maximum. By type: 91 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 34 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -72,6 +72,7 @@ Each dial also says WHEN a change lands. 190 of them as soon as it is saved, and
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
+| Journal | 1 | 1 | 0 |
 
 ## Every dial by name
 
@@ -294,7 +295,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Rung a need aims for when nobody said otherwise | `needs.default_depth_target` | Needs | choice | `satisfied` | the whole village |
 | Share of members a need aims to reach when nobody said otherwise | `needs.default_breadth_pct` | Needs | integer | `100` | the whole village |
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
-| Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+| Whether saying what the village is for is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+| Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
 
 ## Membership
 
@@ -2297,6 +2299,7 @@ Where balances are read from. A public endpoint is fine to start; a dedicated on
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+| Shown to the public | Listed, and open to proposals. Its value stays off the public rules page because it can carry a provider key; admins still see it. |
 
 ## Hypha
 
@@ -3852,9 +3855,9 @@ The smallest number of answers on one need that may appear as a count anywhere i
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Whether naming the village's needs target is asked before launch
+### Whether saying what the village is for is asked before launch
 
-Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not named a needs target may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village needs. What the village is for is a separate question, and it does block: the governing purpose statement is its own row on the launch checklist, and the vote waits for it. Nothing reads this dial until the launch check names it.
+Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not said what it is for may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village is for. Nothing reads this until the launch check names it.
 
 | Fact | Value |
 | --- | --- |
@@ -3871,13 +3874,31 @@ What it may be set to:
 - `recommended` Ask for it, and let the vote open anyway.
 - `none` Do not ask.
 
+## Journal
+
+1 dial. 1 for the whole village.
+
+### Members who must answer before a pulse average shows
+
+How many different members must answer a pulse question in a week before anybody sees that week's average for it. The default is 1, by ruling: a small team still sees its own pulse, and the privacy the village keeps lives in how feedback is written and delivered. Raise it when members know enough of each other's answers that a small average would point at a person. A floor keeps a small count out of casual reading and cannot stop subtraction: somebody who knows how all but one person answered can still read the last answer off the average. Only numbers are ever shown. The words a member writes in the pulse stay in their own journal.
+
+| Fact | Value |
+| --- | --- |
+| Key | `journal.pulse_floor` |
+| Type | integer, a whole number |
+| Default | `1` |
+| Range | 1 to 1000 |
+| Counted in | members |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ## What this file is made from
 
 The generator reads these and fails loudly if any of them moves:
 
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
-- `shared/conflictAgreement.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

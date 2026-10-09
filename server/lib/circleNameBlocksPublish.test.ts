@@ -142,7 +142,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
   it("checks a circle id of 0 against the circles, where truthiness skipped it and published circle \"0\"", async () => {
     const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-zero", payload: { name: "Zero Seat", circleId: 0 } }]);
     const preview = await previewDraft(pool, id, 99);
-    expect(preview.lines[0].blocked).toBe("That circle does not exist. A draft cannot create circles");
+    expect(preview.lines[0].blocked).toBe("That circle does not exist, and this draft does not create it");
     expect((await publishDraft(pool, id, "u-steward", 99)).ok).toBe(false);
     expect(await seatRow("cnb-zero")).toBeUndefined();
   });
@@ -269,7 +269,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
 
     // A list holding a circle that does not exist still says so.
     const missing = await draftWith([{ op: "create_seat", orgRoleId: "cnb-listed-x", payload: { name: "Missing Seat", circleId: ["cnb-nowhere"] } }]);
-    expect((await previewDraft(pool, missing, 99)).lines[0].blocked).toBe("That circle does not exist. A draft cannot create circles");
+    expect((await previewDraft(pool, missing, 99)).lines[0].blocked).toBe("That circle does not exist, and this draft does not create it");
   });
 
   it("gives the recovery for a circle in a form nothing reads beside another reason, and still asks no admin for a circle", async () => {

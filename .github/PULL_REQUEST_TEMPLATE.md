@@ -27,8 +27,8 @@ guard whose last line is blank on failure is why the code matters and the output
 ## Migration
 
 - [ ] **No migration in this pull request.**
-- [ ] **Migration included.** Number: `________`. Claimed in `SEASON2_FLEET_LEDGER.md` section 3
-      before the file was created, and `node scripts/check-migration-numbers.mjs --next` agrees.
+- [ ] **Migration included.** Number: `________`. Named here before the file was created
+      (maintainers keep the claims in the private fleet ledger), and `node scripts/check-migration-numbers.mjs --next` agrees.
   - [ ] It only ADDS. The previous release can still read and write what it produces.
   - [ ] It is a new file. No shipped migration file was edited.
   - [ ] It is below 9000. That band belongs to villages, never to upstream.

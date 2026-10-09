@@ -2,21 +2,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
+import { writeStored } from "@/lib/safeStorage";
+import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
 import {
   DEFAULT_WALK_LANG,
   WALK_GESTURES,
+  WALK_WELCOME_MAX,
+  walkPush,
   type MapWalk,
   type WalkGesture,
   type WalkStep,
+  type WalkWelcome,
 } from "@shared/mapAddress";
 
 /**
- * Admin, Make This Yours: the Welcome Walk a newcomer is taken on.
+ * The village's own welcome, and the Welcome Walk a newcomer can take.
  *
- * The map ships its own seed walk. An empty editor here means the village
- * keeps it, which is the same promise the rest of this wizard makes: blank
- * keeps the suggested value. A village only writes steps when it wants to
- * say something the seed does not.
+ * THE VILLAGE WRITES BOTH, OR THE MAP HAS NEITHER. Rye, 2026-10-02:
+ * "Onboarding is something that founders should do and really personalize and
+ * put their spirit into it." The map used to ship a seed walk and an empty
+ * editor here meant the village kept it. Now an empty walk means the map
+ * offers none, and an empty welcome means the guide greets people plainly.
+ * The Journey to Launch asks for both, and links to this panel.
+ *
+ * Saving tells the map behind the panel, so the walk is offered there the
+ * moment it is saved. The event is the one the map's style save already
+ * sends, because what the map does with it is the same: fetch its config
+ * again and apply it.
  *
  * Steps are stored PER LANGUAGE (`{ en: [...], es: [...] }`) with `en` the
  * default, so a village hosting in two languages does not have to pick which
@@ -42,9 +54,14 @@ const BLANK = (n: number): WalkStep => ({
   gesture: "none",
 });
 
-export default function WalkEditorPanel() {
+export default function WalkEditorPanel({ focus = false }: {
+  /** Bring this panel into view once it renders: the door was opened for it. */
+  focus?: boolean;
+} = {}) {
   const mayAdminister = useIsAdmin();
   const [walk, setWalk] = useState<MapWalk>({});
+  const [welcome, setWelcome] = useState<WalkWelcome>({});
+  const root = useRef<HTMLDivElement | null>(null);
   const [lang, setLang] = useState(DEFAULT_WALK_LANG);
   const [structures, setStructures] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -62,6 +79,7 @@ export default function WalkEditorPanel() {
         gameFetch("/api/admin/map/structures").then((r) => (r.ok ? r.json() : null)),
       ]);
       setWalk(w?.walk ?? {});
+      setWelcome(w?.welcome ?? {});
       setStructures(s?.structures ?? []);
       // The report is a nice-to-have beside the editor, so it never blocks it.
       gameFetch("/api/admin/map/walk-log")
@@ -71,6 +89,11 @@ export default function WalkEditorPanel() {
     } catch { toast.error("Could not load the walk"); }
   }, [mayAdminister]);
   useEffect(() => { load(); }, [load]);
+
+  // Asked for by address (the Journey to Launch's link): scroll here once shown.
+  useEffect(() => {
+    if (focus && mayAdminister) root.current?.scrollIntoView?.({ block: "start" });
+  }, [focus, mayAdminister]);
 
   const setSteps = (next: WalkStep[]) => setWalk({ ...walk, [lang]: next });
   const patch = (i: number, p: Partial<WalkStep>) =>
@@ -90,14 +113,19 @@ export default function WalkEditorPanel() {
     try {
       const res = await gameFetch("/api/admin/map/walk", {
         method: "PUT",
-        body: JSON.stringify({ walk }),
+        body: JSON.stringify({ walk, welcome }),
       });
       if (!res.ok) throw new Error();
       // Read back what the server kept: it drops untitled steps and clamps
       // fields, so showing the stored answer keeps the panel honest.
       const data = await res.json();
       setWalk(data.walk ?? {});
-      toast.success("Walk saved. New arrivals get it from here");
+      setWelcome(data.welcome ?? {});
+      // The map behind this panel fetches its config again: this tab by the
+      // event, any other open map by the storage write.
+      window.dispatchEvent(new Event(MAP_SKIN_SAVED_EVENT));
+      writeStored("local", MAP_SKIN_SAVED_KEY, String(Date.now()));
+      toast.success("Saved. New arrivals get it from here");
     } catch { toast.error("Save failed"); }
     setSaving(false);
   };
@@ -114,10 +142,10 @@ export default function WalkEditorPanel() {
     if (!win) return;
     const draft = (walk[lang] ?? []).filter((s) => s.title.trim());
     win.postMessage(
-      { type: "config", ...(draft.length ? { walk: draft } : {}) },
+      { type: "config", ...walkPush({ walk: draft, welcome: welcome[lang] ?? "" }) },
       window.location.origin,
     );
-  }, [walk, lang]);
+  }, [walk, welcome, lang]);
 
   // The artifact announces itself when it can accept a config.
   useEffect(() => {
@@ -147,11 +175,11 @@ export default function WalkEditorPanel() {
   if (!mayAdminister) return null;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6 mt-6">
-      <h3 className="font-semibold text-gray-900 mb-1">Welcome Walk</h3>
+    <div ref={root} id="welcome-walk" className="bg-white border border-gray-100 rounded-2xl p-6 mt-6">
+      <h3 className="font-semibold text-gray-900 mb-1">Welcome and walk</h3>
       <p className="text-xs text-gray-500 mb-4">
-        The short guided arrival a newcomer gets the first time they open the map. Leave it
-        empty and the map runs its own walk.
+        The first words someone reads on the map, and the short walk the guide can take them on.
+        Until you write a walk, the map offers none.
       </p>
 
       <div className="flex items-center gap-2 mb-4">
@@ -199,9 +227,19 @@ export default function WalkEditorPanel() {
         </div>
       )}
 
+      <div className="mb-5">
+        <label className="block text-xs font-medium text-muted-foreground mb-1" htmlFor="walk-welcome">Welcome</label>
+        <textarea id="walk-welcome" rows={3} maxLength={WALK_WELCOME_MAX} value={welcome[lang] ?? ""}
+          className={input} placeholder="What the guide says when someone opens the map"
+          onChange={(e) => setWelcome({ ...welcome, [lang]: e.target.value })} />
+        <p className="text-xs text-muted-foreground mt-1">
+          Leave it empty and the guide greets people plainly, with the village's name and how to move the map.
+        </p>
+      </div>
+
       {steps.length === 0 && (
         <p className="text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg py-6 text-center mb-4">
-          No steps. The map's own walk is what newcomers see.
+          No stops yet. The map offers no walk until you write one.
         </p>
       )}
 
@@ -291,14 +329,14 @@ export default function WalkEditorPanel() {
         )}
         <button onClick={save} disabled={saving}
           className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {saving ? "Saving..." : "Save walk"}
+          {saving ? "Saving..." : "Save welcome and walk"}
         </button>
       </div>
 
       {previewing && (
         <div className="mt-4">
           <p className="text-xs text-gray-500 mb-2">
-            This is your draft running on the real map. Nothing is saved until you press Save walk.
+            This is your draft running on the real map. Nothing is saved until you press Save welcome and walk.
           </p>
           {/* Mounted only while previewing: the map is four megabytes, and an
               admin page has no business loading it before it is asked to. */}

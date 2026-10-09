@@ -37,7 +37,9 @@ import DraftCards from "./DraftCards";
 import PracticeVote from "./PracticeVote";
 import TypeCards from "./TypeCards";
 import WizardField, { type MechanicsVariableLite } from "./WizardField";
+import WizardRolePreview from "./WizardRolePreview";
 import WizardStepper from "./WizardStepper";
+import { isSearchSource, labelFor, loadPickOptions, type PickOption } from "./pickSources";
 import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
@@ -75,6 +77,27 @@ export default function ProposalWizard() {
   const cfg = type ? typeConfig(type) : null;
   const problems = problemsFor(type, answers);
   const stepProblems = problemsInStep(type, step, answers);
+  // A type that picks a role with powers shows that role as a card once it is
+  // picked. One `/api/roles` read serves the picker and the preview
+  // (`loadPermissionRoles`), so the two cannot disagree about a role.
+  const rolePick = walk.flatMap((s) => fieldsFor(type, s.key)).find((f) => f.kind === "pick" && f.source === "roles");
+  const rolePreview = rolePick && String(answers[rolePick.key] ?? "") ? String(answers[rolePick.key]) : null;
+  // The read-back names a picked value from the list its picker offered
+  // (`labelFor`), where it printed the id. A searched source (members) has no
+  // list to name from and still prints what was stored.
+  const [pickLists, setPickLists] = useState<Record<string, PickOption[]>>({});
+  useEffect(() => {
+    if (step !== "review" || !type) return;
+    const picks = walkFor(type).flatMap((s) => fieldsFor(type, s.key));
+    const sources = Array.from(new Set(picks.flatMap((f) => (f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : []))));
+    let alive = true;
+    void Promise.all(sources.map(async (src) => [src, await loadPickOptions(src)] as const)).then((lists) => {
+      if (alive) setPickLists(Object.fromEntries(lists));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [step, type]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -299,7 +322,7 @@ export default function ProposalWizard() {
   }
 
   return (
-    <div className="lg:grid lg:grid-cols-[1fr_14rem] lg:gap-8">
+    <div className={`lg:grid lg:gap-8 ${rolePreview ? "lg:grid-cols-[1fr_22rem]" : "lg:grid-cols-[1fr_14rem]"}`}>
       <div className="min-w-0">
         {/* Mobile stepper sits above the step; the desktop rail is on the right. */}
         <div className="mb-4 lg:hidden">
@@ -361,6 +384,12 @@ export default function ProposalWizard() {
                 answers={answers}
               />
             ))}
+            {/* On a phone the preview sits under the question that picked it. */}
+            {rolePreview && rolePick && fieldsFor(type, step).includes(rolePick) && (
+              <div className="lg:hidden">
+                <WizardRolePreview roleId={rolePreview} look="inline" />
+              </div>
+            )}
           </div>
         )}
 
@@ -372,6 +401,12 @@ export default function ProposalWizard() {
                 This is what the village will see. Everything here is still yours to change.
               </p>
             </div>
+
+            {rolePreview && (
+              <div className="lg:hidden">
+                <WizardRolePreview roleId={rolePreview} look="inline" />
+              </div>
+            )}
 
             <dl className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
               {walk
@@ -387,7 +422,9 @@ export default function ProposalWizard() {
                           String(v ?? "").trim()
                           ? `Until ${String(v).trim()}`
                           : "Until the season ends"
-                        : String(v ?? "");
+                        : field.kind === "pick" && field.source && pickLists[field.source] && v
+                          ? labelFor(pickLists[field.source], v)
+                          : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">
                       <dt className="w-40 shrink-0 text-sm font-medium text-stone-600">{field.label}</dt>
@@ -513,12 +550,19 @@ export default function ProposalWizard() {
 
       {/* Desktop right rail. */}
       <aside className="hidden lg:block">
-        <div className="sticky top-24">
+        {/* The stepper and a role card are taller than a laptop screen, so the
+            sticky rail scrolls inside itself instead of running off the page.
+            A scroll box clips whatever is drawn outside it, focus rings
+            included, so 4px of padding gives the stepper's ring (2px) and a
+            card control's outline (2px out, 2px offset) room inside it, and
+            the matching negative margin keeps the rail where it was. */}
+        <div className="sticky top-24 -mx-1 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain p-1">
           <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
           {dirty && (
             <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>
           )}
           {!dirty && draftId && <p className="mt-4 px-2 text-xs text-stone-500">Saved. You can close this and come back.</p>}
+          {rolePreview && <WizardRolePreview roleId={rolePreview} look="rail" />}
         </div>
       </aside>
 

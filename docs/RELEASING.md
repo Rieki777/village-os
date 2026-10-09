@@ -95,17 +95,16 @@ commits and CI runs on the twentieth. The other nineteen are never checked by
 anything, and a migration that arrived in one of them was never compared
 against anything at all.
 
-Measured on 2026-09-02, over the 174 commits between `v1.1.0` and `main`:
+Measured on 2026-09-02, over the span between `v1.1.0` and that day's `main`,
+using the same query `release.yml` uses to check for a green run: most sampled
+commits had no completed successful CI run, and every migration added in that
+span landed in a commit that had none. Which migrations a given release
+carries is in its `CHANGELOG.md` entry, under **Does it touch your data**.
 
-- 25 commits sampled, using the same query `release.yml` uses to check for a
-  green run. **3 of the 25 had one.**
-- **All five** of the migrations added since 1.1.0 landed in commits with
-  **zero** completed successful CI runs.
-
-So on the current span the guard has never once been asked whether a village
-on 1.1.0 could roll back from the next release. The rule is written down, the
-guard that enforces it is real and good, and the span between two releases
-falls through the gap between them.
+So on that span the guard was never once asked whether a village on 1.1.0
+could roll back from the next release. The rule is written down, the guard
+that enforces it is real and good, and the span between two releases falls
+through the gap between them.
 
 Running it with `--base <previous release tag>` closes that gap. It asks a
 question CI structurally cannot ask, over the span a village actually moves
@@ -126,7 +125,7 @@ and there is nowhere else it could be asked.
 
 Two consequences to expect, both intended:
 
-- **The first release after this lands may fail this job,** because of the five
+- **The first release after this lands may fail this job,** because of the
   unverified migrations above. That is the check finding real work, not the
   check being wrong. Run the command by hand, read what it reports, and fix
   forward.
@@ -150,8 +149,12 @@ Two consequences to expect, both intended:
    (<date>)`, add a fresh empty `## Unreleased` above it, and confirm all three
    headings are answered. Read the entry as though you run a village and have
    not read the code.
-4. **Set the version** in `package.json` and `PLATFORM_VERSION` in
-   `server/lib/identity.ts` to the same number.
+4. **Set the version** in `package.json`, `PLATFORM_VERSION` in
+   `server/lib/identity.ts`, and the default image in `docker-compose.yml`
+   (`ghcr.io/rieki777/village-os:<version>`) to the same number, and the
+   image named in `START_HERE.md` part B. The workflow refuses a tag that the
+   first three disagree with, because the starter kit carries the compose file
+   and a kit that starts an older image is a release that lies.
 5. **Tag and push.**
 
    ```sh
@@ -166,7 +169,17 @@ Two consequences to expect, both intended:
    is the system working.
 7. **Roll it out** with `ops/roll.mjs`, `plan` first. `ops/README.md` has the
    procedure and what to do when a ring halts.
-8. **Tell the villages.** Nothing notifies them. There is no email, no banner
+8. **Tell the regencivics.earth card.** The "Run it yourself" card on
+   regencivics.earth/village-os links this release's starter kit and guide,
+   and its "Copy the setup guide" button reads `docs/FOUNDER_SETUP_PROMPT.md`
+   at a pinned commit. Both are two constants in the hub repository,
+   Rieki777/ReGenCivics.Earth (its villageOsOffer module): give whoever holds
+   that card the new version
+   and the commit the tag points at (`git rev-parse v<version>^{}`). The
+   release job prints both in its summary. The card copies the text below the
+   prompt's single `---` line, so the prompt keeps exactly one;
+   `scripts/setup-prompt-contract.test.mjs` holds that.
+9. **Tell the villages.** Nothing notifies them. There is no email, no banner
    and no update check, so a release nobody announces reaches only the villages
    the platform team hosts. Self-hosted villages find out by running the
    command in `docs/UPGRADING.md` Step 2, whenever they think to. Anything
@@ -178,7 +191,7 @@ Two consequences to expect, both intended:
 
 Written down so it is not rediscovered.
 
-- **Villages are not notified.** Step 8 is a person remembering. A village that
+- **Villages are not notified.** Step 9 is a person remembering. A village that
   has left the fleet has no channel at all beyond polling the registry by hand.
   The cheapest fix is a published document naming the current version that a
   village can poll, or the village checking the registry itself and showing its

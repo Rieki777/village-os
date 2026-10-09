@@ -43,6 +43,7 @@ vi.mock("@/components/journey/EconomicsView", () => ({ EconomicsView: () => null
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
+  useGameConfig: () => ({ brochurePages: true }),
   fetchGameMe: async () => {
     me.asked += 1;
     return me.current;

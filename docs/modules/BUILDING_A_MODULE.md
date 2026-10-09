@@ -21,16 +21,17 @@ Three things about that are unusual and you should know them before you start.
 **Every module is first-party code in this repository.** There is no plugin runtime. Nothing you
 write runs inside a village's server as third-party code, because there is no mechanism for that and
 there is not going to be one. A module you build is merged here, reviewed here, and shipped to every
-fork as part of the platform. That is a real constraint and it buys three things: the platform can
+village as part of the platform. That is a real constraint and it buys three things: the platform can
 support itself, your service is never blamed for a defect in somebody else's, and the entire class of
 supply-chain attack that has repeatedly hit plugin marketplaces does not exist here.
 
-**Everything ships off.** An absent `module_settings` row means off. A fork inherits every new module
+**Everything ships off.** An absent `module_settings` row means off. A village inherits every new module
 as off, and enabling one is a deliberate admin act recorded in `module_events`. The four core modules
 (quests, gratitude, progression, profiles) are the exception and cannot be disabled.
 
-**The village owns the code.** A village forks this repository and runs it on its own infrastructure.
-It can edit any file, including `shared/modules.ts`. That fact is the single most important input to
+**The village owns the code.** A village runs the published image on its own infrastructure, and the
+code is MIT: any village may fork this repository, change any file, including `shared/modules.ts`,
+and deploy its fork. That fact is the single most important input to
 how paid modules work here, and section 7 is entirely about it.
 
 ## 2. Where things go
@@ -98,7 +99,7 @@ pay, and who do I call.**
 
 | | Included | Connected | Managed |
 |---|---|---|---|
-| Billed by | the platform, in its price | **you, direct to the village** | the platform |
+| Billed by | n/a | **you, direct to the village** | the platform |
 | Supported by | the platform | you for the service, the platform for the connector | the platform first, you behind a private escalation |
 | Credential | none, or the village's own account | **a key the village holds and can see** | platform-held, env only, the village never sees it |
 

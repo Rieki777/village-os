@@ -109,7 +109,7 @@ function Inbox() {
           <div>
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Messages</h1>
             <p className="text-sm text-muted-foreground">
-              {total > 0 ? `${total} waiting for you` : "You are all caught up"}
+              {total > 0 ? `${total} waiting for you` : "All caught up"}
             </p>
           </div>
           <button
@@ -130,10 +130,7 @@ function Inbox() {
           <div className="rounded-xl border border-border bg-card p-8 text-center">
             <Users className="w-7 h-7 mx-auto mb-3 text-muted-foreground" aria-hidden="true" />
             <p className="font-semibold text-foreground mb-1">No conversations yet</p>
-            <p className="text-sm text-muted-foreground">
-              Start one with anybody here. A conversation with two people is a direct message; add more and it becomes a
-              named group.
-            </p>
+            <p className="text-sm text-muted-foreground">Tap New to message anyone here.</p>
           </div>
         )}
 
@@ -235,7 +232,7 @@ function NewConversation({ onClose }: { onClose: () => void }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "That did not work");
+        setError(data?.error ?? "That didn't go through. Try again.");
         return;
       }
       onClose();
@@ -378,7 +375,7 @@ function AddMembers({
     setError("");
     try {
       if (!(await onAdd(chosen.map((c) => c.userId)))) {
-        setError("They could not be added. The group may be at its limit");
+        setError("That didn't go through. The group may be full.");
       }
     } finally {
       setBusy(false);
@@ -546,7 +543,7 @@ function ThreadView({ id }: { id: string }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "That message did not send");
+        setError(data?.error ?? "That didn't send. Try again.");
         return;
       }
       setDraft("");
@@ -615,7 +612,7 @@ function ThreadView({ id }: { id: string }) {
     return (
       <Layout>
         <div className="container max-w-2xl py-24 text-center">
-          <h1 className="font-display text-2xl font-bold text-foreground mb-3">This conversation could not be loaded just now.</h1>
+          <h1 className="font-display text-2xl font-bold text-foreground mb-3">This conversation didn't load.</h1>
           <p className="text-muted-foreground mb-8">Reload to try again.</p>
           <Link href="/messages" className="text-teal-deep font-medium">← Back to messages</Link>
         </div>
@@ -780,7 +777,7 @@ function ThreadView({ id }: { id: string }) {
           <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4">
             {!thread.messages.length && (
               <p className="text-center text-sm text-muted-foreground py-10">
-                Nothing here yet. Say the first thing.
+                No messages yet. Say the first thing.
               </p>
             )}
             {days.map((day) => (

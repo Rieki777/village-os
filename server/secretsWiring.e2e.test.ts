@@ -62,14 +62,27 @@ interface Server {
   logs: string[];
 }
 
-/** The child's environment WITHOUT a village-secrets key, whatever this machine has. */
-function envWithoutKey(extra: Record<string, string>): NodeJS.ProcessEnv {
+/**
+ * The child's environment WITHOUT a usable village-secrets key, whatever this
+ * machine has: deleted, or, when `malformedKey` is given, set to that value,
+ * which the gate refuses exactly as it refuses an absent one.
+ */
+function envWithoutKey(extra: Record<string, string>, malformedKey?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
   delete env[VILLAGE_SECRETS_ENV];
+  if (malformedKey !== undefined) env[VILLAGE_SECRETS_ENV] = malformedKey;
   return env;
 }
 
-async function boot(port: number, dbUrl: string, tokenSecret: string): Promise<Server> {
+/**
+ * A real key in the shape a hand paste produces: quotes around it. Set, and
+ * refused, which is the live report of 2026-10-02 where every line said "not
+ * set". Never printed by anything, and the assertions below hold that.
+ */
+const QUOTED_KEY_HEX = "e7".repeat(32);
+const QUOTED_KEY = `"${QUOTED_KEY_HEX}"`;
+
+async function boot(port: number, dbUrl: string, tokenSecret: string, malformedKey?: string): Promise<Server> {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-secrets-wiring-"));
 
   // Refuse a port a stranger is already holding, and wait out the previous
@@ -95,7 +108,7 @@ async function boot(port: number, dbUrl: string, tokenSecret: string): Promise<S
       AUTH_TOKEN_SECRET: tokenSecret, // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
-    }),
+    }, malformedKey),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const logs: string[] = [];
@@ -197,10 +210,28 @@ describe.skipIf(!DB_CONFIGURED)("saving a key on a deployment with no village-se
     // It names the variable, because "ask your operator" is not actionable on
     // its own for the founder who IS the operator.
     expect(JSON.stringify(put.json)).toContain(VILLAGE_SECRETS_ENV);
+    // And `message` names the PROBLEM, which on this deployment is that the
+    // variable is not set. Suite B below boots one where it is set wrong.
+    expect(String(put.json?.message ?? "")).toContain(`${VILLAGE_SECRETS_ENV} is not set`);
+    expect(String(put.json?.message ?? "")).toContain("Set it in this deployment's environment");
     // Nothing may leak back, refusal or not.
     expect(JSON.stringify(put.json)).not.toContain(LIVE_STRIPE_KEY);
     // The row is exactly as it was: not stored, and not stored in the clear.
     expect(await statusOf("stripe_secret_key")).toEqual(before);
+  });
+
+  it("tells an admin why no key can be saved BEFORE one is typed, and tells nobody else", async () => {
+    const r = await api("GET", "/api/admin/integrations");
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.villageSecretsKey?.configured).toBe(false);
+    expect(String(r.json.villageSecretsKey?.problem ?? "")).toContain(`${VILLAGE_SECRETS_ENV} is not set`);
+    // Admin only. The same route, with no session and with a stranger's token.
+    for (const auth of ["", "not-a-real-session-token"]) {
+      const other = await call(BASE_A, "GET", "/api/admin/integrations", undefined, auth);
+      expect(other.status, JSON.stringify(other.json)).toBe(401);
+      expect(JSON.stringify(other.json)).not.toContain("villageSecretsKey");
+      expect(JSON.stringify(other.json)).not.toContain(VILLAGE_SECRETS_ENV);
+    }
   });
 
   it("still lets an operator CLEAR a key without one", async () => {
@@ -226,6 +257,7 @@ describe.skipIf(!DB_CONFIGURED)("saving a key on a deployment with no village-se
     });
     expect(put.status, JSON.stringify(put.json)).toBe(503);
     expect(String(put.json?.error ?? "")).toContain(NO_VILLAGE_SECRETS_KEY_SENTENCE);
+    expect(String(put.json?.message ?? "")).toContain(`${VILLAGE_SECRETS_ENV} is not set`);
     expect(JSON.stringify(put.json)).not.toContain(LIVE_ASSISTANT_KEY);
 
     const after = await call(BASE_A, "GET", "/api/admin/email-config", undefined, token);
@@ -248,8 +280,14 @@ describe.skipIf(!DB_CONFIGURED)("saving a key on a deployment with no village-se
 });
 
 // ── B: boot, on a village that never booted the sealed release ──────────────
+//
+// The key here is SET, with quotes around it, which the gate refuses exactly
+// as it refuses an absent one (`keyFromEnv` in server/lib/sealedBox.ts), so
+// every boot branch below is the one an unset key takes. It is set wrong on
+// purpose: on 2026-10-02 a founder's key arrived like this and every boot line
+// said "not set". Suite A covers the deleted variable through the routes.
 
-describe.skipIf(!DB_CONFIGURED)("booting with a legacy plaintext key and no village-secrets key", () => {
+describe.skipIf(!DB_CONFIGURED)("booting with a legacy plaintext key and a village-secrets key in the wrong shape", () => {
   let server: Server | undefined;
   let db: TestDb | undefined;
 
@@ -273,7 +311,7 @@ describe.skipIf(!DB_CONFIGURED)("booting with a legacy plaintext key and no vill
     } finally {
       await seed.end();
     }
-    server = await boot(PORT_B, db.url, "secrets-wiring-b-token-secret"); // module-review-ok: fixture, throwaway server
+    server = await boot(PORT_B, db.url, "secrets-wiring-b-token-secret", QUOTED_KEY); // module-review-ok: fixture, throwaway server
   }, 300_000);
 
   afterAll(async () => {
@@ -314,5 +352,21 @@ describe.skipIf(!DB_CONFIGURED)("booting with a legacy plaintext key and no vill
     expect(log).toContain("resend_api_key");
     // And never the value itself: logs travel further than databases do.
     expect(log).not.toContain(LEGACY_RESEND_KEY);
+  });
+
+  it("names WHAT is wrong with the key in every line about it, and never calls it unset", async () => {
+    const log = server!.logs.join("");
+    const lines = log.split(/\r?\n/).filter((l) => l.includes(VILLAGE_SECRETS_ENV));
+    // The control: the lines are there to read. The [secrets] line about the
+    // legacy keys left in the clear, and the [identity] line about the
+    // signing key minted in plaintext on this fresh schema.
+    expect(lines.some((l) => l.startsWith("[secrets]")), log).toBe(true);
+    expect(lines.some((l) => l.includes("[identity]")), log).toBe(true);
+    for (const line of lines) {
+      expect(line).not.toContain("is not set");
+    }
+    expect(lines.filter((l) => l.includes("with quotes around it")).length).toBeGreaterThanOrEqual(2);
+    // Not a character of the key, in any line at all.
+    expect(log).not.toContain(QUOTED_KEY_HEX.slice(0, 8));
   });
 });

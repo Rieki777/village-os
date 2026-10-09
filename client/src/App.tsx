@@ -6,10 +6,12 @@ import { Route, Switch, useLocation } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
+import { brochurePage, useBrochurePages } from "./lib/brochure";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -38,32 +40,21 @@ function useLanding(): "home" | "map" {
   return landing;
 }
 
+/**
+ * The brochure home belongs to the brochure pages (shared/brochure.ts): a
+ * village that serves them gets it, and every other village gets the neutral
+ * welcome page. Nothing renders until the switch is known, so neither one
+ * flashes on the other's village.
+ */
 function LandingRoute() {
   const landing = useLanding();
+  const brochure = useBrochurePages();
   const [, navigate] = useLocation();
   useEffect(() => {
     if (landing === "map") navigate("/map", { replace: true });
   }, [landing, navigate]);
-  return landing === "home" ? <Home /> : null;
-}
-
-function ScrollToTop() {
-  const [location] = useLocation();
-  useEffect(() => {
-    // If the URL carries an anchor (e.g. /#choose-path from another page),
-    // scroll to it once the new page has rendered instead of forcing the top.
-    const hash = window.location.hash;
-    if (hash) {
-      const t = setTimeout(() => {
-        const el = document.querySelector(hash);
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-        else window.scrollTo({ top: 0, behavior: "instant" });
-      }, 100);
-      return () => clearTimeout(t);
-    }
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, [location]);
-  return null;
+  if (landing !== "home" || brochure === null) return null;
+  return brochure ? <Home /> : <VillageWelcome />;
 }
 
 /**
@@ -111,7 +102,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/map": "Village map",
   "/map/circles": "Circles and roles",
   "/events": "Village Calendar",
-  "/first-walk": "Meet your village",
+  "/first-walk": "Your First Walk",
   "/stay": "Stays",
   "/library": "Material library",
   "/badges": "Badges & skills",
@@ -151,6 +142,7 @@ const PAGE_TITLES: Record<string, string> = {
   // place: the whole village's record on one page.
   "/photographs": "Every photograph",
   "/admin": "Village settings",
+  "/journal": "Journal",
 };
 
 function PageTitle() {
@@ -223,12 +215,13 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType<any> }>) => lazy(loader);
+const VillageWelcome = lazyPage(() => import("./pages/VillageWelcome"));
 
-const InvestorJourney = lazyPage(() => import("./pages/InvestorJourney"));
-const StewardJourney = lazyPage(() => import("./pages/StewardJourney"));
-const ResidentJourney = lazyPage(() => import("./pages/ResidentJourney"));
-const ProsperityJourney = lazyPage(() => import("./pages/ProsperityJourney"));
-const LoveLetter = lazyPage(() => import("./pages/LoveLetter"));
+const InvestorJourney = brochurePage(() => import("./pages/InvestorJourney"));
+const StewardJourney = brochurePage(() => import("./pages/StewardJourney"));
+const ResidentJourney = brochurePage(() => import("./pages/ResidentJourney"));
+const ProsperityJourney = brochurePage(() => import("./pages/ProsperityJourney"));
+const LoveLetter = brochurePage(() => import("./pages/LoveLetter"));
 const Circles = lazyPage(() => import("./pages/Circles"));
 const Places = lazyPage(() => import("./pages/Places"));
 const PlacePhotos = lazyPage(() => import("./pages/PlacePhotos"));
@@ -237,13 +230,13 @@ const Quests = lazyPage(() => import("./pages/Quests"));
 const QuestDetail = lazyPage(() => import("./pages/QuestDetail"));
 const ProposeQuest = lazyPage(() => import("./pages/ProposeQuest"));
 const Roles = lazyPage(() => import("./pages/Roles"));
-const HowWeCreate = lazyPage(() => import("./pages/HowWeCreate"));
-const CoCreatorsGuide = lazyPage(() => import("./pages/CoCreatorsGuide"));
-const Housing = lazyPage(() => import("./pages/Housing"));
+const HowWeCreate = brochurePage(() => import("./pages/HowWeCreate"));
+const CoCreatorsGuide = brochurePage(() => import("./pages/CoCreatorsGuide"));
+const Housing = brochurePage(() => import("./pages/Housing"));
 const ReserveHome = lazyPage(() => import("./pages/ReserveHome"));
-const Opportunities = lazyPage(() => import("./pages/Opportunities"));
-const MasterPlan = lazyPage(() => import("./pages/MasterPlan"));
-const Team = lazyPage(() => import("./pages/Team"));
+const Opportunities = brochurePage(() => import("./pages/Opportunities"));
+const MasterPlan = brochurePage(() => import("./pages/MasterPlan"));
+const Team = brochurePage(() => import("./pages/Team"));
 const Admin = lazyPage(() => import("./pages/Admin"));
 const Profile = lazyPage(() => import("./pages/Profile"));
 const Characters = lazyPage(() => import("./pages/Characters"));
@@ -253,25 +246,25 @@ const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
-const GoodNeighbor = lazyPage(() => import("./pages/GoodNeighbor"));
+const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
 const CanvasWorkbook = lazyPage(() => import("./pages/CanvasWorkbook"));
-const ProjectHistory = lazyPage(() => import("./pages/ProjectHistory"));
+const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
 const Network = lazyPage(() => import("./pages/Network"));
 const Contribute = lazyPage(() => import("./pages/Contribute"));
 const SeasonalFestivals = lazyPage(() => import("./pages/SeasonalFestivals"));
-const StewardRights = lazyPage(() => import("./pages/StewardRights"));
-const ResidentRights = lazyPage(() => import("./pages/ResidentRights"));
+const StewardRights = brochurePage(() => import("./pages/StewardRights"));
+const ResidentRights = brochurePage(() => import("./pages/ResidentRights"));
 const Training = lazyPage(() => import("./pages/Training"));
 const Governance = lazyPage(() => import("./pages/Governance"));
 const Decisions = lazyPage(() => import("./pages/Decisions"));
 const Decision = lazyPage(() => import("./pages/Decision"));
 const Propose = lazyPage(() => import("./pages/Propose"));
-const Visit = lazyPage(() => import("./pages/Visit"));
+const Visit = brochurePage(() => import("./pages/Visit"));
 const GratitudeWall = lazyPage(() => import("./pages/GratitudeWall"));
-const WorkWithUs = lazyPage(() => import("./pages/WorkWithUs"));
+const WorkWithUs = brochurePage(() => import("./pages/WorkWithUs"));
 const ToolsHub = lazyPage(() => import("./pages/ToolsHub"));
 const VillageMap = lazyPage(() => import("./pages/VillageMap"));
 const LivingMap = lazyPage(() => import("./pages/LivingMap"));
@@ -294,6 +287,7 @@ const Modules = lazyPage(() => import("./pages/Modules"));
 const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
+const Journal = lazyPage(() => import("./pages/Journal"));
 
 /**
  * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
@@ -428,6 +422,8 @@ function Router() {
       <Route path="/propose" component={Propose} />
       <Route path="/visit" component={Visit} />
       <Route path="/gratitude" component={GratitudeWall} />
+      {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
+      <Route path="/journal" component={Journal} />
       <Route path="/work-with-us" component={WorkWithUs} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

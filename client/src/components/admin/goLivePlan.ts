@@ -33,7 +33,7 @@
  * still live in Admin.tsx until this panel replaces that block:
  *
  *   1. It opened with `railway up --ci`. `docs/PROVISIONING.md` step 5 has
- *      Railway building from the connected GitHub repository, and
+ *      Railway running the published image (or a fork's own Dockerfile), and
  *      `docs/ARCHITECTURE.md` invariant 11 records that `railway up` stamps
  *      the build marker `-dev`, so `/health` cannot say which commit is live
  *      after one.
@@ -117,23 +117,22 @@ export interface GoLiveReference {
 
 export const GO_LIVE_PREREQS: readonly GoLivePrereq[] = [
   {
-    id: "repo-access",
-    name: "A GitHub account, and access to the platform repository",
+    id: "fork",
+    name: "A GitHub account and a fork of your own",
     need: "conditional",
-    when: "you deploy from the repository, which is the documented path",
+    when: "your village changes the platform's code",
     what:
-      "Railway builds this platform straight from its GitHub repository, so the Railway " +
-      "account has to be linked to a GitHub account that can see it. No village keeps its " +
-      "own copy of the code; every one of them runs the same repository, and you ask ReGen " +
-      "Civics to add you as a collaborator on it.",
+      "Most villages never need this. Railway runs the published image, " +
+      "ghcr.io/rieki777/village-os pinned to a release, which needs no account and no access " +
+      "to any repository. A village that changes the code forks the public repository and " +
+      "deploys its fork, and Railway then builds the repository's Dockerfile. Nobody needs " +
+      "access to Rieki777/village-os, and nobody asks ReGen Civics for it.",
     cost: "Free.",
     where: "github.com",
     certainty: "verified",
     note:
-      "docs/PROVISIONING.md steps 1 and 5. One path skips GitHub entirely: ops/RELEASES.md " +
-      "publishes the platform as a container image at ghcr.io/rieki777/village-os and states " +
-      "the package is open, so a self-hosted village can pull and run a named version with " +
-      "no account and no access token.",
+      "START_HERE.md, docs/PROVISIONING.md steps 1 and 5, and railway.toml, which sets " +
+      "builder = DOCKERFILE. ops/RELEASES.md describes the image and its versions.",
   },
   {
     id: "railway",
@@ -159,23 +158,23 @@ export const GO_LIVE_PREREQS: readonly GoLivePrereq[] = [
     need: "optional",
     what:
       "Every variable and every setting in this file can be typed into Railway's web " +
-      "dashboard. The CLI does the same work from a terminal, which is what an agent doing " +
-      "the typing for you would reach for.",
+      "dashboard. The CLI does the same work from a terminal.",
     cost: "Free.",
     certainty: "verified",
     note:
-      "docs/PROVISIONING.md step 3 says the values go into Railway 'by hand or through the " +
-      "Railway CLI'. The old Go live screen opened with a CLI command, which read as though " +
-      "the CLI were the only way in. It is one of two.",
+      "The old Go live screen opened with a CLI command, which read as though the CLI were " +
+      "the only way in. It is one of two. Either way you enter every secret yourself: an AI " +
+      "assistant helping you never types one (AGENTS.md).",
   },
   {
     id: "checkout",
-    name: "A checkout of the repository, and Node.js 22 to run it",
+    name: "The starter kit or a clone, and Node.js 22 to run it",
     need: "required",
     what:
       "One command in this file generates your secrets: scripts/fork-init.mjs. It runs on " +
-      "your own machine against a clone of the repository and writes a local .env. Nothing " +
-      "it writes is deployed. The values it prints are what you paste into Railway.",
+      "your own machine, from the starter kit on the releases page or a clone of the " +
+      "repository, and writes every secret into a local .env without printing it. You open " +
+      "that file yourself and paste each value into Railway.",
     cost: "Free.",
     certainty: "verified",
     note: "The repository pins Node 22 in .node-version, and CI runs that same version.",
@@ -255,24 +254,23 @@ export const GO_LIVE_PREREQS: readonly GoLivePrereq[] = [
       "instead of in Railway, which needs VILLAGE_SECRETS_KEY set first.",
   },
   {
-    id: "agent-browser",
-    name: "Browser control for your LLM",
-    need: "conditional",
-    when: "your own LLM agent is going to do the clicking instead of you",
+    id: "assistant",
+    name: "An AI assistant, if you want one",
+    need: "optional",
     what:
-      "Four surfaces in this file have no command-line path that this repository documents: " +
-      "Railway's Variables and Networking pages, your registrar's DNS records, " +
-      "resend.com/domains, and the Stripe dashboard. An agent working through those needs to " +
-      "drive a real browser session you are already signed into. For Claude that is the " +
-      "Chrome extension.",
+      "An assistant that can read files and run commands, given " +
+      "docs/FOUNDER_SETUP_PROMPT.md, walks you through this file under one rule from " +
+      "AGENTS.md: \"Explain each step before it happens. Run a command, or take any action " +
+      "that changes something, only after the founder has said yes to that step. Then tell " +
+      "them what happened.\" Secrets never pass through it: it never asks for, reads out, " +
+      "types or pastes a password, a key or a token. You press Save and Launch yourself.",
     cost: "Depends on the plan your assistant runs on. This repository records no figure.",
     certainty: "unverified",
     note:
-      "Marked unverified on purpose. No founder has been recorded standing a village up this " +
-      "way and nothing in this repository tests it, so treat the browser path as the part to " +
-      "watch. One rule does carry over from docs/FOUNDER_SETUP_PROMPT.md: do not paste a " +
-      "password or an API key into a chat window. Sign the agent into the account, or type " +
-      "the secret into the dashboard yourself.",
+      "Marked unverified on purpose. Nothing in this repository tests an assistant working " +
+      "through Railway's pages, your registrar's DNS records, resend.com/domains or the " +
+      "Stripe dashboard, so treat those as the part to watch. Where any document disagrees " +
+      "with AGENTS.md, AGENTS.md wins.",
   },
 ];
 
@@ -288,8 +286,8 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "Civics creates it and holds the deploy settings. Both paths end at the same running " +
       "platform.",
     points: [
-      "Create a Railway project, then connect the platform repository as its source.",
-      "Ask ReGen Civics for collaborator access to the repository, because no village keeps its own copy of the code.",
+      "Create a Railway project. Its app service runs the published image, ghcr.io/rieki777/village-os, pinned to a release such as 1.2.0. Never :edge, which is the untested tip of the platform's main branch.",
+      "Nobody needs access to the platform repository for this. A village that changes the code forks the repository and connects its own fork as the service's source instead.",
       "On the ReGen-hosted path, confirm with them that the project exists before you go further.",
     ],
   },
@@ -325,7 +323,7 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "an honest list of what it could not fill in and why.",
     points: [
       "Leave off --domain if you do not have one yet. FRONTEND_URL can be filled in by hand later.",
-      "Save the one-time bootstrap password it prints. It is shown once and you need it in step 8.",
+      "It does not print the one-time founder password. That is the ADMIN_PASSWORD line in .env, and you read it from the file yourself in step 8.",
       "MEMBER_SECRETS_KEY and VILLAGE_SECRETS_KEY are sealing keys. Set each once and leave it alone; rotating either makes everything already stored under it unreadable.",
       "The list of variables it leaves blank is not a failure report. It is the rest of this file.",
     ],
@@ -335,7 +333,9 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
           'node scripts/fork-init.mjs --village-name "<your village name>" \\\n' +
           '     --admin-email "<you@example.org>" \\\n' +
           '     --domain "<your-domain.example.org>"',
-        note: "Writes a local .env and prints every value it generated.",
+        note:
+          "Writes every secret into a local .env, then lists what it filled in and what it " +
+          "could not, without printing a secret.",
       },
     ],
   },
@@ -344,10 +344,12 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
     n: 4,
     title: "Put those values into Railway",
     why:
-      "Production reads its variables from Railway. The .env file the last step wrote is for " +
-      "local development and is never deployed.",
+      "Production reads its variables from Railway. The .env file the last step wrote does " +
+      "not deploy on its own.",
     points: [
-      "Railway, your app service, the Variables tab. Paste in what fork-init printed.",
+      "Railway, your app service, the Variables tab. Open .env yourself and paste in each value. Secrets go in by your own hand, never through an assistant.",
+      "Paste each value alone: no quotes, no spaces, no NAME= in front. VILLAGE_SECRETS_KEY is exactly 64 characters of 0-9 and a-f. If Admin, Integrations refuses it anyway, its banner and the [identity] line in the deploy log name what is wrong with the value.",
+      "Railway holds a changed variable as a staged change until you press Deploy, and the old deployment keeps answering until the new one reads Active.",
       "Do not set JOURNEY_PASSWORD. The old version of this screen asked for it; .env.example records it as retired, gating a screen that no longer exists.",
       "The variable table further down says which ones the server refuses to start without.",
     ],
@@ -374,7 +376,7 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
     points: [
       "The first boot against an empty database was measured at 228 seconds on a cold server, and at 37 seconds against the same server warm. railway.toml gives the health check 900 seconds for that reason. Give it fifteen minutes before deciding something is wrong.",
       "/health answers with the build marker, so a green health check also says which commit is live. A build field that never changes means the deploy has not landed.",
-      "railway up is the manual deploy path and it stamps that marker -dev, so /health cannot confirm the commit after one. Deploy from the connected repository where you can.",
+      "railway up uploads a folder by hand and stamps that marker -dev, so /health cannot confirm the commit after one. Deploy the published image, or a fork connected as the service's source.",
     ],
     commands: [
       {
@@ -418,12 +420,13 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
     n: 8,
     title: "Claim your founder account",
     why:
-      "ADMIN_PASSWORD authenticates exactly once, for this one call, and refuses everyone " +
-      "after the village has a founder.",
+      "ADMIN_PASSWORD creates the founder account. Once the village has a founder it refuses " +
+      "everyone except the address in BREAK_GLASS_ADMIN_EMAIL.",
     points: [
-      "Open https://<your-domain>/claim, enter your email and the ADMIN_PASSWORD from step 3, and submit. That page works from a phone, which has mattered: this step has stranded two people so far.",
+      "Open https://<your-domain>/claim, enter your email, your name and the ADMIN_PASSWORD you read from .env yourself, and submit. That page works from a phone, which has mattered: this step has stranded two people so far.",
       "You get a link to set your own password. If email is working it is also sent to you; if it was not sent, the page shows you the link and the reason.",
-      "Then set FOUNDER_EMAILS to your own address. ADMIN_PASSWORD is spent, and forgot-password cannot help an account that never set a password. A listed address that Google has verified gets the founder role on every sign-in, so a role lost to a restore comes back by signing in again.",
+      "Keep BREAK_GLASS_ADMIN_EMAIL set to your own address. fork-init sets it, and if you are ever locked out that address can still claim at /claim with ADMIN_PASSWORD. Forgot-password cannot help an account that never set a password.",
+      "Once Google sign-in works, set FOUNDER_EMAILS to your own address too. A Google sign-in from a listed address that Google has verified gives that existing account the founder role back on every sign-in. On an invite-only village it cannot create a founder from nothing.",
     ],
     commands: [
       {
@@ -432,8 +435,8 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
           '  -H "Content-Type: application/json" \\\n' +
           '  -d \'{"password":"<your ADMIN_PASSWORD>","email":"<you@example.org>","name":"<Your Name>"}\'',
         note:
-          "The same thing from a shell. The response carries claimUrl, and an emailNote " +
-          "saying why nothing was sent.",
+          "Only for somebody with no browser: the /claim page does the same job. The response " +
+          "carries claimUrl, and an emailNote saying why nothing was sent.",
       },
     ],
   },
@@ -449,6 +452,7 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "Admin, Make This Yours. Steps 1 through 5 of this same wizard.",
       "Every field left blank inherits the platform's own default, so a half-finished village shows something sensible and never something wrong.",
       "The logo, footer mark and browser tab icon apply live, with no deploy.",
+      "Then open the Launch Plan at /journey-to-launch. It lists what is still missing, including your currency and your timezone, which both ship blank.",
     ],
   },
   {
@@ -470,20 +474,15 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
     n: 11,
     title: "Prove it actually works",
     why:
-      "The smoke test registers throwaway members and walks the real product loop end to end " +
-      "against your live domain.",
+      "Your first member arriving through an invitation is the real test of email and " +
+      "sign-up together.",
     points: [
-      "Every line it prints should read as a pass.",
-      "If your village publishes its structure publicly, the well-known document is the second check.",
+      "Sign in, open the Launch Plan at /journey-to-launch, and read what it still lists.",
+      "Invite your first member from your own profile. Members join by invitation link (/register?invite=...), one use each, valid for fourteen days. Somebody without a link asks to join at /request-membership.",
+      "If your village publishes its structure publicly, the well-known document is a second check.",
+      "scripts/smoke-all-modules.mjs is a developer check for a scratch instance with membership.invite_only set to false. It registers accounts with no invitation, so a village on the default setting answers it with 403.",
     ],
-    commands: [
-      {
-        code:
-          "node scripts/smoke-all-modules.mjs --base https://<your-domain> \\\n" +
-          "     --email <you@example.org> --password '<your real password>'",
-      },
-      { code: "curl -s https://<your-domain>/.well-known/village.json" },
-    ],
+    commands: [{ code: "curl -s https://<your-domain>/.well-known/village.json" }],
   },
   {
     id: "metadata",
@@ -520,7 +519,8 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
   {
     name: "ADMIN_PASSWORD",
     need: "required",
-    breaks: "Nobody can ever become an admin. It is spent on the first claim.",
+    breaks:
+      "Nobody can claim the village. After the first claim it works only for BREAK_GLASS_ADMIN_EMAIL.",
     where: "Railway, generated by fork-init",
   },
   {
@@ -534,7 +534,7 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
     name: "BREAK_GLASS_ADMIN_EMAIL",
     need: "recommended",
     breaks: "A village that loses every admin has no way back in.",
-    where: "Railway",
+    where: "Railway, set by fork-init to your own address",
   },
   {
     name: "MEMBER_SECRETS_KEY",
@@ -552,10 +552,18 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
   },
   {
     name: "FOUNDER_EMAILS",
+    need: "conditional",
+    when: "Google sign-in is set up",
+    breaks:
+      "Google sign-in cannot give an existing founder account its role back. It never creates a founder from nothing on an invite-only village.",
+    where: "Railway",
+  },
+  {
+    name: "BACKUP_EXPORT_TOKEN",
     need: "recommended",
     breaks:
-      "A founder whose role goes missing has nothing left to reach for, because ADMIN_PASSWORD is already spent.",
-    where: "Railway",
+      "The uploads half of the GitHub Actions backup answers 503, so member uploads are in no backup while the database dump still looks green. Run that backup only from a private repository.",
+    where: "Railway, generated by fork-init",
   },
   {
     name: "EMAIL_FROM",
@@ -618,8 +626,12 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
 
 export const GO_LIVE_REFERENCES: readonly GoLiveReference[] = [
   {
+    path: "START_HERE.md",
+    what: "The guide to running a village, on one computer with Docker or on a hosting provider.",
+  },
+  {
     path: ".env.example",
-    what: "Every variable this platform reads, and what breaks without each one.",
+    what: "The reference for every variable, and what breaks without each one.",
   },
   {
     path: "docs/PROVISIONING.md",
@@ -627,7 +639,11 @@ export const GO_LIVE_REFERENCES: readonly GoLiveReference[] = [
   },
   {
     path: "docs/FOUNDER_SETUP_PROMPT.md",
-    what: "The same walkthrough written to be pasted into a founder's own Claude session.",
+    what: "The same walkthrough written to be pasted into a founder's own AI assistant.",
+  },
+  {
+    path: "AGENTS.md",
+    what: "The rules that assistant follows. It explains each step and runs one only after you say yes.",
   },
   {
     path: "docs/FORK_RUNBOOK.md",
@@ -643,14 +659,9 @@ export const GO_LIVE_REFERENCES: readonly GoLiveReference[] = [
   },
   {
     path: "railway.toml",
-    what: "How the deployment builds and starts, and why the health check waits 900 seconds.",
+    what: "How a fork deployed from its own repository builds and starts on Railway, and why the health check waits 900 seconds.",
   },
   { path: "scripts/fork-init.mjs", what: "The script in step 3 that generates your secrets." },
-  { path: "scripts/smoke-all-modules.mjs", what: "The end-to-end check in step 11." },
-  {
-    path: "PLATFORM_FOUNDATION.md",
-    what: "The white-label architecture and every swap point.",
-  },
 ];
 
 /* ── Rendering the same objects into a file a founder can save ────────────── */
@@ -709,8 +720,8 @@ export function renderGoLivePackage(opts: GoLivePackageOptions = {}): string {
 
   push("# Go live" + (village ? ": " + village : ""), "");
   push(
-    "Everything needed to put this village on the internet. Hand it to a developer, or",
-    "paste it into an LLM agent that can run commands and drive a browser for you.",
+    "Everything needed to put this village on the internet. Hand it to a developer, or to",
+    "an AI assistant that explains each step and runs one only after you say yes to it.",
     "",
   );
   if (opts.generatedOn) {
@@ -767,9 +778,10 @@ export function renderGoLivePackage(opts: GoLivePackageOptions = {}): string {
 
   push("## What this file does not do", "");
   push(
-    "- It runs nothing. Every command here is still typed by a person or by an agent.",
+    "- It runs nothing. Every command here is still run by a person, or by an assistant",
+    "  after you have said yes to that step.",
     "- It carries none of your secrets. The values in angle brackets are placeholders, and",
-    "  the real ones come from scripts/fork-init.mjs in step 3.",
+    "  the real ones are in the .env that scripts/fork-init.mjs writes in step 3.",
     "- It does not cover the three steps nobody can do for you: DNS records, Resend sender",
     "  verification, and creating your own Stripe account. Each one proves you control",
     "  something outside this platform.",

@@ -8,6 +8,7 @@ import { gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import { useVillageName } from "@/hooks/useVillageName";
 import { readVillageSection } from "@/hooks/useVillageContent";
+import { orgRowIsAgent } from "@shared/roleSheetInputs";
 
 interface TeamMember {
   name: string;
@@ -75,7 +76,10 @@ export default function Team() {
         const seatsByPerson = new Map<string, { name: string; seats: string[]; circle?: string }>();
         for (const r of org.roles ?? []) {
           for (const h of r.holders ?? []) {
-            if (!h?.name) continue;
+            // An agent is not a person on the team. Its member row carries a
+            // vendor's product name and its public row reads "An agent", and
+            // either one would become a person's card here.
+            if (!h?.name || orgRowIsAgent(h)) continue;
             const key = String(h.name).trim().toLowerCase();
             const entry = seatsByPerson.get(key) ?? {
               name: String(h.name).trim(),

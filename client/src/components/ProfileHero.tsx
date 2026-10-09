@@ -84,7 +84,9 @@ export default function ProfileHero({
    */
   const known = typeof stageIndex === "number" && typeof stageCount === "number" && stageCount > 0;
   const arc = known ? Math.max(0, Math.min(1, (stageIndex + 1) / stageCount)) : null;
-  const rung = known ? `Maturity ${stageIndex + 1} of ${stageCount}` : "";
+  // R47: progress is a number, and the ladder's name is the Path of Growth,
+  // so the chip names the stage and never "Maturity".
+  const rung = known ? `Stage ${stageIndex + 1}/${stageCount}` : "";
 
   /*
    * THE VILLAGE'S NAME, AND NOT ITS TAGLINE.
@@ -188,7 +190,7 @@ export default function ProfileHero({
       // profile, and all three read once on mount. See lib/profileRefresh.ts.
       announceProfileChange();
     } catch {
-      setSaid(`${label} could not be fronted. Try again.`);
+      setSaid("That didn't go through. Try again.");
     }
   };
 
@@ -271,7 +273,7 @@ export default function ProfileHero({
                never the sentence that tells a member with six characters that
                they have none. */
             <p role="status" className="text-lg text-muted-foreground">
-              Couldn't load your paths.{" "}
+              Your paths didn't load.{" "}
               <button
                 type="button"
                 onClick={() => load()}

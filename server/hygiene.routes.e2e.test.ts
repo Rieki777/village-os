@@ -46,7 +46,9 @@ const EXPECTED: Array<[string, string]> = [
   ["referrer-policy", "strict-origin-when-cross-origin"],
   ["x-frame-options", "SAMEORIGIN"],
   ["content-security-policy", "frame-ancestors 'self'"],
-  ["permissions-policy", "camera=(), microphone=(), geolocation=()"],
+  // The microphone is this origin's own: speech input needs it (journal QA,
+  // 2026-10-02, found every mic refused with `not-allowed` under `()`).
+  ["permissions-policy", "camera=(), microphone=(self), geolocation=()"],
 ];
 
 beforeAll(async () => {

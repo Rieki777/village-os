@@ -121,7 +121,7 @@ export default function Badges() {
     fetch(path, { method, headers: headers(), body: body ? JSON.stringify(body) : undefined })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Request failed");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? "That didn't go through. Try again.");
         load();
       })
       .catch((e) => setError(e.message));
@@ -148,7 +148,7 @@ export default function Badges() {
             <Link href="/powers" className="underline">
               See what this village looks after
             </Link>
-            , and who holds each of it.
+            , and who holds each one.
           </p>
         </div>
       </section>
@@ -236,7 +236,7 @@ export default function Badges() {
                           nothing about what she should do with it. */}
                       {mine && b.kind === "warning" && !mine.expiresAt && (
                         <p className="text-xs text-stone-600 mt-1">
-                          This is a note on your record. It stays until a steward takes it off.
+                          This warning stays until a steward lifts it.
                         </p>
                       )}
                       {/* Trust can be lent for a season. Until this shipped, a
@@ -294,7 +294,7 @@ export default function Badges() {
                               body: JSON.stringify({ badgeIds: next }),
                             }).then(async (r) => {
                               const d = await r.json();
-                              if (!r.ok) throw new Error(d.message ?? d.error ?? "failed");
+                              if (!r.ok) throw new Error(d.message ?? d.error ?? "That didn't go through. Try again.");
                               load();
                             }).catch((e) => setError(e.message));
                           }}
@@ -309,7 +309,7 @@ export default function Badges() {
               );
             })}
             {data && data.badges.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-12">No badges defined yet.</p>
+              <p className="text-center text-sm text-muted-foreground py-12">No badges yet.</p>
             )}
           </div>
         </div>

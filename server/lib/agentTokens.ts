@@ -27,7 +27,13 @@ import { recordEvent } from "./events";
 
 export const TOKEN_PREFIX = "vat_";
 
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write"] as const;
+/*
+ * `map.draft` lets the agent read the village's masterplan and keep a drafted
+ * map as the holder's draft (server/routes/agentMap.ts). It never publishes:
+ * the holder does that on the map. Only a holder who may draft the land
+ * (`map.edit`) gets anything from it, like every scope here.
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */

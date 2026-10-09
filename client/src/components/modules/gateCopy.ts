@@ -37,18 +37,20 @@
 
 /** Module id to the one line a signed-out reader gets. */
 export const GATE_LINES: Record<string, string> = {
-  badges: "The skills members declare here, and the badges that settled work has earned them.",
+  badges: "The skills members declare here, and the badges their finished work has earned them.",
   commerce:
     "What this project charges for and what it accepts: application fees, donations, deposits and memberships.",
   crowdpool: "The funding ring, the shelf of what is still needed, and the ledger of who has arrived.",
   events: "Gatherings with a time, a place, and a seat you can take.",
-  exchange: "Buying this village's own tokens out of a stocked treasury.",
+  exchange: "Buying this village's own tokens.",
   feed: "The everyday stream: posts, gatherings, and the village's own milestones.",
   forum: "Village conversations by topic, and the proposals that come out of them.",
   governance:
     "Proposals on their way to a vote, the ballots running today, and the outcome of every one that has closed.",
-  health: "This village's vital signs, frozen at the close of each cycle.",
+  health: "This village's vital signs, cycle by cycle.",
   introductions: "What members say they are looking for, and the introductions waiting on a yes.",
+  journal:
+    "Your own morning and evening pages, a weekly pulse, call debriefs, and a kind road for feedback. Only you read what you write.",
   library: "The village's shared tools and goods, and what is on the shelf today.",
   map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
   messaging: "Private conversations between members, one to one or in a named group.",

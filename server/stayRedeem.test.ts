@@ -61,10 +61,6 @@ import { loadVariables, setVariable } from "./lib/variables";
 
 const configured = testDbConfigured();
 const LIBRARY_CREDIT = "library-credit";
-
-/** A ceiling for a case that provisions and then posts several times. */
-const DB_HEAVY = 420_000;
-
 const baseAsk = (over: Partial<RedeemAsk> = {}): RedeemAsk => ({
   slug: STAY_CREDIT,
   amountUnits: 100,
@@ -169,7 +165,7 @@ describe.skipIf(!configured)("a stay credit redeemed, and a stay credit spent", 
     await ensureLibraryToken(pool);
     await loadTokenRegistry(pool);
     await loadVariables(pool);
-  }, DB_HEAVY);
+  });
 
   afterAll(async () => {
     await pool?.end();

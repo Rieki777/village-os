@@ -26,7 +26,7 @@ the current model rather than to the model they were drafted under.
 - **Sections 13 to 18** are what fourteen readers measured against the repository on 2026-09-02,
   each reader's citations re-opened by a second, adversarial agent. Where section 13 contradicts
   sections 1 to 11, section 13 is right. The full reports, with evidence tables, are outside the
-  repository at `C:\Users\taren\Desktop\Amora\governance-sources\reports\` (section 18).
+  repository at `<workspace>/governance-sources/reports/` (section 18).
 
 **Sections 19C to 19F and section 20.11 supersede sections 3, 15, 19, 19B, 20.2, 20.3, 20.5 and 20.8 wherever those describe an approval gate, a hold, a queue, a cycle number on the vote path, a head-count quorum, or a fallback after cycles without quorum.** None of those six things exists in the current model. What stands instead:
 
@@ -56,7 +56,7 @@ the anchor. The other governance files named in this document (`shared/governanc
 `server/lib/orgChart.ts`, `server/routes/governance*.ts`, `docs/TOKENS.md`) are byte-identical
 between `6f6a55e` and `8d2a9c4`, so their line numbers in section 13 held at the time of writing.
 
-**The canonical checkout moved while this was written.** `C:\Users\taren\Desktop\Amora\hotfix` was
+**The canonical checkout moved while this was written.** `<workspace>/hotfix` was
 `main` on the morning of 2026-09-02 and is another lane's live worktree (`wt/g-architecture`) by the
 evening. Never read governance code from a directory you did not create. Make your own worktree
 from `origin/main` and say its commit inside anything you generate.
@@ -1069,9 +1069,9 @@ quorum, unity and weight dials descend from them directly.
 
 | Source | What it is | Local text copy (outside the repo) |
 |---|---|---|
-| https://docs.google.com/presentation/d/1hjjo_p5VqaOkaUml9nR3s8ZGUt1AzCidCSw6VngJ3dc/edit?usp=drivesdk | Slide deck "So you want to make a DHO?" (Hypha / SEEDS). The three dials (voice token variance, quorum, unity) with named presets, plus voice half-life, vote period, role expiry, what requires a vote, vote scope by circle. | `C:\Users\taren\Desktop\Amora\governance-sources\hypha_slides.txt` |
-| https://youtu.be/_TpyEO6NRnY | Talk "How to do a DHO/DAO: Guide for groups building new paradigm organizations" (SEEDS: ReGenerative Renaissance), 78 minutes. | `C:\Users\taren\Desktop\Amora\governance-sources\yt_transcript.txt` (auto captions, deduplicated) |
-| https://docs.google.com/document/d/1hFJPe1N0yyntJ9g-iQFvhtf9j2pDsxmmG-ufxqnAt5g/edit?usp=drivesdk | Hypha Handbook V0.3. His words: "out of date and for a different type of organization than a village but still following some of the Game mechanics we have and the self-organization and regenerative principles throughout". | `C:\Users\taren\Desktop\Amora\governance-sources\hypha_gdoc.txt` |
+| https://docs.google.com/presentation/d/1hjjo_p5VqaOkaUml9nR3s8ZGUt1AzCidCSw6VngJ3dc/edit?usp=drivesdk | Slide deck "So you want to make a DHO?" (Hypha / SEEDS). The three dials (voice token variance, quorum, unity) with named presets, plus voice half-life, vote period, role expiry, what requires a vote, vote scope by circle. | `<workspace>/governance-sources/hypha_slides.txt` |
+| https://youtu.be/_TpyEO6NRnY | Talk "How to do a DHO/DAO: Guide for groups building new paradigm organizations" (SEEDS: ReGenerative Renaissance), 78 minutes. | `<workspace>/governance-sources/yt_transcript.txt` (auto captions, deduplicated) |
+| https://docs.google.com/document/d/1hFJPe1N0yyntJ9g-iQFvhtf9j2pDsxmmG-ufxqnAt5g/edit?usp=drivesdk | Hypha Handbook V0.3. His words: "out of date and for a different type of organization than a village but still following some of the Game mechanics we have and the self-organization and regenerative principles throughout". | `<workspace>/governance-sources/hypha_gdoc.txt` |
 
 The deck's own framing, which the document should probably adopt as its vocabulary: governance is
 three dials (voice token variance, quorum, unity), and the named corners are classic democracy,
@@ -1080,7 +1080,7 @@ start-the-game rule above is the consensus corner with every dial at maximum.
 
 ### Repository facts measured 2026-09-02
 
-- The canonical checkout on this machine is `C:\Users\taren\Desktop\Amora\hotfix`, on `main` at
+- The canonical checkout on this machine is `<workspace>/hotfix`, on `main` at
   `6f6a55e` (2026-09-01), level with `origin/main`. The other directories under `Desktop\Amora` are
   worktrees of older branches; do not read governance code from them.
 - The repository is now `Rieki777/village-os` and the package is PUBLIC (renamed 2026-08-31,
@@ -1099,7 +1099,7 @@ start-the-game rule above is the consensus corner with every dial at maximum.
   that shelf should carry about this village's own rules.
 - Fourteen verified research reports on the engine as it stands on `main` (schema, engine,
   dispatcher, routes, launch, weights, flow, cycles, admin, docs, hub, inspiration, tests, legacy)
-  live in `C:\Users\taren\Desktop\Amora\governance-sources\reports\`. Each has an evidence table
+  live in `<workspace>/governance-sources/reports/`. Each has an evidence table
   with file:line citations that were re-opened by a second agent. Read them before re-deriving.
 
 ---
@@ -1707,7 +1707,7 @@ its reasoning. Step 5's "steward approval" reads as the steward's veto window af
 
 ## 18. Where the research lives, and how far to trust it
 
-- **Reports:** `C:\Users\taren\Desktop\Amora\governance-sources\reports\` holds fourteen files
+- **Reports:** `<workspace>/governance-sources/reports/` holds fourteen files
   (`schema`, `engine`, `dispatcher`, `routes`, `launch`, `weights`, `flow`, `cycles`, `admin`, `docs`,
   `hub`, `inspiration`, `tests`, `legacy`), each with an evidence table (claim, file:line, quote), a
   conflicts list, a gaps list, questions and improvements. `_synthesis_input.txt` in the same folder
@@ -2332,7 +2332,7 @@ so a coordinator that loses its context can pick it up.
 
 ### 20.1 Ground rules for every lane
 
-- **Integration branch:** `wt/governance-build`, worktree `C:\Users\taren\Desktop\Amora\wt-govbuild`,
+- **Integration branch:** `wt/governance-build`, worktree `<workspace>/wt-govbuild`,
   cut from `origin/main` at `2bce3df`. Every lane branches from it (`git worktree add
   ../wt-gb-<lane> -b wt/gb-<lane> wt/governance-build`), commits only its own paths by name, and is
   merged back by a merge agent in the order listed. Nobody writes into `hotfix`.
@@ -2493,7 +2493,7 @@ Ten Opus lenses attacked sections 12 to 20 and the code (capture, the clock, the
 playability, privacy, forkability, consistency, completeness, testability, tokens, operations):
 144 findings, the 80 non-minor ones each put to two independent skeptics told to refute, 64
 survived, synthesised into twelve risks. The full audit is at
-`C:\Users\taren\Desktop\Amora\governance-sources\audit_2026-09-03.md`. Nothing was executed; it
+`<workspace>/governance-sources/audit_2026-09-03.md`. Nothing was executed; it
 read the plan and the tree at `183460d`. What follows is what the coordinator adopted into the
 plan, what it put to the founder, and the correction wave the build now needs.
 
@@ -2624,7 +2624,7 @@ pending list); whoever merges re-measures the combined tree rather than taking e
 
 Nine lenses over sections 12 to 21 and the Phase 1b lane briefs, 122 findings, 80 put to two
 skeptics, 54 survived, synthesised into twelve risks. The full text is at
-`C:\Users\taren\Desktop\Amora\governance-sources\audit2_2026-09-03.md`. Its two structural
+`<workspace>/governance-sources/audit2_2026-09-03.md`. Its two structural
 observations are accepted as rules: a lane follows the paraphrase in its prompt over the founder's
 words when they differ, so every prompt now carries 19F and section 21 by reference AND the
 superseded sentences are edited in place; and no layer of this brief may leave the text it

@@ -41,7 +41,13 @@ jobs:
     # 25, raised from 15 on 2026-09-15: verify on 9f560fc took 14m43s (Test 10m38s), and
     # on 1364bdb it took 15m05s and was cancelled mid-Test by this limit, not by a failure.
     # The suite grows with every lane; cancelled reads like a red, so keep real headroom.
-    timeout-minutes: 25
+    # 40, raised from 25 on 2026-10-05. After the dependency round (#427) verify took
+    # 22m44s and 22m16s on bebd522, against 15m27s on b54035d before it, so the suite sat
+    # 2.5 minutes under the limit. During that day's GitHub Actions outage, f4aa5b2 and
+    # f62f0ac ran all 57 steps green in about 27 minutes and were reported cancelled.
+    # release.yml publishes only a commit this job passed, so one slow runner at the
+    # limit refuses a release.
+    timeout-minutes: 40
     services:
       # S5: the DB-backed suites (server/db/*.test.ts) run against a real MySQL.
       # The harness provisions its own scratch schema and applies every
@@ -235,6 +241,15 @@ jobs:
         # was wired in. A guard that does not run is a comment, and a path
         # resolving is not a guard running.
         run: node scripts/fork-env-audit.mjs
+
+      - name: Public tree
+        # This repository is public and linked from regencivics.earth. On
+        # 2026-10-02 its tree still held the fleet ledger, session prompts, a
+        # production database's proxy host, Railway ids and the path to the
+        # backup recovery key; all of it moved to the private operations
+        # repository. This refuses the next copy, by file name and by content.
+        # Its self-test runs with the others above.
+        run: node scripts/check-public-tree.mjs
 
       - name: Voice guard
         # Shipped language follows the house writing rules (the Rye Voice

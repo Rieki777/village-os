@@ -58,7 +58,7 @@ export interface SeatSeating {
 /**
  * ONE REQUEST WHEN TWO CARDS ASK AT ONCE.
  *
- * `VillageMap` renders HolderCard TWICE, on purpose: the standing panel is
+ * `VillageMap` renders MapSeatCard TWICE, on purpose: the standing panel is
  * `hidden md:block` and the bottom sheet is `md:hidden`, so which one a
  * person sees is CSS and both are mounted. Two mounts firing the same read in
  * the same commit is two requests for one answer on every seat somebody taps.
@@ -144,9 +144,17 @@ export default function SeatHistory({
   const seatWord = useSeatWord();
   const [rows, setRows] = useState<SeatSeating[] | null>(null);
   const [unreadable, setUnreadable] = useState(false);
+  /*
+   * NO SESSION, NO REQUEST. The route refuses a caller with no account every
+   * time (admin and `map.viewPeople` both need one), so asking would only put
+   * a refused request in a visitor's console, which is the noise
+   * `membersOnlyReads.test.tsx` exists to keep off public pages. The answer is
+   * already known: the offer to sign in, below, drawn without asking.
+   */
+  const signedIn = !!authToken();
 
   useEffect(() => {
-    if (!canSeePeople) return;
+    if (!canSeePeople || !signedIn) return;
     let alive = true;
     setRows(null);
     setUnreadable(false);
@@ -158,7 +166,7 @@ export default function SeatHistory({
     return () => {
       alive = false;
     };
-  }, [roleId, canSeePeople]);
+  }, [roleId, canSeePeople, signedIn]);
 
   if (!canSeePeople) return null;
 
@@ -177,8 +185,8 @@ export default function SeatHistory({
    * it would be the useless advice `PeopleLock` names by name, so they get
    * nothing here and the tier note on the page is what speaks.
    */
-  if (unreadable) {
-    if (authToken()) return null;
+  if (!signedIn || unreadable) {
+    if (signedIn) return null;
     return (
       <p className="text-xs text-muted-foreground">
         Sign in to see who has held this {seatWord.name.toLowerCase()} before.

@@ -25,10 +25,12 @@
  *
  * Three bridges to the artifact, in order of how much they can be trusted:
  *
- *  1. THE HASH. `/map#/place/greenhouse` forwards to the iframe so a deep
- *     link into the site reaches the same address inside the map. Set once
- *     via `src`; afterwards written to the iframe's own `location.hash`,
- *     because reassigning `src` reloads four megabytes.
+ *  1. THE HASH, both ways. `/map#/place/greenhouse` opens the iframe at the
+ *     same address (once, via `src`, because reassigning `src` reloads
+ *     four megabytes), and the artifact's `{type:'route'}` writes its address
+ *     back into the visible URL, replacing it and never adding an entry. Back,
+ *     Forward, a reload and a pasted link all go through
+ *     components/map/mapHistory.ts, which says what each one does.
  *  2. `postMessage({type:'nav', route})`. The listener is here and ready. The
  *     artifact does not send it yet; when the map workstream adds it, same-tab
  *     SPA navigation starts working with no change on this side.
@@ -46,11 +48,20 @@ import { useLocation } from "wouter";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { rememberMapAvailable } from "@/lib/landing";
 import { MAP_SKIN_SAVED_EVENT, MAP_SKIN_SAVED_KEY } from "@shared/mapSkin";
+import { walkPush } from "@shared/mapAddress";
 import { isPromiseKind } from "@shared/mapPromise";
 import { isSceneVerb } from "@shared/mapScene";
-import { authToken, gameFetch } from "@/lib/gameApi";
-import VillageSettingsDoor, { takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
+import { gameFetch } from "@/lib/gameApi";
+import { useAuth } from "@/contexts/AuthContext";
+import VillageSettingsDoor, { settingsAsked, takeSettingsDoor, useMayStyleLand } from "@/components/map/VillageSettingsDoor";
 import EnterTheLandGate, { useMapEnterGate, withSkipIntro } from "@/components/map/EnterTheLandGate";
+import { useMapHistory } from "@/components/map/mapHistory";
+import { relaySceneMessage, type SceneReply } from "@/components/map/sceneRelay";
+import { landGroundOf } from "@/components/map/landGround";
+import { pushChips, useChipsCadence } from "@/components/map/statChips";
+import { useOrgFollow } from "@/components/map/orgFollow";
+import BlankSlate, { useMapSlate } from "@/components/map/MapSlate";
+import { configScene, readLand, seedGroundOf, type LandAnswer } from "@/components/map/configPush";
 
 /** Where the staged artifact is served from, and its presence probe. */
 const GROUNDS = "/grounds/index.html";
@@ -105,9 +116,9 @@ async function probeGrounds(): Promise<{ presence: Presence; url: string }> {
  * wrong it errs toward the shell drawing one, which is the safe direction: an
  * extra escape is untidy and no escape strands somebody.
  */
-function pocketProfile(): boolean {
+function pocketProfile(hint: string): boolean {
   if (typeof window === "undefined") return false;
-  const forced = /hud=(pocket|desk)/.exec(window.location.hash || "");
+  const forced = /hud=(pocket|desk)/.exec(hint);
   if (forced) return forced[1] === "pocket";
   return "ontouchstart" in window && Math.min(window.innerWidth, window.innerHeight) < 820;
 }
@@ -120,20 +131,22 @@ export default function LivingMap() {
   const [presence, setPresence] = useState<Presence>("checking");
   /** The URL the manifest names, hashed and immutable where available. */
   const [groundsUrl, setGroundsUrl] = useState<string>(GROUNDS);
+  /* A `#hud=` hint is read from the address the map opened at, once, as the
+     artifact reads it. The address bar follows the map now, so a later read
+     would find the place on screen and lose the hint. */
+  const [hudHint] = useState(() => (typeof window === "undefined" ? "" : window.location.hash));
   /** Whether the artifact is carrying the exit door itself. See pocketProfile. */
-  const [pocket, setPocket] = useState<boolean>(pocketProfile);
+  const [pocket, setPocket] = useState<boolean>(() => pocketProfile(hudHint));
 
   useEffect(() => {
-    const read = () => setPocket(pocketProfile());
+    const read = () => setPocket(pocketProfile(hudHint));
     window.addEventListener("resize", read);
     window.addEventListener("orientationchange", read);
-    window.addEventListener("hashchange", read);
     return () => {
       window.removeEventListener("resize", read);
       window.removeEventListener("orientationchange", read);
-      window.removeEventListener("hashchange", read);
     };
-  }, []);
+  }, [hudHint]);
 
   /**
    * THE ZOOM THE MAP DOES NOT OWN.
@@ -210,9 +223,10 @@ export default function LivingMap() {
    * The map's dock already carries a Village Settings button, and it says the
    * village's colours and words. The shell answers that one door here instead
    * of handing a founder off the land to change how the land looks. See
-   * VillageSettingsDoor: nothing is added to the map.
+   * VillageSettingsDoor: nothing is added to the map. It opens on arrival
+   * when the address asks (`/map?settings=walk`, the Journey to Launch's link).
    */
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => settingsAsked(window.location.search));
   const mayStyleLand = useMayStyleLand();
 
   const resetZoom = useCallback(() => {
@@ -230,16 +244,29 @@ export default function LivingMap() {
     }, 600);
   }, []);
 
-  /**
-   * The hash the map opens on, captured once. Reading it during render on
-   * every pass would reset the iframe's `src` each time the parent re-renders
-   * and reload the artifact under the member's feet.
-   */
-  const [initialHash] = useState(() =>
-    typeof window === "undefined" ? "" : window.location.hash,
-  );
-
-  const { entered, preparing, setPreparing, onEnter } = useMapEnterGate();
+  /* The grace lifted the cover before the map said its land had come: the
+     arrival runs now, where it can be seen, and the land still lands later. */
+  const uncovered = useCallback(() => {
+    try { frame.current?.contentWindow?.postMessage({ type: "uncovered" }, window.location.origin); } catch { /* frame gone */ }
+  }, []);
+  const { entered, preparing, slow, landed, frameLoaded, onEnter, enterAt, startHash } = useMapEnterGate(uncovered);
+  /** The artifact has booted, so on a phone its own bar carries the door out. */
+  const [groundsReady, setGroundsReady] = useState(false);
+  /* Leaving, Back, Forward, F5 and the address bar: one model, in mapHistory.ts.
+     Back and Leave the map both go to the page before the map (D6), and a
+     phone's #/circles link goes to /map/circles (D8), which is why it is told
+     which layout the artifact is drawing. */
+  const { exitApp, onRoute, onReady, markEntered } = useMapHistory({ navigate, frame, entered, enterAt, pocket });
+  const enterTheLand = useCallback(() => {
+    markEntered();
+    onEnter();
+  }, [markEntered, onEnter]);
+  /* A village with nothing published shows its blank slate until someone who
+     may draft the land opens the map from it (components/map/MapSlate.tsx).
+     `blankSent` is per frame: the blank scene goes once (configPush.ts). */
+  const slate = useMapSlate();
+  const [board, setBoard] = useState(false);
+  const blankSent = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -252,37 +279,6 @@ export default function LivingMap() {
   useEffect(() => {
     if (modules.loaded) rememberMapAvailable(Boolean(mapModule));
   }, [modules.loaded, mapModule?.id]);
-
-  /**
-   * Leaving app mode, by one path.
-   *
-   * A marker entry goes on the history stack when the map opens, so the
-   * browser Back button pops it and lands here in `popstate`. The artifact's
-   * own exit button posts `{type:'exit'}` and calls `history.back()`, which
-   * arrives at the SAME handler, and so does the shell's own escape control
-   * below. One way out, three triggers, no chance of any of them disagreeing.
-   *
-   * Where it lands: popping the marker returns to the `/map` entry, and the
-   * `popstate` handler replaces that entry with `/`. So leaving the map always
-   * arrives at the village door rather than at whichever page the visitor came
-   * from, which is what the control's name promises. A direct deep link that
-   * never pushed a marker takes the second branch to the same place.
-   *
-   * The marker keeps the `/map` URL, so popping it does not navigate on its
-   * own; this handler does that, replacing rather than pushing so a second
-   * Back does not walk straight back into the map.
-   */
-  const exitApp = useCallback(() => {
-    if (window.history.state?.villageMapApp) window.history.back();
-    else navigate("/", { replace: true });
-  }, [navigate]);
-
-  useEffect(() => {
-    window.history.pushState({ villageMapApp: true }, "");
-    const onPop = () => navigate("/", { replace: true });
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [navigate]);
 
   /**
    * Nothing behind the map scrolls while it is open.
@@ -306,11 +302,38 @@ export default function LivingMap() {
    * the artifact now offers a real inbound contract and a message is the part
    * of it that survives the artifact being rewritten.
    */
-  const pushConfig = useCallback(async () => {
+  const pushConfig = useCallback(async (land?: Promise<LandAnswer>) => {
     const win = frame.current?.contentWindow;
     if (!win) return;
+    /*
+     * A message goes on EVERY path, a bare `{type:'config'}` when the fetch
+     * fails. The artifact keeps its land covered and its desk arrival waiting
+     * until the shell has said what it will say about the land, and a bare
+     * message changes nothing on the map while it ends the wait.
+     */
+    const payload: Record<string, unknown> = { type: "config" };
+    // The village's own ground rides in the same message, so the map can hold
+    // its cover until that ground has drawn (N19). It is also sent on its own
+    // the moment it is known, so the picture downloads while the config is
+    // still on its way; the map loads it once either way.
+    // The boot hands in its land read, which also carries the seed verdict
+    // below; a later push (a saved skin) reads the land again for the ground.
+    const ground = (land ?? readLand()).then((body) => {
+      const g = landGroundOf(body);
+      if (g) {
+        try {
+          win.postMessage({ type: "ground", ...g }, window.location.origin);
+        } catch {
+          /* The frame went away: nobody is waiting. */
+        }
+      }
+      return g;
+    });
     try {
-      const res = await fetch("/api/map/config");
+      // Where the village stands rides the boot push only (configPush.ts).
+      const [res, landBody] = await Promise.all([fetch("/api/map/config"), land ?? Promise.resolve(null)]);
+      const seedGround = seedGroundOf(landBody);
+      if (seedGround !== null) payload.seedGround = seedGround;
       if (!res.ok) return;
       const body = await res.json();
       /*
@@ -318,36 +341,35 @@ export default function LivingMap() {
        * part only when present, so a village that has customised none of them
        * gets its own seed and nothing is overwritten with blanks.
        *
-       * A null walk means "use the artifact's seed", so it is omitted rather
-       * than sent as an empty array: the artifact treats a non-empty array as
-       * a replacement, and an empty one would read as a walk with no steps.
+       * The walk and the welcome are always sent once the fetch answered: null
+       * is the village saying it wrote none, so no walk is offered and the
+       * guide greets plainly, never the seed (Rye, 2026-10-02; walkPush).
        */
-      const payload: Record<string, unknown> = { type: "config" };
       if (body?.skin) payload.skin = body.skin;
-      if (Array.isArray(body?.walk) && body.walk.length) payload.walk = body.walk;
+      Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
       /*
-       * The published land (0063). Same "absent means keep your own" rule as
-       * the walk: a village that has never published sends null and the map
-       * draws its own seed, which is the ordinary state of a fresh fork.
-       *
-       * The scene crosses the wire as JSON TEXT so the server stores the
-       * bytes the map wrote. This is the one place it becomes an object
-       * again, and a scene that will not parse is dropped rather than pushed:
-       * the map keeps drawing the land it already has, which is a strictly
-       * better failure than a half-applied scene.
+       * The published land (0063), or the blank one when nothing is published:
+       * the map's own seed is another village's land. The scene crosses the
+       * wire as JSON TEXT so the server stores the bytes the map wrote; the
+       * rule for each case is in configPush.ts.
        */
-      if (typeof body?.scene === "string" && body.scene) {
-        try {
-          payload.scene = JSON.parse(body.scene);
-          payload.sceneVersion = Number(body.sceneVersion) || 0;
-        } catch {
-          /* Unparseable: the map keeps the land it is already drawing. */
-        }
+      const told = configScene(body, blankSent.current);
+      if (told) {
+        payload.scene = told.scene;
+        payload.sceneVersion = told.sceneVersion;
+        if (told.blank) blankSent.current = true;
       }
-      win.postMessage(payload, window.location.origin);
     } catch {
       /* The map keeps whatever it is already wearing. */
+    } finally {
+      const g = await ground;
+      if (g) payload.ground = g;
+      try {
+        win.postMessage(payload, window.location.origin);
+      } catch {
+        /* The frame went away under the fetch: nobody is waiting. */
+      }
     }
   }, []);
 
@@ -390,72 +412,6 @@ export default function LivingMap() {
     }
   }, []);
 
-  /**
-   * The ground the map draws its village on.
-   *
-   * The artifact ships Amora's satellite plate baked in, and for a long time
-   * that was the ONLY ground a deployment could have: a new village's map
-   * needed a developer, three Python scripts and a redeploy of a 5.7 MB file.
-   * This push is what makes the ground data instead of code -- the village's
-   * own picture, fetched once into the uploads volume by
-   * `POST /api/admin/land/imagery` and served from there.
-   *
-   * ABSENT MEANS KEEP YOUR OWN, the same rule the walk and the scene follow.
-   * A village that has not placed itself answers `imageryUrl: null` and gets
-   * no message at all, so the map draws the seed it was built with. That is
-   * the ordinary state of a fresh fork and it is not a failure.
-   *
-   * THE PICTURE TRAVELS WITH ITS FRAME. A URL on its own told the map nothing
-   * about where the picture was taken or how much ground it covers, so the map
-   * stretched it across a frame it was never cut for: three times too large
-   * and 345 m off on the one village this was built for. `frame` is what fixes
-   * that, and it carries only what the route was already willing to publish:
-   *
-   *   spanM   the width, which sets the scale and names no place
-   *   seed    one yes-or-no, worked out on the server: does this picture show
-   *           the seed's own rectangle? If so the seed's surround, place names
-   *           and caption still describe the ground and stay; if not they are
-   *           another place's geography and the map takes them down
-   *   centre  whatever /api/land gives, which is null at "hidden" and rounded
-   *           at "approximate". The map uses it for coordinates it shows and
-   *           shows none when it is null
-   *
-   * No surround travels with it yet. A wider fetch does not exist on this
-   * route, and a village standing anywhere but the seed's own rectangle gets
-   * no borrowed coastline in the meantime. When that fetch lands it attaches
-   * here as `surround: { url, rect }`.
-   */
-  const pushGround = useCallback(async () => {
-    const win = frame.current?.contentWindow;
-    if (!win) return;
-    try {
-      const res = await fetch("/api/land");
-      if (!res.ok) return;
-      const body = await res.json();
-      const url = typeof body?.imageryUrl === "string" ? body.imageryUrl : "";
-      if (!url) return;
-      const spanM = Number(body?.spanM);
-      const c = body?.centre;
-      win.postMessage(
-        {
-          type: "ground",
-          core: { url },
-          frame: {
-            spanM: Number.isFinite(spanM) && spanM > 0 ? spanM : null,
-            seed: body?.seedFrame === true,
-            centre:
-              c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon))
-                ? { lat: Number(c.lat), lon: Number(c.lon) }
-                : null,
-          },
-        },
-        window.location.origin,
-      );
-    } catch {
-      /* The map keeps the ground it is already standing on. */
-    }
-  }, []);
-
   const pushHand = useCallback(async () => {
     const win = frame.current?.contentWindow;
     if (!win) return;
@@ -492,131 +448,36 @@ export default function LivingMap() {
     }
   }, []);
 
-  /**
-   * Who is playing, and what the village says about its seats.
-   *
-   * SEPARATE FROM THE HAND, and deliberately so. `pushHand` decides whether the
-   * Build button works, and hanging these off it would make a founder's edit
-   * rights wait on the org chart: `/api/map` is four queries and reads the whole
-   * `users` table when the caller may see people. This message only decides what
-   * the org lens draws, so it can arrive whenever it arrives.
-   *
-   * BOTH ARE CREDENTIALED, and both have to be. The party is which characters
-   * this particular player has chosen, and `/api/map/config` is fetched WITHOUT
-   * credentials and returns the same answer to everyone, so nothing
-   * identity-bearing may ride it.
-   *
-   * Every failure here is silent and costs only the narrowing. With no party the
-   * map shows every mark, and with no seats it draws each one as the scene wrote
-   * it, which is exactly what a signed-out reader already gets.
+  /*
+   * Who is playing, and what the village says about its circles and seats:
+   * the `lens` message, pushed on grounds-ready and kept current while the
+   * map is open (components/map/orgFollow.ts). SEPARATE FROM THE HAND, so a
+   * founder's edit rights never wait on the org chart, and credentialed,
+   * because the party is one player's and names ride the viewPeople tier.
    */
-  const pushLens = useCallback(async () => {
-    const win = frame.current?.contentWindow;
-    if (!win) return;
-    const [partyRes, orgRes] = await Promise.all([
-      // A party is a signed-in player's. With no session the route answers 401,
-      // which the browser logged on every signed-out visit, and the lens reads
-      // that as no party. Not asking reads the same.
-      authToken() ? gameFetch("/api/me/characters").catch(() => null) : null,
-      gameFetch("/api/map").catch(() => null),
-    ]);
-    const partyBody = partyRes?.ok ? await partyRes.json().catch(() => null) : null;
-    const orgBody = orgRes?.ok ? await orgRes.json().catch(() => null) : null;
-    const party: string[] = Array.isArray(partyBody?.party)
-      ? partyBody.party.map((c: any) => String(c?.archetypeKey ?? "")).filter(Boolean)
-      : [];
-    // Example seats are demo data the `progression` module seeds into every
-    // fresh fork. Handing them over would paint a village's own land with seats
-    // nobody in it has ever heard of.
-    const roles = Array.isArray(orgBody?.roles)
-      ? orgBody.roles
-          .filter((r: any) => r && !r.isExample && typeof r.name === "string")
-          .map((r: any) => ({
-            name: String(r.name),
-            state: String(r.state ?? "open"),
-            archetypes: Array.isArray(r.archetypes) ? r.archetypes.map(String) : [],
-          }))
-      : [];
-    try {
-      win.postMessage({ type: "lens", party, roles }, window.location.origin);
-    } catch {
-      /* The lens keeps whatever it is already drawing. */
-    }
-  }, []);
+  const { pushLens } = useOrgFollow({ frame, live: groundsReady });
+
+  /* The crown bar's chips, and their refresh: components/map/statChips.ts.
+     Asked again the moment who is signed in changes, so a members-only chip
+     leaves the bar with the member who signed out. */
+  const pushChipsNow = useCallback(() => { void pushChips(frame.current?.contentWindow); }, []);
+  const viewerId = useAuth().user?.id ?? null;
+  useChipsCadence(pushChipsNow, groundsReady, undefined, viewerId);
 
   /**
    * The map asking the village to keep, publish, discard or roll back its
-   * work.
-   *
-   * Same relay discipline as the promises above and for the same reasons: the
-   * shell decides nothing, the route owns every permission question and every
-   * sentence, and A REPLY GOES BACK ON EVERY PATH including a thrown fetch.
-   * The map's rule is that silence means the optimistic state stands, which
-   * is right when it runs standalone from `file://` and dangerous here: a
-   * village that answered "you may not publish" has to reach the person, or
-   * they will believe the land moved when it did not.
-   *
-   * The nonce is echoed exactly and never inspected, so a reply to a publish
-   * the member already replaced cannot apply itself over the newer one.
+   * work. The relay itself, and why it answers on every path, is in
+   * components/map/sceneRelay.ts. This attaches the nonce and the frame, and
+   * hands it pushConfig, because an undo has to show the map the land it
+   * just put back.
    */
   const relayScene = useCallback(async (msg: any) => {
     const win = frame.current?.contentWindow;
     if (!win) return;
-    const send = (r: Record<string, unknown>) =>
+    const send = (r: SceneReply) =>
       win.postMessage({ type: "scene-result", of: msg.type, nonce: msg.nonce, ...r }, window.location.origin);
-
-    // The scene is stringified ONCE, here, and that exact text is what the
-    // server stores. Building it twice would risk two different strings.
-    const sceneText = () => {
-      try {
-        return JSON.stringify(msg.scene);
-      } catch {
-        return null;
-      }
-    };
-
-    try {
-      if (msg.type === "draft-save") {
-        const scene = sceneText();
-        if (!scene) return send({ ok: false, error: "That draft could not be written down." });
-        const res = await gameFetch("/api/map/draft", {
-          method: "PUT",
-          body: JSON.stringify({ scene, baseVersion: msg.baseVersion ?? 0 }),
-        });
-        const body = await res.json().catch(() => null);
-        return send(res.ok ? { ok: true, baseVersion: body?.baseVersion } : { ok: false, error: body?.error });
-      }
-
-      if (msg.type === "draft-discard") {
-        const res = await gameFetch("/api/map/draft", { method: "DELETE" });
-        const body = await res.json().catch(() => null);
-        return send(res.ok ? { ok: true } : { ok: false, error: body?.error });
-      }
-
-      if (msg.type === "publish") {
-        const scene = sceneText();
-        if (!scene) return send({ ok: false, error: "That scene could not be written down." });
-        const res = await gameFetch("/api/map/publish", {
-          method: "POST",
-          body: JSON.stringify({ scene, baseVersion: msg.baseVersion ?? 0, note: msg.note ?? null }),
-        });
-        const body = await res.json().catch(() => null);
-        if (res.ok) return send({ ok: true, version: body?.version, live: body?.live });
-        // 409 carries WHO moved the map and WHEN. It travels untouched: the
-        // route owns that sentence so there is one place it is written.
-        return send({ ok: false, reason: body?.reason, error: body?.error, live: body?.live });
-      }
-
-      if (msg.type === "restore") {
-        const version = Number(msg.version);
-        const res = await gameFetch(`/api/map/revisions/${version}/restore`, { method: "POST" });
-        const body = await res.json().catch(() => null);
-        return send(res.ok ? { ok: true, version: body?.version, live: body?.live } : { ok: false, error: body?.error });
-      }
-    } catch {
-      return send({ ok: false, error: "The village could not be reached. Your work is still here." });
-    }
-  }, []);
+    await relaySceneMessage(msg, send, pushConfig);
+  }, [pushConfig]);
 
   /**
    * A promise the map made, carried to the village and answered.
@@ -698,24 +559,39 @@ export default function LivingMap() {
       if (!data || typeof data !== "object") return;
 
       if (data.type === "grounds-ready") {
-        // The config and the ground are the same for everyone and need no
-        // session; the hand depends on who is asking. Sending them separately
-        // means a signed-out visitor still gets the published land and the
-        // village's own photograph under it, even though their hand request
-        // tells them they may do nothing.
-        // Preparing clears once the published scene has been asked for.
-        void pushConfig().finally(() => setPreparing(false));
-        pushGround();
+        onReady();
+        setGroundsReady(true);
+        // The config, which carries the ground, is the same for everyone and
+        // needs no session; the hand depends on who is asking. Sending them
+        // separately means a signed-out visitor still gets the published land
+        // and the village's own photograph under it, even though their hand
+        // request tells them they may do nothing.
+        // The cover lifts when the map answers this one with land-ready.
+        // A new frame has been sent no blank yet; one land read serves the
+        // ground and the seed verdict (configPush.ts, landGround.ts).
+        blankSent.current = false;
+        void pushConfig(readLand());
         pushHand();
         pushPhotos();
+        pushChipsNow();
         // Third and last, because it is the only one nothing waits on: the org
         // lens narrows what is drawn and never decides what may be done.
         pushLens();
         return;
       }
+      // The land on screen is the village's own now: the cover can lift.
+      if (data.type === "land-ready") {
+        landed();
+        return;
+      }
       // The map asking to be closed. Same path as the browser Back button.
       if (data.type === "exit") {
         exitApp();
+        return;
+      }
+      // The map's address changed: the visible URL and Back follow it.
+      if (data.type === "route") {
+        onRoute(data);
         return;
       }
       if (isPromiseKind(data.type)) {
@@ -733,7 +609,7 @@ export default function LivingMap() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [navigate, pushConfig, pushGround, pushHand, pushPhotos, pushLens, exitApp, relayPromise, relayScene]);
+  }, [navigate, pushConfig, pushHand, pushPhotos, pushChipsNow, pushLens, exitApp, onRoute, onReady, landed, relayPromise, relayScene]);
 
   /**
    * A save in the wizard retints an open map.
@@ -757,21 +633,6 @@ export default function LivingMap() {
     };
   }, [pushConfig]);
 
-  /** Parent hash changes reach the artifact without reloading it. */
-  useEffect(() => {
-    const onHash = () => {
-      const win = frame.current?.contentWindow;
-      if (!win) return;
-      try {
-        if (win.location.hash !== window.location.hash) win.location.hash = window.location.hash;
-      } catch {
-        /* Cross-origin only, which cannot happen for a same-origin artifact. */
-      }
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-
   /**
    * On load: hand over the village's skin, then upgrade door clicks to SPA
    * navigation if the artifact exposes `siteNav`.
@@ -783,8 +644,19 @@ export default function LivingMap() {
    * demanding the artifact change first.
    */
   const onLoad = () => {
+    // Every script in the frame has run: the cover stops waiting forever.
+    frameLoaded();
     const win = frame.current?.contentWindow as any;
     if (!win) return;
+    /*
+     * Hand the keyboard to the land when nobody else holds it. The pressed
+     * Enter button unmounts and drops focus on the page, and a deep link or a
+     * return by Back arrives with focus on the page too (measured: BODY, so
+     * Escape, L and the arrows answered nothing until a click). Asking where
+     * focus IS covers all three, and leaves a visitor who tabbed to Leave the
+     * map while the land loaded exactly where they are.
+     */
+    if (!document.activeElement || document.activeElement === document.body) frame.current?.focus();
 
     /*
      * The skin is NOT sent from here. `load` fires when the document is
@@ -823,6 +695,15 @@ export default function LivingMap() {
   };
 
   if (modules.loaded && !mapModule) return <ModuleGate moduleId="map" name="How Power Is Held" />;
+  if (slate.state === "blank" && !board) {
+    return (
+      <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+        <BlankSlate slate={slate} onLeave={exitApp} onOpenBoard={() => { setBoard(true); enterTheLand(); }} />
+      </div>
+    );
+  }
+  /* Nothing mounts until the slate is known, so a visitor to a blank village never downloads the map. */
+  const known = slate.state !== "checking";
 
   /*
    * APP MODE. No Layout, no header, no bottom nav, and no page scroll.
@@ -839,8 +720,8 @@ export default function LivingMap() {
    * the whole difference between "fills the screen" and "nearly fills it".
    *
    * Leaving is the artifact's `{type:'exit'}`, the browser Back button, and
-   * the shell's own escape control, and all three run the same path (see the
-   * history effect above). The shell draws one because the artifact's are laid
+   * the shell's own escape control, and all three run the same path (see
+   * mapHistory.ts). The shell draws one because the artifact's are laid
    * out off-screen on a phone, which left app mode with no way out at all.
    */
   return (
@@ -868,8 +749,13 @@ export default function LivingMap() {
        * SO IT MOVED TO THE BOTTOM, which clears the top-left corner outright
        * and puts an escape in the half of a phone a thumb can reach. On the
        * pocket profile the artifact now carries the door itself, as a cell in
-       * its own bottom bar, so this one stands down entirely rather than
-       * shipping two doors with one name. On a desk the artifact makes room:
+       * its own bottom bar, so this one stands down once that bar exists AND
+       * the cover is off it, and not one moment sooner. It used to stand down
+       * the moment Enter was pressed, which on a slow phone left half a minute
+       * of download with no way out at all (F47). The artifact's grounds-ready
+       * is posted by the same script that builds the bar, so it is the bar's
+       * own signal; a land that never boots keeps this door for good. On a desk
+       * the artifact makes room:
        * `body.embed` lifts `#minimapWrap` and the build bar's floor out of the
        * bottom-left corner, because the artifact is the only thing that knows
        * where the artifact's chrome is.
@@ -893,7 +779,7 @@ export default function LivingMap() {
         }}
       />
 
-      {presence !== "absent" && !pocket && (
+      {presence !== "absent" && (!pocket || !groundsReady || preparing) && (
         <button
           type="button"
           onClick={exitApp}
@@ -949,7 +835,7 @@ export default function LivingMap() {
         </button>
       )}
 
-      {presence === "checking" && (
+      {(presence === "checking" || (presence === "present" && !known)) && (
         <p className="text-center text-muted-foreground py-24">Opening the map...</p>
       )}
 
@@ -972,17 +858,17 @@ export default function LivingMap() {
           </p>
           <button type="button" onClick={exitApp}
             className="mt-6 px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted">
-            Back to the village
+            Leave the map
           </button>
         </div>
       )}
 
-      <EnterTheLandGate open={presence === "present" && !entered} preparing={presence === "present" && entered && preparing} onEnter={onEnter} />
+      <EnterTheLandGate open={known && presence === "present" && !entered} preparing={known && presence === "present" && entered && preparing} slow={slow} onEnter={enterTheLand} />
 
-      {presence === "present" && entered && (
+      {known && presence === "present" && entered && (
         <iframe
           ref={frame}
-          src={`${groundsUrl}${withSkipIntro(initialHash)}`}
+          src={`${groundsUrl}${withSkipIntro(startHash)}`}
           onLoad={onLoad}
           title="Living map of the village"
           className="block h-full w-full border-0"
@@ -991,7 +877,6 @@ export default function LivingMap() {
           allow="fullscreen"
         />
       )}
-
     </div>
   );
 }

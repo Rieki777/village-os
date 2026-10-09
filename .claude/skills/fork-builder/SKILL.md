@@ -1,13 +1,16 @@
 ---
 name: fork-builder
-description: Build or modify a custom village fork of the game-amora platform — module add/remove recipes, invariants, gate, and traps
+description: Build or modify a custom village fork of the Village OS platform (formerly game-amora) — module add/remove recipes, invariants, gate, and traps
 ---
 
 # Fork builder
 
 Operating procedure for building a new village fork or adding/removing modules on any fork.
-The platform is white-label: the "Amora" deployment is only the first tenant. Everything below
-is verifiable in code today; where a claim matters, the enforcing file is named.
+The platform is white-label: the "Amora" deployment is only the first tenant. A fork is only for a
+village that changes code: running a village needs no fork and no access to `Rieki777/village-os`,
+only the published image (`START_HERE.md`). A fork deploys through the repository's own
+`Dockerfile`, and changes are offered back by pull request from the fork. Everything below is
+verifiable in code today; where a claim matters, the enforcing file is named.
 
 ## 0. Before writing any code
 
@@ -45,12 +48,17 @@ is verifiable in code today; where a claim matters, the enforcing file is named.
    default to the value that was already being served — turning a setting on must not silently
    change what every existing village sees.
 4. **Migration**: next-numbered `drizzle/00NN_<name>.sql`. The custom runner
-   (`server/db/migrate.ts`) auto-applies at boot, fail-loud, recorded in `_migrations_applied`.
+   (`server/db/migrate.ts`) auto-applies at boot, before the server listens, fail-loud, recorded in
+   `_migrations_applied`. There is no manual migrate step; `npx tsx scripts/run-migration.ts
+   --status` only inspects. A fork's own migrations take numbers from 9000 up and are checked with
+   `node scripts/check-migration-numbers.mjs --village`.
    Obey its parser: statements split on end-of-line semicolons after comment lines are stripped
    (`splitStatements`, line ~30). See traps §6 before writing SQL.
-5. **Server library**: `server/lib/<module>.ts` for domain logic. Routes live in `server/index.ts`,
-   every prefix mounted behind the gate: `app.use("/api/<x>", requireModule("<id>"))`
-   (`server/lib/modules.ts` ~167). **Exception**: settlement webhooks are NEVER behind
+5. **Server library**: `server/lib/<module>.ts` for domain logic. New routes go in
+   `server/routes/<domain>.ts`, registered from `server/index.ts`, which is ratcheted and may not
+   grow (`scripts/check-server-index-size.mjs`). Every prefix is mounted behind the gate:
+   `app.use("/api/<x>", requireModule("<id>"))`, and the `register()` call must come after that
+   mount (`server/lib/modules.ts` ~167). **Exception**: settlement webhooks are NEVER behind
    `requireModule` — in-flight orders must settle while a module is off (invariant #13).
 6. **Tokens**: if the module has its own token, create it idempotently at boot (`ensureStayToken` /
    `ensureLibraryToken` pattern, `server/index.ts` ~1871) BEFORE `checkLedgerInvariants` runs. All
@@ -200,6 +208,7 @@ After deploy: `node scripts/smoke-all-modules.mjs --base … --email … --passw
 | Seeding module lifecycle or every-variable rows in migrations | Freezes defaults forever — both stores are delta-only by design |
 | Enabling a module before its hard dependency | Boot reconciliation demotes it straight back to off and the routes 404. `feed` requires `forum`. In a test this reads as an unrelated failure three assertions later |
 | `railway up` and the build marker | `railway up` uploads a tarball with no git metadata, so `__BUILD_SHA__` falls back to the literal `dev` and `/health` cannot tell you which commit is live. Verify functionally: fetch `/`, take the hashed `/assets/index-*.js` name, grep the bundle for a string only the new code contains. A container serving at all also proves boot migrations applied, since they are fail-loud |
+| `VILLAGE_SECRETS_KEY` set on Railway and still refused | `keyFromEnv` (`server/lib/sealedBox.ts`) answers null for a malformed value exactly as for a missing one: quotes, a pasted `NAME=`, base64, a wrong length. `describeKeyEnv` and `keyEnvSentence` beside it name which, never any of the value, and that sentence leads the `[secrets]` and `[identity]` boot lines, the Admin, Integrations banner and the launch row. Still "not set" means the variable is on the wrong service (the database) or the deploy carrying it is not Active yet. `docs/FORK_RUNBOOK.md`, "Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused" |
 | An `onClick` on an SVG shape | Mouse-only: no focus, no keyboard, nothing announced. Needs `role="button"`, `tabIndex={0}`, an `aria-label` and an Enter/Space handler — the village map shipped this way and could not be used without a mouse |
 | A `title` attribute as the only label on a touch surface | `title` is a hover tooltip and a phone has no hover. An icon-only control needs a real label and, if it must stay icon-only, a press-and-hold affordance (see `AdminNav` and `client/src/lib/gestures.ts`) |
 | A 44px tap-target rule that lists `button` but not `a[href]` | Every link keeps whatever hit area its text gives it, and individual small targets get raised one at a time forever instead of the rule being fixed once. Exclude prose links (`p a`, `li a`) or paragraphs stack invisible boxes |

@@ -74,7 +74,7 @@ function ThreadList() {
     fetch("/api/forum/threads", { method: "POST", headers: headers(), body: JSON.stringify(draft) })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not post");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? "That didn't send. Try again.");
         setComposing(false);
         setDraft({ title: "", body: "", category: "", kind: "discussion" });
         // The server has just retired this module's examples; drop the label
@@ -290,7 +290,7 @@ function ThreadView({ id }: { id: string }) {
       .then(async (r) => {
         const { ok, data: d, refusal: refused } = await readRefusal(r);
         if (refused) { setRefusal({ where, message: refused }); return; }
-        if (!ok) throw new Error(d?.message ?? d?.error ?? "Failed");
+        if (!ok) throw new Error(d?.message ?? d?.error ?? "That didn't go through. Try again.");
         setStatus("Done.");
         setReply("");
         setReplyingTo(null);
@@ -347,7 +347,7 @@ function ThreadView({ id }: { id: string }) {
     })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not save that edit");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? "That didn't save. Try again.");
         setEditing(null);
         setDraft("");
         load();
@@ -372,8 +372,8 @@ function ThreadView({ id }: { id: string }) {
         <div className="container max-w-2xl py-24 text-center">
           <h1 className="font-display text-2xl font-bold text-foreground mb-3">
             {miss === "failed"
-              ? "The forum could not be loaded just now."
-              : "That conversation is not in the forum."}
+              ? "This thread didn't load."
+              : "That thread isn't in the forum."}
           </h1>
           <p className="text-muted-foreground mb-8">
             {miss === "failed"
@@ -478,7 +478,7 @@ function ThreadView({ id }: { id: string }) {
             )}
             {decided && (
               <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
-                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">Decision recorded</p>
+                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">Decided</p>
                 <p className="text-sm text-purple-900 whitespace-pre-wrap">{thread.meta.outcome}</p>
               </div>
             )}

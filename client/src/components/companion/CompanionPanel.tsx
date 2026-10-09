@@ -198,6 +198,7 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
       role="dialog"
       aria-label={name ? `Ask about ${name}` : "Ask about the canvas"}
       data-testid="companion-panel"
+      data-hides-fab
       className="fixed bottom-[calc(var(--tabbar-h)+0.5rem)] md:bottom-4 right-4 z-[70] w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh] wrap-anywhere"
     >
       <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">

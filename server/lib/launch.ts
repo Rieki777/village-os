@@ -40,8 +40,10 @@ import {
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
+import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
 import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
+import { villageSecretsLaunchCheck } from "./secrets";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -50,6 +52,9 @@ import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
  * and nowhere else.
  */
 const GPS_CHECK_KEY = "gps-written";
+
+/** The sealing key's row, resolved by name for the same reason. */
+const SECRETS_KEY_CHECK_KEY = "village-secrets-key";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { normalizeSeasonConfig } from "./seasonCalendar";
 import { governanceRowFor } from "./launchGovernance";
@@ -67,6 +72,8 @@ export interface LaunchDeps {
   checks: Record<string, () => Promise<LaunchCheckResult> | LaunchCheckResult>;
   /** Effective lifecycle for appliesWhenModule gating. */
   moduleLifecycle: (id: string) => string;
+  /** The environment the env-reading checks read. Absent means `process.env`; tests pass their own. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface LaunchItemStatus extends LaunchRequirement {
@@ -297,6 +304,19 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
+    /*
+     * THE SEALING KEY, read from the environment HERE, and for the same reason
+     * as the branches above: it needs no cache from server/index.ts, and
+     * that file only ever gets smaller. The detail is the sentence naming what
+     * is wrong (unset, or set with quotes, a pasted NAME=, base64, the wrong
+     * length), never "not set" for a key that is set in the wrong shape.
+     */
+    if (req.checkKey === SECRETS_KEY_CHECK_KEY) {
+      const read = villageSecretsLaunchCheck(deps.env ?? process.env);
+      items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
     if (req.checkKey.startsWith("manual:")) {
       const confirm = state.manualConfirms[req.id];
       items.push({
@@ -469,13 +489,16 @@ export async function issuanceCapDecisionFor(pool: Pool): Promise<IssuanceCapDec
  *             back whether or not a human looked; only `timezoneAnswer`,
  *             written on a real change or an explicit confirmation, says
  *             somebody answered.
+ *   walk      a stored walk IS the answer too, and it is the third fact: the
+ *             map ships no walk of a village's own, so what is in that
+ *             document a founder wrote (Rye, 2026-10-02).
  *
  * An unreadable or missing document reads as unanswered, which is true: a
  * village that has stored nothing has said nothing.
  *
  * Exported for its own tests. The checklist path reaches it through
  * `launchStatus`, which needs a village's whole world to answer; this reads
- * two documents and can be asked directly with a stub pool.
+ * one document per fact and can be asked directly with a stub pool.
  */
 export async function villageFactFor(
   pool: Pool,
@@ -489,6 +512,14 @@ export async function villageFactFor(
   if (fact === "currency") {
     const doc = await readConfigDocument<{ project?: { fiatCurrency?: string } }>(pool, "brand");
     return projectCurrencyCheck(doc?.project?.fiatCurrency ?? null);
+  }
+  /*
+   * THE VILLAGE'S OWN WALK, read from the document the map is served from.
+   * A stored walk IS the answer, the same shape as the currency: nothing ships
+   * in that document, so whatever is in it a founder wrote.
+   */
+  if (fact === "walk") {
+    return welcomeWalkCheck(await readConfigDocument(pool, MAP_WALK_DOC));
   }
   return {
     state: "missing",

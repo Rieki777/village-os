@@ -113,15 +113,6 @@ const configured = testDbConfigured();
 let db: TestDb;
 let pool: mysql.Pool;
 let seq = 0;
-
-/**
- * The ceiling for a case that opens several redemptions.
- *
- * Raised, never lowered: a local override BELOW vitest.config.ts's global
- * silently undercuts headroom the config deliberately provides.
- */
-const DB_HEAVY = 420_000;
-
 async function makeMember(id: string): Promise<string> {
   await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
@@ -520,7 +511,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 490));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it(
@@ -589,7 +579,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(toLedgerUnits(CREDITS, 10));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   // ── The lock, against the paths that can reach it ────────────────────────
@@ -741,7 +730,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await conservation(CREDITS)).toBe(0);
       expect(await cacheDrift(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it("gives the whole amount back on a refusal", async () => {
@@ -836,7 +824,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, REDEEMED, CREDITS)).toBe(toLedgerUnits(CREDITS, 500));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it(
@@ -855,7 +842,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 500));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it(
@@ -920,7 +906,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, REDEMPTION_HOLD, CREDITS)).toBe(0);
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it("cannot confirm a redemption that was already given back", async () => {
@@ -1017,7 +1002,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, REDEEMED, CREDITS)).toBe(toLedgerUnits(CREDITS, 400));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   // ── What the village can read afterwards ─────────────────────────────────
@@ -1059,7 +1043,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       // And the retired figure is the whole of what changed.
       expect((await retiredSupply(pool))[CREDITS]).toBe(toLedgerUnits(CREDITS, 500));
     },
-    DB_HEAVY,
   );
 
   it("reports nothing from the boot invariants after a whole redemption", async () => {
@@ -1132,7 +1115,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await cacheDrift(CREDITS)).toBe(0);
       expect((await balancesFor(pool, memberAccount(wren)))[CREDITS] ?? 0).toBe(0);
     },
-    DB_HEAVY,
   );
 
   // ── The village that turned the hold off ─────────────────────────────────
@@ -1161,7 +1143,6 @@ describe.skipIf(!configured)("turning tokens into something real", () => {
       expect(await balanceOf(pool, memberAccount(wren), CREDITS)).toBe(toLedgerUnits(CREDITS, 300));
       expect(await conservation(CREDITS)).toBe(0);
     },
-    DB_HEAVY,
   );
 
   it("takes nothing at all when the village has the hold turned off", async () => {

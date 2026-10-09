@@ -6,7 +6,7 @@
  * The server has been able to seat an agent since 0142, and nothing in the
  * product could ask it to. `seatHolder` takes `isAgent` and `agentSlug`, the
  * column exists, the refusal that keeps an agent off the member plane exists,
- * and `HolderCard` already renders "an agent" beside a holder who is one. The
+ * and the seat card (`SeatRoster`) already says "An agent" for a holder who is one. The
  * only missing piece was a control, so the whole feature was reachable by curl
  * and by nothing else. A gate nobody can reach through the product is a gate
  * that does not exist.

@@ -33,6 +33,7 @@ import { usePathLadders } from "@/hooks/usePathLadders";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
+import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
 
 /**
  * THE CHARACTER SHEET.
@@ -76,6 +77,7 @@ import { onProfileRefresh } from "@/lib/profileRefresh";
  */
 
 export default function Profile() {
+  const brochureOn = useBrochurePages() === true;
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
@@ -197,7 +199,7 @@ export default function Profile() {
       setPathError(
         e?.message === "auth_required"
           ? "Your session ended. Sign in again to change your paths."
-          : e?.message || "Could not save, try again",
+          : e?.message || "That didn't save. Try again.",
       );
     } finally {
       setSavingPath(null);
@@ -211,7 +213,7 @@ export default function Profile() {
       await updateProfile({ bio: bioText });
       setEditingBio(false);
     } catch (e: any) {
-      setBioError(e?.message || "Could not save, try again");
+      setBioError(e?.message || "That didn't save. Try again.");
     } finally {
       setSavingBio(false);
     }
@@ -381,7 +383,7 @@ export default function Profile() {
                 className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
-                Sign Out
+                Sign out
               </motion.button>
             </div>
 
@@ -466,7 +468,7 @@ export default function Profile() {
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <h2 id="bio-h" className="font-display text-2xl font-bold text-card-foreground">
-                    About You
+                    About you
                   </h2>
                   <button
                     type="button"
@@ -519,7 +521,7 @@ export default function Profile() {
                         disabled={savingBio}
                         className="min-h-11 rounded-lg border border-border bg-teal-deep px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                       >
-                        {savingBio ? "Saving" : "Save"}
+                        {savingBio ? "Saving…" : "Save"}
                       </button>
                       <button
                         onClick={() => {
@@ -653,23 +655,26 @@ export default function Profile() {
                   id="contrib-h"
                   className="mb-6 font-display text-2xl font-bold text-card-foreground"
                 >
-                  Your Contributions
+                  Your contributions
                 </h2>
                 {recentContributions.length === 0 ? (
                   /*
-                    Name the mechanic, then point at the one door. A row lands
-                    here from `POST /api/profile/contribution`, which no client
-                    calls, or from an admin accepting a Work With Us proposal.
-                    So the card says the second one and links it.
+                    R47: say what is missing, then point at the one door. A row
+                    lands here from `POST /api/profile/contribution`, which no
+                    client calls, or from an admin accepting a Work With Us
+                    proposal. So the card links the second one.
                   */
-                  <p className="text-muted-foreground">
-                    Nothing here yet. A contribution is recorded when the village accepts an offer
-                    you made through{" "}
-                    <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
-                      Work With Us
-                    </Link>
-                    .
-                  </p>
+                  brochureOn ? (
+                    <p className="text-muted-foreground">
+                      No contributions yet. Propose one through{" "}
+                      <Link href="/work-with-us" className="font-medium text-foreground underline underline-offset-2">
+                        Work With Us
+                      </Link>
+                      .
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground">No contributions yet.</p>
+                  )
                 ) : (
                   <ul className="space-y-4">
                     <AnimatePresence>
@@ -852,14 +857,14 @@ export default function Profile() {
                 className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
               >
                 <h2 id="links-h" className="mb-4 font-display text-lg font-bold text-card-foreground">
-                  Quick Links
+                  Quick links
                 </h2>
                 <ul className="space-y-2">
                   {[
                     { href: "/quests", label: "Quests" },
                     { href: "/circles", label: "Circles" },
                     { href: "/housing", label: "Housing" },
-                  ].map((l) => (
+                  ].filter((l) => brochureOn || !isBrochurePath(l.href)).map((l) => (
                     <li key={l.href}>
                       <Link
                         href={l.href}

@@ -803,7 +803,7 @@
         <h1>A <span class="wordSlot">village</span> runs on agreements.<br><span class="vname" id="h1Name">Your Village</span> can run on this.</h1>
         <p class="lede prose" style="margin-top:1.1rem">
           Software that holds who has which role, what work is owed, what value moved, and what the land
-          actually did this season. One system, sixteen parts, and you decide which of them exist.
+          actually did this season. One system, twenty-six parts, and you decide which of them exist.
         </p>
         <p class="prose soft">
           Put your project into the fields below. The rest of this deck, every screen and every number in
@@ -922,9 +922,9 @@
       </div>
 
       <div class="figs rv">
-        <div class="fig"><span class="n">16</span><span class="l">modules</span></div>
+        <div class="fig"><span class="n">25</span><span class="l">modules</span></div>
         <div class="fig"><span class="n">4</span><span class="l">always on</span></div>
-        <div class="fig"><span class="n">12</span><span class="l">your call</span></div>
+        <div class="fig"><span class="n">21</span><span class="l">your call</span></div>
         <div class="fig"><span class="n">1</span><span class="l">village live today</span></div>
       </div>
     </div>
@@ -987,6 +987,7 @@
       deliberate act, recorded with who did it and when.</p>
       <p class="prose soft">Turning one off is refused while it still holds value somebody is owed. Settle
       first, then close the door.</p>
+      <p class="prose soft">The board below shows sixteen of the twenty-six modules.</p>
     </div>
 
     <div class="rv toolbar">
@@ -1480,7 +1481,7 @@
         database, on your hosting, under your keys. We do not hold a copy after handoff, and your API keys
         never touch our database.</div></details>
       <details class="faq"><summary>Do we have to switch everything on?</summary><div class="a">No. Four
-        modules are always on. The other twelve ship off, and turning one on is a deliberate act recorded
+        modules are always on. The other twenty-two ship off, and turning one on is a deliberate act recorded
         with who did it and when. Most projects start with a handful.</div></details>
       <details class="faq"><summary>Can our <span class="peopleSlot">members</span> cash out their tokens?</summary><div class="a">
         No. Money flows in and tokens never flow out. There is no code path to sell a
@@ -1599,9 +1600,9 @@
   "use strict";
 
   /* ─────────────────────────────────────────────────────────────
-     The sixteen modules. Four are core and the platform refuses to
-     switch them off. The other twelve ship OFF, which is why they
-     all start closed here.
+     Sixteen of the platform's twenty-six modules. Four are core and
+     the platform refuses to switch them off. The other twenty-two ship
+     OFF, which is why the twelve shown here all start closed.
      ───────────────────────────────────────────────────────────── */
   var MODULES = [
     { id:"quests",      name:"Quests",            core:1, nav:"Quests",    d:"Post work, claim it, submit it, release recognition when it's done." },
@@ -1854,9 +1855,9 @@
   }
   function paintTally(){
     var n = countOn(), chosen = n-4;
-    tally.innerHTML = esc(v("name")) + " is running <b>" + n + "</b> of 16 &middot; " +
+    tally.innerHTML = esc(v("name")) + " is running <b>" + n + "</b> of 26 &middot; " +
       (chosen === 0 ? "the four that cannot be switched off"
-                    : chosen + " chosen, " + (12-chosen) + " still closed");
+                    : chosen + " chosen, " + (21-chosen) + " still closed");
   }
   function paintNav(){
     var nav = document.getElementById("appNav");
@@ -1984,7 +1985,7 @@
       ["Its people", v("people")],
       ["Its currency", v("token")],
       ["Its guide", raw("guide") || "not named yet"],
-      ["Modules on", countOn() + " of 16"]
+      ["Modules on", countOn() + " of 26"]
     ];
     document.getElementById("bpGrid").innerHTML = pairs.map(function(p){
       return '<div><div class="k">' + esc(p[0]) + '</div><div class="v">' + esc(p[1]) + '</div></div>';

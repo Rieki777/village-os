@@ -117,7 +117,7 @@ export default function Wallet() {
   useEffect(() => {
     if (exchangeModule) load();
     const q = new URLSearchParams(window.location.search).get("purchase");
-    if (q === "success") setNotice("Payment received. Your tokens arrive as soon as Stripe confirms (usually seconds).");
+    if (q === "success") setNotice("Payment received. Your tokens usually arrive within seconds.");
     if (q === "cancelled") setNotice("Checkout cancelled. Nothing was charged.");
   }, [exchangeModule?.id]);
 
@@ -133,7 +133,7 @@ export default function Wallet() {
       .then(async (r) => {
         const { ok, data: d, refusal } = await readRefusal(r);
         if (refusal) { setRefusedSlug({ slug, message: refusal }); return; }
-        if (!ok) throw new Error(d?.error || "Could not start checkout");
+        if (!ok) throw new Error(d?.error || "Checkout didn't start. Try again.");
         window.location.href = d.url;
       })
       .catch((e) => setError(e.message));
@@ -173,7 +173,7 @@ export default function Wallet() {
       ? "Buying is not open to you yet"
       : buyRung === "none"
         ? "Buying opens by role here, never by stage"
-        : `Buying opens at the ${(cfg?.stages ?? []).find((s) => s.id === buyRung)?.name ?? buyRung} stage`;
+        : `Buying opens at ${(cfg?.stages ?? []).find((s) => s.id === buyRung)?.name ?? buyRung}`;
 
   /**
    * ONE QUANTITY ON A RECEIPT, in the village's own word for the token.
@@ -218,18 +218,21 @@ export default function Wallet() {
       <section className="py-12 bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container text-center">
           <h1 className="font-display text-4xl font-bold text-foreground mb-3">The Exchange</h1>
-          {/* R46 enchant-first: the surface line carries the image, and the
-              plain mechanics from the COPY-1 hero live on in the tooltips. */}
+          {/* R47: the Trail line leads and the tooltips define the three
+              token words. The roots line is the Lore, last and quiet. */}
           <p className="text-muted-foreground max-w-xl mx-auto">
-            One room, one ledger: every token the village lives by leaves its
-            thread here, the way roots share water under a forest floor.{" "}
+            Buy credits and check your balances.{" "}
             <InfoTip tip={`${tokenName}: thanks for work, never pay. Earned when someone appreciates a real contribution, and never bought.`}>{tokenName}</InfoTip>,{" "}
             <InfoTip tip="Stay credits are nights at the village, earned through work exchange and spent when you book a stay.">stay credits</InfoTip> and{" "}
             <InfoTip tip="Library credits pay the Material Library's deposit: set aside while you borrow, back when the tool comes home.">library credits</InfoTip>{" "}
-            each carry their own story. Your own balances also sit on{" "}
+            all show here and on{" "}
             <a href="/profile#wallet" className="text-teal-deep font-medium hover:underline">your profile</a>.
           </p>
           <ExamplesBanner moduleId="exchange" noun="listing" />
+          <p className="mt-2 text-sm italic text-muted-foreground max-w-xl mx-auto">
+            One room, one ledger: every token the village lives by leaves its
+            thread here, the way roots share water under a forest floor.
+          </p>
         </div>
       </section>
 
@@ -248,13 +251,13 @@ export default function Wallet() {
                 <p className="text-sm text-muted-foreground">Loading your balances…</p>
               ) : status === "failed" ? (
                 <p className="text-sm text-muted-foreground">
-                  Couldn't load your balances.{" "}
+                  Your balances didn't load.{" "}
                   <button type="button" onClick={load} className="text-teal-deep font-medium hover:underline">
                     Retry
                   </button>
                 </p>
               ) : Object.keys(balances).length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing yet. Contribution is where value starts.</p>
+                <p className="text-sm text-muted-foreground">No balances yet.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Object.entries(balances).map(([slug, bal]) => (
@@ -299,9 +302,9 @@ export default function Wallet() {
               </p>
             </div>
             {status === "failed" ? (
-              <p className="text-sm text-muted-foreground">Couldn't load the listings just now.</p>
+              <p className="text-sm text-muted-foreground">The listings didn't load. Reload to try again.</p>
             ) : status === "ready" && (data?.listings ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing is listed for purchase right now.</p>
+              <p className="text-sm text-muted-foreground">No listings yet.</p>
             ) : null}
             <div className="space-y-3">
               {(data?.listings ?? []).map((l: any) => (
@@ -415,6 +418,8 @@ export default function Wallet() {
                 <InfoTip tip="Hypha is the outside network where governance and equity tokens live. This page is a door to it; nothing here moves those holdings." label="What Hypha holdings are" />
               </p>
               <p className="text-xs text-muted-foreground mb-3">
+                {/* Frozen wording: the Hypha card waits on the founder's open
+                    Hypha ruling (Copy Book, R45 thread), so R47 leaves it whole. */}
                 Governance and equity tokens live on your Hypha DHO. This platform
                 shows the door, never moves what's behind it.
               </p>

@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import type { LaunchGroup } from "@shared/launchRequirements";
 import StewardSlatePicker, { type StewardCandidate } from "@/components/governance/StewardSlatePicker";
+import { useBrochurePages } from "@/lib/brochure";
 
 /**
  * THE SECTION EACH REQUIREMENT SITS IN.
@@ -304,6 +305,7 @@ function viewOfFixAt(fixAt: string): JourneyView | null {
 }
 
 export default function JourneyToLaunch() {
+  const brochureOn = useBrochurePages() === true;
   const { user, loading } = useAuth();
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
   const [status, setStatus] = useState<any>(null);
@@ -536,12 +538,14 @@ export default function JourneyToLaunch() {
               Village economics
             </button>
             <ViewTab active={view === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>
-            <Link
-              href="/project-history"
-              className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
-            >
-              <History className="w-3.5 h-3.5" /> Command Centre
-            </Link>
+            {brochureOn && (
+              <Link
+                href="/project-history"
+                className="inline-flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium bg-white/10 text-white hover:bg-white/20"
+              >
+                <History className="w-3.5 h-3.5" /> Command Centre
+              </Link>
+            )}
             {/* Stays after launch (Wave 4, defect 10): the organizing counsel is for running a village, and it opens on that. */}
             <button
               onClick={() => setGuideOpen(true)}

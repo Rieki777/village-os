@@ -161,12 +161,22 @@ interface IgnoredKeys {
  * the proposal, which is always a valid slug by construction.
  */
 function seatIdFor(vendorId: unknown, fallback: string): string {
-  const slug = String(vendorId ?? "")
+  /*
+   * THE SAME SHAPE CODEQL FLAGGED ON THE CIRCLE SLUG BELOW, and this one is
+   * older, which is why it was never called new and never fixed.
+   *
+   * `/^-+|-+$/` on an UNBOUNDED vendor string is a polynomial ReDoS: the
+   * trailing half rescans from every position and a name of many dashes costs
+   * nothing to send. Bounding first and trimming in two linear passes removes
+   * the backtracking rather than hiding it. The final `-+$` is kept below
+   * because by then the string is at most 64 characters.
+   */
+  let slug = String(vendorId ?? "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64)
-    .replace(/-+$/, "");
+    .slice(0, 64);
+  while (slug.startsWith("-")) slug = slug.slice(1);
+  while (slug.endsWith("-")) slug = slug.slice(0, -1);
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug) ? slug : fallback;
 }
 
@@ -470,6 +480,49 @@ export function register(app: Express, deps: Deps): void {
       // flags match what `createDraft` above took: the title off the first
       // proposal, the rationale only when there is one, so a rationale on any
       // other record is reported instead of vanishing.
+      /*
+       * A CIRCLE PROPOSAL BECOMES A CIRCLE, not a seat.
+       *
+       * `circle.proposed` has been an accepted kind since 0140 and every one
+       * of them used to be run through the SEAT reader below, because
+       * `DraftOp` had no way to make a circle. Accepting one produced a seat
+       * named after the circle, silently, and no test covered it. `create_circle`
+       * exists now, so the kind finally means what it says.
+       */
+      if (p.kind === "circle.proposed") {
+        const payload = (edits[p.id] ?? p.payload) as Record<string, unknown>;
+        const rawName = typeof payload.name === "string" ? payload.name.trim() : "";
+        // A slug, because that is what this table's ids are: the migration's own
+        // example is `permaculture-council`. Falling back to the proposal id
+        // keeps a nameless proposal previewable, where it blocks with a reason.
+        /*
+         * TRIMMED WITHOUT A REGEX, and bounded BEFORE the trim.
+         *
+         * The first version ended `.replace(/^-+|-+$/g, "")`, which CodeQL
+         * flagged as a polynomial ReDoS at high severity and was right to: the
+         * `-+$` half has to scan from every position, the input is a name an
+         * outside service supplied, and a name of many dashes is cheap to send.
+         * Slicing first bounds the work whatever arrives, and two loops trim in
+         * one pass each with nothing to backtrack over.
+         */
+        let slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 56);
+        while (slug.startsWith("-")) slug = slug.slice(1);
+        while (slug.endsWith("-")) slug = slug.slice(0, -1);
+        const circleId = slug !== "" ? slug : `circle-${p.id.toLowerCase()}`;
+        const r = await addChange(getPool(), made.id, {
+          op: "create_circle",
+          orgRoleId: `circle:${circleId}`,
+          payload: {
+            name: rawName,
+            purpose: typeof payload.purpose === "string" ? payload.purpose : null,
+            parentCircleId:
+              typeof payload.parentCircleId === "string" && payload.parentCircleId ? payload.parentCircleId : null,
+          },
+        });
+        if (!r.ok) return { ok: false, error: r.error };
+        continue;
+      }
+
       const read = readProposedSeats(edits[p.id] ?? p.payload, circles, {
         readsTitle: i === 0,
         readsRationale: org.length === 1,

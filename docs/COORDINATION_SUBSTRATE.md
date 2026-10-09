@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 Companion docs: `PEERDOM_LESSONS.md` (what a mature org-mapping product teaches),
-`../FIXES_TO_MAKE_2026-08-02_ROLE_MODEL.md` (the first change this argues for),
+the 2026-08-02 role-model fix list (the first change this argues for, an internal note, in the maintainers' private operations repository since 2026-10-02),
 `ARCHITECTURE.md` (the as-built system), `modules/village-map.md` (the map module contract).
 
 This is the argument for what game-amora is for, what it has to become, and the order to build it in.
@@ -86,7 +86,7 @@ Five objects the schema does not have, in dependency order.
 
 ### 2.1 Assignments, so a holder is an account
 
-Covered in full by `FIXES_TO_MAKE_2026-08-02_ROLE_MODEL.md`. Everything else here is blocked on it.
+Covered in full by the 2026-08-02 role-model fix list (an internal note, in the maintainers' private operations repository since 2026-10-02). Everything else here is blocked on it.
 The short version: `org_roles` carries the work (aim, domain, accountabilities, circle, seats), and
 `org_role_assignments` carries the seating (user id or a documented name, a focus string, a start, an
 end, a reason). Seat state is derived from active assignments against seats, never hand-typed.
@@ -611,7 +611,7 @@ least a lunation.
 
 **Phase 1: the model.** `org_roles` and `org_role_assignments`. Holders become accounts, or documented
 names where there is no account. Seat state derived. The map cuts over. The five real circles get rows.
-`FIXES_TO_MAKE_2026-08-02_ROLE_MODEL.md` is this phase in full.
+The 2026-08-02 role-model fix list (private operations repository) is this phase in full.
 
 **Phase 2: the loop.** Seat claim on login. The weekly ping. Derived staleness. The unmatched-query gap
 queue in Admin. Booking and payment flows repair the seats they depend on. Ship most modules off for a

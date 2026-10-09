@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   currentClaims,
+  gateFix,
   gateLabel,
   hashString,
   linesToList,
@@ -222,12 +223,38 @@ describe("nextQuestFor", () => {
   });
 });
 
+describe("gateFix", () => {
+  const stages = [
+    { id: "guest", rule: { type: "account" as const } },
+    { id: "participant", rule: { type: "training-complete" as const } },
+    { id: "member", rule: { type: "membership" as const } },
+    { id: "quest-seeker", rule: { type: "quests" as const, min: 3 } },
+    { id: "co-creator", rule: { type: "granted" as const } },
+    { id: "contributor", rule: { type: "tokens" as const } },
+  ];
+
+  it("names the one step that reaches the stage, in the village's own word for its agreement", () => {
+    expect(gateFix(quest({ minStage: "guest" }), stages)).toBe("Create your account to get there.");
+    expect(gateFix(quest({ minStage: "participant" }), stages)).toBe("Finish community training to get there.");
+    expect(gateFix(quest({ minStage: "member" }), stages, "Love Letter")).toBe("Sign the Love Letter to get there.");
+    expect(gateFix(quest({ minStage: "member" }), stages)).toBe("Sign the membership agreement to get there.");
+    expect(gateFix(quest({ minStage: "quest-seeker" }), stages)).toBe("Complete 3 Quests to get there.");
+    expect(gateFix(quest({ minStage: "co-creator" }), stages)).toBe("The village grants this stage.");
+  });
+
+  it("names nothing it cannot stand behind", () => {
+    expect(gateFix(quest({ minStage: "contributor" }), stages)).toBeNull();
+    expect(gateFix(quest({ minStage: "elder" }), stages)).toBeNull();
+    expect(gateFix(quest({}), stages)).toBeNull();
+  });
+});
+
 describe("gateLabel", () => {
   const stages = [{ id: "member", name: "Member" }];
 
   it("names the stage from config, with the raw id as fallback", () => {
-    expect(gateLabel(quest({ minStage: "member" }), stages)).toBe("Opens at the Member stage");
-    expect(gateLabel(quest({ minStage: "elder" }), stages)).toBe("Opens at the elder stage");
+    expect(gateLabel(quest({ minStage: "member" }), stages)).toBe("Opens at Member");
+    expect(gateLabel(quest({ minStage: "elder" }), stages)).toBe("Opens at elder");
   });
 
   it("prefers the village's own role prose for a role gate", () => {

@@ -1,8 +1,8 @@
 # Game Mechanics Audit — every economic & governance variable across both systems
 
 > Date: 2026-07-31. Produced by a seven-lens parallel sweep over
-> **game-amora** (`C:/Users/taren/Desktop/Amora/game-amora`) and
-> **regen-civics** (`C:/Users/taren/Downloads/regen-civics-clean`):
+> **game-amora** (`<workspace>/game-amora`) and
+> **regen-civics** (`<workspace>/regen-civics`):
 > registry inventory, hardcoded economics, governance structure, and
 > non-registry config planes, per repo. 261 file reads.
 > This is the FIRST-STEP deliverable for the Game Mechanics initiative:

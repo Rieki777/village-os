@@ -7,21 +7,33 @@ what, where, what breaks without it.
 
 ## Provisioning
 
-- Railway project + service (nixpacks), volume mounted at `/app/data` — seeds
-  live in `server/seeds/`, never in `data/` (volume shadows the image).
+- Two self-host paths, both running the same image
+  (`ghcr.io/rieki777/village-os:<version>`; a village pins a release such as
+  `1.2.0`, `:stable` is the newest release, `:edge` is `main` and never for a
+  village). **One machine:** `docker-compose.yml` (app + MySQL 8.4 + a volume
+  at `/app/data`), `node scripts/fork-init.mjs --compose --village-name "..."
+  --admin-email ...`, then `docker compose up -d` (`START_HERE.md`, part A).
+  **A hosting provider** such as Railway: a MySQL service, a service running
+  the image, a volume at `/app/data`, and the values from `.env` pasted into
+  the provider's variables by hand (`docs/PROVISIONING.md`). Seeds live in
+  `server/seeds/`, never in `data/` (the volume shadows the image).
+- Nobody needs collaborator or write access to `Rieki777/village-os`. A
+  village that changes code forks it and deploys its fork; Railway then builds
+  the repository's `Dockerfile` (`railway.toml`: `builder = "DOCKERFILE"`).
 - MySQL service on the private network; `DATABASE_URL` referenced on the app
-  service. Run `pnpm db:migrate`; verify with `pnpm db:status`.
-- GitHub repo connected with auto-deploy on `main` (Railway GitHub App needs
-  repo access; sudo-mode approval required once).
+  service. **The server applies every migration itself at boot, before it
+  listens**; there is no migrate step. `pnpm db:status` only inspects.
+- First run: open `<address>/claim` and give an email, a name and the
+  `ADMIN_PASSWORD` from `.env` (`ADMIN_PASSWORD` row below).
 
 ## Environment variables
 
 | Var | Purpose | Without it |
 |---|---|---|
 | `AUTH_TOKEN_SECRET` | Signs member tokens | **Silently degrades to per-process sessions** — logins die on every restart |
-| `ADMIN_PASSWORD` | Bootstrap-only (S1): each fork sets its own value and uses it once to create its founder via `POST /api/admin/bootstrap`. **That response carries `claimUrl`, and on a fresh install it will also carry `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap — keeping it set is fine (foundation policy, Rye 2026-07-26); deleting it is optional hygiene. | No founder can be created |
+| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, Rye 2026-07-26), and the break-glass account needs it. | No founder can be created |
 | `JOURNEY_PASSWORD` | Legacy Command Centre gate — retired at v3 S2 | — |
-| `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account | No recovery if all admins are demoted |
+| `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
 | `ANTHROPIC_BASE_URL` | (optional, dev/CI) points the assistant at a stub instead of api.anthropic.com | Defaults to the real API |
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
@@ -287,21 +299,29 @@ two from the admin panel and almost never touches the first.
   the brand guard (wrong extension) and had been drifting behind the code for
   25 variables, eight of which are also invisible to grep because the code
   reaches them through a string.
-- **THE NINETEEN BROCHURE PAGES ARE STILL CODE, and this is the standing gap
-  in fork-ability.** `SHOPFRONT` in `check-brand-refs.mjs` lists them; they
-  carry 39 references to the first village and roughly 11,500 lines of its
-  story. The exemption is correct (a village's prose about its own land is
-  supposed to name it) and the consequence is not: replacing them is the one
-  step in provisioning that still needs somebody who can edit TSX, and there
-  is no per-page visibility switch, so a village that has not rewritten them
-  is publishing them. Five pieces have been lifted into Admin already, by the
-  pattern to keep using: the Team page, the Legal and Jurisdiction Notices
-  (22 claims, commit fe3f3e1), the two Love Letter covenant paragraphs
-  (`server/seeds/pages-covenant-seed.json`), the FAQs and the milestones. Each
-  extraction is a section in `client/src/components/admin/contentSections.ts`
-  plus a read through the generic `/api/content/:section` route. Nothing about
-  the remaining pages needs new infrastructure, only the work.
-  `docs/PROVISIONING.md` step 7 now tells founders this before they launch.
+- **THE BROCHURE PAGES ARE STILL CODE, and since 2026-10-02 they are OFF in
+  every new village.** `SHOPFRONT` in `check-brand-refs.mjs` lists them: the
+  first village's own 18 story pages and 1 component. The exemption is correct
+  (a village's prose about its own land is supposed to name it). One
+  `app_config` document, `brochure-pages` (`{"enabled": true}`), read once at
+  boot, decides whether a village serves them; absent means off. With it off
+  their routes answer not-found, the menus, footer, sitemap and mobile shortcut
+  drop the links, and `/` shows the neutral welcome page
+  (`client/src/pages/VillageWelcome.tsx`). Migration
+  `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote it ON in
+  every database that already had members, so Amora keeps its pages.
+  `shared/brochure.ts` says how a fork that rewrote the pages turns them back
+  on. Neutral legal and covenant templates with placeholders are in
+  `server/seeds/templates/`; the first village's own wording is in
+  `server/seeds/amora/`; nothing loads either automatically. Five pieces of
+  that prose were lifted into Admin earlier, by the pattern to keep using: the
+  Team page, the Legal and Jurisdiction Notices (22 claims, commit fe3f3e1),
+  the two Love Letter covenant paragraphs
+  (`server/seeds/amora/pages-covenant-seed.json`), the FAQs and the milestones.
+  Each extraction is a section in
+  `client/src/components/admin/contentSections.ts` plus a read through the
+  generic `/api/content/:section` route. `docs/PROVISIONING.md` step 7 tells
+  founders all of this.
 - **Money & Value Claims is the sixth extraction** (economics lane,
   2026-09-03), and a fork inherits none of it. The `money` content section
   holds the home deposit range, the venture investment ranges on
@@ -311,8 +331,8 @@ two from the admin panel and almost never touches the first.
   default and a blank field PUBLISHES NOTHING: no figure, no zero and no
   placeholder. Write yours in Admin, Content, Money & Value Claims; the shape
   and the readers are in `client/src/lib/moneyClaims.ts`. The first village's
-  own figures are preserved as data in `server/seeds/money-claims-seed.json`,
-  which NOTHING loads at boot: like `server/seeds/brochure-legal-seed.json` it
+  own figures are preserved as data in `server/seeds/amora/money-claims-seed.json`,
+  which NOTHING loads at boot: like `server/seeds/amora/brochure-legal-seed.json` it
   is applied by one authenticated admin PUT to `/api/admin/content/money`,
   because an instance that already has a `content` row never runs the
   seed-on-empty path.
@@ -458,6 +478,19 @@ nothing had ever read the column).
 
 ## Integrations
 
+- Organisational Memory module (`saberra`, the first `connected`-tier listing;
+  `drizzle/0221_a_seat_carries_what_a_module_knows.sql` adds `module_entity_facts`). Ships OFF. A village holds its OWN
+  connection, so there is nothing shared between two villages here and nothing to
+  provision centrally. Two things per village:
+  - **Secret** `sera_api_secret`, set in the admin secrets panel. Environment fallback
+    `SERA_API_SECRET`. Ask the vendor for a READ-SCOPED token; a structure-write token
+    is a separate credential and is not needed to read.
+  - **Config** `apiUrl`, the vendor's address for this village, and `dashboardUrl`,
+    where the link out opens. Both must be https. `apiUrl` is the one the sync sends
+    the village's sealed key to, so it is read from `module_settings` and never from a
+    request.
+  Nothing is fetched until a steward with `intake.moderate` presses sync, and nothing
+  it returns changes the chart until a steward accepts it in the review queue.
 - Hypha (DHO config): set `hypha.org_url` (v3 S13) — every governance
   surface deep-links from this one value; blank hides all Hypha buttons.
   Confirm the four derived links resolve against your own DHO
@@ -489,7 +522,8 @@ nothing had ever read the column).
   holds ONLY uploaded images (`data/uploads/`) plus historical JSON kept as
   an archive. `scripts/import-json-to-mysql.ts` remains the restore/cutover
   tool for that archive format.
-- **Automated:** `.github/workflows/db-backup.yml` dumps the production
+- **Automated:** the backup workflow (template `ops/backup/db-backup.yml`, run
+  from a PRIVATE repository of the village's own; see `docs/RUNBOOK.md`) dumps the production
   schema daily (09:17 UTC), keeps 30 days of artifacts, and — on every run —
   RESTORES the dump into a scratch MySQL and asserts row counts plus an
   exact round-tripped timestamp against a manifest taken at dump time. A red
@@ -546,7 +580,7 @@ anybody asks when something breaks: **who do I pay, and who do I call.**
 
 | | Included | Connected | Managed |
 |---|---|---|---|
-| Billed by | the platform price | the vendor, direct to you | the platform |
+| Billed by | n/a | the vendor, direct to you | the platform |
 | You call | the platform | the vendor for the service, the platform for the wiring | the platform |
 | The credential | none, or your own upstream account | **yours**, set in Admin → Integrations, source and last4 visible | platform-held, env only, you never see it |
 | You have an account with them | n/a | **yes** | no |
@@ -676,6 +710,19 @@ The founder's own words for roads, water and zones live in the
 a line, with the colour and glyph it is drawn in) and `phases` (what a build
 phase is called, keyed by the number the scene stores).
 
+The numbers across the top of the map (the crown bar's chips) live in the
+`map_chips` document in `app_config`, written by `PUT /api/admin/map/chips` from
+the Village settings drawer on the map, and served resolved for each viewer at
+`GET /api/map/chips` (both behind the `map` module's gate). Nothing to provision:
+with no document the bar draws its five example numbers, each one saying
+"example", until a founder points a chip at a source. The sources and what each
+counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
+module (Events, Village Health) is drawn only for a viewer who can open it.
+The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+`gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
+and is drawn only for a member the village has admitted, or an admin: a
+visitor and a signed-in guest get no chip and no number. Nothing to provision.
+
 ### Promises made on the map (0062)
 
 `quests.map_key` and `events.map_key`: varchar(190), nullable, UNIQUE. The name
@@ -718,12 +765,18 @@ hidden and leaves the last strip behind the address bar). Leaving happens two
 ways that run the same code: the artifact's own exit posts `{type:'exit'}`,
 and the browser Back button pops a marker history entry pushed on open.
 
-`GET /api/map/config` returns `{skin, walk, vocabulary}` in one call, and the
-shell pushes it as a single `{type:'config'}` message on `grounds-ready`. The
-walk lives in a `map_walk` document keyed by language (`en` default);
-**an absent or empty walk means the artifact runs its own seed**, which is why
-the shell omits the key instead of sending `[]`. Edit it in Admin, Make This
-Yours, step 5, which can preview a draft on a real map without saving.
+`GET /api/map/config` returns `{skin, walk, welcome, vocabulary, scene}` in one
+call, and the shell pushes it as a single `{type:'config'}` message on
+`grounds-ready`. The walk and the village's own welcome live in a `map_walk`
+document keyed by language (`en` default; the welcome under `welcome`).
+**An absent or empty walk means the map offers no walk at all, and an absent
+welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+the founders' to write). The seed's example walk is offered to nobody. Once the
+fetch has answered, the shell sends both keys, null included; it leaves them
+out only after a failed fetch, which tells the map to keep what it has. Write
+both on the map under Village settings, which can preview a draft on a real
+map without saving. The Journey to Launch asks for them as a recommended item,
+`welcome-walk`, linking to `/map?settings=walk`.
 `GET /api/admin/map/structures` feeds the step picker from addresses the
 village has actually set (0060).
 
@@ -800,26 +853,32 @@ why.
 
 ## Smoke test after provisioning
 
-**Automated (47 checks across every module):**
+**Automated (47 checks across every module), a developer check and not a
+founder's setup step:**
 
 ```bash
-node scripts/smoke-all-modules.mjs --base https://your-village.example --email founder@example.com --password '…'
+node scripts/smoke-all-modules.mjs --base https://scratch-village.example --email founder@example.com --password '…'
 ```
 
-It registers throwaway members and walks the real loop: quest claim →
+It registers throwaway accounts through `/api/auth/register` with no
+invitation, so a village on the default `membership.invite_only` (true)
+answers it with 403. Run it only against a scratch instance with
+`membership.invite_only` set to false, never against a live village. It walks
+the real loop: quest claim →
 submit → consent → gratitude → forum → feed heart → tools → badges (incl.
 the earned engine) → library intake/loan/settle with escrow reconciliation
 → stays pricing/purchase/activation/nightly posting → exchange firewalls,
 pricing, stocking → health regen + sparse-data honesty → automation
 ingestion + the honest 503 without an API key → exit enumeration → the
-command centre → and finishes by asserting per-token conservation. Run it
-against a fresh deployment; every line should be a ✓.
+command centre → and finishes by asserting per-token conservation. Every
+line should be a ✓.
 
 **The loop, by hand:** `/health` → ok, and its `build` reads
 `<label>-<git sha>` — the SHA is stamped at build time, so if it does not
 match the commit you just pushed, the deploy has not landed yet (a marker
 that never changes is the bug this replaced). Then:
-register → claim → submit → consent (admin) → gratitude send → wall shows
+register (with an invitation link from the founder's profile,
+`/register?invite=<token>`) → claim → submit → consent (admin) → gratitude send → wall shows
 it; `/api/season` shows the seeded season; admin Modules tab lists
 everything OFF.
 
@@ -836,8 +895,9 @@ everything OFF.
   community writes its terms).
 - `node scripts/check-brand-refs.mjs` passes with YOUR village's terms
   added to its banned list.
-- The `db-backup` workflow runs green against your `PROD_DATABASE_URL` —
-  it restores the dump and asserts counts, so green means restorable.
+- The `db-backup` workflow, run from a PRIVATE repository, runs green against
+  your `PROD_DATABASE_URL` — it restores the dump and asserts counts, so green
+  means restorable.
 
 ## Extraction preconditions (who does what)
 
@@ -1256,7 +1316,8 @@ the directory. `/health` reports the volume totals.
 
 ## Backup encryption, the uploads volume gap, and after a suspected exposure (2026-08-30)
 
-**What was found.** `.github/workflows/db-backup.yml` dumped the whole
+**What was found.** The backup workflow (then at .github/workflows/db-backup.yml
+in this public repository, now the template `ops/backup/db-backup.yml`) dumped the whole
 production schema daily, gzipped it, and uploaded it as a plain GitHub
 Actions artifact. Actions artifact download follows repository read access.
 It is not a separate permission. On a repository set to public, that made
@@ -1359,7 +1420,7 @@ sentence is still true today.
 **What a GitHub Action genuinely cannot do:** reach into a Railway volume
 directly. There is no API for "give me a tarball of this service's mounted
 volume" that a scheduled Action can call, and this repository already has a
-live data point on the alternative: `AMORA_FOUNDATION_UPGRADE_PLAN.md`
+live data point on the alternative: the foundation upgrade plan (an internal note, in the maintainers' private operations repository since 2026-10-02)
 records a one-time volume pull over `railway ssh`, done by hand, once. The
 Railway CLI's `ssh` subcommand is built for an interactive session, and nothing
 in this codebase or its history demonstrates it running unattended, on a
@@ -1478,9 +1539,10 @@ does not prove a fresh deploy boots from the bytes, because there is no
 scratch Railway volume to redeploy into inside a GitHub Action. Intact and
 complete is the honest ceiling.
 
-**Still needed from a human**, and blocked on them: `BACKUP_EXPORT_TOKEN` has
-to be generated (`openssl rand -hex 32`), set as a Railway environment
-variable on the app service, and mirrored as a GitHub Actions secret. Until
+**Still needed from a human**, and blocked on them: `BACKUP_EXPORT_TOKEN`
+(`scripts/fork-init.mjs` generates it; `openssl rand -hex 32` also works) has
+to be set as an environment variable on the app service and mirrored as a
+GitHub Actions secret in the PRIVATE repository the backup runs from. Until
 both exist the route answers 503 and the workflow step has nothing to call.
 
 ### Secrets rotation checklist, for a steward, after any suspected exposure
@@ -1489,11 +1551,16 @@ Use this any time a backup artifact, a database dump, or a `.env` file may
 have reached someone who should not have had it. It does not require reading
 code. Where a step needs a technical helper, that is called out.
 
-1. **Confirm the repository is private.** GitHub, the repository's own page,
-   Settings, General, scroll to "Danger Zone", "Change repository visibility".
-   If it says Public, change it to Private now, before anything else on this
-   list. This alone stops new artifact downloads; it does not undo one that
-   already happened.
+1. **Confirm the backup runs from a private repository.** The encrypted
+   backup workflow (template `ops/backup/db-backup.yml`) uploads its dumps as
+   workflow artifacts, and on a public repository anybody can download those
+   and read the logs. `Rieki777/village-os` is public on purpose, so the
+   backup belongs in a private repository of the village's own. Check which it
+   is: GitHub, that repository's page, Settings, General, "Danger Zone",
+   "Change repository visibility". If the backup has been running from a
+   public repository, stop it there and move it to a private one now, before
+   anything else on this list. This stops new artifact downloads; it does not
+   undo one that already happened.
 2. **Stripe.** Log in to the Stripe dashboard, Developers, API keys. Roll the
    secret key. Update it wherever this village stores it (Admin,
    Integrations, if set there; otherwise the `STRIPE_SECRET_KEY` Railway env
@@ -1607,12 +1674,16 @@ should not be done.
 
 Storage in this document used to be plaintext JSON, by a written decision on
 2026-07-27 that named its own revisit condition: revisit if backups start
-leaving the deployment's trust boundary. `.github/workflows/db-backup.yml`
+leaving the deployment's trust boundary. The backup workflow (then in this
+repository's .github/workflows folder)
 mysqldumps the whole database and uploads it as a GitHub Actions artifact kept
 for 30 days, and the repository was public while those artifacts were produced,
 so the condition had already fired. The repository was made private on
-2026-08-30, which narrows who can fetch the artifacts that already exist and
-does not un-produce them. A hosted fleet fires the condition a second time:
+2026-08-30, which narrowed who could fetch the artifacts that already existed
+and did not un-produce them. It is public again now, on purpose, which is why
+that workflow must run only from a private repository: on a public one,
+anybody can download its artifacts and read its logs. A hosted fleet fires the
+condition a second time:
 once ReGen holds another village's Stripe key, "the operator can read the
 database anyway" stops being an answer, because the operator is no longer the
 credential's owner.
@@ -1866,3 +1937,80 @@ season sees the blocks in canvas order and loses nothing.
   before this existed reads as "not named yet" until you do this, so a running village sees one new
   blocking row and nothing else changes. With the default adopted and the redemption module on, the
   redemption form tells a member what redeeming gives up before they ask.
+
+## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
+
+Admin, Integrations seals every key it saves with `VILLAGE_SECRETS_KEY` (the
+section above says what it protects). `scripts/fork-init.mjs` writes one into a
+fork's `.env` as bare hex, so a key that goes wrong is nearly always a key typed
+or pasted by hand into a host's variable screen. That is where this section
+starts.
+
+### 1. Make the key
+
+- Mac or Linux: `openssl rand -hex 32`
+- Windows PowerShell, which has no openssl:
+  `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+Either prints one line of exactly 64 characters, using only 0-9 and a-f.
+
+### 2. Save it in a password manager first
+
+Before it goes anywhere else. Losing it, or changing it later, makes every key
+saved in Admin, Integrations unreadable, and each one has to be typed again.
+The database backup does not bring it back.
+
+### 3. Set it on Railway
+
+1. Open the project.
+2. Open the **web service**: the one serving the village's address. Never the
+   database service. A variable set on the database service never reaches the
+   server.
+3. Open **Variables**, then **New Variable**.
+4. The name is `VILLAGE_SECRETS_KEY`. The value is ONLY the 64 characters: no
+   quotes, no spaces, and no `VILLAGE_SECRETS_KEY=` in front of it.
+5. If Railway shows staged changes, press **Deploy**. A staged variable reaches
+   nothing until a deploy runs.
+6. Wait for the new deployment to read **Active**. The previous one keeps
+   answering until then, and it has no key.
+7. Open Admin, Integrations. The amber banner at the top is gone once the key
+   is usable, and every Save works. Save your keys.
+
+### 4. On any other host
+
+Set the same environment variable for the process that runs the server, and
+restart it.
+
+### When it is set and Admin, Integrations still refuses
+
+Since 2026-10-02 every message about the key names what is wrong with it, and
+never any part of its value, so it is safe to paste into a support thread. Read
+it in any of three places:
+
+- the deploy log, on the lines starting `[identity]` and `[secrets]`;
+- the amber banner at the top of Admin, Integrations;
+- the Journey to Launch row "Set VILLAGE_SECRETS_KEY so Integrations can save
+  keys".
+
+| The sentence says | What happened | What to do |
+|---|---|---|
+| `VILLAGE_SECRETS_KEY is not set, or is empty, in the environment this server started with.` | The server answering requests never received it. The variable is on another service (the database, or a second web service), the deploy carrying it has not gone Active, or the value was saved blank. | Put it on the web service, press Deploy if changes are staged, and wait for Active. |
+| `... is set, but it is 66 characters with quotes around it.` | Quotes were pasted with the value. | Remove the quotes. |
+| `... with the name VILLAGE_SECRETS_KEY= in front of the key.` | The whole `.env` line went into the value box. | Keep only the 64 characters after the `=`. |
+| `... it is 44 characters in base64.` | It was made with `openssl rand -base64 32`. | Make a new one with `openssl rand -hex 32`, and save that one in the password manager. |
+| `... it is 63 characters.` (or any length other than 64) | A character was lost or added while copying. | Copy the whole key again from the password manager. |
+| `... with a space or line break inside it` | The value wrapped while being copied. | Paste it again as one line. |
+| `... with 1 character that is not 0-9 or a-f` | A stray character, often a lookalike picked up from a chat or a document. | Copy it again from the password manager. |
+
+Every sentence ends with the rule itself: exactly 64 characters, using only 0-9
+and a-f, with nothing else in the value.
+
+A key the server refused never sealed anything, so correcting it costs nothing:
+fix the value, deploy, and save the keys. The exception is a variable that
+WORKED and then changed. Keys saved under the old value open only with the old
+value, so put the exact old value back from the password manager; a new key
+cannot open them.
+
+`MEMBER_SECRETS_KEY` takes the same shape and is set the same way, as its own
+variable with its own value. When members' agents miss deliveries for want of
+it, Admin, What's Failing names what is wrong with it in the same words.

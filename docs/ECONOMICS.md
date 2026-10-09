@@ -2444,7 +2444,7 @@ this class at all.
    build, not a handful of sites.
 3. **What proves this engine.** Nothing short of one real cycle in a real village,
    with several members acting at once, separates "proven by its tests" from
-   "proven". See `PLAN_TO_A.md`.
+   "proven". See the plan to A (an internal note, in the maintainers' private operations repository since 2026-10-02).
 4. **What a village owes a departing member.** Section 14. **Narrower than it was,
    and still open.** R4's ten levers decide how a settlement EXECUTES, and a
    village votes them, so the shape of a departure is now the village's own. What

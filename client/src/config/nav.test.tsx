@@ -19,6 +19,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { Router } from "wouter";
 
 const authMock = vi.fn();
+/**
+ * Whether this village serves the brochure pages (shared/brochure.ts). The
+ * Command Centre is one of them, so every case below runs as the first
+ * village, which serves them, except the last, which is a new village.
+ */
+const brochure = { on: true };
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => authMock(),
@@ -30,6 +36,7 @@ vi.mock("@/lib/gameApi", () => ({
   useGameConfig: () => ({
     project: { name: "Willowbrook", tagline: "", memberName: "", location: "", adminPath: "/admin" },
     images: {} as Record<string, string>,
+    brochurePages: brochure.on,
   }),
   altOr: (value: string | undefined, fallback: string) =>
     typeof value === "string" ? value : fallback,
@@ -41,6 +48,7 @@ vi.mock("@/components/mobile/MobileTabBar", () => ({
   isBareRoute: () => false,
 }));
 vi.mock("@/components/mobile/MobileFab", () => ({ default: () => null }));
+vi.mock("@/components/NextStepTrail", () => ({ default: () => null }));
 
 import Layout from "@/components/Layout";
 
@@ -73,6 +81,7 @@ function linksTo(href: string) {
 describe("the Launch Plan entry in the header", () => {
   beforeEach(() => {
     authMock.mockReset();
+    brochure.on = true;
   });
 
   it("is there for a signed-in member holding no admin role", () => {
@@ -108,6 +117,17 @@ describe("the Launch Plan entry in the header", () => {
     openAbout(null);
 
     expect(linksTo(LAUNCH_PLAN)).toHaveLength(0);
+    expect(linksTo(COMMAND_CENTRE)).toHaveLength(0);
+  });
+
+  it("keeps the Launch Plan for a founder of a new village, which has no Command Centre to offer", () => {
+    // The Command Centre is the first village's build history, a brochure
+    // page. A village that does not serve those has none, so its founder
+    // keeps the Launch Plan and meets no door onto a missing page.
+    brochure.on = false;
+    openAbout({ id: "u-founder", name: "Fen Oak", role: "founder" });
+
+    expect(linksTo(LAUNCH_PLAN).length).toBeGreaterThan(0);
     expect(linksTo(COMMAND_CENTRE)).toHaveLength(0);
   });
 });

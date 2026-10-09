@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 24 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 26 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -37,11 +37,11 @@ The four core modules sit outside that. They are always public and the lifecycle
 
 | Tier | What it means |
 | --- | --- |
-| `included` | the platform bills (it is in the platform price) and supports it end to end. Credential is none, or the village's own upstream account where the village is the merchant of record. No pill in the catalog: included is the absence of a badge, the same way everything that is not core is silent today. |
+| `included` | the platform supports it end to end. Credential is none, or the village's own upstream account where the village is the merchant of record. No pill in the catalog: included is the absence of a badge, the same way everything that is not core is silent today. |
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 24 at `included`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 25 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -50,16 +50,16 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Data class | Modules |
 | --- | --- |
 | `none` | none |
-| `village-content` | five: `resources`, `health`, `network`, `crowdpool`, `hypha` |
-| `member-pii` | nineteen: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `governance` |
+| `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
+| `member-pii` | twenty: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `governance` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
-| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha` |
+| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `saberra` |
 
 ### The shelves
 
@@ -68,7 +68,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 4 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
-| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 6 |
+| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
 | Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 6 |
 
 ## The whole library at a glance
@@ -97,10 +97,12 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Tools Hub | `tools` | Coordinate | no | included | member-pii | optional | [tools-hub.md](modules/tools-hub.md) |
 | Village Calendar | `events` | Coordinate | no | included | member-pii | required | [events.md](modules/events.md) |
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
+| Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
+| Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 24 modules, four of them core. Eighteen carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 26 modules, four of them core. Twenty carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -463,6 +465,25 @@ The village's vital signs: per-lunation snapshots frozen at each cycle close, th
 | API prefixes | `/api/health` |
 | Contract doc | [health-dashboard.md](modules/health-dashboard.md) |
 
+### Journal
+
+A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.
+
+| Fact | Value |
+| --- | --- |
+| Id | `journal` |
+| Shelf | Know and decide (`know-and-decide`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `gratitude` |
+| Capabilities it adds | none |
+| Variable keys it owns | `journal.pulse_floor` |
+| API prefixes | `/api/journal` |
+| Contract doc | [journal.md](modules/journal.md) |
+
 ### Governance
 
 The village decides on-site: staged proposals go to weighted ballots with frozen electorates, votes stay changeable until a human closes with a stated outcome, and passed mechanics changes apply through the one amendment ledger. Off keeps the shipped Hypha loop exactly as it is.
@@ -502,6 +523,27 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
+
+### Organisational Memory
+
+An outside service reads your meetings and records, and suggests changes to your circles and roles. Every suggestion is reviewed before anything changes.
+
+| Fact | Value |
+| --- | --- |
+| Id | `saberra` |
+| Shelf | Know and decide (`know-and-decide`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `connected` |
+| Data it holds | `village-content` |
+| Standing it up | `required`, needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. |
+| Requires | nothing |
+| Recommends | nothing |
+| Capabilities it adds | none |
+| Variable keys it owns | none |
+| API prefixes | `/api/saberra` |
+| Contract doc | [organisational-memory.md](modules/organisational-memory.md) |
+| Config it seeds | `apiUrl`, `dashboardUrl` |
+| Counterparty | Saberra LLC, https://saberra.com, support hello@saberra.com |
 
 ## Connect
 
@@ -629,12 +671,13 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 | `crowdpool` | `map` |
 | `events` | `map` |
 | `introductions` | `badges`, `map` |
+| `journal` | `gratitude` |
 | `governance` | `forum` |
 | `hypha` | `governance`, `tools` |
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 24 modules own 94 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 26 modules own 95 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -676,7 +719,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 24,
+  "moduleCount": 26,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1249,6 +1292,28 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "contractDoc": null
     },
     {
+      "id": "journal",
+      "name": "Journal",
+      "description": "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "know-and-decide",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "gratitude"
+      ],
+      "capabilities": [],
+      "variableKeys": [
+        "journal.pulse_floor"
+      ],
+      "apiPrefixes": [
+        "/api/journal"
+      ],
+      "contractDoc": "docs/modules/journal.md"
+    },
+    {
       "id": "governance",
       "name": "Governance",
       "description": "The village decides on-site: staged proposals go to weighted ballots with frozen electorates, votes stay changeable until a human closes with a stated outcome, and passed mechanics changes apply through the one amendment ledger. Off keeps the shipped Hypha loop exactly as it is.",
@@ -1306,6 +1371,24 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/admin/hypha"
       ],
       "contractDoc": "docs/modules/hypha.md"
+    },
+    {
+      "id": "saberra",
+      "name": "Organisational Memory",
+      "description": "An outside service reads your meetings and records, and suggests changes to your circles and roles. Every suggestion is reviewed before anything changes.",
+      "core": false,
+      "tier": "connected",
+      "dataClass": "village-content",
+      "group": "know-and-decide",
+      "setup": "required",
+      "requires": [],
+      "recommends": [],
+      "capabilities": [],
+      "variableKeys": [],
+      "apiPrefixes": [
+        "/api/saberra"
+      ],
+      "contractDoc": "docs/modules/organisational-memory.md"
     }
   ]
 }

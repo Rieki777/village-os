@@ -17,7 +17,7 @@ numbers as fact and ONE of them says so:
     :4587  Housing module footer  "sample until the Stays door feeds it live"
                                   LABELLED, and the only one
 
-The contract at C:/Users/taren/Desktop/Amora/HOUSING_AVAILABILITY_CONTRACT.md
+The contract at <workspace>/HOUSING_AVAILABILITY_CONTRACT.md
 counted three surfaces. homeSheet at :2865 is a fourth: it renders `lot.sold`
 into the `.route` line of the sheet whose primary action asks a visitor to
 request a home. It is the most directive of the four and it carried no label
