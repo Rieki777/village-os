@@ -778,6 +778,58 @@ a page that 404s. Putting something on the calendar needs `event.manage`,
 which is role-granted and never reached by stage; answering one needs
 `event.rsvp`, which any account has. No seeds, no env vars.
 
+### Village Comms setup (0228 to 0230)
+
+Every email the village sends goes through one post office and is recorded
+before it goes; the automations (gathering reminders, path emails, guest
+RSVPs, time-vote emails, letters) live in the `comms` module, which ships off.
+The contract is `docs/modules/comms.md`. The steps a founder takes, all in
+Admin, Comms, Settings, with no Railway access and no env var:
+
+1. **Paste the Resend API key** (item 1). Saved through the secrets store as
+   `resend_api_key`, so it needs `VILLAGE_SECRETS_KEY`; `RESEND_API_KEY` in
+   the environment works until then, and an admin-typed key beats it.
+2. **Add the sending domain** (item 2) and copy the SPF and DKIM records it
+   shows into the domain's DNS, then press Check. A subdomain such as
+   `mail.your-domain.example.org` keeps the village's sending reputation apart
+   from the domain people browse; `docs/PROVISIONING.md` step 4 has the
+   records. Only the person who controls DNS can add them.
+3. **Set the sender name and address** (item 3). The address must be on the
+   verified domain, or it is refused at the door.
+4. **Connect delivery reports** (item 4). One button creates the webhook at
+   Resend, pointing at `https://<your-domain>/api/comms/webhooks/resend`, and
+   stores its signing secret as `resend_webhook_secret`. A key that can only
+   send gets the manual steps instead: make the webhook at resend.com with the
+   events `email.sent`, `email.delivered`, `email.delivery_delayed`,
+   `email.bounced`, `email.complained`, `email.failed` and `email.suppressed`,
+   then paste its `whsec_` secret into the same item. `RESEND_WEBHOOK_SECRET`
+   in the environment also works. Without it, bounces and complaints go
+   unrecorded and a dead address keeps being written to.
+5. **Type the postal address** for every email's footer (item 5).
+6. **Send yourself a test** (item 13). It counts once Resend reports it
+   delivered, which needs step 4.
+7. Optional, any time: who writes back for each path, the tick-box words on
+   public forms, the two recap questions, the rehearsal inbox, who holds
+   `comms.manage`, and the investor words review (until it is set, the
+   investor journey sends only its welcome and its hand-off).
+8. **Turn the module to `preview`** (Admin, Modules) to rehearse: every
+   gathering, path and letter email goes to the rehearsal inbox, marked with
+   who it would have reached. Then `members`, or `public` to let guests with
+   no account say they are coming. Each journey is then turned on by itself on
+   the Journeys screen.
+
+Pause all, on the same screen, holds every email except essential mail and
+member notices, which run whatever the module says. The dials (quiet hours,
+the daily cap, reminder times, retention and the rest) are game variables in
+the category "Email and reminders".
+
+**Tests and development:** `RESEND_API_BASE` points the post office at the
+fake provider in `server/testkit/fakeResend.ts`; every comms e2e suite sets it,
+so no test sends a real email. It is honoured only for an https or loopback
+address. Drive time in a test with `POST /api/admin/comms/run` and
+`{"job": "drain" | "journeys" | "polls"}`, because the e2e suites run with
+`SCHEDULER_ENABLED=0`.
+
 ### Selling library credits (`library.creditSaleEnabled`) — opt-in, off forever by default
 
 By default a library credit is backed by a physical item on the shelf and
