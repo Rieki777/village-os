@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ATTENDANCE_MODES, CALENDAR_LAYERS, EVENT_STATUSES, type CalendarItem, type Recurrence } from "@shared/gatherings";
+import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
 
 /**
  * Admin, The Game, Calendar: the village calendar's own surface (0059,
@@ -681,6 +682,9 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                 </div>
               </div>
             )}
+
+            {/* Village Comms: this gathering's reminders, guests and host. */}
+            {(g.kind === "gathering" || g.kind === "festival") && <GatheringEmailSettings eventId={g.id} token={password} manages />}
           </div>
         ))}
       </div>
