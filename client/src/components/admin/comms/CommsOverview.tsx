@@ -52,6 +52,7 @@ const JOB_LABEL: Record<string, string> = {
   drain: "Send what is due now",
   journeys: "Move the journeys forward",
   polls: "Settle the time votes",
+  letters: "Send the letters that are due",
 };
 
 function journeyName(key: string): string {

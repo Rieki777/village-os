@@ -119,10 +119,11 @@ describe("Comms Overview", () => {
   });
 
   it("names every job the server offers, including one it adds later", async () => {
-    answer = overview({ jobs: ["drain", "journeys", "polls", "letters"] });
+    answer = overview({ jobs: ["drain", "journeys", "polls", "letters", "archive"] });
     render(<CommsOverview password="secret" />);
     expect(await screen.findByRole("button", { name: "Move the journeys forward" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Settle the time votes" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "letters" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send the letters that are due" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "archive" })).toBeTruthy();
   });
 });
