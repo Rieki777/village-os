@@ -46,6 +46,14 @@ interface ListAnswer {
   page: number;
   pageSize: number;
   origins: Array<{ origin: string; count: number }>;
+  /** Months an email and its words are kept, as the village is set now; null when unknown. */
+  retentionMonths?: number | null;
+}
+
+/** The keeping rule in one sentence, with the number when the server sent it. */
+function keptFor(months: number | null | undefined): string {
+  const how = months ? `for ${months} month${months === 1 ? "" : "s"}, as the village is set now (Comms Settings, Dials)` : "for as long as the village's email record setting says";
+  return `An email and its words are kept ${how}. The words of essential mail are never kept.`;
 }
 
 interface Detail extends MessageRow {
@@ -267,8 +275,7 @@ export default function CommsSentMail({ password }: { password: string }) {
             <h2 className="text-xl font-semibold text-gray-900">Sent mail</h2>
             <p className="mt-2 text-sm text-gray-600">
               Every email the village writes is recorded here before it goes: password links, form replies, notices,
-              reminders and letters. Each one says what became of it. An email and its words are kept for as long as
-              the village's email record setting says, and the words of essential mail are never kept.
+              reminders and letters. Each one says what became of it. {keptFor(list?.retentionMonths)}
             </p>
           </div>
           <button type="button" onClick={() => void load()} disabled={loading} className={button}>

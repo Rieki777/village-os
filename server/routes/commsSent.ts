@@ -36,6 +36,7 @@
 import type { Express, Request, Response } from "express";
 import { EMAIL_KINDS, MESSAGE_STATUSES, type EmailKind, type MessageStatus } from "../../shared/comms/kinds";
 import type { AppDeps } from "../lib/appDeps";
+import { commsRetentionMonths } from "../lib/capabilityConsequence";
 import {
   cancelQueued,
   listMessages,
@@ -112,6 +113,8 @@ export function register(app: Express, deps: Deps): void {
       page,
       pageSize: SENT_MAIL_PAGE,
       origins,
+      // How long an email and its words are kept, as the village is set now (Rye, 2026-10-09: "show it").
+      retentionMonths: commsRetentionMonths(),
       filters: {
         status: filters.status,
         kind: filters.kind,

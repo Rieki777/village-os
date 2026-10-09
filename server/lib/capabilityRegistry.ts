@@ -35,7 +35,7 @@
  * renamed or deleted route breaks this file loudly rather than leaving a
  * village reading a sentence about a door that is no longer there.
  */
-import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 import {
   ALL_CAPABILITIES,
   capabilityLabel,
@@ -334,7 +334,7 @@ export function powersForReading(
     capability: p.capability,
     title: p.title,
     surface: p.surface,
-    consequence: CAPABILITY_CONSEQUENCE[p.capability],
+    consequence: liveConsequence(p.capability),
     label: capabilityLabel(p.capability),
     heldBy: holders.get(p.capability) ?? null,
   }));
