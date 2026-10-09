@@ -125,9 +125,17 @@ function stubPool(answer: (table: string, sql: string) => any[] = () => []) {
   return { queries, pool: { query, getConnection: async () => conn } as any };
 }
 
+/**
+ * The people, as `authedUser` hands back their member records. Ana and Ben
+ * were admitted; the guest and the participant stand below Member; the
+ * founder is an admin with no admission on record.
+ */
 const PEOPLE: Record<string, any> = {
-  "m-ana": { id: "m-ana", name: "Ana Reyes", handle: "ana" },
-  "m-ben": { id: "m-ben", name: "Ben Ortiz", handle: "ben" },
+  "m-ana": { id: "m-ana", name: "Ana Reyes", handle: "ana", membershipGranted: true },
+  "m-ben": { id: "m-ben", name: "Ben Ortiz", handle: "ben", membershipGranted: true },
+  "m-placed": { id: "m-placed", name: "Pia Placed", handle: "pia", stageGranted: "member" },
+  "m-guest": { id: "m-guest", name: "Gil Guest", handle: "gil" },
+  "m-participant": { id: "m-participant", name: "Pat Trained", handle: "pat", stageGranted: "participant" },
   "m-founder": { id: "m-founder", name: "Founding Admin", role: "admin" },
 };
 /** Each member's number in the stub's `live_session_members`. */
@@ -217,17 +225,17 @@ function roomPool(opts: {
  * ========================================================================== */
 
 describe("who may reach a live session", () => {
-  it("registers exactly the contract's doors, behind the module gate", () => {
+  it("registers exactly the contract's doors, behind the module gate and the members-only gate", () => {
     const { app, handlers, mounts } = collect();
     register(app, deps(stubPool().pool, () => "m-ana"));
     expect([...handlers.keys()].sort()).toEqual([...DOORS].sort());
-    expect(mounts).toEqual(["/api/sessions"]);
+    expect(mounts).toEqual(["/api/sessions", "/api/sessions"]);
   });
 
   it("mounts the module gate itself: a village with the module off hides every door", async () => {
     const { app, gates } = collect();
     register(app, deps(stubPool().pool, () => "m-ana"));
-    expect(gates).toHaveLength(1);
+    expect(gates).toHaveLength(2);
     // No module settings are loaded in this file, so the stored lifecycle is "off".
     const { res, out } = makeRes();
     let passed = false;
@@ -236,6 +244,46 @@ describe("who may reach a live session", () => {
     });
     expect(passed, "an off module must not reach a door").toBe(false);
     expect(out).toMatchObject({ status: 404, body: { error: "module_disabled", module: "sessions" } });
+  });
+
+  describe("the members-only gate, mounted right after the module gate", () => {
+    /** One pass through the second gate, as `who`. */
+    const through = async (who: string | null) => {
+      const { app, gates } = collect();
+      const { pool, queries } = stubPool();
+      register(app, deps(pool, () => who));
+      const { res, out } = makeRes();
+      let passed = false;
+      await gates[1]({ headers: {} }, res, () => {
+        passed = true;
+      });
+      return { passed, out, queries };
+    };
+
+    it("refuses a guest, an account the village has not admitted, with one sentence and no database", async () => {
+      for (const who of ["m-guest", "m-participant"]) {
+        const { passed, out, queries } = await through(who);
+        expect(passed, who).toBe(false);
+        expect(out).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.membersOnly } });
+        expect(queries).toEqual([]);
+      }
+    });
+
+    it("lets a member through, admitted by vouches or placed on the ladder by hand", async () => {
+      for (const who of ["m-ana", "m-placed"]) {
+        const { passed, out } = await through(who);
+        expect(passed, who).toBe(true);
+        expect(out.body).toBeUndefined();
+      }
+    });
+
+    it("lets an admin through, admitted or not", async () => {
+      expect((await through("m-founder")).passed).toBe(true);
+    });
+
+    it("leaves a stranger to the door, which answers 401 itself", async () => {
+      expect((await through(null)).passed).toBe(true);
+    });
   });
 
   it("registers no admin door and no door that names a member", () => {
@@ -441,7 +489,7 @@ describe("the room's view", () => {
     expect(JSON.stringify(seen.body)).not.toContain("a quiet morning");
   });
 
-  it("hands feedback on the facilitation to the facilitator unsigned, and to nobody else in the room", async () => {
+  it("hands feedback on the facilitation to the facilitator unsigned, once closed, and to nobody else in the room", async () => {
     const people = [
       { member_no: 1, joined_at: new Date(T0), last_seen_at: new Date(T0), arrival_score: null, arrival_wish: null },
       { member_no: 2, joined_at: new Date(T0), last_seen_at: new Date(T0), arrival_score: null, arrival_wish: null },
@@ -449,16 +497,27 @@ describe("the room's view", () => {
     // Even if a row arrived carrying its member, the wire must not.
     const facilitation = [{ value: "mixed", text: "Keep the breath, shorten the reports", member_no: 2 }];
     const responses = [{ target: "facilitation", member_no: 2, value: "mixed", text: "Keep the breath, shorten the reports" }];
+    const closed = { status: "closed", closed_at: new Date(T0) };
+
+    // While the room is open, an answer arriving on the next poll would say who sent it.
+    const open = collect();
+    const openPool = roomPool({ me: "m-ana", people, facilitation, responses });
+    register(open.app, deps(openPool.pool, () => "m-ana"));
+    const live = await call(open.handlers, "GET /api/sessions/:id", { params: { id: "12" } });
+    expect(live.body.facilitation).toBeNull();
+    expect(JSON.stringify(live.body)).not.toContain("shorten the reports");
+    expect(openPool.queries.some((q) => q.sql.includes("`target` = 'facilitation'")), "an open room never reads the feedback").toBe(false);
 
     const facilitator = collect();
-    register(facilitator.app, deps(roomPool({ me: "m-ana", people, facilitation, responses }).pool, () => "m-ana"));
+    register(facilitator.app, deps(roomPool({ me: "m-ana", session: closed, people, facilitation, responses }).pool, () => "m-ana"));
     const mine = await call(facilitator.handlers, "GET /api/sessions/:id", { params: { id: "12" } });
     expect(mine.body.facilitation).toEqual([{ value: "mixed", text: "Keep the breath, shorten the reports" }]);
     expect(mine.body.responses).toEqual([]);
 
     const member = collect();
-    register(member.app, deps(roomPool({ me: "m-ben", people, facilitation, responses }).pool, () => "m-ben"));
+    register(member.app, deps(roomPool({ me: "m-ben", session: closed, people, facilitation, responses }).pool, () => "m-ben"));
     const theirs = await call(member.handlers, "GET /api/sessions/:id", { params: { id: "12" } });
+    expect(theirs.status).toBe(200);
     expect(theirs.body.facilitation).toBeNull();
     expect(JSON.stringify(theirs.body)).not.toContain("shorten the reports");
   });

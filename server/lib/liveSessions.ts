@@ -13,14 +13,18 @@
  *
  * ── WHO MAY DO WHAT ──────────────────────────────────────────────────────
  *
- * Seeing: an open session is seen by any signed-in member, and anybody may
- * join it. A closed one is seen by the people who were in it and by admins.
+ * Seeing: an open session is seen by any admitted member, and any of them may
+ * join it (a signed-in guest is refused at the route's members-only gate). A
+ * closed one is seen by the people who were in it and by admins.
  *
  * Writing: every write needs the session open and the writer in it. On top
  * of that (`rolesIn`):
  *   runs   the facilitator, or an admin: moves the room (act), names the
  *          hosts, reorders the agenda, sets an item's status, closes, and
  *          marks a proposal decided once its consent round has consented.
+ *          A decided proposal is final: its words, its status and the row
+ *          itself stay as they are, and a proposal whose words change while
+ *          open starts its consent round again.
  *   notes  runs, or the secretary: edits any item's words, and any entry's
  *          text, status, seat and date.
  *   author the person who wrote an entry edits or deletes it; the person who
@@ -39,8 +43,19 @@
  * Arrival numbers and words are seen only by the people in an open room,
  * and the close erases them after storing the spread. Feedback on the
  * facilitation is read with no person attached (the repo's
- * `facilitationRows` has no column for one), and only by the facilitator and
- * admins. Nothing here calls `recordEvent`.
+ * `facilitationRows` has no column for one), only by the facilitator and
+ * admins, and only once the session has closed, so it arrives as one sorted
+ * batch and never answer by answer while the room can still see who pressed
+ * send. Nothing here calls `recordEvent`.
+ *
+ * ── A ROOM NOBODY CLOSES ─────────────────────────────────────────────────
+ *
+ * The arrival round is erased only by a close, so a room left open would
+ * keep it for anybody who joins later. `closeStaleRooms` closes an open room
+ * nobody has been seen in for `staleAfterMs` (its length plus two hours, and
+ * never less than six), the same way a facilitator would: it parks the
+ * actions nobody holds and runs the close. The routes run it lazily, as the
+ * list is read and before a room is read or joined.
  */
 import { createHash } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
@@ -680,6 +695,10 @@ export async function addItem(pool: Pool, sessionId: number, actor: Actor, raw: 
       const from = await repo.sessionRow(conn, fromSessionId);
       const prev = from.length ? mapSession(from[0]) : null;
       if (!prev || prev.status !== "closed" || !s.circleId || prev.circleId !== s.circleId) return refuse(400, R.fromSession);
+      // One copy of each thing brought over. The session row is held, so two
+      // taps at once are decided one after the other, against the same list.
+      const key = title.toLowerCase();
+      if (items.some((i) => i.fromSessionId === fromSessionId && i.title.toLowerCase() === key)) return refuse(409, R.alreadyOnAgenda);
     }
     const position = items.reduce((m, i) => Math.max(m, i.position), 0) + 1;
     const id = await repo.insertItem(conn, { sessionId, title, aim, minutes, position, addedByNo: actor.no, fromSessionId, now });
@@ -794,16 +813,20 @@ export async function actInRoom(
     if (!roles.runs) return refuse(403, R.facilitatorOnly);
     const nowMs = now.getTime();
     let move: SessionAction = action;
-    if (action.type === "item") {
+    // Going on to the actions or the close leaves the items behind, so the
+    // item on screen stops there, exactly as wrapping it up would stop it.
+    const leavesItems = action.type === "go" && (action.stage === "actions" || action.stage === "close");
+    if (action.type === "item" || leavesItems) {
+      const chosenId = action.type === "item" ? action.itemId : null;
       const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
-      if (action.itemId != null && !items.some((i) => i.id === action.itemId)) return refuse(404, R.itemUnknown);
+      if (chosenId != null && !items.some((i) => i.id === chosenId)) return refuse(404, R.itemUnknown);
       for (const item of items) {
         const isActive = item.status === "active" || s.state.activeItemId === item.id;
-        if (isActive && item.id !== action.itemId) {
+        if (isActive && item.id !== chosenId) {
           await repo.finishItemClock(conn, item.id, "done", usedAfter(item, s.state, nowMs), now);
         }
       }
-      const chosen = items.find((i) => i.id === action.itemId);
+      const chosen = items.find((i) => i.id === chosenId);
       if (chosen && chosen.status !== "active") await repo.startItemClock(conn, chosen.id, now);
     }
     if (action.type === "round") {
@@ -811,7 +834,8 @@ export async function actInRoom(
       const inRoomNos = new Set((await repo.peopleRows(conn, sessionId)).map((r) => Number(r.member_no)));
       move = { ...action, order: action.order.filter((n) => inRoomNos.has(n)) };
     }
-    const state = applySessionAction(s.state, move, nowMs);
+    const from = leavesItems ? applySessionAction(s.state, { type: "item", itemId: null }, nowMs) : s.state;
+    const state = applySessionAction(from, move, nowMs);
     await repo.writeState(conn, sessionId, JSON.stringify(state));
     return done({ state });
   });
@@ -901,13 +925,13 @@ export async function addEntry(pool: Pool, sessionId: number, actor: Actor, raw:
 /** The consent round on one proposal, counted over the people here now. */
 async function decisionTally(conn: PoolConnection, sessionId: number, entryId: number, now: number): Promise<ConsentTally> {
   const people = (await repo.peopleRows(conn, sessionId)).map(mapPerson);
-  const present = people.filter((p) => isPresentAt(p, now)).length;
+  const here = people.filter((p) => isPresentAt(p, now)).map((p) => p.no);
   const target = `decision:${entryId}`;
-  const values = (await repo.responseRows(conn, sessionId))
+  const answers = (await repo.responseRows(conn, sessionId))
     .map(mapResponse)
     .filter((r) => r.target === target && isConsentValue(r.value))
-    .map((r) => r.value as ConsentValue);
-  return consentTally(values, present);
+    .map((r) => ({ who: r.no, value: r.value as ConsentValue }));
+  return consentTally(answers, here);
 }
 
 export async function patchEntry(
@@ -958,8 +982,13 @@ export async function patchEntry(
         next.claimedAt = null;
       }
     }
+    // A proposal decided by consent is final. New words on an open one need a
+    // new consent round, so the answers given to the old words are cleared.
+    const decided = e.kind === "decision" && e.status === "done";
+    const newWords = text !== undefined && text !== e.text;
     if (text !== undefined) {
       if (!may.text) return refuse(403, R.notYours);
+      if (decided && newWords) return refuse(409, R.decisionFinal);
       next.text = text;
     }
     if (seat.value !== undefined) {
@@ -972,13 +1001,17 @@ export async function patchEntry(
     }
     if (status !== undefined && status !== e.status) {
       if (!may.status) return refuse(403, R.notYours);
+      // Into "decided" or out of it is the facilitator's move, and out of it is never made.
+      if (e.kind === "decision" && (status === "done" || decided) && !roles.runs) return refuse(403, R.facilitatorOnly);
+      if (decided) return refuse(409, R.decisionFinal);
       if (e.kind === "decision" && status === "done") {
-        if (!roles.runs) return refuse(403, R.facilitatorOnly);
-        if (!(await decisionTally(conn, sessionId, e.id, now.getTime())).consented) return refuse(409, R.decisionNotConsented);
+        // Words changed in this same request have had no round at all.
+        if (newWords || !(await decisionTally(conn, sessionId, e.id, now.getTime())).consented) return refuse(409, R.decisionNotConsented);
       }
       next.status = status;
     }
     await repo.writeEntry(conn, e.id, next);
+    if (e.kind === "decision" && newWords) await repo.deleteResponsesForTargets(conn, sessionId, [`decision:${e.id}`]);
     return done(null);
   });
 }
@@ -989,6 +1022,7 @@ export async function removeEntry(pool: Pool, sessionId: number, actor: Actor, e
     if (!rows.length) return refuse(404, R.entryUnknown);
     const e = mapEntry(rows[0]);
     if (!entryRights(e, actor.no, roles).remove) return refuse(403, R.notYours);
+    if (e.kind === "decision" && e.status === "done") return refuse(409, R.decisionFinal);
     await repo.deleteEntryRow(conn, e.id);
     if (e.kind === "decision") await repo.deleteResponsesForTargets(conn, sessionId, [`decision:${e.id}`]);
     return done(null);
@@ -1078,17 +1112,20 @@ async function composeMinutes(q: Pool | PoolConnection, p: RecordParts, lookup: 
  */
 export function closePlan(
   entries: readonly { id: number; kind: EntryKind; status: EntryStatus; ownerNo: number | null; ownerSeatId: string | null }[],
-  people: readonly { arrival: number | null; lastSeenMs: number | null }[],
-  responses: readonly { target: string; value: string }[],
+  people: readonly { no: number; arrival: number | null; lastSeenMs: number | null }[],
+  responses: readonly { no: number; target: string; value: string }[],
   now: number,
 ): { unowned: number[]; arrival: ArrivalSummary; present: number; tallies: Record<number, ConsentTally> } {
   const unowned = unownedActions(entries.map((e) => ({ id: e.id, kind: e.kind, status: e.status, ownerUserId: e.ownerNo, ownerSeatId: e.ownerSeatId })));
   const arrival = arrivalSummary(people.map((p) => p.arrival));
-  const present = people.filter((p) => isPresentAt(p, now)).length;
+  const here = people.filter((p) => isPresentAt(p, now)).map((p) => p.no);
+  const present = here.length;
   const tallies: Record<number, ConsentTally> = {};
   for (const d of entries.filter((e) => e.kind === "decision")) {
-    const values = responses.filter((r) => r.target === `decision:${d.id}` && isConsentValue(r.value)).map((r) => r.value as ConsentValue);
-    tallies[d.id] = consentTally(values, present);
+    const answers = responses
+      .filter((r) => r.target === `decision:${d.id}` && isConsentValue(r.value))
+      .map((r) => ({ who: r.no, value: r.value as ConsentValue }));
+    tallies[d.id] = consentTally(answers, here);
   }
   return { unowned, arrival, present, tallies };
 }
@@ -1101,72 +1138,159 @@ export interface ClosedRecord {
   held: { entryId: number; text: string; dueOn: string | null; ownerNo: number | null; ownerSeatId: string | null }[];
 }
 
+/** What a close and the view need from the routes: names, and circles' names. */
+export interface RoomContext {
+  lookup: MemberLookup;
+  circleName: (id: string | null) => string | null;
+}
+
 /**
- * Close the session. Refused while any action has nobody holding it. Then, in
- * one transaction: the active item stops, the arrival spread is stored and
- * every arrival number and word erased, each proposal's tally is kept, the
- * minutes are written in both audiences, and the session closes.
+ * The close itself, inside a transaction that already holds the session row
+ * and has seen it open. Refused while any action has nobody holding it. Then:
+ * the active item stops at `clockStops` (now, unless the room went quiet
+ * earlier), the arrival spread is stored and every arrival number and word
+ * erased, each proposal's tally is kept, the minutes are written in both
+ * audiences, and the session closes. The caller bumps the version.
  */
-export async function closeSession(
-  pool: Pool,
-  sessionId: number,
-  actor: Actor,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null },
-  now = new Date(),
-): Promise<Outcome<ClosedRecord>> {
+async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext, now: Date, clockStops: Date = now): Promise<Outcome<ClosedRecord>> {
+  const sessionId = s.id;
+  const nowMs = now.getTime();
+  const entries = (await repo.entryRows(conn, sessionId)).map(mapEntry);
+  const people = (await repo.peopleRows(conn, sessionId)).map(mapPerson);
+  const responses = (await repo.responseRows(conn, sessionId)).map(mapResponse);
+  const { unowned, arrival, tallies } = closePlan(entries, people, responses, nowMs);
+  if (unowned.length) return refuse(409, CLOSE_REFUSAL, { unowned });
+
+  let items = (await repo.itemRows(conn, sessionId)).map(mapItem);
+  for (const item of items) {
+    if (item.status === "active" || s.state.activeItemId === item.id) {
+      await repo.finishItemClock(conn, item.id, "done", usedAfter(item, s.state, clockStops.getTime()), clockStops);
+    }
+  }
+  items = (await repo.itemRows(conn, sessionId)).map(mapItem);
+  await repo.eraseArrivals(conn, sessionId);
+
+  const closedState = applySessionAction(s.state, { type: "item", itemId: null }, nowMs);
+  const closed: SessionRec = { ...s, status: "closed", closedAt: now.toISOString(), state: closedState };
+  const circleName = ctx.circleName(s.circleId);
+  const minutes = await composeMinutes(
+    conn,
+    { s: closed, items, entries, peopleNos: people.map((p) => p.no), tallies, arrival, circleName },
+    ctx.lookup,
+  );
+  const summary: StoredSummary = {
+    arrival,
+    tallies,
+    circleName,
+    counts: {
+      people: people.length,
+      items: items.length,
+      entries: entries.length,
+      actions: entries.filter((e) => e.kind === "action").length,
+      decisions: entries.filter((e) => e.kind === "decision").length,
+    },
+  };
+  await repo.writeClosed(conn, sessionId, {
+    state: JSON.stringify(closedState),
+    summary: JSON.stringify(summary),
+    minutesPeople: minutes.people,
+    minutesShareable: minutes.shareable,
+    closedAt: now,
+  });
+  return done({
+    id: sessionId,
+    title: s.title,
+    held: entries
+      .filter((e) => e.kind === "action" && e.status === "open" && (e.ownerNo != null || e.ownerSeatId))
+      .map((e) => ({ entryId: e.id, text: e.text, dueOn: e.dueOn, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId })),
+  });
+}
+
+/** Close the session: the facilitator, or an admin, from inside the room. */
+export async function closeSession(pool: Pool, sessionId: number, actor: Actor, ctx: RoomContext, now = new Date()): Promise<Outcome<ClosedRecord>> {
   return inRoom(pool, sessionId, actor, async ({ conn, s, roles }) => {
     if (!roles.runs) return refuse(403, R.facilitatorOnly);
-    const nowMs = now.getTime();
-    const entries = (await repo.entryRows(conn, sessionId)).map(mapEntry);
-    const people = (await repo.peopleRows(conn, sessionId)).map(mapPerson);
-    const responses = (await repo.responseRows(conn, sessionId)).map(mapResponse);
-    const { unowned, arrival, tallies } = closePlan(entries, people, responses, nowMs);
-    if (unowned.length) return refuse(409, CLOSE_REFUSAL, { unowned });
-
-    let items = (await repo.itemRows(conn, sessionId)).map(mapItem);
-    for (const item of items) {
-      if (item.status === "active" || s.state.activeItemId === item.id) {
-        await repo.finishItemClock(conn, item.id, "done", usedAfter(item, s.state, nowMs), now);
-      }
-    }
-    items = (await repo.itemRows(conn, sessionId)).map(mapItem);
-    await repo.eraseArrivals(conn, sessionId);
-
-    const closedState = applySessionAction(s.state, { type: "item", itemId: null }, nowMs);
-    const closed: SessionRec = { ...s, status: "closed", closedAt: now.toISOString(), state: closedState };
-    const circleName = ctx.circleName(s.circleId);
-    const minutes = await composeMinutes(
-      conn,
-      { s: closed, items, entries, peopleNos: people.map((p) => p.no), tallies, arrival, circleName },
-      ctx.lookup,
-    );
-    const summary: StoredSummary = {
-      arrival,
-      tallies,
-      circleName,
-      counts: {
-        people: people.length,
-        items: items.length,
-        entries: entries.length,
-        actions: entries.filter((e) => e.kind === "action").length,
-        decisions: entries.filter((e) => e.kind === "decision").length,
-      },
-    };
-    await repo.writeClosed(conn, sessionId, {
-      state: JSON.stringify(closedState),
-      summary: JSON.stringify(summary),
-      minutesPeople: minutes.people,
-      minutesShareable: minutes.shareable,
-      closedAt: now,
-    });
-    return done({
-      id: sessionId,
-      title: s.title,
-      held: entries
-        .filter((e) => e.kind === "action" && e.status === "open" && (e.ownerNo != null || e.ownerSeatId))
-        .map((e) => ({ entryId: e.id, text: e.text, dueOn: e.dueOn, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId })),
-    });
+    return closeLocked(conn, s, ctx, now);
   });
+}
+
+// ── A room nobody closes ────────────────────────────────────────────────────
+
+/** Minutes past a room's own length that it may sit with nobody in it. */
+export const STALE_GRACE_MIN = 120;
+/** And never less than this, however short the session was meant to be. */
+export const STALE_FLOOR_MIN = 360;
+/** Rooms one sweep closes at most. The next read closes the rest. */
+const STALE_SWEEP_MAX = 20;
+
+/** How long a room may go with nobody seen in it before it closes on its own. */
+export function staleAfterMs(durationMin: number): number {
+  return Math.max(durationMin + STALE_GRACE_MIN, STALE_FLOOR_MIN) * 60_000;
+}
+
+/** Could this room have gone quiet for good? Read off its row alone, so a fresh room costs nothing more. */
+export function mayBeStale(s: Pick<SessionRec, "status" | "createdAt" | "durationMin">, now: number): boolean {
+  return s.status === "open" && Date.parse(s.createdAt) < now - staleAfterMs(s.durationMin);
+}
+
+/**
+ * Has this room gone quiet for good: open, older than its quiet window, and
+ * nobody seen in it within that window. `lastSeenMs` is the latest anybody
+ * in it was seen, or null when nobody ever was.
+ */
+export function isStaleRoom(s: Pick<SessionRec, "status" | "createdAt" | "durationMin">, lastSeenMs: number | null, now: number): boolean {
+  return mayBeStale(s, now) && (lastSeenMs == null || lastSeenMs < now - staleAfterMs(s.durationMin));
+}
+
+/**
+ * Close every room that has gone quiet for good, or only `onlyId`. One indexed
+ * read finds them, then each is locked and read again: two requests that find
+ * the same room close it once, and a room somebody came back to in between
+ * stays open. Actions nobody holds are parked, because nobody is there to
+ * claim them, and the room closes the way a facilitator closes it. The
+ * notices go out after each commit. Best effort: a room that fails to close
+ * is a log line, and the read that asked carries on. Hands back the ids it
+ * closed.
+ */
+export async function closeStaleRooms(pool: Pool, ctx: RoomContext, deps: NoticeDeps, now = new Date(), onlyId: number | null = null): Promise<number[]> {
+  const closedIds: number[] = [];
+  let ids: number[] = [];
+  try {
+    ids = await repo.staleOpenSessionIds(pool, { now, graceMin: STALE_GRACE_MIN, floorMin: STALE_FLOOR_MIN, onlyId, limit: STALE_SWEEP_MAX });
+  } catch (e) {
+    console.error("[sessions] the quiet rooms could not be read", e);
+    return closedIds;
+  }
+  const nowMs = now.getTime();
+  for (const id of ids) {
+    try {
+      const record = await repo.inTransaction(pool, async (conn) => {
+        const rows = await repo.sessionRow(conn, id, true);
+        if (!rows.length) return null;
+        const s = mapSession(rows[0]);
+        const seen = (await repo.peopleRows(conn, id))
+          .map(mapPerson)
+          .reduce<number | null>((m, p) => (p.lastSeenMs == null ? m : Math.max(m ?? p.lastSeenMs, p.lastSeenMs)), null);
+        if (!isStaleRoom(s, seen, nowMs)) return null;
+        const entries = (await repo.entryRows(conn, id)).map(mapEntry);
+        const unowned = unownedActions(entries.map((e) => ({ id: e.id, kind: e.kind, status: e.status, ownerUserId: e.ownerNo, ownerSeatId: e.ownerSeatId })));
+        await repo.parkEntries(conn, id, unowned);
+        // The item on screen stopped when the room went quiet, not hours later.
+        const clockStops = new Date(Math.min(nowMs, seen ?? Date.parse(s.createdAt)));
+        const out = await closeLocked(conn, s, ctx, now, clockStops);
+        // Unreachable once every unheld action is parked; thrown so the parking rolls back with it.
+        if (!out.ok) throw new Error(`live sessions: quiet room ${id} would not close: ${out.error}`);
+        await repo.bumpVersion(conn, id);
+        return out.value;
+      });
+      if (!record) continue;
+      closedIds.push(id);
+      await noticesAfterClose(pool, record, deps);
+    } catch (e) {
+      console.error(`[sessions] quiet room ${id} was not closed`, e);
+    }
+  }
+  return closedIds;
 }
 
 export interface NoticeDeps {
@@ -1179,6 +1303,9 @@ export interface NoticeDeps {
  * and every member holding an action hears it is theirs, as does every member
  * sitting in a seat that holds one. Each (action, member) pair has one stable
  * dedupe key, so a person who holds an action and sits in its seat hears once.
+ * The record opens only to the people who were in the room (and admins), so a
+ * member who sits in the seat and was not there hears what the action is and
+ * by when, with no link to a page that would refuse them.
  * A failure is a log line; the session is closed either way.
  */
 export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: NoticeDeps): Promise<void> {
@@ -1191,6 +1318,8 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
   try {
     const nos = closed.held.map((h) => h.ownerNo).filter((n): n is number => n != null);
     const userOf = new Map((await repo.memberUserIdRows(pool, nos)).map((r) => [Number(r.no), String(r.user_id)]));
+    const roomNos = (await repo.peopleRows(pool, closed.id)).map((r) => Number(r.member_no));
+    const wasThere = new Set((await repo.memberUserIdRows(pool, roomNos)).map((r) => String(r.user_id)));
     const seated = closed.held.some((h) => h.ownerSeatId)
       ? (await listOrgAssignments(pool)).filter((a) => a.holderKind === "member" && a.userId && !a.isExample)
       : [];
@@ -1205,7 +1334,7 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
           type: "session_action_held",
           title: SESSION_NOTICES.actionHeld(closed.title),
           body: SESSION_NOTICES.actionBody(h.text, h.dueOn),
-          link,
+          link: wasThere.has(userId) ? link : null,
           dedupeKey: `session-action:${h.entryId}:${userId}`,
         });
       }
@@ -1233,7 +1362,9 @@ export async function readMinutes(pool: Pool, sessionId: number, viewer: Viewer,
 /**
  * From a closed session: its actions still open, its backlog (tensions not
  * done, and anything parked), and the items it parked or never reached. An
- * item already brought into this session from there is not offered again.
+ * item or a backlog entry already brought into this session from there is not
+ * offered again. An entry is matched by the title the room gives it when it is
+ * brought over, which is its text cleaned and cut to an agenda title's length.
  */
 export function selectCarried(
   prev: { items: readonly SessionItem[]; entries: readonly SessionEntry[] },
@@ -1241,9 +1372,12 @@ export function selectCarried(
   prevId: number,
 ): { actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } {
   const broughtOver = new Set(current.filter((i) => i.fromSessionId === prevId).map((i) => i.title.toLowerCase()));
+  const asTitle = (text: string) => (cleanLine(text, SESSION_LIMITS.agendaTitle) ?? "").toLowerCase();
   return {
     actions: prev.entries.filter((e) => e.kind === "action" && e.status === "open"),
-    backlog: prev.entries.filter((e) => (e.kind === "tension" && e.status !== "done") || e.status === "parked"),
+    backlog: prev.entries.filter(
+      (e) => ((e.kind === "tension" && e.status !== "done") || e.status === "parked") && !broughtOver.has(asTitle(e.text)),
+    ),
     parkedItems: [...prev.items]
       .sort((a, b) => a.position - b.position)
       .filter((i) => (i.status === "parked" || i.status === "waiting") && !broughtOver.has(i.title.toLowerCase()))
@@ -1281,8 +1415,10 @@ export async function buildView(
   const entries = entriesRaw.map(mapEntry);
   const seesAnswers = joined || viewer.admin;
   const responses: ResponseRec[] = seesAnswers ? (await repo.responseRows(pool, s.id)).map(mapResponse) : [];
+  // Read once the session has closed, as one sorted batch: while the room is
+  // open, an answer turning up on the next poll would say who just sent it.
   const facilitation =
-    roles.facilitates || viewer.admin
+    s.status === "closed" && (roles.facilitates || viewer.admin)
       ? (await repo.facilitationRows(pool, s.id))
           .filter((r) => (FACILITATION_VALUES as readonly string[]).includes(String(r.value)))
           .map((r) => ({ value: r.value as FacilitationValue, text: r.text == null ? null : String(r.text) }))
@@ -1397,16 +1533,18 @@ export async function listSessions(
 
 /**
  * Everything this module holds about one member, for GET /api/profile/export:
- * the sessions they were in, the entries they wrote or hold, and their own
- * answers, feedback on the facilitation included, because it is theirs.
+ * the sessions they were in, the agenda items they added or present, the
+ * entries they wrote or hold, and their own answers, feedback on the
+ * facilitation included, because it is theirs.
  */
 export async function exportMemberSessions(pool: Pool, userId: string): Promise<{
   sessions: Record<string, unknown>[];
+  items: Record<string, unknown>[];
   entries: Record<string, unknown>[];
   responses: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], entries: [], responses: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -1421,6 +1559,23 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     arrival: intOrNull(r.arrival_score),
     wish: r.arrival_wish == null ? null : String(r.arrival_wish),
   }));
+  // The titles they typed and the items they speak to. Nobody else's number travels with them.
+  const items = (await repo.memberItemRows(pool, no)).map((r) => {
+    const i = mapItem(r);
+    return {
+      sessionId: Number(r.session_id),
+      id: i.id,
+      title: i.title,
+      aim: i.aim,
+      minutes: i.minutes,
+      status: i.status,
+      usedSeconds: i.usedSeconds,
+      fromSessionId: i.fromSessionId,
+      added: i.addedBy === no,
+      presents: i.presenterUserId === no,
+      createdAt: toIso(r.created_at),
+    };
+  });
   const entries = (await repo.memberEntryRows(pool, no)).map(mapEntry).map((e) => ({
     sessionId: e.sessionId,
     id: e.id,
@@ -1440,7 +1595,7 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     text: r.text == null ? null : String(r.text),
     at: toIso(r.updated_at),
   }));
-  return { sessions, entries, responses };
+  return { sessions, items, entries, responses };
 }
 
 /**

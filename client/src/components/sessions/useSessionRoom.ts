@@ -24,7 +24,10 @@
  *   ONE CLOCK FOR THE ROOM. Every answer carries `serverNow`. The difference
  *   from this device's clock (taken at the midpoint of the round trip) is kept
  *   as an offset, so a breath, an item's timebox and the session clock read the
- *   same second on every screen however wrong a phone's own clock is.
+ *   same second on every screen however wrong a phone's own clock is. The ask
+ *   goes past the browser's own cache (`no-store`): a cached answer would
+ *   carry a `serverNow` from whenever it was cached and move the room's clock.
+ *   The ETag this hook sends itself still gets a real 304.
  *
  *   SAYS IT IS HERE every HERE_EVERY_MS while visible and joined, which is what
  *   the room's "here now" is made of.
@@ -211,7 +214,7 @@ export function useSessionRoom(
       try {
         const headers: Record<string, string> = {};
         if (!force && etag.current && current.current) headers["If-None-Match"] = etag.current;
-        const res = await gameFetch(base, { headers });
+        const res = await gameFetch(base, { headers, cache: "no-store" });
         if (stale()) return current.current;
         if (res.status === 304) {
           setLagging(false);

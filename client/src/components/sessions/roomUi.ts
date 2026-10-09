@@ -6,6 +6,7 @@
  * 44px tall, the phone's thumb target, and the same classes read on a shared
  * screen across a room.
  */
+import { useState } from "react";
 import {
   ROOM_COPY,
   consentTally,
@@ -81,8 +82,19 @@ export function agendaOrder(items: SessionItem[]): SessionItem[] {
 
 /** The consent answers on one target, as values and as a tally against the people here. */
 export function consentOn(view: Pick<SessionView, "responses" | "people">, target: ResponseTarget): { values: ConsentValue[]; tally: ConsentTally } {
-  const values = view.responses.filter((r) => r.target === target && isConsentValue(r.value)).map((r) => r.value as ConsentValue);
-  return { values, tally: consentTally(values, presentPeople(view).length) };
+  const mine = view.responses.filter((r) => r.target === target && isConsentValue(r.value));
+  const values = mine.map((r) => r.value as ConsentValue);
+  const answers = mine.map((r) => ({ who: r.userId, value: r.value as ConsentValue }));
+  return { values, tally: consentTally(answers, presentPeople(view).map((p) => p.userId)) };
+}
+
+/**
+ * Whether the server hands this viewer the room's answers. It sends them to the
+ * people who joined and to admins (server/lib/liveSessions.ts, `buildView`), so
+ * anybody else gets an empty list, which is not the same as nobody answering.
+ */
+export function seesAnswers(view: Pick<SessionView, "me">): boolean {
+  return view.me.joined || view.me.admin;
 }
 
 /** This member's own answer on a target, if they gave one. */
@@ -165,4 +177,44 @@ export interface StageProps {
   view: SessionView;
   now: number;
   actions: RoomActions;
+}
+
+/**
+ * WORDS BEING TYPED OUTLIVE THE FORM THEY ARE TYPED IN. The facilitator moves
+ * the room, or starts another item, while somebody is halfway through a
+ * sentence, and that unmounts the form under them. So what is typed is kept
+ * here, outside every stage, keyed by session, item and field, and the form
+ * that mounts again with the same key gets it back. Only a send the server
+ * took clears it. It lives in this tab's memory and nowhere else, so a reload
+ * starts clean and nothing typed is ever written down.
+ */
+const DRAFTS = new Map<string, string>();
+
+export interface Draft {
+  text: string;
+  set(next: string): void;
+  /** The server took it: forget the draft, and show `shown` (empty by default). */
+  clear(shown?: string): void;
+}
+
+export function useDraft(key: string, fallback = ""): Draft {
+  const [held, setHeld] = useState(() => ({ key, text: DRAFTS.get(key) ?? fallback }));
+  const text = held.key === key ? held.text : (DRAFTS.get(key) ?? fallback);
+  return {
+    text,
+    set(next) {
+      if (next) DRAFTS.set(key, next);
+      else DRAFTS.delete(key);
+      setHeld({ key, text: next });
+    },
+    clear(shown = "") {
+      DRAFTS.delete(key);
+      setHeld({ key, text: shown });
+    },
+  };
+}
+
+/** Forget every draft. For tests, which share one module between cases. */
+export function forgetDrafts(): void {
+  DRAFTS.clear();
 }

@@ -3,7 +3,9 @@
  * arriving, and, if they like, what would make it an 11+. While the session is
  * open the people in it see each other's numbers and words, the way a spoken
  * round works; at close the words and the numbers are erased and only the
- * spread is kept. Nobody fixes anybody's answer.
+ * spread is kept. Nobody fixes anybody's answer. Somebody who has not joined
+ * is sent nobody's number, so they read that sentence once, in place of a
+ * "Not yet" beside every name.
  *
  * The facilitator can run it as a speaking round in the order of the people
  * here, two names at a time: who speaks now and who is ready next.
@@ -158,6 +160,8 @@ export default function StageArrival({ view, actions }: StageProps) {
           )}
         </div>
 
+        {!joined && <p className={`${HINT} mt-2`}>{ROOM_COPY.arrivalHeardInRoom}</p>}
+
         {roundOn && (
           <div className="mt-3 flex flex-wrap gap-3" aria-live="polite">
             {speakers.done ? (
@@ -189,17 +193,19 @@ export default function StageArrival({ view, actions }: StageProps) {
                   speaking ? "border-teal-deep bg-teal-deep/5" : "border-border bg-card"
                 }`}
               >
-                <span
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-display text-lg font-bold tabular-nums ${
-                    p.arrival != null ? "bg-teal-deep/15 text-foreground" : "bg-muted text-muted-foreground"
-                  }`}
-                  aria-label={p.arrival != null ? String(p.arrival) : ROOM_COPY.notYet}
-                >
-                  {p.arrival ?? "·"}
-                </span>
+                {joined && (
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-display text-lg font-bold tabular-nums ${
+                      p.arrival != null ? "bg-teal-deep/15 text-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                    aria-label={p.arrival != null ? String(p.arrival) : ROOM_COPY.notYet}
+                  >
+                    {p.arrival ?? "·"}
+                  </span>
+                )}
                 <span className="min-w-0">
                   <span className="block font-semibold text-foreground">{p.name}</span>
-                  <span className="block text-sm text-muted-foreground">{p.wish ?? (p.arrival == null ? ROOM_COPY.notYet : "")}</span>
+                  {joined && <span className="block text-sm text-muted-foreground">{p.wish ?? (p.arrival == null ? ROOM_COPY.notYet : "")}</span>}
                 </span>
               </li>
             );

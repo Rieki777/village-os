@@ -1,7 +1,9 @@
 /**
- * CLOSE. Gratitude, one word each, feedback on the facilitation (which the
- * facilitator reads unsigned, and nobody else does), an idea for the tool
- * (which lands in the village's feedback inbox), and the facilitator's Close.
+ * CLOSE. Any proposal still open, so one the room consented to is marked
+ * before the end; gratitude, one word each, feedback on the facilitation
+ * (which the facilitator reads unsigned on the closed record, and nobody else
+ * does), an idea for the tool (which lands in the village's feedback inbox),
+ * and the facilitator's Close.
  *
  * Closing keeps the record, erases the arrival words and numbers, and tells
  * the admins and everyone holding an action. A session with an action nobody
@@ -21,6 +23,7 @@ import {
   type FacilitationValue,
 } from "@shared/sessions";
 import GratitudeRound from "./GratitudeRound";
+import { OpenProposals } from "./Proposal";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, H3, HINT, INPUT, LABEL, myResponse, nameOf, tile, type StageProps } from "./roomUi";
 
 function WordRound({ view, actions }: Omit<StageProps, "now">) {
@@ -155,8 +158,10 @@ function FacilitationFeedback({ view, actions }: Omit<StageProps, "now">) {
 
 /**
  * What the room said about the facilitation, unsigned. The server sends it to
- * the facilitator and to admins and to nobody else, so it shows wherever the
- * view carries it: here while the session is open, and on the closed record.
+ * the facilitator and to admins, and only once the session is closed, all at
+ * once: an answer that showed up while the room was still open would be tied
+ * to whoever had just pressed send. So it is read on the closed record
+ * (ClosedRecord), and the open Close stage does not draw it.
  */
 export function FacilitationReading({ view }: Pick<StageProps, "view">) {
   const list = view.facilitation;
@@ -302,11 +307,11 @@ function CloseButton({ actions, onRefused }: Pick<StageProps, "actions"> & { onR
 export default function StageClose({ view, actions, onRefused }: Omit<StageProps, "now"> & { onRefused: (unowned: number[], sentence: string) => void }) {
   return (
     <div className="space-y-5">
+      <OpenProposals view={view} actions={actions} />
       <GratitudeRound view={view} />
       <WordRound view={view} actions={actions} />
       <FacilitationFeedback view={view} actions={actions} />
       <ToolIdea view={view} actions={actions} />
-      <FacilitationReading view={view} />
       {view.me.facilitates && view.status === "open" && <CloseButton actions={actions} onRefused={onRefused} />}
     </div>
   );

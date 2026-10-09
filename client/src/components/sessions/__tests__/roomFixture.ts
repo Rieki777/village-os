@@ -46,12 +46,13 @@ export const json = (body: unknown, status = 200, headers: Record<string, string
     headers: { "Content-Type": "application/json", ...headers },
   });
 
-/** A recorded call: the path, the method and the parsed body. */
+/** A recorded call: the path, the method, the parsed body, and the cache mode asked for. */
 export interface Call {
   url: string;
   method: string;
   body: any;
   headers: Record<string, string>;
+  cache: RequestCache | undefined;
 }
 
 export function record(calls: Call[], url: string, init?: RequestInit): Call {
@@ -63,6 +64,7 @@ export function record(calls: Call[], url: string, init?: RequestInit): Call {
     method: (init?.method ?? "GET").toUpperCase(),
     body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
     headers,
+    cache: init?.cache,
   };
   calls.push(call);
   return call;

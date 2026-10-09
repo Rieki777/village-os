@@ -6,6 +6,11 @@
  * tile cannot be sent without it. The tally counts the people here; the round
  * is consented when everyone here has answered and nobody objects. Each member
  * can change their answer while the round is open.
+ *
+ * The answers are heard by the people in the room: the server sends them only
+ * to the people who joined and to admins, so anybody else reads that sentence
+ * in place of a tally that would count everyone as still to answer. The
+ * sentence being typed is a draft, so moving the room does not lose it.
  */
 import { useState } from "react";
 import {
@@ -19,7 +24,7 @@ import {
   type ConsentValue,
   type ResponseTarget,
 } from "@shared/sessions";
-import { BTN_PRIMARY, H3, HINT, INPUT, consentOn, myResponse, nameOf, tile, type StageProps } from "./roomUi";
+import { BTN_PRIMARY, H3, HINT, INPUT, consentOn, myResponse, nameOf, seesAnswers, tile, useDraft, type StageProps } from "./roomUi";
 
 export interface ConsentRoundProps extends Omit<StageProps, "now"> {
   target: ResponseTarget;
@@ -31,7 +36,8 @@ export interface ConsentRoundProps extends Omit<StageProps, "now"> {
 export default function ConsentRound({ view, actions, target, ask, readOnly }: ConsentRoundProps) {
   const mine = myResponse(view, target);
   const [choice, setChoice] = useState<ConsentValue | null>(mine && isConsentValue(mine.value) ? mine.value : null);
-  const [words, setWords] = useState(mine?.text ?? "");
+  const draft = useDraft(`${view.id}:${target}:words`, mine?.text ?? "");
+  const words = draft.text;
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const { tally } = consentOn(view, target);
@@ -49,7 +55,9 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
     setBusy(true);
     try {
       const r = await actions.respond(target, choice, consentNeedsWords(choice) ? sentence : null, { quiet: true });
-      if (!r.ok) setNote(r.error);
+      // The server holds the sentence now; the draft is done with, the words stay on screen.
+      if (r.ok) draft.clear(words);
+      else setNote(r.error);
     } finally {
       setBusy(false);
     }
@@ -87,7 +95,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
                 value={words}
                 maxLength={SESSION_LIMITS.text}
                 placeholder={ROOM_COPY.consentSentence}
-                onChange={(e) => setWords(e.target.value)}
+                onChange={(e) => draft.set(e.target.value)}
               />
             </label>
           )}
@@ -104,9 +112,9 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
         </>
       )}
       <p className={HINT} aria-live="polite">
-        {ROOM_COPY.tallyLine(tally)}
+        {seesAnswers(view) ? ROOM_COPY.tallyLine(tally) : ROOM_COPY.answersHeardInRoom}
       </p>
-      {tally.consented && <p className="text-sm font-semibold text-open">{ROOM_COPY.consented}</p>}
+      {seesAnswers(view) && tally.consented && <p className="text-sm font-semibold text-open">{ROOM_COPY.consented}</p>}
       {heard.length > 0 && (
         <ul className="space-y-1.5">
           {heard.map((r) => (

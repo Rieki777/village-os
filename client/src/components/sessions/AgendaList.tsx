@@ -6,6 +6,10 @@
  * agenda" parks it, and it can be brought back), because an item's place and
  * status are the facilitator's to set (server/lib/liveSessions.ts, `rolesIn`).
  *
+ * Editing an item opens its form on the words the room holds right then, and
+ * saving sends only the fields this person changed, so a change somebody else
+ * made while the form was open survives unless both touched the same field.
+ *
  * Moving an item sends the neighbour's position, then checks the answer: if
  * the server swapped the two, that was the whole move; if it only set the one
  * number, the neighbour gets the old one. Either reading of `position` ends in
@@ -24,6 +28,7 @@ import {
   type SessionItem,
 } from "@shared/sessions";
 import { BTN_ICON, BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CHIP, HINT, INPUT, LABEL, agendaOrder, keepsNotes, leads, nameOf, type StageProps } from "./roomUi";
+import type { ItemPatch } from "./useSessionRoom";
 
 const clampMinutes = (n: number) =>
   Math.min(SESSION_LIMITS.minutesMax, Math.max(SESSION_LIMITS.minutesMin, Math.round(Number.isFinite(n) ? n : SESSION_LIMITS.minutesMin)));
@@ -141,7 +146,9 @@ function ItemRow({
   onMove: (item: SessionItem, dir: -1 | 1) => void;
   busy: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  /** What the item held when Edit opened: the form starts here, and save sends what differs from it. */
+  const [opened, setOpened] = useState<Pick<SessionItem, "title" | "aim" | "minutes"> | null>(null);
+  const editing = opened != null;
   const [title, setTitle] = useState(item.title);
   const [aim, setAim] = useState<ItemAim>(item.aim);
   const [minutes, setMinutes] = useState(item.minutes);
@@ -150,13 +157,29 @@ function ItemRow({
   const mayRun = leads(view);
   const parked = item.status === "parked";
 
+  const startEdit = () => {
+    setTitle(item.title);
+    setAim(item.aim);
+    setMinutes(item.minutes);
+    setOpened({ title: item.title, aim: item.aim, minutes: item.minutes });
+  };
+
   const save = async () => {
     const clean = cleanLine(title, SESSION_LIMITS.agendaTitle);
-    if (!clean) return;
+    if (!clean || !opened) return;
+    const patch: ItemPatch = {};
+    if (clean !== opened.title) patch.title = clean;
+    if (aim !== opened.aim) patch.aim = aim;
+    const mins = clampMinutes(minutes);
+    if (mins !== opened.minutes) patch.minutes = mins;
+    if (!Object.keys(patch).length) {
+      setOpened(null);
+      return;
+    }
     setSaving(true);
     try {
-      const r = await actions.patchItem(item.id, { title: clean, aim, minutes: clampMinutes(minutes) });
-      if (r.ok) setEditing(false);
+      const r = await actions.patchItem(item.id, patch);
+      if (r.ok) setOpened(null);
     } finally {
       setSaving(false);
     }
@@ -187,7 +210,7 @@ function ItemRow({
           <button type="button" className={BTN_PRIMARY} disabled={saving || !title.trim()} onClick={() => void save()}>
             {ROOM_COPY.save}
           </button>
-          <button type="button" className={BTN_QUIET} onClick={() => setEditing(false)}>
+          <button type="button" className={BTN_QUIET} onClick={() => setOpened(null)}>
             {ROOM_COPY.cancel}
           </button>
         </div>
@@ -231,7 +254,7 @@ function ItemRow({
           </>
         )}
         {mayEdit && !parked && item.status !== "done" && (
-          <button type="button" className={BTN_QUIET} onClick={() => setEditing(true)}>
+          <button type="button" className={BTN_QUIET} onClick={startEdit}>
             {ROOM_COPY.edit}
           </button>
         )}

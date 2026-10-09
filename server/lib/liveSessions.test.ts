@@ -17,6 +17,7 @@ import {
   SESSION_NOTICES,
   SESSION_REFUSALS,
   SESSION_SEASONS,
+  cleanLine,
   type SessionEntry,
   type SessionItem,
 } from "../../shared/sessions";
@@ -26,7 +27,9 @@ import {
   defaultDuration,
   entryRights,
   etagMatches,
+  isStaleRoom,
   mapSession,
+  mayBeStale,
   mayEditItemWords,
   maySee,
   parseId,
@@ -36,6 +39,7 @@ import {
   seasonAt,
   selectCarried,
   sessionEtag,
+  staleAfterMs,
 } from "./liveSessions";
 import { emailCadenceFor, resolveNotifyPrefs } from "./notify";
 
@@ -115,7 +119,17 @@ describe("what a close works out before it writes", () => {
   });
 
   it("keeps the arrival round as numbers only", () => {
-    const plan = closePlan([], [{ arrival: 3, ...here }, { arrival: 9, ...here }, { arrival: 7, ...gone }, { arrival: null, ...here }], [], T0);
+    const plan = closePlan(
+      [],
+      [
+        { no: 1, arrival: 3, ...here },
+        { no: 2, arrival: 9, ...here },
+        { no: 3, arrival: 7, ...gone },
+        { no: 4, arrival: null, ...here },
+      ],
+      [],
+      T0,
+    );
     expect(plan.arrival).toEqual({ count: 3, median: 7, low: 3, high: 9 });
   });
 
@@ -124,20 +138,77 @@ describe("what a close works out before it writes", () => {
       { id: 10, kind: "decision" as const, status: "open" as const, ownerNo: null, ownerSeatId: null },
       { id: 11, kind: "decision" as const, status: "done" as const, ownerNo: null, ownerSeatId: null },
     ];
-    const people = [{ arrival: null, ...here }, { arrival: null, ...here }, { arrival: null, ...gone }];
+    const people = [
+      { no: 1, arrival: null, ...here },
+      { no: 2, arrival: null, ...here },
+      { no: 3, arrival: null, ...gone },
+    ];
     const responses = [
-      { target: "decision:10", value: "consent" },
-      { target: "decision:10", value: "object" },
-      { target: "decision:11", value: "consent" },
-      { target: "decision:11", value: "concern" },
-      { target: "agenda", value: "consent" },
-      { target: "decision:11", value: "not a consent value" },
+      { no: 1, target: "decision:10", value: "consent" },
+      { no: 2, target: "decision:10", value: "object" },
+      { no: 1, target: "decision:11", value: "consent" },
+      { no: 2, target: "decision:11", value: "concern" },
+      { no: 1, target: "agenda", value: "consent" },
+      { no: 3, target: "decision:11", value: "not a consent value" },
     ];
     const plan = closePlan(entries, people, responses, T0);
     expect(plan.present).toBe(2);
     expect(plan.tallies[10]).toEqual({ consent: 1, concern: 0, object: 1, waiting: 0, consented: false });
     expect(plan.tallies[11]).toEqual({ consent: 1, concern: 1, object: 0, waiting: 0, consented: true });
     expect(Object.keys(plan.tallies)).toEqual(["10", "11"]);
+  });
+
+  it("never lets a consent from somebody who left stand in for somebody here who has not answered", () => {
+    const entries = [{ id: 12, kind: "decision" as const, status: "open" as const, ownerNo: null, ownerSeatId: null }];
+    const people = [
+      { no: 1, arrival: null, ...here },
+      { no: 2, arrival: null, ...here },
+      { no: 3, arrival: null, ...gone },
+    ];
+    // Two answers against two people here, the old arithmetic's "everyone": but
+    // one of the two answers is from somebody who has gone, and 2 is unheard.
+    const responses = [
+      { no: 1, target: "decision:12", value: "consent" },
+      { no: 3, target: "decision:12", value: "consent" },
+    ];
+    const plan = closePlan(entries, people, responses, T0);
+    expect(plan.tallies[12]).toEqual({ consent: 2, concern: 0, object: 0, waiting: 1, consented: false });
+    // Once 2 answers, the round has heard everyone here.
+    const heard = closePlan(entries, people, [...responses, { no: 2, target: "decision:12", value: "concern" }], T0);
+    expect(heard.tallies[12]).toMatchObject({ waiting: 0, consented: true });
+  });
+});
+
+describe("a room nobody closes", () => {
+  const HOUR = 60 * 60 * 1000;
+  const aged = (hoursOld: number, durationMin = 60) => ({ status: "open" as const, createdAt: new Date(T0 - hoursOld * HOUR).toISOString(), durationMin });
+
+  it("waits its length plus two hours, and never less than six", () => {
+    expect(staleAfterMs(60)).toBe(6 * HOUR);
+    expect(staleAfterMs(240)).toBe(6 * HOUR);
+    expect(staleAfterMs(300)).toBe(7 * HOUR);
+    expect(staleAfterMs(480)).toBe(10 * HOUR);
+  });
+
+  it("closes only a room old enough and empty for that long", () => {
+    // Seven hours old, nobody seen for seven: quiet for good.
+    expect(isStaleRoom(aged(7), T0 - 7 * HOUR, T0)).toBe(true);
+    expect(isStaleRoom(aged(7), null, T0)).toBe(true);
+    // Somebody was here an hour ago.
+    expect(isStaleRoom(aged(7), T0 - HOUR, T0)).toBe(false);
+    // Five hours old: younger than the floor, whoever left.
+    expect(isStaleRoom(aged(5), T0 - 5 * HOUR, T0)).toBe(false);
+    // An eight hour session gets ten hours.
+    expect(isStaleRoom(aged(9, 480), T0 - 9 * HOUR, T0)).toBe(false);
+    expect(isStaleRoom(aged(11, 480), T0 - 11 * HOUR, T0)).toBe(true);
+    // A closed room is never closed again.
+    expect(isStaleRoom({ ...aged(30), status: "closed" }, null, T0)).toBe(false);
+  });
+
+  it("reads a fresh room off its row, with no reason to look further", () => {
+    expect(mayBeStale(aged(1), T0)).toBe(false);
+    expect(mayBeStale(aged(7), T0)).toBe(true);
+    expect(mayBeStale({ ...aged(7), status: "closed" }, T0)).toBe(false);
   });
 });
 
@@ -202,6 +273,17 @@ describe("what carries over from the last session of a circle", () => {
     // Brought over from some other session, it is still offered from this one.
     const other = selectCarried({ entries: [], items: [item(2, "Seed library", "parked")] }, [item(9, "Seed library", "waiting", 12)], 40);
     expect(other.parkedItems).toHaveLength(1);
+  });
+
+  it("does not offer a backlog entry twice once it has been brought over, matched by the title it became", () => {
+    const long = { ...entry(4, "tension", "open"), text: `  Who   holds the shed keys? ${"and the gate ".repeat(12)}` };
+    const asItem = (cleanLine(long.text, SESSION_LIMITS.agendaTitle) ?? "").toUpperCase();
+    const prev = { entries: [long, entry(6, "idea", "parked")], items: [] };
+    expect(selectCarried(prev, [], 40).backlog.map((e) => e.id)).toEqual([4, 6]);
+    // The room cleaned and cut the text to an agenda title when it brought it over.
+    expect(selectCarried(prev, [item(9, asItem, "waiting", 40)], 40).backlog.map((e) => e.id)).toEqual([6]);
+    // A copy brought over from some other session leaves this one's entry on offer.
+    expect(selectCarried(prev, [item(9, asItem, "waiting", 12)], 40).backlog.map((e) => e.id)).toEqual([4, 6]);
   });
 });
 
@@ -327,6 +409,9 @@ describe("the dials and the notices this module registers", () => {
       expect(NOTIFICATION_KINDS[type].celebrate).toBe(false);
       expect(emailCadenceFor(type, prefs)).toBe("daily");
     }
+    // A seat holder who was not in the room gets no link to the record, so the
+    // notice's own description promises the action and its date, not the record.
+    expect(NOTIFICATION_KINDS.session_action_held.blurb).not.toMatch(/record/i);
   });
 
   it("writes its notices in the house voice", () => {

@@ -150,10 +150,22 @@ describe("time", () => {
 
 describe("consent and arrival", () => {
   it("consent needs everyone here to answer and nobody to object", () => {
-    expect(consentTally(["consent", "concern"], 3)).toMatchObject({ waiting: 1, consented: false });
-    expect(consentTally(["consent", "concern", "consent"], 3)).toMatchObject({ consent: 2, concern: 1, consented: true });
-    expect(consentTally(["consent", "object", "consent"], 3).consented).toBe(false);
-    expect(consentTally([], 0).consented).toBe(false);
+    const a = (who: number, value: "consent" | "concern" | "object") => ({ who, value });
+    expect(consentTally([a(1, "consent"), a(2, "concern")], [1, 2, 3])).toMatchObject({ waiting: 1, consented: false });
+    expect(consentTally([a(1, "consent"), a(2, "concern"), a(3, "consent")], [1, 2, 3])).toMatchObject({ consent: 2, concern: 1, consented: true });
+    expect(consentTally([a(1, "consent"), a(2, "object"), a(3, "consent")], [1, 2, 3]).consented).toBe(false);
+    expect(consentTally([], []).consented).toBe(false);
+  });
+
+  it("an answer from someone who left never stands in for someone here who has not answered", () => {
+    const a = (who: number, value: "consent" | "concern" | "object") => ({ who, value });
+    // Four consented and stepped away; the two people here now have not answered.
+    const t = consentTally([a(1, "consent"), a(2, "consent"), a(3, "consent"), a(4, "consent")], [5, 6]);
+    expect(t).toMatchObject({ consent: 4, waiting: 2, consented: false });
+    // An objection blocks even after the person who raised it has gone.
+    expect(consentTally([a(5, "consent"), a(6, "consent"), a(9, "object")], [5, 6]).consented).toBe(false);
+    // Nobody here has been heard: not consent, however many answered before.
+    expect(consentTally([a(1, "consent")], []).consented).toBe(false);
     expect(consentNeedsWords("consent")).toBe(false);
     expect(consentNeedsWords("object")).toBe(true);
   });

@@ -17,79 +17,40 @@ import {
   cleanLine,
   cleanText,
   timebox,
-  type SessionEntry,
   type SessionItem,
 } from "@shared/sessions";
 import { ActionRow, AddAction } from "./ActionRow";
-import ConsentRound from "./ConsentRound";
 import EntryStream from "./EntryStream";
+import Proposal from "./Proposal";
 import TimeboxRing from "./TimeboxRing";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H2, HINT, INPUT, agendaOrder, consentOn, leads, nameOf, type StageProps } from "./roomUi";
+import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H2, HINT, INPUT, agendaOrder, leads, useDraft, type StageProps } from "./roomUi";
 
-function Proposal({ view, actions, entry }: Omit<StageProps, "now"> & { entry: SessionEntry }) {
-  const [busy, setBusy] = useState(false);
-  const target = `decision:${entry.id}` as const;
-  const { tally } = consentOn(view, target);
-  const decided = entry.status === "done";
-  return (
-    <div className={`rounded-xl border px-4 py-4 ${decided ? "border-open/50 bg-sage-light/60" : "border-border bg-card"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 whitespace-pre-line font-medium text-foreground">{entry.text}</p>
-        {decided && <span className={`${CHIP} bg-open/15 text-open`}>{ROOM_COPY.decide}</span>}
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{nameOf(view, entry.authorUserId) ?? ""}</p>
-      {!decided && (
-        <div className="mt-4">
-          <ConsentRound
-            view={view}
-            actions={actions}
-            target={target}
-            ask={ROOM_COPY.proposalConsentAsk}
-            readOnly={!view.me.joined || view.status !== "open"}
-          />
-          {leads(view) && tally.consented && (
-            <button
-              type="button"
-              className={`${BTN_PRIMARY} mt-3`}
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await actions.patchEntry(entry.id, { status: "done" });
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {ROOM_COPY.decide}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A short form for one line or a few: the proposal, the seed. */
+/**
+ * A short form for one line or a few: the proposal, the seed. What is typed is
+ * a draft under `draftKey`, so it survives the room moving on under it.
+ */
 function OneLine({
+  draftKey,
   label,
   button,
   multiline,
   onSend,
 }: {
+  draftKey: string;
   label: string;
   button: string;
   multiline?: boolean;
   onSend: (text: string) => Promise<boolean>;
 }) {
-  const [text, setText] = useState("");
+  const draft = useDraft(draftKey);
+  const text = draft.text;
   const [busy, setBusy] = useState(false);
   const send = async () => {
     const clean = multiline ? cleanText(text, SESSION_LIMITS.text) : cleanLine(text, SESSION_LIMITS.text);
     if (!clean || busy) return;
     setBusy(true);
     try {
-      if (await onSend(clean)) setText("");
+      if (await onSend(clean)) draft.clear();
     } finally {
       setBusy(false);
     }
@@ -105,9 +66,9 @@ function OneLine({
       <label className="min-w-0 flex-1">
         <span className="sr-only">{label}</span>
         {multiline ? (
-          <textarea className={`${INPUT} min-h-20`} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => setText(e.target.value)} />
+          <textarea className={`${INPUT} min-h-20`} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => draft.set(e.target.value)} />
         ) : (
-          <input className={INPUT} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => setText(e.target.value)} />
+          <input className={INPUT} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => draft.set(e.target.value)} />
         )}
       </label>
       <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>
@@ -201,6 +162,7 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
         ))}
         {canAdd && (proposals.length === 0 || item.aim === "decide") && (
           <OneLine
+            draftKey={`${view.id}:${item.id}:decision`}
             label={SESSION_COPY.addDecision}
             button={ROOM_COPY.add}
             multiline
@@ -220,6 +182,7 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
         ))}
         {canAdd && (
           <OneLine
+            draftKey={`${view.id}:${item.id}:seed`}
             label={SESSION_COPY.itemSeedPrompt}
             button={ROOM_COPY.seedSave}
             onSend={async (text) => (await actions.addEntry({ kind: "seed", text, itemId: item.id })).ok}

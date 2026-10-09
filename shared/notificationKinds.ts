@@ -354,7 +354,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // it left with is held by you, or by a seat you sit in.
   session_action_held: {
     group: "work",
-    blurb: "A live session closed with an action held by you or by a seat you sit in. The session's record says what it is and by when.",
+    blurb: "A live session closed with an action held by you or by a seat you sit in. The notice says what it is and by when.",
     many: "{n} actions from live sessions are held by you or your seats.",
     celebrate: false,
   },

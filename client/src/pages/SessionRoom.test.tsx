@@ -1,14 +1,27 @@
 // @vitest-environment jsdom
 /**
  * The live room page over a stubbed server: its gates, the stage rail, the
- * facilitator's moves, the door in for someone not yet joined, a close the
- * server refuses, and the closed record with the admin's shareable minutes.
+ * facilitator's moves, the door in for someone not yet joined, the room moving
+ * under somebody (said aloud, focus kept, words kept), a close the server
+ * refuses, the proposals still open at the close, and the closed record with
+ * the admin's shareable minutes.
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { CLOSE_REFUSAL, ROOM_COPY, SESSION_COPY, SESSION_REFUSALS, STAGE_DEFS, defaultSessionState, type SessionView } from "@shared/sessions";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  CLOSE_REFUSAL,
+  ROOM_COPY,
+  SESSION_COPY,
+  SESSION_REFUSALS,
+  STAGE_DEFS,
+  defaultSessionState,
+  type SessionItem,
+  type SessionStage,
+  type SessionView,
+} from "@shared/sessions";
 import { json, makeView, record, type Call } from "@/components/sessions/__tests__/roomFixture";
+import { forgetDrafts } from "@/components/sessions/roomUi";
 
 let signedIn: { id: string } | null = { id: "2" };
 let sessionsOn = true;
@@ -41,6 +54,7 @@ beforeEach(() => {
   calls = [];
   room = makeView();
   answer = () => undefined;
+  forgetDrafts();
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -58,6 +72,30 @@ afterEach(() => {
 });
 
 const posted = (path: string) => calls.filter((c) => c.method === "POST" && c.url === `/api/sessions/7${path}`);
+
+/** The facilitator moves the room, and this screen's next ask (the tab coming to the front) hears it. */
+async function roomMovesTo(stage: SessionStage) {
+  room = { ...room, version: room.version + 1, state: { ...room.state, stage } };
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await screen.findByText(ROOM_COPY.roomMovedTo(STAGE_DEFS[stage].title));
+}
+
+const roofItem: SessionItem = {
+  id: 5,
+  title: "Roof",
+  aim: "decide",
+  minutes: 15,
+  position: 1,
+  status: "active",
+  presenterUserId: null,
+  addedBy: 1,
+  startedAt: null,
+  endedAt: null,
+  usedSeconds: 0,
+  fromSessionId: null,
+};
 
 describe("the gates", () => {
   it("shows the module gate when the module is off, and asks nothing", () => {
@@ -153,6 +191,58 @@ describe("the open room", () => {
   });
 });
 
+describe("when the room moves", () => {
+  it("says so aloud, and focus lost with the old stage lands on the new stage's heading", async () => {
+    room = makeView({ state: { ...defaultSessionState(), stage: "arrival" } });
+    render(<SessionRoom />);
+    const wish = await screen.findByPlaceholderText(SESSION_COPY.wishPlaceholder);
+    // The first sight of the room is not a move.
+    expect(screen.queryByText(ROOM_COPY.roomMovedTo(STAGE_DEFS.arrival.title))).not.toBeInTheDocument();
+    wish.focus();
+    expect(document.activeElement).toBe(wish);
+
+    await roomMovesTo("agenda");
+    const said = screen.getByText(ROOM_COPY.roomMovedTo(STAGE_DEFS.agenda.title));
+    expect(said).toHaveAttribute("aria-live", "polite");
+    const heading = screen.getByRole("heading", { level: 2, name: STAGE_DEFS.agenda.title });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(heading).toHaveAttribute("tabindex", "-1");
+
+    // The region stays mounted, so the next move is said too.
+    await roomMovesTo("items");
+    expect(screen.getByText(ROOM_COPY.roomMovedTo(STAGE_DEFS.items.title))).toBe(said);
+  });
+
+  it("a control that is still there keeps its focus", async () => {
+    render(<SessionRoom />);
+    const tension = await screen.findByRole("button", { name: SESSION_COPY.addTension });
+    tension.focus();
+    await roomMovesTo("arrival");
+    expect(document.activeElement).toBe(tension);
+  });
+
+  it("somebody reading another stage hears the move and is not pulled anywhere", async () => {
+    render(<SessionRoom />);
+    await screen.findByRole("heading", { level: 1, name: "Water circle" });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${STAGE_DEFS.agenda.short}`) }));
+    expect(document.activeElement).toBe(document.body);
+    await roomMovesTo("arrival");
+    expect(screen.getByRole("heading", { level: 2, name: STAGE_DEFS.agenda.title })).toBeInTheDocument();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("a note half typed on an item is still there when the room comes back to it", async () => {
+    room = makeView({ items: [roofItem], state: { ...defaultSessionState(), stage: "items", activeItemId: 5, itemStartedAt: Date.now() } });
+    render(<SessionRoom />);
+    fireEvent.change(await screen.findByPlaceholderText(SESSION_COPY.addNote), { target: { value: "Gutters first" } });
+    await roomMovesTo("actions");
+    expect(screen.queryByPlaceholderText(SESSION_COPY.addNote)).not.toBeInTheDocument();
+    await roomMovesTo("items");
+    expect(screen.getByPlaceholderText(SESSION_COPY.addNote)).toHaveValue("Gutters first");
+    expect(posted("/entries")).toHaveLength(0);
+  });
+});
+
 describe("closing", () => {
   const unownedAction = {
     id: 41,
@@ -181,6 +271,37 @@ describe("closing", () => {
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.closeYes }));
     expect(await screen.findByText(CLOSE_REFUSAL)).toBeInTheDocument();
     await waitFor(() => expect(posted("/act").map((c) => c.body)).toContainEqual({ action: { type: "go", stage: "actions" } }));
+  });
+
+  it("the facilitator marks a proposal the room consented to before closing", async () => {
+    room = makeView({
+      state: { ...defaultSessionState(), stage: "close" },
+      items: [{ ...roofItem, status: "done" }],
+      entries: [{ ...unownedAction, id: 70, itemId: 5, kind: "decision", text: "Fix the roof before the rains." }],
+      responses: [
+        { target: "decision:70", userId: 1, value: "consent", text: null },
+        { target: "decision:70", userId: 2, value: "consent", text: null },
+      ],
+      me: { userId: 1, joined: true, facilitates: true, secretary: false, admin: false },
+    });
+    render(<SessionRoom />);
+    const panel = await screen.findByRole("region", { name: ROOM_COPY.openProposalsTitle });
+    expect(panel).toHaveTextContent("Fix the roof before the rains.");
+    fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.decide }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PATCH" && c.url === "/api/sessions/7/entries/70")).toBe(true));
+    expect(calls.find((c) => c.method === "PATCH")!.body).toEqual({ status: "done" });
+  });
+
+  it("while the room is open the facilitator does not read the feedback on the facilitation", async () => {
+    room = makeView({
+      state: { ...defaultSessionState(), stage: "close" },
+      facilitation: [{ value: "flowed", text: "Calm and clear." }],
+      me: { userId: 1, joined: true, facilitates: true, secretary: false, admin: false },
+    });
+    render(<SessionRoom />);
+    await screen.findByRole("button", { name: SESSION_COPY.closeButton });
+    expect(screen.queryByText(ROOM_COPY.facilitationHeading)).not.toBeInTheDocument();
+    expect(screen.queryByText("Calm and clear.")).not.toBeInTheDocument();
   });
 
   it("the closed record shows numbers only, and an admin can read the shareable minutes", async () => {

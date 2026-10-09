@@ -95,6 +95,10 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
   };
   const view = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
   const room = (id: number, extra: Record<string, string> = {}) => ({ id: String(id), ...extra });
+  /** Each page says it is still here, the beat a room in use sends every 20 seconds. */
+  const beat = async (id: number, ...who: string[]) => {
+    for (const w of who) expect((await as(w, "POST /api/sessions/:id/here", { params: room(id) })).status, w).toBe(200);
+  };
 
   // The story's own ids, filled in as it goes.
   let sid = 0;
@@ -104,6 +108,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
   let orderSeed = 0;
   let fixTank = 0;
   let keysTension = 0;
+  let seedUsed = 0;
 
   beforeAll(async () => {
     db = await provisionTestDb();
@@ -280,6 +285,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
   });
 
   it("decides a proposal only once everyone here consents, and only the facilitator marks it", async () => {
+    await beat(sid, "m-ana", "m-ben", "m-dee");
     const answer = (who: string, value: string, text?: string) =>
       as(who, "POST /api/sessions/:id/respond", { params: room(sid), body: { target: `decision:${proposal}`, value, text } });
     await answer("m-ana", "consent");
@@ -291,6 +297,59 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(await mark("m-ben")).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.facilitatorOnly } });
     expect((await mark("m-ana")).status).toBe(200);
     expect(await answer("m-dee", "object", "Changed my mind")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionClosed } });
+  });
+
+  it("never lets a consent from somebody who stepped away stand in for somebody here who has not answered", async () => {
+    await beat(sid, "m-ana", "m-ben", "m-dee");
+    const gate = (await as("m-dee", "POST /api/sessions/:id/entries", { params: room(sid), body: { kind: "decision", text: "We open the gate at dawn", itemId: seedItem } })).body.id;
+    const answer = (who: string, value: string) => as(who, "POST /api/sessions/:id/respond", { params: room(sid), body: { target: `decision:${gate}`, value } });
+    const mark = () => as("m-ana", "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(gate) }), body: { status: "done" } });
+    expect((await answer("m-dee", "consent")).status).toBe(200);
+    expect((await answer("m-ana", "consent")).status).toBe(200);
+
+    // Dee steps away. Two answers against the two people here was "everyone" to
+    // the old arithmetic, but Ben is here and has not been heard.
+    const [{ no: deeNo }] = await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-dee'");
+    const [{ last_seen_at: deeSeen }] = await q("SELECT `last_seen_at` FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [sid, deeNo]);
+    await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [new Date(Date.now() - 10 * 60_000), sid, deeNo]);
+    const here = (await view("m-ana", sid)).body.people.filter((p: any) => p.present).map((p: any) => p.name);
+    expect(here.sort()).toEqual(["Ana Reyes", "Ben Ortiz"]);
+    expect(await mark()).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
+    await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [deeSeen, sid, deeNo]);
+    await beat(sid, "m-dee");
+
+    // New words start a new round: the answers to the old words are gone, so it cannot be marked on them.
+    expect((await answer("m-ben", "consent")).status).toBe(200);
+    expect((await as("m-dee", "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(gate) }), body: { text: "We open the gate at seven" } })).status).toBe(200);
+    expect(await q("SELECT COUNT(*) AS n FROM `live_session_responses` WHERE `session_id` = ? AND `target` = ?", [sid, `decision:${gate}`])).toEqual([{ n: 0 }]);
+    expect(await mark()).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
+    // Unchanged words keep the round.
+    expect((await answer("m-ben", "consent")).status).toBe(200);
+    expect((await as("m-dee", "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(gate) }), body: { text: "We open the gate at seven" } })).status).toBe(200);
+    expect(await q("SELECT COUNT(*) AS n FROM `live_session_responses` WHERE `session_id` = ? AND `target` = ?", [sid, `decision:${gate}`])).toEqual([{ n: 1 }]);
+    // Dee takes it back off the table, so the story's record stays as it was.
+    expect((await as("m-dee", "DELETE /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(gate) }) })).status).toBe(200);
+  });
+
+  it("keeps a proposal decided by consent as it was decided", async () => {
+    const patch = (who: string, body: Record<string, unknown>) =>
+      as(who, "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(proposal) }), body });
+    // Neither its author nor the facilitator can reword it.
+    expect(await patch("m-ben", { text: "We keep seed in the shed" })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionFinal } });
+    expect(await patch("m-ana", { text: "We keep seed in the shed" })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionFinal } });
+    // Taking it out of "decided" is the facilitator's move, and even the facilitator cannot make it.
+    expect(await patch("m-ben", { status: "open" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.facilitatorOnly } });
+    expect(await patch("m-ana", { status: "open" })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionFinal } });
+    expect(await patch("m-ana", { status: "parked" })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionFinal } });
+    expect(await as("m-ben", "DELETE /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(proposal) }) })).toMatchObject({
+      status: 409,
+      body: { error: SESSION_REFUSALS.decisionFinal },
+    });
+    // Sending the words it already has changes nothing, and is no refusal.
+    expect((await patch("m-ben", { text: "We keep seed in the library" })).status).toBe(200);
+    const [row] = await q("SELECT `text`, `status` FROM `live_session_entries` WHERE `id` = ?", [proposal]);
+    expect(row).toEqual({ text: "We keep seed in the library", status: "done" });
+    expect(await q("SELECT COUNT(*) AS n FROM `live_session_responses` WHERE `session_id` = ? AND `target` = ?", [sid, `decision:${proposal}`])).toEqual([{ n: 3 }]);
   });
 
   it("refuses to close while an action has nobody holding it, then lets the room claim it", async () => {
@@ -324,12 +383,13 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     // A second word replaces the first.
     expect((await respond("m-ben", { target: "word", value: "rested" })).status).toBe(200);
 
+    // While the room is open the feedback is read by nobody: an answer turning
+    // up on the facilitator's next poll would say who had just sent it.
     const facilitator = await view("m-ana", sid);
-    expect(facilitator.body.facilitation).toEqual([
-      { value: "flowed", text: null },
-      { value: "mixed", text: "Shorter reports, please" },
-    ]);
+    expect(facilitator.body.facilitation).toBeNull();
+    expect(JSON.stringify(facilitator.body)).not.toContain("Shorter reports");
     expect((await view("m-ben", sid)).body.facilitation).toBeNull();
+    expect((await view("m-founder", sid)).body.facilitation).toBeNull();
     expect(facilitator.body.responses.filter((r: any) => r.target === "word").map((r: any) => r.value)).toEqual(["rested"]);
 
     const idea = await as("m-dee", "POST /api/sessions/:id/tool-feedback", { params: room(sid), body: { text: "Let the timer chime softer." } });
@@ -339,7 +399,25 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     ]);
   });
 
+  it("stops the item on screen when the room goes on to the actions, the way wrapping it up does", async () => {
+    const [before] = await q("SELECT `status`, `used_seconds`, `started_at` FROM `live_session_items` WHERE `id` = ?", [seedItem]);
+    expect(before.status).toBe("active");
+    // The seed library has been on screen for four minutes.
+    const started = new Date(Math.floor(Date.now() / 1000) * 1000 - 4 * 60_000);
+    await q("UPDATE `live_session_items` SET `started_at` = ? WHERE `id` = ?", [started, seedItem]);
+    const moved = await as("m-ana", "POST /api/sessions/:id/act", { params: room(sid), body: { action: { type: "go", stage: "actions" } } });
+    expect(moved.body).toMatchObject({ ok: true, state: { stage: "actions", activeItemId: null, itemStartedAt: null } });
+    const [after] = await q("SELECT `status`, `used_seconds`, `ended_at` FROM `live_session_items` WHERE `id` = ?", [seedItem]);
+    expect(after.status).toBe("done");
+    expect(after.ended_at).not.toBeNull();
+    expect(after.used_seconds).toBeGreaterThanOrEqual(Number(before.used_seconds) + 240);
+    expect(after.used_seconds).toBeLessThan(Number(before.used_seconds) + 300);
+    // The close that follows adds nothing for the time spent on the actions.
+    seedUsed = Number(after.used_seconds);
+  });
+
   it("closes: the record is kept, the arrival words are erased, and the people holding actions hear", async () => {
+    await beat(sid, "m-ana", "m-ben", "m-dee");
     const closed = await as("m-ana", "POST /api/sessions/:id/close", { params: room(sid) });
     expect(closed).toMatchObject({ status: 200, body: { ok: true } });
 
@@ -368,17 +446,18 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(row.minutes_shareable).toContain("held by a member");
     expect(row.minutes_shareable).toContain("3 people took part.");
 
-    // The item on screen stopped with the session.
-    expect(await q("SELECT `status` FROM `live_session_items` WHERE `id` = ?", [seedItem])).toEqual([{ status: "done" }]);
+    // The item on screen stopped when the room went on to the actions, and the close added nothing.
+    expect(await q("SELECT `status`, `used_seconds` FROM `live_session_items` WHERE `id` = ?", [seedItem])).toEqual([{ status: "done", used_seconds: seedUsed }]);
 
     // Every admin hears the record is ready; Ben holds an action and Cai sits in the seat that holds the other.
+    // Cai was not in the room, and the record opens only to the people who were, so his notice carries no link.
     expect(adminNotices).toEqual([
       { type: "session_record_ready", title: 'The record of "Garden circle, week 2" is ready to read', dedupeKey: `session-record:${sid}`, link: `/sessions/${sid}` },
     ]);
     expect(notices.map((n) => [n.userId, n.type, n.dedupeKey, n.link]).sort()).toEqual(
       [
         ["m-ben", "session_action_held", `session-action:${orderSeed}:m-ben`, `/sessions/${sid}`],
-        ["m-cai", "session_action_held", `session-action:${fixTank}:m-cai`, `/sessions/${sid}`],
+        ["m-cai", "session_action_held", `session-action:${fixTank}:m-cai`, null],
       ].sort(),
     );
     expect(notices.find((n) => n.userId === "m-cai").body).toBe("Fix the water tank before the rains, by 2026-10-31.");
@@ -403,7 +482,15 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(ben.body.arrival).toEqual({ count: 3, median: 8, low: 4, high: 9 });
     expect(ben.body.people.every((p: any) => p.arrival === null && p.wish === null && p.present === false)).toBe(true);
     expect(ben.body.facilitation).toBeNull();
-    expect((await view("m-founder", sid)).status).toBe(200);
+    // Once closed, the facilitator and admins read the feedback as one sorted batch, with nobody on it.
+    const sorted = [
+      { value: "flowed", text: null },
+      { value: "mixed", text: "Shorter reports, please" },
+    ];
+    expect((await view("m-ana", sid)).body.facilitation).toEqual(sorted);
+    const founder = await view("m-founder", sid);
+    expect(founder.status).toBe(200);
+    expect(founder.body.facilitation).toEqual(sorted);
 
     const md = await as("m-ben", "GET /api/sessions/:id/minutes.md", { params: room(sid) });
     expect(md.headers["content-type"]).toBe("text/markdown; charset=utf-8");
@@ -431,6 +518,13 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
         [orderSeed, false, true],
       ].sort(),
     );
+    // The agenda item he added, which he also presents, as he typed it.
+    expect(ben.items).toEqual([
+      expect.objectContaining({ sessionId: sid, id: seedItem, title: "Seed library", aim: "decide", minutes: 20, status: "done", added: true, presents: true }),
+    ]);
+    expect(JSON.stringify(ben.items)).not.toContain("Water rota");
+    const ana = await exportMemberSessions(pool, "m-ana");
+    expect(ana.items.map((i: any) => [i.id, i.added, i.presents])).toEqual([[waterItem, true, true]]);
     // His own answers, the unsigned feedback included, because it is his.
     expect(ben.responses.map((r: any) => [r.target, r.value]).sort()).toEqual(
       [
@@ -441,8 +535,8 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       ].sort(),
     );
     expect(JSON.stringify(ben)).not.toContain("Ana Reyes");
-    // A member who never joined a room exports three empty lists.
-    expect(await exportMemberSessions(pool, "m-never")).toEqual({ sessions: [], entries: [], responses: [] });
+    // A member who never joined a room exports four empty lists.
+    expect(await exportMemberSessions(pool, "m-never")).toEqual({ sessions: [], items: [], entries: [], responses: [] });
   });
 
   it("carries what the circle left open into its next session, for the people who may read it", async () => {
@@ -466,5 +560,103 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     });
     const items = (await view("m-ana", next)).body.items;
     expect(items).toEqual([expect.objectContaining({ title: "Shed keys", fromSessionId: sid, position: 1 })]);
+
+    // A second copy of something already brought over is refused, however it is spelled.
+    for (const title of ["Shed keys", "shed KEYS"]) {
+      expect(await as("m-ana", "POST /api/sessions/:id/items", { params: room(next), body: { title, aim: "explore", minutes: 10, fromSessionId: sid } }), title).toMatchObject({
+        status: 409,
+        body: { error: SESSION_REFUSALS.alreadyOnAgenda },
+      });
+    }
+    // The same title typed fresh, from no earlier session, is the room's own business.
+    expect((await as("m-ana", "POST /api/sessions/:id/items", { params: room(next), body: { title: "Shed keys", aim: "report", minutes: 5 } })).status).toBe(200);
+
+    // Brought over, the tension is offered no more: the room matches the title the text became.
+    expect((await as("m-ana", "POST /api/sessions/:id/items", { params: room(next), body: { title: "Who holds the shed keys?", aim: "explore", minutes: 15, fromSessionId: sid } })).status).toBe(200);
+    const after = (await view("m-ana", next)).body.carried;
+    expect(after.backlog).toEqual([]);
+    expect(after.actions.map((e: any) => e.id).sort()).toEqual([orderSeed, fixTank].sort());
+  });
+
+  it("closes a room nobody closed once it has gone quiet, the way a facilitator closes it, and only once", async () => {
+    const HOUR = 60 * 60_000;
+    const base = Math.floor(Date.now() / 1000) * 1000;
+    const open = async (who: string, title: string, durationMin: number) =>
+      (await as(who, "POST /api/sessions", { body: { title, durationMin } })).body.id as number;
+    /** Wind a room's clock back: opened `openedAgo`, everybody last seen `seenAgo`. */
+    const age = async (id: number, openedAgo: number, seenAgo: number) => {
+      await q("UPDATE `live_sessions` SET `created_at` = ? WHERE `id` = ?", [new Date(base - openedAgo), id]);
+      await q("UPDATE `live_session_people` SET `joined_at` = ?, `last_seen_at` = ? WHERE `session_id` = ?", [new Date(base - openedAgo), new Date(base - seenAgo), id]);
+    };
+
+    // Eve opens a room, gives her number, starts an item, leaves an action with nobody on it, and goes.
+    const shed = await open("m-eve", "Tool shed sort-out", 60);
+    await as("m-eve", "POST /api/sessions/:id/arrival", { params: room(shed), body: { score: 3, wish: "a long nap" } });
+    const tools = (await as("m-eve", "POST /api/sessions/:id/items", { params: room(shed), body: { title: "Sort the tools", aim: "report", minutes: 10 } })).body.id;
+    await as("m-eve", "POST /api/sessions/:id/act", { params: room(shed), body: { action: { type: "item", itemId: tools } } });
+    const sweep = (await as("m-eve", "POST /api/sessions/:id/entries", { params: room(shed), body: { kind: "action", text: "Sweep the floor" } })).body.id;
+    await age(shed, 7 * HOUR, 7 * HOUR - 10 * 60_000);
+    // The item was on screen for its first five minutes, until the room went quiet.
+    await q("UPDATE `live_session_items` SET `started_at` = ? WHERE `id` = ?", [new Date(base - 7 * HOUR + 5 * 60_000), tools]);
+
+    // Two rooms that are not quiet for good: a long session still inside its
+    // own ten hours, and an old room somebody is still in.
+    const long = await open("m-dee", "Long planning day", 480);
+    await age(long, 9 * HOUR, 9 * HOUR);
+    const talking = await open("m-ana", "Still talking", 60);
+    await age(talking, 7 * HOUR, 0);
+    const versionOf = async (id: number) => Number((await q("SELECT `version` FROM `live_sessions` WHERE `id` = ?", [id]))[0].version);
+    const versions = [await versionOf(long), await versionOf(talking)];
+    const readyBefore = adminNotices.length;
+
+    // Reading the list is what closes it.
+    const list = await as("m-ben", "GET /api/sessions");
+    expect(list.status).toBe(200);
+    const openIds = list.body.open.map((r: any) => r.id);
+    expect(openIds).not.toContain(shed);
+    expect(openIds).toEqual(expect.arrayContaining([long, talking]));
+    expect([await versionOf(long), await versionOf(talking)]).toEqual(versions);
+
+    const [row] = await q("SELECT `status`, `closed_at`, `summary`, `minutes_people`, `minutes_shareable` FROM `live_sessions` WHERE `id` = ?", [shed]);
+    expect(row.status).toBe("closed");
+    expect(row.closed_at).not.toBeNull();
+    // The same close: the spread kept, the number and the words erased, both minutes written.
+    expect(JSON.parse(row.summary).arrival).toEqual({ count: 1, median: 3, low: 3, high: 3 });
+    expect(await q("SELECT `arrival_score`, `arrival_wish` FROM `live_session_people` WHERE `session_id` = ?", [shed])).toEqual([
+      { arrival_score: null, arrival_wish: null },
+    ]);
+    for (const minutes of [row.minutes_people, row.minutes_shareable]) {
+      expect(minutes).toContain("Tool shed sort-out");
+      expect(minutes).not.toContain("a long nap");
+    }
+    // Nobody was there to claim the action, so it went to the backlog first.
+    expect(await q("SELECT `status` FROM `live_session_entries` WHERE `id` = ?", [sweep])).toEqual([{ status: "parked" }]);
+    // The item's clock stopped when the room went quiet, not hours later.
+    expect(await q("SELECT `status`, `used_seconds` FROM `live_session_items` WHERE `id` = ?", [tools])).toEqual([{ status: "done", used_seconds: 300 }]);
+    expect(adminNotices.slice(readyBefore)).toEqual([
+      { type: "session_record_ready", title: 'The record of "Tool shed sort-out" is ready to read', dedupeKey: `session-record:${shed}`, link: `/sessions/${shed}` },
+    ]);
+
+    // Only once: the next read finds nothing to close.
+    const closedVersion = await versionOf(shed);
+    await as("m-ana", "GET /api/sessions");
+    expect(await versionOf(shed)).toBe(closedVersion);
+    expect(adminNotices).toHaveLength(readyBefore + 1);
+    // Eve was in it, so the record is hers to read.
+    expect((await view("m-eve", shed)).body).toMatchObject({ status: "closed", arrival: { count: 1, median: 3 } });
+
+    // Joining a room that went quiet closes it first, so nobody joins to read its arrival round.
+    const porch = await open("m-ben", "Porch check-in", 30);
+    await as("m-ben", "POST /api/sessions/:id/arrival", { params: room(porch), body: { score: 6, wish: "tea" } });
+    await age(porch, 8 * HOUR, 8 * HOUR);
+    expect(await as("m-eve", "POST /api/sessions/:id/join", { params: room(porch) })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.closed } });
+    expect(await q("SELECT `status` FROM `live_sessions` WHERE `id` = ?", [porch])).toEqual([{ status: "closed" }]);
+    expect(await q("SELECT `arrival_wish` FROM `live_session_people` WHERE `session_id` = ?", [porch])).toEqual([{ arrival_wish: null }]);
+
+    // Reading one closes it too, and the poll of a room in use is left alone.
+    const gateRota = await open("m-dee", "Gate rota", 45);
+    await age(gateRota, 7 * HOUR, 7 * HOUR);
+    expect((await view("m-dee", gateRota)).body.status).toBe("closed");
+    expect((await view("m-ana", talking)).body.status).toBe("open");
   });
 });

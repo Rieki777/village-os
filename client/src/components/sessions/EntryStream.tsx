@@ -1,12 +1,14 @@
 /**
  * A stream of what people add while an item runs: its notes, or its ideas.
  * Newest last, the way a conversation reads. Whoever wrote an entry, the
- * facilitator or the note taker can take it out again.
+ * facilitator or the note taker can take it out again, once: a second tap
+ * while the first is out sends nothing. What is being typed is a draft, so it
+ * is still there when the room comes back to this item.
  */
 import { useState } from "react";
 import { X } from "lucide-react";
 import { ROOM_COPY, SESSION_LIMITS, cleanText, type EntryKind } from "@shared/sessions";
-import { BTN_ICON, BTN_SECONDARY, HINT, INPUT, entryRightsFor, nameOf, type StageProps } from "./roomUi";
+import { BTN_ICON, BTN_SECONDARY, HINT, INPUT, entryRightsFor, nameOf, useDraft, type StageProps } from "./roomUi";
 
 export interface EntryStreamProps extends Omit<StageProps, "now"> {
   kind: Extract<EntryKind, "note" | "idea">;
@@ -16,8 +18,10 @@ export interface EntryStreamProps extends Omit<StageProps, "now"> {
 }
 
 export default function EntryStream({ view, actions, kind, itemId, title, addLabel }: EntryStreamProps) {
-  const [text, setText] = useState("");
+  const draft = useDraft(`${view.id}:${itemId ?? "loose"}:${kind}`);
+  const text = draft.text;
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<number | null>(null);
   const list = view.entries.filter((e) => e.kind === kind && e.itemId === itemId);
   const canAdd = view.me.joined && view.status === "open";
   const headingId = `stream-${kind}-${itemId ?? "loose"}`;
@@ -28,9 +32,19 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
     setBusy(true);
     try {
       const r = await actions.addEntry({ kind, text: clean, itemId });
-      if (r.ok) setText("");
+      if (r.ok) draft.clear();
     } finally {
       setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    if (removing != null) return;
+    setRemoving(id);
+    try {
+      await actions.deleteEntry(id);
+    } finally {
+      setRemoving(null);
     }
   };
 
@@ -48,7 +62,7 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
                 <span className="block text-xs text-muted-foreground">{nameOf(view, e.authorUserId) ?? ""}</span>
               </p>
               {entryRightsFor(view, e).remove && (
-                <button type="button" className={BTN_ICON} aria-label={ROOM_COPY.remove} onClick={() => void actions.deleteEntry(e.id)}>
+                <button type="button" className={BTN_ICON} aria-label={ROOM_COPY.remove} disabled={removing != null} onClick={() => void remove(e.id)}>
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
@@ -73,7 +87,7 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
               value={text}
               maxLength={SESSION_LIMITS.text}
               placeholder={addLabel}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => draft.set(e.target.value)}
             />
           </label>
           <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>

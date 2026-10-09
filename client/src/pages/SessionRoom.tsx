@@ -12,8 +12,14 @@
  * useSessionRoom.ts). A closed session shows its record, which only the people
  * who were in it and the village's admins can read; anybody else gets that
  * sentence and nothing more.
+ *
+ * WHEN THE ROOM MOVES, it is said out loud: a polite live region, mounted for
+ * as long as the room is on screen, reads "The room moved on to ...". If the
+ * move took away the control somebody was on, so focus would fall to the
+ * page, focus goes to the new stage's heading instead, unless they are
+ * reading another stage on their own screen.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { ROOM_COPY, SESSION_COPY, STAGE_DEFS, type SessionStage } from "@shared/sessions";
@@ -73,7 +79,27 @@ export default function SessionRoom() {
   const [browsing, setBrowsing] = useState<SessionStage | null>(null);
   const [highlight, setHighlight] = useState<number[]>([]);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [moved, setMoved] = useState("");
+  const stageHeading = useRef<HTMLHeadingElement>(null);
+  const lastStage = useRef<SessionStage | null>(null);
   const { actions } = room;
+  const liveStage = room.view?.status === "open" ? room.view.state.stage : null;
+
+  useEffect(() => {
+    // No open room on screen (loading another one, or closed): the next stage seen is a first sight, not a move.
+    if (liveStage == null) {
+      lastStage.current = null;
+      return;
+    }
+    const prev = lastStage.current;
+    lastStage.current = liveStage;
+    if (prev == null || prev === liveStage) return;
+    setMoved(ROOM_COPY.roomMovedTo(STAGE_DEFS[liveStage].title));
+    if (browsing != null) return;
+    const at = document.activeElement;
+    if (!at || at === document.body || !at.isConnected) stageHeading.current?.focus();
+    // Only a move of the room runs this; `browsing` is read as it stands at that moment.
+  }, [liveStage]);
 
   // A refused close moves the room to the actions it named, and says why there.
   const onRefused = useCallback(
@@ -110,6 +136,9 @@ export default function SessionRoom() {
       </div>
 
       <div className="container max-w-5xl space-y-5 pb-16">
+        <p className="sr-only" aria-live="polite" aria-atomic="true">
+          {moved}
+        </p>
         {view.status === "closed" ? (
           <ClosedRecord view={view} />
         ) : (
@@ -152,7 +181,7 @@ export default function SessionRoom() {
 
             <section aria-labelledby="stage-title" className="space-y-5">
               <div>
-                <h2 id="stage-title" className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+                <h2 id="stage-title" ref={stageHeading} tabIndex={-1} className="font-display text-2xl font-bold text-foreground outline-none sm:text-3xl">
                   {def.title}
                 </h2>
                 <p className="mt-1 max-w-3xl text-muted-foreground">{def.lede}</p>

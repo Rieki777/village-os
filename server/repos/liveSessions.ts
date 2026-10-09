@@ -158,6 +158,42 @@ export async function lastClosedInCircle(q: Queryable, circleId: string, exceptI
   );
 }
 
+/**
+ * Open rooms nobody has been seen in for a while: older than
+ * `GREATEST(duration_min + graceMin, floorMin)` minutes, with nobody's
+ * `last_seen_at` inside that window. The status index narrows the read to open
+ * sessions older than the floor before any row is weighed, and each candidate
+ * looks at its own people through their primary key, so a village whose rooms
+ * are all fresh pays one index range that finds nothing. `onlyId` asks about
+ * one room.
+ */
+export async function staleOpenSessionIds(
+  q: Queryable,
+  w: { now: Date; graceMin: number; floorMin: number; onlyId: number | null; limit: number },
+): Promise<number[]> {
+  const windowStart = "DATE_SUB(?, INTERVAL GREATEST(`s`.`duration_min` + ?, ?) MINUTE)";
+  const rows = await rowsOf(
+    q,
+    "SELECT `s`.`id` FROM `live_sessions` `s` WHERE `s`.`status` = 'open' AND `s`.`created_at` < DATE_SUB(?, INTERVAL ? MINUTE) " +
+      `AND \`s\`.\`created_at\` < ${windowStart} ${w.onlyId != null ? "AND `s`.`id` = ? " : ""}` +
+      "AND NOT EXISTS (SELECT 1 FROM `live_session_people` `p` WHERE `p`.`session_id` = `s`.`id` " +
+      `AND \`p\`.\`last_seen_at\` >= ${windowStart}) ORDER BY \`s\`.\`id\` LIMIT ?`,
+    [
+      w.now,
+      w.floorMin,
+      w.now,
+      w.graceMin,
+      w.floorMin,
+      ...(w.onlyId != null ? [w.onlyId] : []),
+      w.now,
+      w.graceMin,
+      w.floorMin,
+      w.limit,
+    ],
+  );
+  return rows.map((r) => Number(r.id));
+}
+
 /** Every write the room makes ends here, inside its transaction. */
 export async function bumpVersion(q: Queryable, id: number): Promise<void> {
   await q.query("UPDATE `live_sessions` SET `version` = `version` + 1 WHERE `id` = ?", [id]);
@@ -371,6 +407,12 @@ export async function writeEntry(
   );
 }
 
+/** A quiet room's actions that nobody holds go to the backlog before it closes. */
+export async function parkEntries(q: Queryable, sessionId: number, ids: readonly number[]): Promise<void> {
+  if (none(ids)) return;
+  await q.query("UPDATE `live_session_entries` SET `status` = 'parked' WHERE `session_id` = ? AND `id` IN (?)", [sessionId, ids]);
+}
+
 export async function deleteEntryRow(q: Queryable, id: number): Promise<void> {
   await q.query("DELETE FROM `live_session_entries` WHERE `id` = ?", [id]);
 }
@@ -436,6 +478,15 @@ export async function memberEntryRows(q: Queryable, no: number): Promise<RowData
   return rowsOf(
     q,
     `SELECT ${ENTRY_COLUMNS} FROM \`live_session_entries\` WHERE \`author_no\` = ? OR \`owner_no\` = ? ORDER BY \`id\``,
+    [no, no],
+  );
+}
+
+/** The agenda items this member added, and the ones they present. */
+export async function memberItemRows(q: Queryable, no: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${ITEM_COLUMNS}, \`created_at\` FROM \`live_session_items\` WHERE \`added_by_no\` = ? OR \`presenter_no\` = ? ORDER BY \`id\``,
     [no, no],
   );
 }

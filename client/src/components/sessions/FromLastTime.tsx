@@ -2,7 +2,8 @@
  * FROM LAST TIME: what the last closed session in this circle left behind.
  * Its actions, to check in on (done or not done, never the results); its
  * backlog; and the items it parked. Anything here can come onto today's agenda
- * with one tap, carrying where it came from.
+ * with one tap, carrying where it came from, and once it is there it is no
+ * longer offered.
  */
 import { useState } from "react";
 import {
@@ -24,6 +25,9 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
   const { actions: carriedActions, backlog, parkedItems } = carried;
   if (!carriedActions.length && !backlog.length && !parkedItems.length) return null;
   const canAdd = view.me.joined && view.status === "open";
+  // The action check is a title of the room's own, so the room asks its agenda whether it is there yet.
+  const checkTitle = ROOM_COPY.actionCheckTitle.toLowerCase();
+  const checkAdded = view.items.some((i) => i.fromSessionId === carried.sessionId && i.title.toLowerCase() === checkTitle);
 
   const bring = async (key: string, title: string, aim: ItemAim, minutes: number) => {
     const clean = cleanLine(title, SESSION_LIMITS.agendaTitle);
@@ -47,7 +51,7 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-semibold text-foreground">{SESSION_COPY.carriedActions}</h4>
-            {canAdd && (
+            {canAdd && !checkAdded && (
               <button
                 type="button"
                 className={BTN_QUIET}

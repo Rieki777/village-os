@@ -105,6 +105,24 @@ describe("the room's poll", () => {
     expect(out.result.current.status).toBe("signed-out");
   });
 
+  it("every ask goes past the browser's cache, so the room's clock is read fresh", async () => {
+    answer = (c) => {
+      if (c.method === "POST") return json({ ok: true });
+      return c.headers["If-None-Match"] ? json(null, 304) : json(makeView(), 200, { ETag: '"s7-3"' });
+    };
+    const { result } = renderHook(() => useSessionRoom(7, { pollMs: POLL, hereMs: HERE }));
+    await settle();
+    await settle(POLL);
+    await act(async () => {
+      await result.current.refresh();
+    });
+    // The first ask, a poll with its ETag, and a forced ask: none may be answered from the HTTP cache.
+    expect(gets()).toHaveLength(3);
+    expect(gets().map((c) => c.cache)).toEqual(["no-store", "no-store", "no-store"]);
+    expect(gets()[1]!.headers["If-None-Match"]).toBe('"s7-3"');
+    expect(gets()[2]!.headers["If-None-Match"]).toBeUndefined();
+  });
+
   it("keeps the room's clock, so every screen reads the same second", async () => {
     const ahead = 90_000;
     answer = (c) => (c.method === "POST" ? json({ ok: true }) : json(makeView({ serverNow: Date.now() + ahead })));

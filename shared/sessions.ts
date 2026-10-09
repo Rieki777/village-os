@@ -538,12 +538,29 @@ export interface ConsentTally {
   consented: boolean;
 }
 
-export function consentTally(values: ConsentValue[], presentCount: number): ConsentTally {
+/** One answer in a consent round, with who gave it (a member's number in the room). */
+export interface ConsentAnswer {
+  who: number;
+  value: ConsentValue;
+}
+
+/**
+ * A consent round, counted person by person. `waiting` is the people here now
+ * who have not answered, so an answer from someone who has left never stands in
+ * for someone present who has not been heard. Every answer counts toward the
+ * totals, and an objection blocks whoever gave it, present or not.
+ */
+export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
   const t = { consent: 0, concern: 0, object: 0 };
-  for (const v of values) t[v] += 1;
-  const answered = t.consent + t.concern + t.object;
-  const waiting = Math.max(0, presentCount - answered);
-  return { ...t, waiting, consented: answered > 0 && waiting === 0 && t.object === 0 };
+  const said = new Set<number>();
+  for (const a of answers) {
+    t[a.value] += 1;
+    said.add(a.who);
+  }
+  const here = Array.from(new Set(presentIds));
+  const waiting = here.filter((id) => !said.has(id)).length;
+  const heardHere = here.some((id) => said.has(id));
+  return { ...t, waiting, consented: heardHere && waiting === 0 && t.object === 0 };
 }
 
 export interface ArrivalSummary {
@@ -956,6 +973,9 @@ export const SESSION_REFUSALS = {
   actionUnknown: "The room does not know that move.",
   notClosedYet: "The minutes are written when the session closes.",
   slowDown: "That is a lot at once. Give it a moment and try again.",
+  membersOnly: "Live sessions are for the village's members. Sign the commitment to join one.",
+  alreadyOnAgenda: "That one is already on today's agenda.",
+  decisionFinal: "That proposal was decided by consent, and its words stay as they were.",
 } as const;
 
 /** What a person is called when the village no longer holds their name. */
@@ -1044,6 +1064,11 @@ export const ROOM_COPY = {
   changeNumber: "Change my number",
   theRoom: "The room",
   notYet: "Not yet",
+  arrivalHeardInRoom: "The numbers are shared with the people who joined the room.",
+  answersHeardInRoom: "The answers are shared with the people who joined the room.",
+  roomMovedTo: (title: string) => `The room moved on to ${title}.`,
+  openProposalsTitle: "Proposals still open",
+  openProposalsHint: "Mark each one decided by consent, or leave it open and it goes in the record as not decided.",
   roundStart: "Start a speaking round",
   roundNext: "Next speaker",
   roundBack: "Back one",

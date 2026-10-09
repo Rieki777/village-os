@@ -25,11 +25,20 @@
  * sentence is SESSION_REFUSALS in the contract.
  *
  * MEMBERS ONLY. Every door answers 401 `auth_required` to anybody without a
- * member's token, before it touches the database. There is no guest door.
+ * member's token, before it touches the database. There is no guest door:
+ * a signed-in account the village has not admitted yet (the Guest stage) is
+ * refused 403 by the members-only gate below, admins excepted. The gate asks
+ * `isAdmitted` on the platform's own ladder, the same answer the map's chips
+ * and the vouch door read.
  *
  * THE MODULE GATE MOUNTS HERE, first, the way the journal mounts its own:
  * `requireModule("sessions")` in front of the whole prefix, so a village with
- * the module off answers 404 on every door below.
+ * the module off answers 404 on every door below. The members-only gate
+ * mounts right after it.
+ *
+ * A ROOM NOBODY CLOSES CLOSES ITSELF, lazily: reading the list sweeps every
+ * quiet room (`closeStaleRooms`, one indexed read), and reading or joining a
+ * room checks that one room when its row says it is old enough to be quiet.
  *
  * THE ROOM POLLS, AND A 304 IS NEARLY FREE. There is no push channel to a
  * browser in this server (server/routes/mapOrg.ts says why), so an open room
@@ -41,7 +50,9 @@
  * default. The close tells the admins and the people holding actions through
  * the notification spine, after its transaction commits.
  */
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { recordFeedback } from "../lib/feedback";
 import {
@@ -51,12 +62,14 @@ import {
   buildView,
   cleanStart,
   closeSession,
+  closeStaleRooms,
   defaultDuration,
   ensureMemberNo,
   etagMatches,
   joinSession,
   listSessions,
   markHere,
+  mayBeStale,
   maySee,
   memberNo,
   noticesAfterClose,
@@ -74,6 +87,7 @@ import {
   type Actor,
   type MemberLookup,
   type Outcome,
+  type Viewer,
 } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import {
@@ -128,6 +142,24 @@ export function register(app: Express, deps: Deps): void {
 
   app.use(SESSIONS_API, requireModule("sessions"));
 
+  /**
+   * Members only. A signed-in account the village has not admitted is a guest,
+   * and a guest gets one sentence and no room. An admin passes either way.
+   * Nobody signed in passes through to the door, which answers 401 itself
+   * before it touches the database.
+   */
+  app.use(SESSIONS_API, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await authedUser(req);
+      if (user && !isAdmitted(user, GAME_CONFIG.stages) && !(await isAdmin(req))) {
+        return res.status(403).json({ error: R.membersOnly });
+      }
+      next();
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // ── Names and circles ─────────────────────────────────────────────────────
 
   /**
@@ -158,6 +190,19 @@ export function register(app: Express, deps: Deps): void {
     return c ? String(c.name ?? id) : null;
   };
   const ctx = { lookup, circleName };
+  const notices = { notify, notifyAdmins };
+
+  /**
+   * One room's row for a read or a join, after closing it if it has gone quiet
+   * for good. Only a row old enough to be quiet pays for the extra read, so the
+   * poll of a room in use costs what it did.
+   */
+  const current = async (pool: Parameters<typeof sessionForViewer>[0], id: number, viewer: Viewer) => {
+    const found = await sessionForViewer(pool, id, viewer);
+    if (!found || !mayBeStale(found.s, Date.now())) return found;
+    const closed = await closeStaleRooms(pool, ctx, notices, new Date(), id);
+    return closed.length ? sessionForViewer(pool, id, viewer) : found;
+  };
 
   // ── Answering ─────────────────────────────────────────────────────────────
 
@@ -208,6 +253,8 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
     const viewer = { no: await memberNo(pool, String(user.id)), admin: await isAdmin(req) };
+    // A room nobody closed closes now, so the list never offers its arrival round to a late joiner.
+    await closeStaleRooms(pool, ctx, notices);
     const lists = await listSessions(pool, viewer, ctx);
     res.json({ ...lists, circles: circles(), defaultMinutes: defaultDuration() });
   });
@@ -234,7 +281,7 @@ export function register(app: Express, deps: Deps): void {
     if (id == null) return res.status(404).json({ error: R.notFound });
     const pool = getPool();
     const viewer = { no: await memberNo(pool, String(user.id)), admin: await isAdmin(req) };
-    const found = await sessionForViewer(pool, id, viewer);
+    const found = await current(pool, id, viewer);
     if (!found) return res.status(404).json({ error: R.notFound });
     if (!maySee(found.s, found.joined, viewer.admin)) return res.status(403).json({ error: SESSION_COPY.closedNoAccess });
     const now = Date.now();
@@ -254,8 +301,9 @@ export function register(app: Express, deps: Deps): void {
     const id = parseId(req.params?.id);
     if (id == null) return res.status(404).json({ error: R.notFound });
     const pool = getPool();
-    // Refuse a missing or closed room before handing out a number.
-    const found = await sessionForViewer(pool, id, { no: null, admin: false });
+    // Refuse a missing or closed room before handing out a number. A room that
+    // went quiet closes here, so nobody joins it to read its arrival round.
+    const found = await current(pool, id, { no: null, admin: false });
     if (!found) return res.status(404).json({ error: R.notFound });
     if (found.s.status !== "open") return res.status(409).json({ error: R.closed });
     const no = await ensureMemberNo(pool, uid);
@@ -351,7 +399,7 @@ export function register(app: Express, deps: Deps): void {
     if (!w) return;
     const out = await closeSession(w.pool, w.id, w.actor, ctx);
     if (!out.ok) return res.status(out.status).json({ ...(out.body ?? {}), error: out.error });
-    await noticesAfterClose(w.pool, out.value, { notify, notifyAdmins });
+    await noticesAfterClose(w.pool, out.value, notices);
     res.json({ ok: true });
   });
 

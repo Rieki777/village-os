@@ -19,7 +19,8 @@ admins.**
 ## Status
 
 Ships OFF, like every non-core module. An admin turns it on to `members`: members only, no guests,
-and nothing to probe in public. Nothing to set up. The place line falls back to a neutral sentence
+and nothing to probe in public. A signed-in account the village has not admitted yet (anybody below
+the Member stage, a Guest included) is refused at every door with one sentence; admins pass. Nothing to set up. The place line falls back to a neutral sentence
 and the usual length is a working default, so a circle can hold its first session the day the
 module is switched on.
 
@@ -42,7 +43,7 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, or object, and a concern or an objection is said in one sentence. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a seed line (what we now know) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with a seed. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a seed line (what we now know) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with a seed. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a seat, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
@@ -53,23 +54,37 @@ with the room's consent (up to sixty extra on one item), park it, or wrap it up.
 **Speaking rounds.** The facilitator sets an order and the room shows who speaks now and who is
 ready next, two names at a time.
 
+**A consent round counts the people here, one by one.** A proposal reads "everyone here consents"
+only when every person present now has answered and nobody has objected. An answer from somebody who
+has stepped away never stands in for somebody present who has not been heard, and an objection holds
+the round whether or not the person who raised it is still here.
+
+**A decided proposal is final.** Marking a proposal decided by consent is the facilitator's move
+(or an admin running the room), and only once its round has consented. After that its words and its
+status stay as they are and it cannot be deleted. While a proposal is still open, new words start a
+new round: the answers given to the old words are cleared.
+
 **The close refuses while any action has nobody.** An open action with no person and no seat on it
 stops the close with a sentence and the list of those actions. Claim it, name a seat, or park it.
 
 ## Roles
 
-- **Facilitator.** Whoever opened the room, until they hand it to somebody in the room. Moves the
-  stage, starts the clock, the breath and the rounds, names the secretary, and closes. The cues for
-  each stage are shown to the facilitator only.
+- **Facilitator.** Whoever opened the room, until they or an admin hand it to somebody in the room.
+  Moves the stage, starts the clock, the breath and the rounds, names the secretary, marks a consented
+  proposal decided, and closes. The cues for each stage are shown to the facilitator only.
 - **Secretary.** Optional, named by the facilitator. Can change notes and entries alongside the
   facilitator.
 - **Members in the room.** Join, give a number, add items and entries, claim and let go of actions,
   answer consent rounds, leave a word and feedback.
-- **Admins.** Read every closed record and receive the notice that one is ready.
+- **Admins.** Read every closed record and receive the notice that one is ready. An admin who joins
+  an open room can also run it, the same as the facilitator: move the stage, start the clocks and
+  rounds, name the secretary, take over facilitating (for when the facilitator has stepped away),
+  mark a consented proposal decided, and close. Admins also see the consent answers, and the feedback
+  on the facilitation once the session has closed.
 
 There is no capability in v1. Facilitation is a fact of each session, held on its own row, and an
-admin reads closed records through `isAdmin`. A facilitation capability can come later without a
-migration, because nothing stores one.
+admin reads closed records and runs any open room they have joined through `isAdmin`. A facilitation
+capability can come later without a migration, because nothing stores one.
 
 ## Live, on a poll
 
@@ -83,7 +98,9 @@ every half minute while its tab is visible.
 
 ## The privacy line
 
-- **Members only.** Every door needs a signed-in member. There are no guests and no public view.
+- **Members only.** Every door needs a signed-in member the village has admitted, on the same ladder
+  the rest of the platform reads (`isAdmitted` in `server/lib/admission.ts`). A Guest gets a 403 and
+  one sentence, admins excepted. There is no public view.
 - **An open room can be looked into before joining.** A member who has not joined sees the agenda
   and the work, so they can decide to come in. Only the people who joined see the arrival round, and the
   consent answers are seen by them and by admins.
@@ -91,9 +108,11 @@ every half minute while its tab is visible.
   number and words, the way a spoken round works. At close the spread is written down (count,
   median, low and high) and then every number and every word is set to NULL. The record keeps the
   spread and nothing else from the round.
-- **Feedback on the facilitation arrives unsigned.** It is stored with its member's number so one
-  person answers once, and no route returns that number with it. Only the facilitator and admins
-  receive it.
+- **Feedback on the facilitation arrives unsigned, after the session closes.** It is stored with its
+  member's number so one person answers once, and no route returns that number with it. Only the
+  facilitator and admins receive it, and only once the session has closed, as one batch sorted by
+  answer. While the room is open nobody reads it, because an answer showing up on the next poll
+  would say who had just pressed send.
 - **The record of a closed session** (agenda, outcomes, decisions, seeds, actions and backlog) is
   read by the people who were in it and by the village's admins, and by nobody else.
 - **Nothing is written to `health_events`.** `recordEvent` defaults to a public audience, and the
@@ -115,7 +134,20 @@ or joins a session one number, and every person column in the other five holds t
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
-action, or sits in a seat that holds one, gets a notice that it is in their hands.
+action, or sits in a seat that holds one, gets a notice that it is in their hands. The notice says
+what the action is and by when. It links to the record only for somebody who was in the room, since
+the record opens to nobody else.
+
+**A room nobody closes closes itself.** The arrival round is erased only by a close, so a room left
+open would keep it for anybody who joined later. An open room that nobody has been seen in for its
+own length plus two hours (and never less than six hours), and that is older than that, is closed
+the way a facilitator closes it: its actions with no person and no seat are parked first, then the
+arrival spread is stored and every number and word erased, each proposal's tally is kept, both
+minutes are written, and the admins hear the record is ready. The item on screen stops at the last
+moment anybody was seen. Nothing runs on a timer. Reading the list closes every quiet room with one
+indexed read, and reading or joining a room closes that one first when its row is old enough. Each
+room is locked and checked again before it closes, so two readers close it once, and a room somebody
+came back to stays open (`closeStaleRooms` in `server/lib/liveSessions.ts`).
 
 ## The shareable minutes, and an organisational-memory service
 
@@ -152,9 +184,12 @@ and the admins.
   line. The stamp is on the record and at the top of the minutes.
 - **The backlog seeds the next session.** When a circle meets again, the room shows "From last
   time": the open actions from its last closed session, for an action check, and its backlog
-  (parked items, parked entries and tensions), each one a tap from this session's agenda.
+  (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
+  brought over is offered no more, and a second copy of it from the same session is refused.
 - **The feedback inbox.** An idea for the tool, given at close, lands in the village's feedback
-  inbox as an idea, under the same relay rules as any other.
+  inbox as an idea and stays in the village. The close form promises the inbox only, so the idea is
+  recorded as not relayable (`may_relay` 0) and the feedback relay never sends it to the platform
+  hub, even when the village relay is on.
 - **The journal.** The journal's call debrief is one member's private reflection after a call. A
   session is the call itself, held together. The two sit side by side.
 
@@ -194,4 +229,6 @@ and the admins.
 and the entries they wrote, clears them off the actions they held, writes 0 where they facilitated,
 took notes or opened a session, rebuilds the stored minutes of every closed session that named
 them, and then deletes their number. A name the village no longer holds reads as "A member".
-`GET /api/profile/export` carries a `sessions` key with what this module holds about the member.
+`GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
+the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
+and their own answers.

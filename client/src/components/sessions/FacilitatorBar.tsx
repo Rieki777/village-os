@@ -3,6 +3,10 @@
  * stage on screen (or on to the next), read the cues for this stage behind a
  * toggle, hand facilitation to someone else in the room, and name who takes
  * notes. Facilitator and note taker are best two different people.
+ *
+ * The note taker picker stays usable while a save is out, so focus stays on
+ * it: it shows the choice on its way until the room answers, and a choice
+ * made while another save is still out is ignored.
  */
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
@@ -24,6 +28,7 @@ export default function FacilitatorBar({
   const [panel, setPanel] = useState<"cues" | "hosts" | null>(null);
   const [busy, setBusy] = useState(false);
   const [handTo, setHandTo] = useState("");
+  const [secretarySaving, setSecretarySaving] = useState<string | null>(null);
   const room = view.state.stage;
   const next = SESSION_STAGES[SESSION_STAGES.indexOf(room) + 1] ?? null;
   const others = view.people.filter((p) => p.userId !== view.me.userId);
@@ -36,6 +41,12 @@ export default function FacilitatorBar({
     } finally {
       setBusy(false);
     }
+  };
+
+  const nameSecretary = (value: string) => {
+    if (busy || secretarySaving != null) return;
+    setSecretarySaving(value);
+    void run(() => actions.hosts({ secretaryUserId: value ? Number(value) : null })).finally(() => setSecretarySaving(null));
   };
 
   return (
@@ -116,9 +127,9 @@ export default function FacilitatorBar({
               <select
                 id="host-secretary"
                 className={`${INPUT} mt-1`}
-                value={view.secretaryUserId ?? ""}
-                disabled={busy}
-                onChange={(e) => void run(() => actions.hosts({ secretaryUserId: e.target.value ? Number(e.target.value) : null }))}
+                value={secretarySaving ?? view.secretaryUserId ?? ""}
+                aria-busy={secretarySaving != null}
+                onChange={(e) => nameSecretary(e.target.value)}
               >
                 <option value="">{ROOM_COPY.nobodyYet}</option>
                 {view.people.map((p) => (
