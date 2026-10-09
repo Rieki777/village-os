@@ -116,7 +116,7 @@ export default function HostRecapPanel({
     const out = await call("draft", `${url}/draft`, { notes: body });
     if (out?.bodyMd) {
       setBody(String(out.bodyMd));
-      setNote("Drafted. Read it over, then save or send.");
+      setNote(out.polished ? "Drafted, with your notes polished. Read it over, then save or send." : "Drafted. Read it over, then save or send.");
     }
   };
 
