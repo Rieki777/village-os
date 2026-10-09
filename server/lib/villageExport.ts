@@ -50,6 +50,7 @@ import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { VILLAGE_SECRETS_ENV, villageSecretsKeyProblem } from "./secrets";
 import { DECIDES_BY, DOMAINS, SHAPES } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
+import { canonicalJson } from "../../shared/canonicalJson";
 
 /*
  * 0083 vocabulary, published as IDS ONLY and sanitised against the closed
@@ -385,24 +386,11 @@ export function publicKeyBlock(k: SigningKey) {
 }
 
 /**
- * Deterministic JSON. Signing is worthless if the bytes a verifier
- * reconstructs differ from the bytes that were signed, and object key order in
- * JS follows insertion order, which follows whatever the code happened to do
- * that day. Keys are sorted recursively; arrays keep their order because their
- * order is meaning.
+ * Deterministic JSON, from `shared/canonicalJson.ts`. Re-exported so every
+ * existing import of it from this module keeps working, and imported for the
+ * signing below. One canonicaliser for the repository, never a twin.
  */
-export function canonicalJson(value: unknown): string {
-  const walk = (v: any): any => {
-    if (Array.isArray(v)) return v.map(walk);
-    if (v && typeof v === "object" && !(v instanceof Date)) {
-      const out: Record<string, any> = {};
-      for (const k of Object.keys(v).sort()) out[k] = walk(v[k]);
-      return out;
-    }
-    return v;
-  };
-  return JSON.stringify(walk(value));
-}
+export { canonicalJson };
 
 export interface Proof {
   alg: "ed25519";

@@ -38,12 +38,12 @@ import {
   KeyRound,
   Scale,
   Undo2,
-  UserPlus,
   type LucideIcon,
 } from "lucide-react";
+import { ROLE_APPLICATION_TYPE } from "./roleApplicationType";
 import { ROLE_SEAT_TYPE } from "./roleSeatType";
 import { GPS_CHANGE_TYPE } from "./gpsChangeType";
-import { atLeast, changesPresent, pct, positive, required } from "./wizardValidators";
+import { atLeast, changesPresent, positive, required } from "./wizardValidators";
 
 /**
  * The proposal types (GOV_DESIGN section 4).
@@ -100,7 +100,13 @@ export type FieldKind =
    * runs the server's own rule (shared/seatTerms.ts), so a steward's cap and
    * the no-season refusal arrive in the route's words before publishing.
    */
-  | "seatTerm";
+  | "seatTerm"
+  /*
+   * A seat's terms (shared/seatSettings.ts), written through
+   * SeatSettingsEditor: every group from a preset, tweaked, judged by
+   * `parseSeatSettings`, the parser the route will use.
+   */
+  | "seatSettings";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -159,6 +165,8 @@ export interface FieldSpec {
    * so a role carrying the steward veto is held to the season's end.
    */
   roleKey?: string;
+  /** For a `seatSettings` field: the whole preset an empty field starts from. */
+  prefillWhole?: string;
   /** A sentence naming what is wrong, or null. Runs on every keystroke. */
   problem?: (value: unknown, answers: Record<string, unknown>) => string | null;
 }
@@ -200,114 +208,7 @@ export interface WizardTypeConfig {
 // The shared validators live in wizardValidators.ts.
 
 export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
-  {
-    id: "role_application",
-    group: "Recurring",
-    icon: UserPlus,
-    title: "Apply for a seat",
-    description: "Raise your hand for a role, with what you will have done by the end of the season.",
-    consequence:
-      "Publishing sends this to the seat's circle. They see your deliverables, your terms and your fit statement before anyone votes.",
-    publish: {
-      path: "/api/governance/role-applications",
-      body: (a) => ({
-        orgRoleId: a.seatId,
-        deliverables: a.deliverables,
-        fitStatement: a.fitStatement,
-        commitmentPct: Number(a.commitmentPct ?? 100),
-        deferredPct: Number(a.deferredPct ?? 0),
-        tokenSlug: a.tokenSlug || null,
-        tokenPerCycle: a.tokenPerCycle ? Number(a.tokenPerCycle) : null,
-        cashNote: a.cashNote || null,
-      }),
-    },
-    steps: {
-      subject: {
-        label: "The seat",
-        intro: "Which seat you are raising your hand for.",
-        fields: [
-          {
-            key: "seatId",
-            kind: "pick",
-            source: "seats",
-            label: "Seat",
-            required: true,
-            problem: required("A seat"),
-            tip: "Seats come from the village's org chart. A seat that is recruiting shows first.",
-          },
-        ],
-      },
-      details: {
-        label: "Your season",
-        intro: "What you will have done by the end of the season, and why you.",
-        fields: [
-          {
-            key: "deliverables",
-            kind: "textarea",
-            rows: 6,
-            maxLength: 2000,
-            label: "Deliverables for the season",
-            placeholder: "By the end of the season, the spring runs clear and two people besides me know how to keep it that way.",
-            help: "Write what will be TRUE at season's end, so anyone can check it without asking you.",
-            required: true,
-            problem: atLeast(40, "Your deliverables"),
-          },
-          {
-            key: "fitStatement",
-            kind: "textarea",
-            rows: 4,
-            maxLength: 1500,
-            label: "Why you",
-            placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
-            required: true,
-            problem: atLeast(30, "Your fit statement"),
-          },
-        ],
-      },
-      terms: {
-        label: "Your terms",
-        intro: "What you are taking on and what the village owes you for it.",
-        fields: [
-          {
-            key: "commitmentPct",
-            kind: "percent",
-            label: "Commitment",
-            help: "A partial seat is a real seat. 40% means you hold two fifths of the role and are paid for two fifths.",
-            tip: "Commitment scales both the pay and the voice this seat carries. You can lower it later without a vote; raising it takes a new one.",
-            problem: pct,
-          },
-          {
-            key: "deferredPct",
-            kind: "percent",
-            label: "Deferred",
-            help: "The share you let the village hold back and owe you. Deferring changes your pay. It never changes your voice.",
-            tip: "Voice accrues on the full amount whatever you defer, so choosing to wait for value never costs you a say.",
-            problem: pct,
-          },
-          {
-            key: "tokenSlug",
-            kind: "pick",
-            source: "tokens",
-            label: "Paid in",
-          },
-          {
-            key: "tokenPerCycle",
-            kind: "number",
-            min: 0,
-            label: "Per cycle, at full commitment",
-            help: "The whole-seat figure. What you actually receive is this times your commitment, less what you defer.",
-          },
-          {
-            key: "cashNote",
-            kind: "text",
-            maxLength: 500,
-            label: "Cash expectation",
-            help: "Recorded here and settled off the platform. Money never flows out of this village through this software.",
-          },
-        ],
-      },
-    },
-  },
+  ROLE_APPLICATION_TYPE,
   {
     id: "mechanics",
     group: "Rules",

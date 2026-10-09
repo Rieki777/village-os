@@ -21,6 +21,8 @@
  *   pick              a select over a REMOTE list, or a search for members.
  *   changeSet         the mechanics dial editor, the one field with real
  *                     machinery behind it.
+ *   seatSettings      a seat's terms, group by group from presets
+ *                     (SeatSettingsEditor), judged by parseSeatSettings.
  *
  * ACCESSIBILITY. Every control has a real <label> tied by id, every problem is
  * announced through aria-describedby and role="alert", every target clears
@@ -33,6 +35,7 @@ import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
 import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from "./pickSources";
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
+import SeatSettingsEditor from "./SeatSettingsEditor";
 
 export interface MechanicsVariableLite {
   key: string;
@@ -214,6 +217,27 @@ export default function WizardField({
             byVote
           />
           {footer}
+        </div>
+      );
+
+    case "seatSettings":
+      // No single control to label: the editor is many, each labelled itself.
+      return (
+        <div>
+          <p className="block text-sm font-semibold text-stone-900">{field.label}</p>
+          {field.help && (
+            <p id={helpId} className="mt-1 text-xs text-stone-600 leading-relaxed">
+              {field.help}
+            </p>
+          )}
+          <div className="mt-3">
+            <SeatSettingsEditor value={value} onChange={onChange} prefillWholeId={field.prefillWhole} />
+          </div>
+          {problem && (
+            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-coral">
+              {problem}
+            </p>
+          )}
         </div>
       );
 

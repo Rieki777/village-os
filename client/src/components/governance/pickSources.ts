@@ -74,6 +74,28 @@ export function loadPermissionRoles(): Promise<any[] | null> {
   return rolesRead.list;
 }
 
+/**
+ * THE ORG CHART (`/api/org`), ONE READ SHARED BY EVERY ASKER, on the same
+ * terms as `loadPermissionRoles` above: the "seats" and "circles" pickers and
+ * the wizard's live seat preview (`WizardSeatPreview`) read this one answer,
+ * so the preview can never draw a seat the picker did not offer under that
+ * name. Tiered by session, asked again after a minute, and a failed read is
+ * dropped at once. Null when the chart cannot be had.
+ */
+let orgRead: { token: string | null; at: number; body: Promise<any | null> } | null = null;
+
+export function loadOrg(): Promise<any | null> {
+  const token = authToken();
+  if (!orgRead || orgRead.token !== token || Date.now() - orgRead.at > ROLES_FRESH_MS) {
+    const entry = { token, at: Date.now(), body: getJson<any>("/api/org") };
+    orgRead = entry;
+    entry.body.then((r) => {
+      if (r === null && orgRead === entry) orgRead = null;
+    });
+  }
+  return orgRead.body;
+}
+
 /** A role as the picker offers it, and so as the review step names it. */
 const roleOption = (r: any): PickOption => ({
   value: String(r.id),
@@ -85,7 +107,7 @@ const roleOption = (r: any): PickOption => ({
 export async function loadPickOptions(source: PickSource): Promise<PickOption[]> {
   switch (source) {
     case "seats": {
-      const org = await getJson<any>("/api/org");
+      const org = await loadOrg();
       return (org?.roles ?? [])
         .filter((r: any) => !r.isExample)
         .map((r: any) => ({
@@ -95,7 +117,7 @@ export async function loadPickOptions(source: PickSource): Promise<PickOption[]>
         }));
     }
     case "circles": {
-      const org = await getJson<any>("/api/org");
+      const org = await loadOrg();
       return (org?.circles ?? [])
         .filter((c: any) => !c.isExample && c.status !== "retired")
         .map((c: any) => ({ value: String(c.id), label: String(c.name), hint: c.purpose ?? undefined }));

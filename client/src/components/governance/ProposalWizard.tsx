@@ -38,6 +38,8 @@ import PracticeVote from "./PracticeVote";
 import TypeCards from "./TypeCards";
 import WizardField, { type MechanicsVariableLite } from "./WizardField";
 import WizardRolePreview from "./WizardRolePreview";
+import WizardSeatPreview from "./WizardSeatPreview";
+import { settingsWords } from "@shared/seatSettings";
 import WizardStepper from "./WizardStepper";
 import { isSearchSource, labelFor, loadPickOptions, type PickOption } from "./pickSources";
 import { authToken } from "@/lib/gameApi";
@@ -80,8 +82,24 @@ export default function ProposalWizard() {
   // A type that picks a role with powers shows that role as a card once it is
   // picked. One `/api/roles` read serves the picker and the preview
   // (`loadPermissionRoles`), so the two cannot disagree about a role.
-  const rolePick = walk.flatMap((s) => fieldsFor(type, s.key)).find((f) => f.kind === "pick" && f.source === "roles");
+  //
+  // ONE preview, chosen by what the type picks: a seat from the org chart
+  // draws the seat card with its terms drawer (WizardSeatPreview), a role with
+  // powers draws the permission card (WizardRolePreview). A type picking both
+  // would show the seat, never two cards.
+  const walkFields = walk.flatMap((s) => fieldsFor(type, s.key));
+  const seatPick = walkFields.find((f) => f.kind === "pick" && f.source === "seats");
+  const settingsField = walkFields.find((f) => f.kind === "seatSettings");
+  const seatPreview = seatPick && String(answers[seatPick.key] ?? "") ? String(answers[seatPick.key]) : null;
+  const rolePick = seatPreview ? undefined : walkFields.find((f) => f.kind === "pick" && f.source === "roles");
   const rolePreview = rolePick && String(answers[rolePick.key] ?? "") ? String(answers[rolePick.key]) : null;
+  const previewPick = seatPreview ? seatPick : rolePick;
+  const preview = (look: "rail" | "inline") =>
+    seatPreview ? (
+      <WizardSeatPreview seatId={seatPreview} settings={settingsField ? answers[settingsField.key] : undefined} look={look} />
+    ) : rolePreview ? (
+      <WizardRolePreview roleId={rolePreview} look={look} />
+    ) : null;
   // The read-back names a picked value from the list its picker offered
   // (`labelFor`), where it printed the id. A searched source (members) has no
   // list to name from and still prints what was stored.
@@ -322,7 +340,7 @@ export default function ProposalWizard() {
   }
 
   return (
-    <div className={`lg:grid lg:gap-8 ${rolePreview ? "lg:grid-cols-[1fr_22rem]" : "lg:grid-cols-[1fr_14rem]"}`}>
+    <div className={`lg:grid lg:gap-8 ${seatPreview || rolePreview ? "lg:grid-cols-[1fr_22rem]" : "lg:grid-cols-[1fr_14rem]"}`}>
       <div className="min-w-0">
         {/* Mobile stepper sits above the step; the desktop rail is on the right. */}
         <div className="mb-4 lg:hidden">
@@ -385,10 +403,8 @@ export default function ProposalWizard() {
               />
             ))}
             {/* On a phone the preview sits under the question that picked it. */}
-            {rolePreview && rolePick && fieldsFor(type, step).includes(rolePick) && (
-              <div className="lg:hidden">
-                <WizardRolePreview roleId={rolePreview} look="inline" />
-              </div>
+            {previewPick && (fieldsFor(type, step).includes(previewPick) || (settingsField && fieldsFor(type, step).includes(settingsField))) && (
+              <div className="lg:hidden">{preview("inline")}</div>
             )}
           </div>
         )}
@@ -402,11 +418,7 @@ export default function ProposalWizard() {
               </p>
             </div>
 
-            {rolePreview && (
-              <div className="lg:hidden">
-                <WizardRolePreview roleId={rolePreview} look="inline" />
-              </div>
-            )}
+            {(seatPreview || rolePreview) && <div className="lg:hidden">{preview("inline")}</div>}
 
             <dl className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
               {walk
@@ -417,7 +429,13 @@ export default function ProposalWizard() {
                   const shown =
                     field.kind === "changeSet"
                       ? (Array.isArray(v) ? v : []).map((c: any) => `${c.key} becomes ${c.to}`).join(", ")
-                      : field.kind === "seatTerm"
+                      : field.kind === "seatSettings"
+                        ? // The headline of every group that is set; the card above shows the rest.
+                          settingsWords(v as any)
+                            .filter((r) => r.set)
+                            .map((r) => `${r.label}: ${r.headline}`)
+                            .join("\n")
+                        : field.kind === "seatTerm"
                         ? // A blank end date is an answer: the seat ends with the season.
                           String(v ?? "").trim()
                           ? `Until ${String(v).trim()}`
@@ -562,7 +580,7 @@ export default function ProposalWizard() {
             <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>
           )}
           {!dirty && draftId && <p className="mt-4 px-2 text-xs text-stone-500">Saved. You can close this and come back.</p>}
-          {rolePreview && <WizardRolePreview roleId={rolePreview} look="rail" />}
+          {preview("rail")}
         </div>
       </aside>
 
