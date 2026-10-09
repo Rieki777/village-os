@@ -29,6 +29,7 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { listCalendarItems } from "./calendar";
+import { canvasAnswersForMembers, canvasLibrary, matrixRowsForMembers } from "./companionCanvas";
 
 export type ReaderAudience = "public" | "member" | "admin";
 
@@ -37,11 +38,27 @@ export interface ReaderViewer {
   isAdmin: boolean;
   /** Resolved through hasCapability by the caller, never re-derived here. */
   holds(cap: Capability): boolean;
+  /**
+   * The village admitted this account (Wave 4, the companion): the canvas's
+   * own reading rule, `mayReadCanvas` in server/routes/canvas.ts, asked by the
+   * caller. Being signed in is `id`, and it is NOT this: an invited account
+   * the village has not admitted is signed in, and so is anybody who registers
+   * on a fork with invite-only off. Absent reads as not admitted, so a caller
+   * that never asks opens no reader that needs it.
+   */
+  admitted?: boolean;
 }
 
 export interface ReaderCtx {
   pool: Pool;
   viewer: ReaderViewer;
+  /**
+   * The question being answered, for the readers that rank by it (Wave 4:
+   * `canvas.library`) or narrow by it (`canvas.answers` reads the blocks a
+   * question names). Optional, so every caller that passes none still works:
+   * a reader then answers as if nothing was asked.
+   */
+  query?: string;
 }
 
 export interface VillageReader {
@@ -54,6 +71,14 @@ export interface VillageReader {
   requiresVar?: string;
   capability?: Capability;
   audience: ReaderAudience;
+  /**
+   * Only for an account the village admitted, or an admin (Wave 4). The
+   * canvas and its Decision Matrix are the village's own account of how it
+   * governs itself, and their routes refuse a signed-in account the village
+   * has not admitted; a reader over the same rows must refuse the same person,
+   * or the assistant becomes the way around the door.
+   */
+  admittedOnly?: boolean;
   /** Hard cap on the serialized result, so one reader cannot eat the prompt. */
   maxTokens: number;
   read(ctx: ReaderCtx): Promise<unknown>;
@@ -97,6 +122,7 @@ const AUDIENCE_RANK: Record<ReaderAudience, number> = { public: 0, member: 1, ad
 export function readerRefusal(r: VillageReader, viewer: ReaderViewer): string | null {
   const viewerRank = viewer.isAdmin ? 2 : viewer.id ? 1 : 0;
   if (viewerRank < AUDIENCE_RANK[r.audience]) return `${r.key} is not for this audience`;
+  if (r.admittedOnly && !viewer.isAdmin && viewer.admitted !== true) return `${r.key} is for the village's admitted members`;
   if (r.module && !deps.moduleIsOn(r.module)) return `${r.key} needs the ${r.module} module, which is off`;
   if (r.requiresVar && !deps.boolVar(r.requiresVar)) return `${r.key} needs ${r.requiresVar} switched on`;
   if (r.capability && !viewer.holds(r.capability)) return `${r.key} needs the ${r.capability} capability`;
@@ -388,6 +414,44 @@ READERS.push({
   maxTokens: 500,
   read: async ({ pool, viewer }) => weekAhead(pool, { userId: viewer.id, isAdmin: viewer.isAdmin }),
 });
+
+// ── The canvas, for the companion (Wave 4, plan 5.4) ─────────────────────────
+//
+// No module key: the canvas is core, so these exist on a fork that has
+// enabled nothing (server/routes/canvas.ts says why). The canvas and its
+// matrix are `admittedOnly`, the rule their own routes apply; the library is
+// counsel and public metadata, so any member may read it. The SQL lives in
+// the repos and in villageBrain.ts, behind server/lib/companionCanvas.ts.
+READERS.push(
+  {
+    key: "canvas.answers",
+    describe:
+      "The village's governance canvas: for each block, the answer the village adopted and its latest reading. Members' words only: a section whose words stay with the administrators is listed under `others` with its state, and is never blank. Name a block in the question to read it whole.",
+    audience: "member",
+    admittedOnly: true,
+    maxTokens: 2200,
+    // The words are members' whoever asks; an administrator is told the
+    // state of the sections whose words stay out (companionCanvas.ts header).
+    read: async ({ pool, query, viewer }) => canvasAnswersForMembers(pool, query, { admin: viewer.isAdmin }),
+  },
+  {
+    key: "canvas.library",
+    describe:
+      "Reading for a governance question: Canvas Resources that fit it, and the sections of the platform's own governance shelf that bear on it. Counsel, below the village's own record.",
+    audience: "member",
+    maxTokens: 900,
+    read: async ({ pool, query }) => canvasLibrary(pool, query ?? ""),
+  },
+  {
+    key: "matrix.rows",
+    describe:
+      "The rows of the Decision Matrix the village wrote: for each kind of decision, who approves it, who is asked first, who is told, and the method.",
+    audience: "member",
+    admittedOnly: true,
+    maxTokens: 900,
+    read: async ({ pool }) => matrixRowsForMembers(pool),
+  },
+);
 
 export const READER_KEYS = READERS.map((r) => r.key);
 

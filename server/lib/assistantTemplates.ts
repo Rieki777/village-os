@@ -27,6 +27,8 @@
  */
 
 import { villageTimezone } from "./villageReaders";
+import { renderCanvasAnswers, renderCanvasLibrary, renderMatrixRows } from "./companionCanvas";
+import { canvasMoonLine } from "../../shared/canvasRevisit";
 
 /** The organize route's response shape, so the client renders it unchanged. */
 export interface Rendered {
@@ -240,6 +242,17 @@ export function renderWeeklyBrief(input: unknown): RenderedBrief | null {
     );
   } catch { /* dropped */ }
 
+  // The canvas moon (plan 4.4): one line in the week a new moon falls in,
+  // block titles only, in the same words the moon digest uses.
+  try {
+    const m = d.canvasMoon;
+    if (m && typeof m === "object" && typeof m.date === "string" && Array.isArray(m.blocks)) {
+      const line = canvasMoonLine(m.blocks.filter((b: unknown) => typeof b === "string"));
+      const day = briefDay(m.date);
+      if (line && day) push("The canvas moon", [`New moon, ${day}. ${line}`]);
+    }
+  } catch { /* dropped */ }
+
   try {
     const seats = d.openSeats;
     if (seats && Number.isFinite(Number(seats.count)) && Number(seats.count) > 0) {
@@ -429,6 +442,13 @@ export const RENDERERS: Record<string, Renderer> = {
         `could answer: ${named(asked, r.more)}.`,
     );
   },
+
+  // The canvas's three (Wave 4, the companion). Written beside the readers in
+  // server/lib/companionCanvas.ts, which also writes the no-model answer, so
+  // the two ways of saying the canvas cannot drift apart.
+  "canvas.answers": renderCanvasAnswers,
+  "canvas.library": renderCanvasLibrary,
+  "matrix.rows": renderMatrixRows,
 };
 
 /** Reader keys a template can answer. Derived, so a test can hold it to the registry. */

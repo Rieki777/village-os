@@ -59,6 +59,8 @@ export default function ProposalWizard() {
   const [conductable, setConductable] = useState<string[]>([]);
   const [advisory, setAdvisory] = useState<string[]>([]);
   const [mayOpenAdvisory, setMayOpenAdvisory] = useState(false);
+  /** Whether this member may open a binding vote: every `opensVote` type's route asks it. */
+  const [mayOpenBallot, setMayOpenBallot] = useState(false);
   /** The kind being put to a practice vote, when one is being written. */
   const [practiceType, setPracticeType] = useState<WizardType | null>(null);
   const [supportThreshold, setSupportThreshold] = useState(0);
@@ -109,6 +111,7 @@ export default function ProposalWizard() {
         setConductable(factsAnswer.data.conductable);
         setAdvisory(factsAnswer.data.advisory ?? []);
         setMayOpenAdvisory(!!factsAnswer.data.mayOpenAdvisory);
+        setMayOpenBallot(!!factsAnswer.data.mayOpenBallot);
         setSupportThreshold(factsAnswer.data.supportThreshold);
       }
       if (draftsAnswer.ok) setDrafts(draftsAnswer.data.drafts);
@@ -361,6 +364,7 @@ export default function ProposalWizard() {
                       conductable={conductable}
                       advisory={advisory}
                       mayOpenAdvisory={mayOpenAdvisory}
+                      mayOpenBallot={mayOpenBallot}
                       onChoose={chooseType}
                       onPractice={setPracticeType}
                     />

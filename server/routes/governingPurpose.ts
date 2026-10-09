@@ -42,7 +42,7 @@ import { openBallot, withdrawBallot } from "../lib/ballots";
 import { recordGpsChangeProposal } from "../repos/gpsChangeProposals";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
 import { GPS_CHANGE, purposeStatementProblem } from "../../shared/governingPurpose";
-import { thresholdsFor } from "../../shared/ballotSubjects";
+import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
 import {
   founderPenRefusal,
@@ -212,6 +212,8 @@ export function register(app: Express, deps: Deps): void {
         unityPct: Math.max(0, numberVar("governance.unity_pct")),
         quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
       },
+      // A tier bar the village raised is the bar this vote freezes (the conflict agreement's twin, Wave 3a audit).
+      thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)),
     );
     const conducts: BallotMethod = dials.method ?? (villageMethod === "hypha" ? "custom" : villageMethod);
     const snapshot = weightModeNow();

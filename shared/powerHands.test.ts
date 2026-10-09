@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import {
   asOffer,
+  canvasPenSentence,
   NOTE_IS_PUBLIC,
   POWER_APPLICATION,
   POWER_HAND_KEYS,
@@ -18,6 +19,7 @@ import {
   raiseHandRefusal,
   STANDING_HAND_STATUSES,
   standingHands,
+  whoAdoptsCanvasAnswer,
   whoMayPutHandToVillage,
 } from "./powerHands";
 
@@ -189,6 +191,74 @@ describe("who may put a hand for a power to the village", () => {
   it("says nothing about a power when it has no label to say", () => {
     const no = putToVillageRefusal(whoMayPutHandToVillage(false, [HOLDER]), ANA);
     expect(no?.message).toContain("this power");
+  });
+
+  it("the scaffolding extension changes the NEITHER branch only, and only when a caller names one", () => {
+    expect(whoMayPutHandToVillage(false, [], "admins")).toEqual({ who: "admins", because: "the-scaffolding-holds-it", holders: [] });
+    // The other two branches answer the same whoever asks.
+    expect(whoMayPutHandToVillage(true, [], "admins")).toEqual(whoMayPutHandToVillage(true, []));
+    expect(whoMayPutHandToVillage(false, [HOLDER], "founders")).toEqual(whoMayPutHandToVillage(false, [HOLDER]));
+    // A scaffolding answer is nobody's to put to the village from the hand door.
+    expect(putToVillageRefusal(whoMayPutHandToVillage(false, [], "admins"), ANA)?.status).toBe(403);
+  });
+});
+
+/**
+ * RULING 3 (plan 2.3, "Three pens"): who adopts a canvas answer. One case per
+ * pen and per side of the moment that moves it, so a pen that stopped
+ * following its ruling fails by name.
+ */
+describe("who adopts a canvas answer", () => {
+  const before = { birthed: false, handoverComplete: false };
+  const after = { birthed: true, handoverComplete: false };
+  const handedOver = { birthed: true, handoverComplete: true };
+
+  it("the purpose statement stays with the founders until the handover, the Birthing does not move it", () => {
+    expect(whoAdoptsCanvasAnswer("purpose", before)).toMatchObject({ how: "act", who: "founders", because: "the-scaffolding-holds-it" });
+    expect(whoAdoptsCanvasAnswer("purpose", after)).toMatchObject({ how: "act", who: "founders" });
+    expect(whoAdoptsCanvasAnswer("purpose", handedOver)).toMatchObject({ how: "ballot", who: "any-member", because: "village-holds-it" });
+  });
+
+  it("canvas prose is story.tell asked of the gate, before and after both moments", () => {
+    for (const facts of [before, after, handedOver]) {
+      expect(whoAdoptsCanvasAnswer("prose", facts)).toEqual({
+        pen: "prose", how: "act", who: "the-gate", because: "the-scaffolding-holds-it", capability: "story.tell",
+      });
+    }
+  });
+
+  it("the consequence pen is the founders before the Birthing and the village's vote after it", () => {
+    expect(whoAdoptsCanvasAnswer("consequence", before)).toMatchObject({ how: "act", who: "admins" });
+    expect(whoAdoptsCanvasAnswer("consequence", after)).toMatchObject({ how: "ballot", who: "any-member" });
+  });
+
+  it("a dial is dial.set asked of the gate before the Birthing, and a proposal any member files after", () => {
+    expect(whoAdoptsCanvasAnswer("dial", before)).toMatchObject({ how: "act", who: "the-gate", capability: "dial.set" });
+    const later = whoAdoptsCanvasAnswer("dial", after);
+    expect(later).toMatchObject({ how: "ballot", who: "any-member" });
+    expect(later.capability).toBeUndefined();
+  });
+
+  it("a module is the founders' to switch before the Birthing, and a proposal any member files after", () => {
+    expect(whoAdoptsCanvasAnswer("module", before)).toMatchObject({ how: "act", who: "admins" });
+    expect(whoAdoptsCanvasAnswer("module", after)).toMatchObject({ how: "ballot", who: "any-member" });
+    // The module the vote runs on: no vote can move it, so it stays with them.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, votable: false })).toMatchObject({ how: "act", who: "admins" });
+    // Only the module pen reads it.
+    expect(whoAdoptsCanvasAnswer("consequence", { ...after, votable: false })).toMatchObject({ how: "ballot" });
+  });
+
+  it("the administrators' sections stay theirs whatever happens", () => {
+    for (const facts of [before, after, handedOver]) {
+      expect(whoAdoptsCanvasAnswer("admin", facts)).toMatchObject({ how: "act", who: "admins" });
+    }
+  });
+
+  it("says each answer in one sentence, and a vote in a different one", () => {
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("consequence", before))).toBe("The founders adopt this before the Game starts.");
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("consequence", after))).toBe("The Game has started, so adopting this goes to a vote of the whole village.");
+    // The filing is the suggestion's author's (FILED_BY_PROPOSER in server/routes/canvasFrames.ts).
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("dial", after))).toContain("the member who suggested this files it as a proposal");
   });
 });
 

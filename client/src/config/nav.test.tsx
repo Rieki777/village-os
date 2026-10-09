@@ -131,3 +131,29 @@ describe("the Launch Plan entry in the header", () => {
     expect(linksTo(COMMAND_CENTRE)).toHaveLength(0);
   });
 });
+
+/*
+ * /governance was renamed "How we work together" on 2026-09-28 and kept its
+ * route, so every link to it, header and footer, must carry the new name and
+ * still point at the old address.
+ */
+describe("the How we work together entry", () => {
+  beforeEach(() => {
+    authMock.mockReset();
+  });
+
+  for (const [who, user] of [
+    ["a visitor", null],
+    ["a member", { id: "u-wren", name: "Wren Ash", role: "member" }],
+  ] as const) {
+    it(`reads "How we work together" for ${who}, in the menu and the footer, and still opens /governance`, () => {
+      openAbout(user);
+      const links = linksTo("/governance");
+      // One in the About menu, one in the footer.
+      expect(links.length).toBeGreaterThanOrEqual(2);
+      for (const a of links) expect(a.textContent?.trim()).toBe("How we work together");
+      // Nothing is still called Governance and pointing there.
+      expect(Array.from(document.querySelectorAll("a")).some((a) => a.textContent?.trim() === "Governance")).toBe(false);
+    });
+  }
+});

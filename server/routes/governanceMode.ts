@@ -37,7 +37,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { numberVar, stringVar } from "../lib/variables";
 import { openBallot } from "../lib/ballots";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
-import { GOVERNANCE_MODE, thresholdsFor } from "../../shared/ballotSubjects";
+import { GOVERNANCE_MODE, thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 
@@ -94,6 +94,8 @@ export function register(app: Express, deps: Deps): void {
       { subjects: [GOVERNANCE_MODE] },
       villageMethod === "hypha" ? "custom" : (villageMethod as BallotMethod),
       { unityPct: Math.max(0, numberVar("governance.unity_pct")), quorumPct: Math.max(0, numberVar("governance.quorum_pct")) },
+      // A tier bar the village raised is the bar this vote freezes (the conflict agreement's twin, Wave 3a audit).
+      thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)),
     );
     const conducts: BallotMethod = dials.method ?? (villageMethod === "hypha" ? "custom" : villageMethod);
     const title = `How this village weighs a vote: ${snapshot.mode} to ${to}`;

@@ -30,6 +30,8 @@ import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { VILLAGE_SECRETS_ENV } from "./secrets";
+import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
+import { writeConfigDocument } from "../repos/appConfigDocs";
 
 const ID = "village-secrets-key";
 const KEY = "c3".repeat(32);
@@ -77,7 +79,9 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
       if (r.checkKey.startsWith("manual:") || r.checkKey.startsWith("decide:")) continue;
       checks[r.checkKey] = () => ({ state: answer, detail: "not in this test" });
     }
-    return { checks, moduleLifecycle: () => "off", env };
+    // Governance open to members, since `governance-on-for-members` is a
+    // blocking row read from this lifecycle; every other module is off.
+    return { checks, moduleLifecycle: (id) => (id === "governance" ? "members" : "off"), env };
   };
 
   const item = async (env: NodeJS.ProcessEnv) => {
@@ -120,6 +124,24 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
      */
     const wrote = await writeGoverningPurpose(pool, { statement: PURPOSE_EXAMPLE, writtenBy: "founder-1" });
     expect(wrote.ok, JSON.stringify(wrote)).toBe(true);
+
+    /*
+     * The canvas build's two PLATFORM-WIDE governance rows are blocking and
+     * resolve from the database or the lifecycle rather than the stubbed
+     * `deps.checks`, so they are answered here: an adopted closing statement,
+     * and governance open to members (in `deps`). The canvas and conflict-door
+     * rows belong to their optional modules (Rye's module ruling, 2026-10-01),
+     * which are off here like every module but governance, so this village is
+     * READY with no canvas reading and no conflict door at all.
+     */
+    await writeConfigDocument(pool, "exit-policy", {
+      closing: {
+        policyId: "proportional-closing-balance",
+        statement: PROPORTIONAL_CLOSING_STATEMENT,
+        adoptedBy: "founder-1",
+        adoptedAt: new Date().toISOString(),
+      },
+    });
   }, 180_000);
 
   beforeEach(async () => {

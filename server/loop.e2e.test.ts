@@ -27,6 +27,7 @@ import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { verifyDocument } from "./lib/villageExport";
 import { villageMoonLabel } from "../shared/villageMoon";
@@ -72,6 +73,43 @@ let testDb: TestDb;
 
 /** Absolute path to the built server, which the test requires to exist. */
 const DIST = path.resolve(process.cwd(), "dist", "index.js");
+
+/*
+ * THE MAIL THIS SERVER SENDS, CAPTURED WHERE IT LEAVES.
+ *
+ * `sendResendEmail` in server/index.ts posts to a hardcoded
+ * `https://api.resend.com/emails` and has no test seam, and with no key it
+ * returns before building a request at all, so until now nothing in this suite
+ * could see an email's subject or body. The child is started with the preload
+ * below (`node --import`), which wraps the global `fetch` and turns any request
+ * to api.resend.com into one JSON line in `mailLog` plus a 200. Every other
+ * request passes straight through. The production code is unchanged: the
+ * outbound request is the exact payload a real provider would have received.
+ *
+ * It is inert until a Resend key is set, which the suite does only around the
+ * one send it wants to read (the restorative intake), and a key set anywhere
+ * else can no longer reach the real provider from a test run.
+ */
+let mailLog = "";
+const MAIL_CAPTURE_PRELOAD = `
+import { appendFileSync } from "node:fs";
+const out = process.env.LOOP_MAIL_CAPTURE;
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : String(input?.url ?? "");
+  if (out && url.startsWith("https://api.resend.com/")) {
+    appendFileSync(out, JSON.stringify({ url, body: JSON.parse(String(init?.body ?? "{}")) }) + "\\n");
+    return new Response(JSON.stringify({ id: "captured-by-the-loop" }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return realFetch(input, init);
+};
+`;
+
+/** Every email the child has handed to the provider so far, oldest first. */
+function capturedMail(): Array<{ url: string; body: { to: string[]; subject: string; html: string } }> {
+  if (!mailLog || !fs.existsSync(mailLog)) return [];
+  return fs.readFileSync(mailLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+}
 
 async function api(
   method: string,
@@ -184,12 +222,22 @@ beforeAll(async () => {
   // 200 on this port, so without this an orphan answers it and the whole
   // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
   await waitForPortFree(PORT);
-  child = spawn(process.execPath, [DIST], {
+  // Beside the data dir, never inside it, so the server's own sweeps of DATA_DIR never meet it.
+  const harnessDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-mail-capture-"));
+  const preload = path.join(harnessDir, "capture-mail.mjs");
+  fs.writeFileSync(preload, MAIL_CAPTURE_PRELOAD);
+  mailLog = path.join(harnessDir, "mail.jsonl");
+  child = spawn(process.execPath, ["--import", pathToFileURL(preload).href, DIST], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: String(PORT),
       DATA_DIR: dataDir,
+      // Read by the preload above. A sender address is set so a send with a
+      // key reaches the provider request instead of stopping at "no sender";
+      // with no key (the rest of the run) neither of these does anything.
+      LOOP_MAIL_CAPTURE: mailLog,
+      EMAIL_FROM: "loop@example.test",
       // The child runs its own boot migrations against the scratch schema —
       // the same self-migrating path production takes on deploy.
       DATABASE_URL: testDb.url,
@@ -283,6 +331,7 @@ afterAll(async () => {
   if (dataDir && fs.existsSync(dataDir)) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+  if (mailLog) fs.rmSync(path.dirname(mailLog), { recursive: true, force: true });
   await testDb?.drop();
 });
 
@@ -1932,12 +1981,55 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   it("S19-S23: the village map — circles, tiers, relay, concierge", async () => {
     // Off = the whole surface is the framework 404.
     expect((await api("GET", "/api/map")).status).toBe(404);
+
+    /*
+     * THE VILLAGE FORMS ITS OWN CIRCLES. This section used to find eight
+     * councils already standing, seeded from server/seeds/circles-seed.json on
+     * the empty table: one village's council structure, marked active, which
+     * every fork then served as its own organisation before it had formed a
+     * single circle (the never-build rule "seeding aspirational structure").
+     * The seed ships empty now, so the three this section leans on are made
+     * here, through the same admin door a founder uses, and BEFORE the module
+     * turns on, which is the state the old seed produced: real circles present,
+     * so the map's standing examples never layer over them.
+     */
+    const orgBefore = await api("GET", "/api/org");
+    expect(orgBefore.status).toBe(200);
+    expect(
+      (orgBefore.json.circles ?? []).filter((c: any) => !c.isExample),
+      "a village that has formed no circle serves none",
+    ).toEqual([]);
+    for (const own of [
+      { name: "Permaculture Council", aliases: ["Regenerative Agriculture", "Land Stewardship"] },
+      { name: "Education Council", aliases: ["Education"] },
+      { name: "Community Life Council", aliases: ["Community Development"] },
+    ]) {
+      const made = await api("POST", "/api/admin/circles", own, founderToken);
+      expect(made.status, JSON.stringify(made.json)).toBe(200);
+    }
+    /*
+     * And the quest the alias check below reads is one the village posts
+     * itself, under a name its new circle answers to. It used to be a
+     * starter quest, but the starter quests carry no circle since 2026-09-27:
+     * a circle name on a quest put a filter chip on the board for a circle the
+     * village had never formed. Nothing about permaculture or gardens is in
+     * it, so the concierge further down cannot pick it.
+     */
+    const aliased = await api(
+      "POST",
+      "/api/admin/quests",
+      { title: "Mend the rain barrels", gratitude: "10", circle: "Land Stewardship" },
+      founderToken,
+    );
+    expect(aliased.status, JSON.stringify(aliased.json)).toBe(200);
     await api("PUT", "/api/admin/modules/map/lifecycle", { lifecycle: "public" }, founderToken);
 
-    // Circles seeded from the file on the empty table; aliases resolve quests.
+    // Aliases resolve quests.
     const circles = await api("GET", "/api/circles");
     expect(circles.status).toBe(200);
-    expect(circles.json.length).toBeGreaterThanOrEqual(8);
+    expect(circles.json.map((c: any) => c.id)).toEqual(
+      expect.arrayContaining(["permaculture-council", "education-council", "community-life-council"]),
+    );
     const perma = circles.json.find((c: any) => c.id === "permaculture-council");
     expect(perma.aliases).toContain("Regenerative Agriculture");
 
@@ -2006,8 +2098,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const documented = memberRole.holders.find((h: any) => h.kind === "documented");
     expect(documented.name).toBe("Mira");
     expect(documented.userId).toBeNull();
-    // Quests resolve to circles through aliases.
-    expect(anonMap.json.quests.some((q: any) => q.circleId === "permaculture-council")).toBe(true);
+    // Quests resolve to circles through aliases: "Land Stewardship" is one of
+    // the Permaculture Council's.
+    expect(anonMap.json.quests.find((q: any) => q.id === aliased.json.id)?.circleId).toBe("permaculture-council");
 
     /*
      * ── R57: the people are PUBLIC by default, with one lock ─────────────
@@ -3412,24 +3505,37 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // Stale milestones: TIME makes a milestone stale (aged by SQL — no API
     // can backdate, by design); an EDIT through the API restamps and clears
     // it; completed milestones never nag, however old.
-    await testDb.conn.query("UPDATE milestones SET updated_at = (NOW() - INTERVAL 20 DAY) WHERE id = 'site-planning'");
-    // The completed fixture is MADE complete here rather than assumed. The
-    // seeded build board used to arrive with two rows already marked complete,
-    // stating that one specific property had been bought and appraised, which
-    // every fork then published as its own history. Nothing ships complete any
-    // more, so a test about "completed milestones never nag" has to complete
-    // one itself, which is also the honest shape for it.
+    //
+    // Both milestones are WRITTEN here, through the founder's own door. The
+    // board used to arrive seeded with eight rows in four phases, from buying
+    // the land to a finished village with a retreat centre and a health
+    // centre: one village's build plan, which every fork then published as its
+    // own roadmap. A fresh village's board is empty now (asserted in
+    // server/forkPublish.e2e.test.ts), so a test about how a board goes stale
+    // has to have a board first, which is also the honest shape for it.
+    const planning = await api("POST", "/api/admin/milestones", { phase: "Now", title: "Plan the site" }, founderToken);
+    expect(planning.status, JSON.stringify(planning.json)).toBe(200);
+    const landed = await api("POST", "/api/admin/milestones", { phase: "Now", title: "Walk the boundary" }, founderToken);
+    expect(landed.status, JSON.stringify(landed.json)).toBe(200);
+    const planningId = String(planning.json.id);
+    const landedId = String(landed.json.id);
+    await testDb.conn.query( // module-review-ok: no API can backdate a milestone, which is the point
+      "UPDATE milestones SET updated_at = (NOW() - INTERVAL 20 DAY) WHERE id = ?", [planningId],
+    );
+    // The completed fixture is MADE complete here rather than assumed:
+    // nothing ships complete, so a test about "completed milestones never nag"
+    // has to complete one itself.
     await testDb.conn.query( // module-review-ok: no API can backdate or pre-complete a milestone, which is the point
-      "UPDATE milestones SET status = 'complete', updated_at = (NOW() - INTERVAL 40 DAY) WHERE id = 'land-acquired'",
+      "UPDATE milestones SET status = 'complete', updated_at = (NOW() - INTERVAL 40 DAY) WHERE id = ?", [landedId],
     );
     const withStale = await api("GET", "/api/admin/command-centre", undefined, founderToken);
-    const stale = withStale.json.staleMilestones.find((m: any) => m.id === "site-planning");
+    const stale = withStale.json.staleMilestones.find((m: any) => m.id === planningId);
     expect(stale).toBeTruthy();
     expect(stale.daysStale).toBeGreaterThanOrEqual(19);
-    expect(withStale.json.staleMilestones.some((m: any) => m.id === "land-acquired")).toBe(false); // complete
-    const touch = await api("PUT", "/api/admin/milestones/site-planning", { updateNote: "Reviewed at the fireside" }, founderToken);
+    expect(withStale.json.staleMilestones.some((m: any) => m.id === landedId)).toBe(false); // complete
+    const touch = await api("PUT", `/api/admin/milestones/${planningId}`, { updateNote: "Reviewed at the fireside" }, founderToken);
     expect(touch.status).toBe(200);
-    expect((await api("GET", "/api/admin/command-centre", undefined, founderToken)).json.staleMilestones.some((m: any) => m.id === "site-planning")).toBe(false);
+    expect((await api("GET", "/api/admin/command-centre", undefined, founderToken)).json.staleMilestones.some((m: any) => m.id === planningId)).toBe(false);
 
     // The ledger's own invariants ride along, green, on the founder's desk.
     expect(cc.json.reconciliation.invariants.ok).toBe(true);
@@ -3625,16 +3731,76 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // RESTORATIVE INTAKE (the F12 hard rule as code): configure the intake
     // role, send a private message — it reaches the role's holders through
     // the notification spine and NOTHING else. No thread, no event, no row.
-    await api("PUT", "/api/admin/exit-policy", {
+    //
+    // This village started its Game at provisioning, and after the Birthing
+    // the intake role changes only by a village vote on the conflict
+    // agreement (saveExitPolicy, server/routes/exits.ts, Wave 3a audit). The
+    // founder's setup is written on the side of that moment it belongs to:
+    // the start is lifted for this one save and put back exactly as it was.
+    const [[startRow]] = await testDb.conn.query<any[]>("SELECT value FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await testDb.conn.query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const intakeRoleSaved = await api("PUT", "/api/admin/exit-policy", {
       ...pol.json.policy,
       restorative: { ...pol.json.policy.restorative, intakeContactRole: "founders-circle" },
     }, founderToken);
+    if (startRow) {
+      await testDb.conn.query("INSERT INTO app_config (config_key, value) VALUES ('game-start', ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        typeof startRow.value === "string" ? startRow.value : JSON.stringify(startRow.value),
+      ]);
+    }
+    expect(intakeRoleSaved.status, JSON.stringify(intakeRoleSaved.json)).toBe(200);
     const [[fBefore]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
-    const intake = await api("POST", "/api/exit/restorative-intake", { message: "I need help repairing something, privately." }, peerToken);
+    /*
+     * THE EMAIL IS WHERE THE WORDS USED TO LEAVE. The intake is emailed at
+     * once, and the notification email rendered the title ("A private intake
+     * from <the sender's name>") and the body (their words), so both went to
+     * outside mailboxes. A Resend key is set around this one send so the mail
+     * reaches the provider request the capture preload records (see
+     * MAIL_CAPTURE_PRELOAD), and cleared straight after.
+     *
+     * The message names another member, as a real one usually does, and its
+     * words are distinctive so a leak cannot hide behind a common one.
+     */
+    const intakeWords = "Zephyrine and I need help repairing something, privately, after the orchard meeting.";
+    const leaksIn = (text: string) =>
+      [peer.name, ...peer.name.split(" "), ...intakeWords.split(/[\s,.]+/).filter((w) => w.length >= 5)].filter((needle) =>
+        text.toLowerCase().includes(needle.toLowerCase()),
+      );
+    const mailBefore = capturedMail().length;
+    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "re_LOOPCAPTURE_0000" }, founderToken)).status).toBe(200);
+    const intake = await api("POST", "/api/exit/restorative-intake", { message: intakeWords }, peerToken);
+    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "" }, founderToken)).status).toBe(200);
     expect(intake.status).toBe(200);
     expect(intake.json.reached).toBeGreaterThan(0);
+
+    const intakeMail = capturedMail().slice(mailBefore);
+    expect(intakeMail.length, "the intake is emailed at once, so the provider was handed at least one email").toBeGreaterThan(0);
+    for (const m of intakeMail) {
+      expect(m.url).toBe("https://api.resend.com/emails");
+      expect(leaksIn(m.body.subject), "the email subject names no one and quotes nothing").toEqual([]);
+      expect(leaksIn(m.body.html), "the email body carries neither the sender's name nor their words").toEqual([]);
+      expect(m.body.subject).toBe("A private intake is waiting for you");
+      expect(m.body.html, "the email still says an intake is waiting").toContain("A private intake is waiting for you");
+      expect(m.body.html, "and says where the words can be read").toContain("open the bell at the top of any page");
+    }
+
+    // The words and the name stay in the village, in the recipient's own row.
     const doerBell = await api("GET", "/api/notifications", undefined, doerToken);
-    expect(doerBell.json.notifications.some((n: any) => n.type === "restorative_intake")).toBe(true); // doer holds founders-circle
+    const doerIntake = doerBell.json.notifications.find((n: any) => n.type === "restorative_intake"); // doer holds founders-circle
+    expect(doerIntake, "the recipient's bell carries the intake").toBeTruthy();
+    expect(doerIntake.body, "the in-app row keeps every word").toContain(intakeWords);
+    expect(doerIntake.body, "and who wrote them").toContain(peer.name);
+    expect(leaksIn(doerIntake.title), "the title, which is also the email subject, names no one").toEqual([]);
+    expect(String(doerIntake.link ?? ""), "it opens a page a member who is not an admin can open").not.toMatch(/^\/admin/);
+    // One row per person reached, and no copy anywhere else in the table.
+    // peer sent it and holds founders-circle too, and is never their own
+    // recipient: doer's row above is what was reached, and peer has none.
+    const [[rows]] = await testDb.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n, COALESCE(SUM(user_id = ?), 0) AS own FROM notifications WHERE type = 'restorative_intake'",
+      [peerId],
+    );
+    expect(Number(rows.n)).toBe(intake.json.reached);
+    expect(Number(rows.own), "the sender is not sent their own intake").toBe(0);
     const [[fAfter]] = await testDb.conn.query<any[]>("SELECT COUNT(*) AS n FROM forum_threads");
     expect(Number(fAfter.n)).toBe(Number(fBefore.n)); // no thread, ever
     // The CONTENT never lands anywhere but its recipients' notifications:

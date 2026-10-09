@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
+import ClosingPolicyCard from "@/components/ClosingPolicyCard";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -27,11 +28,37 @@ export default function ExitPolicy() {
   const identity = useIdentityConfirm("request-exit");
 
   useEffect(() => {
-    fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
+    // With the token when there is one: the server gives a member the outside
+    // contact and every step whole, and anybody else the public reading.
+    const token = authToken();
+    (token ? fetch("/api/exit-policy", { headers: headers() }) : fetch("/api/exit-policy")).then((r) => r.json()).then(setData).catch(() => {});
   }, []);
 
   const policy = data?.policy;
   const shownError = error || identity.returnError;
+  // The role an intake reaches, named by the published policy, so a member
+  // knows who will read their words before they send them.
+  const intakeRoleLabel = policy?.restorative?.intakeRole?.name ? `${policy.restorative.intakeRole.name} role` : "intake role";
+  // The conflict door's promise and its outside contact, printed only once the
+  // village has stated them: a blank here is a promise nobody made yet.
+  const replyHours = Number(policy?.restorative?.replyHours) || 0;
+  const within = replyHours === 1 ? "1 hour" : `${replyHours} hours`;
+  const outside = policy?.restorative?.outsideContact;
+  const outsideNamed = !!(outside?.name && outside?.howToReach);
+  // The promise belongs to whoever receives the request. With an intake role
+  // that is its holders. With none, the outside contact is the only way in, so
+  // the page says so plainly, and never "also" beside a door that is not there.
+  // A reply time with no door at all promises nothing, and is not printed.
+  //
+  // HELD TODAY, NOT MERELY CHOSEN (Wave 2 audit, 2026-09-28). This read the
+  // stored role id, so a role nobody was ever seated in, or one whose every
+  // term had run out, printed "you hear back within N hours" above a form that
+  // then refused with "The intake role has no holders right now". The server
+  // says whether an intake sent now would reach anybody (`heldToday`,
+  // server/lib/restorativeIntake.ts), and the promise and the form follow it.
+  const intakeRole = policy?.restorative?.intakeRole;
+  const hasIntake = !!intakeRole?.heldToday;
+  const intakeUnheld = !!intakeRole && !intakeRole.heldToday;
 
   const requestExit = () => {
     setError(""); setMsg("");
@@ -57,7 +84,11 @@ export default function ExitPolicy() {
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.message ?? d.error ?? "Could not send");
-        setMsg(`Your message reached ${d.reached} steward(s), privately. Nothing was posted anywhere.`);
+        const reached = Number(d.reached ?? 0);
+        setMsg(
+          `Your message reached ${reached === 1 ? "1 person" : `${reached} people`} holding the ${intakeRoleLabel}. ` +
+            "They read it in their notifications here. Your words were not emailed.",
+        );
         setIntake("");
       })
       .catch((e) => setError(e.message));
@@ -143,11 +174,36 @@ export default function ExitPolicy() {
                 <li key={i} className="text-sm text-foreground">{s}</li>
               ))}
             </ol>
-            {user && policy?.restorative?.intakeContactRole && (
+            {hasIntake && replyHours > 0 && (
+              <p className="text-sm text-muted-foreground mb-2">
+                Bring it to the {intakeRoleLabel} and you hear back within {within}.
+              </p>
+            )}
+            {intakeUnheld && (
+              <p className="text-sm text-muted-foreground mb-2">
+                Nobody holds the {intakeRoleLabel} today, so a private intake would reach nobody.
+              </p>
+            )}
+            {!outsideNamed && !!outside?.organisation && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {hasIntake ? "You can also bring it to somebody outside the village" : "Bring it to somebody outside the village"}, at {outside.organisation}. Members see who they are and how to reach them.
+              </p>
+            )}
+            {outsideNamed && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {hasIntake ? "You can also bring it to somebody outside the village" : "Bring it to somebody outside the village"}: {outside.name}
+                {outside.organisation ? `, ${outside.organisation}` : ""}. {outside.howToReach}
+                {!hasIntake && replyHours > 0 ? ` You hear back within ${within}.` : ""}
+              </p>
+            )}
+            {user && hasIntake && (
               <div className="border-t border-border pt-3 space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Start a private intake. It goes directly to the stewards
-                  holding that role. It is never posted anywhere.
+                  Start a private intake. It reaches only the people holding
+                  the {intakeRoleLabel}, who read your name and your words in
+                  their notifications here. If they get an email, it says only
+                  that an intake is waiting: your words and your name are never
+                  emailed.
                 </p>
                 <textarea value={intake} onChange={(e) => setIntake(e.target.value)} rows={3}
                   placeholder="What happened, in your own words…"
@@ -159,6 +215,9 @@ export default function ExitPolicy() {
               </div>
             )}
           </div>
+
+          {/* The exit AND closing policy: what happens if the village itself ends (2026-09-25). */}
+          {policy && <ClosingPolicyCard closing={policy.closing} />}
 
           {user && (
             <div className="bg-card border border-border rounded-xl p-5">

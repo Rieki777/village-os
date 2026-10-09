@@ -161,6 +161,32 @@ const PATTERNS: Record<string, Weighted[]> = {
     // ambiguity, so it may confirm a reading and may never make one.
     [/\bgaps?\b/, SUPPORT],
   ],
+  // The canvas's three (Wave 4, the companion). A block's NAME is not a
+  // pattern here: "roles", "meetings" and "power" are words other readers'
+  // questions use. The route reads the block a question names itself
+  // (`blocksNamedIn`, server/lib/companionCanvas.ts), and the Ask buttons send
+  // the block they sit on.
+  "canvas.answers": [
+    [/\bcanvas\b/, SPECIFIC],
+    [/\bstill blank\b/, SPECIFIC],
+    [/\bwhat did we (answer|say|adopt)\b/, SPECIFIC],
+    [/\b(our |last |latest )readings?\b/, TOPIC],
+    [/\breadings?\b/, SUPPORT],
+    [/\badopted\b/, SUPPORT],
+    [/\banswers?\b/, SUPPORT],
+  ],
+  "canvas.library": [
+    [/\breading list\b/, SPECIFIC],
+    [/\b(what|which) (should|could|can) (i|we) read\b/, SPECIFIC],
+    [/\bresources?\b/, TOPIC],
+    [/\b(articles?|toolkits?|books?)\b/, SUPPORT],
+  ],
+  "matrix.rows": [
+    [/\bdecision matrix\b/, SPECIFIC],
+    [/\bmatrix\b/, SPECIFIC],
+    [/\bwho approves\b/, SPECIFIC],
+    [/\bwho (is|gets|should be) (told|informed|consulted|asked first)\b/, TOPIC],
+  ],
 };
 
 /** Reader keys this router knows how to score. Derived, never typed out twice. */

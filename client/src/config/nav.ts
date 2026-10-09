@@ -181,7 +181,8 @@ export const NAV: readonly NavEntry[] = [
     label: "About",
     items: [
       { href: "/how-we-create", brochure: true, label: "How We Create" },
-      { href: "/governance", label: "Governance" },
+      // Renamed on 2026-09-28 with the page it opens; the route stays put.
+      { href: "/governance", label: "How we work together" },
       // The live surface, module-gated: /governance explains how the village
       // decides and is always there, /decisions shows what it is deciding and
       // exists only where the engine is switched on.

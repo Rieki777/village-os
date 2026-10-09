@@ -42,6 +42,7 @@ import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
 import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
+import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
 import { villageSecretsLaunchCheck } from "./secrets";
 
 /**
@@ -56,6 +57,7 @@ const GPS_CHECK_KEY = "gps-written";
 const SECRETS_KEY_CHECK_KEY = "village-secrets-key";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { normalizeSeasonConfig } from "./seasonCalendar";
+import { governanceRowFor } from "./launchGovernance";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -256,6 +258,14 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
+    // WHAT CLOSING MEANS (Rye, 2026-09-25), read off the exit policy document
+    // the same way the statement above is read: a pool, no cache, nothing in
+    // server/index.ts. server/lib/closingPolicy.ts.
+    if (req.checkKey === CLOSING_CHECK_KEY) {
+      items.push({ ...req, ...(await closingLaunchCheck(pool)) });
+      continue;
+    }
+
     /*
      * WHERE THE VILLAGE IS, resolved HERE for the reason the `decide:` branch
      * above gives: `server/index.ts` sits at exactly its line baseline, and
@@ -274,8 +284,29 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
     }
 
     /*
+     * THE GOVERNANCE ROWS (2026-09-27): every canvas block on record, a door
+     * for a conflict with a promised reply, and governance open to members.
+     * Resolved in server/lib/launchGovernance.ts for the reason the `village:`
+     * branch gives: none of them needs a boot cache, and server/index.ts only
+     * ever gets smaller. The module lifecycle is the one fact from outside,
+     * and it arrives through `deps`, which already carries it.
+     *
+     * A read that throws fails THIS row visibly, the same way a wired check's
+     * throw does below, and never the whole checklist.
+     */
+    if (req.checkKey.startsWith("canvas:") || req.checkKey.startsWith("governance:")) {
+      try {
+        const read = await governanceRowFor(pool, deps, req.checkKey);
+        items.push({ ...req, state: read.state, detail: read.detail });
+      } catch (e: any) {
+        items.push({ ...req, state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` });
+      }
+      continue;
+    }
+
+    /*
      * THE SEALING KEY, read from the environment HERE, and for the same reason
-     * as the two branches above: it needs no cache from server/index.ts, and
+     * as the branches above: it needs no cache from server/index.ts, and
      * that file only ever gets smaller. The detail is the sentence naming what
      * is wrong (unset, or set with quotes, a pasted NAME=, base64, the wrong
      * length), never "not set" for a key that is set in the wrong shape.

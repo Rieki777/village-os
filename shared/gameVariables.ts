@@ -3044,9 +3044,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "needs.launch_requirement",
     category: "Needs",
-    label: "Whether saying what the village is for is asked before launch",
+    label: "Whether naming the village's needs target is asked before launch",
     description:
-      "Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not said what it is for may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village is for. Nothing reads this until the launch check names it.",
+      "Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not named a needs target may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village needs. What the village is for is a separate question, and it does block: the governing purpose statement is its own row on the launch checklist, and the vote waits for it. Nothing reads this dial until the launch check names it.",
     type: "choice",
     default: "recommended",
     choices: [

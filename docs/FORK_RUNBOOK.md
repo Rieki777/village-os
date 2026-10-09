@@ -38,6 +38,7 @@ what, where, what breaks without it.
 | `ANTHROPIC_BASE_URL` | (optional, dev/CI) points the assistant at a stub instead of api.anthropic.com | Defaults to the real API |
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
 | `PLATFORM_ASSISTANT_DAILY_CAP` | (S76, optional) Calls per day allowed against the borrowed key, counted separately from every per-mode budget so a demo fork cannot spend a production village's headroom. `0` means zero, never unlimited. | 100 |
+| `PLATFORM_ASSISTANT_OPERATOR` | (Wave 4, the member companion, optional) The name of whoever holds `PLATFORM_ASSISTANT_KEY`, as members should read it. Before a member's question first goes to a model on the borrowed key, the companion shows one line naming the provider and this operator, and the member agrees or does not (`server/lib/companionConsent.ts`). Set it with the borrowed key, at provisioning. A yes is to one line, so changing this name asks every member again | The line says the shared key's operator "is not named on this deployment", which is true, and members decide on that |
 | `MEMBER_SECRETS_KEY` | (round 4, Your agent) 32 random bytes as 64 hex characters (`openssl rand -hex 32`), set at provisioning. Encrypts each member's own LLM key at rest (AES-256-GCM, `server/lib/memberSecrets.ts`) and derives each member's agent-inbox signing secret. **Rotating it makes every stored member key unreadable**: members re-enter theirs and re-save their inbox URL. Deliberately no per-process fallback: a random key would store credentials this deployment could never read again after its next restart. Agent tokens (`vat_`) do NOT depend on it; they are hashed. Optional flag beside it: `AGENT_INTENT_WRITE=1` opens `POST /api/agent/v1/intents` once the introductions module has landed (leave unset until then). | The profile's "Run the assistant on your key" and "Agent inbox" sections say "this deployment has no member-secrets key; ask your operator" and refuse to store anything; bring-your-agent tokens, the skills and every read still work |
 | `RESEND_API_KEY` | Transactional email. **S63: settable from Admin → Integrations instead** — admin-typed beats env, masked on read. | Emails silently skipped (logged) |
 | ↳ *sender domain* | **Every fork must verify its sender domain in Resend (resend.com/domains: SPF + DKIM records in the domain's DNS).** Resend returns 200 on unverified domains and delivers NOTHING — email death is silent. **Amora handoff item (Rye, 2026-07-26): `amora.cr` is unverified and only its team can add the DNS records — verify it during handoff.** | Claim links & notifications never arrive |
@@ -135,7 +136,38 @@ above the size of a gathering, not to the size of one person's usage.
 ## Seeds & per-deployment data
 
 - `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
-  library (self-heals via `seedIfMissingOrEmpty`).
+  library (the old `seedIfMissingOrEmpty` self-heal is retired). The content
+  document is written once, on a boot that finds no content document. The
+  quests, like the roles, trainings, circles and milestones below, are written
+  on ANY boot that finds their table empty, and never into a table that holds
+  a row. So a seed edit leaves a running village's rows alone, with one known
+  edge: a village that deletes every starter quest, role or training gets the
+  seed's copy back on its next boot.
+- **What a fresh village is handed as its own (fresh-boot seed audit,
+  2026-09-26): nothing it did not choose.** The roadmap (`milestones` in
+  `site-content-seed.json`), the circles (`circles-seed.json`) and the four
+  journey ladders (`content-seed.json`) ship EMPTY; they used to hand every
+  fork one village's four build phases, eight active councils and its stages
+  and rites. The FAQs ship empty, and the investor summary and visit page ship
+  their questions with every term "To be confirmed". Those three are read-time
+  defaults behind `faqs`, `investor-summary` and `visit-config` in `app_config`,
+  so a village that has saved its own is unaffected, and one that has not now
+  shows no FAQ (the section hides) and unstated terms. Build yours in Admin,
+  Make it yours: FAQs, Build Progress (the roadmap), Visit Program and
+  Investor Summary; circles in Org Chart. What still arrives: the four capability
+  roles (`roles-seed.json`, see "The other appointments" below), and four
+  starter trainings and 13 starter quests whose descriptions say what the
+  practice is and never that this village already practises it. The quests
+  carry no circle, so the quest board shows no filter chip for a circle you
+  never formed (2026-09-27; until then they described one village's food
+  forests, night watch and named circles as if yours had them). They are
+  still real, claimable, payable rows, each with its own reward range: read
+  every one in Admin and edit or delete it before the village opens. A
+  village already running keeps its own quests word for word, because the
+  seed only reaches an empty table. `server/forkPublish.e2e.test.ts` holds the
+  empty seeds, that the starter quests arrive with no circle, and that none of
+  the old board's phrases comes back; `server/lib/questSeed.test.ts` holds the
+  quests' words, and that a board which already exists is left alone.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
@@ -1843,6 +1875,68 @@ disabled, which is why it owns this.
 Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
+
+## Loading a season file onto the governance canvas (no migration, 2026-09-26)
+
+A season file is a week map a village lays over its governance canvas: each
+week's date and title, the canvas blocks it works on, and its foundations,
+tools, showcase ask and actions, plus any canvas moons. The Canvas view on
+Journey to Launch (`/journey-to-launch`, the Canvas tab) puts the current
+week's blocks first. It only orders: every block stays on the page and open
+every week, and the Birthing gate never reads the file. A village with no
+season sees the blocks in canvas order and loses nothing.
+
+- **Nothing here needs a ReGen service, or any outside service.** The file is
+  loaded by hand and stored in your own database, as the `canvas-season`
+  document in `app_config`. A self-hosted village with no network access to
+  anyone uses it exactly the same way.
+- **Who can load one:** whoever holds the canvas pen, `story.tell` (before
+  the handover, any admin or founder). Open the Canvas tab, open "Load a
+  season file", paste the JSON or choose the `.json` file, press "Check the
+  file", read the preview, then "Save this season". "Take the season off"
+  goes back to canvas order; "Download this season file" hands the pen a
+  copy first, since taking a season off deletes it.
+- **Who can read it, and the canvas:** a member the village has ADMITTED
+  (`membershipGranted`), and any admin. Being signed in is not enough: an
+  invited account the village has not admitted yet, and anybody who registers
+  on a fork with `membership.invite_only` off, get 403 and one sentence from
+  both `GET /api/canvas` and `GET /api/canvas/season`, and the Canvas tab is
+  not offered to them. The readings name who recorded them, so the canvas is
+  members-only, never public.
+- **A template ships with the platform:** `docs/seasons/season-two-2026.json`
+  (thirteen Saturdays from 26 September to 19 December 2026, 11:00
+  America/Los_Angeles). Copy it and change the dates, titles and blocks to
+  write your own season.
+- **The format** is `shared/canvasSeason.ts`, and its validator is the one the
+  page and the server both run: `id`, `name`, `timezone` (an IANA zone such
+  as `Europe/Amsterdam`), optional `sessionTime` (`HH:MM`) and `description`,
+  `weeks[]` of `{ number, date (YYYY-MM-DD, in the season's timezone), title,
+  blocks[], foundations[], tools[], showcaseAsk, actions[] }` and `moons[]` of
+  `{ date, blocks[], note }`. Block ids are the twelve in
+  `shared/governanceCanvas.ts`; foundation ids are `legal-framework`,
+  `internal-rules`, `culture` and `personal-leadership`. At most 60 weeks, and
+  the whole file under 128,000 characters. A field the format does not know
+  is left out and named in the preview, so a file written for a newer release
+  still loads on an older one.
+- **Over HTTP**, for a script: `PUT /api/canvas/season` with the file as the
+  JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
+  takes it off; `GET /api/canvas/season` reads it back for an admitted member
+  or an admin (403 to any other signed-in account).
+
+## Naming what closing your village means (no migration, 2026-09-27) <a id="closing-policy"></a>
+
+- **Before the launch vote can open, the village names what happens to its treasury and assets if it
+  ever closes** (the blocking row "Name what closing this village means"). In Admin, Departures, under
+  the published policy: choose "Shared by closing-day balances" (the platform's suggested default: in
+  proportion to the contribution tokens each person holds on closing day, and a member who already
+  redeemed receives nothing more) or "In the village's own words", edit the statement, tick "The
+  village adopts these words" and save. The pre-filled words saved without the tick are a draft and do
+  not count. It is stored as the `closing` section of the `exit-policy` app_config document, written by
+  `PUT /api/admin/exit-policy/closing` (`{ policyId, statement, adopt }`, admin session). Every reader
+  sees it at `/exit-policy`; the platform computes and moves nothing on closing. An exit policy saved
+  before this existed reads as "not named yet" until you do this, so a running village sees one new
+  blocking row and nothing else changes. With the default adopted and the redemption module on, the
+  redemption form tells a member what redeeming gives up before they ask.
 
 ## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
 
