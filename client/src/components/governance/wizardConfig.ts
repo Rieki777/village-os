@@ -390,9 +390,9 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
     group: "Rules",
     icon: FileText,
     title: "Write an agreement",
-    description: "Put a shared understanding into words the village can adopt, review and amend.",
+    description: "Put a shared understanding into words the village can adopt.",
     consequence:
-      "Publishing puts this to the village's vote. If it carries, it becomes an active agreement, exactly as written, with its own review date.",
+      "Publishing puts this to the village's vote. If it carries, it becomes an active agreement, exactly as written, and its words keep the review date you set. Nothing reminds the village when that date comes yet, so put it on the calendar too.",
     // The route opens the vote itself (server/routes/governanceAgreements.ts), so there is no sensing step to describe.
     opensVote: true,
     publish: {
@@ -457,7 +457,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             key: "reviewAt",
             kind: "date",
             label: "Review on",
-            help: "Good enough for now, safe enough to try, until this date. Leaving it blank makes it open-ended.",
+            help: "Good enough for now, safe enough to try, until this date. The date is written into the agreement, and nothing reminds the village when it comes yet. Leaving it blank makes it open-ended.",
             tip: "A review date is how an agreement stays a living decision instead of becoming furniture.",
           },
         ],

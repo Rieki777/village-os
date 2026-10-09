@@ -89,7 +89,7 @@ export function agreementCloser(deps: AgreementCloserDeps): SubjectCloser {
         type: "governance",
         title: `The village adopted this agreement: ${stored.title}`,
         body: stored.reviewAt
-          ? `It binds from today, exactly as written, and the village looks at it again on ${stored.reviewAt}.`
+          ? `It binds from today, exactly as written. Its words name ${stored.reviewAt} as the day the village looks at it again, and nothing reminds anyone when that day comes yet, so put it on the calendar.`
           : "It binds from today, exactly as written. No review date is set.",
         link: deps.ballotLink(b),
         actorUserId: actorId,
