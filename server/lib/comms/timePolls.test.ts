@@ -23,6 +23,8 @@ import {
 } from "./timePolls";
 import { timeStillBeingVoted } from "./timePollSummary";
 import { pollForEvent } from "../../repos/timePolls";
+import { gatheringFactsFor } from "./gatheringJourney";
+import { defaultJourney } from "../../../shared/comms/defaults/journeys";
 
 /**
  * The live time vote against a real schema (the comms build spec 5.10), with
@@ -183,6 +185,16 @@ describe.skipIf(!configured)("a one-off gathering's live time vote", () => {
       [enrollmentId],
     );
     expect(Number(row[0].due), "the reminders re-plan on the next tick").toBe(1);
+    // "Time is set" already told u-9 when, with the calendar file: the confirmation the vote held is not sent as well.
+    const [told] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+      "SELECT contact_id FROM comms_messages WHERE origin = 'poll.locked' AND to_email = ?",
+      ["u-9@village.example.test"],
+    );
+    const plan = await gatheringFactsFor(pool, defaultJourney("gathering.going")!, `event:${eventId}:`, {}, String(told[0].contact_id));
+    expect(plan.stepOverrides.confirm).toEqual({ skip: true });
+    // Somebody the lock email never reached still gets their confirmation.
+    const other = await gatheringFactsFor(pool, defaultJourney("gathering.going")!, `event:${eventId}:`, {}, "ct-nobody");
+    expect(other.stepOverrides.confirm).toBeUndefined();
     // A vote on a locked poll changes nothing.
     expect(await vote(deps(), (await pollForEvent(pool, eventId))!.id, "u-4", { set: [] })).toMatchObject({ ok: false, status: 409 });
   });

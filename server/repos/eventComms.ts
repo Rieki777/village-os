@@ -345,3 +345,21 @@ export async function queuedMessageIdsFor(pool: Pool, enrollmentIds: readonly st
   );
   return rows.map((r) => String(r.id));
 }
+
+/**
+ * True when "the time is set" has gone, or is going, to this contact for this
+ * gathering's vote. A held confirmation is then not sent as well: the lock
+ * email already carries the time and the calendar file. A lock email that was
+ * skipped, failed or cancelled does not count, so that person still gets the
+ * confirmation.
+ */
+export async function lockNoticeReached(pool: Pool, eventId: string, contactId: string): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, one contact's lock email for one gathering's vote
+    "SELECT m.id FROM comms_messages m JOIN event_time_polls p ON p.event_id = ? " +
+      "WHERE m.village_id = ? AND m.contact_id = ? AND m.origin = 'poll.locked' " +
+      "AND m.idempotency_key LIKE CONCAT('poll:', p.id, ':locked:%') " +
+      "AND m.status IN ('queued', 'sending', 'sent', 'delivered', 'rehearsed') LIMIT 1",
+    [eventId, VILLAGE, contactId],
+  );
+  return rows.length > 0;
+}

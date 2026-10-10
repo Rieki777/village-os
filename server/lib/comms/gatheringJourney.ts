@@ -38,7 +38,7 @@ import {
   type GatheringStepOverride,
 } from "../../../shared/comms/gatheringSettings";
 import type { MergeValues } from "../../../shared/comms/mergeFields";
-import { readEventComms } from "../../repos/eventComms";
+import { lockNoticeReached, readEventComms } from "../../repos/eventComms";
 import { gatheringValues, icsGatheringOf, loadGathering } from "./gatheringVars";
 import { buildGatheringIcs, hostOf, icsAttachment } from "./ics";
 import type { PostOfficeDeps } from "./postOffice";
@@ -95,18 +95,24 @@ const personKeyOf = (ctx: JourneyContextLike & { facts?: Record<string, unknown>
  * enrollment. A gathering on "default" keeps the journey's own reminder times
  * (`journeyReminderMinutes`): the dial while the journey is unedited, the
  * admin's edit once it is. "Off" and "custom" are the host's, and win.
+ *
+ * A confirmation a one-off vote held is skipped once "the time is set" has
+ * reached the person: that email already says when, with the calendar file,
+ * and a second one seconds later only repeats it.
  */
 export async function gatheringFactsFor(
   pool: Pool,
   definition: Pick<JourneyDefinition, "key" | "steps">,
   subject: string,
   stored: Record<string, unknown>,
+  contactId?: string,
 ): Promise<GatheringReminderFacts> {
   const ev = eventSubjectOf(subject);
   if (!ev || definition.key !== GATHERING_GOING_JOURNEY) return { stepOverrides: {}, extraSteps: [] };
   const setting = reminderSettingFromColumn((await readEventComms(pool, ev.eventId)).reminders);
   const plan = reminderPlan(effectiveReminders(setting, journeyReminderMinutes(definition)), definition);
   if (stored.promoted === true) plan.stepOverrides.confirm = { skip: true };
+  else if (contactId && (await lockNoticeReached(pool, ev.eventId, contactId))) plan.stepOverrides.confirm = { skip: true };
   return plan;
 }
 
@@ -114,7 +120,7 @@ export async function gatheringFactsFor(
 export function gatheringFactsProvider(deps: GatheringJourneyDeps) {
   return async (ctx: JourneyContextLike): Promise<GatheringFactsAnswer> => {
     if (ctx.definition.key !== GATHERING_GOING_JOURNEY) return {};
-    const plan = await gatheringFactsFor(ctx.getPool(), ctx.definition, ctx.enrollment.subjectRef, ctx.enrollment.stored);
+    const plan = await gatheringFactsFor(ctx.getPool(), ctx.definition, ctx.enrollment.subjectRef, ctx.enrollment.stored, ctx.enrollment.contactId);
     return { ...plan, personKey: personKeyOf(ctx) };
   };
 }
