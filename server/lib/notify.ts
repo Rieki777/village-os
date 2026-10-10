@@ -247,6 +247,15 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // forty emails. The digest collapses that run into one line each.
     case "feedback":
       return "daily";
+    // Live Sessions. The record of a closed session reaching the admins, and
+    // an action from one reaching the person or the seat holding it. Daily on
+    // purpose: everybody holding an action was told in the room, or sits in
+    // the seat that holds it, and a village closing three sessions in an
+    // evening would otherwise send three emails to every admin. The digest
+    // still carries each one the next morning.
+    case "session_record_ready":
+    case "session_action_held":
+      return "daily";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been
     // waiting weeks for, and it only ever fires on a real transition.

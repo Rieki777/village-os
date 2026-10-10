@@ -3249,6 +3249,36 @@ export const VARIABLES: VariableDef[] = [
     max: 1000,
     unit: "members",
   },
+
+  // ── Live Sessions: the room's own words and its usual length ──────────────
+  //
+  // READ by server/lib/liveSessions.ts: `placeLine` reads the first into the
+  // stamp a session takes when it opens, and `defaultDuration` reads the
+  // second when the opener names no length. The duration's bounds and default
+  // are SESSION_LIMITS in shared/sessions.ts, pinned together by
+  // server/lib/liveSessions.test.ts.
+  {
+    key: "sessions.place_line",
+    category: "Live Sessions",
+    label: "The place line read at drop in",
+    description:
+      "One line the facilitator reads out as a live session begins, to honour the land and the place the village meets on. Write it in your village's own words, the way you would say it aloud: whose land this is, what grows here, what the place asks of the people on it. Each session keeps the line it opened with. Leave it blank and the room offers a short neutral sentence instead.",
+    type: "text",
+    default: "",
+    unit: "line",
+  },
+  {
+    key: "sessions.default_minutes",
+    category: "Live Sessions",
+    label: "How long a live session runs unless its opener says otherwise",
+    description:
+      "The length a new live session starts with when whoever opens it names none. The room compares its agenda against this, and warns when the items ask for more time than the session has left. The opener can always choose another length between 10 and 480 minutes for one session.",
+    type: "integer",
+    default: "60",
+    min: 10,
+    max: 480,
+    unit: "minutes",
+  },
 ];
 
 // ── Progression: the ladder's economics and thresholds, GENERATED per stage ──

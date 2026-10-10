@@ -134,9 +134,16 @@ describe("moduleCatalog", () => {
      * default of 1 is ruled (shared/journal.ts) and is a working village: a
      * team of three sees its own pulse the day the module is switched on.
      */
+    /*
+     * Live Sessions joined on 2026-10-09 with two dials. `sessions.default_minutes`
+     * is a working length on day one, and `sessions.place_line` reads a
+     * neutral sentence (SESSION_COPY.placeLineFallback in shared/sessions.ts)
+     * until a village writes its own, so the drop in works everywhere before
+     * anybody has touched either.
+     */
     expect(claiming).toEqual([
       "feed", "forum", "governance", "gratitude",
-      "introductions", "journal", "messaging", "progression", "quests",
+      "introductions", "journal", "messaging", "progression", "quests", "sessions",
     ]);
   });
 
@@ -271,8 +278,15 @@ describe("moduleCatalog", () => {
      * every reader treats it as off, and the default is blank precisely so a
      * fork does not inherit somebody else's relay. Redemption's three were not
      * that: `process_text` empty shows a member no card at all.
+     *
+     * `sessions.place_line` is the second honest case, judged on 2026-10-09.
+     * Empty there MEANS the village has not written its own line yet, and the
+     * room reads a neutral sentence in its place (SESSION_COPY.placeLineFallback
+     * in shared/sessions.ts), so a drop in works on day one. A default line
+     * would put platform words where a village's own belong, and a line about
+     * one place is wrong for every other place.
      */
-    expect(blank).toEqual(["governance"]);
+    expect(blank).toEqual(["sessions", "governance"]);
   });
 
   it("the builder links point into the upstream repository's module docs", () => {

@@ -361,6 +361,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} tasks were suggested to you from calls.",
     celebrate: false,
   },
+  // Live Sessions (server/lib/liveSessions.ts): a session closed, and an action
+  // it left with is held by you, or by a seat you sit in.
+  session_action_held: {
+    group: "work",
+    blurb: "A live session closed with an action held by you or by a seat you sit in. The notice says what it is and by when.",
+    many: "{n} actions from live sessions are held by you or your seats.",
+    celebrate: false,
+  },
 
   // ── People ────────────────────────────────────────────────────────────────
   arrival: {
@@ -490,6 +498,13 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "village",
     blurb: "A bug or an idea you sent in was triaged, and this is where it landed.",
     many: "{n} things you sent in were triaged.",
+    celebrate: false,
+  },
+  // Live Sessions: to every admin, when a session closes and its record is kept.
+  session_record_ready: {
+    group: "village",
+    blurb: "A live session closed and its record is kept: the agenda, what was decided, who holds each action, and the backlog.",
+    many: "{n} live session records are ready to read.",
     celebrate: false,
   },
   moderation: {

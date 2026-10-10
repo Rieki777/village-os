@@ -1901,6 +1901,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     for (const key of ["entries", "pulse", "feedbackSent", "feedbackReceived"]) {
       expect(Array.isArray(exported.json.journal?.[key]), `journal.${key} is in the export`).toBe(true);
     }
+    // Live Sessions (0238), present the same way: the rooms they joined, the
+    // entries they wrote or hold, and their own answers, empty for a member
+    // who never joined one.
+    for (const key of ["sessions", "entries", "responses"]) {
+      expect(Array.isArray(exported.json.sessions?.[key]), `sessions.${key} is in the export`).toBe(true);
+    }
 
     // Deletion needs the password; then the account is a tombstone.
     expect((await api("POST", "/api/profile/delete-account", { password: "wrong" }, leaverToken)).status).toBe(403);
