@@ -49,6 +49,7 @@ import { usersRepo } from "../repos/users";
 import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/memberErasure";
 import { saveMemberNeed } from "./needs";
 import { queueFeedback, saveEntry, savePrefs } from "./journal";
+import { addEntry, closeSession, ensureMemberNo, joinSession, patchEntry, respond, saveArrival, startSession } from "./liveSessions";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 import { landPublicSubmission } from "./publicForms";
@@ -396,6 +397,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "tombstone",
       "needs-after-tombstone",
       "journal-after-tombstone",
+      "sessions-after-tombstone",
       "audit",
       "external-stores",
     ]);
@@ -517,6 +519,81 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // The neighbour keeps their own entry and their own yes.
     expect(await q("SELECT `id` FROM `journal_entries` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
     expect(await q("SELECT `user_id` FROM `journal_feedback_prefs` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
+  });
+
+  /*
+   * LIVE SESSIONS: THE MEMBER LEAVES EVERY ROOM, AND THE RECORD FORGETS THEM.
+   *
+   * Asserts the ROWS and the stored MINUTES. A closed record keeps its minutes
+   * as text, so deleting the rows alone would leave the name in the record:
+   * de-attribution is not erasure. A neighbour who stays keeps their own
+   * words and their place in the room.
+   */
+  it("takes them out of every live session, and writes the closed record again without their name", async () => {
+    const id = "er-sessions-1";
+    const neighbour = "er-sessions-neighbour";
+    const target = await seedMember(id);
+    await q(
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +
+        "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
+      [neighbour, "Rowan Ashby", `${neighbour}@examples.invalid`],
+    );
+    const lookup = (uid: string) => usersRepo(pool).byId(uid);
+    const leaverNo = await ensureMemberNo(pool, id);
+    const neighbourNo = await ensureMemberNo(pool, neighbour);
+    const leaver = { no: leaverNo, admin: false };
+    const stays = { no: neighbourNo, admin: false };
+
+    // A closed session the leaver opened and facilitated, wrote a proposal in,
+    // gave a closing word in, and left holding the neighbour's action.
+    const closedId = await startSession(pool, leaverNo, { title: "Orchard circle", circleId: null, durationMin: 30 });
+    expect((await joinSession(pool, closedId, neighbourNo)).ok).toBe(true);
+    await saveArrival(pool, closedId, leaver, { score: 6, wish: "a long walk" });
+    const proposal = await addEntry(pool, closedId, leaver, { kind: "decision", text: "We prune in the dry season" });
+    const action = await addEntry(pool, closedId, stays, { kind: "action", text: "Sharpen the shears" });
+    const note = await addEntry(pool, closedId, stays, { kind: "note", text: "The pears came early" });
+    expect(proposal.ok && action.ok && note.ok, "the fixture must write all three").toBe(true);
+    if (!proposal.ok || !action.ok || !note.ok) return;
+    expect((await patchEntry(pool, closedId, leaver, action.value.id, { claim: true })).ok).toBe(true);
+    await respond(pool, closedId, stays, { target: `decision:${proposal.value.id}`, value: "consent" });
+    await respond(pool, closedId, leaver, { target: "word", value: "rooted" });
+    expect((await closeSession(pool, closedId, leaver, { lookup, circleName: () => null })).ok).toBe(true);
+    // And an open one they are still sitting in.
+    const openId = await startSession(pool, neighbourNo, { title: "Orchard circle, again", circleId: null, durationMin: 30 });
+    expect((await joinSession(pool, openId, leaverNo)).ok).toBe(true);
+
+    const minutes = async () => String((await q("SELECT `minutes_people` FROM `live_sessions` WHERE `id` = ?", [closedId]))[0].minutes_people);
+    expect(await minutes(), "the fixture must name them, or the absence below proves nothing").toContain("Wren Halloway");
+    const named = async () =>
+      Number((await q(
+        "SELECT (SELECT COUNT(*) FROM `live_session_people` WHERE `member_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_responses` WHERE `member_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_entries` WHERE `author_no` = ? OR `owner_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_sessions` WHERE `facilitator_no` = ? OR `created_by_no` = ? OR `secretary_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_members` WHERE `user_id` = ?) AS n",
+        [leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, id],
+      ))[0].n);
+    expect(await named()).toBeGreaterThan(0);
+
+    await anonymizeMember(pool, target, null, deps());
+
+    expect(await named()).toBe(0);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("sessions-after-tombstone");
+    // The answers to the proposal they wrote went with it.
+    expect(await q("SELECT `id` FROM `live_session_responses` WHERE `target` = ?", [`decision:${proposal.value.id}`])).toEqual([]);
+    // The record is written again from what is left.
+    const after = await minutes();
+    expect(after).not.toContain("Wren Halloway");
+    expect(after).not.toContain("We prune in the dry season");
+    expect(after).toContain("Facilitated by A member.");
+    expect(after).toContain("Present: Rowan Ashby.");
+    expect(after).toContain("Sharpen the shears, held by nobody yet.");
+    // The neighbour keeps their words and their place in both rooms.
+    expect(await q("SELECT `id` FROM `live_session_entries` WHERE `author_no` = ?", [neighbourNo])).toHaveLength(2);
+    expect(await q("SELECT `session_id` FROM `live_session_people` WHERE `member_no` = ? ORDER BY `session_id`", [neighbourNo])).toEqual([
+      { session_id: closedId },
+      { session_id: openId },
+    ]);
   });
 
   it("says so rather than pretending, when there is no member left to resume", async () => {
