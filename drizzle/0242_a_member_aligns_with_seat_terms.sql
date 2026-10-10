@@ -59,7 +59,9 @@ CREATE TABLE IF NOT EXISTS `alignment_parties` (
   `user_id` varchar(64) NULL,
   `capacity` varchar(120) NOT NULL,
   `required` tinyint NOT NULL,
-  UNIQUE KEY `alignment_parties_text_party` (`text_id`, `party_key`),
+  -- The primary key is the pair: a host with sql_require_primary_key refuses a
+  -- table without one, and a migration that fails stops the village booting.
+  PRIMARY KEY (`text_id`, `party_key`),
   KEY `alignment_parties_user_idx` (`user_id`)
 );
 
