@@ -78,7 +78,16 @@ export default function StructureMap({
   const { layout, seatById, circleById, parents } = drawn;
   const v = layout.village;
   const pad = 16;
-  const size = Math.max(1, v.r * 2 + pad * 2);
+  // Framed on what is drawn. The village ring encloses its circles on a ring
+  // of their own, and framing on it left most of the picture as empty ground.
+  const boxes = [
+    ...layout.circles.map((c) => [c.x - c.r, c.y - c.r, c.x + c.r, c.y + c.r]),
+    ...v.roles.map((d) => [d.x - 10, d.y - 10, d.x + 10, d.y + 10]),
+  ];
+  const minX = boxes.length ? Math.min(...boxes.map((b) => b[0])) : v.x - v.r;
+  const minY = boxes.length ? Math.min(...boxes.map((b) => b[1])) : v.y - v.r;
+  const maxX = boxes.length ? Math.max(...boxes.map((b) => b[2])) : v.x + v.r;
+  const maxY = boxes.length ? Math.max(...boxes.map((b) => b[3])) : v.y + v.r;
   const dots = [
     ...layout.circles.flatMap((c) => c.roles),
     ...v.roles,
@@ -87,13 +96,12 @@ export default function StructureMap({
   return (
     <figure className="m-0">
       <svg
-        viewBox={`${v.x - v.r - pad} ${v.y - v.r - pad} ${size} ${size}`}
+        viewBox={`${minX - pad} ${minY - pad} ${Math.max(1, maxX - minX + pad * 2)} ${Math.max(1, maxY - minY + pad * 2)}`}
         className="w-full h-auto block"
         role="img"
         aria-label={caption}
         data-testid="structure-map"
       >
-        <circle cx={v.x} cy={v.y} r={v.r} fill="none" stroke="var(--border)" strokeOpacity={0.5} strokeWidth={2} />
         {layout.circles.map((pos) => {
           const c = circleById.get(pos.id);
           if (!c) return null;

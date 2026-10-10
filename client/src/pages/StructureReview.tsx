@@ -646,7 +646,10 @@ export default function StructureReview() {
           </div>
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur px-4 sm:px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
+        {/* Above the phone tab bar (--tabbar-h is 0 from md up), and it asks the
+            shortcuts button to step out: this bar owns the bottom-right corner
+            and its primary action sits there. */}
+        <div data-hides-fab className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 border-t border-border bg-background/95 backdrop-blur px-4 sm:px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
           <div className="max-w-[1180px] mx-auto flex flex-wrap gap-3 items-center justify-between">
             <p className="text-sm" role="status" data-testid="bar-status">
               {done ? (
@@ -674,7 +677,7 @@ export default function StructureReview() {
                 type="button"
                 disabled={!canAccept}
                 onClick={() => void post(true)}
-                className="rounded-full border border-border bg-muted px-[18px] py-2.5 min-h-[44px] font-semibold text-sm disabled:opacity-45 disabled:cursor-not-allowed"
+                className="rounded-full border border-border bg-muted px-3.5 sm:px-[18px] py-2.5 min-h-[44px] font-semibold text-sm disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {busy === "preview" ? "Previewing" : "Preview as a draft"}
               </button>
@@ -682,7 +685,7 @@ export default function StructureReview() {
                 type="button"
                 disabled={!canAccept}
                 onClick={() => void post(false)}
-                className="rounded-full border border-notice bg-notice text-background px-[18px] py-2.5 min-h-[44px] font-semibold text-sm disabled:opacity-45 disabled:cursor-not-allowed"
+                className="rounded-full border border-notice bg-notice text-background px-3.5 sm:px-[18px] py-2.5 min-h-[44px] font-semibold text-sm disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {busy === "accept" ? "Accepting" : "Accept into a draft"}
               </button>
