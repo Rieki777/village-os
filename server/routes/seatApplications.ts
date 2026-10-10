@@ -126,6 +126,9 @@ export { seatFromApplication } from "../lib/seatApplicationCloser";
 /** At most ten asks in ten minutes per member per door, the raised-hand door's numbers. */
 const ASKS_PER_WINDOW = 10;
 const ASK_WINDOW_MS = 10 * 60 * 1000;
+/** At most three applications a day that open a village vote, per member (red team S6). */
+const BALLOTS_PER_DAY = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Deps = Pick<
   AppDeps,
@@ -215,7 +218,8 @@ export function register(app: Express, deps: Deps): void {
   async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[]) {
     if (a.textId) {
       const v = await viewText(getPool(), a.textId, today());
-      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), true);
+      // The hash is for a party (red team S5): the candidate reads it, other members do not.
+      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId);
     }
     const words = seatTermsWords(seatNames, a.settings);
     const closed = a.status === "withdrawn" || a.status === "not-adopted";
@@ -487,6 +491,18 @@ export function register(app: Express, deps: Deps): void {
       return res.status(201).json({ success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: term.caution ?? null });
     }
 
+    /*
+     * A DAILY CAP ON THE VOTES ONE MEMBER OPENS (red team S6). Every ballot
+     * notifies the whole roll, and withdraw-and-apply-again opens a fresh one
+     * each time, so a member could fill everybody's inbox. Three a day is more
+     * than a season plan's seats need.
+     */
+    if (await overLimit(`seat-application-ballot:${userId}`, BALLOTS_PER_DAY, DAY_MS)) {
+      return res.status(429).json({
+        error: "too_many_votes",
+        message: `You have opened ${BALLOTS_PER_DAY} votes on applications today, which is the most one day holds. Apply again tomorrow.`,
+      });
+    }
     const opened = await openVote(row, userId, (conn) => writeAll(conn, "voting"));
     if (!opened.ok) return res.status(opened.status).json({ error: opened.error });
     res.status(201).json({

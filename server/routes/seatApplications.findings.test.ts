@@ -259,4 +259,31 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
     expect(b.closedBy).toBe("governance");
     expect(b.outcomeNote).toBe("The application was withdrawn.");
   });
+
+  it("S5: the text's hash is served to the candidate, never to another member reading the page", async () => {
+    const s = await seat("Hash seat");
+    const a = await apply({ seatIds: [s] });
+    const mine = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(mine.body.application.alignment.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    h.state.viewer = { id: "u-hal", stage: "member" };
+    const theirs = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(theirs.status).toBe(200);
+    expect(theirs.body.application.alignment.contentHash).toBeNull();
+    const list = await h.call("GET", "/api/governance/role-applications");
+    expect(JSON.stringify(list.body)).not.toContain(mine.body.application.alignment.contentHash);
+  });
+
+  it("S6: a member opens at most three application votes a day", async () => {
+    h.state.viewer = { id: "u-ivo", stage: "member" };
+    for (let i = 0; i < 3; i += 1) {
+      const ok = await apply({ seatIds: [await seat(`Cap seat ${i}`)] });
+      expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    }
+    const fourth = await apply({ seatIds: [await seat("Cap seat 4")] });
+    expect(fourth.status).toBe(429);
+    expect(fourth.body.error).toBe("too_many_votes");
+    // CONTROL: another member is not held to Ivo's count.
+    h.state.viewer = { id: "u-hal", stage: "member" };
+    expect((await apply({ seatIds: [await seat("Cap seat 5")] })).status).toBe(201);
+  });
 });
