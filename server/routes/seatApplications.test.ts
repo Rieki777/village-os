@@ -466,6 +466,24 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect(await seatingsOf("u-ana", s)).toHaveLength(1);
   });
 
+  it("SEASON PLANS: a season still to come sets the first day, so the term sits in that season", async () => {
+    const s = await seat("Planned seat");
+    const a = await apply({ seatIds: [s], seasonId: "s-next" });
+    expect(a.status).toBe(201);
+    const stored = (await readApplication(pool, a.body.id))!;
+    expect(stored.termSeasonId).toBe("s-next");
+    expect(stored.startsAt?.toISOString().slice(0, 10)).toBe("2029-12-31");
+    // The running season sets nothing: the term sits in it, from adoption.
+    const now = await apply({ seatIds: [await seat("Planned now")], seasonId: "s-now" });
+    const nowRow = (await readApplication(pool, now.body.id))!;
+    expect(nowRow.termSeasonId).toBe("s-now");
+    expect(nowRow.startsAt).toBeNull();
+    // A season the calendar does not have is refused in words.
+    const stray = await apply({ seatIds: [await seat("Planned stray")], seasonId: "s-nowhere" });
+    expect(stray.status).toBe(400);
+    expect(stray.body.field).toBe("seasonId");
+  });
+
   it("a vote that does not carry marks it not adopted and tells the candidate", async () => {
     const a = await apply({ seatIds: [await seat("Lost vote")] });
     const ballot = (await openBallotFor(pool, "role_application", a.body.id))!;

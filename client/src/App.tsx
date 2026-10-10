@@ -257,6 +257,8 @@ const Decisions = lazyPage(() => import("./pages/Decisions"));
 const Decision = lazyPage(() => import("./pages/Decision"));
 const Propose = lazyPage(() => import("./pages/Propose"));
 const SeatApplication = lazyPage(() => import("./pages/SeatApplication"));
+const SeasonPlans = lazyPage(() => import("./pages/SeasonPlans"));
+const MySeason = lazyPage(() => import("./pages/MySeason"));
 const Visit = brochurePage(() => import("./pages/Visit"));
 const GratitudeWall = lazyPage(() => import("./pages/GratitudeWall"));
 const WorkWithUs = brochurePage(() => import("./pages/WorkWithUs"));
@@ -414,6 +416,9 @@ function Router() {
       <Route path="/propose" component={Propose} />
       {/* One application to hold seats, on terms. Members only, behind terms.read. */}
       <Route path="/seat-applications/:id" component={SeatApplication} />
+      {/* Your season: your own plan, then the village's page of everyone's, by name. */}
+      <Route path="/season-plans/mine" component={MySeason} />
+      <Route path="/season-plans" component={SeasonPlans} />
       <Route path="/visit" component={Visit} />
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}

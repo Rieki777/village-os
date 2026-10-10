@@ -128,6 +128,7 @@ import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
 import { register as registerSeatApplicationRoutes } from "./routes/seatApplications";
+import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -19508,6 +19509,7 @@ ${inner}
       await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
     }),
   });
+  registerSeasonPlanRoutes(app, { authedUser, guardCapability, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -26475,6 +26477,7 @@ ${inner}
       portraits: await portraitsForMember(pool, user.id),
       portraitBudget: await grantsForMember(pool, user.id),
       gratitudeDistributions: await distributionsForMember(pool, user.id),
+      seasonPlans: await seasonPlansForMember(pool, user.id), // every version of their season plans, words and seats handed back (server/repos/seasonPlans.ts)
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────

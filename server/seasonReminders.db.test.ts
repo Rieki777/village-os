@@ -141,7 +141,7 @@ describe.skipIf(!configured)("the daily cap and the season-end reminder", () => 
       "SELECT user_id, link FROM notifications WHERE dedupe_key LIKE 'season-ending:spring-2026:2026-10-01:14:u-sweep-%' ORDER BY user_id",
     );
     expect(rows.map((r) => [r.user_id, r.link])).toEqual([
-      ["u-sweep-a", "/seasonal-festivals"],
+      ["u-sweep-a", "/season-plans/mine"],
       ["u-sweep-b", "/admin?tab=seasons-patterns"],
     ]);
   });

@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `b00144e4c93b0614`, which regenerating reproduces.
+It describes the sources at fingerprint `100c7dd7d4614ecd`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -82,7 +82,7 @@ Governance copy is English, and only English, in version 1.0. Nothing on these s
 <!-- written by a person: publishModule -->
 Read the module state first. While the governance module is off, every path under its prefixes answers 404 to everybody, signed in or not. The mechanics routes are never module-gated, so they answer under every lifecycle.
 
-The governance module ships **off**. Its lifecycles are `off`, `preview`, `members`, `public`, an absent row means off, and its prefixes are `/api/governance`, `/api/admin/governance`. It turns on `ballot.vote`, `member.vouch` and carries 7 settings of its own.
+The governance module ships **off**. Its lifecycles are `off`, `preview`, `members`, `public`, an absent row means off, and its prefixes are `/api/governance`, `/api/admin/governance`, `/api/season-plans`. It turns on `ballot.vote`, `member.vouch` and carries 7 settings of its own.
 
 ## What a decision is
 
@@ -1049,7 +1049,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "b00144e4c93b0614",
+  "commit": "100c7dd7d4614ecd",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1061,7 +1061,8 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     ],
     "apiPrefixes": [
       "/api/governance",
-      "/api/admin/governance"
+      "/api/admin/governance",
+      "/api/season-plans"
     ],
     "capabilities": [
       "ballot.vote",
@@ -2809,7 +2810,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 169 migration files in `drizzle/`.
+Checked against the 170 migration files in `drizzle/`.
 
 ## What this file is made from
 

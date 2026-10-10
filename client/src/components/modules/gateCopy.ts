@@ -66,6 +66,7 @@ export const GATE_LINES: Record<string, string> = {
 export const PAGE_GATE_LINES = {
   places: "Every place on this land somebody has photographed, and the pictures they took of it.",
   propose: "The walk that takes a proposal from its first sentence to a ballot the village can vote on.",
+  seasonPlans: "Each member's plan for the season: the seats they keep, hand back or ask for, and what they will do.",
 } as const;
 
 /** The line for a module, or null when there is nothing true to say. */

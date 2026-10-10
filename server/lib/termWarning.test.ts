@@ -129,7 +129,7 @@ describe("the watch itself, both planes", () => {
       now,
       season: { current: { id: "s-1" } },
       seatings: [
-        { id: "as-soon", holderKind: "member", userId: "m-soon", roleName: "Host", daysLeft: 17, termEndsAt: at("2026-10-01T00:00:00Z") },
+        { id: "as-soon", orgRoleId: "seat-host", holderKind: "member", userId: "m-soon", roleName: "Host", daysLeft: 17, termEndsAt: at("2026-10-01T00:00:00Z") },
         { id: "as-later", holderKind: "member", userId: "m-later", roleName: "Host", daysLeft: 48, termEndsAt: at("2026-11-01T00:00:00Z") },
         { id: "as-lapsed", holderKind: "member", userId: "m-lapsed", roleName: "Host", daysLeft: null, lapsed: true },
         { id: "as-undated", holderKind: "member", userId: "m-undated", roleName: "Host", daysLeft: null },
@@ -160,8 +160,11 @@ describe("the watch itself, both planes", () => {
     expect(perm.body).toContain("Nothing renews on its own");
     expect(perm.body).toContain("no limit on terms");
     expect(told.find((t) => t.key === "term-soon:as-soon")!.body).toContain("no limit on terms");
-    // No client screen opens a seat vote yet, so the link stays on the roles page.
-    expect(told.every((t) => t.link === "/roles")).toBe(true);
+    // Season plans: a seating opens the member's season page on that seat, a
+    // permission holding (no org seat to name) and an undated row open it plain.
+    expect(told.find((t) => t.key === "term-soon:as-soon")!.link).toBe("/season-plans/mine?renew=seat-host");
+    expect(told.find((t) => t.key === "term-ended:as-lapsed")!.link).toBe("/season-plans/mine");
+    expect(told.find((t) => t.key === "perm-term-soon:soon")!.link).toBe("/season-plans/mine");
   });
 
   it("points the stopped-calendar notice at an admin tab that exists", async () => {

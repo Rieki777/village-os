@@ -111,6 +111,22 @@ describe("a wizard opened from a seat", () => {
     expect(roleApplicationStart("")).toBeNull();
   });
 
+  it("opens from a season plan: renew picks the held seat and the season rides to the route", () => {
+    expect(roleApplicationStart("?type=role_application&seat=seat-lead&renew=seat-lead&season=s-next")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-lead"], seasonId: "s-next" },
+    });
+    expect(roleApplicationStart("?type=role_application&renew=seat-lead")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-lead"] },
+    });
+    const body = ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["seat-lead"], seasonId: "s-next" });
+    const parsed = parseApplicationInput(body);
+    expect(parsed.ok && parsed.input.seasonId).toBe("s-next");
+    // No season: none is sent.
+    expect(ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["s-1"] })).not.toHaveProperty("seasonId");
+  });
+
   it("starts the terms from the first seat's terms on offer, and from the preset when there are none", () => {
     const org = {
       roles: [

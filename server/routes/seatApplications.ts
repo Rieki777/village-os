@@ -275,8 +275,19 @@ export function register(app: Express, deps: Deps): void {
     const tz = calendar.timezone || "UTC";
     const now = new Date();
 
-    const startsAt = input.startsOn ? civilDateInstant(input.startsOn, tz) : null;
-    if (input.startsOn && !startsAt) {
+    // A season named by the member's season plan: a season still to come sets
+    // the first day to its own when the member set none, so the term sits in it.
+    let startsOn = input.startsOn;
+    if (input.seasonId) {
+      const season = calendar.seasons.find((s) => s.id === input.seasonId);
+      if (!season) return res.status(400).json({ error: "There is no season by that id.", field: "seasonId" });
+      const ends = season.endsOn ? civilDateInstant(season.endsOn, tz) : null;
+      if (ends && ends.getTime() <= now.getTime()) return res.status(409).json({ error: "That season has already ended.", field: "seasonId" });
+      const begins = civilDateInstant(season.startsOn, tz);
+      if (!startsOn && begins && begins.getTime() > now.getTime()) startsOn = season.startsOn;
+    }
+    const startsAt = startsOn ? civilDateInstant(startsOn, tz) : null;
+    if (startsOn && !startsAt) {
       return res.status(400).json({ error: "That first day is not a date the calendar has.", field: "startsNoEarlierThan" });
     }
     const later = !!startsAt && startsAt.getTime() > now.getTime();
