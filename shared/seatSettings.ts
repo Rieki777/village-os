@@ -753,8 +753,11 @@ function termWords(t: TermSettings, locale: string): Pick<SettingsRow, "headline
   return { headline, lines };
 }
 
-function clockWords(c: ClockSettings): Pick<SettingsRow, "headline" | "lines"> {
-  const pay = c.pay === "calendar-month" ? "Paid by the calendar month" : c.pay === "moon" ? "Paid by the moon" : null;
+function clockWords(c: ClockSettings, payTerms?: PaySettings): Pick<SettingsRow, "headline" | "lines"> {
+  // A pay amount set "a month" or "a moon" IS the pay clock: the words follow
+  // it, so they never say "Paid by the moon" beside "XTS 1,500 a month" (red team U7).
+  const payClock = payTerms?.per === "month" ? "calendar-month" : payTerms?.per === "moon" ? "moon" : c.pay;
+  const pay = payClock === "calendar-month" ? "Paid by the calendar month" : payClock === "moon" ? "Paid by the moon" : null;
   const work = c.work === "moon" ? "works by the moon" : c.work === "week" ? "works by the week" : null;
   const headline = pay && work ? `${pay}, ${work}` : pay ? pay : work ? work.charAt(0).toUpperCase() + work.slice(1) : NOT_SET;
   return { headline, lines: [] };
@@ -766,7 +769,8 @@ function rhythmWords(r: RhythmSettings): Pick<SettingsRow, "headline" | "lines">
     (g) => `${g.label}: ${g.every === "fortnight" ? "every other" : "every"} ${WEEKDAYS[g.weekday]} at ${g.time}`,
   );
   if (r.quietDays && r.quietDays.length > 0) lines.push(`Quiet days: ${r.quietDays.map((d) => WEEKDAYS[d]).join(", ")}`);
-  lines.push(r.tz ? `Times in ${r.tz}` : "Times on the season's clock");
+  // Which clock the times are on, only when there are times to read (red team U7).
+  if (gatherings.length > 0 || (r.quietDays && r.quietDays.length > 0)) lines.push(r.tz ? `Times in ${r.tz}` : "Times on the season's clock");
   const headline =
     gatherings.length === 0
       ? "No standing gatherings"
@@ -917,7 +921,7 @@ export function settingsWords(settings: SeatSettings | null | undefined, ctx: Wo
       group === "term"
         ? termWords(value as TermSettings, locale)
         : group === "clocks"
-          ? clockWords(value as ClockSettings)
+          ? clockWords(value as ClockSettings, s.pay)
           : group === "rhythm"
             ? rhythmWords(value as RhythmSettings)
             : group === "pay"

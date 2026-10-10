@@ -126,14 +126,14 @@ function Whole({ label, value, onChange, min = 0, max }: { label: string; value:
   );
 }
 
-function Words({ label, value, onChange, max, wide = true, area = false }: { label: string; value: unknown; onChange: (v: string | undefined) => void; max: number; wide?: boolean; area?: boolean }) {
+function Words({ label, value, onChange, max, wide = true, area = false, placeholder }: { label: string; value: unknown; onChange: (v: string | undefined) => void; max: number; wide?: boolean; area?: boolean; placeholder?: string }) {
   return (
     <Field label={label} wide={wide}>
       {(id) =>
         area ? (
-          <textarea id={id} className={input} rows={2} maxLength={max} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || undefined)} />
+          <textarea id={id} className={input} rows={2} maxLength={max} placeholder={placeholder} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || undefined)} />
         ) : (
-          <input id={id} className={input} type="text" maxLength={max} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || undefined)} />
+          <input id={id} className={input} type="text" maxLength={max} placeholder={placeholder} value={String(value ?? "")} onChange={(e) => onChange(e.target.value || undefined)} />
         )
       }
     </Field>
@@ -323,7 +323,7 @@ function BonusFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
       <Choice label="Kind" value={g.kind} options={BONUS_KINDS} onChange={(v) => set(put(g, "kind", v))} />
       {g.kind === "equity" && (
         <>
-          <Words label="The cap, in words" max={LIMITS.wordsChars} value={g.capWords} onChange={(v) => set(put(g, "capWords", v))} />
+          <Words label="The cap, in words" max={LIMITS.wordsChars} placeholder="Up to a set share, written here in words" value={g.capWords} onChange={(v) => set(put(g, "capWords", v))} />
           <Words label="Rated by" max={LIMITS.wordsChars} value={g.ratedBy} onChange={(v) => set(put(g, "ratedBy", v))} />
           <Words label="How often it is rated" max={LIMITS.wordsChars} value={g.cadence} onChange={(v) => set(put(g, "cadence", v))} />
         </>

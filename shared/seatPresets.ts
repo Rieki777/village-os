@@ -206,9 +206,11 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     label: "Rated equity, in words",
     blurb: "A share of equity, capped and rated in words the funders agree.",
     version: 1,
+    // The cap is the member's own words to write: a template sentence stored
+    // as a value would be aligned with as if it were a term (red team U7). The
+    // editor shows the hint as a placeholder.
     values: {
       kind: "equity",
-      capWords: "Up to a set share, written here in words",
       ratedBy: "the people who fund the seat",
       cadence: "Rated each month",
     },
@@ -227,13 +229,14 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     id: "platform:starter-measures",
     group: "scoreboard",
     label: "Starter measures",
-    blurb: "Three plain measures of the work, each read from somewhere anyone can check.",
+    blurb: "Two plain measures of the work, each read from somewhere anyone can check.",
     version: 1,
+    // No measure counts gatherings: a seat may have none, and its terms would
+    // then measure something they never set (red team U7).
     values: {
       measures: [
         { measure: "Quests done", target: "every agreed quest done by the moon's end", readFrom: "the quest board" },
         { measure: "Handoffs written", target: "one handoff note each moon", readFrom: "the seat's notes" },
-        { measure: "Gatherings held", target: "every standing gathering held or moved", readFrom: "the calendar" },
       ],
     },
   }),
