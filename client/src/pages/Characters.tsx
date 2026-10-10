@@ -477,7 +477,7 @@ export default function Characters() {
                   disabled={busy}
                   className="min-h-11 rounded-xl bg-teal-deep px-8 py-3 font-semibold text-white shadow hover:bg-teal-deep-dark disabled:opacity-50"
                 >
-                  {playing ? "Save this look" : "Walk this path"}
+                  {playing ? "Save this look" : "Play this character"}
                 </button>
                 {error ? <p role="alert" className="mt-3 text-sm text-red-700">{error}</p> : null}
                 {/*

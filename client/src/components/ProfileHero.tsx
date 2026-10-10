@@ -266,14 +266,14 @@ export default function ProfileHero({
             </p>
           ) : status === "loading" ? (
             <p role="status" className="text-lg text-muted-foreground">
-              Reading your paths…
+              Reading your characters…
             </p>
           ) : status === "failed" ? (
             /* The failure branch that used to be the empty branch. Retry, and
                never the sentence that tells a member with six characters that
                they have none. */
             <p role="status" className="text-lg text-muted-foreground">
-              Your paths didn't load.{" "}
+              Your characters didn't load.{" "}
               <button
                 type="button"
                 onClick={() => load()}
@@ -284,7 +284,7 @@ export default function ProfileHero({
             </p>
           ) : (
             <p className="text-lg text-muted-foreground">
-              No path chosen yet.{" "}
+              No character chosen yet.{" "}
               <Link href="/profile/characters" className="font-medium text-foreground underline underline-offset-2">
                 Choose who you will be
               </Link>
@@ -300,7 +300,7 @@ export default function ProfileHero({
       </div>
 
       {/* The rest of the party, directly under the hero. Multi-class is the
-          point, so every path a member walks is visible without scrolling. */}
+          point, so every character a member plays is visible without scrolling. */}
       {party.length > 0 ? (
         <div className="mt-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -345,7 +345,7 @@ export default function ProfileHero({
               href="/profile/characters"
               className="flex min-h-11 items-center rounded-xl border border-dashed border-border px-4 py-3 text-sm font-semibold text-foreground hover:bg-muted"
             >
-              Add a path
+              Add a character
             </Link>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">

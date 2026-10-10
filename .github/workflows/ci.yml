@@ -54,6 +54,31 @@ jobs:
       # migration through the same engine production uses.
       mysql:
         image: mysql:8
+        # AUTHENTICATED PULL, AND WHY A LOGIN STEP CANNOT DO THIS JOB.
+        #
+        # On 2026-10-09 at about 20:55Z Docker Hub began refusing anonymous
+        # pulls from this runner pool's addresses, and EVERY tree in the
+        # repository went red inside one step with nobody's commit involved:
+        # main's own post-merge run, batch 25, and the repository-move branch.
+        # The step tally is the fingerprint, `failure:2 skipped:49 success:3`:
+        # "Initialize containers" fails, 49 steps are skipped because setup
+        # never ran, and `Build` then cascades with "pnpm: command not found",
+        # which is an echo of the first failure and not a second defect.
+        #
+        # The credentials belong HERE rather than in a `docker/login-action`
+        # step, because the runner pulls service containers BEFORE the first
+        # step runs - which is why the failure is step 2. A login step is too
+        # late by construction, however early in the job it is placed.
+        #
+        # IT DEGRADES SAFELY. Absent secrets evaluate to empty strings and the
+        # pull falls back to anonymous, which is exactly today's behaviour, so
+        # this cannot break a fork or a clone that sets no secret. The same
+        # property means FORK pull requests keep pulling anonymously, because
+        # GitHub withholds secrets from them, and can still meet the limit.
+        # A READ-ONLY access token is sufficient; this needs no write scope.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           MYSQL_ROOT_PASSWORD: ci-test
         ports:
