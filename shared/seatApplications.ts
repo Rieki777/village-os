@@ -174,8 +174,14 @@ export function adoptRefusal(rule: HandOpenerRule, actorId: string, candidateId:
   return null;
 }
 
-/** Why this member may not send this application to a vote, or null. Any live holder may, the candidate included. */
+/**
+ * Why this member may not send this application to a vote, or null. Any live
+ * holder may, the candidate included. When the power is the village's, or
+ * nobody holds it live any more, any member may (red team G5): an application
+ * written while a holder sat would otherwise wait for nobody, for good.
+ */
 export function putToVillageRefusal(rule: HandOpenerRule, actorId: string): DoorRefusal | null {
+  if (rule.who === "any-member") return null;
   if (rule.who === "live-holders" && rule.holders.includes(actorId)) return null;
   return {
     status: 403,
