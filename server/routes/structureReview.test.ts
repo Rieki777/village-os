@@ -168,11 +168,12 @@ describe.skipIf(!configured)("the structure change review", () => {
     const r = await call("GET", `/api/review/batches/${BATCH}/structure`);
     expect(r.status).toBe(200);
     const plan = r.json.plan;
-    expect(plan.circles.map((c: any) => [c.name, c.status, c.problem])).toEqual([
+    // Sorted: rows landed in the same second come back in id order, which is random.
+    expect(plan.circles.map((c: any) => [c.name, c.status, c.problem]).sort()).toEqual([
       ["Community Anchor", "new", null],
       ["Regenerative Business", "new", null],
-      ["Regenerative Development", "new", null],
       ["Regenerative Community", "new", null],
+      ["Regenerative Development", "new", null],
     ]);
     expect(plan.circles.every((c: any) => c.purpose === null)).toBe(true);
     expect(plan.seats.filter((s: any) => s.match).map((s: any) => s.match.seatId)).toEqual([
