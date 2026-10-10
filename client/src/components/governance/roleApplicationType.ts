@@ -28,6 +28,7 @@
 import { UserPlus } from "lucide-react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { MAX_SEATS } from "@shared/seatApplications";
+import { ALIGN_WORDS } from "@shared/alignments";
 import type { WizardTypeConfig } from "./wizardConfig";
 import { atLeast } from "./wizardValidators";
 import { pickedSeats } from "./SeatPicksField";
@@ -62,6 +63,9 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   consequence:
     "Publishing puts your application and its terms in front of whoever adopts seats: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the seats and never you or the money.",
   opensVote: true,
+  // The candidate aligns as they propose, with the words Review shows: they never click twice.
+  aligns: true,
+  publishLabel: ALIGN_WORDS.proposeAndAlign,
   publish: {
     path: "/api/governance/role-applications",
     body: (a) => ({

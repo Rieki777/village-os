@@ -103,6 +103,8 @@ export const SHEET_SECTIONS: SheetSection[] = [
   // ── RECORD: fills in as you go ─────────────────────────────────────────
   { id: "contributions", band: "record", quiet: "" },
   { id: "journey", band: "record", quiet: "" },
+  // What you have aligned with: the terms of the seats you applied for, and where each stands.
+  { id: "aligned", band: "record", quiet: "" },
 
   // ── PATH: present and quiet until the path is walked ───────────────────
   {

@@ -39,6 +39,7 @@ import TypeCards from "./TypeCards";
 import WizardField, { type MechanicsVariableLite } from "./WizardField";
 import WizardRolePreview from "./WizardRolePreview";
 import WizardSeatPreview from "./WizardSeatPreview";
+import AlignmentReview, { type ReviewAlignment } from "@/components/alignment/AlignmentReview";
 import { settingsWords } from "@shared/seatSettings";
 import WizardStepper from "./WizardStepper";
 import { isSearchSource, labelFor, loadOrg, loadPickOptions, type PickOption } from "./pickSources";
@@ -83,6 +84,8 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [leaving, setLeaving] = useState(false);
   const [published, setPublished] = useState<{ id?: string; title: string } | null>(null);
+  // The words an aligning type's Review step showed, sent back so the server binds the click to them.
+  const [review, setReview] = useState<ReviewAlignment>({ words: null, ready: false });
 
   const walk = walkFor(type);
   const stepIndex = Math.max(0, walk.findIndex((s) => s.key === step));
@@ -312,7 +315,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     if (!cfg || problems.length > 0) return;
     setBusy(true);
     setFeedback(null);
-    const answer = await publishProposal(cfg.publish.path, cfg.publish.body(answers));
+    if (cfg.aligns && !review.ready) return;
+    const body = cfg.publish.body(answers);
+    const answer = await publishProposal(cfg.publish.path, cfg.aligns ? { ...body, alignedWords: review.words } : body);
     if (!answer.ok) {
       setFeedback({ ok: false, text: answer.error });
       setBusy(false);
@@ -537,6 +542,8 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               </div>
             )}
 
+            {cfg.aligns && <AlignmentReview body={cfg.publish.body(answers)} onState={setReview} />}
+
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
               <p className="text-sm font-semibold text-stone-900">What publishing does</p>
               <p className="mt-1 text-sm text-stone-700 leading-relaxed">{cfg.consequence}</p>
@@ -585,12 +592,12 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
           {step === "review" ? (
             <button
               type="button"
-              disabled={busy || problems.length > 0}
+              disabled={busy || problems.length > 0 || (!!cfg?.aligns && !review.ready)}
               onClick={publish}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
-              Put it in front of the village
+              {cfg?.publishLabel ?? "Put it in front of the village"}
             </button>
           ) : (
             nextStep(type, step) && (

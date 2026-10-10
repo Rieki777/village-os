@@ -20,6 +20,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import VouchPanel from "@/components/profile/VouchPanel";
 import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
+import AlignedSection from "@/components/profile/AlignedSection";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
@@ -219,6 +220,13 @@ export default function PublicProfile() {
         {sheet.handle ? (
           <div className="mt-10">
             <SeasonPlanSection handle={sheet.handle} />
+          </div>
+        ) : null}
+
+        {/* What they have aligned with (seat settings PR5): for a reader holding terms.read, nothing for anybody else. */}
+        {sheet.handle ? (
+          <div className="mt-10">
+            <AlignedSection handle={sheet.handle} />
           </div>
         ) : null}
 

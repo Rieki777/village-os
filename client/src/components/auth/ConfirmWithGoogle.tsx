@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { GoogleMark } from "./GoogleSignInButton";
 
-export type ConfirmAction = "request-exit" | "delete-account";
+export type ConfirmAction = "request-exit" | "delete-account" | "align";
 export type ConfirmWith = "password" | "google" | "none";
 
 export interface IdentityConfirmState {
