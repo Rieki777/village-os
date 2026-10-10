@@ -9,7 +9,7 @@
  */
 import type { ReactNode } from "react";
 import { Link } from "wouter";
-import { questPipsWords } from "@shared/seasonPlans";
+import { civilDayWords, questPipsWords } from "@shared/seasonPlans";
 import type { PlanApplication, PlanCard as PlanCardData } from "./seasonPlansApi";
 
 export const PLAN_CARD_WORDS = {
@@ -81,7 +81,7 @@ export default function PlanCard({ card, headingLevel = 3 }: { card: PlanCardDat
           )}
         </H>
         <span className={`text-sm font-semibold ${card.filed ? "text-teal-deep" : "text-stone-600"}`}>
-          {card.filed ? `${PLAN_CARD_WORDS.filed}${card.filedOn ? ` ${card.filedOn}` : ""}` : PLAN_CARD_WORDS.notFiled}
+          {card.filed ? `${PLAN_CARD_WORDS.filed}${card.filedOn ? ` ${civilDayWords(card.filedOn)}` : ""}` : PLAN_CARD_WORDS.notFiled}
         </span>
       </header>
 
