@@ -4,7 +4,7 @@
  *
  * The routes are registered on the fake Express server/routes/journal.test.ts
  * uses, with the scratch schema's pool behind them, so every statement is the
- * real one against the tables 0232 creates. The people are a stub member
+ * real one against the tables 0238 creates. The people are a stub member
  * list, and the notices are recorded where they would have been sent.
  *
  * THE CASES RUN IN ORDER and share one story, the way a session does: the

@@ -7,7 +7,7 @@ Provenance: platform
 > builder, the privacy line and every sentence a member reads. Routes in
 > `server/routes/liveSessions.ts`; the rules in `server/lib/liveSessions.ts`; every statement
 > against the tables in `server/repos/liveSessions.ts`; the schema in
-> `drizzle/0232_a_circle_holds_a_live_session.sql`. The list is `client/src/pages/Sessions.tsx`
+> `drizzle/0238_a_circle_holds_a_live_session.sql`. The list is `client/src/pages/Sessions.tsx`
 > and the room is `client/src/pages/SessionRoom.tsx`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six

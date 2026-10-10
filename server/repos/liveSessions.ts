@@ -1,5 +1,5 @@
 /**
- * Live Sessions' six tables (0232): `live_session_members`, `live_sessions`,
+ * Live Sessions' six tables (0238): `live_session_members`, `live_sessions`,
  * `live_session_people`, `live_session_items`, `live_session_entries` and
  * `live_session_responses`. Every statement `server/lib/liveSessions.ts` runs
  * against them, one function each.

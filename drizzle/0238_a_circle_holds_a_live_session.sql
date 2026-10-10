@@ -1,4 +1,4 @@
--- 0232: a circle holds a live session, and keeps its record.
+-- 0238: a circle holds a live session, and keeps its record.
 --
 -- Six new tables and nothing else, so this file is expand-only: the previous
 -- release neither reads nor writes any of them, and rolling an image back over

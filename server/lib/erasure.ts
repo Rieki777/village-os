@@ -570,7 +570,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Live Sessions (0232): the member leaves every room. Their people rows,
+       * Live Sessions (0238): the member leaves every room. Their people rows,
        * answers and written entries are deleted, the actions they held go back
        * to nobody, the hosts and adders they were read 0, and every closed
        * record that named them has its minutes written again from what is
