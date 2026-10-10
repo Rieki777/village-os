@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `053ef9a79fc4ddf3`, which regenerating reproduces.
+It describes the sources at fingerprint `b00144e4c93b0614`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -212,7 +212,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
-A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 6 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`); the other 4 open as practice votes (`role_application`, `agreement`, `badge_grant`, `quest_payout`).
+A member drafts through the wizard, which knows 10 types: `role_application`, `mechanics`, `agreement`, `badge_grant`, `quest_payout`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`. 7 of them can be taken to a binding vote today (`mechanics`, `power_transfer`, `power_grant`, `power_return`, `role_seat`, `gps_change`, `role_application`); the other 3 open as practice votes (`agreement`, `badge_grant`, `quest_payout`).
 
 <!-- written by a person: practiceVotes -->
 The wizard offers types the executors have not reached. Those open as practice votes: the village holds a real decision, reads the real answer, and nothing moves. It is a ladder and never a scorecard.
@@ -497,6 +497,12 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/power-transfers` | signed in | none |
 | GET | `/api/governance/purpose` | signed in | none |
 | POST | `/api/governance/purpose-changes` | signed in | none |
+| GET | `/api/governance/role-applications` | signed in | none |
+| POST | `/api/governance/role-applications` | signed in | none |
+| GET | `/api/governance/role-applications/:id` | signed in | none |
+| POST | `/api/governance/role-applications/:id/adopt` | signed in | none |
+| POST | `/api/governance/role-applications/:id/put-to-village` | signed in | none |
+| POST | `/api/governance/role-applications/:id/withdraw` | signed in | none |
 | POST | `/api/governance/role-declarations` | signed in | none |
 | POST | `/api/governance/role-seats` | signed in | none |
 | POST | `/api/governance/role-unseats` | signed in | none |
@@ -506,7 +512,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-54 routes: 40 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+60 routes: 46 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
 
@@ -1043,7 +1049,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "053ef9a79fc4ddf3",
+  "commit": "b00144e4c93b0614",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1727,10 +1733,10 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "power_grant",
       "power_return",
       "role_seat",
-      "gps_change"
+      "gps_change",
+      "role_application"
     ],
     "advisory": [
-      "role_application",
       "agreement",
       "badge_grant",
       "quest_payout"
@@ -2121,6 +2127,48 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "signed in",
       "capability": null,
       "file": "server/routes/governingPurpose.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/role-applications",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/role-applications",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/role-applications/:id",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/role-applications/:id/adopt",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/role-applications/:id/put-to-village",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/role-applications/:id/withdraw",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/seatApplications.ts"
     },
     {
       "method": "POST",
@@ -2761,7 +2809,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 168 migration files in `drizzle/`.
+Checked against the 169 migration files in `drizzle/`.
 
 ## What this file is made from
 
