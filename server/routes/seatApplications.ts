@@ -49,7 +49,7 @@
 import crypto from "node:crypto";
 import type { Express } from "express";
 import type { PoolConnection } from "mysql2/promise";
-import { hasCapability, isVillageHeld, type Capability } from "../../shared/capabilities";
+import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { whoMayPutHandToVillage } from "../../shared/powerHands";
 import {
   ADOPTING_POWER,
@@ -101,7 +101,7 @@ const ASK_WINDOW_MS = 10 * 60 * 1000;
 
 type Deps = Pick<
   AppDeps,
-  "authedUser" | "capabilityCtx" | "getPool" | "notify" | "notifyAdmins" | "overLimit" | "members" | "firstName"
+  "authedUser" | "capabilityCtx" | "guardCapability" | "getPool" | "notify" | "notifyAdmins" | "overLimit" | "members" | "firstName"
 > & {
   /** Who holds a power live, counted the way the gate counts. `liveHoldersOf` in server/index.ts. */
   liveHoldersOf(capability: string): Promise<string[]>;
@@ -138,7 +138,7 @@ function requestedEndsOn(settings: SeatSettings, startsAt: Date, timezone: strin
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, capabilityCtx, getPool, notify, notifyAdmins, overLimit, members, firstName } = deps;
+  const { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName } = deps;
   const { liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse, landingDeps } = deps;
 
   const closer = seatApplicationCloser({ getPool, notify, notifyAdmins, lapse, calendar: seatCalendar });
@@ -150,10 +150,15 @@ export function register(app: Express, deps: Deps): void {
     return whoMayPutHandToVillage(isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), await liveHoldersOf(ADOPTING_POWER));
   }
 
-  /** The signed-in member holding `terms.read`, or null after answering 401. */
+  /**
+   * The signed-in member holding `terms.read`, or null after answering 401.
+   * Asked through the one gate, `guardCapability`, so a visitor and a guest
+   * are told the same thing and the governance document reads the door.
+   */
   async function reader(req: any, res: any): Promise<any | null> {
+    if (!(await guardCapability(req, res, "terms.read", { status: 401, body: MEMBERS_ONLY }))) return null;
     const viewer = await authedUser(req);
-    if (!viewer || !hasCapability("terms.read", await capabilityCtx(viewer))) {
+    if (!viewer) {
       res.status(401).json(MEMBERS_ONLY);
       return null;
     }
@@ -258,10 +263,7 @@ export function register(app: Express, deps: Deps): void {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to apply for a seat." });
     const userId = String(user.id);
-    const ctx = await capabilityCtx(user);
-    if (!hasCapability("terms.read", ctx)) {
-      return res.status(403).json({ error: "members_only", message: "Applying for a seat opens at the member rung." });
-    }
+    if (!(await guardCapability(req, res, "terms.read", { status: 403, body: { error: "members_only", message: "Applying for a seat opens at the member rung." } }))) return;
     if (await overLimit(`seat-application:${userId}`, ASKS_PER_WINDOW, ASK_WINDOW_MS)) {
       return res.status(429).json({ error: "too_many_asks", message: "That is a lot of applications in a few minutes. Wait a little and try again." });
     }

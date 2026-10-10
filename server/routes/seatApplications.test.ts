@@ -32,7 +32,7 @@ import path from "node:path";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { CapabilityCtx } from "../../shared/capabilities";
+import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ballotById, openBallotFor } from "../lib/ballots";
@@ -122,6 +122,17 @@ function harness() {
           roleCapabilities: [],
           villageHeld: [...state.villageHeld],
         }) as unknown as CapabilityCtx,
+      // The one gate's shape: refuse with the route's own refusal unless the reader holds the key.
+      guardCapability: async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
+        const ctx = {
+          stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"),
+          stageIndexOf: (id: string) => LADDER.indexOf(id),
+          roleCapabilities: [],
+        } as unknown as CapabilityCtx;
+        if (state.viewer && hasCapability(cap, ctx)) return true;
+        res.status(refusal?.status ?? 401).json(refusal?.body ?? { error: "auth_required" });
+        return false;
+      },
       getPool: () => state.pool(),
       notify: async (input: any) => {
         notices.push(input);

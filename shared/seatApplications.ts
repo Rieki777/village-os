@@ -211,7 +211,7 @@ export function applicationBallotDoc(seats: readonly BallotSeat[], applicationId
     "",
     "WHAT THE VILLAGE DECIDES",
     "  Whether a member's application to hold these seats, on the terms it sets, is adopted.",
-    "  If it carries, the member holds every seat it names from the day it lands, on those terms.",
+    "  If it carries, the member holds every seat it names on those terms, from the day it lands or a later first day the application sets.",
     "",
     "Members read the application on its page.",
     `  ${applicationHref(applicationId)}`,
