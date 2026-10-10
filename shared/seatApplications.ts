@@ -250,3 +250,32 @@ export function applicationNoticeTitle(kind: "opened" | "waiting" | "adopted" | 
       return `Held, a seat is full: your application for ${seats}`;
   }
 }
+
+// ── The public record of an application's ballot ─────────────────────────────
+
+/** Who the ballot names as having closed or withdrawn it: the system, never a member. */
+export const APPLICATION_BALLOT_ACTOR = "governance";
+
+/** The only words a withdrawn application's ballot records. */
+export const APPLICATION_WITHDRAWN_NOTE = "The application was withdrawn.";
+
+/** The only words a closed application's ballot records, whatever the closer typed. */
+export const APPLICATION_CLOSED_NOTE = "The village decided on the application. Members read it on its page.";
+
+/**
+ * Does the public ballot name whoever closed or withdrew it? Not for an
+ * application (red team S1): the candidate withdraws their own, so naming the
+ * withdrawer names the candidate on a record built never to name them.
+ */
+export function ballotNamesItsCloser(subjectType: string): boolean {
+  return subjectType !== ROLE_APPLICATION;
+}
+
+/**
+ * The outcome words a close may store (red team U12). An application's ballot
+ * takes no free text: a closer could type the candidate's name into a public
+ * record, so it records fixed words and the application page says the rest.
+ */
+export function closeNoteFor(subjectType: string, typed: string): string {
+  return subjectType === ROLE_APPLICATION ? APPLICATION_CLOSED_NOTE : typed;
+}

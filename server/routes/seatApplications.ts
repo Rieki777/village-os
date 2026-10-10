@@ -72,7 +72,9 @@ import {
   applicationBallotTitle,
   applicationHref,
   applicationNoticeTitle,
+  APPLICATION_BALLOT_ACTOR,
   APPLICATION_ID,
+  APPLICATION_WITHDRAWN_NOTE,
   OPEN_STATUSES,
   parseApplicationInput,
   putToVillageRefusal,
@@ -624,8 +626,9 @@ export function register(app: Express, deps: Deps): void {
       if (ballot) {
         const out = await withdrawBallot(pool, {
           ballotId: ballot.id,
-          withdrawnBy: userId,
-          reason: "The member who applied withdrew the application.",
+          // The public ballot names nobody (red team S1): the system withdraws it, in neutral words.
+          withdrawnBy: APPLICATION_BALLOT_ACTOR,
+          reason: APPLICATION_WITHDRAWN_NOTE,
           withdrawerMayDiscardVotes: true,
         });
         if (!out.ok) return res.status(409).json({ error: out.error });

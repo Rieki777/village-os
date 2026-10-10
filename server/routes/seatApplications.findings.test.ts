@@ -17,9 +17,9 @@ import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import { isSeatSubject } from "../../shared/governanceKinds";
 import { whoMayPutHandToVillage } from "../../shared/powerHands";
-import { putToVillageRefusal } from "../../shared/seatApplications";
+import { APPLICATION_CLOSED_NOTE, ballotNamesItsCloser, closeNoteFor, putToVillageRefusal } from "../../shared/seatApplications";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { openBallotFor } from "../lib/ballots";
+import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole } from "../lib/orgChart";
 import { isVetoable } from "../lib/stewardship";
@@ -188,6 +188,16 @@ describe("G5: when the power that seats people leaves every holder, any member m
   });
 });
 
+describe("S1 and U12: an application's public ballot names nobody", () => {
+  it("does not name whoever closed or withdrew it, and takes no free text at the close", () => {
+    expect(ballotNamesItsCloser("role_application")).toBe(false);
+    expect(closeNoteFor("role_application", "Ana Quillfeather got the seat.")).toBe(APPLICATION_CLOSED_NOTE);
+    // CONTROL: every other ballot keeps its closer's name and its words.
+    expect(ballotNamesItsCloser("mechanics")).toBe(true);
+    expect(closeNoteFor("mechanics", "We agreed nine days.")).toBe("We agreed nine days.");
+  });
+});
+
 // ── Over the database ─────────────────────────────────────────────────────────
 
 describe.skipIf(!configured)("the member door, over a scratch schema", () => {
@@ -236,5 +246,17 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
     expect(p.body.status).toBe("voting");
     expect((await readApplication(pool, a.body.id))!.status).toBe("voting");
     expect(await openBallotFor(pool, "role_application", a.body.id)).not.toBeNull();
+  });
+
+  it("S1: a candidate's withdraw records the system and neutral words on the public ballot", async () => {
+    const s = await seat("Withdrawn seat");
+    const a = await apply({ seatIds: [s] });
+    expect(a.body.status).toBe("voting");
+    const w = await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
+    expect(w.status).toBe(200);
+    const b = (await ballotById(pool, a.body.ballot.id))!;
+    expect(b.status).toBe("withdrawn");
+    expect(b.closedBy).toBe("governance");
+    expect(b.outcomeNote).toBe("The application was withdrawn.");
   });
 });

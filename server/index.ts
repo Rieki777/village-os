@@ -332,6 +332,7 @@ import {
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
+import { ballotNamesItsCloser, closeNoteFor } from "../shared/seatApplications";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
@@ -23384,7 +23385,7 @@ ${inner}
       // 0219: the judgement line, beside the proposal at the moment of deciding.
       purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
-      closedBy: b.closedBy ? await nameOf(b.closedBy) : null,
+      closedBy: b.closedBy && ballotNamesItsCloser(b.subjectType) ? await nameOf(b.closedBy) : null, // red team S1: an application ballot names nobody
       closedAt: b.closedAt,
       tallies,
       unity: unityPctOf(tallies),
@@ -24088,7 +24089,7 @@ ${inner}
     const result = await closeBallot(getPool(), {
       ballotId: b.id,
       closedBy: user.id,
-      outcomeNote: String(req.body?.outcomeNote ?? req.body?.outcome_note ?? ""),
+      outcomeNote: closeNoteFor(b.subjectType, String(req.body?.outcomeNote ?? req.body?.outcome_note ?? "")), // red team U12: fixed words for an application
       closerMayCloseEarly: isFacilitator,
     });
     if (!result.ok) {
