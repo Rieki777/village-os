@@ -525,6 +525,16 @@ describe("the terms tier: no termsOffer below the member rung", () => {
     expect(sorted(withTerms)).toEqual([...ORG_BEFORE, ...ORG_GAINED, ...TERMS_KEYS].sort());
   });
 
+  it("carries the adopted terms a holder sits on, at the terms tier only (red team U2)", () => {
+    const seated = { ...MARA, applicationId: "sa-0000000000000001" } as OrgAssignment;
+    const heldTerms = new Map([["sa-0000000000000001", { applicationId: "sa-0000000000000001", settings: { v: 1 }, decidedOn: "2026-10-09" }]]);
+    const withTerms = projectSeat(offered, [seated], tierOrg({ viewPeople: true, terms: true }), { ...ctx("org"), heldTerms });
+    expect(withTerms.heldTerms).toEqual([{ holderName: "Mara", applicationId: "sa-0000000000000001", settings: { v: 1 }, decidedOn: "2026-10-09" }]);
+    // CONTROL: below the terms tier, nothing of it travels.
+    const without = projectSeat(offered, [seated], tierOrg({ viewPeople: true }), { ...ctx("org"), heldTerms });
+    expect(without).not.toHaveProperty("heldTerms");
+  });
+
   it("both handlers ask the one gate for terms.read, and nothing else decides it", () => {
     expect(handler("get", "/api/map")).toMatch(
       /mapSeatTier\(viewPeople, !!viewerCapCtx && hasCapability\("terms\.read", viewerCapCtx\)\)/,

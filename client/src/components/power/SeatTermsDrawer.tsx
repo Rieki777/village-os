@@ -68,6 +68,7 @@ export const DRAWER_WORDS = {
   none: OFFER_WORDS.none,
   propose: OFFER_WORDS.propose,
   changed: OFFER_WORDS.changed,
+  changeLater: "Changing the terms of a seat somebody holds comes later.",
 } as const;
 
 export interface DrawerAdoption {
@@ -207,7 +208,7 @@ export default function SeatTermsDrawer({
    * host whose reader holds `terms.read`, so it never tells a stranger
    * anything. `href` is where proposing terms starts, absent on an example.
    */
-  empty?: { href: string | null } | null;
+  empty?: { href: string | null; heldLine?: boolean } | null;
   /** Groups to light as changed, when this shows a proposed change of terms. */
   changedGroups?: readonly SettingsGroup[];
   /**
@@ -251,6 +252,7 @@ export default function SeatTermsDrawer({
         ) : !settings && empty ? (
           <div className="py-2" data-terms-empty="">
             <p className="text-sm text-foreground">{DRAWER_WORDS.none}</p>
+            {empty.heldLine && <p className="mt-1 text-xs text-muted-foreground">{DRAWER_WORDS.changeLater}</p>}
             {empty.href && (
               <a
                 href={empty.href}

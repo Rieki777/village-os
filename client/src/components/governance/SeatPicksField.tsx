@@ -13,7 +13,8 @@
  * longer offers stays listed under its id, so a saved draft never loses a seat
  * without the member seeing it.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useOptionalAuth } from "@/contexts/AuthContext";
 import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
 import { loadPickOptions, type PickOption } from "./pickSources";
@@ -42,6 +43,9 @@ export default function SeatPicksField({
   footerNode: React.ReactNode;
 }) {
   const [options, setOptions] = useState<PickOption[] | null>(null);
+  const me = String((useOptionalAuth()?.user as any)?.id ?? "");
+  const [dropped, setDropped] = useState<string[]>([]);
+  const checked = useRef(false);
   useEffect(() => {
     let alive = true;
     void loadPickOptions("seats").then((o) => {
@@ -57,6 +61,25 @@ export default function SeatPicksField({
   const atMost = picked.length >= max;
   const listed = options ?? [];
   const strays = picked.filter((id) => !listed.some((o) => o.value === id)).map((id) => ({ value: id, label: id }) as PickOption);
+
+  /*
+   * A FULL SEAT IS NO PLACE TO APPLY FOR (red team U4). Every place held, and
+   * not by this member (a holder may renew their own), means the application
+   * could only be refused at the end. Such a seat is shown, marked, and
+   * cannot be ticked; one already picked (a link, a saved draft) is taken off
+   * the list once, here at the seats step, and the member is told which.
+   */
+  const fullForMe = (o: PickOption) => !!o.full && !(me && (o.holderIds ?? []).includes(me));
+  useEffect(() => {
+    if (options === null || checked.current) return;
+    checked.current = true;
+    const full = options.filter((o) => fullForMe(o) && picked.includes(o.value));
+    if (full.length > 0) {
+      setDropped(full.map((o) => o.label));
+      onChange(picked.filter((id) => !full.some((o) => o.value === id)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
 
   const toggle = (id: string) => {
     const next = picked.includes(id) ? picked.filter((p) => p !== id) : atMost ? picked : [...picked, id];
@@ -74,6 +97,11 @@ export default function SeatPicksField({
       <p className="mt-0.5 text-xs text-stone-600" aria-live="polite">
         {picked.length} of at most {max} picked.
       </p>
+      {dropped.length > 0 && (
+        <p role="status" className="mt-1 text-sm text-coral">
+          {dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} full: every place is held, so it came off your list.
+        </p>
+      )}
       {options === null ? (
         <p className="mt-2 text-sm text-stone-600">Loading the seats</p>
       ) : listed.length === 0 && strays.length === 0 ? (
@@ -85,6 +113,7 @@ export default function SeatPicksField({
           {[...listed, ...strays].map((o) => {
             const on = picked.includes(o.value);
             const id = `seat-pick-${o.value}`;
+            const full = fullForMe(o);
             return (
               <li key={o.value}>
                 <label
@@ -97,12 +126,16 @@ export default function SeatPicksField({
                     id={id}
                     type="checkbox"
                     checked={on}
-                    disabled={!on && atMost}
+                    disabled={!on && (atMost || full)}
                     onChange={() => toggle(o.value)}
                     className="size-4 accent-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                   />
                   <span className="min-w-0 flex-1">{o.label}</span>
-                  {o.hint && <span className="text-xs text-stone-500">{o.hint}</span>}
+                  {full ? (
+                    <span className="text-xs text-stone-500">Full: every place is held</span>
+                  ) : (
+                    o.hint && <span className="text-xs text-stone-500">{o.hint}</span>
+                  )}
                 </label>
               </li>
             );

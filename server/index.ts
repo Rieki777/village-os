@@ -333,6 +333,7 @@ import {
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
 import { ballotNamesItsCloser, closeNoteFor } from "../shared/seatApplications";
+import { heldTermsFor } from "./lib/heldTerms";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
@@ -10152,6 +10153,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       nameOf,
       firstName,
       avatarOf: (id) => avatarByUser.get(id) ?? null,
+      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx)
+        ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf })
+        : undefined,
     });
 
     const seasonNow = seasonState();
@@ -25566,7 +25570,11 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName }),
+      roles: projectSeats(roles, assignments, tier, {
+        route: "org", now: new Date(), nameOf, firstName,
+        // The adopted terms each holder sits on, for a terms.read reader (red team U2; server/lib/heldTerms.ts).
+        heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined,
+      }),
     });
   });
 

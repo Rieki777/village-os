@@ -24,10 +24,40 @@ import SeatTermsDrawer from "./SeatTermsDrawer";
 
 function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
   const presets = useVillagePresets();
+  /*
+   * THE TERMS THE SEAT IS HELD ON come first (red team U2): a member seated on
+   * adopted terms shows those terms, the adoption and where the parties stand,
+   * never "No terms on offer yet". One drawer per holder on terms.
+   */
+  const held: any[] = Array.isArray(seat.heldTerms) ? seat.heldTerms : [];
+  if (held.length > 0) {
+    return (
+      <div className="space-y-2">
+        {held.map((h) => {
+          const parsed = parseSeatSettings(h.settings);
+          return (
+            <div key={String(h.applicationId)}>
+              {held.length > 1 && h.holderName && <p className="text-xs font-semibold text-muted-foreground">{String(h.holderName)}</p>}
+              <SeatTermsDrawer
+                settings={parsed.ok ? parsed.settings : null}
+                unreadable={!parsed.ok}
+                villagePresets={presets}
+                adopted={h.decidedOn ? { how: h.adoptedVia === "holder" ? "holder" : "vote", on: String(h.decidedOn), href: h.href ?? null } : null}
+                alignment={h.alignment ?? null}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   const raw = seat.termsOffer;
   if (raw === null || raw === undefined) {
     if (seat.termsOfferUnreadable) return <SeatTermsDrawer unreadable />;
-    return <SeatTermsDrawer empty={{ href: seat.isExample ? null : proposeTermsHref(String(seat.id)) }} />;
+    // Proposing terms is an application to hold the seat, so it is offered only on a seat nobody holds:
+    // changing a held seat's terms comes later, with the seat-proposal kind (red team U4).
+    const held = Number(seat.holderCount ?? 0) > 0;
+    return <SeatTermsDrawer empty={{ href: seat.isExample || held ? null : proposeTermsHref(String(seat.id)), heldLine: held }} />;
   }
   const parsed = parseSeatSettings(raw);
   return (
@@ -47,6 +77,8 @@ function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
  */
 export function applyHrefFor(seat: Record<string, any> | null | undefined): string | null {
   if (!seat || typeof seat !== "object" || !("termsOffer" in seat) || seat.isExample) return null;
+  // A full seat has no place to apply for (red team U4).
+  if (seat.state === "filled") return null;
   const id = String(seat.id ?? "").trim();
   return id ? proposeTermsHref(id) : null;
 }

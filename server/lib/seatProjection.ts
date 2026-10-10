@@ -110,6 +110,11 @@ export interface SeatProjectionCtx {
   firstName: (name: string) => string;
   /** A holder's primary-character avatar. Read on the map's member tier only. */
   avatarOf?: (userId: string) => string | null;
+  /**
+   * The adopted terms behind live seatings, by application id
+   * (server/lib/heldTerms.ts). Read at the `terms.read` tier only (red team U2).
+   */
+  heldTerms?: ReadonlyMap<string, unknown>;
 }
 
 /**
@@ -337,6 +342,13 @@ function termsOffer(role: OrgRole) {
   };
 }
 
+/** The adopted terms behind each live seating that has some, holder named, oldest seating first. */
+function heldTermsOf(held: OrgAssignment[], all: ReadonlyMap<string, unknown>, ctx: SeatProjectionCtx): unknown[] {
+  return held
+    .filter((h) => h.applicationId && all.has(h.applicationId))
+    .map((h) => ({ holderName: h.holderKind === "member" && h.userId ? ctx.nameOf(h.userId) : (h.displayName ?? null), ...(all.get(h.applicationId!) as object) }));
+}
+
 /** One seat, for one caller, on one route. */
 export function projectSeat(
   role: OrgRole,
@@ -364,6 +376,8 @@ export function projectSeat(
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
     ...(tier.terms ? termsOffer(role) : {}),
+    // The terms each live holder is seated on, beside what the seat offers (red team U2).
+    ...(tier.terms && ctx.heldTerms ? { heldTerms: heldTermsOf(held, ctx.heldTerms, ctx) } : {}),
   };
   const holders = projectHolders(held, tier, ctx);
   if (ctx.route === "map") {

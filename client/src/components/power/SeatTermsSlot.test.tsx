@@ -119,6 +119,35 @@ describe("a host, the map's seat card", () => {
   });
 });
 
+describe("a seat somebody holds on adopted terms (red team U2, U4)", () => {
+  it("shows the terms it is held on, the adoption, and Aligned, never No terms on offer yet", () => {
+    session.token = "member-token";
+    const held = {
+      applicationId: "sa-0000000000000001",
+      href: "/seat-applications/sa-0000000000000001",
+      holderName: "Ana",
+      settings: FAKE_OFFER,
+      adoptedVia: "ballot",
+      decidedOn: "2026-10-09",
+      alignment: { state: "in-force", sealed: true, parties: [] },
+    };
+    const { container } = mount({ ...BASE, holderCount: 1, state: "partial", termsOffer: null, heldTerms: [held] });
+    fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
+    expect(screen.queryByText("No terms on offer yet.")).toBeNull();
+    expect(container.textContent).toMatch(/Adopted by vote/);
+    expect(container.textContent).toMatch(/XTS/);
+    expect(container.textContent).toMatch(/Aligned/);
+  });
+
+  it("offers no Propose terms on a seat somebody holds, and says why", () => {
+    session.token = "member-token";
+    mount({ ...BASE, holderCount: 1, state: "partial", termsOffer: null });
+    fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
+    expect(screen.queryByRole("link", { name: "Propose terms" })).toBeNull();
+    expect(screen.getByText("Changing the terms of a seat somebody holds comes later.")).toBeInTheDocument();
+  });
+});
+
 describe("every live-card host goes through the one slot", () => {
   const ROOT = path.resolve(__dirname, "../../../..");
   for (const file of ["client/src/pages/Roles.tsx", "client/src/pages/Circles.tsx", "client/src/components/power/MapSeatCard.tsx"]) {

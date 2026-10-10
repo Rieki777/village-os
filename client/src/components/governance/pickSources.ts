@@ -23,6 +23,10 @@ export interface PickOption {
   label: string;
   /** A second line under the label. Optional everywhere. */
   hint?: string;
+  /** Seats only: every place is held (red team U4). */
+  full?: boolean;
+  /** Seats only: who holds it, when the reader may see names. */
+  holderIds?: string[];
 }
 
 const headers = (): Record<string, string> => {
@@ -114,6 +118,8 @@ export async function loadPickOptions(source: PickSource): Promise<PickOption[]>
           value: String(r.id),
           label: String(r.title ?? r.name ?? r.id),
           hint: r.recruiting ? "recruiting" : r.circleName ? String(r.circleName) : undefined,
+          full: r.state === "filled",
+          holderIds: Array.isArray(r.holders) ? r.holders.map((h: any) => String(h?.userId ?? "")).filter(Boolean) : [],
         }));
     }
     case "circles": {
