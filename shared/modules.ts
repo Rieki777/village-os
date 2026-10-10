@@ -1170,7 +1170,7 @@ export const MODULES: ModuleDef[] = [
     setup: "none",
     name: "Journal",
     description:
-      "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+      "A journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. Inside the village an entry is its author's alone; it is shared with organisational memory under code-names unless the member keeps it private. The village reads the pulse as numbers, and members who say yes can receive unsigned feedback in a weekly batch.",
     requires: [],
     // The guide reads the gratitude a member received lately, and the evening
     // practice asks who they would like to thank. Better with it, whole without it.

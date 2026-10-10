@@ -402,7 +402,7 @@ describe("Characters: the page speaks", () => {
     const { container } = render(<Characters />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^The Weaver/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Walk this path" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Play this character" }));
 
     await waitFor(() => expect(live(container)).toContain("The Weaver joined your party"));
     expect(heard).toHaveBeenCalled();
@@ -419,7 +419,7 @@ describe("Characters: the page speaks", () => {
     const { container } = render(<Characters />);
 
     fireEvent.click(await screen.findByRole("button", { name: /^The Weaver/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Walk this path" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Play this character" }));
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("did not save"));
     expect(live(container)).toContain("did not save");
