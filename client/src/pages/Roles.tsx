@@ -30,7 +30,7 @@ import { swatchFor } from "@/lib/swatch";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatAction from "@/components/power/SeatAction";
-import { termsSlotFor } from "@/components/power/SeatTermsSlot";
+import { applyHrefFor, termsSlotFor } from "@/components/power/SeatTermsSlot";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
@@ -305,7 +305,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 labelledBy={headerId}
                 input={fromOrgSeat(role.raw, sheet.circles, sheet.people, sheet.village, { raiseHand: sheet.raiseHand })}
                 ctx={sheet.ctx}
-                action={<SeatAction circleId={role.circleId ?? null} />}
+                action={<SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />}
                 settings={termsSlotFor(role.raw)}
               />
               {/* The seat as a link, for sending to whoever might hold it.

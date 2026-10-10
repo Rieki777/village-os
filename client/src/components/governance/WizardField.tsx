@@ -23,6 +23,8 @@
  *                     machinery behind it.
  *   seatSettings      a seat's terms, group by group from presets
  *                     (SeatSettingsEditor), judged by parseSeatSettings.
+ *   seatPicks         one to five seats from the org chart, as a list
+ *                     (SeatPicksField), for an application over several seats.
  *
  * ACCESSIBILITY. Every control has a real <label> tied by id, every problem is
  * announced through aria-describedby and role="alert", every target clears
@@ -36,6 +38,7 @@ import type { FieldSpec } from "./wizardConfig";
 import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from "./pickSources";
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 import SeatSettingsEditor from "./SeatSettingsEditor";
+import SeatPicksField from "./SeatPicksField";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
@@ -277,6 +280,11 @@ export default function WizardField({
           describedBy={describedBy}
           invalid={!!problem}
         />
+      );
+
+    case "seatPicks":
+      return (
+        <SeatPicksField field={field} value={value} onChange={onChange} describedBy={describedBy} invalid={!!problem} footerNode={footer} />
       );
 
     case "changeSet":

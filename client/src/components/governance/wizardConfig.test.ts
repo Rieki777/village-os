@@ -49,6 +49,8 @@ const completeAnswersFor = (typeId: string): Record<string, unknown> => {
       else if (f.kind === "number") answers[f.key] = 12;
       // A seat's terms: an empty set is valid terms, every group not set.
       else if (f.kind === "seatSettings") answers[f.key] = { v: 1 };
+      // A list of seats: one picked is a complete answer.
+      else if (f.kind === "seatPicks") answers[f.key] = ["seat-1"];
       /*
        * WORDS AND NOT ONE LONG TOKEN. `"x".repeat(80)` satisfied every
        * character-length validator this config had and is a single word, so

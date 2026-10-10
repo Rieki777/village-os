@@ -39,6 +39,18 @@ function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
   );
 }
 
+/**
+ * Where a raised hand on this seat goes for a reader who reads terms: the
+ * "Apply for a seat" wizard with this seat picked (seat settings PR4). Null for
+ * everyone else, who keep the inbox hand, and on a standing example, which
+ * nobody holds. The same presence test as the drawer, so the two never disagree.
+ */
+export function applyHrefFor(seat: Record<string, any> | null | undefined): string | null {
+  if (!seat || typeof seat !== "object" || !("termsOffer" in seat) || seat.isExample) return null;
+  const id = String(seat.id ?? "").trim();
+  return id ? proposeTermsHref(id) : null;
+}
+
 /** The `settings` slot for a live seat card, or undefined when this reader may not read terms. */
 export function termsSlotFor(seat: Record<string, any> | null | undefined): ReactNode | undefined {
   if (!seat || typeof seat !== "object" || !("termsOffer" in seat)) return undefined;

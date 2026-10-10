@@ -20,7 +20,7 @@
  *     something different for each type and guessing is not a member's job.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowLeft, ArrowRight, Check, Loader2, Save, Send } from "lucide-react";
 import { BreathingLoader } from "@/components/natural";
 import {
@@ -41,21 +41,32 @@ import WizardRolePreview from "./WizardRolePreview";
 import WizardSeatPreview from "./WizardSeatPreview";
 import { settingsWords } from "@shared/seatSettings";
 import WizardStepper from "./WizardStepper";
-import { isSearchSource, labelFor, loadPickOptions, type PickOption } from "./pickSources";
+import { isSearchSource, labelFor, loadOrg, loadPickOptions, type PickOption } from "./pickSources";
+import { pickedSeats } from "./SeatPicksField";
+import { offerPrefill } from "./roleApplicationType";
 import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
 
 type Feedback = { ok: boolean; text: string } | null;
 
-export default function ProposalWizard() {
+/**
+ * Where the walk starts. Absent, it opens on the type step. A seat card's door
+ * passes `role_application` with the seat already picked (`roleApplicationStart`).
+ */
+export interface WizardStart {
+  type: WizardType;
+  answers: Record<string, unknown>;
+}
+
+export default function ProposalWizard({ start = null }: { start?: WizardStart | null } = {}) {
   const [, navigate] = useLocation();
 
-  const [type, setType] = useState<WizardType | null>(null);
-  const [step, setStep] = useState<StepKey>("type");
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [type, setType] = useState<WizardType | null>(start?.type ?? null);
+  const [step, setStep] = useState<StepKey>(() => (start ? (nextStep(start.type, "type") ?? "type") : "type"));
+  const [answers, setAnswers] = useState<Record<string, unknown>>(start?.answers ?? {});
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(!!start);
 
   const [drafts, setDrafts] = useState<ProposalDraft[]>([]);
   const [conductable, setConductable] = useState<string[]>([]);
@@ -88,9 +99,10 @@ export default function ProposalWizard() {
   // powers draws the permission card (WizardRolePreview). A type picking both
   // would show the seat, never two cards.
   const walkFields = walk.flatMap((s) => fieldsFor(type, s.key));
-  const seatPick = walkFields.find((f) => f.kind === "pick" && f.source === "seats");
+  // A list of seats (`seatPicks`) previews its first seat: the one whose terms the step starts from.
+  const seatPick = walkFields.find((f) => (f.kind === "pick" && f.source === "seats") || f.kind === "seatPicks");
   const settingsField = walkFields.find((f) => f.kind === "seatSettings");
-  const seatPreview = seatPick && String(answers[seatPick.key] ?? "") ? String(answers[seatPick.key]) : null;
+  const seatPreview = seatPick ? (pickedSeats(answers[seatPick.key])[0] ?? null) : null;
   const rolePick = seatPreview ? undefined : walkFields.find((f) => f.kind === "pick" && f.source === "roles");
   const rolePreview = rolePick && String(answers[rolePick.key] ?? "") ? String(answers[rolePick.key]) : null;
   const previewPick = seatPreview ? seatPick : rolePick;
@@ -107,7 +119,13 @@ export default function ProposalWizard() {
   useEffect(() => {
     if (step !== "review" || !type) return;
     const picks = walkFor(type).flatMap((s) => fieldsFor(type, s.key));
-    const sources = Array.from(new Set(picks.flatMap((f) => (f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : []))));
+    const sources = Array.from(
+      new Set(
+        picks.flatMap((f) =>
+          f.kind === "seatPicks" ? ["seats" as const] : f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : [],
+        ),
+      ),
+    );
     let alive = true;
     void Promise.all(sources.map(async (src) => [src, await loadPickOptions(src)] as const)).then((lists) => {
       if (alive) setPickLists(Object.fromEntries(lists));
@@ -116,6 +134,27 @@ export default function ProposalWizard() {
       alive = false;
     };
   }, [step, type]);
+
+  /*
+   * THE SEAT'S OWN TERMS AS THE STARTING POINT. When a seat is picked and the
+   * terms are still unwritten, the first seat's terms on offer fill them, so a
+   * member starts from what the seat offers and changes what does not fit.
+   * Written terms are never replaced: this only ever fills an empty field.
+   */
+  const firstSeat = seatPreview;
+  const settingsKey = settingsField?.key ?? null;
+  useEffect(() => {
+    if (!firstSeat || !settingsKey || answers[settingsKey] !== undefined) return;
+    let alive = true;
+    void loadOrg().then((org) => {
+      const offer = offerPrefill([firstSeat], org);
+      if (!alive || offer === undefined) return;
+      setAnswers((prev) => (prev[settingsKey] === undefined ? { ...prev, [settingsKey]: offer } : prev));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [firstSeat, settingsKey, answers]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -313,6 +352,16 @@ export default function ProposalWizard() {
           </p>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
+          {/* An application has a page of its own, where the holder adopts it
+              and the member can withdraw it. */}
+          {type === "role_application" && published.id && (
+            <Link
+              href={`/seat-applications/${encodeURIComponent(published.id)}`}
+              className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+            >
+              Open the application
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => navigate("/decisions")}
@@ -442,7 +491,11 @@ export default function ProposalWizard() {
                           : "Until the season ends"
                         : field.kind === "pick" && field.source && pickLists[field.source] && v
                           ? labelFor(pickLists[field.source], v)
-                          : String(v ?? "");
+                          : field.kind === "seatPicks"
+                            ? pickedSeats(v)
+                                .map((id) => (pickLists.seats ? labelFor(pickLists.seats, id) : id))
+                                .join(", ")
+                            : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">
                       <dt className="w-40 shrink-0 text-sm font-medium text-stone-600">{field.label}</dt>
