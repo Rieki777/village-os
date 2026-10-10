@@ -49,6 +49,28 @@ import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
 
+/** The draft the address names, `?draft=<id>`, or null. */
+export function draftFromUrl(search: string = typeof window === "undefined" ? "" : window.location.search): string | null {
+  const id = new URLSearchParams(search).get("draft");
+  return id && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+}
+
+/** Name the draft in the address, keeping the path and dropping a one-time start (`type`, `seat`). */
+function writeDraftToUrl(id: string, how: "replace" | "push"): void {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.pathname}?draft=${encodeURIComponent(id)}`;
+  if (window.location.search === `?draft=${encodeURIComponent(id)}`) return;
+  const state = window.history.state;
+  if (how === "replace") window.history.replaceState(state, "", url);
+  else window.history.pushState(state, "", url);
+}
+
+/** A history entry for a step, at the same address. */
+function pushStep(step: string): void {
+  if (typeof window === "undefined") return;
+  window.history.pushState({ ...(window.history.state ?? {}), wizardStep: step }, "", window.location.pathname + window.location.search);
+}
+
 type Feedback = { ok: boolean; text: string } | null;
 
 /**
@@ -67,7 +89,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const [step, setStep] = useState<StepKey>(() => (start ? (nextStep(start.type, "type") ?? "type") : "type"));
   const [answers, setAnswers] = useState<Record<string, unknown>>(start?.answers ?? {});
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(!!start);
+  // An untouched start is not work: a prefilled door (a seat card's) saves
+  // nothing until the member changes something or moves a step (red team U3).
+  const [dirty, setDirty] = useState(false);
 
   const [drafts, setDrafts] = useState<ProposalDraft[]>([]);
   const [conductable, setConductable] = useState<string[]>([]);
@@ -171,7 +195,14 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
         setMayOpenAdvisory(!!factsAnswer.data.mayOpenAdvisory);
         setSupportThreshold(factsAnswer.data.supportThreshold);
       }
-      if (draftsAnswer.ok) setDrafts(draftsAnswer.data.drafts);
+      if (draftsAnswer.ok) {
+        setDrafts(draftsAnswer.data.drafts);
+        // `?draft=<id>`: a refresh, Back or a shared tab resumes the same draft
+        // at the step it was left on, never a blank wizard (red team U3).
+        const resume = draftFromUrl();
+        const found = resume ? draftsAnswer.data.drafts.find((d) => d.id === resume) : undefined;
+        if (found) continueDraftRef.current(found);
+      }
       setLoading(false);
     })();
     return () => {
@@ -222,6 +253,8 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
         draftIdRef.current = answer.data.draft.id;
         setDraftId(answer.data.draft.id);
         setDirty(false);
+        // The address names the draft from its first save, so a refresh resumes it (red team U3).
+        writeDraftToUrl(answer.data.draft.id, "replace");
         return answer.data.draft.id;
       });
       // A rejection must not poison the chain for every later save.
@@ -261,21 +294,36 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     setDirty(true);
   };
 
-  const goTo = async (next: StepKey) => {
+  const goTo = async (next: StepKey, fromHistory = false) => {
     setStep(next);
     setFeedback(null);
+    // One history entry per step, so the browser's Back walks the steps (red team U3).
+    if (!fromHistory) pushStep(next);
     const position = walk.findIndex((s) => s.key === next);
     if (type) await persist({ stepIndex: Math.max(0, position) });
   };
 
   const chooseType = (id: WizardType) => {
+    // Picking a kind is not yet work: nothing is saved until something is written (red team U3).
     setType(id);
-    setDirty(true);
     const first = nextStep(id, "type");
     if (first) setStep(first);
   };
 
+  // Back and Forward move between the steps the member walked.
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const s = (e.state as { wizardStep?: StepKey } | null)?.wizardStep;
+      if (s) void goToRef.current(s, true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const continueDraft = (draft: ProposalDraft) => {
+    writeDraftToUrl(draft.id, "replace");
     setBusyDraft(draft.id);
     setType(draft.wizardType as WizardType);
     setAnswers(draft.payload ?? {});
@@ -285,6 +333,8 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     setDirty(false);
     setBusyDraft(null);
   };
+  const continueDraftRef = useRef(continueDraft);
+  continueDraftRef.current = continueDraft;
 
   const discardDraft = async (draft: ProposalDraft) => {
     setBusyDraft(draft.id);

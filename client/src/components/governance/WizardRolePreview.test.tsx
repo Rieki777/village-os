@@ -79,6 +79,8 @@ const ROLES = [
 const asked: string[] = [];
 
 beforeEach(() => {
+  // The wizard names its draft in the address once it has one (red team U3); each case starts at a bare /propose.
+  window.history.replaceState(null, "", "/propose");
   asked.length = 0;
   drafts.list = [];
   vi.stubGlobal(
