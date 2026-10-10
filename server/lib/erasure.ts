@@ -107,6 +107,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { eraseApplicationWords } from "../repos/seatApplications";
+import { deleteDraftsOf } from "./proposalDrafts";
 import { eraseFromAlignments } from "./alignmentErasure";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { isExampleUser } from "./examples";
@@ -346,6 +347,16 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "org-drafts",
       run: async () => {
         await forgetMemberInDrafts(pool, target.id, ANON);
+      },
+    },
+    {
+      // The wizard's unfinished proposals (red team S2). Private to their
+      // author and never a record of anything the village decided, so they
+      // go whole: a half-written seat application carries the member's words
+      // and their terms, and nothing else would ever remove them.
+      name: "proposal-drafts",
+      run: async () => {
+        await deleteDraftsOf(pool, target.id);
       },
     },
     /*

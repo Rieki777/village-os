@@ -40,6 +40,17 @@ let n = 0;
 const someone = () => `u-draft-${++n}`;
 
 describe("draftProblem (pure)", () => {
+  it("refuses a seat application draft carrying payment details, in the words or in the terms (red team S2)", () => {
+    const card = "4111 1111 1111 1111";
+    expect(draftProblem({ wizardType: "role_application", payload: { fitStatement: `Pay me at ${card}` }, stepIndex: 2 })).toMatch(/bank or card number/);
+    expect(draftProblem({ wizardType: "role_application", payload: { deliverables: "IBAN DE89370400440532013000" }, stepIndex: 2 })).toMatch(/bank or card number/);
+    expect(
+      draftProblem({ wizardType: "role_application", payload: { seatSettings: { v: 1, pay: { kind: "honorary", note: `acct ${card}` } } }, stepIndex: 3 }),
+    ).toMatch(/bank or card number/);
+    // CONTROL: a half-written application with ordinary words saves.
+    expect(draftProblem({ wizardType: "role_application", payload: { fitStatement: "I kept the ledger.", seatSettings: { v: 1, pay: { kind: "honorary" } } }, stepIndex: 3 })).toBeNull();
+  });
+
   it("refuses a type the village does not know", () => {
     expect(draftProblem({ wizardType: "coup", payload: {}, stepIndex: 0 })).toContain("not a proposal type");
     expect(draftProblem({ wizardType: "mechanics", payload: {}, stepIndex: 0 })).toBeNull();

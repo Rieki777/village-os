@@ -483,6 +483,23 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
    * from the wrong column reports the same "done". A neighbour who stays keeps
    * everything of theirs that does not name the leaver.
    */
+  it("takes their unfinished proposals with them, a half-written seat application included (red team S2)", async () => {
+    const id = "er-drafts-1";
+    const neighbour = "er-drafts-neighbour";
+    const target = await seedMember(id);
+    for (const [draftId, owner] of [["pd-er-1", id], ["pd-er-2", neighbour]] as const) {
+      await q("INSERT INTO `proposal_drafts` (`id`, `user_id`, `wizard_type`, `payload`, `step_index`) VALUES (?,?,?,?,?)", [
+        draftId, owner, "role_application", JSON.stringify({ fitStatement: "I kept the orchard ledger." }), 2,
+      ]);
+    }
+    // CONTROL: the draft is there before the sweep.
+    expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [id])).toHaveLength(1);
+    await anonymizeMember(pool, target, null, deps());
+    expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [id])).toHaveLength(0);
+    expect((await erasureRecord(pool, id))!.stepsDone).toContain("proposal-drafts");
+    expect(await q("SELECT `id` FROM `proposal_drafts` WHERE `user_id` = ?", [neighbour])).toHaveLength(1);
+  });
+
   it("takes the journal with them: entries, pulse, the feedback yes, and feedback both ways", async () => {
     const id = "er-journal-1";
     const neighbour = "er-journal-neighbour";

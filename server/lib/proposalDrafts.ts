@@ -33,6 +33,7 @@
  */
 import { randomUUID } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings } from "../../shared/seatSettings";
 
 /**
  * The proposal types a wizard draft may belong to (GOV_DESIGN section 4).
@@ -311,7 +312,33 @@ export function draftProblem(input: DraftInput): string | null {
   if (!Number.isInteger(step) || step < 0 || step > 50) {
     return "A draft remembers which step you left off at, and that one is out of range";
   }
+  if (input.wizardType === "role_application") return applicationDraftProblem(payload as Record<string, unknown>);
   return null;
+}
+
+/**
+ * A seat application's draft is held to the rule its publish is (red team S2):
+ * payment details are never stored, and an autosave is a store. The member's
+ * words and the terms are read by the same check the route runs; every other
+ * problem a half-written draft has is left for the steps to raise.
+ */
+export function applicationDraftProblem(payload: Record<string, unknown>): string | null {
+  for (const key of ["note", "fitStatement", "deliverables"]) {
+    const v = payload[key];
+    if (typeof v === "string" && looksLikePaymentDetails(v)) return PAYMENT_DETAIL_MESSAGE;
+  }
+  const settings = payload.seatSettings ?? payload.settings;
+  if (settings !== undefined && settings !== null) {
+    const parsed = parseSeatSettings(settings);
+    if (parsed.problems.some((p) => p.message === PAYMENT_DETAIL_MESSAGE)) return PAYMENT_DETAIL_MESSAGE;
+  }
+  return null;
+}
+
+/** A departed member's unfinished proposals go with them (erasure step `proposal-drafts`). */
+export async function deleteDraftsOf(pool: Pool, userId: string): Promise<number> {
+  const [result] = await pool.query<any>("DELETE FROM proposal_drafts WHERE user_id = ?", [userId]);
+  return Number(result.affectedRows ?? 0);
 }
 
 export async function draftsOf(pool: Pool, userId: string): Promise<ProposalDraftRow[]> {
