@@ -186,7 +186,7 @@ export default function Layout({ children }: LayoutProps) {
               half the width. This breakpoint and the mobile button's below are
               a matched pair and must always move together, or some viewport
               gets no navigation at all. */}
-          <div className="hidden lg:flex items-center gap-4 xl:gap-6">
+          <div className="hidden lg:flex items-center gap-2.5 xl:gap-6">
             {navEntries.map((entry) =>
               isGroup(entry) ? (
                 <NavDropdown
