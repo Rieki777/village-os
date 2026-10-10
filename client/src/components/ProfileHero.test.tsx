@@ -3,7 +3,7 @@
  * The top of your own sheet, and the sentence it must never say by accident.
  *
  * `party` started as `[]` and the sentence under the name read off its
- * length, so a member with six characters was told "No path chosen yet.
+ * length, so a member with six characters was told "No character chosen yet.
  * Choose who you will be" for the whole of the loading window, and forever
  * after a failed read. An empty state is a CLAIM ABOUT THE MEMBER, and this
  * one is close to insulting when it is wrong, so the tests below hold it to
@@ -85,33 +85,33 @@ describe("ProfileHero", () => {
     draw();
 
     expect(await screen.findByText(/The Steward/)).toBeTruthy();
-    expect(screen.queryByText(/No path chosen yet/)).toBeNull();
+    expect(screen.queryByText(/No character chosen yet/)).toBeNull();
   });
 
   it("does not say a member has no path while the read is still out", () => {
     routing((p) => (p.includes("archetypes") ? Promise.resolve(ok(archetypes)) : new Promise(() => {})));
     const { container } = draw();
 
-    expect(container.textContent).not.toContain("No path chosen yet");
-    expect(container.textContent).toContain("Reading your paths");
+    expect(container.textContent).not.toContain("No character chosen yet");
+    expect(container.textContent).toContain("Reading your characters");
   });
 
   it("says the read failed instead of claiming an empty party", async () => {
     routing(async (p) => (p.includes("archetypes") ? ok(archetypes) : boom));
     const { container } = draw();
 
-    await waitFor(() => expect(container.textContent).toContain("Your paths didn't load"));
-    expect(container.textContent).not.toContain("No path chosen yet");
+    await waitFor(() => expect(container.textContent).toContain("Your characters didn't load"));
+    expect(container.textContent).not.toContain("No character chosen yet");
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
-  it("still says 'No path chosen yet' when the server really answered with none", async () => {
+  it("still says 'No character chosen yet' when the server really answered with none", async () => {
     routing(async (p) =>
       p.includes("archetypes") ? ok(archetypes) : ok({ party: [], title: null, moonsOnTheLand: 0 }),
     );
     draw();
 
-    expect(await screen.findByText(/No path chosen yet/)).toBeTruthy();
+    expect(await screen.findByText(/No character chosen yet/)).toBeTruthy();
   });
 
   it("re-reads on Retry", async () => {

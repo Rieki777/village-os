@@ -116,7 +116,7 @@ function requirementOf(
    * because only those gate the rung.
    */
   if (rule.type === "training-complete" && training && training.required > 0) {
-    const unit = training.required === 1 ? "required module" : "required modules";
+    const unit = training.required === 1 ? "required lesson" : "required lessons";
     return `${Math.min(training.done, training.required)} of ${training.required} ${unit}`;
   }
   if (rule.type !== "quests") return REQUIREMENT[rule.type];

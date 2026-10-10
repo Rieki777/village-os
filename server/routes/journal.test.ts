@@ -267,6 +267,24 @@ describe("the guide's rules, in its own words", () => {
     expect(guideSystemPrompt("Riverbend", "evening", "light", 14)).not.toContain("writing late");
   });
 
+  // The pulse asks about role tensions, unowned work and missed opportunities
+  // (2026-10-05). The guide helps make them concrete and may ask whether to
+  // raise one, never raising or proposing anything itself.
+  it("helps make a role tension or an opportunity concrete on the pulse, and only there", () => {
+    const pulse = guideSystemPrompt("Riverbend", "pulse", "light");
+    expect(pulse).toContain("smallest next step");
+    expect(pulse).toContain("raise it with the village as a tension or propose it as a quest");
+    expect(pulse).toContain("you never raise or propose anything yourself");
+    expect(pulse).not.toMatch(/[–—]/);
+    expect(guideSystemPrompt("Riverbend", "evening", "light")).not.toContain("smallest next step");
+  });
+
+  it("no longer tells the model the journal is private, since entries are shared unless kept private", () => {
+    const p = guideSystemPrompt("Riverbend", "evening", "light");
+    expect(p).toContain("nobody else in the village can read");
+    expect(p).not.toContain("private journal");
+  });
+
   it("shapes feedback in the recipient's style and strips what identifies the author", () => {
     const p = shapeSystemPrompt("Riverbend", "with-examples", true);
     expect(p).toContain("with concrete examples");
@@ -364,7 +382,26 @@ describe.skipIf(!configured)("the journal against a real schema", () => {
       const md = await call(handlers, "GET /api/journal/export.md");
       expect(md.text ?? "").not.toContain("sunrise");
     }
-    expect(await q("SELECT `privacy` FROM `journal_entries` WHERE `id` = ?", [id])).toEqual([{ privacy: "private" }]);
+    // Untouched by every refused edit, and still the shared default it saved with.
+    expect(await q("SELECT `privacy` FROM `journal_entries` WHERE `id` = ?", [id])).toEqual([{ privacy: "internal" }]);
+  });
+
+  // Ruling 2026-10-05: shared by default, private when the author says so,
+  // and the author alone can move an entry between the two afterwards.
+  it("stores a new entry as shared, keeps one marked private, and lets the author change it", async () => {
+    const shared = await call(handlers, "POST /api/journal/entries", { body: entry("c-share", "the market idea") });
+    expect(shared.body.privacy).toBe("internal");
+    const kept = await call(handlers, "POST /api/journal/entries", {
+      body: { ...entry("c-keep", "something only mine"), privacy: "private" },
+    });
+    expect(kept.body.privacy).toBe("private");
+    expect(await q("SELECT `privacy` FROM `journal_entries` WHERE `client_id` = 'c-keep'")).toEqual([{ privacy: "private" }]);
+
+    const made = await call(handlers, "PATCH /api/journal/entries/:id", { params: { id: shared.body.id }, body: { privacy: "private" } });
+    expect(made.status).toBe(200);
+    expect(made.body.privacy).toBe("private");
+    const back = await call(handlers, "PATCH /api/journal/entries/:id", { params: { id: shared.body.id }, body: { privacy: "internal" } });
+    expect(back.body.privacy).toBe("internal");
   });
 
   it("writes a retried save once, and answers the retry with the first row", async () => {
