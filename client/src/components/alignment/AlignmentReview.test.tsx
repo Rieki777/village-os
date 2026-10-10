@@ -64,6 +64,19 @@ describe("the words at Review", () => {
     await waitFor(() => expect(states.at(-1)).toEqual({ words: WORDS, ready: true }));
   });
 
+  it("the password box is labelled, offers the saved password, and Enter confirms (red team U8)", async () => {
+    money = true;
+    fresh = false;
+    const states: ReviewAlignment[] = [];
+    render(<AlignmentReview body={{ seatIds: ["s-1"] }} onState={(s) => states.push(s)} />);
+    const box = (await screen.findByLabelText("Your password")) as HTMLInputElement;
+    expect(box.getAttribute("autocomplete")).toBe("current-password");
+    fireEvent.change(box, { target: { value: "right horse battery" } });
+    fireEvent.submit(box.closest("form")!);
+    await waitFor(() => expect(asked).toContain("POST /api/profile/alignments/confirm"));
+    await waitFor(() => expect(states.at(-1)).toEqual({ words: WORDS, ready: true }));
+  });
+
   it("CONTROL: money with a fresh confirmation is ready without asking again", async () => {
     money = true;
     fresh = true;

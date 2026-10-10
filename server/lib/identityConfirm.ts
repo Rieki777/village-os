@@ -105,6 +105,9 @@ export const CONFIRM_HOME: Record<ConfirmAction, string> = {
   align: "/profile",
 };
 
+/** A password typed into the align re-confirm that does not match. */
+export const WRONG_PASSWORD = "That password is not right.";
+
 /** The password refusals, byte for byte what the two routes answered before this lane. */
 export const PASSWORD_REFUSAL: Record<ConfirmAction, string> = {
   "request-exit": "Confirm with your password",
@@ -323,8 +326,11 @@ export function makeIdentityGate(deps: IdentityGateDeps) {
         return { ok: false, body: { error: PASSWORD_NEEDS_RESET } };
       }
       const password = (req.body ?? {}).password;
-      if (!password || !(await deps.verifyPassword(String(password), user.passwordHash))) {
-        return { ok: false, body: { error: PASSWORD_REFUSAL[action] } };
+      if (!password) return { ok: false, body: { error: PASSWORD_REFUSAL[action] } };
+      if (!(await deps.verifyPassword(String(password), user.passwordHash))) {
+        // A typed password that is wrong is told so (red team U8). Exit and
+        // delete keep the sentence their routes always answered.
+        return { ok: false, body: { error: action === "align" ? WRONG_PASSWORD : PASSWORD_REFUSAL[action] } };
       }
       return { ok: true, via: "password" };
     }

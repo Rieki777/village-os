@@ -57,28 +57,35 @@ export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
         {ALIGN_WORDS.reconfirmLine}
       </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      {/* A form, so Enter confirms (red team U8). */}
+      <form
+        className="mt-3 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy && identityReady(state, password)) void confirm();
+        }}
+      >
         <IdentityConfirmField
           state={state}
           action="align"
           password={password}
           onPassword={setPassword}
+          label="Your password"
           placeholder="Your password"
           inputClassName="min-h-11 w-full max-w-xs rounded-lg border border-border bg-background px-3 text-sm text-foreground"
         />
         {/* Unknown yet draws the password box, as exit and delete do. */}
         {state.confirmWith !== "google" && state.confirmWith !== "none" && (
           <button
-            type="button"
+            type="submit"
             disabled={busy || !identityReady(state, password)}
-            onClick={() => void confirm()}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
           >
             {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
             {ALIGN_WORDS.reconfirm}
           </button>
         )}
-      </div>
+      </form>
       {state.returnError && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {state.returnError}
