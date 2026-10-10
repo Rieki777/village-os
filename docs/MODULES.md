@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 26 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 27 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 25 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 26 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -51,13 +51,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | twenty: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `governance` |
+| `member-pii` | 21: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `sessions`, `governance` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `sessions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `saberra` |
 
@@ -65,7 +65,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 
 | Shelf | Id | What is on it | Modules |
 | --- | --- | --- | --- |
-| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 4 |
+| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 5 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
 | Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
@@ -98,11 +98,12 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Village Calendar | `events` | Coordinate | no | included | member-pii | required | [events.md](modules/events.md) |
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
+| Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 26 modules, four of them core. Twenty carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 27 modules, four of them core. 21 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -249,6 +250,25 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 | Variable keys it owns | `events.rsvp_enabled`, `events.upcoming_days`, `events.past_visible_days`, `calendar.year_anchor`, `calendar.hemisphere`, `calendar.cross_quarters` |
 | API prefixes | `/api/events`, `/api/admin/events` |
 | Contract doc | [events.md](modules/events.md) |
+
+### Live Sessions
+
+A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.
+
+| Fact | Value |
+| --- | --- |
+| Id | `sessions` |
+| Shelf | Coordinate (`coordinate`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `gratitude` |
+| Capabilities it adds | none |
+| Variable keys it owns | `sessions.place_line`, `sessions.default_minutes` |
+| API prefixes | `/api/sessions` |
+| Contract doc | [live-sessions.md](modules/live-sessions.md) |
 
 ## Recognise
 
@@ -672,12 +692,13 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 | `events` | `map` |
 | `introductions` | `badges`, `map` |
 | `journal` | `gratitude` |
+| `sessions` | `gratitude` |
 | `governance` | `forum` |
 | `hypha` | `governance`, `tools` |
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 26 modules own 95 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 27 modules own 97 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -719,7 +740,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 26,
+  "moduleCount": 27,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1312,6 +1333,29 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/journal"
       ],
       "contractDoc": "docs/modules/journal.md"
+    },
+    {
+      "id": "sessions",
+      "name": "Live Sessions",
+      "description": "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "coordinate",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "gratitude"
+      ],
+      "capabilities": [],
+      "variableKeys": [
+        "sessions.place_line",
+        "sessions.default_minutes"
+      ],
+      "apiPrefixes": [
+        "/api/sessions"
+      ],
+      "contractDoc": "docs/modules/live-sessions.md"
     },
     {
       "id": "governance",
