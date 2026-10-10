@@ -116,6 +116,20 @@ export interface OrgRole {
   locationExpectations: string | null;
   compensationReality: string | null;
   evidenceRequired: string | null;
+  /**
+   * WHAT THE SEAT OFFERS WHOEVER HOLDS IT (0247, seat settings PR3).
+   *
+   * The stored settings object, UNPARSED and UNTYPED here on purpose: this
+   * file is imported by modules that move value, and the settings model may
+   * never be reachable from them (shared/seatSettings.boundary.test.ts). The
+   * one reader that parses it is `server/lib/seatProjection.ts`, at the
+   * `terms.read` tier, and nothing else on any route sends it. Written only by
+   * a published org draft a human wrote. Null is "no terms on offer yet".
+   */
+  termsOffer: unknown;
+  termsOfferAt: Date | null;
+  /** The member who published the offer. */
+  termsOfferBy: string | null;
 }
 
 export interface OrgAssignment {
@@ -167,6 +181,8 @@ export interface OrgAssignment {
    * somebody asserted at seating time.
    */
   isAgent: boolean;
+  /** 0248: the seat application whose terms this seating holds. Absent for every other door. */
+  applicationId?: string;
 }
 
 const ROLE_COLS =
@@ -176,7 +192,10 @@ const ROLE_COLS =
   "authority, first_year_outcomes, first_90_day_outcomes, location_expectations, compensation_reality, evidence_required, " +
   // 0083: representation and succession. Selected from day one, because the
   // recruitment pack above is the cautionary tale about columns nobody reads.
-  "represents_circle, how_chosen, how_chosen_gloss";
+  "represents_circle, how_chosen, how_chosen_gloss, " +
+  // 0247: the terms on offer. Selected here and projected only at the
+  // `terms.read` tier (server/lib/seatProjection.ts).
+  "terms_offer, terms_offer_at, terms_offer_by";
 
 const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -188,7 +207,9 @@ const ASSIGN_COLS =
   // 0142. Same reasoning `is_example` carries above: a flag that does not ride
   // through every SELECT is a flag downstream cannot act on, and the surfaces
   // that must not count an agent are exactly the ones furthest from here.
-  "is_agent";
+  "is_agent, " +
+  // 0248: the seat application whose terms a seating holds, null for every other door.
+  "application_id";
 
 /** MySQL hands JSON back already parsed on some drivers and as text on others. */
 function asList(v: unknown): string[] {
@@ -234,6 +255,9 @@ function rowToRole(r: any): OrgRole {
     locationExpectations: r.location_expectations ?? null,
     compensationReality: r.compensation_reality ?? null,
     evidenceRequired: r.evidence_required ?? null,
+    termsOffer: r.terms_offer ?? null,
+    termsOfferAt: r.terms_offer_at ?? null,
+    termsOfferBy: r.terms_offer_by ?? null,
   };
 }
 
@@ -254,6 +278,8 @@ function rowToAssignment(r: any): OrgAssignment {
     endedReason: r.ended_reason ?? null,
     isExample: !!r.is_example,
     isAgent: !!r.is_agent,
+    // Only when set, so a reader that compares whole rows sees nothing new on every other seating.
+    ...(r.application_id ? { applicationId: String(r.application_id) } : {}),
   };
 }
 
@@ -946,6 +972,8 @@ export async function seatHolder(
     isAgent?: boolean;
     /** The agent's stable slug. The holder key becomes `agent:<slug>`. */
     agentSlug?: string | null;
+    /** 0248: the seat application whose terms this seating holds. */
+    applicationId?: string | null;
   },
   /**
    * `assignmentId` is returned so the caller can key a notification on THIS
@@ -990,8 +1018,8 @@ export async function seatHolder(
   try {
     await pool.query(
       `INSERT INTO org_role_assignments
-         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season, application_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         assignmentId,
         orgRoleId,
@@ -1006,6 +1034,7 @@ export async function seatHolder(
         h.grantedBy ?? null,
         isAgent ? 1 : 0,
         h.termFollowsSeason ? 1 : 0,
+        h.applicationId ?? null,
       ],
     );
     return { ok: true, assignmentId };

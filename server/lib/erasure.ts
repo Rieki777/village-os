@@ -106,6 +106,10 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
+import { deleteDraftsOf } from "./proposalDrafts";
+import { eraseFromAlignments } from "./alignmentErasure";
+import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
@@ -346,6 +350,16 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         await forgetMemberInDrafts(pool, target.id, ANON);
       },
     },
+    {
+      // The wizard's unfinished proposals (red team S2). Private to their
+      // author and never a record of anything the village decided, so they
+      // go whole: a half-written seat application carries the member's words
+      // and their terms, and nothing else would ever remove them.
+      name: "proposal-drafts",
+      run: async () => {
+        await deleteDraftsOf(pool, target.id);
+      },
+    },
     /*
      * THE TRACES A TOMBSTONE DOES NOT COVER.
      *
@@ -566,6 +580,47 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Seat applications (0248): the member's own words, what they would have
+       * done and why them, go. The application stays: its seats, its terms and
+       * the village's decision are the record of what the village agreed to,
+       * and the tombstoned user row de-attributes it without remapping ids.
+       * After the tombstone, for the reason the steps above give.
+       */
+      name: "seat-application-words-after-tombstone",
+      run: async () => {
+        await eraseApplicationWords(pool, target.id);
+        // And nothing they applied for is seated after they have gone.
+        await withdrawUnseatedOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The alignment store (0250): their name and handle come out of the
+       * words of every alignment text, the seats' terms on offer and the
+       * village presets; the words otherwise stay, de-attributed (decision 2).
+       * Hash, parties and seal are untouched, so receipts still verify.
+       * `target` is the row as read before the tombstone, so it still holds
+       * the name. server/lib/alignmentErasure.ts says the rest.
+       */
+      name: "alignment-names-after-tombstone",
+      run: async () => {
+        await eraseFromAlignments(pool, { id: target.id, name: target.name, handle: target.handle });
+      },
+    },
+    {
+      /*
+       * Season plans (0249): the member's own words, their aim, the goal they
+       * served and what they committed to, go. The seats they handed back stay
+       * on the row, as the village's record of who held what, de-attributed by
+       * the tombstone. After the tombstone, for the reason the steps above give.
+       */
+      name: "season-plan-words-after-tombstone",
+      run: async () => {
+        await eraseSeasonPlanWords(pool, target.id);
       },
     },
     {

@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { GoogleMark } from "./GoogleSignInButton";
 
-export type ConfirmAction = "request-exit" | "delete-account";
+export type ConfirmAction = "request-exit" | "delete-account" | "align";
 export type ConfirmWith = "password" | "google" | "none";
 
 export interface IdentityConfirmState {
@@ -119,6 +119,7 @@ export function IdentityConfirmField({
   onPassword,
   placeholder,
   inputClassName,
+  label,
 }: {
   state: IdentityConfirmState;
   action: ConfirmAction;
@@ -126,6 +127,8 @@ export function IdentityConfirmField({
   onPassword(value: string): void;
   placeholder: string;
   inputClassName: string;
+  /** A visible label for the password box (red team U8). */
+  label?: string;
 }) {
   if (state.confirmWith === "google") {
     return state.confirmed ? (
@@ -144,14 +147,27 @@ export function IdentityConfirmField({
       </p>
     );
   }
-  return (
+  const id = `confirm-password-${action}`;
+  const input = (
     <input
+      id={id}
       type="password"
+      autoComplete="current-password"
+      aria-label={label ? undefined : placeholder}
       value={password}
       onChange={(e) => onPassword(e.target.value)}
       placeholder={placeholder}
       className={inputClassName}
     />
+  );
+  if (!label) return input;
+  return (
+    <span className="flex w-full flex-col gap-1">
+      <label htmlFor={id} className="text-sm font-semibold text-foreground">
+        {label}
+      </label>
+      {input}
+    </span>
   );
 }
 

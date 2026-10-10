@@ -35,6 +35,9 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { seasonDocumentToStore, suggestNextSeasonDates } from "../lib/seasonCalendar";
 import { restampSeatsToCalendar, type RestampDeps } from "../lib/seatTermLanding";
+import { villageClock } from "../lib/stewardship";
+import { seasonSaved } from "../lib/seasonTurn";
+import { planTargetAt, planWindowPayload } from "../../shared/seasonPlans";
 
 type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
 
@@ -72,7 +75,19 @@ export function register(app: Express, deps: Deps): void {
     } catch (err) {
       console.warn("[season] seat vote landing forecast failed:", (err as Error)?.message ?? err);
     }
-    res.json({ ...seasonState(), seatVoteLandsAt });
+    // Season plans (2026-10-09): the season members plan now and its window,
+    // so the banner can say "Plan your season" while it is open. Days only, and
+    // null when no window has opened. Like the forecast, it never takes the
+    // season down with it.
+    const state = seasonState();
+    let planWindow: ReturnType<typeof planWindowPayload> = null;
+    try {
+      const now = new Date();
+      planWindow = planWindowPayload(planTargetAt(state.seasons ?? [], villageClock(), state.timezone || "UTC", now), now);
+    } catch (err) {
+      console.warn("[season] plan window failed:", (err as Error)?.message ?? err);
+    }
+    res.json({ ...state, seatVoteLandsAt, planWindow });
   });
 
   // Admin: the whole season list + cadence + timezone.
@@ -125,6 +140,8 @@ export function register(app: Express, deps: Deps): void {
         error: "The season list saved, and moving the seats that end with a season failed. Save again to retry moving them.",
       });
     }
+    // Seat applications waiting for the turn are seated now, not up to an hour later (season plans RC2).
+    await seasonSaved();
     res.json({ success: true, ...after, seatsMoved });
   });
 }

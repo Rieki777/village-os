@@ -15,6 +15,10 @@
  * would end before the hand goes up), and a message posts to
  * `/api/map/contact`. A refusal shows in the server's own words.
  *
+ * A MEMBER WHO READS TERMS GETS ONE DOOR (seat settings PR4): the hand links
+ * to the application wizard with the seat picked, so raising a hand and
+ * applying are the same act. The host decides, through `applyHref`.
+ *
  * A DIFFERENT SEAT CLEARS THE COMPOSER, so a half-written note to one person
  * never lands under another name.
  *
@@ -55,7 +59,19 @@ const QUIET =
   "min-h-11 rounded-xl px-3 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
 
-export default function SeatAction({ circleId = null }: { circleId?: string | null }) {
+export default function SeatAction({
+  circleId = null,
+  applyHref = null,
+}: {
+  circleId?: string | null;
+  /**
+   * ONE DOOR FOR A MEMBER WHO READS TERMS (seat settings PR4). When the host
+   * passes it (`applyHrefFor`, only for a reader holding terms.read), the
+   * raised hand opens "Apply for a seat" with this seat picked, a formal
+   * application the village adopts. Everyone else keeps the inbox hand.
+   */
+  applyHref?: string | null;
+}) {
   const slot = useSeatCardSlot();
   const [location] = useLocation();
   const [composing, setComposing] = useState(false);
@@ -168,6 +184,26 @@ export default function SeatAction({ circleId = null }: { circleId?: string | nu
         <Hand className="size-[17px] shrink-0" aria-hidden="true" />
         {view.label}
       </Link>
+    );
+  }
+
+  if (view.kind === "raise" && applyHref) {
+    return (
+      <div>
+        <Link
+          ref={(el: HTMLAnchorElement | null) => {
+            doorRef.current = el;
+          }}
+          href={applyHref}
+          aria-label={view.ariaLabel ?? undefined}
+          className={`${GOLD} w-full`}
+        >
+          <Hand className="size-[17px] shrink-0" aria-hidden="true" />
+          {view.label}
+        </Link>
+        <p className="mt-1.5 px-1 text-xs text-muted-foreground">{SHEET_WORDS.applyConsequence}</p>
+        {statusLine}
+      </div>
     );
   }
 

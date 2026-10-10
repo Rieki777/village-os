@@ -178,6 +178,13 @@ describe("the gate both destructive routes call", () => {
     expect(PASSWORD_REFUSAL["delete-account"]).toBe("Confirm with your password to delete your account");
   });
 
+  it("tells a member aligning that a typed password is wrong, in those words (red team U8)", async () => {
+    const w = world({ passwordHash: "hash:right" });
+    expect(await w.gate(w.req({ password: "wrong" }), w.res, w.row, "align")).toEqual({ ok: false, body: { error: "That password is not right." } });
+    // CONTROL: no password at all is still asked for.
+    expect(await w.gate(w.req({}), w.res, w.row, "align")).toEqual({ ok: false, body: { error: PASSWORD_REFUSAL.align } });
+  });
+
   it("answers a legacy unsalted hash by naming the reset, and never reaches the password check", async () => {
     // 64 hex characters is an unsalted SHA-256 from before bcrypt. Sign-in
     // stopped accepting those, so this member cannot satisfy a password check

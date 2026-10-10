@@ -42,6 +42,7 @@ export const SHEET_WORDS = {
   unreachable: "Held, and not reachable through the map yet.",
   raise: "Raise your hand",
   raiseConsequence: "A raised hand reaches the founding team, who will be in touch.",
+  applyConsequence: "Opens your application for this seat and its terms. A seat holder or the village adopts it.",
   raisePlaceholder: "Why this role calls to you (optional)",
   raiseTermLabel: "End date for your seat (optional)",
   raiseSubmit: "Raise my hand",

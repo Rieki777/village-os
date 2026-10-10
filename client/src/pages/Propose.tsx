@@ -12,6 +12,10 @@
  * heading and promise change with it. "Nothing you write here is public until
  * you publish it" is true of the wizard walk and false of an ask, which opens
  * a vote the moment the button is pressed.
+ *
+ * THE SECOND: `?type=role_application&seat=<id>` opens "Apply for a seat" with
+ * that seat picked (`roleApplicationStart`), the door a seat card's raised hand
+ * opens for a member who reads terms.
  */
 import { useState } from "react";
 import { Link } from "wouter";
@@ -25,6 +29,7 @@ import ProposalWizard from "@/components/governance/ProposalWizard";
 import ModuleAsk from "@/components/modules/ModuleAsk";
 import { askedModuleId } from "@/components/modules/askDoor";
 import { askHref } from "@/components/modules/ModuleAskDoor";
+import { roleApplicationStart } from "@/components/governance/roleApplicationType";
 
 export default function Propose() {
   const { user } = useAuth();
@@ -33,6 +38,9 @@ export default function Propose() {
   // Read once. A member does not change this without a navigation, and a
   // re-read on every render would rebuild the ask mid-typing.
   const [askModuleId] = useState(() => askedModuleId(window.location.search));
+  // `?type=role_application&seat=<id>`: a seat card's door, opening "Apply for a
+  // seat" with that seat picked. Read once, for the reason the ask is.
+  const [start] = useState(() => roleApplicationStart(window.location.search));
 
   if (modules.loaded && !governance)
     return <ModuleGate moduleId="governance" name="Start a proposal" behind={PAGE_GATE_LINES.propose} />;
@@ -62,7 +70,7 @@ export default function Propose() {
             askModuleId ? (
               <ModuleAsk moduleId={askModuleId} />
             ) : (
-              <ProposalWizard />
+              <ProposalWizard start={start} />
             )
           ) : (
             <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
@@ -80,7 +88,7 @@ export default function Propose() {
                   to write a proposal should still be able to go and read one. */}
               <div className="mt-5">
                 {/* Back to the ask they came for, not to a blank wizard. */}
-                <SignInDoors next={askModuleId ? askHref(askModuleId) : "/propose"} />
+                <SignInDoors next={askModuleId ? askHref(askModuleId) : `/propose${start ? window.location.search : ""}`} />
               </div>
             </div>
           )}

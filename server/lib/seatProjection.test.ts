@@ -25,6 +25,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { hasCapability } from "../../shared/capabilities";
 import type { OrgAssignment, OrgRole } from "./orgChart";
 import {
   PUBLIC_AGENT_NAME,
@@ -55,6 +56,7 @@ const role = (over: Partial<OrgRole> = {}): OrgRole => ({
   first90DayOutcomes: "A repair list", locationExpectations: "On site weekly",
   compensationReality: "Unpaid this season", evidenceRequired: "Monthly test log",
   representsCircle: true, howChosen: "election", howChosenGloss: null,
+  termsOffer: null, termsOfferAt: null, termsOfferBy: null,
   ...over,
 });
 
@@ -340,8 +342,11 @@ describe("the privacy rule: never more public on /api/org than on /api/map", () 
     expect(tierOrg({ viewPeople: false, peopleArePublic: true }).people).toBe("public");
     expect(tierOrg({ viewPeople: true, peopleArePublic: false }).people).toBe("member");
     expect(tierOrg({ viewPeople: true, peopleArePublic: true }).people).toBe("member");
-    expect(mapSeatTier(false)).toEqual({ structure: true, people: "none", editing: false });
-    expect(mapSeatTier(true)).toEqual({ structure: true, people: "member", editing: false });
+    expect(mapSeatTier(false)).toEqual({ structure: true, people: "none", editing: false, terms: false });
+    expect(mapSeatTier(true)).toEqual({ structure: true, people: "member", editing: false, terms: false });
+    // terms.read is its own flag: map.viewPeople never implies it.
+    expect(mapSeatTier(true, true).terms).toBe(true);
+    expect(tierOrg({ viewPeople: true, editing: true }).terms).toBe(false);
   });
 });
 
@@ -394,7 +399,7 @@ describe("both handlers send the projection and write no seat of their own", () 
   });
 
   it("/api/map projects its seats through projectSeats at the map tier", () => {
-    expect(handler("get", "/api/map")).toMatch(/projectSeats\(\s*orgRoles,\s*orgAssignments,\s*mapSeatTier\(viewPeople\)/);
+    expect(handler("get", "/api/map")).toMatch(/projectSeats\(\s*orgRoles,\s*orgAssignments,\s*mapSeatTier\(viewPeople,/);
   });
 
   it("/api/org projects its seats through projectSeats at the tier orgSeatTier decides", () => {
@@ -435,5 +440,109 @@ describe("the village's way on /api/org", () => {
     expect(body).toMatch(/tier\.structure \? \{ village: villageWay\(villagePowerDeclared\(\)\) \}/);
     // Control: the map sends the same declared block, whole, in `power`.
     expect(handler("get", "/api/map")).toContain("villagePowerDeclared()");
+  });
+});
+
+/*
+ * ── THE OPEN BOOK: terms on offer ride the `terms.read` tier only (PR3) ────
+ *
+ * The tiers here are built the way the two handlers build them, from the
+ * REAL gate over a visitor, a guest and a member, so a change to the rung or
+ * to the gate moves these answers. A guest holds `map.viewPeople` and reads
+ * holder names; that same guest must read no terms, which is the whole reason
+ * `terms.read` is its own key. The figures are fake on purpose (XTS is the
+ * ISO code reserved for testing).
+ */
+describe("the terms tier: no termsOffer below the member rung", () => {
+  const LADDER = ["visitor", "guest", "member"];
+  const capCtx = (stage: string) => ({
+    stageIndex: LADDER.indexOf(stage),
+    stageIndexOf: (id: string) => LADDER.indexOf(id),
+    roleCapabilities: [] as string[],
+  });
+  const FAKE_OFFER = { v: 1, pay: { kind: "fixed", currency: "XTS", amountMinor: 12345, per: "month" } };
+  const offered = role({ termsOffer: JSON.stringify(FAKE_OFFER), termsOfferAt: day(-2), termsOfferBy: "u-founder" });
+  const TERMS_KEYS = ["termsOffer", "termsOfferAt", "termsOfferUnreadable"];
+
+  /** The tiers each handler would build for this reader. */
+  const tiersFor = (reader: "public" | "guest" | "member") => {
+    const c = reader === "public" ? null : capCtx(reader);
+    const viewPeople = c ? hasCapability("map.viewPeople", c) : false;
+    const terms = c ? hasCapability("terms.read", c) : false;
+    return {
+      map: mapSeatTier(viewPeople, terms),
+      org: orgSeatTier({ editing: false, viewPeople, peopleArePublic: true, mapStructure: true, terms }),
+    };
+  };
+
+  for (const reader of ["public", "guest"] as const) {
+    it(`${reader}: neither /api/map nor /api/org carries any terms key`, () => {
+      const t = tiersFor(reader);
+      for (const [route, tier] of [["map", t.map], ["org", t.org]] as const) {
+        const seat = projectSeat(offered, HELD, tier, ctx(route));
+        for (const k of TERMS_KEYS) expect(seat, `${route} ${reader} ${k}`).not.toHaveProperty(k);
+        expect(JSON.stringify(seat), `${route} ${reader} carries no figure`).not.toContain("12345");
+      }
+    });
+  }
+
+  it("guest: names ride and terms do not, the control that makes the line above mean something", () => {
+    const seat = projectSeat(offered, HELD, tiersFor("guest").map, ctx("map"));
+    expect(holdersOf(seat)).toHaveLength(3);
+    expect(seat).not.toHaveProperty("termsOffer");
+  });
+
+  it("member: the positive control, both routes carry the parsed offer and when it was set", () => {
+    const t = tiersFor("member");
+    for (const [route, tier] of [["map", t.map], ["org", t.org]] as const) {
+      const seat = projectSeat(offered, HELD, tier, ctx(route));
+      expect(seat.termsOffer, route).toMatchObject({ v: 1, pay: { kind: "fixed", amountMinor: 12345 } });
+      expect(seat.termsOfferUnreadable).toBe(false);
+      expect(seat.termsOfferAt).toBe(day(-2).toISOString());
+      // Who set it is a user id, so it never rides with the terms.
+      expect(seat).not.toHaveProperty("termsOfferBy");
+    }
+  });
+
+  it("member: a seat with no offer reads null, so a member can be told there are none", () => {
+    const seat = projectSeat(role(), HELD, tiersFor("member").org, ctx("org"));
+    expect(seat.termsOffer).toBeNull();
+    expect(seat.termsOfferUnreadable).toBe(false);
+  });
+
+  it("member: a stored offer the parser refuses is said to be unreadable, never sent half read", () => {
+    const bad = role({ termsOffer: JSON.stringify({ v: 1, pay: { kind: "fixed", note: "IBAN GB29NWBK60161331926819" } }) });
+    const seat = projectSeat(bad, HELD, tiersFor("member").org, ctx("org"));
+    expect(seat.termsOffer).toBeNull();
+    expect(seat.termsOfferUnreadable).toBe(true);
+    expect(JSON.stringify(seat)).not.toContain("GB29");
+  });
+
+  it("the terms keys are the only thing the member tier gained", () => {
+    const seat = projectSeat(offered, HELD, tierOrg({ viewPeople: true }), ctx("org"));
+    expect(sorted(seat)).toEqual([...ORG_BEFORE, ...ORG_GAINED].sort());
+    const withTerms = projectSeat(offered, HELD, tierOrg({ viewPeople: true, terms: true }), ctx("org"));
+    expect(sorted(withTerms)).toEqual([...ORG_BEFORE, ...ORG_GAINED, ...TERMS_KEYS].sort());
+  });
+
+  it("carries the adopted terms a holder sits on, at the terms tier only (red team U2)", () => {
+    const seated = { ...MARA, applicationId: "sa-0000000000000001" } as OrgAssignment;
+    const heldTerms = new Map([["sa-0000000000000001", { applicationId: "sa-0000000000000001", settings: { v: 1 }, decidedOn: "2026-10-09" }]]);
+    const withTerms = projectSeat(offered, [seated], tierOrg({ viewPeople: true, terms: true }), { ...ctx("org"), heldTerms });
+    expect(withTerms.heldTerms).toEqual([{ holderName: "Mara", applicationId: "sa-0000000000000001", settings: { v: 1 }, decidedOn: "2026-10-09" }]);
+    // CONTROL: below the terms tier, nothing of it travels.
+    const without = projectSeat(offered, [seated], tierOrg({ viewPeople: true }), { ...ctx("org"), heldTerms });
+    expect(without).not.toHaveProperty("heldTerms");
+  });
+
+  it("both handlers ask the one gate for terms.read, and nothing else decides it", () => {
+    expect(handler("get", "/api/map")).toMatch(
+      /mapSeatTier\(viewPeople, !!viewerCapCtx && hasCapability\("terms\.read", viewerCapCtx\)\)/,
+    );
+    expect(handler("get", "/api/org")).toMatch(/terms: viewerCtx \? hasCapability\("terms\.read", viewerCtx\) : false/);
+    // Never the guest-rung key standing in for it.
+    for (const route of ["/api/map", "/api/org"]) {
+      expect(handler("get", route)).not.toMatch(/terms[^\n]*map\.viewPeople/);
+    }
   });
 });

@@ -520,7 +520,7 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | Recommends | `forum` |
 | Capabilities it adds | `ballot.vote`, `member.vouch` |
 | Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method` |
-| API prefixes | `/api/governance`, `/api/admin/governance` |
+| API prefixes | `/api/governance`, `/api/admin/governance`, `/api/season-plans` |
 | Contract doc | none yet |
 
 ### Hypha Bridge
@@ -717,7 +717,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 34 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Twelve modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 35 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Twelve modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -1385,7 +1385,8 @@ The same facts, for anything that would rather parse than read. Regenerated with
       ],
       "apiPrefixes": [
         "/api/governance",
-        "/api/admin/governance"
+        "/api/admin/governance",
+        "/api/season-plans"
       ],
       "contractDoc": null
     },

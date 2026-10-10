@@ -359,3 +359,31 @@ describe("the timezone answer", () => {
     expect(bad.ok).toBe(false);
   });
 });
+
+// ── Season plans (RC1): a hand-set plan window on a season ─────────────────
+
+describe("a season's plan window survives the normaliser", () => {
+  const season = { id: "s-found", name: "First", startsOn: "2026-06-21", endsOn: "2027-03-21" };
+
+  it("keeps a hand-set window on read and through a save", () => {
+    const planWindow = { opensOn: "2026-10-10", closesOn: "2026-11-09" };
+    const read = normalizeSeasonConfig({ seasons: [{ ...season, planWindow }], cadence: "custom", timezone: "UTC" });
+    expect(read.seasons[0].planWindow).toEqual(planWindow);
+    // Read again, as every load does: still there.
+    expect(normalizeSeasonConfig(read).seasons[0].planWindow).toEqual(planWindow);
+    const saved = seasonDocumentToStore({ seasons: [{ ...season, planWindow }], cadence: "custom", timezone: "UTC" }, SAVED_AT, null, "founder-1");
+    expect(saved.ok && saved.doc.seasons[0].planWindow).toEqual(planWindow);
+  });
+
+  it("CONTROL: a field the fixed list does not name is dropped on read, which is the trap the line above closes", () => {
+    const read = normalizeSeasonConfig({ seasons: [{ ...season, planWindowTypo: { opensOn: "2026-10-10" } }], cadence: "custom", timezone: "UTC" });
+    expect(read.seasons[0]).not.toHaveProperty("planWindowTypo");
+  });
+
+  it("keeps only two dates: anything else reads as no window", () => {
+    const half = normalizeSeasonConfig({ seasons: [{ ...season, planWindow: { opensOn: "2026-10-10" } }], cadence: "custom", timezone: "UTC" });
+    expect(half.seasons[0].planWindow).toBeNull();
+    const none = normalizeSeasonConfig({ seasons: [season], cadence: "custom", timezone: "UTC" });
+    expect(none.seasons[0].planWindow).toBeNull();
+  });
+});

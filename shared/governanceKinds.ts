@@ -236,7 +236,12 @@ export function executesAtPassWithNoWindow(subjectType: string): boolean {
  * 20.11 had to undo. These keep their instant, their countdown and their
  * notice, and lose only the door.
  */
-export const SEAT_SUBJECTS: ReadonlySet<string> = new Set(["role_seat", "role_unseat"]);
+/*
+ * `role_application` (seat settings PR4) is the member door to the same act: a
+ * member applying to hold seats, adopted by a vote. It waits its window and no
+ * steward stops it, like a `role_seat` vote (red team G3, 2026-10-09).
+ */
+export const SEAT_SUBJECTS: ReadonlySet<string> = new Set(["role_seat", "role_unseat", "role_application"]);
 
 /** Is this a seating act, which waits its window and admits no veto? */
 export function isSeatSubject(subjectType: string): boolean {

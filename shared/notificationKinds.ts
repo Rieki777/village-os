@@ -219,6 +219,19 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} reminders that the season is turning.",
     celebrate: false,
   },
+  // Season plans (2026-10-09). Quiet, both: planning is an ask, never a moment.
+  season_plan_open: {
+    group: "decisions",
+    blurb: "Planning is open for the season. Choose the seats you keep, hand back or apply for, and what you will do.",
+    many: "{n} notices that planning is open.",
+    celebrate: false,
+  },
+  season_plan_reminder: {
+    group: "decisions",
+    blurb: "Your season plan is not filed yet. Filing takes a few minutes, and the village sees it by name.",
+    many: "{n} reminders to file your season.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",

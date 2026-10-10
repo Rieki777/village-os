@@ -126,6 +126,10 @@ import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
+import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
+import { register as registerSeatApplicationRoutes } from "./routes/seatApplications";
+import { register as registerAlignmentRoutes, alignmentsForExport } from "./routes/alignments";
+import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -329,6 +333,8 @@ import {
   VILLAGE_LAUNCH,
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
+import { ballotNamesItsCloser, closeNoteFor } from "../shared/seatApplications";
+import { heldTermsFor } from "./lib/heldTerms";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
 /** The two dials a started Game answers for itself, through a governance_mode ballot. */
 const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
@@ -10088,9 +10094,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const admin = await isAdmin(req);
     let viewPeople = admin;
     let viewerCapCtx: Awaited<ReturnType<typeof capabilityCtx>> | null = null;
-    if (!viewPeople && viewer) {
+    if (viewer) {
       viewerCapCtx = await capabilityCtx(viewer);
-      viewPeople = hasCapability("map.viewPeople", viewerCapCtx);
+      viewPeople = viewPeople || hasCapability("map.viewPeople", viewerCapCtx);
     }
     if (!viewer && !boolVar("map.public_structure")) {
       return res.status(401).json({ error: "auth_required", message: "Sign in to see the village map" });
@@ -10142,12 +10148,15 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
 
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
-    const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople), {
+    const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
       route: "map",
       now: new Date(),
       nameOf,
       firstName,
       avatarOf: (id) => avatarByUser.get(id) ?? null,
+      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx)
+        ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf })
+        : undefined,
     });
 
     const seasonNow = seasonState();
@@ -19493,6 +19502,7 @@ ${inner}
     getPool,
   });
   registerMapChipsRoutes(app, { isAdmin, authedUser, getPool, seasonState, lapseContext });
+  registerSeatPresetsRoutes(app, { isAdmin, authedUser, capabilityCtx, getPool });
 
   // The live org the open map polls for: server/routes/mapOrg.ts.
   registerMapOrgRoutes(app, { authedUser, isAdmin, capabilityCtx, circlesRepo, members, firstName, lapseContext, getPool });
@@ -19507,6 +19517,7 @@ ${inner}
       await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
     }),
   });
+  registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -23380,7 +23391,7 @@ ${inner}
       // 0219: the judgement line, beside the proposal at the moment of deciding.
       purposeAlignment: b.purposeAlignment ?? null,
       outcomeNote: b.outcomeNote,
-      closedBy: b.closedBy ? await nameOf(b.closedBy) : null,
+      closedBy: b.closedBy && ballotNamesItsCloser(b.subjectType) ? await nameOf(b.closedBy) : null, // red team S1: an application ballot names nobody
       closedAt: b.closedAt,
       tallies,
       unity: unityPctOf(tallies),
@@ -24084,7 +24095,7 @@ ${inner}
     const result = await closeBallot(getPool(), {
       ballotId: b.id,
       closedBy: user.id,
-      outcomeNote: String(req.body?.outcomeNote ?? req.body?.outcome_note ?? ""),
+      outcomeNote: closeNoteFor(b.subjectType, String(req.body?.outcomeNote ?? req.body?.outcome_note ?? "")), // red team U12: fixed words for an application
       closerMayCloseEarly: isFacilitator,
     });
     if (!result.ok) {
@@ -25233,6 +25244,8 @@ ${inner}
   // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
+  registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
+  registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
@@ -25500,8 +25513,8 @@ ${inner}
   app.get("/api/org", async (req, res) => {
     const viewer = await authedUser(req);
     const admin = await isAdmin(req);
-    const maySeePeople =
-      admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
+    const viewerCtx = viewer ? await capabilityCtx(viewer) : null;
+    const maySeePeople = admin || (viewerCtx ? hasCapability("map.viewPeople", viewerCtx) : false);
     // The village's own dial. `maySeePeople` still wins, so turning the lock
     // on never takes the people away from the members who were already
     // entitled to them.
@@ -25510,7 +25523,7 @@ ${inner}
     // fields `/api/map` already served reach a caller here only where the map
     // would show them to that same caller (server/lib/seatProjection.ts).
     const tier = orgSeatTier({
-      editing: admin,
+      editing: admin, terms: viewerCtx ? hasCapability("terms.read", viewerCtx) : false,
       viewPeople: maySeePeople,
       peopleArePublic,
       mapStructure: mapShowsStructureTo({
@@ -25559,7 +25572,11 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName }),
+      roles: projectSeats(roles, assignments, tier, {
+        route: "org", now: new Date(), nameOf, firstName,
+        // The adopted terms each holder sits on, for a terms.read reader (red team U2; server/lib/heldTerms.ts).
+        heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined,
+      }),
     });
   });
 
@@ -26473,6 +26490,8 @@ ${inner}
       portraits: await portraitsForMember(pool, user.id),
       portraitBudget: await grantsForMember(pool, user.id),
       gratitudeDistributions: await distributionsForMember(pool, user.id),
+      seasonPlans: await seasonPlansForMember(pool, user.id), // every version of their season plans, words and seats handed back (server/repos/seasonPlans.ts)
+      aligned: await alignmentsForExport(pool, user.id, async (id) => (await members.byId(id))?.name ?? null), // texts they are party to, their own alignment rows and receipts; counterparties as name and capacity only (server/routes/alignments.ts)
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       /*
