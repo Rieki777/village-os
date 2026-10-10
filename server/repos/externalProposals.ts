@@ -266,3 +266,43 @@ export async function clearQuotesOn(pool: Pool, ids: readonly string[]): Promise
   );
   return Number(q?.affectedRows) || 0;
 }
+
+/**
+ * A copy of one waiting record carrying a different payload, for the half of a
+ * split structure that stays in the queue (the structure change review).
+ *
+ * WHY A COPY AND NOT A NEW LANDING. `landProposal` would run the door's checks
+ * again, count a drop on refusal, and supersede every other waiting record
+ * with the same identity, which for a structure with no source reference is
+ * every other structure that vendor sent. A remainder is the same claim, cut
+ * in two by a steward. So every column comes across from the original, and the
+ * identity with it, so a later redelivery from the vendor supersedes the
+ * remainder exactly as it would have the whole. Only the id, the payload and
+ * the dedupe key are new, the last because it is unique.
+ *
+ * The people the record names come across too, so the remainder is found by
+ * their export and their erasure like the original.
+ */
+export async function insertProposalCopy(
+  pool: Pool,
+  fromId: string,
+  input: { id: string; payload: Record<string, unknown>; dedupeKey: string },
+): Promise<boolean> {
+  const [res] = await pool.query<any>(
+    "INSERT INTO external_proposals (id, village_id, module_id, batch_id, correlation_id, kind, payload, quote, " +
+      "source_ref, source_occurred_at, subject_ref, trust_tier, significance, confidence, evidence, audience, " +
+      "dedupe_key, identity_key, received_at) " +
+      "SELECT ?, village_id, module_id, batch_id, correlation_id, kind, ?, quote, source_ref, source_occurred_at, " +
+      "subject_ref, trust_tier, significance, confidence, evidence, audience, ?, identity_key, received_at " +
+      "FROM external_proposals WHERE id = ? AND status = 'proposed'",
+    [input.id, JSON.stringify(input.payload), input.dedupeKey, fromId],
+  );
+  if (!(Number(res?.affectedRows ?? 0) > 0)) return false;
+  await pool.query(
+    "INSERT IGNORE INTO external_proposal_subjects (id, proposal_id, subject_ref, member_id, position) " +
+      "SELECT CONCAT('eps-', LEFT(REPLACE(UUID(), '-', ''), 12)), ?, subject_ref, member_id, position " +
+      "FROM external_proposal_subjects WHERE proposal_id = ?",
+    [input.id, fromId],
+  );
+  return true;
+}

@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 177 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 179 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 192 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 194 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-218 dials in 33 categories. 128 carry a minimum and a maximum. By type: 91 integer, 20 decimal, 18 percentage, 24 boolean, 30 choice, 34 text, 1 longtext.
+220 dials in 34 categories. 129 carry a minimum and a maximum. By type: 92 integer, 20 decimal, 18 percentage, 24 boolean, 30 choice, 35 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -73,6 +73,7 @@ Each dial also says WHEN a change lands. 192 of them as soon as it is saved, and
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
 | Journal | 1 | 1 | 0 |
+| Live Sessions | 2 | 2 | 0 |
 
 ## Every dial by name
 
@@ -298,6 +299,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
 | Whether saying what the village is for is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 | Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
+| The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
+| How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
 
 ## Membership
 
@@ -3920,6 +3923,40 @@ How many different members must answer a pulse question in a week before anybody
 | Default | `1` |
 | Range | 1 to 1000 |
 | Counted in | members |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## Live Sessions
+
+2 dials. 2 for the whole village.
+
+### The place line read at drop in
+
+One line the facilitator reads out as a live session begins, to honour the land and the place the village meets on. Write it in your village's own words, the way you would say it aloud: whose land this is, what grows here, what the place asks of the people on it. Each session keeps the line it opened with. Leave it blank and the room offers a short neutral sentence instead.
+
+| Fact | Value |
+| --- | --- |
+| Key | `sessions.place_line` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Counted in | line |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long a live session runs unless its opener says otherwise
+
+The length a new live session starts with when whoever opens it names none. The room compares its agenda against this, and warns when the items ask for more time than the session has left. The opener can always choose another length between 10 and 480 minutes for one session.
+
+| Fact | Value |
+| --- | --- |
+| Key | `sessions.default_minutes` |
+| Type | integer, a whole number |
+| Default | `60` |
+| Range | 10 to 480 |
+| Counted in | minutes |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |

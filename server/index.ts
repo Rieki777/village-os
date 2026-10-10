@@ -141,6 +141,7 @@ import { register as registerBrandPreviewRoutes } from "./routes/brandPreview";
 import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
+import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
@@ -18835,6 +18836,7 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
+  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
    * Put a redemption to the village, with the setup every village-wide vote
@@ -26491,6 +26493,7 @@ ${inner}
       seasonPlans: await seasonPlansForMember(pool, user.id), // every version of their season plans, words and seats handed back (server/repos/seasonPlans.ts)
       aligned: await alignmentsForExport(pool, user.id, async (id) => (await members.byId(id))?.name ?? null), // texts they are party to, their own alignment rows and receipts; counterparties as name and capacity only (server/routes/alignments.ts)
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
+      sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

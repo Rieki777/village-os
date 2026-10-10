@@ -252,6 +252,10 @@ export const ACCOUNT_MENU: readonly NavLink[] = [
   // button carries the other door (config/mobileNav.ts); both hide while the
   // journal module is off for this viewer.
   { href: "/journal", label: "Journal", module: "journal" },
+  // The circle calls a member takes part in: the one happening now, and the
+  // records of the ones they were in. The shortcuts button carries the other
+  // door (config/mobileNav.ts); both hide while the module is off.
+  { href: "/sessions", label: "Live sessions", module: "sessions" },
   { href: "/profile#wallet", label: "Wallet", module: "exchange" },
   { href: "/badges", label: "Badges", module: "badges" },
   // 0098. What the village looks after, and who holds each one. In the

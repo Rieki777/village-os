@@ -55,6 +55,8 @@ export const GATE_LINES: Record<string, string> = {
   map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
   messaging: "Private conversations between members, one to one or in a named group.",
   network: "The needs and offers this village shares with the villages it listens to.",
+  sessions:
+    "A circle's calls, held live: who is arriving, the agenda, decisions by consent, and who holds each action, kept for those who were there.",
   stays: "Rooms on this land, what a night costs in stay credits, and how to book one.",
   tools: "One place to find the chat, the documents, and the governance space this village runs on.",
 };
