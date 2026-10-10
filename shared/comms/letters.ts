@@ -19,7 +19,7 @@
 // ── Where a letter stands ───────────────────────────────────────────────────
 
 /**
- * The states drizzle/0230 names for `comms_letters.state`.
+ * The states drizzle/0246 names for `comms_letters.state`.
  *
  *   draft      being written. The only state whose words may change, with
  *              `cancelled`.

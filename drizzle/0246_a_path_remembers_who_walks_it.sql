@@ -16,7 +16,7 @@
 -- WHAT THE COLUMNS MEAN, where the DDL cannot say it:
 --
 --   path_enrollments.person_key  a user id, or `guest:<contactId>` for
---                              somebody with no account (the rule 0229
+--                              somebody with no account (the rule 0245
 --                              writes down).
 --   path_enrollments.source    how they came to the path: sign-up, a profile
 --                              edit, a public form, a housing request, an
@@ -50,7 +50,7 @@
 --                              office row in `message_id`.
 --
 -- DEDUPE COLUMNS ARE NOT NULL: `path_enrollments_one` and
--- `comms_letters_idem`, for the reason 0228 gives.
+-- `comms_letters_idem`, for the reason 0244 gives.
 --
 -- NO CHARSET OR COLLATE CLAUSE, for the reason 0198 gives.
 --

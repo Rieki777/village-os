@@ -10,7 +10,7 @@
  * `event_waitlist.user_id` and every `person_key` column (`event_attendance`,
  * `event_feedback`, `event_time_poll_votes`), so every seat count and waitlist
  * read that existed before guests counts a guest with no change at all.
- * drizzle/0229 writes the same rule down. Readers that NAME people learn the
+ * drizzle/0245 writes the same rule down. Readers that NAME people learn the
  * prefix and read a guest's name from `comms_contacts`, never an address.
  *
  * ── THE FLOW ───────────────────────────────────────────────────────────────

@@ -165,7 +165,7 @@ export type JourneyState = (typeof JOURNEY_STATES)[number];
 // ── Person keys ─────────────────────────────────────────────────────────────
 
 /**
- * THE PERSON KEY RULE (drizzle/0229 writes it down too).
+ * THE PERSON KEY RULE (drizzle/0245 writes it down too).
  *
  * A member is their user id. Somebody with no account is `guest:<contactId>`.
  * That one string goes in `event_rsvps.user_id`, `event_waitlist.user_id` and

@@ -1,7 +1,7 @@
 /**
  * The readers and writers for the journey tables: `comms_enrollments` now,
  * and `comms_journeys` with its versions when the journey engine lands
- * (drizzle/0228). One family: an enrollment is a person on a journey.
+ * (drizzle/0244). One family: an enrollment is a person on a journey.
  *
  * ONE ENROLLMENT PER PERSON, JOURNEY AND SUBJECT, held by
  * `comms_enrollments_once`, so two triggers racing to enroll the same person

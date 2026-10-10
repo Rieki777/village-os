@@ -1,6 +1,6 @@
 /**
  * The readers and writers for guests at gatherings: `event_guest_requests`
- * (drizzle/0229), and the few reads of one person's own answer that the
+ * (drizzle/0245), and the few reads of one person's own answer that the
  * confirmation and the next-gathering link need.
  *
  * A REQUEST IS PENDING UNTIL THE PERSON PRESSES THE LINK. The link carries a
@@ -78,7 +78,7 @@ export async function confirmGuestRequest(pool: Pool, id: string): Promise<boole
 
 /**
  * A gathering's own guest setting: true, false, or null when it follows the
- * village dial (drizzle/0229's header). Read here because the guest door asks
+ * village dial (drizzle/0245's header). Read here because the guest door asks
  * it; the gathering's email settings are written by their own routes.
  */
 export async function guestSettingFor(pool: Pool, eventId: string): Promise<boolean | null> {

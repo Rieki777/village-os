@@ -1,7 +1,7 @@
 /**
  * The readers and writers for the post office ledger, `comms_messages`, and
  * for what the provider reported about it, `comms_provider_events`
- * (drizzle/0228). One family: a delivery report is a fact about a message.
+ * (drizzle/0244). One family: a delivery report is a fact about a message.
  *
  * THE ROW IS WRITTEN BEFORE THE SEND, and every status move after it is a
  * conditional UPDATE on the status it expects, so a slow retry can never walk

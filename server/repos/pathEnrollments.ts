@@ -1,5 +1,5 @@
 /**
- * The readers and writers for `path_enrollments` (drizzle/0230): who walks
+ * The readers and writers for `path_enrollments` (drizzle/0246): who walks
  * which path, how they came to it, whether they left, and whether they
  * reached its goal (the comms build spec 5.11).
  *

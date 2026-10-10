@@ -1,5 +1,5 @@
 /**
- * The readers and writers for `comms_suppressions` (drizzle/0228): the
+ * The readers and writers for `comms_suppressions` (drizzle/0244): the
  * addresses that receive nothing but essential mail.
  *
  * ONE ROW PER ADDRESS, keyed by `(village_id, email_key)`. An address that is

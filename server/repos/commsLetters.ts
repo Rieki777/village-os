@@ -1,6 +1,6 @@
 /**
  * The readers and writers for letters: `comms_letters` and its snapshot,
- * `comms_letter_recipients` (drizzle/0230), plus the audience reads a letter
+ * `comms_letter_recipients` (drizzle/0246), plus the audience reads a letter
  * makes over the address book, the path table and the gathering tables. The
  * behaviour is server/lib/comms/letters.ts; this file is only its SQL.
  *

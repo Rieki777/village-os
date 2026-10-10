@@ -531,7 +531,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0228 to 0230): their
+       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0244 to 0246): their
        * contacts and answers, journeys and paths, guest rows, votes,
        * attendance and feedback, the delivery reports that name them, and no
        * suppression kept, because a suppression is the address under another

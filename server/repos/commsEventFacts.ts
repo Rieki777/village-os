@@ -3,7 +3,7 @@
  * and stop rules (server/lib/comms/conditions.ts): the person's answer, how
  * many said yes, who was marked as having come, whether the recap went, and
  * whether a time vote is still open. Read-only, one small query each, over
- * the gathering tables of drizzle/0059, 0085 and 0229.
+ * the gathering tables of drizzle/0059, 0085 and 0245.
  *
  * Person keys follow the rule in shared/comms/kinds.ts: a member is their user
  * id, a guest is `guest:<contactId>`, in `event_rsvps.user_id` and every

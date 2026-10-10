@@ -1,7 +1,7 @@
 /**
  * LEAVING WELL, FOR EVERY COMMS TABLE (the comms build spec 5.17).
  *
- * A member is seeded with a row in every table from 0228, 0229 and 0230 that
+ * A member is seeded with a row in every table from 0244, 0245 and 0246 that
  * names a person, under both of the keys a person has there (their user id,
  * and `guest:<contactId>` for an address they used before they had an
  * account), and a second person is seeded beside them as the control. Then

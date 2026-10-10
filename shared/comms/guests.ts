@@ -10,7 +10,7 @@
  * THE PERSON KEY. A guest's seat is the string `guest:<contactId>` in
  * `event_rsvps.user_id` (shared/comms/kinds.ts, `guestPersonKey`), so every
  * seat count and waitlist read that exists counts them with no change. The
- * same rule is written in drizzle/0229 and in server/lib/comms/guests.ts.
+ * same rule is written in drizzle/0245 and in server/lib/comms/guests.ts.
  *
  * WHEN THE DOOR IS OPEN. `guestRefusal` answers every condition at once, in
  * one order, so the gathering's card, the request and the confirmation ask
@@ -96,7 +96,7 @@ export interface GuestFacts {
   now: number;
 }
 
-/** A gathering's own guest setting, or the village's when it has none (drizzle/0229's header). */
+/** A gathering's own guest setting, or the village's when it has none (drizzle/0245's header). */
 export function guestsOn(stored: boolean | null, villageDefault: boolean): boolean {
   return stored === null ? villageDefault : stored;
 }

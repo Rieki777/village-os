@@ -7,9 +7,9 @@ Provenance: platform
 > Registry id `comms`, catalogue name Village Comms. Built from 2026-10-02 on the plan Rye approved
 > that day. The build spec every lane works from is kept in the maintainers' private operations
 > repository, and code comments cite its sections as "the comms build spec". The schema is
-> `drizzle/0228_every_email_is_recorded_before_it_is_sent.sql`,
-> `drizzle/0229_a_gathering_asks_when_and_remembers_who_came.sql` and
-> `drizzle/0230_a_path_remembers_who_walks_it.sql`.
+> `drizzle/0244_every_email_is_recorded_before_it_is_sent.sql`,
+> `drizzle/0245_a_gathering_asks_when_and_remembers_who_came.sql` and
+> `drizzle/0246_a_path_remembers_who_walks_it.sql`.
 
 **Every email the village sends passes through one post office, is recorded before it goes, and
 reaches only people who agreed to that kind of email. The automations that write those emails
@@ -143,7 +143,7 @@ their row in `comms_contacts`. That one string goes in `event_rsvps.user_id`,
 `event_waitlist.user_id` and every `person_key` column (`event_attendance`, `event_feedback`,
 `event_time_poll_votes`, `path_enrollments`), so every seat count and waitlist read that existed
 before guests counts a guest with no change. Readers that name people learn the prefix and read a
-guest's name from `comms_contacts`, never their address. `drizzle/0229_a_gathering_asks_when_and_remembers_who_came.sql`
+guest's name from `comms_contacts`, never their address. `drizzle/0245_a_gathering_asks_when_and_remembers_who_came.sql`
 and `server/lib/comms/guests.ts` say the same.
 
 An address is keyed by `email_key`: the address trimmed and lowercased, and nothing else folded.

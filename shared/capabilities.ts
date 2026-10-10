@@ -115,7 +115,7 @@ export type Capability =
    * inside its window, in the open, with a name and a reason on it.
    */
   | "steward.veto" // stop a carried decision inside its window, and say why
-  // ── The comms key (Village Comms, 0228) ──────────────────────────────────
+  // ── The comms key (Village Comms, 0244) ──────────────────────────────────
   //
   // The village's email: which automations run, what they say, and the
   // letters it sends to people who agreed to get them. It passes the test the

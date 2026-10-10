@@ -1,6 +1,6 @@
 /**
  * The readers and writers for `comms_templates`: a village's own words for
- * each email, every version it has ever saved (drizzle/0228).
+ * each email, every version it has ever saved (drizzle/0244).
  *
  * ONE LIVE ROW PER KEY, held here because the table cannot hold it: the
  * primary key is (village, key, version) and `state` is a plain column, so two

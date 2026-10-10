@@ -1,6 +1,6 @@
 /**
  * The readers and writers for `comms_contacts`, the village's one address
- * book (drizzle/0228).
+ * book (drizzle/0244).
  *
  * ONE ROW PER ADDRESS, keyed by `(village_id, email_key)`, where the key is
  * the address trimmed and lowercased (`emailKeyOf`, shared/comms/address.ts).

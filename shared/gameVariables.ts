@@ -1800,7 +1800,7 @@ export const VARIABLES: VariableDef[] = [
     unit: "per day",
   },
 
-  // ── Village Comms (0228): the post office and its automations ─────────────
+  // ── Village Comms (0244): the post office and its automations ─────────────
   // Owned by the `comms` module (shared/modules.ts). Four are founder held:
   // retention is a privacy window, the send rate is the provider's limit, and
   // both trackers watch people, which is not a game rule a vote should turn on.

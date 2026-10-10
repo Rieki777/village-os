@@ -1,7 +1,7 @@
 /**
  * The readers and writers for what happens after a gathering: who came
  * (`event_attendance`), the recap (`event_recaps`), and the answers to its two
- * questions (`event_feedback`), all from drizzle/0229. One family: the record
+ * questions (`event_feedback`), all from drizzle/0245. One family: the record
  * of one evening once it has happened.
  *
  * PERSON KEYS throughout: a member's user id, or `guest:<contactId>` for

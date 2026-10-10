@@ -1,6 +1,6 @@
 /**
  * The SQL behind one gathering's emails (the comms build spec 5.7): the
- * gathering's own email settings in `event_comms` (drizzle/0229), and the
+ * gathering's own email settings in `event_comms` (drizzle/0245), and the
  * reads the event email handlers make of the tables around them.
  *
  * WHAT IS WRITTEN HERE, AND WHERE IT BELONGS:

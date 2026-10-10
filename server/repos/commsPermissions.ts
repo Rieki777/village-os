@@ -1,7 +1,7 @@
 /**
  * The readers and writers for `comms_permissions`: what each person in the
  * address book said yes or no to, why the village holds that answer, and the
- * evidence for it (drizzle/0228).
+ * evidence for it (drizzle/0244).
  *
  * ONE ROW PER CONTACT AND KIND, and `essential` is never a row: a password
  * link always goes, so there is nothing to ask. A kind with no row means the

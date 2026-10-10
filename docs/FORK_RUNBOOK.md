@@ -778,7 +778,7 @@ a page that 404s. Putting something on the calendar needs `event.manage`,
 which is role-granted and never reached by stage; answering one needs
 `event.rsvp`, which any account has. No seeds, no env vars.
 
-### Village Comms setup (0228 to 0230)
+### Village Comms setup (0244 to 0246)
 
 Every email the village sends goes through one post office and is recorded
 before it goes; the automations (gathering reminders, path emails, guest

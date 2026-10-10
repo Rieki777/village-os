@@ -1,5 +1,5 @@
 /**
- * The readers and writers for a gathering's time vote (drizzle/0229):
+ * The readers and writers for a gathering's time vote (drizzle/0245):
  * `event_time_polls`, `event_time_poll_options` and `event_time_poll_votes`,
  * plus the reads its emails need from the gathering's own answers and queue,
  * the names a tally may show, and the one counter it bumps in `event_comms`.

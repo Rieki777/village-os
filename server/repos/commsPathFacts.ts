@@ -5,7 +5,7 @@
  * village already writes: `submissions` (0001), `housing_reservations` (0077),
  * `investor_path_facts` (0156), `member_ventures` (0157),
  * `org_role_assignments` (0049), `quest_claims` (0001), `event_attendance`
- * (0229) and `users`.
+ * (0245) and `users`.
  *
  * WHO "THE PERSON" IS. A journey knows a contact: an address, and a user id
  * when the address belongs to an account. Every rule matches on whichever of

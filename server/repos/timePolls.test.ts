@@ -22,7 +22,7 @@ import {
 } from "./timePolls";
 
 /**
- * The time vote's tables against a real schema (drizzle/0229): one poll per
+ * The time vote's tables against a real schema (drizzle/0245): one poll per
  * gathering, one approval per person per time, a vote refused once the poll
  * locks, a lock claimed by exactly one caller, a removed time's votes kept,
  * and the reads the emails and the calendar make.

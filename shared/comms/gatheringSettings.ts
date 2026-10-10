@@ -2,7 +2,7 @@
  * ONE GATHERING'S OWN EMAIL SETTINGS, and the rule that turns its reminder
  * times into what the journey planner reads (the comms build spec 5.7).
  *
- * Each gathering keeps three choices in `event_comms` (drizzle/0229):
+ * Each gathering keeps three choices in `event_comms` (drizzle/0245):
  *
  *   reminders   NULL follows the village (`comms.event_reminder_minutes`),
  *               an empty list is off, and a list of minutes before the start
