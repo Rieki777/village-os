@@ -54,7 +54,7 @@ import {
 } from "./seatSettings";
 
 /** The member's own season page. Every notice about planning links here. */
-export const SEASON_PLAN_MINE = "/season-plans/mine";
+export { SEASON_PLAN_MINE } from "./seasonPlanLinks";
 
 /** The village's page: everyone's plan, by name. Members only. */
 export const SEASON_PLANS_PAGE = "/season-plans";

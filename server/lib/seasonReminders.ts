@@ -62,7 +62,7 @@
  */
 import crypto from "node:crypto";
 import type { PresenceTest } from "./memberPresence";
-import { SEASON_PLAN_MINE } from "../../shared/seasonPlans";
+import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
 
 export const SEASON_REMINDER_DAYS = [14, 7, 3, 1] as const;
 export type SeasonReminderMark = (typeof SEASON_REMINDER_DAYS)[number];

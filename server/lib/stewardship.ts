@@ -142,7 +142,7 @@ import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
 import { clockFor, termWarningOpensAt, type CycleClock } from "../../shared/cycleClock";
-import { SEASON_PLAN_MINE } from "../../shared/seasonPlans";
+import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
 import {
   blankVetoActReason,
   blankVetoActReasonsBy,
