@@ -42,6 +42,8 @@ import { numberVar } from "./variables";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
+import { canonicalJson } from "../../shared/canonicalJson";
+import { OFFER_WORDS, readTermsOffer } from "../../shared/seatTermsOffer";
 
 export type DraftOp =
   | "create_seat"
@@ -897,6 +899,12 @@ export function previewLoadedDraft(
      */
     if (machine && (c.op === "seat_holder" || c.op === "end_holding")) {
       blocked = "A proposal never names who holds a seat. Structure can be proposed; occupancy is a human act";
+    } else if (machine && carriesTerms(c.payload)) {
+      // TERMS NEVER CROSS THE BRIDGE (seat settings PR3). What a seat offers
+      // whoever holds it is the village's own economics, written by a member.
+      // A vendor's or Saberra's draft carrying an offer under either spelling
+      // is blocked here, and `applyChange` refuses it again at publish.
+      blocked = OFFER_WORDS.machineRefused;
     } else if (machine && index > cap) {
       blocked = `This proposal is past this village's limit of ${cap} changes in one reorganisation`;
     } else if (machine && c.op === "rest_seat") {
@@ -1044,6 +1052,8 @@ export function previewLoadedDraft(
         const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
         if (circle) reasons.push(circle);
       }
+      const terms = termsBlock(c.payload);
+      if (terms) reasons.push(terms);
       blocked = reasons.length ? reasons.join(". ") : null;
     } else {
       if (!existing && !willExist.has(c.orgRoleId)) blocked = "That seat no longer exists";
@@ -1055,6 +1065,7 @@ export function previewLoadedDraft(
         reads = `Edit ${name}`;
         if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
         if (!blocked) blocked = seatShapeBlocks(c.payload)[0] ?? null;
+        if (!blocked) blocked = termsBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
@@ -1078,6 +1089,21 @@ export function previewLoadedDraft(
     lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
   }
   return { lines, blocked: lines.filter((l) => l.blocked).length };
+}
+
+/** True when a change carries terms on offer, under the field's name or the column's. */
+function carriesTerms(payload: Record<string, any> | null | undefined): boolean {
+  return !!payload && (payload.termsOffer !== undefined || payload.terms_offer !== undefined);
+}
+
+/**
+ * Why an offer a person wrote cannot be published, or null. `null` itself is
+ * a real offer: it takes the seat's terms off offer.
+ */
+function termsBlock(payload: Record<string, any> | null | undefined): string | null {
+  if (!payload || payload.termsOffer === undefined) return null;
+  const read = readTermsOffer(payload.termsOffer);
+  return read.ok ? null : `These terms cannot be offered. ${read.problem}`;
 }
 
 /** One change in a draft that cannot apply: what it would do, and why it cannot. */
@@ -1210,7 +1236,7 @@ export async function publishDraft(
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
-      const s = await applyChange(conn, c, calendar ?? null);
+      const s = await applyChange(conn, c, calendar ?? null, { machine: draft.sourceKind !== "human", by: publishedBy });
       if (s) seated.push(s);
     }
     // THE WHOLE POINT OF THE `status = 'open'` CLAUSE IS THIS COUNT.
@@ -1256,7 +1282,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting FROM org_roles WHERE id = ?",
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
   return row ?? null;
@@ -1267,6 +1293,10 @@ const SEAT_FIELDS: Record<string, string> = {
   name: "name", circleId: "circle_id", aim: "aim", domain: "domain",
   whyItMatters: "why_it_matters", seats: "seats", criticality: "criticality",
   recruiting: "recruiting",
+  // 0239: the terms on offer. Written by a draft a HUMAN wrote and nobody
+  // else, and never through the generic loop below: `applyChange` reads it
+  // through the one parser and stamps when and by whom.
+  termsOffer: "terms_offer",
 };
 
 /** The seating a change made, for the caller to tell the person about. */
@@ -1279,7 +1309,26 @@ export interface DraftSeating {
   seatAim: string | null;
 }
 
-async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatCalendar | null): Promise<DraftSeating | null> {
+/**
+ * The terms a change puts on offer, as the three column values, or undefined
+ * when it names none. Refuses a machine's draft outright: the preview has
+ * already blocked it, and this is the second lock on the same door.
+ */
+function offerColumns(p: any, who: { machine: boolean; by: string | null }): [string | null, Date, string | null] | undefined {
+  if (p.termsOffer === undefined && p.terms_offer === undefined) return undefined;
+  if (who.machine) throw new Error(OFFER_WORDS.machineRefused);
+  if (p.termsOffer === undefined) return undefined;
+  const read = readTermsOffer(p.termsOffer);
+  if (!read.ok) throw new Error(`These terms cannot be offered. ${read.problem}`);
+  return [read.settings ? canonicalJson(read.settings) : null, new Date(), who.by];
+}
+
+async function applyChange(
+  conn: PoolConnection,
+  c: DraftChange,
+  calendar: SeatCalendar | null,
+  who: { machine: boolean; by: string | null } = { machine: true, by: null },
+): Promise<DraftSeating | null> {
   const p = c.payload ?? {};
   if (c.op === "move_circle") {
     /*
@@ -1331,13 +1380,15 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
     // and flag are NOT NULL with a DEFAULT, and an explicit NULL is not an
     // absent column, so an unnamed field writes the default value itself.
     // `previewDraft` has already blocked any criticality other than these two.
+    // 0239: and the terms it offers, when a member wrote some.
+    const offer = offerColumns(p, who) ?? [null, null, null];
     await conn.query(
-      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
-        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0],
+        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer],
     );
     return null;
   }
@@ -1402,9 +1453,14 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
   const sets: string[] = [];
   const args: any[] = [];
   for (const [key, col] of Object.entries(SEAT_FIELDS)) {
-    if (p[key] === undefined) continue;
+    if (p[key] === undefined || key === "termsOffer") continue;
     sets.push(`\`${col}\` = ?`);
     args.push(p[key]);
+  }
+  const offer = offerColumns(p, who);
+  if (offer) {
+    sets.push("`terms_offer` = ?", "`terms_offer_at` = ?", "`terms_offer_by` = ?");
+    args.push(...offer);
   }
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
@@ -1515,12 +1571,26 @@ export async function revertDraft(
         );
       } else if (c.beforeJson) {
         const b = c.beforeJson;
+        /*
+         * 0239: the terms on offer go back too, but ONLY when this change's
+         * `before_json` captured them. A draft published by the release before
+         * 0239 captured no terms, and reverting it must not wipe an offer
+         * somebody made since, so the CASE leaves the columns as they stand.
+         */
+        const hadTerms = "terms_offer" in b ? 1 : 0;
+        const termsBack = b.terms_offer === null || b.terms_offer === undefined ? null
+          : typeof b.terms_offer === "string" ? b.terms_offer : JSON.stringify(b.terms_offer);
         await conn.query(
           `UPDATE org_roles SET circle_id = ?, name = ?, aim = ?, domain = ?, accountabilities = ?,
-             why_it_matters = ?, seats = ?, criticality = ?, active = ?, recruiting = ? WHERE id = ?`,
+             why_it_matters = ?, seats = ?, criticality = ?, active = ?, recruiting = ?,
+             terms_offer = CASE WHEN ? = 1 THEN ? ELSE terms_offer END,
+             terms_offer_at = CASE WHEN ? = 1 THEN ? ELSE terms_offer_at END,
+             terms_offer_by = CASE WHEN ? = 1 THEN ? ELSE terms_offer_by END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
-            b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting, c.orgRoleId],
+            b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
+            hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
+            hadTerms, b.terms_offer_by ?? null, c.orgRoleId],
         );
       }
     }

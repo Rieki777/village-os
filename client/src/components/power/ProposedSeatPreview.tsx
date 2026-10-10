@@ -14,6 +14,13 @@
  * Nothing is seated and nothing is decided yet, so the card prints no holders,
  * no state, no clock and no door.
  *
+ * TERMS ON OFFER (seat settings PR3). A draft a MEMBER wrote may carry the
+ * terms a seat offers, and `terms` shows them in the Settings drawer, open,
+ * with each group that differs from the offer standing today lit as changed.
+ * The host passes it only to a reader holding `terms.read`. A vendor's
+ * proposal never carries terms (they never cross the bridge, and the draft
+ * path refuses them), so the review queue's own proposals pass nothing.
+ *
  * It fetches nothing and imports nothing from `@/lib/gameApi`: the two /review
  * test files mock that module down to `authToken`, and this has to render
  * under them. Typing re-reads the text on a deferred value, so a long payload
@@ -23,6 +30,9 @@ import { useDeferredValue, useMemo } from "react";
 import { SHEET_WORDS, notReadLine, type SheetContext } from "@shared/roleSheet";
 import { fromProposedSeat } from "@shared/roleSheetInputs";
 import { readProposedSeats, type NormalisedSeat } from "@shared/proposedSeats";
+import { parseSeatSettings } from "@shared/seatSettings";
+import { changedGroups } from "@shared/seatTermsOffer";
+import SeatTermsDrawer from "./SeatTermsDrawer";
 import SeatTradingCard from "./SeatTradingCard";
 
 type Reading = { ok: false } | { ok: true; seats: NormalisedSeat[]; notRead: string | null };
@@ -47,7 +57,29 @@ function readProposalText(text: string): Reading {
 /** No clock and no class names: a proposal has neither a term nor a tag yet. */
 const PROPOSAL_CTX: Omit<SheetContext, "now"> = { season: null, classNames: null };
 
-export default function ProposedSeatPreview({ text }: { text: string }) {
+/** The proposed offer in the drawer, changed rows lit against the offer standing now. */
+function termsDrawer(terms: { offer: unknown; base?: unknown }) {
+  const next = parseSeatSettings(terms.offer);
+  const base = parseSeatSettings(terms.base);
+  const settings = next.ok ? next.settings : null;
+  return (
+    <SeatTermsDrawer
+      settings={settings}
+      unreadable={!next.ok}
+      changedGroups={settings && base.ok ? changedGroups(base.settings, settings) : []}
+      defaultOpen
+    />
+  );
+}
+
+export default function ProposedSeatPreview({
+  text,
+  terms,
+}: {
+  text: string;
+  /** A member-written offer for the seat, and the offer it would replace. */
+  terms?: { offer: unknown; base?: unknown } | null;
+}) {
   const deferred = useDeferredValue(text);
   const reading = useMemo(() => readProposalText(deferred), [deferred]);
 
@@ -63,6 +95,7 @@ export default function ProposedSeatPreview({ text }: { text: string }) {
           input={fromProposedSeat(seat)}
           ctx={{ ...PROPOSAL_CTX, now: new Date() }}
           faces="stacked"
+          settings={terms && terms.offer !== undefined ? termsDrawer(terms) : undefined}
         />
       ))}
       {reading.notRead && <p className="text-xs text-muted-foreground">{reading.notRead}</p>}

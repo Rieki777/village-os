@@ -116,6 +116,20 @@ export interface OrgRole {
   locationExpectations: string | null;
   compensationReality: string | null;
   evidenceRequired: string | null;
+  /**
+   * WHAT THE SEAT OFFERS WHOEVER HOLDS IT (0239, seat settings PR3).
+   *
+   * The stored settings object, UNPARSED and UNTYPED here on purpose: this
+   * file is imported by modules that move value, and the settings model may
+   * never be reachable from them (shared/seatSettings.boundary.test.ts). The
+   * one reader that parses it is `server/lib/seatProjection.ts`, at the
+   * `terms.read` tier, and nothing else on any route sends it. Written only by
+   * a published org draft a human wrote. Null is "no terms on offer yet".
+   */
+  termsOffer: unknown;
+  termsOfferAt: Date | null;
+  /** The member who published the offer. */
+  termsOfferBy: string | null;
 }
 
 export interface OrgAssignment {
@@ -176,7 +190,10 @@ const ROLE_COLS =
   "authority, first_year_outcomes, first_90_day_outcomes, location_expectations, compensation_reality, evidence_required, " +
   // 0083: representation and succession. Selected from day one, because the
   // recruitment pack above is the cautionary tale about columns nobody reads.
-  "represents_circle, how_chosen, how_chosen_gloss";
+  "represents_circle, how_chosen, how_chosen_gloss, " +
+  // 0239: the terms on offer. Selected here and projected only at the
+  // `terms.read` tier (server/lib/seatProjection.ts).
+  "terms_offer, terms_offer_at, terms_offer_by";
 
 const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -234,6 +251,9 @@ function rowToRole(r: any): OrgRole {
     locationExpectations: r.location_expectations ?? null,
     compensationReality: r.compensation_reality ?? null,
     evidenceRequired: r.evidence_required ?? null,
+    termsOffer: r.terms_offer ?? null,
+    termsOfferAt: r.terms_offer_at ?? null,
+    termsOfferBy: r.terms_offer_by ?? null,
   };
 }
 

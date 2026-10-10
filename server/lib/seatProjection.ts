@@ -41,6 +41,7 @@
  * `orgSeatTier` is the only place it is applied.
  */
 import type { ModuleLifecycle } from "../../shared/modules";
+import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 
 /**
@@ -90,6 +91,13 @@ export interface SeatTier {
    * pack. `/api/org` only; `/api/map` never had one.
    */
   editing: boolean;
+  /**
+   * THE OPEN BOOK (seat settings PR3): the seat's terms on offer, money
+   * included. Set only for a reader holding `terms.read`, which opens at the
+   * member rung. Below it the key is ABSENT, never null, so a visitor's and a
+   * guest's payload cannot even say whether a seat has terms.
+   */
+  terms: boolean;
 }
 
 export interface SeatProjectionCtx {
@@ -130,9 +138,12 @@ export function mapShowsStructureTo(v: {
   }
 }
 
-/** `/api/map`: structure always (the route has already decided to answer), holders behind map.viewPeople. */
-export function mapSeatTier(viewPeople: boolean): SeatTier {
-  return { structure: true, people: viewPeople ? "member" : "none", editing: false };
+/**
+ * `/api/map`: structure always (the route has already decided to answer),
+ * holders behind map.viewPeople, terms behind terms.read.
+ */
+export function mapSeatTier(viewPeople: boolean, terms = false): SeatTier {
+  return { structure: true, people: viewPeople ? "member" : "none", editing: false, terms };
 }
 
 /**
@@ -150,11 +161,14 @@ export function orgSeatTier(v: {
   viewPeople: boolean;
   peopleArePublic: boolean;
   mapStructure: boolean;
+  /** The reader holds `terms.read`. Never implied by any other flag here. */
+  terms?: boolean;
 }): SeatTier {
   return {
     structure: v.viewPeople || v.mapStructure,
     people: v.viewPeople ? "member" : v.peopleArePublic ? "public" : "none",
     editing: v.editing,
+    terms: v.terms === true,
   };
 }
 
@@ -306,6 +320,23 @@ function recruitmentPack(role: OrgRole) {
   };
 }
 
+/**
+ * THE TERMS ON OFFER, `terms.read` TIER ONLY, and the same on both routes.
+ *
+ * Parsed here, by the one parser, so a stored offer a later release can no
+ * longer read is said to be unreadable instead of being sent half-read.
+ * `compensationReality` is NOT this and never rides with it: that stays the
+ * admin's private note in the recruitment pack.
+ */
+function termsOffer(role: OrgRole) {
+  const read = readTermsOffer(role.termsOffer);
+  return {
+    termsOffer: read.ok ? read.settings : null,
+    termsOfferUnreadable: !read.ok,
+    termsOfferAt: role.termsOfferAt ? new Date(role.termsOfferAt).toISOString() : null,
+  };
+}
+
 /** One seat, for one caller, on one route. */
 export function projectSeat(
   role: OrgRole,
@@ -332,6 +363,7 @@ export function projectSeat(
     holderCount: held.length,
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
+    ...(tier.terms ? termsOffer(role) : {}),
   };
   const holders = projectHolders(held, tier, ctx);
   if (ctx.route === "map") {
