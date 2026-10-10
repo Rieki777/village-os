@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { settingsWords, type SeatSettings, type SettingsGroup, type SettingsRow } from "@shared/seatSettings";
 import { isCustomised, presetFor, type SeatPreset } from "@shared/seatPresets";
+import { OFFER_WORDS } from "@shared/seatTermsOffer";
 
 const GROUP_ICONS: Record<SettingsGroup, LucideIcon> = {
   term: CalendarClock,
@@ -62,6 +63,9 @@ export const DRAWER_WORDS = {
   unreadable: "Some of these terms need fixing before they show here.",
   adoptedByVote: "Adopted by vote",
   adoptedBy: "Adopted by",
+  none: OFFER_WORDS.none,
+  propose: OFFER_WORDS.propose,
+  changed: OFFER_WORDS.changed,
 } as const;
 
 export interface DrawerAdoption {
@@ -100,11 +104,14 @@ function Row({
   settings,
   villagePresets,
   bodyId,
+  changed,
 }: {
   row: SettingsRow;
   settings: SeatSettings;
   villagePresets: readonly SeatPreset[];
   bodyId: string;
+  /** Lit: this group differs from the terms on offer now (a proposed change). */
+  changed: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const Icon = GROUP_ICONS[row.group];
@@ -112,7 +119,10 @@ function Row({
   const customised = isCustomised(settings, row.group, villagePresets);
   const hasMore = row.lines.length > 0 || !!preset;
   return (
-    <li className="border-b border-border/50 last:border-b-0">
+    <li
+      data-changed={changed ? "" : undefined}
+      className={`border-b border-border/50 last:border-b-0 ${changed ? "-mx-2 rounded-lg bg-notice/10 px-2" : ""}`}
+    >
       <button
         type="button"
         aria-expanded={hasMore ? open : undefined}
@@ -123,7 +133,14 @@ function Row({
       >
         <Icon className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">{row.label}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            {row.label}
+            {changed && (
+              <span className="ml-1.5 rounded-full border border-notice/60 px-1.5 py-px text-[10px] tracking-normal text-notice">
+                {DRAWER_WORDS.changed}
+              </span>
+            )}
+          </span>
           <span className="mt-0.5 block text-[13.5px] leading-snug text-foreground">{row.headline}</span>
           {row.pips && (
             <span className="mt-1 block">
@@ -170,6 +187,8 @@ export default function SeatTermsDrawer({
   defaultOpen = false,
   unreadable = false,
   adopted = null,
+  empty = null,
+  changedGroups = [],
 }: {
   /** Parsed settings (`parseSeatSettings`). Absent: nothing renders. */
   settings?: SeatSettings | null;
@@ -180,11 +199,19 @@ export default function SeatTermsDrawer({
   /** The host had terms it could not parse. Says so instead of guessing. */
   unreadable?: boolean;
   adopted?: DrawerAdoption | null;
+  /**
+   * A member reading a seat that offers no terms yet (PR3). Passed only by a
+   * host whose reader holds `terms.read`, so it never tells a stranger
+   * anything. `href` is where proposing terms starts, absent on an example.
+   */
+  empty?: { href: string | null } | null;
+  /** Groups to light as changed, when this shows a proposed change of terms. */
+  changedGroups?: readonly SettingsGroup[];
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const bodyId = `${uid}-terms`;
-  if (!settings && !unreadable) return null;
+  if (!settings && !unreadable && !empty) return null;
 
   const rows = settings ? settingsWords(settings) : [];
   const set = rows.filter((r) => r.set);
@@ -212,6 +239,18 @@ export default function SeatTermsDrawer({
       <div id={bodyId} hidden={!open} className="mt-1 border-t border-border/50 pt-1">
         {unreadable && !settings ? (
           <p className="py-2 text-xs text-muted-foreground">{DRAWER_WORDS.unreadable}</p>
+        ) : !settings && empty ? (
+          <div className="py-2" data-terms-empty="">
+            <p className="text-sm text-foreground">{DRAWER_WORDS.none}</p>
+            {empty.href && (
+              <a
+                href={empty.href}
+                className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-notice underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {DRAWER_WORDS.propose}
+              </a>
+            )}
+          </div>
         ) : (
           <>
             {set.length > 0 && (
@@ -223,6 +262,7 @@ export default function SeatTermsDrawer({
                     settings={settings!}
                     villagePresets={villagePresets}
                     bodyId={`${bodyId}-${row.group}`}
+                    changed={changedGroups.includes(row.group)}
                   />
                 ))}
               </ul>

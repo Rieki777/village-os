@@ -83,6 +83,13 @@ export interface PowerSeat {
   /** "declared": a state set by hand and still in force. "derived": from the seatings. */
   stateSource?: "declared" | "derived";
   holders: PowerHolder[];
+  /**
+   * The seat's terms on offer (seat settings PR3). PRESENT only for a reader
+   * holding `terms.read`, null when the seat offers none yet, ABSENT below the
+   * member rung. Read through `termsSlotFor`, never directly.
+   */
+  termsOffer?: unknown;
+  termsOfferUnreadable?: boolean;
 }
 
 export interface PowerCircle {

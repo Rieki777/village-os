@@ -153,6 +153,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "proposal.open": "open a governance decision",
   "proposal.decide": "record the outcome of a governance decision and close it",
   "map.viewPeople": "see which named people hold which seats",
+  "terms.read": "read what every seat offers whoever holds it, money included",
   "map.contact": "reach role holders through the contact relay",
   "map.edit": "reshape the land in build mode, as a draft nobody else sees yet",
   "map.publish": "put a drafted map in front of every visitor",

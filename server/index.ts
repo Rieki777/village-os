@@ -126,6 +126,7 @@ import { register as registerVouchRoutes } from "./routes/vouches";
 import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
+import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -10087,9 +10088,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const admin = await isAdmin(req);
     let viewPeople = admin;
     let viewerCapCtx: Awaited<ReturnType<typeof capabilityCtx>> | null = null;
-    if (!viewPeople && viewer) {
+    if (viewer) {
       viewerCapCtx = await capabilityCtx(viewer);
-      viewPeople = hasCapability("map.viewPeople", viewerCapCtx);
+      viewPeople = viewPeople || hasCapability("map.viewPeople", viewerCapCtx);
     }
     if (!viewer && !boolVar("map.public_structure")) {
       return res.status(401).json({ error: "auth_required", message: "Sign in to see the village map" });
@@ -10141,7 +10142,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
 
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
-    const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople), {
+    const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
       route: "map",
       now: new Date(),
       nameOf,
@@ -19491,6 +19492,7 @@ ${inner}
     getPool,
   });
   registerMapChipsRoutes(app, { isAdmin, authedUser, getPool, seasonState, lapseContext });
+  registerSeatPresetsRoutes(app, { isAdmin, authedUser, capabilityCtx, getPool });
 
   // The live org the open map polls for: server/routes/mapOrg.ts.
   registerMapOrgRoutes(app, { authedUser, isAdmin, capabilityCtx, circlesRepo, members, firstName, lapseContext, getPool });
@@ -25498,8 +25500,8 @@ ${inner}
   app.get("/api/org", async (req, res) => {
     const viewer = await authedUser(req);
     const admin = await isAdmin(req);
-    const maySeePeople =
-      admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
+    const viewerCtx = viewer ? await capabilityCtx(viewer) : null;
+    const maySeePeople = admin || (viewerCtx ? hasCapability("map.viewPeople", viewerCtx) : false);
     // The village's own dial. `maySeePeople` still wins, so turning the lock
     // on never takes the people away from the members who were already
     // entitled to them.
@@ -25508,7 +25510,7 @@ ${inner}
     // fields `/api/map` already served reach a caller here only where the map
     // would show them to that same caller (server/lib/seatProjection.ts).
     const tier = orgSeatTier({
-      editing: admin,
+      editing: admin, terms: viewerCtx ? hasCapability("terms.read", viewerCtx) : false,
       viewPeople: maySeePeople,
       peopleArePublic,
       mapStructure: mapShowsStructureTo({

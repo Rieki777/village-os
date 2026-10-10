@@ -36,6 +36,7 @@ import type { FieldSpec } from "./wizardConfig";
 import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from "./pickSources";
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 import SeatSettingsEditor from "./SeatSettingsEditor";
+import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
   key: string;
@@ -82,6 +83,9 @@ export default function WizardField({
   answers?: Record<string, unknown>;
 }) {
   const id = useId();
+  // The village's own presets, offered after the platform's (PR3). Asked only
+  // by a terms field, and a reader without terms.read is answered an empty list.
+  const villagePresets = useVillagePresets(field.kind === "seatSettings");
   const errorId = `${id}-problem`;
   const helpId = `${id}-help`;
   const describedBy = [problem ? errorId : null, field.help ? helpId : null].filter(Boolean).join(" ") || undefined;
@@ -231,7 +235,12 @@ export default function WizardField({
             </p>
           )}
           <div className="mt-3">
-            <SeatSettingsEditor value={value} onChange={onChange} prefillWholeId={field.prefillWhole} />
+            <SeatSettingsEditor
+              value={value}
+              onChange={onChange}
+              prefillWholeId={field.prefillWhole}
+              villagePresets={villagePresets}
+            />
           </div>
           {problem && (
             <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-coral">

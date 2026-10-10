@@ -23,6 +23,7 @@ import { parseSeatSettings } from "@shared/seatSettings";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatTermsDrawer from "@/components/power/SeatTermsDrawer";
 import { loadOrg } from "./pickSources";
+import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 /** `/api/org` through the shared loader. Null while unread, or when it cannot be had. */
 function useOrg(): any | null {
@@ -52,6 +53,7 @@ export default function WizardSeatPreview({
 }) {
   const org = useOrg();
   const season = useSeason();
+  const villagePresets = useVillagePresets();
   const headId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-preview`;
   const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
   const row = roles.find((r) => String(r?.id ?? "") === seatId) ?? null;
@@ -77,7 +79,12 @@ export default function WizardSeatPreview({
           faces="stacked"
           settings={
             parsed ? (
-              <SeatTermsDrawer settings={parsed.ok ? parsed.settings : null} unreadable={!parsed.ok} defaultOpen />
+              <SeatTermsDrawer
+                settings={parsed.ok ? parsed.settings : null}
+                unreadable={!parsed.ok}
+                villagePresets={villagePresets}
+                defaultOpen
+              />
             ) : undefined
           }
         />

@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 176 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 177 open and 41 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 191 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 192 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-217 dials in 33 categories. 128 carry a minimum and a maximum. By type: 91 integer, 20 decimal, 18 percentage, 24 boolean, 29 choice, 34 text, 1 longtext.
+218 dials in 33 categories. 128 carry a minimum and a maximum. By type: 91 integer, 20 decimal, 18 percentage, 24 boolean, 30 choice, 34 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ Each dial also says WHEN a change lands. 191 of them as soon as it is saved, and
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 6 | 5 | 1 |
-| Progression | 28 | 28 | 0 |
+| Progression | 29 | 29 | 0 |
 | Quests | 5 | 5 | 0 |
 | Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
@@ -135,6 +135,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: forum.post | `progression.unlock.forum.post` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: proposal.open | `progression.unlock.proposal.open` | Progression | choice | `co-creator` | the whole village |
 | Stage that unlocks: map.viewPeople | `progression.unlock.map.viewPeople` | Progression | choice | `guest` | the whole village |
+| Stage that unlocks: terms.read | `progression.unlock.terms.read` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: map.contact | `progression.unlock.map.contact` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: stay.member_rate | `progression.unlock.stay.member_rate` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: message.send | `progression.unlock.message.send` | Progression | choice | `member` | the whole village |
@@ -868,7 +869,7 @@ What it may be set to:
 
 ## Progression
 
-28 dials. 28 for the whole village.
+29 dials. 29 for the whole village.
 
 ### How often every seat reopens
 
@@ -1170,6 +1171,36 @@ Which rung of the ladder grants "map.viewPeople" by progression alone. Roles and
 | Key | `progression.unlock.map.viewPeople` |
 | Type | choice, one of a fixed list |
 | Default | `guest` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `visitor` Visitor.
+- `guest` Guest.
+- `immersant` Immersant.
+- `participant` Participant.
+- `member` Member.
+- `contributor` Contributor.
+- `quest-seeker` Quest Seeker.
+- `initiate` Initiate.
+- `co-creator` Co-Creator.
+- `role-holder` Role Holder.
+- `guide` Guide.
+- `sage` Sage.
+- `none` Never by stage (role or badge only).
+
+### Stage that unlocks: terms.read
+
+Which rung of the ladder grants "terms.read" by progression alone. Roles and badges can still grant it at any stage; "never by stage" makes it role/badge-only. This is the constitution's parameter table, so move rungs deliberately.
+
+| Fact | Value |
+| --- | --- |
+| Key | `progression.unlock.terms.read` |
+| Type | choice, one of a fixed list |
+| Default | `member` |
 | Range | one of the choices below |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |

@@ -52,6 +52,7 @@ const role = (over: Partial<OrgRole> = {}): OrgRole => ({
   authority: null, firstYearOutcomes: null, first90DayOutcomes: null,
   locationExpectations: null, compensationReality: null, evidenceRequired: null,
   representsCircle: false, howChosen: null, howChosenGloss: null,
+  termsOffer: null, termsOfferAt: null, termsOfferBy: null,
   ...over,
 });
 
