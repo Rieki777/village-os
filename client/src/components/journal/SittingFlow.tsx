@@ -180,6 +180,7 @@ export default function SittingFlow({
             onText={setText}
             onGoTo={go}
             onReflection={(t) => onChange({ ...sitting, reflection: t })}
+            onKeepPrivate={(keepPrivate) => onChange({ ...sitting, keepPrivate })}
             onSave={onSave}
             saving={saving}
             canSave={canSave}

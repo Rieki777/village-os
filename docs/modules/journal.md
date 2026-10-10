@@ -19,11 +19,20 @@ practices and the questions are platform copy, and the one dial has a working de
 
 ## The privacy line
 
-- **An entry is its author's.** Every read filters on the id from the signed-in member's own token.
-  There is no admin read, no `/api/admin/journal`, and no door that takes another member's id to
-  read with. An admin asking for an entry that is not theirs gets the same 404 as anybody.
-- **The pulse's numbers aggregate; its words never do.** `journal_pulse` holds a number per member
-  per metric per week and no text. The aggregate's SELECT names no `user_id`.
+- **An entry is its author's inside the village.** Every read filters on the id from the signed-in
+  member's own token. There is no admin read, no `/api/admin/journal`, and no door that takes another
+  member's id to read with. An admin asking for an entry that is not theirs gets the same 404 as
+  anybody.
+- **An entry is shared with organisational memory unless the author keeps it private** (Rye,
+  2026-10-05: "All journal entries go to Saberra (if that module is on) unless specifically marked
+  private"). A new entry is `internal` (`JOURNAL_DEFAULT_PRIVACY`); `private` is the author's choice
+  on the review step or later from History, and never crosses. What crosses goes under code-names,
+  with member names swapped out of the prose (ruling 2026-10-02). **The transport is not built**:
+  it waits on a journal write path on the organisational-memory side, so today nothing leaves the
+  village, and the page says "when that is connected" for that reason. The 0227 column's own
+  DEFAULT is still `private`, so every insert names the tier explicitly.
+- **The pulse's numbers aggregate; its words travel with their entry.** `journal_pulse` holds a
+  number per member per metric per week and no text. The aggregate's SELECT names no `user_id`.
 - **Feedback arrives unsigned.** The received read's SELECT does not name `author_id`, so the
   recipient's payload carries no author at any depth. Feedback ids are random, so an id cannot
   date a message either.
