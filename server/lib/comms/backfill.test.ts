@@ -84,9 +84,9 @@ describe.skipIf(!configured)("the address book backfill", () => {
   it("leaves every answer exactly where the source puts it", async () => {
     const deps: PeopleDeps = { getPool: () => pool, members: usersRepo(pool), suppressions: suppressionsPortFor(() => pool) };
     const may = async (email: string, kind: "events" | "paths" | "letters" | "notices") => (await permissionFor(deps, email, kind)).allowed;
-    // A member who chose a path in their account: path emails, from the account itself.
+    // A member: path emails, from the account itself. Joining is choosing the member's path (2026-10-09).
     expect(await may("ada@example.test", "paths")).toBe(true);
-    expect(await may("bo@example.test", "paths")).toBe(false);
+    expect(await may("bo@example.test", "paths")).toBe(true);
     // Nobody is on a letters list they never asked to join.
     for (const email of ["ada@example.test", "bo@example.test", "stranger@example.test", "investor@example.test", "friend@example.test", "housing@example.test"]) {
       expect(await may(email, "letters"), email).toBe(false);

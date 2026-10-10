@@ -18,6 +18,7 @@ import {
 } from "./capabilityRegistry";
 import { ALL_CAPABILITIES, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 
 /**
  * Every file that mounts routes, concatenated, not just the big one.
@@ -106,8 +107,12 @@ describe("the powers registry", () => {
   it("sources its sentences from CAPABILITY_CONSEQUENCE and never re-types them", () => {
     const read = powersForReading(new Map());
     for (const row of read) {
-      expect(row.consequence).toBe(CAPABILITY_CONSEQUENCE[row.capability]);
+      // One power adds the live number its sentence depends on (comms.manage, the months mail is kept).
+      expect(row.consequence).toBe(liveConsequence(row.capability));
+      expect(row.consequence.startsWith(CAPABILITY_CONSEQUENCE[row.capability])).toBe(true);
     }
+    const comms = read.find((r) => r.capability === "comms.manage");
+    expect(comms?.consequence).toMatch(/kept \d+ months? as the village is set now$/);
   });
 
   it("keeps a stable order that owes nothing to who holds what", () => {
