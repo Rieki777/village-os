@@ -21,9 +21,11 @@ import { APPLICATION_CLOSED_NOTE, ballotNamesItsCloser, closeNoteFor, putToVilla
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
-import { createOrgRole } from "../lib/orgChart";
-import { isVetoable } from "../lib/stewardship";
-import { readApplication } from "../repos/seatApplications";
+import { createOrgRole, isLapsed, seatHolder } from "../lib/orgChart";
+import { isVetoable, runTermWatch } from "../lib/stewardship";
+import { runSeasonTurn } from "../lib/seasonTurn";
+import { viewText } from "../lib/alignmentSubjects";
+import { readApplication, seatingsHolding } from "../repos/seatApplications";
 import { register } from "./seatApplications";
 
 const LADDER = ["visitor", "guest", "member"];
@@ -285,5 +287,211 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
     // CONTROL: another member is not held to Ivo's count.
     h.state.viewer = { id: "u-hal", stage: "member" };
     expect((await apply({ seatIds: [await seat("Cap seat 5")] })).status).toBe(201);
+  });
+
+  // ── The seating rules ───────────────────────────────────────────────────────
+
+  const open = async (userId: string, seatId: string) =>
+    (await pool.query<any[]>( // module-review-ok: fixture read of the scratch schema
+      "SELECT id, application_id, term_ends_at, season_id, ended_at FROM org_role_assignments WHERE user_id = ? AND org_role_id = ? AND ended_at IS NULL",
+      [userId, seatId],
+    ))[0];
+  const everyRow = async (userId: string, seatId: string) =>
+    (await pool.query<any[]>( // module-review-ok: fixture read of the scratch schema
+      "SELECT id, application_id, ended_at FROM org_role_assignments WHERE user_id = ? AND org_role_id = ? ORDER BY started_at, id",
+      [userId, seatId],
+    ))[0];
+  const land = async (applicationId: string) => {
+    const ballot = await openBallotFor(pool, "role_application", applicationId);
+    if (!ballot) throw new Error("no open ballot");
+    return h.closers.role_application!.execute!(ballot, "governance");
+  };
+  const lapseAt = (now: Date) => ({ currentSeasonId: CALENDAR.currentSeasonId, cadence: "season_turn" as const, now });
+  const turn = (now: Date) =>
+    runSeasonTurn({
+      getPool: () => pool,
+      notify: async (input: any) => {
+        h.notices.push(input);
+      },
+      notifyAdmins: async () => {},
+      closer: h.closers.role_application!,
+      lapse: () => ({ currentSeasonId: CALENDAR.currentSeasonId, cadence: "season_turn" }),
+      calendar: () => CALENDAR,
+      now: () => now,
+    });
+
+  it("G6: two applies at once for the same seat: one lands, the other is refused", async () => {
+    const s = await seat("Double click seat");
+    const [x, y] = await Promise.all([apply({ seatIds: [s] }), apply({ seatIds: [s] })]);
+    expect([x.status, y.status].sort()).toEqual([201, 409]);
+    const [rows] = await pool.query<any[]>("SELECT id FROM seat_applications WHERE candidate_user_id = 'u-ana' AND JSON_CONTAINS(seat_ids, JSON_QUOTE(?))", [s]); // module-review-ok: fixture read of the scratch schema
+    expect(rows).toHaveLength(1);
+  });
+
+  it("G6: an application adopted for later still holds its seats, so a second one for the same seat is refused", async () => {
+    const s = await seat("Held for later seat");
+    const a = await apply({ seatIds: [s], seasonId: "s-next" });
+    await land(a.body.id);
+    expect((await readApplication(pool, a.body.id))!.status).toBe("adopted");
+    expect(await open("u-ana", s)).toHaveLength(0);
+    const again = await apply({ seatIds: [s] });
+    expect(again.status).toBe(409);
+    expect(again.body.applicationId).toBe(a.body.id);
+  });
+
+  it("G1: a renewal over a lapsed seating seats the member afresh on the new terms and ends the old seating", async () => {
+    const s = await seat("Renewed seat");
+    await seatHolder(pool, s, { userId: "u-ana", seasonId: "s-old", termEndsAt: new Date("2029-03-01T00:00:00Z") });
+    const before = (await open("u-ana", s))[0];
+    // CONTROL: the seating being renewed reads lapsed.
+    expect(isLapsed({ termEndsAt: new Date(before.term_ends_at), seasonId: before.season_id, endedAt: null }, { expiresEachSeason: null }, lapseAt(new Date())).lapsed).toBe(true);
+    const a = await apply({ seatIds: [s] });
+    expect(a.status).toBe(201);
+    await land(a.body.id);
+    const rows = await open("u-ana", s);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].application_id).toBe(a.body.id);
+    expect(rows[0].season_id).toBe("s-now");
+    expect(isLapsed({ termEndsAt: new Date(rows[0].term_ends_at), seasonId: rows[0].season_id, endedAt: null }, { expiresEachSeason: null }, lapseAt(new Date())).lapsed).toBe(false);
+    const history = await everyRow("u-ana", s);
+    expect(history).toHaveLength(2);
+    expect(history[0].ended_at).not.toBeNull();
+  });
+
+  it("G1: the earlier application's terms end when a later one renews the seat, and its history stays", async () => {
+    const s = await seat("Twice applied seat");
+    const first = await apply({ seatIds: [s] });
+    await land(first.body.id);
+    expect(await seatingsHolding(pool, first.body.id)).toHaveLength(1);
+    const second = await apply({ seatIds: [s] });
+    expect(second.status).toBe(201);
+    await land(second.body.id);
+    expect(await seatingsHolding(pool, second.body.id)).toHaveLength(1);
+    expect(await seatingsHolding(pool, first.body.id)).toHaveLength(0);
+    const history = await everyRow("u-ana", s);
+    expect(history.map((r: any) => r.application_id)).toEqual([first.body.id, second.body.id]);
+    const v = await viewText(pool, (await readApplication(pool, first.body.id))!.textId!, "2027-01-01");
+    expect(v?.derived.state).toBe("ended");
+  });
+
+  it("G4 + G2: a holder adopting near a season's end waits for the turn, and the turn seats it in the new season", async () => {
+    const soon = new Date(Date.now() + 2 * DAY);
+    const soonDay = soon.toISOString().slice(0, 10);
+    CALENDAR.seasons = [
+      { id: "s-now", startsOn: "2026-01-01", endsOn: soonDay },
+      { id: "s-next", startsOn: soonDay, endsOn: "2029-12-31" },
+    ] as any;
+    h.state.holders = ["u-hal"];
+    const s = await seat("Edge seat");
+    const a = await apply({ seatIds: [s] });
+    expect(a.body.status).toBe("awaiting-holder");
+    h.state.viewer = { id: "u-hal", stage: "member" };
+    const ad = await h.call("POST", `/api/governance/role-applications/${a.body.id}/adopt`);
+    expect(ad.body.status).toBe("adopted");
+    // Nobody is seated with next season's id while this season runs.
+    expect(await open("u-ana", s)).toHaveLength(0);
+    // CONTROL: the turn before the day seats nobody.
+    await turn(new Date());
+    expect(await open("u-ana", s)).toHaveLength(0);
+    // The season turns.
+    CALENDAR.currentSeasonId = "s-next";
+    const after = new Date(soon.getTime() + 2 * DAY);
+    await turn(after);
+    const rows = await open("u-ana", s);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].season_id).toBe("s-next");
+    expect(rows[0].application_id).toBe(a.body.id);
+    expect(isLapsed({ termEndsAt: new Date(rows[0].term_ends_at), seasonId: rows[0].season_id, endedAt: null }, { expiresEachSeason: null }, lapseAt(after)).lapsed).toBe(false);
+    expect(h.notices.some((x) => x.userId === "u-ana" && x.type === "role_appointed")).toBe(true);
+  });
+
+  it("G2: an application held for a full seat is seated by the turn once a place frees", async () => {
+    const s = await seat("Frees later seat");
+    const a = await apply({ seatIds: [s] });
+    const hal = await seatHolder(pool, s, { userId: "u-hal", seasonId: "s-now", termEndsAt: new Date("2029-06-01T00:00:00Z") });
+    await land(a.body.id);
+    expect((await readApplication(pool, a.body.id))!.status).toBe("held-full");
+    await turn(new Date());
+    expect((await readApplication(pool, a.body.id))!.status).toBe("held-full");
+    await pool.query("UPDATE org_role_assignments SET ended_at = NOW() WHERE id = ?", [hal.assignmentId]); // module-review-ok: fixture, Hal leaves the seat
+    await turn(new Date());
+    expect((await readApplication(pool, a.body.id))!.status).toBe("adopted");
+    expect(await open("u-ana", s)).toHaveLength(1);
+  });
+
+  it("G2: the candidate may withdraw an application adopted for later, before any seating takes it up", async () => {
+    const s = await seat("Later seat");
+    const a = await apply({ seatIds: [s], seasonId: "s-next" });
+    await land(a.body.id);
+    const stored = (await readApplication(pool, a.body.id))!;
+    expect(stored.status).toBe("adopted");
+    const page = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(page.body.application.you.mayWithdraw).toBe(true);
+    const w = await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
+    expect(w.status).toBe(200);
+    expect((await readApplication(pool, a.body.id))!.status).toBe("withdrawn");
+    // And the turn never seats it.
+    CALENDAR.currentSeasonId = "s-next";
+    await turn(new Date("2030-01-05T00:00:00Z"));
+    expect(await open("u-ana", s)).toHaveLength(0);
+  });
+
+  it("G2: the term watch says nothing about a seat whose renewal the village already adopted", async () => {
+    const s = await seat("Renewing seat");
+    const seated = await seatHolder(pool, s, { userId: "u-ana", seasonId: "s-old", termEndsAt: new Date(Date.now() - DAY) });
+    const told: string[] = [];
+    const watch = () =>
+      runTermWatch({
+        pool,
+        notify: async (n) => {
+          told.push(n.dedupeKey);
+          return { fresh: true };
+        },
+        notifyAdmins: async () => {},
+        seatings: [{ id: seated.assignmentId!, orgRoleId: s, holderKind: "member", userId: "u-ana", roleName: "Renewing seat", daysLeft: 0, lapsed: true }],
+        season: { current: { id: "s-now" } },
+      });
+    // CONTROL: with no renewal adopted, the member is told their term ended.
+    await watch();
+    expect(told).toContain(`term-ended:${seated.assignmentId}`);
+    told.length = 0;
+    const a = await apply({ seatIds: [s], seasonId: "s-next" });
+    await land(a.body.id);
+    expect((await readApplication(pool, a.body.id))!.status).toBe("adopted");
+    await watch();
+    expect(told).not.toContain(`term-ended:${seated.assignmentId}`);
+  });
+
+  it("D4: an application left voting under a vote that already passed and landed is adopted by the sweep", async () => {
+    const s = await seat("Stranded vote seat");
+    const a = await apply({ seatIds: [s] });
+    // What an older image leaves: the ballot marked applied with no closer run.
+    await pool.query("UPDATE ballots SET status = 'passed', landing_status = 'applied', closed_at = NOW() WHERE id = ?", [a.body.ballot.id]); // module-review-ok: fixture, the rollback shape
+    expect((await readApplication(pool, a.body.id))!.status).toBe("voting");
+    await turn(new Date());
+    expect((await readApplication(pool, a.body.id))!.status).toBe("adopted");
+    expect(await open("u-ana", s)).toHaveLength(1);
+    // And a vote that failed closes its application the same way.
+    const s2 = await seat("Failed vote seat");
+    const b = await apply({ seatIds: [s2] });
+    await pool.query("UPDATE ballots SET status = 'failed', closed_at = NOW() WHERE id = ?", [b.body.ballot.id]); // module-review-ok: fixture
+    await turn(new Date());
+    expect((await readApplication(pool, b.body.id))!.status).toBe("not-adopted");
+  });
+
+  it("U1: a vote that carried and has not landed reads as carried, keeps its link, and cannot be withdrawn", async () => {
+    const s = await seat("Carried seat");
+    const a = await apply({ seatIds: [s] });
+    await pool.query( // module-review-ok: fixture, a carried vote inside its window
+      "UPDATE ballots SET status = 'passed', landing_status = 'pending', lands_at = ?, closed_at = NOW() WHERE id = ?",
+      [new Date("2029-11-12T12:00:00Z"), a.body.ballot.id],
+    );
+    const page = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(page.body.application.statusWords).toBe("Carried, lands on 12 November 2029");
+    expect(page.body.application.ballotId).toBe(a.body.ballot.id);
+    expect(page.body.application.you.mayWithdraw).toBe(false);
+    const w = await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
+    expect(w.status).toBe(409);
+    expect((await readApplication(pool, a.body.id))!.status).toBe("voting");
   });
 });

@@ -106,7 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
-import { eraseApplicationWords } from "../repos/seatApplications";
+import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
 import { eraseFromAlignments } from "./alignmentErasure";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
@@ -592,6 +592,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "seat-application-words-after-tombstone",
       run: async () => {
         await eraseApplicationWords(pool, target.id);
+        // And nothing they applied for is seated after they have gone.
+        await withdrawUnseatedOf(pool, target.id);
       },
     },
     {

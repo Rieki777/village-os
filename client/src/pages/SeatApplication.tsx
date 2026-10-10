@@ -63,6 +63,9 @@ export const APPLICATION_WORDS = {
   align: "Align for the village",
   putToVillage: "Put it to the village",
   withdraw: "Withdraw my application",
+  withdrawAsk: "Withdraw it? Votes already cast are set aside, and the village is told nothing more about it.",
+  withdrawYes: "Yes, withdraw it",
+  withdrawNo: "Keep it",
   votingLine: "The village is voting on this application.",
   readTheVote: "Read the vote",
   laterLine: "Adopted. The seats are taken up on the first day it names.",
@@ -149,6 +152,8 @@ export default function SeatApplication() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
+  // Withdraw asks once before it acts (red team U1).
+  const [asking, setAsking] = useState(false);
 
   const load = useCallback(async () => {
     const answer = await fetchApplication(id);
@@ -274,7 +279,7 @@ export default function SeatApplication() {
 
             {app.status === "voting" && app.ballotId && (
               <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <p className="text-stone-800">{APPLICATION_WORDS.votingLine}</p>
+                <p className="text-stone-800">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
                 <Link
                   href={`/decisions/${app.ballotId}`}
                   className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
@@ -324,16 +329,41 @@ export default function SeatApplication() {
               </section>
             )}
 
-            {app.you?.mayWithdraw && (
+            {app.you?.mayWithdraw && !asking && (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void act(() => withdrawApplication(app.id), "Withdrawn.")}
+                onClick={() => setAsking(true)}
                 className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
               >
                 <Undo2 className="w-4 h-4" aria-hidden="true" />
                 {APPLICATION_WORDS.withdraw}
               </button>
+            )}
+            {app.you?.mayWithdraw && asking && (
+              <div role="group" aria-label={APPLICATION_WORDS.withdraw} className="rounded-xl border border-stone-300 bg-white p-4">
+                <p className="text-stone-800">{APPLICATION_WORDS.withdrawAsk}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setAsking(false);
+                      void act(() => withdrawApplication(app.id), "Withdrawn.");
+                    }}
+                    className="inline-flex min-h-[44px] items-center rounded-lg bg-coral px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                  >
+                    {APPLICATION_WORDS.withdrawYes}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAsking(false)}
+                    className="inline-flex min-h-[44px] items-center rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  >
+                    {APPLICATION_WORDS.withdrawNo}
+                  </button>
+                </div>
+              </div>
             )}
 
             {said && (

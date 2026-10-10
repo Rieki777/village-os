@@ -143,6 +143,7 @@ import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/gove
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
 import { clockFor, termWarningOpensAt, type CycleClock } from "../../shared/cycleClock";
 import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
+import { adoptedUnseatedSeats } from "../repos/seatRenewals";
 import {
   blankVetoActReason,
   blankVetoActReasonsBy,
@@ -2224,8 +2225,12 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
   // Plane one: org-chart seatings. This plane carries no capabilities, so its
   // copy stays about the mandate and says so rather than making a claim about
   // powers that would be false one plane over.
+  // A seat the village has already renewed (an adopted application waiting
+  // for its first day) is not warned about: its next term is agreed (RC2).
+  const renewing = await adoptedUnseatedSeats(deps.pool).catch(() => new Set<string>());
   for (const a of deps.seatings) {
     if (a.holderKind !== "member" || !a.userId) continue;
+    if (a.orgRoleId && renewing.has(`${a.userId}@${a.orgRoleId}`)) continue;
     const ended = !!a.lapsed;
     if (!ended && !due(a.termEndsAt)) continue;
     const r = await deps.notify({

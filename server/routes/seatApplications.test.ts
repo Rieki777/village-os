@@ -16,7 +16,8 @@
  *   - the closer re-reads the stored row and COUNTS THE SEATS AGAIN at landing,
  *     holding the whole application (`held-full`) when a place filled while the
  *     vote ran, with a control that seats when the place is still free;
- *   - a candidate already seated keeps that seating, which takes the terms;
+ *   - a candidate already seated is renewed: the old seating ends and a new
+ *     one carries the application's terms and term (red team G1);
  *   - the ballot's title and document carry no amount, currency, candidate
  *     name, note or hash, against a control fixture that carries every one;
  *   - withdrawing while voting withdraws the ballot;
@@ -403,7 +404,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect((await readApplication(pool, a.body.id))).toMatchObject({ status: "adopted", adoptedVia: "ballot" });
   });
 
-  it("a candidate already seated keeps that seating, and the seating takes the terms", async () => {
+  it("a candidate already seated is renewed: the old seating ends and a new one carries the terms", async () => {
     const s = await seat("Already mine");
     const first = await seatHolder(pool, s, { userId: "u-ana", seasonId: "s-now", termEndsAt: new Date("2029-03-01T00:00:00Z") });
     // The seat's one place is theirs, so the application is not refused as full.
@@ -412,10 +413,11 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     await land(a.body.id);
     const rows = await seatingsOf("u-ana", s);
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe(first.assignmentId);
+    expect(rows[0].id).not.toBe(first.assignmentId);
     expect(rows[0].application_id).toBe(a.body.id);
-    // The existing term is untouched.
-    expect(new Date(rows[0].term_ends_at).toISOString()).toBe("2029-03-01T00:00:00.000Z");
+    // The application's term, not the old seating's (red team G1).
+    expect(new Date(rows[0].term_ends_at).toISOString()).toBe((await readApplication(pool, a.body.id))!.termEndsAt.toISOString());
+    expect(new Date(rows[0].term_ends_at).toISOString()).not.toBe("2029-03-01T00:00:00.000Z");
   });
 
   it("one application over three seats seats all three on the same term", async () => {

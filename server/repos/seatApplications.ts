@@ -248,6 +248,20 @@ export async function eraseApplicationWords(db: Db, candidateUserId: string): Pr
   return Number(r?.affectedRows ?? 0);
 }
 
+/**
+ * A departed member's applications that no seating took up are withdrawn, so
+ * the season turn never seats somebody who has gone (red team G2). Adopted
+ * applications already seated keep their status: they are the record.
+ */
+export async function withdrawUnseatedOf(db: Db, candidateUserId: string): Promise<number> {
+  const [r]: any = await db.query(
+    "UPDATE seat_applications a SET status = 'withdrawn', decided_at = COALESCE(decided_at, UTC_TIMESTAMP()) WHERE candidate_user_id = ? " +
+      "AND (status IN ('awaiting-holder','voting','held-full') OR (status = 'adopted' AND NOT EXISTS (SELECT 1 FROM org_role_assignments s WHERE s.application_id = a.id)))",
+    [candidateUserId],
+  );
+  return Number(r?.affectedRows ?? 0);
+}
+
 // ── Terms on offer, for the erasure step ───────────────────────────────────
 
 /** Seats whose terms on offer mention a phrase. */
@@ -320,13 +334,15 @@ export interface LiveSeating {
   termEndsAt: Date | null;
   startedAt: Date | null;
   applicationId: string | null;
+  focus?: string | null;
+  note?: string | null;
 }
 
 /** The live seatings on these seats, locked when handed a transaction's connection. */
 export async function liveSeatingsOf(db: Db, seatIds: readonly string[], lock = false): Promise<LiveSeating[]> {
   if (seatIds.length === 0) return [];
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT id, org_role_id, user_id, season_id, term_ends_at, started_at, application_id FROM org_role_assignments " +
+    "SELECT id, org_role_id, user_id, season_id, term_ends_at, started_at, application_id, focus, note FROM org_role_assignments " +
       `WHERE ended_at IS NULL AND org_role_id IN (${seatIds.map(() => "?").join(",")})${lock ? " FOR UPDATE" : ""}`,
     [...seatIds],
   );
@@ -338,6 +354,8 @@ export async function liveSeatingsOf(db: Db, seatIds: readonly string[], lock = 
     termEndsAt: instant(r.term_ends_at),
     startedAt: instant(r.started_at),
     applicationId: r.application_id ?? null,
+    focus: r.focus ?? null,
+    note: r.note ?? null,
   }));
 }
 
@@ -358,9 +376,103 @@ export async function seatingsHolding(db: Db, applicationId: string): Promise<Li
   }));
 }
 
-/** A member already seated takes the application's terms on their existing seating. */
-export async function linkSeating(db: Db, assignmentId: string, applicationId: string): Promise<void> {
-  await db.query("UPDATE org_role_assignments SET application_id = ? WHERE id = ? AND ended_at IS NULL", [applicationId, assignmentId]);
+/**
+ * A RENEWAL ENDS THE SEATING IT REPLACES (red team G1). A member already
+ * seated who is adopted again is seated afresh on the new application's
+ * terms, and the old seating ends here, inside the adoption's transaction.
+ * The old seating keeps its own application id, so the earlier terms read
+ * as ended (their seating ended) and the history of which terms the member
+ * held, and when, stays on the rows. Overwriting the id instead lost it, and
+ * left the season and the term's end as they were, so a lapsed seating
+ * stayed lapsed under terms that read in force.
+ */
+export async function endSeatingForRenewal(db: Db, assignmentId: string, applicationId: string): Promise<boolean> {
+  const [r]: any = await db.query(
+    "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE id = ? AND ended_at IS NULL",
+    [`Renewed on the terms of ${applicationId}.`.slice(0, 255), assignmentId],
+  );
+  return Number(r?.affectedRows ?? 0) > 0;
+}
+
+/** How many seatings, open or ended, ever held an application's terms. Zero means it was never seated. */
+export async function seatingsEverHolding(db: Db, applicationId: string): Promise<number> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT COUNT(*) AS n FROM org_role_assignments WHERE application_id = ?", [applicationId]);
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** The statuses that hold a seat for a member's application: a second one for the same seat waits. */
+export const HOLDING_STATUSES = ["awaiting-holder", "voting", "held-full"] as const;
+
+/**
+ * Lock the seats, then read the member's applications still holding any of
+ * them (red team G6). Inside the transaction that writes the new
+ * application: the seat rows are locked in id order first, so two applies
+ * for the same seat queue on the lock, and the second reads the first's row
+ * with a locking read once it commits. An application adopted and not yet
+ * seated holds its seats too.
+ */
+export async function holdingApplicationsLocked(conn: PoolConnection, candidateUserId: string, seatIds: readonly string[]): Promise<StoredApplication[]> {
+  if (seatIds.length > 0) {
+    const sorted = [...seatIds].sort();
+    await conn.query(`SELECT id FROM org_roles WHERE id IN (${sorted.map(() => "?").join(",")}) ORDER BY id FOR UPDATE`, sorted);
+  }
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications a WHERE candidate_user_id = ? AND (status IN (${HOLDING_STATUSES.map(() => "?").join(",")}) ` +
+      "OR (status = 'adopted' AND NOT EXISTS (SELECT 1 FROM org_role_assignments s WHERE s.application_id = a.id))) FOR UPDATE",
+    [candidateUserId, ...HOLDING_STATUSES],
+  );
+  return rows.map(rowToApplication).filter((a) => a.seatIds.some((sid) => seatIds.includes(sid)));
+}
+
+/**
+ * The applications the season turn may seat (red team G2): adopted and never
+ * seated, with their first day reached or unset, and every one held because
+ * a seat was full.
+ */
+export async function applicationsToSeat(db: Db, now: Date): Promise<StoredApplication[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications a WHERE (status = 'held-full' OR (status = 'adopted' AND (starts_at IS NULL OR starts_at <= ?))) ` +
+      "AND NOT EXISTS (SELECT 1 FROM org_role_assignments s WHERE s.application_id = a.id) ORDER BY created_at, id LIMIT 500",
+    [now],
+  );
+  return rows.map(rowToApplication);
+}
+
+/** Applications waiting on a vote, for the sweep that finds one whose vote already ended (red team D4). */
+export async function votingApplications(db: Db): Promise<StoredApplication[]> {
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM seat_applications WHERE status = 'voting' ORDER BY created_at, id LIMIT 500`);
+  return rows.map(rowToApplication);
+}
+
+/** The newest ballot on an application, in any state. */
+export interface ApplicationBallot {
+  id: string;
+  applicationId: string;
+  status: string;
+  landingStatus: string | null;
+  landsAt: Date | null;
+}
+
+/** The newest `role_application` ballot on each of these applications, in any state (red team U1, D4, D8). */
+export async function latestBallotsFor(db: Db, applicationIds: readonly string[]): Promise<Map<string, ApplicationBallot>> {
+  const out = new Map<string, ApplicationBallot>();
+  if (applicationIds.length === 0) return out;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, subject_ref, status, landing_status, lands_at FROM ballots WHERE subject_type = 'role_application' " +
+      `AND subject_ref IN (${applicationIds.map(() => "?").join(",")}) ORDER BY opens_at, id`,
+    [...applicationIds],
+  );
+  // Oldest first, so the newest of each wins.
+  for (const r of rows as any[]) {
+    out.set(String(r.subject_ref), {
+      id: String(r.id),
+      applicationId: String(r.subject_ref),
+      status: String(r.status),
+      landingStatus: r.landing_status === null || r.landing_status === undefined ? null : String(r.landing_status),
+      landsAt: instant(r.lands_at),
+    });
+  }
+  return out;
 }
 
 /** Run `work` inside one transaction on one connection: commit when it returns, roll back when it throws. */

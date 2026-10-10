@@ -107,16 +107,23 @@ import {
 } from "../lib/alignmentSubjects";
 import { confirmedWithin } from "../lib/identityConfirm";
 import {
+  holdingApplicationsLocked,
   inApplicationTransaction,
   insertApplication,
+  latestBallotsFor,
   listApplications,
   liveSeatingsOf,
   openApplicationsOf,
   readApplication,
+  seatingsEverHolding,
   seatsForUpdate,
   setStatus,
+  type ApplicationBallot,
   type StoredApplication,
 } from "../repos/seatApplications";
+import { registerJob } from "../lib/scheduler";
+import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
+import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
 import { freezeSeatTerm } from "../repos/ballotSeatTerms";
 
@@ -156,6 +163,7 @@ type Deps = Pick<
 };
 
 const MEMBERS_ONLY = { error: "auth_required", message: "Members read seat applications." };
+const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these seats. Withdraw it first, or wait for it.";
 
 /** A seat's term as a civil date, from the terms' own length when no date is written. */
 function requestedEndsOn(settings: SeatSettings, startsAt: Date, timezone: string): string | null {
@@ -174,6 +182,12 @@ export function register(app: Express, deps: Deps): void {
 
   const closer = seatApplicationCloser({ getPool, notify, notifyAdmins, lapse, calendar: seatCalendar });
   deps.closers[ROLE_APPLICATION] = closer;
+
+  // The season turn (RC2, red team G2 and D4): hourly, and on every Season tab
+  // save. The pool is read when it runs, never at registration.
+  const turn = () => runSeasonTurn({ getPool, notify, notifyAdmins, closer, lapse, calendar: seatCalendar });
+  registerJob(SEASON_TURN_JOB, SEASON_TURN_EVERY_MS, turn);
+  whenSeasonsSaved(turn);
 
   /** Who adopts seats today, and why: the raised-hand door's one rule over `org.seat`. */
   async function adoptionRule(viewer: any) {
@@ -246,12 +260,40 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
+  /**
+   * May the candidate still take this application back? While it waits on a
+   * holder, while its vote is OPEN, while it is held for a full seat, and
+   * while it is adopted for a later day and no seating has taken it up (red
+   * team G2). Never once its vote has CARRIED (red team U1): the village
+   * decided, and withdrawing then would silently undo a carried vote.
+   */
+  async function withdrawable(a: StoredApplication, ballot: ApplicationBallot | null): Promise<boolean> {
+    if (a.status === "awaiting-holder" || a.status === "held-full") return true;
+    if (a.status === "voting") return !ballot || ballot.status === "open";
+    if (a.status === "adopted") return (await seatingsEverHolding(getPool(), a.id)) === 0;
+    return false;
+  }
+
+  /** "Carried, lands on 12 November 2026" for a vote that carried and has not landed yet (red team U1). */
+  function statusWordsOf(a: StoredApplication, ballot: ApplicationBallot | null, tz: string): string {
+    if (a.status === "voting" && ballot && ballot.status === "passed") {
+      return ballot.landsAt ? `Carried, lands on ${civilDayWords(civilDateKey(ballot.landsAt, tz))}` : "Carried, and waiting to land";
+    }
+    return STATUS_WORDS[a.status];
+  }
+
   /** An application as a member reads it, with what this reader may do with it. */
-  async function served(a: StoredApplication, viewerId: string | null, rule: Awaited<ReturnType<typeof adoptionRule>> | null) {
+  async function served(
+    a: StoredApplication,
+    viewerId: string | null,
+    rule: Awaited<ReturnType<typeof adoptionRule>> | null,
+    known?: { ballot: ApplicationBallot | null },
+  ) {
     const pool = getPool();
     const seats = await seatsForUpdate(pool, a.seatIds);
     const tz = seatCalendar().timezone || "UTC";
-    const ballot = a.status === "voting" ? await openBallotFor(pool, ROLE_APPLICATION, a.id) : null;
+    // The newest ballot in ANY state (red team U1): a carried vote keeps its link.
+    const ballot = known ? known.ballot : ((await latestBallotsFor(pool, [a.id])).get(a.id) ?? null);
     const isCandidate = viewerId === a.candidateUserId;
     const awaiting = a.status === "awaiting-holder";
     const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? id);
@@ -259,7 +301,8 @@ export function register(app: Express, deps: Deps): void {
       id: a.id,
       href: applicationHref(a.id),
       status: a.status,
-      statusWords: STATUS_WORDS[a.status],
+      statusWords: statusWordsOf(a, ballot, tz),
+      carried: a.status === "voting" && ballot?.status === "passed",
       candidate: { id: a.candidateUserId, name: await nameOf(a.candidateUserId) },
       seats: a.seatIds.map((id) => {
         const s = seats.find((x) => x.id === id);
@@ -273,6 +316,7 @@ export function register(app: Express, deps: Deps): void {
       adoptedVia: a.adoptedVia,
       adoptedBy: a.adoptedVia === "holder" ? await nameOf(a.adoptedRef) : null,
       ballotId: ballot?.id ?? (a.adoptedVia === "ballot" ? a.adoptedRef : null),
+      decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, tz) : null,
       decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       createdAt: a.createdAt ? a.createdAt.toISOString() : null,
       alignment: await alignmentOf(a, viewerId, seatNames),
@@ -282,7 +326,7 @@ export function register(app: Express, deps: Deps): void {
               isCandidate,
               mayAdopt: awaiting && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
               mayPutToVillage: awaiting && putToVillageRefusal(rule, viewerId) === null,
-              mayWithdraw: isCandidate && (OPEN_STATUSES.includes(a.status) || a.status === "held-full"),
+              mayWithdraw: isCandidate && (await withdrawable(a, ballot)),
               holdsThePower: rule.who === "live-holders" && rule.holders.includes(viewerId),
             },
           }
@@ -405,12 +449,7 @@ export function register(app: Express, deps: Deps): void {
       }
     }
     const pending = (await openApplicationsOf(pool, userId)).find((a) => a.seatIds.some((s) => input.seatIds.includes(s)));
-    if (pending) {
-      return res.status(409).json({
-        error: "You already have an application waiting on a decision for one of these seats. Withdraw it first, or wait for it.",
-        applicationId: pending.id,
-      });
-    }
+    if (pending) return res.status(409).json({ error: PENDING_MESSAGE, applicationId: pending.id });
 
     // The road, decided now.
     const rule = await adoptionRule(user);
@@ -462,6 +501,16 @@ export function register(app: Express, deps: Deps): void {
     const stored = { ...row, textId: prepared.text.id, textHash: prepared.text.contentHash };
     /** The application, its text, its parties and the candidate's alignment: one transaction, so the candidate never clicks twice. */
     const writeAll = async (conn: PoolConnection, status: "awaiting-holder" | "voting") => {
+      /*
+       * ONE APPLICATION PER SEAT AT A TIME, UNDER THE LOCK (red team G6). The
+       * check above reads without a lock, so two applies at once both passed
+       * it and both landed, and the second took the seating from the first.
+       * Here the seat rows are locked and the member's applications holding
+       * any of them (held-full and adopted-not-yet-seated included) are read
+       * with a locking read, in the transaction that writes this one.
+       */
+      const holding = await holdingApplicationsLocked(conn, userId, input.seatIds);
+      if (holding.length > 0) throw Object.assign(new Error(PENDING_MESSAGE), { code: "SA_PENDING", applicationId: holding[0].id });
       await insertApplication(conn, { ...stored, status });
       await writePreparedText(conn, prepared);
       await recordAlignment(conn, {
@@ -475,8 +524,23 @@ export function register(app: Express, deps: Deps): void {
       });
     };
 
+    /** A refusal the locked check threw, or a write that lost a race with a twin, answered as a 409. */
+    const raced = (e: any) => {
+      if (e?.code === "SA_PENDING") return { status: 409, body: { error: PENDING_MESSAGE, applicationId: e.applicationId } };
+      if (e?.code === "ER_LOCK_DEADLOCK" || e?.errno === 1213 || e?.errno === 1020) {
+        return { status: 409, body: { error: "Another application for these seats was written at the same moment. Read your applications, then try again." } };
+      }
+      return null;
+    };
+
     if (path === "holder") {
-      await inApplicationTransaction(pool, (conn) => writeAll(conn, "awaiting-holder"));
+      try {
+        await inApplicationTransaction(pool, (conn) => writeAll(conn, "awaiting-holder"));
+      } catch (e) {
+        const r = raced(e);
+        if (r) return res.status(r.status).json(r.body);
+        throw e;
+      }
       for (const holder of rule.holders.filter((h) => h !== userId)) {
         await notify({
           userId: holder,
@@ -503,7 +567,14 @@ export function register(app: Express, deps: Deps): void {
         message: `You have opened ${BALLOTS_PER_DAY} votes on applications today, which is the most one day holds. Apply again tomorrow.`,
       });
     }
-    const opened = await openVote(row, userId, (conn) => writeAll(conn, "voting"));
+    let opened: Awaited<ReturnType<typeof openVote>>;
+    try {
+      opened = await openVote(row, userId, (conn) => writeAll(conn, "voting"));
+    } catch (e) {
+      const r = raced(e);
+      if (r) return res.status(r.status).json(r.body);
+      throw e;
+    }
     if (!opened.ok) return res.status(opened.status).json({ error: opened.error });
     res.status(201).json({
       success: true,
@@ -522,7 +593,8 @@ export function register(app: Express, deps: Deps): void {
     if (!viewer) return;
     const rule = await adoptionRule(viewer);
     const all = await listApplications(getPool());
-    res.json({ applications: await Promise.all(all.map((a) => served(a, String(viewer.id), rule))) });
+    const ballots = await latestBallotsFor(getPool(), all.map((a) => a.id));
+    res.json({ applications: await Promise.all(all.map((a) => served(a, String(viewer.id), rule, { ballot: ballots.get(a.id) ?? null }))) });
   });
 
   app.get("/api/governance/role-applications/:id", async (req, res) => {
@@ -628,7 +700,12 @@ export function register(app: Express, deps: Deps): void {
     const a = APPLICATION_ID.test(id) ? await readApplication(pool, id) : null;
     if (!a) return res.status(404).json({ error: "There is no application by that id." });
     if (a.candidateUserId !== userId) return res.status(403).json({ error: "Only the member who applied can withdraw an application." });
-    if (!OPEN_STATUSES.includes(a.status) && a.status !== "held-full") {
+    const latest = (await latestBallotsFor(pool, [a.id])).get(a.id) ?? null;
+    if (a.status === "voting" && latest && latest.status === "passed") {
+      // The village carried it (red team U1). Withdrawing now would undo a carried vote with nobody told.
+      return res.status(409).json({ error: "The village carried this application, so it can no longer be withdrawn. It lands when its window ends.", status: a.status, carried: true });
+    }
+    if (!(await withdrawable(a, latest))) {
       return res.status(409).json({ error: `This application is ${STATUS_WORDS[a.status].toLowerCase()}, so there is nothing to withdraw.`, status: a.status });
     }
     if (a.status === "voting") {
@@ -653,6 +730,8 @@ export function register(app: Express, deps: Deps): void {
     }
     const moved = await setStatus(pool, a.id, [a.status], "withdrawn", { decided: true });
     if (!moved) return res.status(409).json({ error: "This application moved a moment ago. Read it again." });
+    // An adopted application's terms were aligned by both parties; withdrawn, they read as ended.
+    if (a.textId) await settleText(settleDeps, a.textId);
     res.json({ success: true, status: "withdrawn" });
   });
 }

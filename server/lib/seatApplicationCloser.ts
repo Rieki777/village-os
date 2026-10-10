@@ -25,16 +25,24 @@
  * to be reassigned and does not count against the place, the rule
  * `seatState` already reads.
  *
- * A CANDIDATE ALREADY SEATED in one of the seats keeps that seating, and the
- * seating takes the application's terms (`application_id`). Nothing about the
- * existing term changes.
+ * A CANDIDATE ALREADY SEATED in one of the seats is RENEWED (red team G1): the
+ * existing seating ends, and a new one starts on this application's terms,
+ * season and term end, keeping the old seating's focus and note. The old row
+ * keeps the application id it held, so the earlier terms read as ended and
+ * the record of who held what on which terms stays whole. Writing the new id
+ * over the old row lost that record and left the season and the end as they
+ * were, so a lapsed seating stayed lapsed under terms reading in force.
  *
  * ── AN APPLICATION FOR LATER IS ADOPTED AND SEATS NOBODY ───────────────────
  *
  * `starts_at` in the future means next season's seats. A seating made today
  * would carry next season's id and read as lapsed in this one (`isLapsed`), so
- * adoption records `adopted` and stops. `seatFromApplication`, exported for
- * the job that turns the season, seats it on the day through the same count.
+ * adoption records `adopted` and stops. `seatFromApplication`, run by the
+ * hourly `season-plan-turn` job (server/lib/seasonTurn.ts), seats it on the
+ * day through the same count. An application whose term sits in a season that
+ * has not begun is later in the same way, whatever its `starts_at` says (red
+ * team G4): a holder adopting it near a season's end would otherwise seat it
+ * now with next season's id, lapsed from the moment it was made.
  *
  * NO PUBLIC EVENT AND NO ACTIVITY LINE. Neither `recordEvent` nor
  * `addActivity` is called anywhere in this feature: the row is the record, and
@@ -50,11 +58,11 @@ import { isLapsed, seatHolder, type LapseContext } from "./orgChart";
 import { ensureApplicationText, recordVillageAlignment, settleText } from "./alignmentSubjects";
 import { civilDateKey } from "../../shared/lunar";
 import {
+  endSeatingForRenewal,
   inApplicationTransaction,
-  linkSeating,
   liveSeatingsOf,
   readApplication,
-  seatingsHolding,
+  seatingsEverHolding,
   seatsForUpdate,
   setStatus,
   type StoredApplication,
@@ -75,8 +83,8 @@ export interface Adoption {
 }
 
 export type SeatingOutcome =
-  /** Seated now. `seated` are new seatings, `linked` existing ones that took the terms. */
-  | { kind: "seated"; seated: Array<{ assignmentId: string; seatId: string }>; linked: string[] }
+  /** Seated now. `seated` are the new seatings; `linked` names the seats where an existing seating was renewed. */
+  | { kind: "seated"; seated: Array<{ assignmentId: string; seatId: string; renewed: boolean }>; linked: string[] }
   /** Adopted, and the seats wait for `starts_at`. */
   | { kind: "later" }
   /** A seat had no free place. Nobody was seated. */
@@ -85,6 +93,24 @@ export type SeatingOutcome =
   | { kind: "cannot"; why: string }
   /** The application was not where this door expected it. Another door got there first. */
   | { kind: "lost"; status: ApplicationStatus | null };
+
+/**
+ * The first instant an application's seats may be taken up: its own
+ * `starts_at`, or, when its term sits in a season that begins later, that
+ * season's first day (red team G4). Null means now.
+ */
+export function firstDayOf(app: Pick<StoredApplication, "startsAt" | "termSeasonId">, calendar: SeatCalendar): Date | null {
+  const tz = calendar.timezone || "UTC";
+  const season = app.termSeasonId ? calendar.seasons.find((s) => s.id === app.termSeasonId) : null;
+  const begins = season?.startsOn ? civilDateInstant(season.startsOn, tz) : null;
+  if (app.startsAt && begins) return app.startsAt.getTime() > begins.getTime() ? app.startsAt : begins;
+  return app.startsAt ?? begins ?? null;
+}
+
+const notYet = (app: Pick<StoredApplication, "startsAt" | "termSeasonId">, ctx: SeatingContext) => {
+  const first = firstDayOf(app, ctx.calendar);
+  return !!first && first.getTime() > ctx.now.getTime();
+};
 
 /** The term a seating takes, following the season's end when the application said it would. */
 function termAtSeating(app: StoredApplication, calendar: SeatCalendar, now: Date): { ok: true; endsAt: Date } | { ok: false; why: string } {
@@ -114,7 +140,7 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
   const lapse = { ...ctx.lapse, now: ctx.now };
 
   const full: string[] = [];
-  const toLink: string[] = [];
+  const toRenew: Array<{ seatId: string; old: (typeof live)[number] }> = [];
   const toSeat: string[] = [];
   for (const seatId of app.seatIds) {
     const seat = seats.find((s) => s.id === seatId);
@@ -124,7 +150,8 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
     const here = live.filter((l) => l.orgRoleId === seatId);
     const mine = here.find((l) => l.userId === app.candidateUserId);
     if (mine) {
-      toLink.push(mine.id);
+      // Already on this application's terms: nothing to do for this seat.
+      if (mine.applicationId !== app.id) toRenew.push({ seatId, old: mine });
       continue;
     }
     const current = here.filter((l) => !isLapsed({ ...l, endedAt: null }, seat, lapse).lapsed).length;
@@ -133,9 +160,11 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
   }
   if (full.length > 0) return { kind: "held-full", full };
 
-  for (const id of toLink) await linkSeating(conn, id, app.id);
-  const seated: Array<{ assignmentId: string; seatId: string }> = [];
-  for (const seatId of toSeat) {
+  const seated: Array<{ assignmentId: string; seatId: string; renewed: boolean }> = [];
+  const seatOne = async (seatId: string, renewed: (typeof toRenew)[number] | null) => {
+    if (renewed && !(await endSeatingForRenewal(conn, renewed.old.id, app.id))) {
+      throw new Error(`the seating ${renewed.old.id} renewed by ${app.id} ended under this transaction`);
+    }
     const r = await seatHolder(conn, seatId, {
       userId: app.candidateUserId,
       seasonId: app.termSeasonId,
@@ -143,13 +172,17 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
       termFollowsSeason: app.termFollowsSeason,
       grantedBy,
       applicationId: app.id,
+      focus: renewed?.old.focus ?? null,
+      note: renewed?.old.note ?? null,
     });
     // The seats and their seatings are locked above, so a refusal here is a
     // write this transaction cannot explain. Throwing rolls back every seat.
     if (!r.ok || !r.assignmentId) throw new Error(`seating ${seatId} for ${app.id} was refused: ${r.reason ?? "no reason"}`);
-    seated.push({ assignmentId: r.assignmentId, seatId });
-  }
-  return { kind: "seated", seated, linked: toLink };
+    seated.push({ assignmentId: r.assignmentId, seatId, renewed: !!renewed });
+  };
+  for (const r of toRenew) await seatOne(r.seatId, r);
+  for (const seatId of toSeat) await seatOne(seatId, null);
+  return { kind: "seated", seated, linked: toRenew.map((r) => r.seatId) };
 }
 
 /**
@@ -195,7 +228,7 @@ export async function adoptApplication(
         tz,
       );
 
-    if (app.startsAt && app.startsAt.getTime() > ctx.now.getTime()) {
+    if (notYet(app, ctx)) {
       await setStatus(conn, id, from, "adopted", adopted);
       await villageAligns();
       return { outcome: { kind: "later" }, app, textId: text.id };
@@ -223,11 +256,16 @@ export async function seatFromApplication(pool: Pool, id: string, ctx: SeatingCo
   return inApplicationTransaction(pool, async (conn) => {
     const app = await readApplication(conn, id, true);
     if (!app || (app.status !== "adopted" && app.status !== "held-full")) return { outcome: { kind: "lost", status: app?.status ?? null }, app };
-    if (app.startsAt && app.startsAt.getTime() > ctx.now.getTime()) return { outcome: { kind: "later" }, app };
-    if ((await seatingsHolding(conn, id)).length > 0) return { outcome: { kind: "lost", status: app.status }, app };
+    if (notYet(app, ctx)) return { outcome: { kind: "later" }, app };
+    // Seated once is seated: a seating that has since ENDED (an unseat, an
+    // erasure) is not re-made by the turn. Only a seating ever made counts.
+    if ((await seatingsEverHolding(conn, id)) > 0) return { outcome: { kind: "lost", status: app.status }, app };
     const outcome = await seatInTransaction(conn, app, ctx, app.adoptedRef ?? app.id);
     if (outcome.kind === "seated" && app.status === "held-full") await setStatus(conn, id, ["held-full"], "adopted");
     if (outcome.kind === "held-full" && app.status === "adopted") await setStatus(conn, id, ["adopted"], "held-full");
+    // A term that ran out before its seats could be taken up closes the
+    // application, so the turn does not try it again every hour.
+    if (outcome.kind === "cannot") await setStatus(conn, id, [app.status], "not-adopted", { decided: true });
     return { outcome, app };
   });
 }
@@ -269,7 +307,8 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
     for (const s of outcome.seated) {
       const name = names[app.seatIds.indexOf(s.seatId)] ?? s.seatId;
       // The same type and key grammar every seating door uses, keyed on this seating.
-      await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title: `You were seated as ${name}`, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
+      const title = s.renewed ? `Your seat as ${name} was renewed on your new terms` : `You were seated as ${name}`;
+      await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
     }
   }
   if (outcome.kind === "held-full") {

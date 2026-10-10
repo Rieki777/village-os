@@ -36,6 +36,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { seasonDocumentToStore, suggestNextSeasonDates } from "../lib/seasonCalendar";
 import { restampSeatsToCalendar, type RestampDeps } from "../lib/seatTermLanding";
 import { villageClock } from "../lib/stewardship";
+import { seasonSaved } from "../lib/seasonTurn";
 import { planTargetAt, planWindowPayload } from "../../shared/seasonPlans";
 
 type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
@@ -139,6 +140,8 @@ export function register(app: Express, deps: Deps): void {
         error: "The season list saved, and moving the seats that end with a season failed. Save again to retry moving them.",
       });
     }
+    // Seat applications waiting for the turn are seated now, not up to an hour later (season plans RC2).
+    await seasonSaved();
     res.json({ success: true, ...after, seatsMoved });
   });
 }

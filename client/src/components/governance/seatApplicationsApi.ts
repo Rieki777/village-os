@@ -25,7 +25,11 @@ export interface ServedApplication {
   adoptedVia: "holder" | "ballot" | null;
   adoptedBy: string | null;
   ballotId: string | null;
+  /** True when the village's vote carried and the decision has not landed yet. */
+  carried?: boolean;
   decidedAt: string | null;
+  /** The day it was decided, in the village's calendar. */
+  decidedOn?: string | null;
   createdAt: string | null;
   /** The words the parties align with, and where each party stands (PR5). */
   alignment?: ServedAlignment;

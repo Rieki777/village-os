@@ -151,6 +151,28 @@ describe("a member reading one", () => {
     expect(screen.getByRole("button", { name: "Withdraw my application" })).toBeTruthy();
   });
 
+  it("asks once before withdrawing, and withdraws only on the yes (red team U1)", async () => {
+    answer = () =>
+      json({ application: { ...SERVED, you: { isCandidate: true, mayAdopt: false, mayPutToVillage: false, mayWithdraw: true, holdsThePower: false } } });
+    render(<SeatApplication />);
+    fireEvent.click(await screen.findByRole("button", { name: "Withdraw my application" }));
+    expect(asked.some((a) => a.endsWith("/withdraw"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(asked.some((a) => a.endsWith("/withdraw"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw my application" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, withdraw it" }));
+    await waitFor(() => expect(asked).toContain(`POST /api/governance/role-applications/${ID}/withdraw`));
+  });
+
+  it("says a carried vote is carried and keeps the link to it (red team U1)", async () => {
+    answer = () =>
+      json({ application: { ...SERVED, status: "voting", statusWords: "Carried, lands on 12 November 2029", carried: true, ballotId: "bal-1", you: { isCandidate: true, mayAdopt: false, mayPutToVillage: false, mayWithdraw: false, holdsThePower: false } } });
+    render(<SeatApplication />);
+    expect(await screen.findByText("Carried, lands on 12 November 2029.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Read the vote" }).getAttribute("href")).toBe("/decisions/bal-1");
+    expect(screen.queryByRole("button", { name: "Withdraw my application" })).toBeNull();
+  });
+
   it("CONTROL: a member who holds no power gets neither door", async () => {
     answer = () =>
       json({ application: { ...SERVED, you: { isCandidate: false, mayAdopt: false, mayPutToVillage: false, mayWithdraw: false, holdsThePower: false } } });
