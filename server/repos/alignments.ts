@@ -218,6 +218,13 @@ export async function readText(db: Db, id: string): Promise<StoredText | null> {
   return rows[0] ? rowToText(rows[0]) : null;
 }
 
+/** Several texts by id, in one read. */
+export async function readTexts(db: Db, ids: readonly string[]): Promise<StoredText[]> {
+  if (ids.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${TEXT_COLUMNS} FROM alignment_texts WHERE id IN (${ids.map(() => "?").join(",")})`, [...ids]);
+  return rows.map(rowToText);
+}
+
 /** Every version of a subject's text, oldest first. */
 export async function textsForSubject(db: Db, subjectType: string, subjectRef: string): Promise<StoredText[]> {
   const [rows] = await db.query<RowDataPacket[]>(
@@ -290,19 +297,43 @@ export async function sealsOf(db: Db, textIds: readonly string[]): Promise<Store
  * tens of these a season.
  */
 export async function textsToSettle(db: Db, recentDays = 400): Promise<string[]> {
+  // A text whose application was withdrawn or not adopted can never be sealed
+  // or come into force, so the sweep does not read it again (red team D9).
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT t.id FROM alignment_texts t LEFT JOIN alignment_seals s ON s.text_id = t.id " +
-      "WHERE s.text_id IS NULL OR t.created_at >= UTC_TIMESTAMP() - INTERVAL ? DAY ORDER BY t.created_at LIMIT 2000",
+      "LEFT JOIN seat_applications a ON t.subject_type = 'seat_terms' AND a.id = t.subject_ref " +
+      "WHERE (a.id IS NULL OR a.status NOT IN ('withdrawn','not-adopted')) " +
+      "AND (s.text_id IS NULL OR t.created_at >= UTC_TIMESTAMP() - INTERVAL ? DAY) ORDER BY t.created_at LIMIT 2000",
     [recentDays],
   );
   return rows.map((r: any) => String(r.id));
 }
 
+export interface SeatingFacts {
+  open: number;
+  total: number;
+  /** The latest term end among the open seatings, which moves when a season-following term moves. */
+  openEndsAt: Date | null;
+}
+
+/** Every seating, open or ended, that carries each application's terms: one grouped read (red team D8). */
+export async function seatingFacts(db: Db, applicationIds: readonly string[]): Promise<Map<string, SeatingFacts>> {
+  const out = new Map<string, SeatingFacts>();
+  if (applicationIds.length === 0) return out;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT application_id, COUNT(*) AS total, SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END) AS open, " +
+      "MAX(CASE WHEN ended_at IS NULL THEN term_ends_at ELSE NULL END) AS open_ends FROM org_role_assignments " +
+      `WHERE application_id IN (${applicationIds.map(() => "?").join(",")}) GROUP BY application_id`,
+    [...applicationIds],
+  );
+  for (const r of rows as any[]) {
+    out.set(String(r.application_id), { open: Number(r.open ?? 0), total: Number(r.total ?? 0), openEndsAt: instant(r.open_ends) });
+  }
+  return out;
+}
+
 /** Every seating, open or ended, that carries an application's terms. */
 export async function seatingCounts(db: Db, applicationId: string): Promise<{ open: number; total: number }> {
-  const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS total, SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END) AS open FROM org_role_assignments WHERE application_id = ?",
-    [applicationId],
-  );
-  return { open: Number(rows[0]?.open ?? 0), total: Number(rows[0]?.total ?? 0) };
+  const f = (await seatingFacts(db, [applicationId])).get(applicationId);
+  return { open: f?.open ?? 0, total: f?.total ?? 0 };
 }

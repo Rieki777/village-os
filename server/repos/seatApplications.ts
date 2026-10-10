@@ -152,6 +152,13 @@ export async function readApplication(db: Db, id: string, lock = false): Promise
   return rows[0] ? rowToApplication(rows[0]) : null;
 }
 
+/** Several applications by id, in one read (red team D8). */
+export async function readApplications(db: Db, ids: readonly string[]): Promise<StoredApplication[]> {
+  if (ids.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM seat_applications WHERE id IN (${ids.map(() => "?").join(",")})`, [...ids]);
+  return rows.map(rowToApplication);
+}
+
 /** Every application, newest first. A village holds tens of these a season, never thousands. */
 export async function listApplications(db: Db, limit = 500): Promise<StoredApplication[]> {
   const [rows] = await db.query<RowDataPacket[]>(

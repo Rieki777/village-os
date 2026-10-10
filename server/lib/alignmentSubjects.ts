@@ -73,13 +73,13 @@ import {
   partiesOf,
   readText,
   sealsOf,
-  seatingCounts,
+  seatingFacts,
   textsToSettle,
   type StoredAlignment,
   type StoredParty,
   type StoredText,
 } from "../repos/alignments";
-import { readApplication, seatsForUpdate, setApplicationText, type StoredApplication } from "../repos/seatApplications";
+import { readApplications, seatsForUpdate, setApplicationText, type StoredApplication } from "../repos/seatApplications";
 import { canSign, signDocument, signingKey } from "./villageExport";
 
 type Db = Pool | PoolConnection;
@@ -292,14 +292,36 @@ const CLOSED: Partial<Record<string, string>> = {
   "not-adopted": `${STATUS_WORDS["not-adopted"]}.`,
 };
 
-/** Everything about some texts, with their state derived now. */
-export async function viewTexts(db: Db, texts: readonly StoredText[], today: string): Promise<TextView[]> {
+/**
+ * Everything about some texts, with their state derived now. A fixed number
+ * of reads whatever the number of texts (red team D8): the applications, their
+ * seatings and their seats' names are each read once for the whole list.
+ *
+ * A TERM THAT FOLLOWS THE SEASON MOVES WITH IT (red team G7). The text's
+ * stored window end is the term as it stood when the application was written;
+ * when the admin moves the season's end, the seating's term moves, so for such
+ * an application the window ends with the open seating's term instead.
+ */
+export async function viewTexts(db: Db, texts: readonly StoredText[], today: string, timezone = "UTC"): Promise<TextView[]> {
   const ids = texts.map((t) => t.id);
-  const [parties, alignments, seals] = await Promise.all([partiesOf(db, ids), alignmentsOf(db, ids), sealsOf(db, ids)]);
+  const appIds = Array.from(new Set(texts.filter((t) => t.subjectType === SEAT_TERMS).map((t) => t.subjectRef)));
+  const [parties, alignments, seals, apps, facts] = await Promise.all([
+    partiesOf(db, ids),
+    alignmentsOf(db, ids),
+    sealsOf(db, ids),
+    readApplications(db, appIds),
+    seatingFacts(db, appIds),
+  ]);
+  const seatIds = Array.from(new Set(apps.flatMap((a) => a.seatIds)));
+  const seats = await seatsForUpdate(db, seatIds);
+  const nameOfSeat = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
   const out: TextView[] = [];
   for (const text of texts) {
-    const app = text.subjectType === SEAT_TERMS ? await readApplication(db, text.subjectRef) : null;
-    const seatings = app ? await seatingCounts(db, app.id) : null;
+    const app = text.subjectType === SEAT_TERMS ? (apps.find((a) => a.id === text.subjectRef) ?? null) : null;
+    const fact = app ? facts.get(app.id) : undefined;
+    const seatings = app ? { open: fact?.open ?? 0, total: fact?.total ?? 0 } : null;
+    const effectiveTo =
+      app?.termFollowsSeason && fact?.openEndsAt ? civilDateKey(new Date(fact.openEndsAt.getTime() - 1), timezone || "UTC") : text.effectiveTo;
     const mine = parties.filter((p) => p.textId === text.id);
     const aligned = alignments.filter((a) => a.textId === text.id);
     const seal = seals.find((s) => s.textId === text.id) ?? null;
@@ -310,13 +332,13 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
       sealed: !!seal,
       receipt: seal?.receipt ?? null,
       application: app,
-      seatNames: app ? await seatNamesFor(db, app.seatIds) : [],
+      seatNames: app ? app.seatIds.map(nameOfSeat) : [],
       derived: deriveAlignmentState({
         contentHash: text.contentHash,
         parties: mine,
         alignments: aligned,
         effectiveFrom: text.effectiveFrom,
-        effectiveTo: text.effectiveTo,
+        effectiveTo,
         today,
         seatings: text.subjectType === SEAT_TERMS ? (seatings ?? { open: 0, total: 0 }) : null,
         closed: app ? (CLOSED[app.status] ?? null) : null,
@@ -326,9 +348,9 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
   return out;
 }
 
-export async function viewText(db: Db, textId: string, today: string): Promise<TextView | null> {
+export async function viewText(db: Db, textId: string, today: string, timezone = "UTC"): Promise<TextView | null> {
   const t = await readText(db, textId);
-  return t ? ((await viewTexts(db, [t], today))[0] ?? null) : null;
+  return t ? ((await viewTexts(db, [t], today, timezone))[0] ?? null) : null;
 }
 
 // ── Seal and tell ────────────────────────────────────────────────────────────

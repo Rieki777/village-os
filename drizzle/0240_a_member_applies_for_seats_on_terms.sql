@@ -71,5 +71,8 @@ CREATE TABLE IF NOT EXISTS `seat_applications` (
   KEY `seat_applications_status_idx` (`status`)
 );
 
+-- Indexed: the in-force derivation, the season turn and the application
+-- page all read the seatings carrying an application (red team D8).
 ALTER TABLE `org_role_assignments`
-  ADD COLUMN `application_id` varchar(40) NULL;
+  ADD COLUMN `application_id` varchar(40) NULL,
+  ADD KEY `org_role_assignments_application_idx` (`application_id`);

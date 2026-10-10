@@ -26,6 +26,7 @@ import { isVetoable, runTermWatch } from "../lib/stewardship";
 import { runSeasonTurn } from "../lib/seasonTurn";
 import { viewText } from "../lib/alignmentSubjects";
 import { readApplication, seatingsHolding } from "../repos/seatApplications";
+import { textsToSettle } from "../repos/alignments";
 import { register } from "./seatApplications";
 
 const LADDER = ["visitor", "guest", "member"];
@@ -493,5 +494,69 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
     const w = await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
     expect(w.status).toBe(409);
     expect((await readApplication(pool, a.body.id))!.status).toBe("voting");
+  });
+
+  it("D8: listing applications costs the same reads for three more of them, and seatings are indexed by application", async () => {
+    let reads = 0;
+    const counting = new Proxy(pool, {
+      get(target, key) {
+        if (key === "query") {
+          return (...args: any[]) => {
+            reads += 1;
+            return (target.query as any)(...args);
+          };
+        }
+        const v = (target as any)[key];
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+    h.state.pool = () => counting;
+    try {
+      h.state.viewer = { id: "u-hal", stage: "member" };
+      await apply({ seatIds: [await seat("List seat 1")] });
+      const listed = async () => {
+        reads = 0;
+        const r = await h.call("GET", "/api/governance/role-applications");
+        expect(r.status).toBe(200);
+        return { reads, n: r.body.applications.length };
+      };
+      const before = await listed();
+      for (let i = 2; i <= 3; i += 1) await apply({ seatIds: [await seat(`List seat ${i}`)] });
+      h.state.viewer = { id: "u-ivo", stage: "member" };
+      await apply({ seatIds: [await seat("List seat 4")] });
+      const after = await listed();
+      expect(after.n).toBe(before.n + 3);
+      expect(after.reads).toBe(before.reads);
+    } finally {
+      h.state.pool = () => pool;
+    }
+    const [idx] = await pool.query<any[]>("SHOW INDEX FROM org_role_assignments WHERE Column_name = 'application_id'"); // module-review-ok: fixture read of the scratch schema
+    expect(idx.length).toBeGreaterThan(0);
+  });
+
+  it("G7: a season-following term's alignment window moves with the season, so it stays in force", async () => {
+    const s = await seat("Moving season seat");
+    const a = await apply({ seatIds: [s] });
+    expect(a.status).toBe(201);
+    CALENDAR.seasons = [
+      { id: "s-now", startsOn: "2026-01-01", endsOn: "2030-06-30" },
+      { id: "s-next", startsOn: "2030-06-30", endsOn: "2031-01-01" },
+    ] as any;
+    await land(a.body.id);
+    const rows = await open("u-ana", s);
+    expect(new Date(rows[0].term_ends_at).toISOString()).toBe("2030-06-30T00:00:00.000Z");
+    const v = await viewText(pool, (await readApplication(pool, a.body.id))!.textId!, "2030-03-01");
+    expect(v?.derived.state).toBe("in-force");
+    // CONTROL: after the moved end, it has ended.
+    expect((await viewText(pool, (await readApplication(pool, a.body.id))!.textId!, "2030-07-01"))?.derived.state).toBe("ended");
+  });
+
+  it("D9: the hourly settle sweep stops reading a withdrawn application's text", async () => {
+    const s = await seat("Withdrawn text seat");
+    const a = await apply({ seatIds: [s] });
+    const textId = (await readApplication(pool, a.body.id))!.textId!;
+    expect(await textsToSettle(pool)).toContain(textId);
+    await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
+    expect(await textsToSettle(pool)).not.toContain(textId);
   });
 });

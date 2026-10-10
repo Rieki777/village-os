@@ -102,8 +102,10 @@ import {
   seatTermsWords,
   settleText,
   viewText,
+  viewTexts,
   writePreparedText,
   type PreparedText,
+  type TextView,
 } from "../lib/alignmentSubjects";
 import { confirmedWithin } from "../lib/identityConfirm";
 import {
@@ -119,8 +121,10 @@ import {
   seatsForUpdate,
   setStatus,
   type ApplicationBallot,
+  type SeatForCapacity,
   type StoredApplication,
 } from "../repos/seatApplications";
+import { readTexts } from "../repos/alignments";
 import { registerJob } from "../lib/scheduler";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
@@ -229,9 +233,9 @@ export function register(app: Express, deps: Deps): void {
    * before PR5 has no text yet: its words render from the stored terms, and
    * the candidate's Align writes the text (POST /api/profile/alignments).
    */
-  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[]) {
+  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[], known?: TextView | null) {
     if (a.textId) {
-      const v = await viewText(getPool(), a.textId, today());
+      const v = known !== undefined ? known : await viewText(getPool(), a.textId, today(), seatCalendar().timezone || "UTC");
       // The hash is for a party (red team S5): the candidate reads it, other members do not.
       if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId);
     }
@@ -287,10 +291,10 @@ export function register(app: Express, deps: Deps): void {
     a: StoredApplication,
     viewerId: string | null,
     rule: Awaited<ReturnType<typeof adoptionRule>> | null,
-    known?: { ballot: ApplicationBallot | null },
+    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null },
   ) {
     const pool = getPool();
-    const seats = await seatsForUpdate(pool, a.seatIds);
+    const seats = known ? known.seats : await seatsForUpdate(pool, a.seatIds);
     const tz = seatCalendar().timezone || "UTC";
     // The newest ballot in ANY state (red team U1): a carried vote keeps its link.
     const ballot = known ? known.ballot : ((await latestBallotsFor(pool, [a.id])).get(a.id) ?? null);
@@ -319,7 +323,7 @@ export function register(app: Express, deps: Deps): void {
       decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, tz) : null,
       decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       createdAt: a.createdAt ? a.createdAt.toISOString() : null,
-      alignment: await alignmentOf(a, viewerId, seatNames),
+      alignment: await alignmentOf(a, viewerId, seatNames, known ? known.view : undefined),
       ...(viewerId && rule
         ? {
             you: {
@@ -593,8 +597,23 @@ export function register(app: Express, deps: Deps): void {
     if (!viewer) return;
     const rule = await adoptionRule(viewer);
     const all = await listApplications(getPool());
-    const ballots = await latestBallotsFor(getPool(), all.map((a) => a.id));
-    res.json({ applications: await Promise.all(all.map((a) => served(a, String(viewer.id), rule, { ballot: ballots.get(a.id) ?? null }))) });
+    // A fixed number of reads for the whole list (red team D8): ballots, seats and texts once each.
+    const pool = getPool();
+    const ballots = await latestBallotsFor(pool, all.map((a) => a.id));
+    const seats = await seatsForUpdate(pool, Array.from(new Set(all.flatMap((a) => a.seatIds))));
+    const texts = await readTexts(pool, all.map((a) => a.textId).filter((t): t is string => !!t));
+    const views = await viewTexts(pool, texts, today(), seatCalendar().timezone || "UTC");
+    res.json({
+      applications: await Promise.all(
+        all.map((a) =>
+          served(a, String(viewer.id), rule, {
+            ballot: ballots.get(a.id) ?? null,
+            seats,
+            view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
+          }),
+        ),
+      ),
+    });
   });
 
   app.get("/api/governance/role-applications/:id", async (req, res) => {
