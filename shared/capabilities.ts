@@ -35,6 +35,12 @@ export type Capability =
   | "proposal.open" // open a governance decision
   | "proposal.decide" // record a decision's outcome
   | "map.viewPeople" // see WHO holds seats on the village map (not just counts)
+  // The open book (seat settings, 2026-10-09). Every member reads every
+  // seat's terms on offer, money included; a visitor and a signed-in guest
+  // read none of it. One key, unlocked at the member rung, and no bespoke
+  // rung check anywhere: a village that wants its book closed moves the rung.
+  // `map.viewPeople` is never used for this, because it opens at guest.
+  | "terms.read" // read what each seat offers whoever holds it, money included
   | "map.contact" // reach a role holder through the contact relay
   | "map.edit" // enter build mode and keep a draft of the land
   | "map.publish" // push a draft onto the live map everyone sees
@@ -128,6 +134,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "proposal.open",
   "proposal.decide",
   "map.viewPeople",
+  "terms.read",
   "map.contact",
   "map.edit",
   "map.publish",
@@ -183,6 +190,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "proposal.open": "Open a governance decision",
   "proposal.decide": "Record a decision's outcome",
   "map.viewPeople": "See who holds seats on the village map",
+  "terms.read": "Read what each seat offers, money included",
   "map.contact": "Reach a role holder through the contact relay",
   "map.edit": "Draft changes to the land in build mode",
   "map.publish": "Publish a draft onto the live map",
@@ -234,6 +242,10 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
   "forum.post": "member", // you can talk once you have joined
   "proposal.open": "co-creator", // open a decision once you are co-creating
   "map.viewPeople": "guest", // any account sees who holds the village's seats
+  // The open book: membership is the bar for reading a seat's terms. Guest is
+  // deliberately NOT enough, which is why this is its own key and never
+  // map.viewPeople.
+  "terms.read": "member",
   "map.contact": "member", // reaching people through the relay starts at member
   "stay.member_rate": "member", // the member price comes with membership
   // Messaging opens where forum posting opens: once you have joined, you can
@@ -442,6 +454,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "stay.member_rate": false,
   "map.photograph": false,
   "map.viewPeople": false,
+  // Reading is a member's own act, so there is nobody for it to move to.
+  "terms.read": false,
   "map.contact": false,
   "map.edit": false,
 
@@ -668,6 +682,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "forum.moderate": true,
   "proposal.decide": true,
   "map.viewPeople": true,
+  "terms.read": true, // a look, like map.viewPeople: a deny may pause it
   "map.edit": true,
   "map.publish": true,
   "map.curatePhotos": true,
@@ -783,6 +798,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "proposal.open": true,
   "proposal.decide": true,
   "map.viewPeople": true,
+  "terms.read": true,
   "map.contact": true,
   "map.edit": true,
   "map.publish": true,
