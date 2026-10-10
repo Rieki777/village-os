@@ -106,7 +106,13 @@ export type FieldKind =
    * SeatSettingsEditor: every group from a preset, tweaked, judged by
    * `parseSeatSettings`, the parser the route will use.
    */
-  | "seatSettings";
+  | "seatSettings"
+  /*
+   * One to five seats from the org chart, as a list (seat settings PR4): one
+   * application carries every seat a member would hold, so their terms are
+   * recorded once. SeatPicksField draws it.
+   */
+  | "seatPicks";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -794,7 +800,9 @@ export const TYPE_GROUPS = [
  */
 export const SUBJECT_NOUN: Record<string, string> = {
   mechanics: "Rule change",
-  role_application: "Seat application",
+  // Seat settings PR4: a member's application for seats, on terms. The noun is
+  // what is decided, and it names no person, like the ballot it labels.
+  role_application: "Who holds a seat, and on what terms",
   agreement: "Agreement",
   badge_grant: "Badge grant",
   quest_payout: "Quest payout",

@@ -1,56 +1,36 @@
 // @vitest-environment jsdom
 /**
- * "APPLY FOR A SEAT" AFTER THE MOVE: terms as one object, and still locked.
+ * "APPLY FOR A SEAT" PUBLISHES NOW (seat settings PR4).
  *
- * Two promises this lane makes until PR4 mounts the route:
+ * PR1 held this type to a practice vote until its route existed, and this file
+ * held that lock. The route has landed (server/routes/seatApplications.ts), so
+ * the lock is gone and what this file holds instead is that the type is real:
  *
- *  1. Publishing stays a practice vote. `role_application` is out of the
- *     server's CONDUCTABLE_TYPES, so the type card can never start a wizard
- *     walk that ends in a POST to a route nobody mounted. It is asserted on
- *     the RENDERED card, against the server's own list.
- *  2. The old terms are gone: no commitment, deferred share, token or amount
- *     per cycle, and neither false tip. Drafts still load under the same id.
+ *  1. It is conductable on the server, and the rendered type card starts a
+ *     wizard walk rather than a practice vote.
+ *  2. It picks one to five seats, and its publish body is what the route reads.
+ *  3. `?type=role_application&seat=<id>` opens it with that seat picked, and the
+ *     seat's terms on offer are the terms step's starting point.
+ *  4. The old terms are gone: no commitment, deferred share, token or amount per
+ *     cycle, and neither false tip. Drafts still load under the same id.
  */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { CONDUCTABLE_TYPES, WIZARD_TYPES as SERVER_WIZARD_TYPES } from "../../../../server/lib/proposalDrafts";
+import { parseApplicationInput } from "@shared/seatApplications";
 import TypeCards from "./TypeCards";
 import { typeConfig } from "./wizardConfig";
 import { fieldsFor } from "./wizardWalk";
-import { ROLE_APPLICATION_TYPE, settingsProblem } from "./roleApplicationType";
+import { offerPrefill, ROLE_APPLICATION_TYPE, roleApplicationStart, seatsProblem, settingsProblem } from "./roleApplicationType";
 
 const cardFor = () => screen.getByRole("button", { name: /Apply for a seat/ });
 
-describe("role_application publish is practice locked", () => {
-  it("is not conductable on the server", () => {
-    expect(CONDUCTABLE_TYPES).not.toContain("role_application");
-    // Control: the list is real and carries the kinds that are live.
-    expect(CONDUCTABLE_TYPES).toContain("role_seat");
+describe("role_application publishes", () => {
+  it("is conductable on the server", () => {
+    expect(CONDUCTABLE_TYPES).toContain("role_application");
   });
 
-  it("renders a locked card that cannot start a wizard walk", () => {
-    const onChoose = vi.fn();
-    const onPractice = vi.fn();
-    render(
-      <TypeCards
-        chosen={null}
-        conductable={[...CONDUCTABLE_TYPES]}
-        advisory={[]}
-        mayOpenAdvisory={false}
-        onChoose={onChoose}
-        onPractice={onPractice}
-      />,
-    );
-    const card = cardFor();
-    expect(card).toBeDisabled();
-    fireEvent.click(card);
-    expect(onChoose).not.toHaveBeenCalled();
-    // Control: a live kind on the same screen is choosable.
-    fireEvent.click(screen.getByRole("button", { name: /Seat someone in a role/ }));
-    expect(onChoose).toHaveBeenCalledWith("role_seat");
-  });
-
-  it("offers only a practice vote where the village may open one", () => {
+  it("renders a card that starts the wizard walk, never a practice vote", () => {
     const onChoose = vi.fn();
     const onPractice = vi.fn();
     render(
@@ -64,10 +44,86 @@ describe("role_application publish is practice locked", () => {
       />,
     );
     const card = cardFor();
-    expect(card).not.toHaveAttribute("aria-pressed");
+    expect(card).not.toBeDisabled();
     fireEvent.click(card);
-    expect(onPractice).toHaveBeenCalledWith("role_application");
+    expect(onChoose).toHaveBeenCalledWith("role_application");
+    expect(onPractice).not.toHaveBeenCalled();
+  });
+
+  it("CONTROL: a type outside the conductable list is still practice locked on the same screen", () => {
+    const onChoose = vi.fn();
+    render(
+      <TypeCards
+        chosen={null}
+        conductable={CONDUCTABLE_TYPES.filter((t) => t !== "role_application")}
+        advisory={[]}
+        mayOpenAdvisory={false}
+        onChoose={onChoose}
+        onPractice={vi.fn()}
+      />,
+    );
+    const card = cardFor();
+    expect(card).toBeDisabled();
+    fireEvent.click(card);
     expect(onChoose).not.toHaveBeenCalled();
+  });
+
+  it("opens the vote itself, so the review step leaves out the sensing sentences", () => {
+    expect(ROLE_APPLICATION_TYPE.opensVote).toBe(true);
+    expect(ROLE_APPLICATION_TYPE.publish.path).toBe("/api/governance/role-applications");
+  });
+
+  it("publishes a body the route reads as one application over every picked seat", () => {
+    const body = ROLE_APPLICATION_TYPE.publish.body({
+      seatIds: ["s-1", "s-2", "s-3"],
+      deliverables: "By the end of the season two more people can keep the orchard ledger.",
+      fitStatement: "I kept the ledger last season and know where it goes wrong.",
+      seatSettings: { v: 1, pay: { kind: "none" } },
+      startsNoEarlierThan: "2027-03-21",
+    });
+    const parsed = parseApplicationInput(body);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.input.seatIds).toEqual(["s-1", "s-2", "s-3"]);
+      expect(parsed.input.startsOn).toBe("2027-03-21");
+      expect(parsed.input.note).toMatch(/kept the ledger/);
+    }
+    // No first day picked: none is sent.
+    expect(ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["s-1"] })).not.toHaveProperty("startsNoEarlierThan");
+  });
+
+  it("picks one to five seats", () => {
+    expect(fieldsFor("role_application", "subject").map((f) => [f.key, f.kind])).toEqual([["seatIds", "seatPicks"]]);
+    expect(seatsProblem([])).toMatch(/Pick the seat/);
+    expect(seatsProblem(["a"])).toBeNull();
+    expect(seatsProblem(["a", "b", "c", "d", "e"])).toBeNull();
+    expect(seatsProblem(["a", "b", "c", "d", "e", "f"])).toMatch(/at most 5/);
+  });
+});
+
+describe("a wizard opened from a seat", () => {
+  it("starts on this type with the seat picked", () => {
+    expect(roleApplicationStart("?type=role_application&seat=seat-lead")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-lead"] },
+    });
+    expect(roleApplicationStart("?module=events")).toBeNull();
+    expect(roleApplicationStart("")).toBeNull();
+  });
+
+  it("starts the terms from the first seat's terms on offer, and from the preset when there are none", () => {
+    const org = {
+      roles: [
+        { id: "seat-lead", termsOffer: { v: 1, pay: { kind: "honorary" } } },
+        { id: "seat-quiet", termsOffer: null },
+        // A reader without terms.read is served the seat with no termsOffer key at all.
+        { id: "seat-hidden" },
+      ],
+    };
+    expect(offerPrefill(["seat-lead", "seat-quiet"], org)).toEqual({ v: 1, pay: { kind: "honorary" } });
+    expect(offerPrefill(["seat-quiet"], org)).toBeUndefined();
+    expect(offerPrefill(["seat-hidden"], org)).toBeUndefined();
+    expect(offerPrefill([], org)).toBeUndefined();
   });
 });
 
@@ -77,8 +133,11 @@ describe("role_application after the move", () => {
     expect(typeConfig("role_application")).toBe(ROLE_APPLICATION_TYPE);
   });
 
-  it("asks its terms as one seatSettings field", () => {
-    expect(fieldsFor("role_application", "terms").map((f) => [f.key, f.kind])).toEqual([["seatSettings", "seatSettings"]]);
+  it("asks its terms as one seatSettings field, with an optional first day", () => {
+    expect(fieldsFor("role_application", "terms").map((f) => [f.key, f.kind])).toEqual([
+      ["seatSettings", "seatSettings"],
+      ["startsNoEarlierThan", "date"],
+    ]);
   });
 
   it("drops the old fields and their tips everywhere", () => {
@@ -88,9 +147,10 @@ describe("role_application after the move", () => {
     }
     expect(text).not.toMatch(/scales both the pay and the voice/);
     expect(text).not.toMatch(/never costs you a say/);
-    // An old draft's keys are carried, unread, and never published.
+    // An old draft's keys are carried, unread, and never published. Its one seat still is.
     const body = ROLE_APPLICATION_TYPE.publish.body({ seatId: "s-1", commitmentPct: 40, tokenSlug: "x", seatSettings: { v: 1 } });
-    expect(Object.keys(body).sort()).toEqual(["deliverables", "fitStatement", "orgRoleId", "seatSettings"]);
+    expect(Object.keys(body).sort()).toEqual(["deliverables", "fitStatement", "seatIds", "seatSettings"]);
+    expect(body.seatIds).toEqual(["s-1"]);
   });
 
   it("judges the terms with the shared parser", () => {

@@ -127,6 +127,7 @@ import { register as registerPlacesRoutes } from "./routes/places";
 import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
+import { register as registerSeatApplicationRoutes } from "./routes/seatApplications";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -25233,6 +25234,7 @@ ${inner}
   // The seat vote itself is server/routes/powerHands.ts. It registers HERE, below the
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
+  registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────

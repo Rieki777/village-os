@@ -966,6 +966,8 @@ export async function seatHolder(
     isAgent?: boolean;
     /** The agent's stable slug. The holder key becomes `agent:<slug>`. */
     agentSlug?: string | null;
+    /** 0240: the seat application whose terms this seating holds. */
+    applicationId?: string | null;
   },
   /**
    * `assignmentId` is returned so the caller can key a notification on THIS
@@ -1010,8 +1012,8 @@ export async function seatHolder(
   try {
     await pool.query(
       `INSERT INTO org_role_assignments
-         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         (id, org_role_id, holder_kind, user_id, display_name, holder_key, focus, note, season_id, term_ends_at, granted_by, is_agent, term_follows_season, application_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         assignmentId,
         orgRoleId,
@@ -1026,6 +1028,7 @@ export async function seatHolder(
         h.grantedBy ?? null,
         isAgent ? 1 : 0,
         h.termFollowsSeason ? 1 : 0,
+        h.applicationId ?? null,
       ],
     );
     return { ok: true, assignmentId };

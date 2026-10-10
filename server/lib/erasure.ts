@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { eraseApplicationWords } from "../repos/seatApplications";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -565,6 +566,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Seat applications (0240): the member's own words, what they would have
+       * done and why them, go. The application stays: its seats, its terms and
+       * the village's decision are the record of what the village agreed to,
+       * and the tombstoned user row de-attributes it without remapping ids.
+       * After the tombstone, for the reason the steps above give.
+       */
+      name: "seat-application-words-after-tombstone",
+      run: async () => {
+        await eraseApplicationWords(pool, target.id);
       },
     },
     {

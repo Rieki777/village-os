@@ -256,6 +256,7 @@ const Governance = lazyPage(() => import("./pages/Governance"));
 const Decisions = lazyPage(() => import("./pages/Decisions"));
 const Decision = lazyPage(() => import("./pages/Decision"));
 const Propose = lazyPage(() => import("./pages/Propose"));
+const SeatApplication = lazyPage(() => import("./pages/SeatApplication"));
 const Visit = brochurePage(() => import("./pages/Visit"));
 const GratitudeWall = lazyPage(() => import("./pages/GratitudeWall"));
 const WorkWithUs = brochurePage(() => import("./pages/WorkWithUs"));
@@ -411,6 +412,8 @@ function Router() {
       <Route path="/decisions" component={Decisions} />
       <Route path="/decisions/:id" component={Decision} />
       <Route path="/propose" component={Propose} />
+      {/* One application to hold seats, on terms. Members only, behind terms.read. */}
+      <Route path="/seat-applications/:id" component={SeatApplication} />
       <Route path="/visit" component={Visit} />
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}

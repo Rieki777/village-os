@@ -396,6 +396,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "tombstone",
       "needs-after-tombstone",
       "journal-after-tombstone",
+      "seat-application-words-after-tombstone",
       "audit",
       "external-stores",
     ]);
