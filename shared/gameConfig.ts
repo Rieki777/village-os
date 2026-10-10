@@ -325,6 +325,13 @@ export interface SeasonEntry {
   patternId?: string;
   /** What this season is actually trying to achieve. Shown on the banner//season. */
   goals: { text: string; done: boolean }[];
+  /**
+   * WHEN MEMBERS PLAN THIS SEASON, set by hand (season plans, 2026-10-09).
+   * Absent or null means the window is worked out from the season's first day
+   * (`planWindowFor` in shared/seasonPlans.ts). Both dates are civil dates in
+   * the village's zone and both days are inside the window.
+   */
+  planWindow?: { opensOn: string; closesOn: string } | null;
 }
 
 export interface SeasonConfig {

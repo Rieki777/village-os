@@ -91,6 +91,8 @@ export const SHEET_SECTIONS: SheetSection[] = [
   // browsing and claiming a quest needs nothing earned first.
   { id: "quests", band: "now", quiet: "" },
   { id: "vessel", band: "now", quiet: "" },
+  // Your season: the seats you keep, hand back or ask for, and your part.
+  { id: "season", band: "now", quiet: "" },
   { id: "aboutYou", band: "now", quiet: "" },
   { id: "paths", band: "now", quiet: "" },
 

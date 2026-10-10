@@ -160,6 +160,20 @@ export async function openApplicationsOf(db: Db, candidateUserId: string): Promi
   return rows.map(rowToApplication);
 }
 
+/**
+ * The applications whose term sits in one season, oldest first. Season plans
+ * (RC1) list a member's seat choices this way, by `candidate_user_id` and
+ * `term_season_id`: a plan keeps no second store of them. Pass a member to
+ * read only theirs.
+ */
+export async function applicationsInSeason(db: Db, seasonId: string, candidateUserId?: string): Promise<StoredApplication[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications WHERE term_season_id = ?${candidateUserId ? " AND candidate_user_id = ?" : ""} ORDER BY created_at, id`,
+    candidateUserId ? [seasonId, candidateUserId] : [seasonId],
+  );
+  return rows.map(rowToApplication);
+}
+
 export interface StatusChange {
   adoptedVia?: "holder" | "ballot" | null;
   adoptedRef?: string | null;

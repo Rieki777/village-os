@@ -141,7 +141,8 @@ import type { Criticality } from "../../shared/governanceEngine";
 import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
-import { clockFor, type CycleClock } from "../../shared/cycleClock";
+import { clockFor, termWarningOpensAt, type CycleClock } from "../../shared/cycleClock";
+import { SEASON_PLAN_MINE } from "../../shared/seasonPlans";
 import {
   blankVetoActReason,
   blankVetoActReasonsBy,
@@ -2028,33 +2029,12 @@ export function villageClock(): CycleClock {
 }
 
 /**
- * THE TERM WARNING OPENS ONE CYCLE BEFORE THE TERM ENDS.
- *
- * Rye, 2026-09-14: warn a holder one lunar cycle before their term ends. It
- * used to be a flat 14 days, which is half a moon, and a village that re-seats
- * by vote needs a whole cycle to open a ballot, let it run, and close it.
- *
- * MEASURED WITH THE VILLAGE'S OWN CLOCK, never with a day count. Terms are
- * stamped on a cycle boundary (`termEndsAtFromCycles`), so the warning for a
- * term ending at the boundary that opens cycle N opens at the boundary that
- * opened cycle N-1: the new moon before, on the lunar clock, or the first of
- * the month before, on the calendar clock. A lunation runs anywhere from
- * about 29.3 to 29.8 days, so "30 days" would be wrong in both directions.
- *
- * A term that does not sit on a boundary (a date somebody typed on an
- * org-chart seating) keeps its offset into its cycle and moves back one cycle.
- * When the cycle before is shorter than that offset (the 31st of March has no
- * 31st of February), the warning opens at the start of the term's own cycle,
- * which is still at least one whole cycle before the term ends.
- *
- * PURE. The clock is an argument so a test can hold both clocks.
+ * THE TERM WARNING OPENS ONE CYCLE BEFORE THE TERM ENDS. The arithmetic lives
+ * in shared/cycleClock.ts since season plans (2026-10-09): a season's plan
+ * window opens at the same instant before the season's first day, and the
+ * client reads it too, so both share one spelling.
  */
-export function termWarningOpensAt(termEndsAt: Date, clock: CycleClock): Date {
-  const n = clock.cycleNumberAt(termEndsAt);
-  const ownStart = clock.startOf(n).getTime();
-  const offset = Math.max(0, termEndsAt.getTime() - ownStart);
-  return new Date(Math.min(clock.startOf(n - 1).getTime() + offset, ownStart));
-}
+export { termWarningOpensAt };
 
 /** True once the warning for a term ending at `termEndsAt` is due. */
 export function termWarningDue(termEndsAt: Date, now: Date, clock: CycleClock): boolean {
@@ -2136,7 +2116,7 @@ export interface TermWatchDeps {
    * its `termEndsAt` says the one-cycle warning is due; with no date there is
    * nothing to count down to, so it is not told.
    */
-  seatings: Array<{ id: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean; termEndsAt?: Date | string | null }>;
+  seatings: Array<{ id: string; orgRoleId?: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean; termEndsAt?: Date | string | null }>;
   /** The village clock. Defaults to the live `cycle.mode`; tests hand one in. */
   clock?: CycleClock;
   /**
@@ -2220,11 +2200,12 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
   };
 
   /*
-   * THE RENEWAL, and what it cannot be yet. Rye, 2026-09-14: a term is never
-   * extended automatically, and there is no limit on repeat terms, so the
-   * warning says both. The link is `/roles` because no screen in the client
-   * opens a seat vote (`POST /api/governance/role-seats`) yet; when one lands,
-   * this link is the single place to point it at. The dedupe keys keep their
+   * THE RENEWAL. Rye, 2026-09-14: a term is never extended automatically, and
+   * there is no limit on repeat terms, so the warning says both. Since season
+   * plans (2026-10-09) the link is the member's own season page: an org-chart
+   * seating opens it with `?renew=<seat>`, where "Carry on" puts the renewal
+   * to the village through the member door. A permission holding has no org
+   * seat to name, so it opens the page plain. The dedupe keys keep their
    * shape, one warning per holding.
    */
 
@@ -2244,7 +2225,7 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
       body: ended
         ? "The agreement to keep holding this seat unasked has run out. This seat carries no permissions of its own, so nothing has been switched off, and it is the moment to say whether you want to carry on."
         : "This is the nudge to say whether you want to carry on, while there is a whole cycle left to arrange it. Nothing renews on its own, and there is no limit on terms, so the village can seat you again.",
-      link: "/roles",
+      link: a.orgRoleId ? `${SEASON_PLAN_MINE}?renew=${encodeURIComponent(a.orgRoleId)}` : SEASON_PLAN_MINE,
       dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}`,
     });
     if (r.fresh) report.holdersTold += 1;
@@ -2265,7 +2246,7 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
       body: h.ended
         ? "The seat has ended, and the powers that came with it have ended with it. Nothing was taken from you by anybody; the term simply reached its date. The village seats you again if it wants you to carry on."
         : "When the date arrives the seat ends, and the powers that came with it end too. Nothing renews on its own. There is no limit on terms, so the village can vote to seat you again before the date.",
-      link: "/roles",
+      link: SEASON_PLAN_MINE,
       dedupeKey: `${h.ended ? "perm-term-ended" : "perm-term-soon"}:${h.id}`,
     });
     if (r.fresh) report.holdersTold += 1;

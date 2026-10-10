@@ -80,6 +80,12 @@ export interface ApplicationInput {
   settings: SeatSettings;
   /** YYYY-MM-DD, the earliest day the seats may be taken up, or null for "when adopted". */
   startsOn: string | null;
+  /**
+   * The season the member applies for, from their season plan (season plans
+   * RC1). A season that has not started yet sets the first day to its own,
+   * so the application's term sits in that season.
+   */
+  seasonId: string | null;
 }
 
 export type ParsedApplication = { ok: true; input: ApplicationInput } | { ok: false; error: string; field: string };
@@ -125,7 +131,9 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (startsRaw && !/^\d{4}-\d{2}-\d{2}$/.test(startsRaw)) {
     return { ok: false, field: "startsNoEarlierThan", error: "Write the first day as a date like 2027-03-21, or leave it empty." };
   }
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw } };
+  const seasonId = words(b.seasonId);
+  if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
+  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────

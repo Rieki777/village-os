@@ -18,6 +18,7 @@ import InvitePanel from "@/components/profile/InvitePanel";
 import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
+import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
@@ -574,6 +575,8 @@ export default function Profile() {
                 failed={meFailed}
                 onGiven={reloadMe}
               />
+              {/* YOUR SEASON (season plans RC1): where your plan stands, and the door to it. */}
+              <SeasonPlanSection />
               {/*
                 THE ANCHOR THE SURFACED BANNER POINTS AT.
 

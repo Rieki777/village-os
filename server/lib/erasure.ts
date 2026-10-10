@@ -107,6 +107,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { eraseApplicationWords } from "../repos/seatApplications";
+import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -579,6 +580,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "seat-application-words-after-tombstone",
       run: async () => {
         await eraseApplicationWords(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Season plans (0241): the member's own words, their aim, the goal they
+       * served and what they committed to, go. The seats they handed back stay
+       * on the row, as the village's record of who held what, de-attributed by
+       * the tombstone. After the tombstone, for the reason the steps above give.
+       */
+      name: "season-plan-words-after-tombstone",
+      run: async () => {
+        await eraseSeasonPlanWords(pool, target.id);
       },
     },
     {

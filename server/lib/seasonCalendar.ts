@@ -271,6 +271,10 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
         goals: Array.isArray(s.goals)
           ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
           : [],
+        // Season plans (2026-10-09): the window members plan this season in,
+        // when an admin set it by hand. On this FIXED list for the reason
+        // `patternId` is: a field left off here is dropped on every read.
+        planWindow: planWindowOf(s),
       })),
       cadence: raw.cadence ?? def.cadence,
       timezone: raw.timezone ?? def.timezone,
@@ -311,6 +315,16 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
   };
 }
 
+/** A hand-set plan window, kept only when both days are dates; anything else is null. */
+function planWindowOf(s: any): { opensOn: string; closesOn: string } | null {
+  const w = s?.planWindow;
+  if (!w || typeof w !== "object") return null;
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const opensOn = String(w.opensOn ?? "").trim();
+  const closesOn = String(w.closesOn ?? "").trim();
+  return day.test(opensOn) && day.test(closesOn) ? { opensOn, closesOn } : null;
+}
+
 /** The stored answer, kept only when it is the shape this file writes. */
 function answerOf(raw: any): TimezoneAnswer | null {
   const a = raw?.timezoneAnswer;
@@ -326,6 +340,7 @@ function sameSeasonList(a: readonly any[], b: readonly any[]): boolean {
     JSON.stringify([
       s?.id ?? "", s?.name ?? "", s?.theme ?? "", s?.focus ?? "", s?.startsOn ?? "", s?.endsOn ?? "",
       s?.patternId ?? "", Array.isArray(s?.goals) ? s.goals.map((g: any) => [String(g?.text ?? ""), !!g?.done]) : [],
+      s?.planWindow ? [s.planWindow.opensOn ?? "", s.planWindow.closesOn ?? ""] : null,
     ]);
   return a.length === b.length && a.every((s, i) => key(s) === key(b[i]));
 }

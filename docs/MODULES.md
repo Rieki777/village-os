@@ -500,7 +500,7 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | Recommends | `forum` |
 | Capabilities it adds | `ballot.vote`, `member.vouch` |
 | Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method` |
-| API prefixes | `/api/governance`, `/api/admin/governance` |
+| API prefixes | `/api/governance`, `/api/admin/governance`, `/api/season-plans` |
 | Contract doc | none yet |
 
 ### Hypha Bridge
@@ -1341,7 +1341,8 @@ The same facts, for anything that would rather parse than read. Regenerated with
       ],
       "apiPrefixes": [
         "/api/governance",
-        "/api/admin/governance"
+        "/api/admin/governance",
+        "/api/season-plans"
       ],
       "contractDoc": null
     },

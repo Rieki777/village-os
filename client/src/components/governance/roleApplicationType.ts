@@ -71,6 +71,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
       seatSettings: a.seatSettings ?? null,
       // Sent only when picked: no first day means "as soon as it is adopted".
       ...(String(a.startsNoEarlierThan ?? "").trim() ? { startsNoEarlierThan: String(a.startsNoEarlierThan).trim() } : {}),
+      // From the member's season plan: a season still to come sets the first day to its own.
+      ...(String(a.seasonId ?? "").trim() ? { seasonId: String(a.seasonId).trim() } : {}),
     }),
   },
   steps: {
@@ -145,12 +147,20 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
  * `?type=role_application&seat=<id>` (the address `proposeTermsHref` builds)
  * opens this type with the seat picked. Anything else is no start at all, and
  * the wizard opens on its type step as it always has.
+ *
+ * Season plans (RC1) add two: `renew=<id>` picks a seat the member already
+ * holds ("Carry on"), and `season=<id>` names the season they plan, which the
+ * publish sends so a season still to come sets the first day.
  */
 export function roleApplicationStart(search: string): { type: "role_application"; answers: Record<string, unknown> } | null {
   const q = new URLSearchParams(search);
   if (q.get("type") !== "role_application") return null;
-  const seat = String(q.get("seat") ?? "").trim();
-  return { type: "role_application", answers: seat ? { seatIds: [seat] } : {} };
+  const seat = String(q.get("seat") ?? q.get("renew") ?? "").trim();
+  const season = String(q.get("season") ?? "").trim();
+  return {
+    type: "role_application",
+    answers: { ...(seat ? { seatIds: [seat] } : {}), ...(season ? { seasonId: season } : {}) },
+  };
 }
 
 /**
