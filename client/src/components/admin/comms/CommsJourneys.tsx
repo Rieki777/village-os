@@ -49,7 +49,7 @@ export default function CommsJourneys({ password }: { password: string }) {
       {!journeys && !error && <p className="py-12 text-center text-sm text-gray-400">Loading...</p>}
 
       {journeys && (
-        <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <nav aria-label="Journeys">
             <ul className="space-y-1">
               {journeys.map((j) => (

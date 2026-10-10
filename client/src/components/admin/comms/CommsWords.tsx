@@ -62,7 +62,7 @@ export default function CommsWords({ password }: { password: string }) {
       {!list && !error && <p className="py-12 text-center text-sm text-gray-400">Loading...</p>}
 
       {list && (
-        <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <nav aria-label="Emails" className="space-y-4">
             {list.groups.map((group) => (
               <div key={group.id}>

@@ -324,7 +324,7 @@ export function SenderEditor(props: EditorProps) {
           {data.sender.source === "env" ? ", from the host's EMAIL_FROM setting. Saving here takes over from it." : "."}
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="text-sm font-medium text-gray-700 block mb-1">Name people see</span>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your village's name" className={inputCls} />
