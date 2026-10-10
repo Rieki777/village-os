@@ -20,9 +20,10 @@ import { SEAT_PRESETS_DOC } from "../../shared/seatTermsOffer";
 import { userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import { createOrgRole } from "./orgChart";
 import { contentHashOf, prepareSeatTermsText, recordAlignment, sealIfReady, viewText, writePreparedText } from "./alignmentSubjects";
-import { eraseFromAlignments, FORMER_MEMBER, scrubText } from "./alignmentErasure";
+import { eraseFromAlignments, FORMER_MEMBER, namesToScrub, scrubText } from "./alignmentErasure";
 import { ensureSigningKey, resetSigningKeyForTests, signingKey, verifyDocument } from "./villageExport";
-import { eraseApplicationWords, insertApplication, rewriteTermsOffer } from "../repos/seatApplications";
+import { eraseApplicationWords, insertApplication, readApplication, rewriteTermsOffer } from "../repos/seatApplications";
+import { insertPlanVersion, planVersions } from "../repos/seasonPlans";
 import { readText, sealsOf } from "../repos/alignments";
 import { dbDocument } from "../repos/store-db";
 
@@ -32,12 +33,23 @@ const configured = testDbConfigured();
 if (!configured) console.warn("[alignmentErasure] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
 
 describe("scrubbing a name out of words", () => {
-  it("replaces whole words, any case, and leaves look-alikes alone", () => {
-    const names = [NAME, `@${HANDLE}`, HANDLE];
+  it("replaces whole words in the case they are written, and leaves look-alikes alone", () => {
+    const names = [NAME, `@${HANDLE}`];
     expect(scrubText("Agreed with Ana Quillfeather and @anaq.", names)).toBe(`Agreed with ${FORMER_MEMBER} and ${FORMER_MEMBER}.`);
-    expect(scrubText("ANA QUILLFEATHER keeps it", names)).toBe(`${FORMER_MEMBER} keeps it`);
-    // "anaqua" is not the handle.
-    expect(scrubText("the anaqua spring", names)).toBe("the anaqua spring");
+    // Case-sensitive (red team D3): a shouted phrase is not taken to be the name.
+    expect(scrubText("ANA QUILLFEATHER keeps it", names)).toBe("ANA QUILLFEATHER keeps it");
+    // "@anaqua" is not the handle.
+    expect(scrubText("the @anaqua spring", names)).toBe("the @anaqua spring");
+  });
+
+  it("never scrubs a name that is part of a date, and says who is scrubbed by which spelling (red team D3)", () => {
+    expect(scrubText("Ends 31 May 2027.", ["May"])).toBe("Ends 31 May 2027.");
+    expect(scrubText("From May 2027 on.", ["May"])).toBe("From May 2027 on.");
+    expect(scrubText("Thanks, May.", ["May"])).toBe(`Thanks, ${FORMER_MEMBER}.`);
+    expect(scrubText("the may pole", ["May"])).toBe("the may pole");
+    expect(namesToScrub({ name: "May Ostrander", handle: "mayo" })).toEqual({ own: ["May Ostrander", "@mayo", "May"], others: ["May Ostrander", "@mayo"] });
+    // Under three characters nothing is scrubbed, by any spelling.
+    expect(namesToScrub({ name: "Al", handle: "al" })).toEqual({ own: [], others: [] });
   });
 });
 
@@ -83,7 +95,7 @@ describe.skipIf(!configured)("erasure keeps the words, takes the name, and the s
     const settings = {
       v: 1 as const,
       pay: { kind: "fixed" as const, currency: "XTS", amountMinor: 4321000, per: "month" as const, note: `Reviewed by ${NAME} each moon.` },
-      scoreboard: { measures: [{ measure: `Ledgers ${HANDLE} hands on`, target: "two people" }] },
+      scoreboard: { measures: [{ measure: `Ledgers @${HANDLE} hands on`, target: "two people" }] },
     };
     const app = {
       id: "sa-00000000000000e1",
@@ -121,7 +133,7 @@ describe.skipIf(!configured)("erasure keeps the words, takes the name, and the s
 
     await eraseApplicationWords(pool, "u-ana");
     const report = await eraseFromAlignments(pool, { id: "u-ana", name: NAME, handle: HANDLE });
-    expect(report).toEqual({ textsRedacted: 1, applicationsScrubbed: 1, offersScrubbed: 1, presetsScrubbed: true });
+    expect(report).toEqual({ textsRedacted: 1, applicationsScrubbed: 1, offersScrubbed: 1, presetsScrubbed: true, othersWordsScrubbed: 0 });
 
     const after = await everything();
     expect(after).not.toContain("Quillfeather");
@@ -141,5 +153,52 @@ describe.skipIf(!configured)("erasure keeps the words, takes the name, and the s
     // The rows keep their user id: the tombstone de-attributes, nothing is remapped.
     const [rows] = await pool.query<any[]>("SELECT user_id FROM alignments WHERE text_id = ? AND party_key = ?", [text.id, userParty("u-ana")]); // module-review-ok: fixture read of the S5 scratch schema
     expect(rows[0].user_id).toBe("u-ana");
+  });
+
+  it("a common-word name: other members' dates survive, their words lose only the full name and handle (red team D3, S4)", async () => {
+    const seatId = await createOrgRole(pool, { id: "seat-erasure-may", name: "Gate keeper", seats: 2 });
+    const mk = async (id: string, candidate: string, note: string, payNote: string) => {
+      const app = {
+        id,
+        candidateUserId: candidate,
+        proposedBy: candidate,
+        seatIds: [seatId],
+        note,
+        deliverables: "The gate opens on time.",
+        settings: { v: 1 as const, pay: { kind: "honorary" as const, note: payNote }, term: { endsOn: "2027-05-31" } },
+        settingsHash: "b".repeat(64),
+        termEndsAt: new Date("2027-05-31T00:00:00Z"),
+        termSeasonId: null,
+        termFollowsSeason: false,
+        startsAt: null,
+      };
+      const prepared = prepareSeatTermsText(app, ["Gate keeper"], candidate, "UTC");
+      await insertApplication(pool, { ...app, textId: prepared.text.id, textHash: prepared.text.contentHash, status: "voting" });
+      await writePreparedText(pool, prepared);
+      return prepared.text.id;
+    };
+    // Hers: her first name in her own words.
+    const mine = await mk("sa-00000000000000f1", "u-may", "I keep the gate.", "Ask May about the keys.");
+    // His: a date with her first name's word in it, her first name alone, and her full name.
+    const his = await mk("sa-00000000000000f2", "u-ivo", "I learned the gate from May Ostrander.", "Reviewed in May 2027 by May.");
+    await insertPlanVersion(pool, "u-ivo", "s-now", { aim: "Work the gate beside @mayo.", servesGoal: null, commitments: {}, handingBack: [] } as any);
+    const hisBefore = (await readText(pool, his))!;
+    // CONTROL: the words carry every spelling, and his text names the date.
+    expect(hisBefore.body).toContain("May 2027");
+    expect(hisBefore.body).toContain("31 May 2027");
+
+    await eraseFromAlignments(pool, { id: "u-may", name: "May Ostrander", handle: "mayo" });
+
+    const hisAfter = (await readText(pool, his))!;
+    expect(hisAfter.body).toContain("31 May 2027");
+    expect(hisAfter.body).toContain("Reviewed in May 2027 by May.");
+    expect(hisAfter.body).not.toContain(FORMER_MEMBER);
+    expect((await readApplication(pool, "sa-00000000000000f2"))!.note).toBe(`I learned the gate from ${FORMER_MEMBER}.`);
+    const plans = await planVersions(pool, "u-ivo", "s-now");
+    expect(plans[plans.length - 1].aim).toBe(`Work the gate beside ${FORMER_MEMBER}.`);
+    // Her own text loses her first name, and keeps its dates.
+    const mineAfter = (await readText(pool, mine))!;
+    expect(mineAfter.body).toContain(`Ask ${FORMER_MEMBER} about the keys.`);
+    expect(mineAfter.body).toContain("31 May 2027");
   });
 });

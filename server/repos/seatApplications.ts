@@ -264,21 +264,66 @@ export async function withdrawUnseatedOf(db: Db, candidateUserId: string): Promi
 
 // ── Terms on offer, for the erasure step ───────────────────────────────────
 
-/** Seats whose terms on offer mention a phrase. */
-export async function offersMentioning(db: Db, phrase: string): Promise<Array<{ id: string; termsOffer: unknown }>> {
-  const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+const likeOf = (phrase: string) => `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/**
+ * Seats whose terms on offer mention a phrase, with who published each. The
+ * LIKE is a wide net (it ignores case); the erasure step decides, case by
+ * case, what in the words is the member.
+ */
+export async function offersMentioning(db: Db, phrase: string): Promise<Array<{ id: string; termsOffer: unknown; by: string | null }>> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT id, terms_offer FROM org_roles WHERE terms_offer IS NOT NULL AND CAST(terms_offer AS CHAR) LIKE ?",
-    [like],
+    "SELECT id, terms_offer, terms_offer_by FROM org_roles WHERE terms_offer IS NOT NULL AND CAST(terms_offer AS CHAR) LIKE ?",
+    [likeOf(phrase)],
   );
-  return rows.map((r: any) => ({ id: String(r.id), termsOffer: json<unknown>(r.terms_offer, null) }));
+  return rows.map((r: any) => ({ id: String(r.id), termsOffer: json<unknown>(r.terms_offer, null), by: r.terms_offer_by ?? null }));
 }
 
-/** Applications whose stored terms mention a phrase, for the erasure step. */
-export async function applicationsMentioning(db: Db, phrase: string): Promise<Array<{ id: string; settings: unknown }>> {
-  const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-  const [rows] = await db.query<RowDataPacket[]>("SELECT id, settings_json FROM seat_applications WHERE CAST(settings_json AS CHAR) LIKE ?", [like]);
-  return rows.map((r: any) => ({ id: String(r.id), settings: json<unknown>(r.settings_json, null) }));
+/** Seats whose terms on offer a member published, for the erasure step. */
+export async function offersBy(db: Db, userId: string): Promise<Array<{ id: string; termsOffer: unknown; by: string | null }>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT id, terms_offer, terms_offer_by FROM org_roles WHERE terms_offer IS NOT NULL AND terms_offer_by = ?", [userId]);
+  return rows.map((r: any) => ({ id: String(r.id), termsOffer: json<unknown>(r.terms_offer, null), by: r.terms_offer_by ?? null }));
+}
+
+export interface ApplicationWords {
+  id: string;
+  candidateUserId: string;
+  note: string | null;
+  deliverables: string | null;
+  settings: unknown;
+}
+
+const wordsOf = (r: any): ApplicationWords => ({
+  id: String(r.id),
+  candidateUserId: String(r.candidate_user_id),
+  note: r.note ?? null,
+  deliverables: r.deliverables ?? null,
+  settings: json<unknown>(r.settings_json, null),
+});
+
+/** A member's own applications' words and terms, for the erasure step. */
+export async function applicationWordsOf(db: Db, candidateUserId: string): Promise<ApplicationWords[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, candidate_user_id, note, deliverables, settings_json FROM seat_applications WHERE candidate_user_id = ?",
+    [candidateUserId],
+  );
+  return rows.map(wordsOf);
+}
+
+/** Other members' applications whose words or terms mention a phrase (a wide, case-blind net), for the erasure step. */
+export async function applicationsMentioning(db: Db, phrase: string): Promise<ApplicationWords[]> {
+  const like = likeOf(phrase);
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, candidate_user_id, note, deliverables, settings_json FROM seat_applications " +
+      "WHERE note LIKE ? OR deliverables LIKE ? OR CAST(settings_json AS CHAR) LIKE ?",
+    [like, like, like],
+  );
+  return rows.map(wordsOf);
+}
+
+/** Erasure only: another member's own words with a departed member's name taken out. */
+export async function rewriteApplicationWords(db: Db, id: string, note: string | null, deliverables: string | null): Promise<void> {
+  await db.query("UPDATE seat_applications SET note = ?, deliverables = ? WHERE id = ?", [note, deliverables, id]);
 }
 
 /**

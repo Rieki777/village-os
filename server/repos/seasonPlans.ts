@@ -164,6 +164,21 @@ export async function eraseSeasonPlanWords(db: Db, userId: string): Promise<numb
   return Number(r?.affectedRows ?? 0);
 }
 
+/** Other members' plans whose aim or commitments mention a phrase (a wide, case-blind net), for the erasure step. */
+export async function plansMentioning(db: Db, phrase: string): Promise<Array<{ id: string; userId: string; aim: string | null; commitments: unknown }>> {
+  const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, user_id, aim, commitments_json FROM season_plans WHERE aim LIKE ? OR CAST(commitments_json AS CHAR) LIKE ?",
+    [like, like],
+  );
+  return rows.map((r: any) => ({ id: String(r.id), userId: String(r.user_id), aim: r.aim ?? null, commitments: json<unknown>(r.commitments_json, null) }));
+}
+
+/** Erasure only: another member's plan words with a departed member's name taken out. */
+export async function rewritePlanWords(db: Db, id: string, aim: string | null, commitments: unknown): Promise<void> {
+  await db.query("UPDATE season_plans SET aim = ?, commitments_json = ? WHERE id = ?", [aim, commitments === null ? null : JSON.stringify(commitments), id]);
+}
+
 /**
  * QUESTS CONSENTED INSIDE ONE MOON, per member, in one grouped read.
  *
