@@ -238,10 +238,22 @@ const REFUSED_KEYS: Record<string, string> = {
   tokenPerCycle: "Terms record money in a currency. Tokens are paid through the village's own rules.",
 };
 
-/** Eight or more digits, allowing one space, dot or dash between them. */
-const DIGIT_RUN = /\d(?:[ .-]?\d){7,}/;
-/** Calendar dates are dates, never account numbers. */
-const ISO_DATE_IN_TEXT = /\b\d{4}-\d{2}-\d{2}\b/g;
+/**
+ * Eight or more digits once the separators are gone (red team S3). Short runs
+ * of anything that is not a digit, three characters or fewer, are what people
+ * put between the groups of a card or account number: a space, two spaces,
+ * " - ", "/", ",". So they are collapsed before the digits are counted.
+ */
+const DIGIT_RUN = /\d{8,}/;
+const SHORT_GAP = /(\d)\D{1,3}(?=\d)/g;
+/**
+ * Calendar dates are dates, never account numbers: a STANDALONE real date,
+ * with nothing digit-shaped joined to either end, is taken out before the
+ * count. "acct 1234-56-78-90" is not one, and stays in.
+ */
+const ISO_DATE_IN_TEXT = /(?<![\d./,-])(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?![\d]|[-./,]\d)/g;
+/** A clock time, "10:00", likewise: a gathering's hours are not a number. */
+const TIME_IN_TEXT = /(?<![\d:])(?:[01]?\d|2[0-3]):[0-5]\d(?![\d:])/g;
 /** Two letters, two check digits, then eleven to thirty letters or digits. */
 const IBAN_SHAPE = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/i;
 
@@ -254,8 +266,10 @@ export const PAYMENT_DETAIL_MESSAGE =
 
 /** True when a piece of free text carries something shaped like payment details. */
 export function looksLikePaymentDetails(text: string): boolean {
-  const withoutDates = text.replace(ISO_DATE_IN_TEXT, " ");
-  return DIGIT_RUN.test(withoutDates) || IBAN_SHAPE.test(text);
+  // Fullwidth and other compatibility digits read as the digits they are.
+  const plain = text.normalize("NFKC");
+  const digits = plain.replace(ISO_DATE_IN_TEXT, " ").replace(TIME_IN_TEXT, " ").replace(SHORT_GAP, "$1");
+  return DIGIT_RUN.test(digits) || IBAN_SHAPE.test(plain);
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>

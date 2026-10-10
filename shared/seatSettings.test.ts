@@ -105,6 +105,23 @@ describe("parseSeatSettings refuses payment details (economics ruling 23)", () =
     for (const raw of cases) expect(ok(raw).ok, JSON.stringify(raw)).toBe(false);
     expect(looksLikePaymentDetails("nothing here")).toBe(false);
   });
+
+  it("is not walked round by spacing, separators, a date-shaped prefix or fullwidth digits (red team S3)", () => {
+    for (const text of [
+      "card 4111  1111  1111  1111",
+      "acct 1234 - 5678 - 90",
+      "acct 1234/5678/90",
+      "acct 1234,5678,90",
+      "acct 1234-56-78-90",
+      "card ４１１１１１１１１",
+    ]) {
+      expect(looksLikePaymentDetails(text), text).toBe(true);
+    }
+    // CONTROL: real dates, a time and short counts stay ordinary words.
+    for (const text of ["From 2026-10-09 to 2027-03-21", "Gather at 10:00 on 2027-01-05", "1 to 12 quests a moon, 3 measures", "Room B12 on the north side"]) {
+      expect(looksLikePaymentDetails(text), text).toBe(false);
+    }
+  });
 });
 
 describe("parseSeatSettings refuses what is never a term", () => {
