@@ -522,6 +522,18 @@ export function isVetoable(
           : "This village does not put this kind of decision inside the veto window.",
     };
   }
+  /*
+   * A SEAT APPLICATION IS A SEATING, and the 2026-09-04 ruling holds for it
+   * whatever seats it names: it waits its window and no steward stops it
+   * (red team G3). Its subject reference is an application id, so there is no
+   * role to read off it, and none is needed.
+   */
+  if (subjectType === "role_application") {
+    return {
+      vetoable: false,
+      why: "This decision seats a member who applied. It waits out its window like any other Game change, and no steward can stop it.",
+    };
+  }
   if (ROLE_SEAT_SUBJECTS.includes(subjectType) && ctx.seatsStewardCapableRole) {
     return {
       vetoable: false,
