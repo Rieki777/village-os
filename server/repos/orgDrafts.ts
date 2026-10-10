@@ -146,6 +146,16 @@ export async function readCirclesForPreview(conn: Pool | PoolConnection): Promis
 }
 
 /*
+ * EVERY SEAT, as much of it as a draft preview checks: its id and name for the
+ * collision rules, whether it is live or an example, and its circle, which a
+ * circle's retirement reads (0243). On the caller's connection, like the rest.
+ */
+export async function readRolesForPreview(conn: Pool | PoolConnection): Promise<any[]> {
+  const [rows]: any = await conn.query("SELECT id, name, is_example, active, circle_id FROM org_roles");
+  return rows as any[];
+}
+
+/*
  * THE SEATS SOMEBODY HOLDS RIGHT NOW (0243), for the preview's check that a
  * steward retiring the old chart never unseats anybody. On the caller's
  * connection for the same reason as the circles above: inside a publish, the

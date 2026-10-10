@@ -39,7 +39,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
-import { readHeldSeatIds } from "../repos/orgDrafts";
+import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
@@ -827,7 +827,7 @@ function stewardChose(c: { payload?: any }): boolean {
 }
 
 export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<PreviewContext> {
-  const [roles]: any = await pool.query("SELECT id, name, is_example, active, circle_id FROM org_roles");
+  const roles = await readRolesForPreview(pool);
   const circles = await readCirclesForPreview(pool);
   const all = (circles as any[]).map((c) => ({
     id: String(c.id),
