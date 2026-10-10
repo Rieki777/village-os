@@ -167,6 +167,8 @@ export const NAV: readonly NavEntry[] = [
       // example and the page ends at the settings, so it is the team's tour.
       { href: "/first-walk", label: "Your First Walk", roles: ["admin", "founder"] },
       { href: "/game-mechanics", label: "Game Mechanics" },
+      // Every email the village sends and when, read-only, with a door to propose a change (comms build spec 5.13).
+      { href: "/village-email", label: "Village Email", module: "comms" },
       { href: "/good-neighbor", brochure: true, label: "Good Neighbor" },
       { href: "/training", label: "Training" },
       { href: "/resident-rights", brochure: true, label: "Resident Rights" },

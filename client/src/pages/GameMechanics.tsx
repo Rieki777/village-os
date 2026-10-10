@@ -55,6 +55,7 @@ import { useCatalyst, useGameConfig, authToken } from "@/lib/gameApi";
 import { ballotReturn } from "./gameMechanicsBallotCopy";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFocusTarget } from "@/lib/useFocusTarget";
+import { dialFromSearch } from "@shared/comms/memberView";
 import InfoTip, { DialFact } from "@/components/InfoTip";
 import LongText from "@/components/LongText";
 import PurposeAlignmentField, { usePurposeAlignment } from "@/components/governance/PurposeAlignmentField";
@@ -512,7 +513,8 @@ export default function GameMechanics() {
   const [history, setHistory] = useState<Amendment[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
-  const [dialQuery, setDialQuery] = useState("");
+  // A link may name one dial (`?dial=`, the village email page's door): the search finds it.
+  const [dialQuery, setDialQuery] = useState(() => dialFromSearch(window.location.search));
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [standing, setStanding] = useState<Standing | null>(null);
   const [staged, setStaged] = useState<Record<string, string>>({});
@@ -930,6 +932,9 @@ export default function GameMechanics() {
                     placeholder="Search dials by name, key, or what they do"
                     className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                   />
+                  {allDials.some((v) => v.key.startsWith("comms.")) && (
+                    <Link href="/village-email" className="block text-xs text-teal-deep underline underline-offset-2 mt-2">See every email the village sends, and when</Link>
+                  )}
                   <p aria-live="polite" className="text-xs text-stone-500 mt-1">
                     {dialSearch
                       ? `${matchedDials.length} of ${allDials.length} dials match.`

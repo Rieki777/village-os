@@ -309,6 +309,8 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   // Shipped with its module (ruling 22, 2026-09-15), so the gap ratchet never
   // counts it.
   redemption: "redemption.md",
+  // Shipped with its module (Village Comms, 2026-10-02), for the same reason.
+  comms: "comms.md",
   // Shipped with its module (2026-10-02). A contract and no member's words:
   // the doc describes the tables and never holds an entry.
   journal: "journal.md",

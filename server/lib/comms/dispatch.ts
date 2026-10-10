@@ -1,0 +1,52 @@
+/**
+ * WHERE A COMMS TRIGGER GOES (the comms build spec sections 2 and 7).
+ *
+ * The server registers this as the sink's one handler at boot
+ * (`commsSink.register(createCommsDispatcher(...))` in server/index.ts), and
+ * every lane that acts on a trigger adds its case HERE, never in
+ * server/index.ts: event emails (C2), guests and recaps (C3), the time vote
+ * (C4), paths (D1). The switch is over the trigger's own union, so a case for
+ * a trigger that does not exist is a compile error.
+ *
+ * TODAY IT DISPATCHES NOWHERE. It notes each trigger at debug level, with the
+ * type and never the contents, so a founder watching the log can see the
+ * hooks firing before any automation is built on them.
+ *
+ * Runs after the caller has moved on (server/lib/commsSink.ts), so a handler
+ * here may take its time and may fail without undoing anything.
+ */
+import type { Pool } from "mysql2/promise";
+import type { CommsTrigger } from "../../../shared/comms/contracts";
+import type { PostOfficeDeps } from "./postOffice";
+// Event emails (lane C2): one function per gathering trigger.
+import { handleGatheringTrigger, isGatheringTrigger } from "./eventEmails";
+// Paths, membership and joining (lane D1): server/lib/comms/paths.ts.
+import { handlePathTrigger, isPathTrigger } from "./paths";
+import type { MembersPort } from "./permissions";
+
+/** What the lanes that fill this in will reach. Grows one entry per lane. */
+export interface CommsDispatchDeps {
+  getPool(): Pool;
+  postOffice: PostOfficeDeps;
+  /** The members repository, for the paths lane. Absent: it reads the users table itself. */
+  members?: MembersPort;
+}
+
+export function createCommsDispatcher(deps: CommsDispatchDeps): (t: CommsTrigger) => Promise<void> {
+  return async (t: CommsTrigger): Promise<void> => {
+    // Event emails (lane C2): answers, the waitlist, and the gathering itself.
+    if (isGatheringTrigger(t)) {
+      await handleGatheringTrigger({ getPool: deps.getPool, postOffice: deps.postOffice }, t);
+      return;
+    }
+    // Paths, a new member, a request to join (lane D1).
+    if (isPathTrigger(t)) {
+      await handlePathTrigger({ getPool: deps.getPool, ...(deps.members ? { members: deps.members } : {}) }, t);
+      return;
+    }
+    switch (t.type) {
+      default:
+        console.debug(`[comms] ${t.type} fired; nothing is listening to it yet`);
+    }
+  };
+}

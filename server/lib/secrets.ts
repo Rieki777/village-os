@@ -78,11 +78,15 @@ import type { Pool } from "mysql2/promise";
 import { registrySecretKeys } from "../../shared/modules";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 
-/** The platform's own seven. A literal union, so every call site still typechecks. */
+/** The platform's own eight. A literal union, so every call site still typechecks. */
 const BASE_SECRET_KEYS = [
   "stripe_secret_key",
   "stripe_webhook_secret",
   "resend_api_key",
+  // Village Comms: the signing secret the email provider's delivery reports
+  // carry, checked by server/routes/commsWebhook.ts. Declared beside the key it
+  // belongs to, the way the Stripe pair sits together.
+  "resend_webhook_secret",
   "assistant_api_key",
   "riverside_webhook_secret",
   "governance_hub_secret",
@@ -93,7 +97,7 @@ export type BaseSecretKey = (typeof BASE_SECRET_KEYS)[number];
 /**
  * A platform key, or a slot a listing contributed.
  *
- * `string & {}` keeps the seven literals in autocomplete and in every existing
+ * `string & {}` keeps the eight literals in autocomplete and in every existing
  * call site's type check while admitting a registry-contributed slot. Before
  * this, adding one vendor credential meant editing a frozen union and a
  * hardcoded env map in platform code and shipping a release to every fork,
@@ -116,6 +120,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string> = {
   stripe_secret_key: "STRIPE_SECRET_KEY",
   stripe_webhook_secret: "STRIPE_WEBHOOK_SECRET",
   resend_api_key: "RESEND_API_KEY",
+  resend_webhook_secret: "RESEND_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   assistant_api_key: "ANTHROPIC_API_KEY",
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",
@@ -123,7 +128,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string> = {
 };
 
 /**
- * The env var a slot falls back to. The seven keep the exact names the runbook
+ * The env var a slot falls back to. The eight keep the exact names the runbook
  * documents; a registry slot takes its own name uppercased, which is a rule a
  * fork operator can apply without reading any code.
  */

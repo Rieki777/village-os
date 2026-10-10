@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ATTENDANCE_MODES, CALENDAR_LAYERS, EVENT_STATUSES, type CalendarItem, type Recurrence } from "@shared/gatherings";
+import GatheringEmailSettings from "@/components/comms/GatheringEmailSettings";
+import HostRecapPanel, { hostToolsFor } from "@/components/comms/HostRecapPanel";
+import TimePollEditor from "@/components/admin/comms/TimePollEditor";
 
 /**
  * Admin, The Game, Calendar: the village calendar's own surface (0059,
@@ -103,6 +106,10 @@ export default function EventsAdminPanel({ password }: { password: string }) {
   const [moduleOff, setModuleOff] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY);
   const [editing, setEditing] = useState<string | null>(null);
+  // Village Comms 5.10: a gathering with a time vote takes its time from the
+  // vote, so the edit form leaves the time alone (see body()).
+  const [editingVoted, setEditingVoted] = useState(false);
+  const [openPoll, setOpenPoll] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [openRsvps, setOpenRsvps] = useState<string | null>(null);
   const [rsvps, setRsvps] = useState<Record<string, any[]>>({});
@@ -113,6 +120,8 @@ export default function EventsAdminPanel({ password }: { password: string }) {
   const [calBusy, setCalBusy] = useState<string | null>(null);
   // 0088: slots per gathering, and the weekly brief's settings.
   const [openSlots, setOpenSlots] = useState<string | null>(null);
+  /** Village Comms (5.9): the recap composer, for a gathering that has begun. Keyed by evening. */
+  const [openRecap, setOpenRecap] = useState<string | null>(null);
   const [slots, setSlots] = useState<Record<string, AdminSlot[]>>({});
   const [slotForm, setSlotForm] = useState(EMPTY_SLOT);
   const [brief, setBrief] = useState<{ enabled: boolean; day: number; hour: number } | null>(null);
@@ -231,7 +240,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
 
   const body = () => {
     const keys = form.structureKeys.split(",").map((s) => s.trim()).filter(Boolean);
-    return {
+    const all = {
       title: form.title.trim(),
       description: form.description.trim() || null,
       // The picker gives local time; the server stores UTC. Converting here
@@ -256,6 +265,11 @@ export default function EventsAdminPanel({ password }: { password: string }) {
       recurrence: repeatToRecurrence(form.repeat, form.startsAt),
       link: form.link.trim() || null,
     };
+    if (!editingVoted) return all;
+    // The vote owns the time. Saving these would undo what the vote chose, and
+    // for a series would drop the evenings the vote moved.
+    const { startsAt: _s, endsAt: _e, recurrence: _r, allDay: _a, ...rest } = all;
+    return rest;
   };
 
   const save = async () => {
@@ -274,13 +288,14 @@ export default function EventsAdminPanel({ password }: { password: string }) {
       // The server owns validation, so its message is the one worth showing.
       if (!res.ok) { toast.error(data?.error ?? "Save failed"); setSaving(false); return; }
       toast.success(editingId ? "Gathering updated" : "Gathering added");
-      setForm(EMPTY); setEditing(null); load();
+      setForm(EMPTY); setEditing(null); setEditingVoted(false); load();
     } catch { toast.error("Save failed"); }
     setSaving(false);
   };
 
   const edit = (g: CalendarItem) => {
     setEditing(g.id);
+    setEditingVoted(Boolean(g.timePoll));
     setForm({
       title: g.title,
       description: g.description ?? "",
@@ -406,6 +421,11 @@ export default function EventsAdminPanel({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">
           {editing ? "Edit gathering" : "Add a gathering"}
         </h3>
+        {editingVoted && (
+          <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            This gathering's time follows its vote, so saving here leaves the time as it is. Change the time from the vote.
+          </p>
+        )}
         <div className="grid md:grid-cols-2 gap-4 mb-4">
           {field("Title", "title", "text", "Harvest work party")}
           {field("Where (in words)", "locationText", "text", "The greenhouse")}
@@ -519,7 +539,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
             {saving ? "Saving..." : editing ? "Save changes" : "Add gathering"}
           </button>
           {editing && (
-            <button onClick={() => { setEditing(null); setForm(EMPTY); }}
+            <button onClick={() => { setEditing(null); setEditingVoted(false); setForm(EMPTY); }}
               className="px-4 py-2 border border-gray-200 rounded-lg text-sm">Cancel</button>
           )}
         </div>
@@ -597,6 +617,16 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                   className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
                   {openSlots === g.id ? "Hide slots" : "Slots"}
                 </button>
+                {hostToolsFor(g) && (
+                  <button onClick={() => setOpenRecap(openRecap === `${g.id}:${g.occurrenceKey}` ? null : `${g.id}:${g.occurrenceKey}`)}
+                    className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
+                    {openRecap === `${g.id}:${g.occurrenceKey}` ? "Hide recap" : "Recap"}
+                  </button>
+                )}
+                <button onClick={() => setOpenPoll(openPoll === `${g.id}:${g.occurrenceKey}` ? null : `${g.id}:${g.occurrenceKey}`)}
+                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
+                  {openPoll === `${g.id}:${g.occurrenceKey}` ? "Hide time vote" : g.timePoll ? "Time vote" : "Vote on the time"}
+                </button>
                 <button onClick={() => edit(g)}
                   className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">Edit</button>
                 {g.status === "draft" && (
@@ -622,12 +652,19 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                     <li key={`${r.userId}:${r.occurrenceKey ?? ""}`} className="flex items-center justify-between gap-3">
                       {/* A deleted member's answer still counts toward the room,
                           so it stays listed with the tombstone spelled out. */}
-                      <span>{r.name ?? "a member who has since left"}{r.occurrenceKey ? <span className="text-gray-400"> ({r.occurrenceKey})</span> : null}</span>
+                      {/* A guest (5.8) shows the name they gave, marked, and never an address. */}
+                      <span>{r.name ?? (r.guest ? "a guest" : "a member who has since left")}{r.guest && r.name ? " (guest)" : ""}{r.occurrenceKey ? <span className="text-gray-400"> ({r.occurrenceKey})</span> : null}</span>
                       <span className="text-gray-400">{r.status}</span>
                     </li>
                   ))}
                 </ul>
               </div>
+            )}
+
+            {openRecap === `${g.id}:${g.occurrenceKey}` && <HostRecapPanel eventId={g.id} occurrenceKey={g.occurrenceKey} startOpen />}
+            {/* Village Comms 5.10: the gathering's live time vote. */}
+            {openPoll === `${g.id}:${g.occurrenceKey}` && (
+              <TimePollEditor eventId={g.id} weekly={g.recurrence?.freq === "weekly"} password={password} onChanged={load} />
             )}
 
             {/* 0088: what this gathering asks people to bring or hold. */}
@@ -681,6 +718,9 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                 </div>
               </div>
             )}
+
+            {/* Village Comms: this gathering's reminders, guests and host. */}
+            {(g.kind === "gathering" || g.kind === "festival") && <GatheringEmailSettings eventId={g.id} token={password} manages />}
           </div>
         ))}
       </div>

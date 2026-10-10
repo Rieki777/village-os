@@ -606,7 +606,9 @@ const FIXED: Record<string, number> = {
   "client/src/components/profile/InvitePanel.tsx": 1,
   "client/src/components/ui/badge.tsx": 1,
   "client/src/components/ui/button.tsx": 1,
-  "client/src/pages/Admin.tsx": 13,
+  "client/src/pages/Admin.tsx": 12,
+  // The Comms setup editors took one of Admin.tsx's fixed hovers with them; the total stays 63.
+  "client/src/components/admin/comms/CommsSetupEditors.tsx": 1,
   "client/src/pages/Bootstrap.tsx": 1,
   "client/src/pages/CoCreatorsGuide.tsx": 1,
   "client/src/pages/FirstWalk.tsx": 2,

@@ -90,13 +90,13 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       // session secret and the assistant key, and SEVEN of the seventeen
       // launch requirements point at it, more than any other tab. It was the
       // second row of a two-row group named after the other one. It leads
-      // here, and email settings follow it, because a mail provider is one
-      // connection among several rather than the category.
+      // here, because a mail provider is one connection among several.
+      //
+      // Email Settings sat beside it until 2026-10-02, and is now the start of
+      // Comms Settings, in the Comms group below. Its old key, `email-settings`,
+      // still renders that screen, so every link to it still lands.
       title: CONNECTIONS_GROUP_TITLE,
-      items: [
-        { key: "integrations", label: "Integrations", icon: KeyRound },
-        { key: "email-settings", label: "Email Settings", icon: Mail },
-      ],
+      items: [{ key: "integrations", label: "Integrations", icon: KeyRound }],
     },
     {
       // What the village DOES. Module Library first: it is the master switch
@@ -173,6 +173,23 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         // because it is the queue of last resort: everything on it either
         // retries on its own or is waiting for a person.
         { key: "failures", label: "What's Failing", icon: AlertTriangle },
+      ],
+    },
+    {
+      // Village Comms (the comms build spec 6): the village's email, after
+      // the week's queues because keeping in touch is ordinary running. Sent
+      // mail and Settings show whether or not the comms module is on (a village
+      // sets up its sending first, and the post office records every email
+      // either way); the other five follow the module (client/src/lib/adminNav.ts).
+      title: "Comms",
+      items: [
+        { key: "comms-overview", label: "Overview", icon: Activity },
+        { key: "comms-journeys", label: "Journeys", icon: Calendar },
+        { key: "comms-words", label: "Words", icon: FileText },
+        { key: "comms-people", label: "People", icon: Users },
+        { key: "comms-letters", label: "Letters", icon: Mail },
+        { key: "comms-sent", label: "Sent mail", icon: Inbox },
+        { key: "comms-settings", label: "Settings", icon: KeyRound },
       ],
     },
     {

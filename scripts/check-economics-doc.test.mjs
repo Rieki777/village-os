@@ -452,6 +452,40 @@ check("F10 READER: a builder that is not in `keys` is a THROW, not a silent gap"
   assert.throws(() => postingKeys(root), /is not in the\s+`keys` object this reader read/);
 });
 
+check("F10 READER: an email's key is not a ledger key, and a posting with a subject still is", () => {
+  // Village Comms writes `idempotencyKey` on every email and on the row that
+  // records it. Those keys dedupe `comms_messages` and never reach the ledger,
+  // so an email (a subject AND its words or its address) is passed over. A
+  // posting that only has a `subject` field is still a posting: read when
+  // readable, refused when not.
+  const root = path.join(READER_FIXTURES, "email-key");
+  fs.mkdirSync(path.join(root, "server", "lib"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "server", "lib", "economy.ts"),
+    "export const keys = { a: (v: string) => `a:${v}` };\n" +
+      "export async function mail(office: any, id: string, r: any) {\n" +
+      "  await post(office, { idempotencyKey: opaqueKey(id), subject: 'Hello', html: '<p>Hi</p>' });\n" +
+      "  await insertMessage(office, { idempotencyKey: opaqueKey(id), subject: 'Hello', bodyHtml: null });\n" +
+      "  return { idempotencyKey: String(r.idempotency_key), toEmail: String(r.to_email), subject: String(r.subject) };\n" +
+      "}\n" +
+      "export async function pay(pool: any, v: string) {\n" +
+      "  return postTransfer(pool, { idempotencyKey: keys.a(v), subject: 'a field a posting might grow' });\n" +
+      "}\n",
+  );
+  assert.deepStrictEqual(postingKeys(root).sites.map((s) => s.shape), ["a:<v>"]);
+
+  const refused = path.join(READER_FIXTURES, "subject-only-posting");
+  fs.mkdirSync(path.join(refused, "server", "lib"), { recursive: true });
+  fs.writeFileSync(
+    path.join(refused, "server", "lib", "economy.ts"),
+    "export const keys = { a: (v: string) => `a:${v}` };\n" +
+      "export async function pay(pool: any, id: string) {\n" +
+      "  return postTransfer(pool, { idempotencyKey: opaqueKey(id), subject: 'not an email' });\n" +
+      "}\n",
+  );
+  assert.throws(() => postingKeys(refused), /writes an idempotency key this reader cannot resolve/);
+});
+
 check("F10 READER: the tokenSlug suffix is found wherever it is written", () => {
   // The keystone lane may move the `:${slug}` inside the builders. Both
   // arrangements must produce the same final shape, or this reader would go

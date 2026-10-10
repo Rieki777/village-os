@@ -35,7 +35,7 @@
  */
 import type { Express } from "express";
 import type { Capability } from "../../shared/capabilities";
-import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "../lib/capabilityConsequence";
 import type { AppDeps } from "../lib/appDeps";
 import {
   BADGE_KINDS,
@@ -458,7 +458,7 @@ export function register(app: Express, deps: Deps): void {
       holderIds = holders.map((h: any) => String(h.user_id));
       if (holderIds.length > 0 && req.body?.confirmCapabilityChange !== true) {
         const say = (list: string[]) =>
-          list.map((c) => CAPABILITY_CONSEQUENCE[c as Capability] ?? c).join("; ");
+          list.map((c) => liveConsequence(c)).join("; ");
         const parts: string[] = [];
         if (gained.length) parts.push(`they will be able to ${say(gained)}`);
         if (lost.length) parts.push(`they will no longer be able to ${say(lost)}`);

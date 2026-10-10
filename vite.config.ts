@@ -105,6 +105,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
+        experimentalMinChunkSize: 8192,
         /**
          * One icon chunk, because the total budget is measured in BLOCKS.
          *
@@ -136,6 +137,15 @@ export default defineConfig({
          * weaker knob: about 64 KB at 4096, a plateau by 20000, and it pushes
          * real bytes INTO the main chunk, which is the one budget measured in
          * real bytes. Reach for it only after this.
+         *
+         * IT IS ON NOW, AT 8192 (2026-10-09). Village Comms and the sessions
+         * module landing together took the total to 6656 KB of 6600 with the
+         * icons grouping already in place. Measured on that tree: off 6656 KB
+         * with main JS 516 KB; 4096 gave 6580 and 521; 8192 gave 6548 and 540;
+         * 20000 gave 6480 and 554. 8192 leaves the next lane room for some 50
+         * KB at a cost of 24 KB on first load. The lasting fix is the 1.6 MB
+         * of avatars in client/public moving to the uploads volume, which this
+         * knob only postpones.
          *
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.

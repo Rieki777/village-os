@@ -55,8 +55,9 @@ control something outside this platform:
    manages your domain's records (your registrar, Cloudflare, wherever you
    bought it). Nobody else can do this for you.
 2. **Resend sender-domain verification.** Proving you own your sending
-   domain by adding SPF and DKIM records, at resend.com/domains. Same
-   reason: it is your domain.
+   domain by adding the SPF and DKIM records that Comms Settings (or
+   resend.com/domains) shows you, wherever your domain's DNS is managed.
+   Same reason: it is your domain.
 3. **Creating your own Stripe account**, if you take payments. Stripe
    requires the account holder to verify their own identity and banking
    details directly with Stripe.
@@ -153,23 +154,61 @@ hold the key itself.
 
 ## 4. Set up email
 
-Create a Resend account (or use your existing one), then verify your sending
-domain at resend.com/domains: Resend gives you the exact SPF and DKIM
-records to add wherever your domain's DNS lives. This step waits on DNS
-access, which is human-only (see above).
+Create a Resend account (or use your existing one). Everything after that
+is done from Admin, Comms, Settings once you have claimed your founder
+account in step 6, and needs no Railway access. Its checklist takes your
+Resend key, adds your sending domain and shows the exact SPF and DKIM
+records to add wherever your domain's DNS lives, checks verification with
+Resend, sets the sender name and address, connects delivery reports with
+one button, takes the postal address for the footer, and sends you a test
+email that counts once Resend reports it delivered. Adding the DNS records
+waits on DNS access, which is human-only (see above). A Resend key that can
+only send gets the same steps to do by hand in Resend's dashboard.
 
 **The trap:** Resend accepts mail through an unverified domain and answers
-HTTP 200 as if it worked. Nothing arrives. There is no error, no bounce, no
-warning anywhere in this platform. Verify the domain before you trust that
+HTTP 200 as if it worked. Nothing arrives, with no error and no bounce.
+Comms Settings marks the domain verified only when Resend says so, and
+refuses a sender address that is not on it. Until then, do not trust that
 any email, including your own founder claim link in step 6, is actually
 being delivered.
 
-Once verified, set `RESEND_API_KEY` and `EMAIL_FROM` in Railway.
-`RESEND_API_KEY` can also be set from Admin, Integrations, after you have
-logged in, which needs no Railway access; that route needs
-`VILLAGE_SECRETS_KEY` from step 3 and refuses the save without it.
-The sender address can likewise be set in Admin, Email config, and that
-value beats `EMAIL_FROM` when both are set.
+To set email up before you sign in, set `RESEND_API_KEY` and `EMAIL_FROM`
+in Railway instead. Both still work, and whatever is saved in Comms Settings
+takes over from them. Saving the key from the admin panel needs
+`VILLAGE_SECRETS_KEY` from step 3 and refuses the save without it. With no
+sender set anywhere, nothing is sent: each email is recorded as not sent.
+
+### DNS for a sending subdomain
+
+Send from a subdomain of your own domain, such as
+`mail.your-domain.example.org`. Its reputation with mail providers is then its
+own, and a bad week of bounces never touches the domain people browse or the
+mail your team sends by hand. Add the subdomain in Comms Settings (item 2),
+and it shows the records Resend wants for it. Typically that is a DKIM record
+(TXT, under `resend._domainkey`) and, for bounces, an SPF record (TXT) with an
+MX record on a `send` name beneath your subdomain. Copy the names and values
+exactly as shown: they differ by Resend region, and a record typed from
+memory is the commonest reason a domain stays pending. A DMARC record on the
+subdomain (TXT at `_dmarc`, starting `v=DMARC1; p=none;`) is not required and
+is worth adding.
+
+DNS can take from minutes to a day to spread. Press Check in Comms Settings
+until the domain reads verified, then set the sender address on that same
+subdomain (item 3). An address on any other domain is refused.
+
+### Connecting delivery reports
+
+Delivery reports are how the village learns that an email bounced or was
+marked as spam, and stops writing to that address. In Comms Settings, item 4
+creates the webhook at Resend with one button and stores its signing secret
+(`resend_webhook_secret`). If your Resend key can only send, make the webhook
+by hand at resend.com: point it at `https://<your-domain>/api/comms/webhooks/resend`,
+choose the events `email.sent`, `email.delivered`, `email.delivery_delayed`,
+`email.bounced`, `email.complained`, `email.failed` and `email.suppressed`,
+and paste its `whsec_` secret into item 4. The test email in item 13 counts
+only once a delivery report says it arrived, so this step is how you know the
+whole loop works. The long form, with every step a founder takes, is the
+Village Comms setup section of `docs/FORK_RUNBOOK.md`.
 
 ## 5. Deploy; the server migrates itself
 

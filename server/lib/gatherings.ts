@@ -46,6 +46,10 @@ import {
 } from "./calendar";
 import { firePromotionSink, promoteForCapacityChange, promoteWaitlist } from "./calendarCommunity";
 import { chargeForPlace, heldSeatValue, refundAllPlaces, refundPlace } from "./eventSeats";
+// Village Comms: the one door to the email system. Every call fires after the
+// change it reports is written, and never throws (server/lib/commsSink.ts).
+import { commsSink } from "./commsSink";
+import { gatheringTriggers } from "../../shared/comms/contracts";
 
 const newId = () => `ev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -234,17 +238,24 @@ export async function createGathering(
       seat.token,
     ],
   );
+  if (cleanStatus(input.status, "draft") === "scheduled") commsSink.fire({ type: "gathering_published", eventId: id });
   return (await getGathering(pool, id))!;
 }
 
 /**
  * Patch a gathering. Only keys actually present are written, so a caller
  * sending `{status}` cannot blank a description it never loaded.
+ *
+ * `opts.cause` names who made the edit when it was not a person at the
+ * editor: the live time vote passes `time_vote`, and the comms trigger
+ * carries it, so the vote's moves are ordinary edits for the seat fees, the
+ * queue and the calendar while the vote sends its own words about them.
  */
 export async function updateGathering(
   pool: Pool,
   id: string,
   patch: Partial<GatheringInput>,
+  opts: { cause?: "time_vote" } = {},
 ): Promise<CalendarItem | null> {
   const sets: string[] = [];
   const params: any[] = [];
@@ -289,6 +300,9 @@ export async function updateGathering(
 
   if (!sets.length) return getGathering(pool, id);
   params.push(id);
+  // What it was, so the comms trigger below reports what CHANGED and never
+  // what the editor happened to resend (gatheringTriggers says why).
+  const before = await getGathering(pool, id);
   await pool.query(`UPDATE events SET ${sets.join(", ")} WHERE id = ?`, params);
   /*
    * 0092: A GATHERING THAT STOPS HAPPENING GIVES THE SEAT FEES BACK.
@@ -329,7 +343,9 @@ export async function updateGathering(
       console.error("[waitlist] capacity-change promotion failed (edit saved)", e);
     }
   }
-  return getGathering(pool, id);
+  const after = await getGathering(pool, id);
+  for (const t of gatheringTriggers(id, before, after, opts.cause)) commsSink.fire(t);
+  return after;
 }
 
 export async function deleteGathering(pool: Pool, id: string): Promise<boolean> {
@@ -355,7 +371,11 @@ export async function deleteGathering(pool: Pool, id: string): Promise<boolean> 
   await pool.query("DELETE ss FROM event_slot_signups ss JOIN event_slots s ON s.id = ss.slot_id WHERE s.event_id = ?", [id]);
   await pool.query("DELETE FROM event_slots WHERE event_id = ?", [id]);
   const [res] = await pool.query<any>("DELETE FROM events WHERE id = ?", [id]);
-  return Number(res?.affectedRows ?? 0) > 0;
+  const deleted = Number(res?.affectedRows ?? 0) > 0;
+  // Its answers are gone by now, so its journey enrollments are what is left
+  // of its audience (the CommsTrigger union says so beside this trigger).
+  if (deleted) commsSink.fire({ type: "gathering_cancelled", eventId: id });
+  return deleted;
 }
 
 export type RsvpOutcome =
@@ -508,6 +528,8 @@ export async function rsvp(
       await withdrawRsvp(pool, eventId, userId, occ);
       return { ok: false, reason: "unpaid", message: charge.error };
     }
+    // Only now that the place is paid for: a refused fee hands the seat back above.
+    commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey: occ, personKey: userId, status: wanted });
     return {
       ok: true, status: wanted, goingCount, duplicate,
       charged: charge.duplicate ? 0 : charge.charged, tokenType: charge.tokenType,
@@ -521,6 +543,7 @@ export async function rsvp(
   if (freedSeat) {
     await refundPlace(pool, eventId, userId, occ, "You changed your answer");
   }
+  commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey: occ, personKey: userId, status: wanted });
   return { ok: true, status: wanted, goingCount, duplicate };
 }
 
@@ -531,6 +554,12 @@ export interface RsvpRow {
   at: string;
   /** Which evening, for a recurring gathering; "" for a one-off. */
   occurrenceKey: string;
+  /**
+   * True for somebody with no account (`guest:<contactId>`, shared/comms/kinds.ts).
+   * Their name is the one they gave, read from `comms_contacts`; their address
+   * never leaves the address book.
+   */
+  guest: boolean;
 }
 
 /**
@@ -544,17 +573,24 @@ export interface RsvpRow {
  * Emails are deliberately absent. An organiser needs to know who is coming;
  * a downloadable address list is a different feature with its own consent
  * question.
+ *
+ * A GUEST (`guest:<contactId>`, the comms build spec 5.8) has no `users` row,
+ * so their name comes from the address book, and the row says `guest` so the
+ * list can mark them. The join keys on the contact's primary key: the prefix
+ * is six characters, and the id is what follows it.
  */
 export async function listRsvps(pool: Pool, eventId: string, occurrenceKey?: string): Promise<RsvpRow[]> {
   const params: any[] = [eventId];
   let occ = "";
   if (occurrenceKey !== undefined) { occ = " AND r.occurrence_key = ?"; params.push(occurrenceKey); }
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT r.user_id, r.status, r.created_at, r.occurrence_key, u.name
+    `SELECT r.user_id, r.status, r.created_at, r.occurrence_key, COALESCE(u.name, c.name) AS name,
+            (r.user_id LIKE 'guest:%') AS is_guest
        FROM event_rsvps r
        LEFT JOIN users u ON u.id = r.user_id
+       LEFT JOIN comms_contacts c ON r.user_id LIKE 'guest:%' AND c.id = SUBSTRING(r.user_id, 7)
       WHERE r.event_id = ?${occ}
-      ORDER BY r.occurrence_key, FIELD(r.status,'going','maybe','declined'), u.name IS NULL, u.name`,
+      ORDER BY r.occurrence_key, FIELD(r.status,'going','maybe','declined'), COALESCE(u.name, c.name) IS NULL, COALESCE(u.name, c.name)`,
     params,
   );
   return rows.map((r) => ({
@@ -563,6 +599,7 @@ export async function listRsvps(pool: Pool, eventId: string, occurrenceKey?: str
     status: String(r.status) as RsvpStatus,
     at: iso(r.created_at),
     occurrenceKey: String(r.occurrence_key ?? ""),
+    guest: Number(r.is_guest) === 1,
   }));
 }
 
@@ -614,6 +651,7 @@ export async function withdrawRsvp(pool: Pool, eventId: string, userId: string, 
   if (gaveUpPlace) {
     await refundPlace(pool, eventId, userId, occurrenceKey, "You took your answer back");
   }
+  commsSink.fire({ type: "rsvp_changed", eventId, occurrenceKey, personKey: userId, status: "withdrawn" });
   return true;
 }
 

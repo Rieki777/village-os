@@ -39,9 +39,11 @@ what, where, what breaks without it.
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
 | `PLATFORM_ASSISTANT_DAILY_CAP` | (S76, optional) Calls per day allowed against the borrowed key, counted separately from every per-mode budget so a demo fork cannot spend a production village's headroom. `0` means zero, never unlimited. | 100 |
 | `MEMBER_SECRETS_KEY` | (round 4, Your agent) 32 random bytes as 64 hex characters (`openssl rand -hex 32`), set at provisioning. Encrypts each member's own LLM key at rest (AES-256-GCM, `server/lib/memberSecrets.ts`) and derives each member's agent-inbox signing secret. **Rotating it makes every stored member key unreadable**: members re-enter theirs and re-save their inbox URL. Deliberately no per-process fallback: a random key would store credentials this deployment could never read again after its next restart. Agent tokens (`vat_`) do NOT depend on it; they are hashed. Optional flag beside it: `AGENT_INTENT_WRITE=1` opens `POST /api/agent/v1/intents` once the introductions module has landed (leave unset until then). | The profile's "Run the assistant on your key" and "Agent inbox" sections say "this deployment has no member-secrets key; ask your operator" and refuse to store anything; bring-your-agent tokens, the skills and every read still work |
-| `RESEND_API_KEY` | Transactional email. **S63: settable from Admin → Integrations instead** — admin-typed beats env, masked on read. | Emails silently skipped (logged) |
-| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (resend.com/domains: SPF + DKIM records in the domain's DNS).** Resend returns 200 on unverified domains and delivers NOTHING — email death is silent. **Amora handoff item (Rye, 2026-07-26): `amora.cr` is unverified and only its team can add the DNS records — verify it during handoff.** | Claim links & notifications never arrive |
-| `EMAIL_FROM` | The `From:` address every village email leaves under — `name@example.org` or `Village Name <name@example.org>`. **Settable from Admin → Email config instead** (admin-typed beats this env var, and a malformed value there is refused at the door). Must be on the domain verified in Resend, or the send 200s and delivers nothing. **Set this during any fork's provisioning** — otherwise mail goes out under the platform's fallback sender, which is the first village's domain. | Falls back to the platform's own sender address |
+| `RESEND_API_KEY` | Transactional email. **S63: settable from Admin → Integrations instead** — admin-typed beats env, masked on read. Village Comms puts the same key first on the Comms Settings checklist (Admin, Comms, Settings), saved through the same secrets route. | Each email is recorded as not sent, and nothing leaves the village |
+| `RESEND_WEBHOOK_SECRET` | (Village Comms, 2026-10-02) The signing secret (`whsec_…`) of the email provider's delivery-report webhook. `POST /api/comms/webhooks/resend` checks every report against it in the Svix format and stores each one once. Held in the secrets store as `resend_webhook_secret`, so an admin-typed value beats this env var; Comms Settings creates the webhook and stores the secret with one button (Delivery reports), and takes the secret pasted by hand when the Resend key in use can only send. | Delivery reports answer 503 and the provider retries them; bounces and complaints go unrecorded, so a dead address keeps being written to |
+| `RESEND_API_BASE` | (dev/CI only, Village Comms) Points the post office at a stand-in provider instead of `https://api.resend.com`. The test suites set it to the fake in `server/testkit/fakeResend.ts`, so no test ever sends a real email. Honoured only when it is an https address or a loopback one, so a mistyped value cannot carry the village's key across a network in the clear. | The real provider is used, which is correct in production |
+| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. **Amora handoff item (Rye, 2026-07-26): `amora.cr` is unverified and only its team can add the DNS records — verify it during handoff.** | Claim links & notifications never arrive |
+| `EMAIL_FROM` | The `From:` address every village email leaves under: `name@example.org` or `Village Name <name@example.org>`. **Settable from Admin, Comms, Settings instead** (the sender name and address; admin-typed beats this env var, a malformed value is refused at the door, and so is an address that is not on the village's sending domain). Must be on the domain verified in Resend, or the send 200s and delivers nothing. There is no fallback sender: with neither this nor an admin-typed sender, nothing is sent, the post office records each email as not configured, and the caller is told why. | Nothing is sent; each email is recorded as not configured |
 | `FRONTEND_URL` | This village's own public address, e.g. `https://village.example.org`. Two things read it: the CORS allow-origin header, and every absolute link this server writes into an outgoing email (claim links, digests, the weekly brief). **Set it during any fork's provisioning.** It used to fall back to one specific project's domain, so a fork that left it unset mailed its own members a link to somebody else's login page and nobody found out until a member clicked one. That fallback is gone. | No CORS grant is sent at all, which refuses cross-origin readers rather than trusting a stranger. Email links fall back to the address this server has actually been reached at, taken from the first inbound request's proxy headers. If nothing has reached it yet, links have no absolute address and one log line names this variable |
 | `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** **Amora handoff item (Rye, 2026-07-26): the Amora team creates its own Stripe account and connects it during handoff** — until then card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
 | `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Amora handoff item (Rye, 2026-07-26): create the endpoint + set this secret together with `STRIPE_SECRET_KEY` — a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
@@ -775,6 +777,58 @@ on the calendar before switching the module off, so members are not sent to
 a page that 404s. Putting something on the calendar needs `event.manage`,
 which is role-granted and never reached by stage; answering one needs
 `event.rsvp`, which any account has. No seeds, no env vars.
+
+### Village Comms setup (0244 to 0246)
+
+Every email the village sends goes through one post office and is recorded
+before it goes; the automations (gathering reminders, path emails, guest
+RSVPs, time-vote emails, letters) live in the `comms` module, which ships off.
+The contract is `docs/modules/comms.md`. The steps a founder takes, all in
+Admin, Comms, Settings, with no Railway access and no env var:
+
+1. **Paste the Resend API key** (item 1). Saved through the secrets store as
+   `resend_api_key`, so it needs `VILLAGE_SECRETS_KEY`; `RESEND_API_KEY` in
+   the environment works until then, and an admin-typed key beats it.
+2. **Add the sending domain** (item 2) and copy the SPF and DKIM records it
+   shows into the domain's DNS, then press Check. A subdomain such as
+   `mail.your-domain.example.org` keeps the village's sending reputation apart
+   from the domain people browse; `docs/PROVISIONING.md` step 4 has the
+   records. Only the person who controls DNS can add them.
+3. **Set the sender name and address** (item 3). The address must be on the
+   verified domain, or it is refused at the door.
+4. **Connect delivery reports** (item 4). One button creates the webhook at
+   Resend, pointing at `https://<your-domain>/api/comms/webhooks/resend`, and
+   stores its signing secret as `resend_webhook_secret`. A key that can only
+   send gets the manual steps instead: make the webhook at resend.com with the
+   events `email.sent`, `email.delivered`, `email.delivery_delayed`,
+   `email.bounced`, `email.complained`, `email.failed` and `email.suppressed`,
+   then paste its `whsec_` secret into the same item. `RESEND_WEBHOOK_SECRET`
+   in the environment also works. Without it, bounces and complaints go
+   unrecorded and a dead address keeps being written to.
+5. **Type the postal address** for every email's footer (item 5).
+6. **Send yourself a test** (item 13). It counts once Resend reports it
+   delivered, which needs step 4.
+7. Optional, any time: who writes back for each path, the tick-box words on
+   public forms, the two recap questions, the rehearsal inbox, who holds
+   `comms.manage`, and the investor words review (until it is set, the
+   investor journey sends only its welcome and its hand-off).
+8. **Turn the module to `preview`** (Admin, Modules) to rehearse: every
+   gathering, path and letter email goes to the rehearsal inbox, marked with
+   who it would have reached. Then `members`, or `public` to let guests with
+   no account say they are coming. Each journey is then turned on by itself on
+   the Journeys screen.
+
+Pause all, on the same screen, holds every email except essential mail and
+member notices, which run whatever the module says. The dials (quiet hours,
+the daily cap, reminder times, retention and the rest) are game variables in
+the category "Email and reminders".
+
+**Tests and development:** `RESEND_API_BASE` points the post office at the
+fake provider in `server/testkit/fakeResend.ts`; every comms e2e suite sets it,
+so no test sends a real email. It is honoured only for an https or loopback
+address. Drive time in a test with `POST /api/admin/comms/run` and
+`{"job": "drain" | "journeys" | "polls"}`, because the e2e suites run with
+`SCHEDULER_ENABLED=0`.
 
 ### Selling library credits (`library.creditSaleEnabled`) — opt-in, off forever by default
 

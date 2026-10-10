@@ -148,6 +148,10 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
+import { register as registerCommsWebhook } from "./routes/commsWebhook";
+import { register as registerCommsRoutes } from "./routes/comms";
+import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
+import { register as registerCommsEventRoutes } from "./routes/commsEvents";
 import { resolveGoogleConfig } from "./lib/oauthGoogle";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
@@ -627,6 +631,18 @@ import {
   villageSecretsRefusal,
   type SecretKey,
 } from "./lib/secrets";
+import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from "./lib/comms/mailer";
+import { commsMode } from "./lib/comms/settings";
+import { createPermissionFor, suppressionsPortFor } from "./lib/comms/permissions";
+import { sweepCommsRetention } from "./lib/comms/retention";
+import { commsSink } from "./lib/commsSink";
+import { createCommsDispatcher } from "./lib/comms/dispatch";
+import { registerGatheringJourneyParts } from "./lib/comms/gatheringJourney";
+import { registerFactsProvider, registerVarsBuilder } from "./lib/comms/journeys";
+import { FORM_CONSENT_FIELD, formSubmittedTrigger } from "../shared/comms/contracts";
+import { backfillContacts } from "./lib/comms/backfill";
+import { backfillPathEnrollments } from "./lib/comms/paths";
+import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
 import {
   confirmManual,
   launchStatus,
@@ -963,29 +979,6 @@ if (!process.env.AUTH_TOKEN_SECRET) {
       "logins will not survive a restart, and auth will break if this service runs more than one replica.",
   );
 }
-const DEFAULT_EMAIL_CONFIG = {
-  investor: "",
-  steward: "",
-  resident: "",
-  prosperity: "",
-  resend_api_key: "",
-  // Anthropic API key for the "Work With Us" guide. Blank = the AI persona is
-  // dormant and the site shows the plain form instead. No key, no cost.
-  assistant_api_key: "",
-  // The From: address every village email leaves under. Blank inherits
-  // EMAIL_FROM, then the platform's last-resort literal — so an existing
-  // deployment changes nothing, and a fork can set its own sender from Admin
-  // without a deploy. Must be `addr@dom.tld` or `Name <addr@dom.tld>`.
-  sender: "",
-};
-
-/** `addr@dom.tld` or `Name <addr@dom.tld>` — anything else is not sendable. */
-function validEmailSender(v: string): boolean {
-  const s = v.trim();
-  if (!s) return false;
-  return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(s) || /^[^<>]+<[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>$/.test(s);
-}
-
 // FAQ_PATHWAYS and FaqPathway now live with the domain that defines them, in
 // server/routes/faqs.ts, and are imported above. Still needed here for the
 // seed document's type.
@@ -1095,19 +1088,6 @@ const DEFAULT_SETTINGS = {
 /** The starter training list, read with this village's name. See server/lib/trainingStarter.ts. */
 const defaultTrainingModules = () => starterTrainingModules(mergedConfig().project.name);
 
-const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" | "prosperity"> = {
-  investor: "investor",
-  "investor-pack": "investor",
-  "investor-call": "investor",
-  "investor-doc-request": "investor",
-  steward: "steward",
-  resident: "resident",
-  prosperity: "prosperity",
-  contact: "prosperity",
-  "work-with-us": "prosperity",
-  "quest-proposal": "steward",
-};
-
 /**
  * THE FORM TYPES THE PUBLIC DOOR COLLECTS. Nothing else gets through it.
  *
@@ -1129,7 +1109,7 @@ const FORM_TYPE_TO_PATHWAY: Record<string, "investor" | "steward" | "resident" |
  *     (InvestorJourney), `steward-interest` (StewardJourney), `visit-inquiry`
  *     (Visit), `quest-proposal` (ProposeQuest and GuideChat), `work-with-us`
  *     (WorkWithUs and GuideChat);
- *   - what `FORM_TYPE_TO_PATHWAY` above already knows how to route to an
+ *   - what `FORM_TYPE_TO_PATHWAY` (server/lib/comms/mailer.ts) routes to an
  *     inbox: `investor`, `investor-pack`, `resident`, `prosperity`, `contact`;
  *   - what `Admin.tsx` lists in its own filter, which is the same set again.
  *
@@ -1323,6 +1303,9 @@ const faqsRepo = dbDocument(getPool(), "faqs", DEFAULT_FAQS as any);
  */
 const journeyRepo = dbDocument(getPool(), "journey-state", { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] } as any);
 const emailConfigRepo = dbDocument(getPool(), "email-config", DEFAULT_EMAIL_CONFIG as any);
+const { getEmailConfig, sendResendEmail, sendNotice, buildSubmissionEmailHtml, recipientsForType, postOffice: commsPostOffice } = createMailer({ emailConfig: () => emailConfigRepo.get(), secretValue, projectName: () => mergedConfig().project.name, getPool, origin: deploymentOrigin, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")), mode: () => commsMode({ getPool, lifecycle: () => effectiveLifecycle("comms"), adminEmails: async () => (await accountsWithAdminReach()).map((u: any) => String(u.email ?? "")) }), permissionFor: (emailKey, kind, contactId) => createPermissionFor({ getPool, members, suppressions: suppressionsPortFor(getPool) })(emailKey, kind, contactId) });
+commsSink.register(createCommsDispatcher({ getPool, postOffice: commsPostOffice, members }));
+registerGatheringJourneyParts({ registerFactsProvider, registerVarsBuilder }, { getPool, postOffice: commsPostOffice });
 const settingsRepo = dbDocument(getPool(), "settings", DEFAULT_SETTINGS as any);
 const brandRepo = dbDocument(getPool(), "brand", DEFAULT_BRAND as any);
 /**
@@ -1914,6 +1897,8 @@ async function ensureDataFiles() {
     await alignTableCollations(getPool(), (m) => console.log(m));
   });
   await runOnce("currency-name-into-tokens-2026-08-14", migrateCurrencyNameIntoTokens);
+  await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
+  await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
   // rule the quest library follows, and the reason matters here: these are
@@ -2971,6 +2956,7 @@ async function recordStageEvent(user: any, from: string, to: string, reason: str
     reason,
     at: new Date().toISOString(),
   });
+  commsSink.fire({ type: "stage_advanced", userId: user.id, stage: to });
   await addActivity("stage", `${firstName(user.name)} advanced to ${getStage(to).name}`, { actorUserId: user.id, entityType: "stage", entityRef: to });
   await notify({
     userId: user.id,
@@ -3954,9 +3940,7 @@ const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verify
 const notifyDeps: NotifyDeps = {
   get pool() { return getPool(); },
   memberById: (id) => members.byId(id),
-  // The spine's contract wants `Promise<void>`; the sender now reports what it
-  // did, and this caller has no use for the report.
-  sendEmail: async (opts) => { await sendResendEmail(opts); },
+  sendEmail: sendNotice,
   isPresent: presenceTest(AUTH_TOKEN_SECRET),
   origin: deploymentOrigin,
   projectName: () => mergedConfig().project.name,
@@ -4479,6 +4463,7 @@ async function runRetentionSweep(): Promise<string> {
   }
   const bodies = await sweepContactBodies(getPool(), numberVar("map.contact_retention_days"));
   if (bodies) parts.push(`${bodies} contact body(ies)`);
+  const idleContacts = await sweepIdleContacts(getPool(), numberVar("comms.retention_months")); if (idleContacts) parts.push(`${idleContacts} unused email contact(s)`); // Village Comms 5.17: nobody written to, nothing on record
   const ntfDays = numberVar("retention.notifications_days");
   if (ntfDays > 0) {
     const [r]: any = await getPool().query(
@@ -4495,6 +4480,7 @@ async function runRetentionSweep(): Promise<string> {
     "DELETE FROM payments_log WHERE handled_at IS NOT NULL AND at < (NOW() - INTERVAL 400 DAY) LIMIT 5000",
   );
   if (pl.affectedRows) parts.push(`${pl.affectedRows} payment log row(s)`);
+  parts.push(...(await sweepCommsRetention(getPool(), numberVar("comms.retention_months"))));
   /*
    * 0093: photographs that were taken down long enough ago to forget.
    *
@@ -4620,25 +4606,6 @@ async function servedNextAction(user: any): Promise<{ id: string; label: string;
   return { ...rule, label: withCommitmentName(rule.label, mergedConfig().project.commitmentName) };
 }
 
-/**
- * Integration config. Keys resolve in this order:
- *   1. What an admin typed in the UI (per-project override, stored on the volume)
- *   2. The environment (RESEND_API_KEY / ANTHROPIC_API_KEY on the host)
- * Env vars are the better home for a shared key — they're not sitting in a JSON
- * file on a data volume, and one Railway service can run the integrations for a
- * project hosted under it. The admin UI still wins if a project sets its own.
- */
-function getEmailConfig() {
-  const merged = { ...DEFAULT_EMAIL_CONFIG, ...emailConfigRepo.get() };
-  return {
-    ...merged,
-    // S63: keys live in the write-only secrets store now (admin-first,
-    // env-fallback). Legacy values are migrated out of this doc at boot.
-    resend_api_key: secretValue("resend_api_key"),
-    assistant_api_key: secretValue("assistant_api_key"),
-  };
-}
-
 function getWorkWithUs() {
   return { ...DEFAULT_WORK_WITH_US, ...workWithUsRepo.get() };
 }
@@ -4736,168 +4703,6 @@ async function applyAcceptReward(
   if (!updated) return { rewarded: false };
   await addActivity("proposal", `${firstName(updated.name)}'s proposal was welcomed into the village`, { actorUserId: updated.id, entityType: "submission", entityRef: entry.id });
   return { rewarded: true };
-}
-
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/**
- * The heading was the literal word "Amora", so every village that installed
- * this platform emailed its own stewards under another village's name. Same
- * rule as every other identity string: the name comes from the merged config,
- * which is a brand override over the gameConfig default, and is escaped
- * because a village types its own name.
- */
-function buildSubmissionEmailHtml(type: string, data: Record<string, unknown>, adminUrl: string): string {
-  const rows = Object.entries(data)
-    .map(
-      ([k, v]) =>
-        `<tr><td style="padding:6px 12px;font-weight:600;color:#2D5A5A;background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
-    )
-    .join("");
-  return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
-<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(mergedConfig().project.name)}</div></div>
-  <div style="padding:20px 24px">
-    <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}</table>
-    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:#2D5A5A;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
-  </div>
-</div></body></html>`;
-}
-
-/**
- * The From: address, resolved across the config planes: admin-typed sender
- * (Admin → Email config) beats EMAIL_FROM, which beats the platform's
- * last-resort literal. An admin value that is not a sendable address is
- * skipped loudly rather than used — Resend accepts a malformed From: and
- * delivers nothing, which is the silent email death this whole path exists
- * to avoid.
- */
-function resolvedEmailSender(): string {
-  const typed = String(getEmailConfig().sender ?? "").trim();
-  if (typed) {
-    if (validEmailSender(typed)) return typed;
-    console.error(`[RESEND] configured sender "${typed}" is not a valid address, falling back`);
-  }
-  const env = String(process.env.EMAIL_FROM ?? "").trim();
-  if (env) {
-    if (validEmailSender(env)) return env;
-    console.error(`[RESEND] EMAIL_FROM "${env}" is not a valid address, falling back`);
-  }
-  /*
-   * NO LAST-RESORT SENDER ANY MORE, and that is the honest answer.
-   *
-   * This used to return one specific village's address. Two things followed.
-   * Every fork's mail went out claiming a domain it does not own, which Resend
-   * accepts with a 200 and then delivers nowhere, because the send fails the
-   * receiving domain's SPF and DKIM checks. And the runbook already records
-   * that this very domain is unverified, so the fallback was not even
-   * delivering for the village it named.
-   *
-   * An empty string means "this deployment has not said who its mail comes
-   * from", `sendResendEmail` declines rather than sending into a hole, and the
-   * caller is told. A refusal a founder can read beats a 200 nobody receives.
-   */
-  return "";
-}
-
-/**
- * WHAT THIS RETURNS, and why it did not used to return anything.
- *
- * Every path out of this function used to be indistinguishable from every
- * other: no API key, no recipients, a 4xx from the provider and a clean
- * accepted send all returned the same `undefined`, and none of them threw. So
- * a caller that wanted to know whether mail had actually gone had exactly one
- * signal available, "it did not throw", which was true in all four cases.
- *
- * `POST /api/admin/bootstrap` was that caller. It set `emailed = true` after
- * the await and reported it to the operator who had just created the founder
- * account, on a deployment with no email provider configured, which is the
- * state every fork boots in. The server log on the same request read
- * "[RESEND] API key not set, skipping email".
- *
- * `sent` is now only true when the provider accepted the message, and `reason`
- * names which door it left by otherwise. Note the ceiling on that word:
- * ACCEPTED is not DELIVERED. A provider returns 200 for a domain whose SPF and
- * DKIM records were never published and then delivers nothing, so `sent: true`
- * means the message was handed over, never that it arrived.
- *
- * Callers that do not care may keep ignoring the result.
- */
-type MailResult = { sent: boolean; reason?: "no_api_key" | "no_sender" | "no_recipients" | "rejected" | "failed" };
-
-async function sendResendEmail(opts: { to: string[]; subject: string; html: string; from?: string; replyTo?: string }): Promise<MailResult> {
-  const cfg = getEmailConfig();
-  if (!cfg.resend_api_key) {
-    console.log("[RESEND] API key not set, skipping email");
-    return { sent: false, reason: "no_api_key" };
-  }
-  const from = opts.from ?? resolvedEmailSender();
-  if (!from) {
-    console.error("[RESEND] no sender address configured, skipping email. Set EMAIL_FROM or the sender in Admin, Email config.");
-    return { sent: false, reason: "no_sender" };
-  }
-  // Every configured inbox may hold a comma-separated LIST — several people
-  // receiving updates is the norm for a village, not an edge case. Split,
-  // trim, drop non-addresses, dedupe; every caller gets this for free.
-  const to = Array.from(new Set(
-    opts.to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
-  ));
-  if (!to.length) {
-    console.log("[RESEND] No recipients, skipping email");
-    return { sent: false, reason: "no_recipients" };
-  }
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.resend_api_key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        // Admin-typed sender first, then the env var. A malformed admin value
-        // is IGNORED rather than sent (a bad From: kills every email silently),
-        // and says so in the log so the founder can find it. Resolved above,
-        // because no sender at all is a refusal rather than a send.
-        from,
-        to,
-        subject: opts.subject,
-        html: opts.html,
-        // The contact relay (S22) sets this to the SENDER's address so a
-        // plain reply works — always with compose-screen disclosure.
-        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("[RESEND ERROR]", res.status, errText);
-      return { sent: false, reason: "rejected" };
-    }
-    return { sent: true };
-  } catch (err) {
-    console.error("[RESEND ERROR]", err);
-    return { sent: false, reason: "failed" };
-  }
-}
-
-function recipientsForType(type: string): string[] {
-  const cfg = getEmailConfig();
-  const pathway = FORM_TYPE_TO_PATHWAY[type];
-  if (pathway && cfg[pathway]) return [cfg[pathway]];
-  // Fallback: send to all configured pathway inboxes
-  return Array.from(
-    new Set(
-      ["investor", "steward", "resident", "prosperity"]
-        .map((k) => cfg[k as keyof typeof cfg])
-        .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
-    )
-  );
 }
 
 // â”€â”€ Abuse guards (S12: MySQL-backed — a redeploy is no longer an amnesty) â”€â”€
@@ -6766,6 +6571,7 @@ async function startServer() {
     }
     res.json({ ok: true, refunded: out.refunded });
   });
+  registerCommsWebhook(app, { getPool, clientIp });
 
   /*
    * A scene is legitimately bigger than a form post, so the two routes that
@@ -7828,6 +7634,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
     // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
     await landPublicSubmission(submissionsRepo, getPool(), entry);
+    commsSink.fire(formSubmittedTrigger(type, entry.id, data));
 
     /*
      * The origin comes from OUR configuration, never from the request.
@@ -7848,7 +7655,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       const recipients = recipientsForType(type);
       if (recipients.length) {
         await sendResendEmail({
-          to: recipients,
+          to: recipients, origin: "forms.team_alert",
           subject: `[${notifyDeps.projectName()}] New ${type} submission from ${applicantName}`,
           html: buildSubmissionEmailHtml(type, data, `${origin}/admin`),
         });
@@ -7856,7 +7663,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       // Acknowledge the submitter of a Work With Us proposal
       if (type === "work-with-us" && (data as any)?.email) {
         await sendResendEmail({
-          to: [(data as any).email],
+          to: [(data as any).email], origin: "forms.ack",
           subject: "We've received your proposal",
           html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your proposal is with us</div></div><div style="padding:22px 24px;line-height:1.6"><p>Hi ${escapeHtml(String(applicantName))},</p><p>Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.</p><p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p></div></div></body></html>`,
         });
@@ -7953,6 +7760,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const admitted: boolean | null = signingAccepted ? !!submissions[idx].userId : null;
     if (admitted) await members.update(String(submissions[idx].userId), (m: any) => { m.membershipGranted = true; });
     await submissionsRepo.replaceAll(submissions);
+    if (before !== status) commsSink.fire({ type: "submission_status", submissionId: String(submissions[idx].id), formType: String(submissions[idx].type ?? ""), status });
+    if (admitted) commsSink.fire({ type: "member_admitted", userId: String(submissions[idx].userId) });
 
     /*
      * SWEEP (the incomplete loop). This route moves an application, an offer
@@ -8269,7 +8078,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
         try {
           const mail = await sendResendEmail({
-            to: [normEmail],
+            to: [normEmail], origin: "auth.founder_claim",
             subject: `Set your password`,
             html: `<p><a href="${escapeHtml(claimUrl)}">Set your password</a> (link expires in 60 minutes).</p>
 <p>If the button does nothing, paste this into your browser:<br>${escapeHtml(claimUrl)}</p>`,
@@ -8302,7 +8111,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       claimUrl = `${(process.env.FRONTEND_URL || "").replace(/\/$/, "")}/set-password?token=${encodeURIComponent(claim)}`;
       try {
         const mail = await sendResendEmail({
-          to: [normEmail],
+          to: [normEmail], origin: "auth.founder_claim",
           subject: `You are the founder admin. Set your password`,
           html: `<p>Your founder admin account was just created on ${escapeHtml(mergedConfig().project.name)}.</p>
 <p><a href="${escapeHtml(claimUrl)}">Set your password</a> (link expires in 60 minutes).</p>
@@ -8465,17 +8274,18 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!target.email) return res.status(409).json({ error: "That account has no address to send to" });
     const claim = makeSetPasswordToken(AUTH_TOKEN_SECRET, target.id, target.tokenVersion ?? 0);
     const claimUrl = `${notifyDeps.origin()}/set-password?token=${encodeURIComponent(claim)}`;
-    let emailed = true;
+    let emailed = false; // what the post office did, never "it did not throw"
     try {
-      await sendResendEmail({
-        to: [target.email],
+      const mail = await sendResendEmail({
+        to: [target.email], origin: "auth.admin_password_link",
         subject: "Set a new password",
         html: `<p>An administrator of ${escapeHtml(mergedConfig().project.name)} sent you a link to set a new password.</p>
 <p><a href="${escapeHtml(claimUrl)}">Set a new password</a> (link expires in 60 minutes, and works once).</p>
 <p>If the button does nothing, paste this into your browser:<br>${escapeHtml(claimUrl)}</p>`,
       });
+      emailed = mail.sent;
+      if (!mail.sent) console.error(`[auth] admin password link NOT SENT for ${target.id}: reason=${mail.reason ?? "unknown"}`);
     } catch (e) {
-      emailed = false;
       console.error(`[auth] admin password link FAILED to send for ${target.id}`, e);
     }
     // This is the one admin action that can produce member-attributed
@@ -10419,18 +10229,15 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (queryId) await markQueryContacted(getPool(), String(queryId));
 
     // The relay email: recipient sees the sender's words; replying goes
-    // STRAIGHT to the sender (Reply-To), never through the platform.
-    try {
-      await sendResendEmail({
-        to: [recipient.email],
-        subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
-        html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
-        replyTo: user.email,
-      });
-      await setContactEmailStatus(getPool(), inserted.id, "sent");
-    } catch {
-      await setContactEmailStatus(getPool(), inserted.id, "failed");
-    }
+    // STRAIGHT to the sender (Reply-To), never through the platform. The status
+    // is what the post office did: "sent" only when the provider took it.
+    const relayed = await sendResendEmail({
+      to: [recipient.email], origin: "map.contact_relay",
+      subject: `[${mergedConfig().project.name}] ${firstName(user.name)} wants to connect${role ? ` about ${role.name}` : ""}`,
+      html: `<p><strong>${escapeHtml(firstName(user.name))}</strong> reached out through the village map${role ? ` about your role as <strong>${escapeHtml(role.name)}</strong>` : ""}:</p><blockquote style="border-left:3px solid #2D5A5A;padding-left:10px;color:#4b5563">${escapeHtml(String(message)).replace(/\n/g, "<br>")}</blockquote><p style="color:#6b7280;font-size:13px">Reply to this email to answer them directly.</p>`,
+      replyTo: user.email,
+    }).catch(() => ({ sent: false }));
+    await setContactEmailStatus(getPool(), inserted.id, relayed.sent ? "sent" : "failed");
     await notify({
       userId: recipient.id,
       type: "contact_request",
@@ -11130,6 +10937,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
   app.use("/api/events", requireModule("events"));
   app.use("/api/admin/events", requireModule("events"));
+  registerCommsEventRoutes(app, { authedUser, overLimit, clientIp, isAdmin, guardCapability, mayStillSee, capabilityCtx, getPool, commsPostOffice, members, deploymentOrigin, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), notify });
 
   /** The window the calendar looks through, from the two wired variables. */
   const eventWindow = () => ({
@@ -17744,6 +17552,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({ success: true });
   });
+  registerCommsRoutes(app, { authedUser, guardCapability, mayStillSee, getPool, commsPostOffice, adminActor, members, notify, lapseContext, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), projectName: () => mergedConfig().project.name, liveHoldersOf, emailConfigRepo });
+  registerCommsPublicRoutes(app, { overLimit, clientIp, authedUser, getPool, members, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, submissionsRepo, notifyAdmins });
 
   // ── S63: Integrations — every third-party key, write-only ────────────────
   // Reads return {configured, source, last4, setBy, setAt}; a value NEVER
@@ -18690,6 +18500,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       submittedAt: new Date().toISOString(),
     };
     await submissionsRepo.insert(entry);
+    commsSink.fire(formSubmittedTrigger("investor-doc-request", entry.id, { ...entry.data, [FORM_CONSENT_FIELD]: req.body?.[FORM_CONSENT_FIELD] === true }));
 
     /*
      * The origin comes from OUR configuration, never from the request.
@@ -18753,7 +18564,7 @@ ${inner}
     <p style="margin-top:20px">A team member will be in touch within 48 hours to answer your questions.</p>`)
         : shell(`Thank you for your interest in ${notifyDeps.projectName()}`, `    <p>Thank you for your interest in investing in ${escapeHtml(notifyDeps.projectName())}. We have your request and a member of our team will be in touch within 48 hours to talk it through with you.</p>`);
       await sendResendEmail({
-        to: [email],
+        to: [email], origin: "investor.packet",
         subject: packet.length
           ? `Your ${notifyDeps.projectName()} Investor Packet`
           : `Thank you for your interest in ${notifyDeps.projectName()}`,
@@ -18765,7 +18576,7 @@ ${inner}
       const investorTeam = recipientsForType("investor-doc-request");
       if (investorTeam.length) {
         await sendResendEmail({
-          to: investorTeam,
+          to: investorTeam, origin: "investor.team_alert",
           subject: packet.length
             ? `[${notifyDeps.projectName()}] New investor doc request from ${name}`
             : `[${notifyDeps.projectName()}] Investor doc request from ${name}, no documents in the packet`,
@@ -26489,6 +26300,7 @@ ${inner}
        * partial export announces itself instead of looking complete.
        */
       externalStores: await exportMemberEverywhere(getPool(), user.id),
+      comms: await exportCommsForMember(pool, user), // Village Comms: the address book, answers, emails, journeys, paths and guest rows (server/repos/commsPeople.ts)
     };
     res.setHeader("Content-Disposition", `attachment; filename="my-data-${user.id}.json"`);
     res.json(exportDoc);
