@@ -156,7 +156,7 @@ export function PathContactsEditor(props: EditorProps) {
         At three weeks, each path's journey asks this person to write to whoever is walking it. With nobody named, the request goes to the path's
         inbox above.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {data.paths.map((p) => (
           <label key={p.id} className="block">
             <span className="text-sm font-medium text-gray-700 block mb-1">{p.label}</span>
