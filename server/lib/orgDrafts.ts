@@ -1312,9 +1312,10 @@ export interface DraftSeating {
 /**
  * The terms a change puts on offer, as the three column values, or undefined
  * when it names none. Refuses a machine's draft outright: the preview has
- * already blocked it, and this is the second lock on the same door.
+ * already blocked it, and this is the second lock on the same door. Exported
+ * so that lock has a test of its own (seatTermsOffer.drafts.test.ts).
  */
-function offerColumns(p: any, who: { machine: boolean; by: string | null }): [string | null, Date, string | null] | undefined {
+export function offerColumns(p: any, who: { machine: boolean; by: string | null }): [string | null, Date, string | null] | undefined {
   if (p.termsOffer === undefined && p.terms_offer === undefined) return undefined;
   if (who.machine) throw new Error(OFFER_WORDS.machineRefused);
   if (p.termsOffer === undefined) return undefined;

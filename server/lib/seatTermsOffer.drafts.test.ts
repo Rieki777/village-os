@@ -17,7 +17,7 @@ import mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { OFFER_WORDS } from "../../shared/seatTermsOffer";
 import { createOrgRole, listOrgRoles } from "./orgChart";
-import { addChange, createDraft, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
+import { addChange, createDraft, offerColumns, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
 
 const configured = testDbConfigured();
 let db: TestDb;
@@ -39,6 +39,22 @@ async function draftWith(sourceKind: string, op: "update_seat" | "create_seat", 
   if (!added.ok) throw new Error(added.error);
   return made.id;
 }
+
+/*
+ * THE SECOND LOCK, held on its own. The preview blocks a machine's terms
+ * first, so the database cases below never reach apply; this is the
+ * apply-time refusal that stands if a preview ever lets one through.
+ */
+describe("the apply-time lock on a machine's terms", () => {
+  it("refuses a machine's offer under either spelling, and writes a person's", () => {
+    expect(() => offerColumns({ termsOffer: FAKE_OFFER }, { machine: true, by: null })).toThrow(OFFER_WORDS.machineRefused);
+    expect(() => offerColumns({ terms_offer: FAKE_OFFER }, { machine: true, by: null })).toThrow(OFFER_WORDS.machineRefused);
+    const cols = offerColumns({ termsOffer: FAKE_OFFER }, { machine: false, by: "u-publisher" });
+    expect(cols?.[0]).toContain("50000");
+    expect(cols?.[2]).toBe("u-publisher");
+    expect(offerColumns({ aim: "No terms here" }, { machine: true, by: null })).toBeUndefined();
+  });
+});
 
 const offerOf = async (id: string) => (await listOrgRoles(pool)).find((r) => r.id === id) ?? null;
 
