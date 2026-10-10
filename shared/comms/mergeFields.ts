@@ -190,7 +190,7 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   f("path.nextStepLink", "path", "url", "Next step link", "Where the next step is taken.", "{{path.pageUrl}}"),
   f("path.pageUrl", "path", "url", "Path page", "The path's own page on your site.", "{{village.url}}"),
   f("path.contactName", "path", "text", "Who writes back", "The person who writes to people on this path, from Comms Settings.", "someone from our team"),
-  f("path.contactEmail", "path", "text", "Their address", "That person's email address.", "", true),
+  f("path.contactEmail", "path", "text", "The path's address", "The path's own inbox from Comms Settings. A contact person's own address is never shown.", "", true),
   f("path.rung", "path", "text", "Step reached", "The step on the path's ladder they just reached.", "a new step"),
 
   // The letter.

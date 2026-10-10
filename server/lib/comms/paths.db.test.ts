@@ -340,6 +340,15 @@ describe.skipIf(!configured)("paths: day 21 and the rungs", () => {
     expect(await handOff(parts(), { ...ctx, result: { status: "skipped", messageId: null } })).toBe("not_this_step");
   });
 
+  it("asks nobody to write when the check-in was only rehearsed", async () => {
+    const host = await member("Rae Rehearsal");
+    await writeCommsSettings(pool, { pathContacts: { steward: host.id } }, { pathIds: ["steward"] });
+    const before = notices.length;
+    const ctx = await stepCtx("rowan.guest@example.test", "path.steward", "rehearsed");
+    expect(await handOff(parts(), ctx)).toBe("rehearsal");
+    expect(notices.length, "a real contact person is never asked to write to a rehearsal's reader").toBe(before);
+  });
+
   it("falls back to the path's inbox when the path has no contact person", async () => {
     await writeCommsSettings(pool, { pathContacts: { steward: null } }, { pathIds: ["steward"] });
     const ctx = await stepCtx("rowan.guest@example.test", "path.steward", "sent");

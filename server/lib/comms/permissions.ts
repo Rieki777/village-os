@@ -12,9 +12,13 @@
  *              people who said yes are ever on a gathering's journey, so a
  *              person with no answer stored is allowed and a stored `no`
  *              (an unsubscribe) refuses.
- *   paths      a member who chose a path in their account: yes, basis
- *              `account`. Anybody else: only an explicit yes on record (a
- *              ticked box, with the words they saw as evidence).
+ *   paths      a member: yes, basis `account`. Joining is choosing the
+ *              member's path, and its welcome (`member.welcome`) sends as
+ *              this kind; a member with no other path chosen was refused it
+ *              until 2026-10-09. A path journey only ever enrolls somebody who
+ *              chose that path, so this lets nobody onto one. Anybody without
+ *              an account: only an explicit yes on record (a ticked box, with
+ *              the words they saw as evidence). A stored no always wins.
  *   letters    only an explicit yes. A person with no account confirms it by
  *              email first (double opt-in, server/lib/comms/preferences.ts).
  *   notices    a member's own notification emails. They follow `users.prefs`
@@ -236,8 +240,9 @@ export async function answerFor(
     case "events":
       return derived("yes", "implied", "a yes to a gathering");
     case "paths": {
-      const paths = Array.isArray(who?.paths) ? who.paths : [];
-      return paths.length > 0 ? derived("yes", "account", "a path chosen in their account") : derived("no", null, null);
+      if (!who) return derived("no", null, null);
+      const paths = Array.isArray(who.paths) ? who.paths : [];
+      return derived("yes", "account", paths.length > 0 ? "a path chosen in their account" : "joining as a member");
     }
     case "letters":
       return derived("no", null, null);

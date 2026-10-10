@@ -155,7 +155,8 @@ describe.skipIf(!configured)("permissionFor and stopping", () => {
     const withoutPath = await member();
     const g = await stranger();
     expect(await allowed(withPath.email, "paths", withPath.contactId)).toBe(true);
-    expect(await allowed(withoutPath.email, "paths", withoutPath.contactId)).toBe(false);
+    // Joining is choosing the member's path: its welcome sends as paths (2026-10-09).
+    expect(await allowed(withoutPath.email, "paths", withoutPath.contactId)).toBe(true);
     expect(await allowed(g.email, "paths", g.contactId)).toBe(false);
 
     await setPermission(deps(), { contactId: g.contactId, kind: "paths", state: "yes", basis: "asked", source: "resident", evidence: { words: "Walk me through it" } });

@@ -262,9 +262,18 @@ async function contactFor(deps: PathPartsDeps, pool: Pool, pathId: string): Prom
   const userId = settings.pathContacts[pathId] ?? null;
   const holder = userId ? realMember(await deps.members.byId(userId)) : null;
   if (holder) return { userId: String(holder.id), firstName: firstNameOf(holder.name), email: holder.email ? String(holder.email) : null };
+  return { userId: null, firstName: null, email: pathInbox(deps, pathId) };
+}
+
+/**
+ * The path's own inbox (the four inboxes in Comms Settings), or null. This is
+ * the only address a path email ever shows a reader: the contact person's
+ * account address is theirs, and a stranger on a path never sees it.
+ */
+function pathInbox(deps: PathPartsDeps, pathId: string): string | null {
   const pathway = PATHWAY_OF_PATH[pathId];
   const inbox = pathway ? deps.emailConfig?.()?.[pathway] : null;
-  return { userId: null, firstName: null, email: typeof inbox === "string" && inbox.trim() ? inbox.trim() : null };
+  return typeof inbox === "string" && inbox.trim() ? inbox.trim() : null;
 }
 
 /** The `nextGathering.*` values for one reader, with their own one-press link. */
@@ -291,7 +300,7 @@ export async function pathValues(deps: PathPartsDeps, pool: Pool, pathId: string
     "path.name": pathNameOf(pathId),
     ...(next ? { "path.nextStep": next.step, ...(base ? { "path.nextStepLink": `${base}${next.route}` } : {}) } : {}),
     ...(contact.firstName ? { "path.contactName": contact.firstName } : {}),
-    ...(contact.email ? { "path.contactEmail": contact.email } : {}),
+    ...(pathInbox(deps, pathId) ? { "path.contactEmail": pathInbox(deps, pathId)! } : {}),
   };
 }
 
@@ -318,16 +327,23 @@ export function peoplePageLink(contactId: string): string {
   return `/admin?tab=comms-people&person=${encodeURIComponent(contactId)}`;
 }
 
-/** A post the hand-off should follow: one that is going, or went, or was rehearsed. */
-const HANDED: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["queued", "sending", "sent", "delivered", "rehearsed"]);
+/**
+ * A post the hand-off should follow: one that is going, or went. A REHEARSED
+ * check-in asks nobody to write: the person on the path is a rehearsal's
+ * reader, and the contact person is a real one who would be asked to write to
+ * somebody the village never actually emailed.
+ */
+const HANDED: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["queued", "sending", "sent", "delivered"]);
 
 /** The step every path journey hands off on. */
 export const HANDOFF_STEP = "check_in";
 
 /** After the day 21 check-in is posted, ask the path's contact person to write. */
-export async function handOff(deps: PathPartsDeps, ctx: StepPostedContext): Promise<"notified" | "inbox" | "nobody" | "not_this_step"> {
+export async function handOff(deps: PathPartsDeps, ctx: StepPostedContext): Promise<"notified" | "inbox" | "nobody" | "not_this_step" | "rehearsal"> {
   const pathId = pathIdOfJourney(ctx.definition.key);
-  if (!pathId || ctx.step.key !== HANDOFF_STEP || !HANDED.has(ctx.result.status) || !ctx.contact) return "not_this_step";
+  if (!pathId || ctx.step.key !== HANDOFF_STEP || !ctx.contact) return "not_this_step";
+  if (ctx.result.status === "rehearsed") return "rehearsal";
+  if (!HANDED.has(ctx.result.status)) return "not_this_step";
   const pool = ctx.getPool();
   const firstName = firstNameOf(ctx.contact.name) ?? "Somebody";
   const pathName = pathNameOf(pathId);
