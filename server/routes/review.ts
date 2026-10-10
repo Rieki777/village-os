@@ -123,6 +123,27 @@ type Deps = Pick<
 /** The kinds whose accept builds an org draft. Everything else is a record. */
 const ORG_KINDS = new Set(["org.proposed", "role.proposed", "circle.proposed"]);
 
+/**
+ * A circle proposal's name: `name`, else the vendor's own "Circle Name".
+ *
+ * THE FIRST REAL SYNC SENT ONLY THE VENDOR'S KEY. Saberra's circle records
+ * cross the boundary under their own field names, and the accept path read
+ * `name` alone, so every circle in that batch previewed as
+ * `Create the circle ""` with "A circle needs a name". Read here at ACCEPT,
+ * not where the proposal is built, because those proposals were already in
+ * the queue, and a withdrawn draft puts them back carrying the same keys.
+ * A blank `name` says nothing, so the vendor's key beats it.
+ */
+const CIRCLE_PROPOSAL_NAME_KEYS = ["name", "Circle Name"] as const;
+
+function proposedCircleName(payload: Record<string, unknown>): string {
+  for (const k of CIRCLE_PROPOSAL_NAME_KEYS) {
+    const v = payload[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return "";
+}
+
 /** Keys one proposal carried that nothing read. Only proposals with at least one are listed. */
 interface IgnoredKeys {
   proposalId: string;
@@ -470,59 +491,78 @@ export function register(app: Express, deps: Deps): void {
     // ONE read of the circles for the whole accept, so every seat in it is
     // placed against the same list. See `circlesRepo` in appDeps.ts for why a
     // circle an admin made a moment ago is in it.
-    const circles = circlesRepo.all() as LiveCircle[];
+    const live = circlesRepo.all() as LiveCircle[];
     let seats = 0;
     const ignored: IgnoredKeys[] = [];
+    /*
+     * A CIRCLE PROPOSAL BECOMES A CIRCLE, not a seat.
+     *
+     * `circle.proposed` has been an accepted kind since 0140 and every one
+     * of them used to be run through the SEAT reader below, because
+     * `DraftOp` had no way to make a circle. Accepting one produced a seat
+     * named after the circle, silently, and no test covered it. `create_circle`
+     * exists now, so the kind finally means what it says.
+     *
+     * CIRCLES FIRST, SEATS SECOND, whatever order the batch arrived in. A
+     * vendor's reading of a village arrives as circles AND the seats inside
+     * them, and its seats name their circle in words. Those words were placed
+     * against the LIVE circles only, so every seat naming a circle this same
+     * draft creates kept its name, matched nothing, and blocked on "There is
+     * no circle called X yet" beside the very line that creates it. So the
+     * circles are added to the draft first, which is also the order publish
+     * applies them in (`sort_order`), and each one this draft creates joins
+     * the list the seats are placed against. A name answering to a live circle
+     * AND a new one matches two and blocks as ambiguous, which is the honest
+     * reading rather than a guess.
+     */
+    const drafted: LiveCircle[] = [];
+    for (const p of org) {
+      if (p.kind !== "circle.proposed") continue;
+      const payload = (edits[p.id] ?? p.payload) as Record<string, unknown>;
+      const rawName = proposedCircleName(payload);
+      // A slug, because that is what this table's ids are: the migration's own
+      // example is `permaculture-council`. Falling back to the proposal id
+      // keeps a nameless proposal previewable, where it blocks with a reason.
+      /*
+       * TRIMMED WITHOUT A REGEX, and bounded BEFORE the trim.
+       *
+       * The first version ended `.replace(/^-+|-+$/g, "")`, which CodeQL
+       * flagged as a polynomial ReDoS at high severity and was right to: the
+       * `-+$` half has to scan from every position, the input is a name an
+       * outside service supplied, and a name of many dashes is cheap to send.
+       * Slicing first bounds the work whatever arrives, and two loops trim in
+       * one pass each with nothing to backtrack over.
+       */
+      let slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 56);
+      while (slug.startsWith("-")) slug = slug.slice(1);
+      while (slug.endsWith("-")) slug = slug.slice(0, -1);
+      const circleId = slug !== "" ? slug : `circle-${p.id.toLowerCase()}`;
+      const r = await addChange(getPool(), made.id, {
+        op: "create_circle",
+        orgRoleId: `circle:${circleId}`,
+        payload: {
+          name: rawName,
+          // `purpose` only, and never the vendor's "Notes": on the first real
+          // sync that field was the vendor's own change log ("[Rewritten ...
+          // per ... V5]"), which is not what a circle is for.
+          purpose: typeof payload.purpose === "string" ? payload.purpose : null,
+          parentCircleId:
+            typeof payload.parentCircleId === "string" && payload.parentCircleId ? payload.parentCircleId : null,
+        },
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      if (rawName !== "") drafted.push({ id: circleId, name: rawName });
+    }
+    const circles: LiveCircle[] = [...live, ...drafted];
+
     for (let i = 0; i < org.length; i++) {
       const p = org[i];
+      if (p.kind === "circle.proposed") continue;
       // An edited payload goes through the same reading as the vendor's own,
       // so a steward's correction is placed and reported the same way. The
       // flags match what `createDraft` above took: the title off the first
       // proposal, the rationale only when there is one, so a rationale on any
       // other record is reported instead of vanishing.
-      /*
-       * A CIRCLE PROPOSAL BECOMES A CIRCLE, not a seat.
-       *
-       * `circle.proposed` has been an accepted kind since 0140 and every one
-       * of them used to be run through the SEAT reader below, because
-       * `DraftOp` had no way to make a circle. Accepting one produced a seat
-       * named after the circle, silently, and no test covered it. `create_circle`
-       * exists now, so the kind finally means what it says.
-       */
-      if (p.kind === "circle.proposed") {
-        const payload = (edits[p.id] ?? p.payload) as Record<string, unknown>;
-        const rawName = typeof payload.name === "string" ? payload.name.trim() : "";
-        // A slug, because that is what this table's ids are: the migration's own
-        // example is `permaculture-council`. Falling back to the proposal id
-        // keeps a nameless proposal previewable, where it blocks with a reason.
-        /*
-         * TRIMMED WITHOUT A REGEX, and bounded BEFORE the trim.
-         *
-         * The first version ended `.replace(/^-+|-+$/g, "")`, which CodeQL
-         * flagged as a polynomial ReDoS at high severity and was right to: the
-         * `-+$` half has to scan from every position, the input is a name an
-         * outside service supplied, and a name of many dashes is cheap to send.
-         * Slicing first bounds the work whatever arrives, and two loops trim in
-         * one pass each with nothing to backtrack over.
-         */
-        let slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 56);
-        while (slug.startsWith("-")) slug = slug.slice(1);
-        while (slug.endsWith("-")) slug = slug.slice(0, -1);
-        const circleId = slug !== "" ? slug : `circle-${p.id.toLowerCase()}`;
-        const r = await addChange(getPool(), made.id, {
-          op: "create_circle",
-          orgRoleId: `circle:${circleId}`,
-          payload: {
-            name: rawName,
-            purpose: typeof payload.purpose === "string" ? payload.purpose : null,
-            parentCircleId:
-              typeof payload.parentCircleId === "string" && payload.parentCircleId ? payload.parentCircleId : null,
-          },
-        });
-        if (!r.ok) return { ok: false, error: r.error };
-        continue;
-      }
-
       const read = readProposedSeats(edits[p.id] ?? p.payload, circles, {
         readsTitle: i === 0,
         readsRationale: org.length === 1,
