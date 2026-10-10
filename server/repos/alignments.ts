@@ -1,5 +1,5 @@
 /**
- * The alignment store (0242): `alignment_texts`, `alignment_parties`,
+ * The alignment store (0250): `alignment_texts`, `alignment_parties`,
  * `alignments` and `alignment_seals`. INSERT ONLY.
  *
  * Every statement this store runs lives here, and none of them is an UPDATE or

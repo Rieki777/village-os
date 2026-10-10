@@ -1,7 +1,7 @@
 /**
  * THE ONE MUTATION SITE OF THE ALIGNMENT STORE: ERASURE (seat settings PR5, spec section 5).
  *
- * The four alignment tables (0242) are insert only, everywhere but here. A
+ * The four alignment tables (0250) are insert only, everywhere but here. A
  * grep test (server/lib/alignments.store.test.ts) fails on any other file
  * that names one of them beside an UPDATE, a DELETE, a TRUNCATE, a REPLACE or
  * an upsert.

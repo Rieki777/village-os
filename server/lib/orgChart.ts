@@ -117,7 +117,7 @@ export interface OrgRole {
   compensationReality: string | null;
   evidenceRequired: string | null;
   /**
-   * WHAT THE SEAT OFFERS WHOEVER HOLDS IT (0239, seat settings PR3).
+   * WHAT THE SEAT OFFERS WHOEVER HOLDS IT (0247, seat settings PR3).
    *
    * The stored settings object, UNPARSED and UNTYPED here on purpose: this
    * file is imported by modules that move value, and the settings model may
@@ -181,7 +181,7 @@ export interface OrgAssignment {
    * somebody asserted at seating time.
    */
   isAgent: boolean;
-  /** 0240: the seat application whose terms this seating holds. Absent for every other door. */
+  /** 0248: the seat application whose terms this seating holds. Absent for every other door. */
   applicationId?: string;
 }
 
@@ -193,7 +193,7 @@ const ROLE_COLS =
   // 0083: representation and succession. Selected from day one, because the
   // recruitment pack above is the cautionary tale about columns nobody reads.
   "represents_circle, how_chosen, how_chosen_gloss, " +
-  // 0239: the terms on offer. Selected here and projected only at the
+  // 0247: the terms on offer. Selected here and projected only at the
   // `terms.read` tier (server/lib/seatProjection.ts).
   "terms_offer, terms_offer_at, terms_offer_by";
 
@@ -208,7 +208,7 @@ const ASSIGN_COLS =
   // through every SELECT is a flag downstream cannot act on, and the surfaces
   // that must not count an agent are exactly the ones furthest from here.
   "is_agent, " +
-  // 0240: the seat application whose terms a seating holds, null for every other door.
+  // 0248: the seat application whose terms a seating holds, null for every other door.
   "application_id";
 
 /** MySQL hands JSON back already parsed on some drivers and as text on others. */
@@ -972,7 +972,7 @@ export async function seatHolder(
     isAgent?: boolean;
     /** The agent's stable slug. The holder key becomes `agent:<slug>`. */
     agentSlug?: string | null;
-    /** 0240: the seat application whose terms this seating holds. */
+    /** 0248: the seat application whose terms this seating holds. */
     applicationId?: string | null;
   },
   /**

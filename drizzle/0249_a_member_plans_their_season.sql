@@ -1,11 +1,11 @@
--- 0241: each member plans their season.
+-- 0249: each member plans their season.
 --
 -- WHAT THIS IS FOR.
 -- Season plans RC1 (2026-10-09), "Your season". At the start of each season
 -- every member says which seats they keep, hand back or apply for, and what
 -- they personally commit to: an aim, a season goal they serve, quests a moon
 -- and up to three measures (shared/seasonPlans.ts). A seat that needs the
--- village's word is an ordinary `seat_applications` row (0240), found by
+-- village's word is an ordinary `seat_applications` row (0248), found by
 -- `candidate_user_id` and `term_season_id`; this table holds no second copy.
 -- What a member commits to personally is FILED, never voted.
 --

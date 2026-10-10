@@ -4,7 +4,7 @@
  * The live seat card's drawer read only the seat's terms on offer, so a member
  * seated on adopted terms, in force and aligned by both parties, showed "No
  * terms on offer yet". A seating made by the member door carries its
- * application's id (0240); this reads every such application once, with its
+ * application's id (0248); this reads every such application once, with its
  * alignment, and the seat projection (server/lib/seatProjection.ts) puts them
  * on the seat for a reader holding `terms.read`, the tier that already
  * carries the terms on offer. Nobody else is handed any of it.

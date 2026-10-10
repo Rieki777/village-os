@@ -1,4 +1,4 @@
--- 0239: a seat says what it offers whoever holds it.
+-- 0247: a seat says what it offers whoever holds it.
 --
 -- WHAT THIS IS FOR.
 -- Seat settings (2026-10-09). A seat's terms on offer are the settings object

@@ -1,4 +1,4 @@
--- 0240: a member applies to hold one to five seats, on terms, as one proposal.
+-- 0248: a member applies to hold one to five seats, on terms, as one proposal.
 --
 -- WHAT THIS IS FOR.
 -- Seat settings PR4, the member door. A member picks the seats they would hold,

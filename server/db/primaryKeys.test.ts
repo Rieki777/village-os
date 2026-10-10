@@ -5,7 +5,7 @@
  * offerings turn it on for replication), and there a CREATE TABLE with no
  * primary key fails. A migration fails loud at boot, so one table without a
  * key is a village that cannot start on such a host. `alignment_parties`
- * (0242) shipped with a UNIQUE key and no primary key, the first table in the
+ * (0250) shipped with a UNIQUE key and no primary key, the first table in the
  * migration set to do so; this holds every table to it, from the provisioned
  * schema itself rather than from a reading of the SQL.
  */

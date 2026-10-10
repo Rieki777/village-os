@@ -1,4 +1,4 @@
--- 0242: the alignment store. A member aligns with words, one click from their own account.
+-- 0250: the alignment store. A member aligns with words, one click from their own account.
 --
 -- WHAT THIS IS FOR.
 -- Seat settings PR5. When a member applies for seats on terms, the words of

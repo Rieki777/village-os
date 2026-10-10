@@ -5,7 +5,7 @@
  * (shared/seatSettings.ts) and the platform's shapes (shared/seatPresets.ts):
  *
  *   TERMS ON OFFER   what a seat offers whoever holds it, stored beside the
- *                    seat in `org_roles.terms_offer` (0239), written only by a
+ *                    seat in `org_roles.terms_offer` (0247), written only by a
  *                    published org draft a human wrote, and projected only to
  *                    a reader holding `terms.read`.
  *   VILLAGE PRESETS  the village's own preset rows, amounts included, in the

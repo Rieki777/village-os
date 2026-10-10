@@ -584,7 +584,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Seat applications (0240): the member's own words, what they would have
+       * Seat applications (0248): the member's own words, what they would have
        * done and why them, go. The application stays: its seats, its terms and
        * the village's decision are the record of what the village agreed to,
        * and the tombstoned user row de-attributes it without remapping ids.
@@ -599,7 +599,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * The alignment store (0242): their name and handle come out of the
+       * The alignment store (0250): their name and handle come out of the
        * words of every alignment text, the seats' terms on offer and the
        * village presets; the words otherwise stay, de-attributed (decision 2).
        * Hash, parties and seal are untouched, so receipts still verify.
@@ -613,7 +613,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Season plans (0241): the member's own words, their aim, the goal they
+       * Season plans (0249): the member's own words, their aim, the goal they
        * served and what they committed to, go. The seats they handed back stay
        * on the row, as the village's record of who held what, de-attributed by
        * the tombstone. After the tombstone, for the reason the steps above give.

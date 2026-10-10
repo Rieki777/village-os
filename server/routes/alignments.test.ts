@@ -3,7 +3,7 @@
  *
  * The member door (server/routes/seatApplications.ts) and the alignment
  * routes (server/routes/alignments.ts) mounted together on one app, against
- * the S5 scratch schema with migration 0242 applied. What is pinned:
+ * the S5 scratch schema with migration 0250 applied. What is pinned:
  *
  *   - "Propose and align" writes the application, text v1, both parties and
  *     the candidate's alignment in one act, and the text's hash is the one the

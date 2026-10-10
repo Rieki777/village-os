@@ -94,7 +94,7 @@ describe("the retention sweep never touches the alignment store", () => {
   });
 
   it("no production file outside the store names the four tables", () => {
-    const allowed = new Set(["server/repos/alignments.ts", EXEMPT, "drizzle/0242_a_member_aligns_with_seat_terms.sql"]);
+    const allowed = new Set(["server/repos/alignments.ts", EXEMPT, "drizzle/0250_a_member_aligns_with_seat_terms.sql"]);
     const re = new RegExp(`\\b(?:${TABLES.join("|")})\\b(?=[\\s\\x60(,;]|$)`, "m");
     const named = sources()
       .filter((f) => !/\.test\.tsx?$/.test(f) && !allowed.has(f) && !f.startsWith("client/"))

@@ -1,6 +1,6 @@
 /**
  * Terms on offer are written by a published org draft a MEMBER wrote, and by
- * nothing else (seat settings PR3, migration 0239).
+ * nothing else (seat settings PR3, migration 0247).
  *
  * THE RULE THIS HOLDS. Terms never cross the bridge: a draft a vendor or
  * Saberra wrote (`source_kind` other than `human`) carrying `termsOffer`, or

@@ -84,7 +84,7 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
   "role_seat",
   // The route opens the change and the closer writes the statement (0219).
   "gps_change",
-  // Seat settings PR4 (0240): a member applies for seats on terms. A live
+  // Seat settings PR4 (0248): a member applies for seats on terms. A live
   // org.seat holder adopts it, or the route opens the vote itself and the
   // closer (server/lib/seatApplicationCloser.ts) seats it when it lands.
   "role_application",

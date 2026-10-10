@@ -1,5 +1,5 @@
 /**
- * `seat_applications` (0240) and the reads the member door makes beside it.
+ * `seat_applications` (0248) and the reads the member door makes beside it.
  *
  * Every statement the door runs lives here, so the table's readers and writers
  * stay enumerable: the route (server/routes/seatApplications.ts), the closer
@@ -35,7 +35,7 @@ export interface StoredApplication {
   deliverables: string | null;
   settings: SeatSettings;
   settingsHash: string;
-  /** The alignment text this application's words live in (0242), null before PR5. */
+  /** The alignment text this application's words live in (0250), null before PR5. */
   textId: string | null;
   textHash: string | null;
   termEndsAt: Date;

@@ -1,5 +1,5 @@
 /**
- * `season_plans` (0241) and the one quest read the plan page makes beside it.
+ * `season_plans` (0249) and the one quest read the plan page makes beside it.
  *
  * Every statement season plans run lives here, so the table's readers and
  * writers stay enumerable: the route (server/routes/seasonPlans.ts), the notice

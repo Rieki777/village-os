@@ -1390,7 +1390,7 @@ const SEAT_FIELDS: Record<string, string> = {
   name: "name", circleId: "circle_id", aim: "aim", domain: "domain",
   whyItMatters: "why_it_matters", seats: "seats", criticality: "criticality",
   recruiting: "recruiting",
-  // 0239: the terms on offer. Written by a draft a HUMAN wrote and nobody
+  // 0247: the terms on offer. Written by a draft a HUMAN wrote and nobody
   // else, and never through the generic loop below: `applyChange` reads it
   // through the one parser and stamps when and by whom.
   termsOffer: "terms_offer",
@@ -1491,7 +1491,7 @@ async function applyChange(
     // and flag are NOT NULL with a DEFAULT, and an explicit NULL is not an
     // absent column, so an unnamed field writes the default value itself.
     // `previewDraft` has already blocked any criticality other than these two.
-    // 0239: and the terms it offers, when a member wrote some.
+    // 0247: and the terms it offers, when a member wrote some.
     const offer = offerColumns(p, who) ?? [null, null, null];
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
@@ -1697,9 +1697,9 @@ export async function revertDraft(
       } else if (c.beforeJson) {
         const b = c.beforeJson;
         /*
-         * 0239: the terms on offer go back too, but ONLY when this change's
+         * 0247: the terms on offer go back too, but ONLY when this change's
          * `before_json` captured them. A draft published by the release before
-         * 0239 captured no terms, and reverting it must not wipe an offer
+         * 0247 captured no terms, and reverting it must not wipe an offer
          * somebody made since, so the CASE leaves the columns as they stand.
          */
         const hadTerms = "terms_offer" in b ? 1 : 0;
