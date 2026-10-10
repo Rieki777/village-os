@@ -152,4 +152,17 @@ describe.skipIf(!testDbConfigured())("the presets document, read and written", (
     expect(retired.status).toBe(200);
     expect((await h.call("GET", "/api/admin/seat-presets")).body.presets[0].retiredAt).toBe("2026-10-09");
   });
+
+  it("stores only a preset's known fields, so nothing rides along in an unknown key (red team S7)", async () => {
+    h.state.admin = true;
+    const r = await h.call("PUT", "/api/admin/seat-presets", {
+      presets: [{ ...FAKE_ROW, retiredAt: "2026-10-09", iban: "GB33BUKB20201555555555", payTo: "card 4111 1111 1111 1111" }],
+    });
+    expect(r.status).toBe(200);
+    const stored = (await h.call("GET", "/api/admin/seat-presets")).body.presets[0];
+    expect(Object.keys(stored).sort()).toEqual(["group", "id", "label", "retiredAt", "values", "version"].concat("blurb" in FAKE_ROW ? ["blurb"] : []).sort());
+    expect(JSON.stringify(stored)).not.toMatch(/GB33|4111/);
+    // CONTROL: the known fields are kept as sent.
+    expect(stored.values.amountMinor).toBe(100000);
+  });
 });

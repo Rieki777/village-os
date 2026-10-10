@@ -29,6 +29,7 @@
 import type { Express } from "express";
 import { hasCapability } from "../../shared/capabilities";
 import {
+  cleanSeatPresetsDoc,
   SEAT_PRESETS_DOC,
   seatPresetsDocProblems,
   villagePresetsFrom,
@@ -68,7 +69,9 @@ export function register(app: Express, deps: Deps): void {
     const next = { presets: Array.isArray(req.body?.presets) ? req.body.presets : null };
     const problems = seatPresetsDocProblems(next, doc.exists() ? doc.get() : null);
     if (problems.length > 0) return res.status(400).json({ error: "invalid_presets", message: problems[0], problems });
-    await doc.put(next as SeatPresetsDoc & Record<string, any>);
-    res.json({ success: true, presets: next.presets });
+    // Rebuilt from the known fields (red team S7): an unknown key is never stored.
+    const clean = cleanSeatPresetsDoc(next as SeatPresetsDoc);
+    await doc.put(clean as SeatPresetsDoc & Record<string, any>);
+    res.json({ success: true, presets: clean.presets });
   });
 }

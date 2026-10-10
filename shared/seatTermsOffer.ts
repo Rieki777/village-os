@@ -141,6 +141,32 @@ function rowProblems(row: unknown): string[] {
 }
 
 /**
+ * A preset document rebuilt from the fields a row is known to carry (red team
+ * S7). Call it only on a document `seatPresetsDocProblems` passed: anything
+ * else a request sent, an unknown key on a row, is not
+ * stored, so a field no check reads can never carry payment details in.
+ * The values themselves are what the settings parser passed, unknown keys
+ * inside them refused there.
+ */
+export function cleanSeatPresetsDoc(doc: SeatPresetsDoc): SeatPresetsDoc {
+  return {
+    presets: doc.presets.map((r) => {
+      const row: VillagePresetRow = {
+        id: r.id,
+        group: r.group,
+        label: String(r.label).trim(),
+        version: r.version,
+        // The settings parser already refused any key a group does not know.
+        values: r.values,
+        retiredAt: typeof r.retiredAt === "string" ? r.retiredAt : null,
+      };
+      if (typeof r.blurb === "string") row.blurb = r.blurb;
+      return row;
+    }),
+  };
+}
+
+/**
  * The village's presets as the picker and the drawer read them.
  *
  * Tolerant on purpose: a row that no longer reads is left out rather than
