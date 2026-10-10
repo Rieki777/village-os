@@ -47,6 +47,8 @@ import { applicationHref, applicationNoticeTitle, type ApplicationStatus } from 
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import type { BallotRow } from "./ballots";
 import { isLapsed, seatHolder, type LapseContext } from "./orgChart";
+import { ensureApplicationText, recordVillageAlignment, settleText } from "./alignmentSubjects";
+import { civilDateKey } from "../../shared/lunar";
 import {
   inApplicationTransaction,
   linkSeating,
@@ -163,21 +165,48 @@ export async function adoptApplication(
   from: readonly ApplicationStatus[],
   how: Adoption,
   ctx: SeatingContext,
-): Promise<{ outcome: SeatingOutcome; app: StoredApplication | null }> {
+): Promise<{ outcome: SeatingOutcome; app: StoredApplication | null; textId: string | null }> {
   return inApplicationTransaction(pool, async (conn) => {
     const app = await readApplication(conn, id, true);
-    if (!app || !from.includes(app.status)) return { outcome: { kind: "lost", status: app?.status ?? null }, app };
+    if (!app || !from.includes(app.status)) return { outcome: { kind: "lost", status: app?.status ?? null }, app, textId: null };
     const adopted = { adoptedVia: how.via, adoptedRef: how.ref, authorityRef: how.authority, decided: true };
+    const tz = ctx.calendar.timezone || "UTC";
+
+    /*
+     * THE VILLAGE ALIGNS WITH THE WORDS IT WAS ASKED ABOUT (PR5). The text's
+     * hash must be the one the application recorded when it was written; an
+     * application from before PR5 gains its text here, rendered from its
+     * stored terms. A mismatch adopts nothing.
+     */
+    const text = await ensureApplicationText(conn, app, how.via === "holder" ? how.ref : app.candidateUserId, tz);
+    if (app.textHash && text.contentHash !== app.textHash) {
+      await setStatus(conn, id, from, "not-adopted", { decided: true });
+      return {
+        outcome: { kind: "cannot", why: "The words this adoption would align with are not the words the application recorded, so nothing was changed." },
+        app,
+        textId: text.id,
+      };
+    }
+    const villageAligns = () =>
+      recordVillageAlignment(
+        conn,
+        { ...app, textId: text.id, textHash: text.contentHash },
+        { method: how.via, authorityRef: how.authority, actorId: how.ref },
+        tz,
+      );
 
     if (app.startsAt && app.startsAt.getTime() > ctx.now.getTime()) {
       await setStatus(conn, id, from, "adopted", adopted);
-      return { outcome: { kind: "later" }, app };
+      await villageAligns();
+      return { outcome: { kind: "later" }, app, textId: text.id };
     }
     const outcome = await seatInTransaction(conn, app, ctx, how.ref);
     if (outcome.kind === "seated") await setStatus(conn, id, from, "adopted", adopted);
     else if (outcome.kind === "held-full") await setStatus(conn, id, from, "held-full", adopted);
     else if (outcome.kind === "cannot") await setStatus(conn, id, from, "not-adopted", { decided: true });
-    return { outcome, app };
+    // The village decided to adopt, whether or not a place was free today: it aligns.
+    if (outcome.kind === "seated" || outcome.kind === "held-full") await villageAligns();
+    return { outcome, app, textId: text.id };
   });
 }
 
@@ -263,6 +292,16 @@ export interface SeatApplicationCloserDeps extends NoticeDeps {
 
 const nothing = (): CloseRouting => ({ applied: [], held: null, proposerTold: null });
 
+/** What `settleText` needs, from the notice deps and the village's calendar. */
+export function settleDepsOf(deps: NoticeDeps & { calendar: () => SeatCalendar }, now: () => Date = () => new Date()) {
+  return {
+    getPool: deps.getPool,
+    notify: deps.notify,
+    notifyAdmins: deps.notifyAdmins,
+    today: () => civilDateKey(now(), deps.calendar().timezone || "UTC"),
+  };
+}
+
 /**
  * What a `role_application` ballot does when it closes, lands, is withdrawn
  * or is stopped. A game change: it waits its window like any other.
@@ -292,7 +331,7 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
     },
 
     execute: async (b: BallotRow, actorId) => {
-      const { outcome, app } = await adoptApplication(
+      const { outcome, app, textId } = await adoptApplication(
         deps.getPool(),
         b.subjectRef,
         ["voting"],
@@ -307,6 +346,7 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
         };
       }
       await tellOutcome(deps, app, outcome, b.id, actorId);
+      if (textId) await settleText(settleDepsOf(deps, now), textId);
       if (outcome.kind === "held-full") {
         return {
           applied: [],

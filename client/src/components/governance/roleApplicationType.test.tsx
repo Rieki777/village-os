@@ -68,6 +68,11 @@ describe("role_application publishes", () => {
     expect(onChoose).not.toHaveBeenCalled();
   });
 
+  it("PR5: the candidate aligns as they propose, and the button says so", () => {
+    expect(ROLE_APPLICATION_TYPE.aligns).toBe(true);
+    expect(ROLE_APPLICATION_TYPE.publishLabel).toBe("Propose and align");
+  });
+
   it("opens the vote itself, so the review step leaves out the sensing sentences", () => {
     expect(ROLE_APPLICATION_TYPE.opensVote).toBe(true);
     expect(ROLE_APPLICATION_TYPE.publish.path).toBe("/api/governance/role-applications");

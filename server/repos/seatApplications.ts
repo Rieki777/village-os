@@ -35,6 +35,9 @@ export interface StoredApplication {
   deliverables: string | null;
   settings: SeatSettings;
   settingsHash: string;
+  /** The alignment text this application's words live in (0242), null before PR5. */
+  textId: string | null;
+  textHash: string | null;
   termEndsAt: Date;
   termSeasonId: string | null;
   termFollowsSeason: boolean;
@@ -48,7 +51,7 @@ export interface StoredApplication {
 }
 
 const COLUMNS =
-  "id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, settings_hash, " +
+  "id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, settings_hash, text_id, text_hash, " +
   "term_ends_at, term_season_id, term_follows_season, starts_at, status, adopted_via, adopted_ref, " +
   "authority_ref, decided_at, created_at";
 
@@ -81,6 +84,8 @@ function rowToApplication(r: any): StoredApplication {
     deliverables: r.deliverables ?? null,
     settings: json<SeatSettings>(r.settings_json, { v: 1 }),
     settingsHash: String(r.settings_hash),
+    textId: r.text_id ?? null,
+    textHash: r.text_hash ?? null,
     termEndsAt: instant(r.term_ends_at) as Date,
     termSeasonId: r.term_season_id ?? null,
     termFollowsSeason: Number(r.term_follows_season) === 1,
@@ -103,6 +108,9 @@ export interface NewApplication {
   deliverables: string | null;
   settings: SeatSettings;
   settingsHash: string;
+  /** The alignment text written in the same transaction (PR5). */
+  textId?: string | null;
+  textHash?: string | null;
   termEndsAt: Date;
   termSeasonId: string | null;
   termFollowsSeason: boolean;
@@ -113,8 +121,8 @@ export interface NewApplication {
 export async function insertApplication(db: Db, a: NewApplication): Promise<void> {
   await db.query(
     "INSERT INTO seat_applications (id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, " +
-      "settings_hash, term_ends_at, term_season_id, term_follows_season, starts_at, status) " +
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, status) " +
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     [
       a.id,
       a.candidateUserId,
@@ -124,6 +132,8 @@ export async function insertApplication(db: Db, a: NewApplication): Promise<void
       a.deliverables,
       JSON.stringify(a.settings),
       a.settingsHash,
+      a.textId ?? null,
+      a.textHash ?? null,
       a.termEndsAt,
       a.termSeasonId,
       a.termFollowsSeason ? 1 : 0,
@@ -216,6 +226,19 @@ export async function setStatus(
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
+/**
+ * An application written before the alignment store (PR5) gains its text when
+ * the candidate first aligns with it, or when the village adopts it. Written
+ * once: a row that already names a text is left alone, and false says so.
+ */
+export async function setApplicationText(db: Db, id: string, textId: string, textHash: string): Promise<boolean> {
+  const [r]: any = await db.query(
+    "UPDATE seat_applications SET text_id = ?, text_hash = ? WHERE id = ? AND text_id IS NULL",
+    [textId, textHash, id],
+  );
+  return Number(r?.affectedRows ?? 0) > 0;
+}
+
 /** The member's own words go when they ask to be forgotten. The terms and the decision stay, de-attributed. */
 export async function eraseApplicationWords(db: Db, candidateUserId: string): Promise<number> {
   const [r]: any = await db.query(
@@ -223,6 +246,40 @@ export async function eraseApplicationWords(db: Db, candidateUserId: string): Pr
     [candidateUserId],
   );
   return Number(r?.affectedRows ?? 0);
+}
+
+// ── Terms on offer, for the erasure step ───────────────────────────────────
+
+/** Seats whose terms on offer mention a phrase. */
+export async function offersMentioning(db: Db, phrase: string): Promise<Array<{ id: string; termsOffer: unknown }>> {
+  const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, terms_offer FROM org_roles WHERE terms_offer IS NOT NULL AND CAST(terms_offer AS CHAR) LIKE ?",
+    [like],
+  );
+  return rows.map((r: any) => ({ id: String(r.id), termsOffer: json<unknown>(r.terms_offer, null) }));
+}
+
+/** Applications whose stored terms mention a phrase, for the erasure step. */
+export async function applicationsMentioning(db: Db, phrase: string): Promise<Array<{ id: string; settings: unknown }>> {
+  const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const [rows] = await db.query<RowDataPacket[]>("SELECT id, settings_json FROM seat_applications WHERE CAST(settings_json AS CHAR) LIKE ?", [like]);
+  return rows.map((r: any) => ({ id: String(r.id), settings: json<unknown>(r.settings_json, null) }));
+}
+
+/**
+ * THE ONE WRITE TO `settings_json` AFTER INSERT: erasure, scrubbing a departed
+ * member's name out of the words in the terms (a pay note, a measure). The
+ * figures and the shape stay; `settings_hash` stays as the record of what was
+ * applied for, and the alignment text's own hash is what binds the parties.
+ */
+export async function rewriteApplicationSettings(db: Db, id: string, settings: unknown): Promise<void> {
+  await db.query("UPDATE seat_applications SET settings_json = ? WHERE id = ?", [JSON.stringify(settings), id]);
+}
+
+/** Rewrite a seat's terms on offer, with a departed member's name scrubbed out. */
+export async function rewriteTermsOffer(db: Db, id: string, termsOffer: unknown): Promise<void> {
+  await db.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify(termsOffer), id]);
 }
 
 // ── The seats, read for the capacity check ──────────────────────────────────

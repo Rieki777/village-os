@@ -41,6 +41,8 @@ import {
 import { settingsWords, type SeatSettings, type SettingsGroup, type SettingsRow } from "@shared/seatSettings";
 import { isCustomised, presetFor, type SeatPreset } from "@shared/seatPresets";
 import { OFFER_WORDS } from "@shared/seatTermsOffer";
+import type { AlignmentState } from "@shared/alignments";
+import AlignmentMarks, { type ChipParty } from "@/components/alignment/AlignmentMarks";
 
 const GROUP_ICONS: Record<SettingsGroup, LucideIcon> = {
   term: CalendarClock,
@@ -189,6 +191,7 @@ export default function SeatTermsDrawer({
   adopted = null,
   empty = null,
   changedGroups = [],
+  alignment = null,
 }: {
   /** Parsed settings (`parseSeatSettings`). Absent: nothing renders. */
   settings?: SeatSettings | null;
@@ -207,6 +210,12 @@ export default function SeatTermsDrawer({
   empty?: { href: string | null } | null;
   /** Groups to light as changed, when this shows a proposed change of terms. */
   changedGroups?: readonly SettingsGroup[];
+  /**
+   * Where the parties stand on these terms (PR5): the "Aligned" stamp once in
+   * force, and a chip per party. Passed by a host showing an application's
+   * terms to a member; a seat's offer has no parties and passes nothing.
+   */
+  alignment?: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[] } | null;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -274,6 +283,7 @@ export default function SeatTermsDrawer({
             )}
           </>
         )}
+        {alignment && <AlignmentMarks state={alignment.state} sealed={alignment.sealed} parties={alignment.parties} />}
         {adopted && (
           <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">
             {adopted.href ? (

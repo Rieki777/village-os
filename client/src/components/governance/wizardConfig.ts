@@ -202,6 +202,13 @@ export interface WizardTypeConfig {
    * the road a proposal travels before somebody takes it to a vote.
    */
   opensVote?: boolean;
+  /**
+   * The publish records the proposer's alignment with words (seat settings
+   * PR5): the Review step shows them (AlignmentReview) and the button reads
+   * `publishLabel`. The publish body gains `alignedWords`.
+   */
+  aligns?: boolean;
+  publishLabel?: string;
   /** Where a finished proposal goes, and in what shape. */
   publish: {
     path: string;

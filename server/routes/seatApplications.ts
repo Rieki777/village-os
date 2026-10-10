@@ -39,6 +39,19 @@
  * village's public record by default. The row is the record. A member hears
  * through a notification naming the seats and linking the page.
  *
+ * ── THE CANDIDATE ALIGNS WHEN THEY PROPOSE (PR5) ───────────────────────────
+ *
+ *   POST /api/governance/role-applications/words               the exact words a Review step shows
+ *
+ * The create route writes, in ONE transaction, the application, version 1 of
+ * its alignment text (server/lib/alignmentSubjects.ts), the two parties and
+ * the candidate's own alignment. The wizard's Review step shows the words the
+ * `words` route rendered and sends them back as `alignedWords`; words that no
+ * longer match are refused, so nobody aligns with words they did not see.
+ * Terms carrying money ask the identity re-confirm first (decision 3). The
+ * holder's adopt click, or the landed ballot, is the village's alignment
+ * (server/lib/seatApplicationCloser.ts).
+ *
  * ── THE CLOSER RIDES THE REGISTER LINE ─────────────────────────────────────
  *
  * `register` writes the `role_application` closer into the table it is handed,
@@ -78,8 +91,21 @@ import { openBallot, openBallotFor, withdrawBallot } from "../lib/ballots";
 import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import type { LapseContext } from "../lib/orgChart";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
-import { adoptApplication, seatApplicationCloser, tellOutcome } from "../lib/seatApplicationCloser";
+import { adoptApplication, seatApplicationCloser, settleDepsOf, tellOutcome } from "../lib/seatApplicationCloser";
+import { carriesMoney, intentSentence, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
 import {
+  prepareSeatTermsText,
+  presentView,
+  recordAlignment,
+  seatTermsWords,
+  settleText,
+  viewText,
+  writePreparedText,
+  type PreparedText,
+} from "../lib/alignmentSubjects";
+import { confirmedWithin } from "../lib/identityConfirm";
+import {
+  inApplicationTransaction,
   insertApplication,
   listApplications,
   liveSeatingsOf,
@@ -170,6 +196,49 @@ export function register(app: Express, deps: Deps): void {
     const m = await members.byId(id);
     return m ? String(m.name ?? "") : null;
   };
+  const today = () => civilDateKey(new Date(), seatCalendar().timezone || "UTC");
+  const settleDeps = settleDepsOf({ getPool, notify, notifyAdmins, calendar: seatCalendar });
+
+  /** Terms carrying money ask the identity re-confirm when the last one is stale (decision 3), or null. */
+  const moneyRefusal = (user: any, settings: SeatSettings) =>
+    carriesMoney(settings) && !confirmedWithin(user, RECONFIRM_FRESH_MS)
+      ? { error: "reconfirm_required", message: ALIGN_WORDS.reconfirmLine }
+      : null;
+
+  /**
+   * The application's alignment as a member reads it. An application from
+   * before PR5 has no text yet: its words render from the stored terms, and
+   * the candidate's Align writes the text (POST /api/profile/alignments).
+   */
+  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[]) {
+    if (a.textId) {
+      const v = await viewText(getPool(), a.textId, today());
+      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), true);
+    }
+    const words = seatTermsWords(seatNames, a.settings);
+    const closed = a.status === "withdrawn" || a.status === "not-adopted";
+    const isCandidate = viewerId === a.candidateUserId;
+    return {
+      textId: null,
+      title: words.title,
+      body: words.body,
+      version: 1,
+      seatNames,
+      href: applicationHref(a.id),
+      state: closed ? ("ended" as const) : ("pending" as const),
+      why: closed ? `${STATUS_WORDS[a.status]}.` : "Waiting for every party to align.",
+      sealed: false,
+      money: carriesMoney(a.settings),
+      parties: [
+        { partyKey: userParty(a.candidateUserId), label: (await nameOf(a.candidateUserId)) || "A former member", capacity: "individually", required: true, aligned: false, at: null, method: null },
+        { partyKey: "village", label: "The village", capacity: "for the village", required: true, aligned: false, at: null, method: null },
+      ],
+      you: isCandidate ? { partyKey: userParty(a.candidateUserId), aligned: false, alignedAt: null, mayAlign: !closed } : null,
+      contentHash: null,
+      createdAt: null,
+      retrofit: true,
+    };
+  }
 
   /** An application as a member reads it, with what this reader may do with it. */
   async function served(a: StoredApplication, viewerId: string | null, rule: Awaited<ReturnType<typeof adoptionRule>> | null) {
@@ -179,6 +248,7 @@ export function register(app: Express, deps: Deps): void {
     const ballot = a.status === "voting" ? await openBallotFor(pool, ROLE_APPLICATION, a.id) : null;
     const isCandidate = viewerId === a.candidateUserId;
     const awaiting = a.status === "awaiting-holder";
+    const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? id);
     return {
       id: a.id,
       href: applicationHref(a.id),
@@ -199,6 +269,7 @@ export function register(app: Express, deps: Deps): void {
       ballotId: ballot?.id ?? (a.adoptedVia === "ballot" ? a.adoptedRef : null),
       decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       createdAt: a.createdAt ? a.createdAt.toISOString() : null,
+      alignment: await alignmentOf(a, viewerId, seatNames),
       ...(viewerId && rule
         ? {
             you: {
@@ -257,6 +328,21 @@ export function register(app: Express, deps: Deps): void {
     });
     return { ok: true, ballotId: result.ballot.id, closesAt: result.ballot.closesAt };
   }
+
+  // ── The words, for the Review step ────────────────────────────────────────
+  app.post("/api/governance/role-applications/words", async (req, res) => {
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    if (await overLimit(`seat-application-words:${String(viewer.id)}`, 120, ASK_WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_asks", message: "Wait a little and try again." });
+    }
+    const parsed = parseApplicationInput(req.body);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
+    const seats = await seatsForUpdate(getPool(), parsed.input.seatIds);
+    const names = parsed.input.seatIds.map((id) => seats.find((s) => s.id === id)?.name ?? id);
+    const words = seatTermsWords(names, parsed.input.settings);
+    res.json({ title: words.title, body: words.body, money: carriesMoney(parsed.input.settings), intent: intentSentence(names) });
+  });
 
   // ── Apply ─────────────────────────────────────────────────────────────────
   app.post("/api/governance/role-applications", async (req, res) => {
@@ -355,8 +441,36 @@ export function register(app: Express, deps: Deps): void {
     };
     const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? sid);
 
+    /*
+     * THE WORDS THE CANDIDATE ALIGNS WITH (PR5). The Review step showed the
+     * words the `words` route rendered and hands them back: words that no
+     * longer match, because a seat was renamed or the terms moved, are refused
+     * before anything is written. Money asks the re-confirm first.
+     */
+    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz);
+    if (req.body?.alignedWords !== undefined && String(req.body.alignedWords) !== prepared.text.body) {
+      return res.status(409).json({ error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
+    }
+    const money = moneyRefusal(user, input.settings);
+    if (money) return res.status(403).json(money);
+    const stored = { ...row, textId: prepared.text.id, textHash: prepared.text.contentHash };
+    /** The application, its text, its parties and the candidate's alignment: one transaction, so the candidate never clicks twice. */
+    const writeAll = async (conn: PoolConnection, status: "awaiting-holder" | "voting") => {
+      await insertApplication(conn, { ...stored, status });
+      await writePreparedText(conn, prepared);
+      await recordAlignment(conn, {
+        textId: prepared.text.id,
+        partyKey: userParty(userId),
+        userId,
+        contentHash: prepared.text.contentHash,
+        intent: intentSentence(seatNames),
+        method: "click",
+        authorityRef: null,
+      });
+    };
+
     if (path === "holder") {
-      await insertApplication(pool, { ...row, status: "awaiting-holder" });
+      await inApplicationTransaction(pool, (conn) => writeAll(conn, "awaiting-holder"));
       for (const holder of rule.holders.filter((h) => h !== userId)) {
         await notify({
           userId: holder,
@@ -368,16 +482,17 @@ export function register(app: Express, deps: Deps): void {
           dedupeKey: `sa:${id}:waiting:${holder}`,
         });
       }
-      return res.status(201).json({ success: true, id, url: applicationHref(id), status: "awaiting-holder", caution: term.caution ?? null });
+      return res.status(201).json({ success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: term.caution ?? null });
     }
 
-    const opened = await openVote(row, userId, (conn) => insertApplication(conn, { ...row, status: "voting" }));
+    const opened = await openVote(row, userId, (conn) => writeAll(conn, "voting"));
     if (!opened.ok) return res.status(opened.status).json({ error: opened.error });
     res.status(201).json({
       success: true,
       id,
       url: applicationHref(id),
       status: "voting",
+      textId: prepared.text.id,
       ballot: { id: opened.ballotId, closesAt: opened.closesAt },
       caution: term.caution ?? null,
     });
@@ -433,10 +548,13 @@ export function register(app: Express, deps: Deps): void {
     const actorId = String(user.id);
     const refusal = adoptRefusal(rule, actorId, a.candidateUserId);
     if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
+    // The holder aligns for the village: money terms ask them the re-confirm too.
+    const money = moneyRefusal(user, a.settings);
+    if (money) return res.status(403).json(money);
 
     const carrying = rolesCarrying(ADOPTING_POWER).map((r) => r.id);
     const seatedIn = loadRoleHolders().find((h) => h.userId === actorId && carrying.includes(h.roleId))?.roleId ?? "badge";
-    const { outcome, app: stored } = await adoptApplication(
+    const { outcome, app: stored, textId } = await adoptApplication(
       getPool(),
       a.id,
       ["awaiting-holder"],
@@ -447,6 +565,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({ error: "Somebody else decided this application a moment ago.", status: outcome.kind === "lost" ? outcome.status : null });
     }
     await tellOutcome({ getPool, notify, notifyAdmins }, stored, outcome, actorId, actorId);
+    if (textId) await settleText(settleDeps, textId);
     const status = outcome.kind === "held-full" ? "held-full" : outcome.kind === "cannot" ? "not-adopted" : "adopted";
     res.json({
       success: outcome.kind === "seated" || outcome.kind === "later",

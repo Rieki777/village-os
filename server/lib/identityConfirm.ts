@@ -73,7 +73,13 @@ import type { Request, Response } from "express";
 import { signTokenPayload } from "./memberTokens";
 import { readGoogleLink } from "./oauthAccounts";
 
-export const CONFIRM_ACTIONS = ["request-exit", "delete-account"] as const;
+/**
+ * `align` (seat settings PR5, decision 3 of 2026-10-09): aligning with terms
+ * that carry pay, allowance or bonus asks this same confirmation when the last
+ * one is older than fifteen minutes. Its route lives under /api/profile, so the
+ * Google cookie reaches it like the other two.
+ */
+export const CONFIRM_ACTIONS = ["request-exit", "delete-account", "align"] as const;
 export type ConfirmAction = (typeof CONFIRM_ACTIONS)[number];
 
 export function isConfirmAction(v: unknown): v is ConfirmAction {
@@ -95,12 +101,15 @@ export function confirmCookieName(action: ConfirmAction): string {
 export const CONFIRM_HOME: Record<ConfirmAction, string> = {
   "request-exit": "/exit-policy",
   "delete-account": "/profile",
+  // The profile's "What you have aligned with" section, where a pending row carries its Align button.
+  align: "/profile",
 };
 
 /** The password refusals, byte for byte what the two routes answered before this lane. */
 export const PASSWORD_REFUSAL: Record<ConfirmAction, string> = {
   "request-exit": "Confirm with your password",
   "delete-account": "Confirm with your password to delete your account",
+  align: "Confirm with your password to align with terms that carry money",
 };
 
 /**
@@ -126,6 +135,7 @@ export function storedHashNeedsReset(storedHash: string | null | undefined): boo
 const DOING: Record<ConfirmAction, string> = {
   "request-exit": "open your departure",
   "delete-account": "delete your account",
+  align: "align with terms that carry money",
 };
 
 export const NO_WAY_TO_CONFIRM =
@@ -222,6 +232,33 @@ export function spendPending(member: { prefs?: any }, action: ConfirmAction, jti
   delete slots[action];
   member.prefs = { ...member.prefs, [PREFS_KEY]: slots };
   return true;
+}
+
+/**
+ * WHEN THE LAST CONFIRMATION WAS, for the actions that ask only when it is
+ * stale (aligning with money terms). Stored on the member beside the pending
+ * slots, bound to the session generation like a Google confirmation is, so
+ * signing out everywhere retires it.
+ */
+const CONFIRMED_AT_KEY = "identityConfirmedAt";
+
+/** Stamp a confirmation that just passed. Call inside `members.update`. */
+export function stampConfirmed(member: { prefs?: any; tokenVersion?: number }, nowMs: number = Date.now()): void {
+  member.prefs = { ...(member.prefs ?? {}), [CONFIRMED_AT_KEY]: { at: nowMs, v: Number(member.tokenVersion ?? 0) } };
+}
+
+/** The instant the last confirmation stops counting, or null when there is none for this session generation. */
+export function confirmedUntil(member: { prefs?: any; tokenVersion?: number }, windowMs: number): number | null {
+  const stamp = member.prefs?.[CONFIRMED_AT_KEY];
+  if (!stamp || typeof stamp.at !== "number") return null;
+  if (Number(stamp.v ?? -1) !== Number(member.tokenVersion ?? 0)) return null;
+  return stamp.at + windowMs;
+}
+
+/** Whether a confirmation within `windowMs` stands for this member now. */
+export function confirmedWithin(member: { prefs?: any; tokenVersion?: number }, windowMs: number, nowMs: number = Date.now()): boolean {
+  const until = confirmedUntil(member, windowMs);
+  return until !== null && nowMs <= until;
 }
 
 /** One cookie by name, out of the raw header. No cookie parser is wired in this app. */

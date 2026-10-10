@@ -23,7 +23,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Check, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Send, Undo2 } from "lucide-react";
 import Layout from "@/components/Layout";
 import ModuleGate, { SignInDoors } from "@/components/modules/ModuleGate";
 import { PAGE_GATE_LINES } from "@/components/modules/gateCopy";
@@ -34,7 +34,6 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatTermsDrawer from "@/components/power/SeatTermsDrawer";
 import { loadOrg } from "@/components/governance/pickSources";
 import {
-  adoptApplication,
   fetchApplication,
   putApplicationToVillage,
   withdrawApplication,
@@ -45,6 +44,10 @@ import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { seatList } from "@shared/seatApplications";
+import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
+import AlignButton from "@/components/alignment/AlignButton";
+import AlignmentCard from "@/components/alignment/AlignmentCard";
+import { call as alignCall } from "@/components/alignment/alignmentsApi";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read seat applications.",
@@ -79,6 +82,7 @@ function SeatCards({ app }: { app: ServedApplication }) {
     };
   }, []);
   const parsed = parseSeatSettings(app.settings);
+  const marks = app.alignment ? { state: app.alignment.state, sealed: app.alignment.sealed, parties: app.alignment.parties } : null;
   const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
   const adopted =
     app.status === "adopted" && app.decidedAt
@@ -106,6 +110,7 @@ function SeatCards({ app }: { app: ServedApplication }) {
                     unreadable={!parsed.ok}
                     villagePresets={villagePresets}
                     adopted={adopted}
+                    alignment={marks}
                     defaultOpen
                   />
                 }
@@ -120,6 +125,7 @@ function SeatCards({ app }: { app: ServedApplication }) {
                     unreadable={!parsed.ok}
                     villagePresets={villagePresets}
                     adopted={adopted}
+                    alignment={marks}
                     defaultOpen
                   />
                 </div>
@@ -239,6 +245,9 @@ export default function SeatApplication() {
 
             <SeatCards app={app} />
 
+            {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
+            {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
+
             <section aria-labelledby="sa-words">
               <h2 id="sa-words" className="text-lg font-bold text-stone-900">
                 {APPLICATION_WORDS.wordsHeading}
@@ -288,15 +297,17 @@ export default function SeatApplication() {
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {app.you.mayAdopt && (
-                    <button
-                      type="button"
+                    // The holder's adopt click IS the village's alignment. Money terms may ask the re-confirm first.
+                    <AlignButton
+                      label={ALIGN_WORDS.forTheVillage}
+                      sentence={intentSentence(app.seats.map((x) => x.name), true)}
                       disabled={busy}
-                      onClick={() => void act(() => adoptApplication(app.id), "Adopted for the village.")}
-                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
-                    >
-                      <Check className="w-4 h-4" aria-hidden="true" />
-                      {APPLICATION_WORDS.align}
-                    </button>
+                      onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST")}
+                      onDone={(data) => {
+                        setSaid({ ok: true, text: typeof data?.message === "string" ? data.message : "Adopted for the village." });
+                        void load();
+                      }}
+                    />
                   )}
                   {app.you.mayPutToVillage && (
                     <button

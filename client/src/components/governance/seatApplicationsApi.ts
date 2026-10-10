@@ -8,6 +8,7 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
+import type { ServedAlignment } from "@/components/alignment/alignmentsApi";
 
 export interface ServedApplication {
   id: string;
@@ -26,6 +27,8 @@ export interface ServedApplication {
   ballotId: string | null;
   decidedAt: string | null;
   createdAt: string | null;
+  /** The words the parties align with, and where each party stands (PR5). */
+  alignment?: ServedAlignment;
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;

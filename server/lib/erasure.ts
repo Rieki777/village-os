@@ -107,6 +107,7 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { eraseApplicationWords } from "../repos/seatApplications";
+import { eraseFromAlignments } from "./alignmentErasure";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
@@ -580,6 +581,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "seat-application-words-after-tombstone",
       run: async () => {
         await eraseApplicationWords(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The alignment store (0242): their name and handle come out of the
+       * words of every alignment text, the seats' terms on offer and the
+       * village presets; the words otherwise stay, de-attributed (decision 2).
+       * Hash, parties and seal are untouched, so receipts still verify.
+       * `target` is the row as read before the tombstone, so it still holds
+       * the name. server/lib/alignmentErasure.ts says the rest.
+       */
+      name: "alignment-names-after-tombstone",
+      run: async () => {
+        await eraseFromAlignments(pool, { id: target.id, name: target.name, handle: target.handle });
       },
     },
     {

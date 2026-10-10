@@ -114,7 +114,11 @@ function harness() {
     const app = express();
     app.use(express.json());
     register(app, {
-      authedUser: async () => (state.viewer ? PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" } : null),
+      // A fresh identity confirmation (PR5), so money terms align without the re-confirm here; alignments.test.ts covers a stale one.
+      authedUser: async () =>
+        state.viewer
+          ? { ...(PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" }), tokenVersion: 0, prefs: { identityConfirmedAt: { at: Date.now(), v: 0 } } }
+          : null,
       capabilityCtx: async () =>
         ({
           stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"),

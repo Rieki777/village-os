@@ -128,6 +128,7 @@ import { register as registerMapSceneRoutes } from "./routes/mapScene";
 import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
 import { register as registerSeatApplicationRoutes } from "./routes/seatApplications";
+import { register as registerAlignmentRoutes, alignmentsForExport } from "./routes/alignments";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -25237,6 +25238,7 @@ ${inner}
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
+  registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
@@ -26478,6 +26480,7 @@ ${inner}
       portraitBudget: await grantsForMember(pool, user.id),
       gratitudeDistributions: await distributionsForMember(pool, user.id),
       seasonPlans: await seasonPlansForMember(pool, user.id), // every version of their season plans, words and seats handed back (server/repos/seasonPlans.ts)
+      aligned: await alignmentsForExport(pool, user.id, async (id) => (await members.byId(id))?.name ?? null), // texts they are party to, their own alignment rows and receipts; counterparties as name and capacity only (server/routes/alignments.ts)
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────

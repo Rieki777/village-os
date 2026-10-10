@@ -160,3 +160,100 @@ describe("a member reading one", () => {
     expect(screen.queryByRole("button", { name: "Put it to the village" })).toBeNull();
   });
 });
+
+describe("the words every party aligns with (PR5)", () => {
+  const HASH = "c".repeat(64);
+  const ALIGNMENT = {
+    textId: "at-00112233445566aa",
+    title: "Terms for Lead steward and Platform steward",
+    body: "Terms for Lead steward and Platform steward\n\nTHE SEATS\n  Lead steward\n  Platform steward\n",
+    version: 1,
+    seatNames: ["Lead steward", "Platform steward"],
+    href: `/seat-applications/${ID}`,
+    state: "pending",
+    why: "Waiting for every party to align.",
+    sealed: false,
+    money: true,
+    parties: [
+      { partyKey: "user:u-ana", label: "Ana Quillfeather", capacity: "individually", required: true, aligned: false, at: null, method: null },
+      { partyKey: "village", label: "The village", capacity: "for the village", required: true, aligned: true, at: "2026-10-09T10:00:00.000Z", method: "holder" },
+    ],
+    you: { partyKey: "user:u-ana", aligned: false, alignedAt: null, mayAlign: true },
+    contentHash: HASH,
+    createdAt: "2026-10-09T00:00:00.000Z",
+  };
+  const posted: Array<{ url: string; body: any }> = [];
+  let alignAnswers: Response[] = [];
+
+  beforeEach(() => {
+    signedIn = { id: "u-ana" };
+    posted.length = 0;
+    alignAnswers = [];
+    answer = () =>
+      json({ application: { ...SERVED, alignment: ALIGNMENT, you: { isCandidate: true, mayAdopt: false, mayPutToVillage: false, mayWithdraw: false, holdsThePower: false } } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+        asked.push(`${init?.method ?? "GET"} ${url}`);
+        if (init?.method === "POST") posted.push({ url, body: JSON.parse(init.body ?? "{}") });
+        if (url === `/api/governance/role-applications/${ID}`) return answer();
+        if (url === "/api/org") return json(ORG);
+        if (url === "/api/seat-presets") return json({ presets: [] });
+        if (url === "/api/auth/confirm-methods") return json({ confirmWith: "password" });
+        if (url === "/api/profile/alignments/confirm") return json({ success: true, fresh: true, freshUntil: null, confirmWith: "password" });
+        if (url === "/api/profile/alignments") return alignAnswers.shift() ?? json({ success: true, alignment: null }, 201);
+        return json({});
+      }),
+    );
+  });
+
+  it("shows the exact stored words and a chip per party, with one Align and one plain sentence", async () => {
+    render(<SeatApplication />);
+    const words = await screen.findByText((_, el) => el?.getAttribute("data-alignment-words") === "" && el.textContent === ALIGNMENT.body);
+    expect(words).toBeTruthy();
+    expect(screen.getAllByText("Ana Quillfeather, not yet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("The village, aligned").length).toBeGreaterThan(0);
+    expect(screen.getByText("I align with these terms for Lead steward and Platform steward.")).toBeTruthy();
+    // No hash and no version beside the button, and never "sign".
+    expect(document.body.textContent).not.toContain(HASH);
+    expect(document.body.textContent).not.toMatch(/\bsign(ed|ature)?\b/i);
+    fireEvent.click(screen.getByRole("button", { name: "Align" }));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/profile/alignments")?.body).toEqual({ textId: ALIGNMENT.textId, contentHash: HASH }));
+  });
+
+  it("MONEY: a re-confirm demand opens the confirmation in place, and confirming aligns without a second click on Align", async () => {
+    alignAnswers = [json({ error: "reconfirm_required", message: "These terms carry money, so the village asks you to confirm it is you before you align." }, 403)];
+    render(<SeatApplication />);
+    fireEvent.click(await screen.findByRole("button", { name: "Align" }));
+    expect(await screen.findByText("These terms carry money, so the village asks you to confirm it is you before you align.")).toBeTruthy();
+    fireEvent.change(await screen.findByPlaceholderText("Your password"), { target: { value: "right horse battery" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm it is you" }));
+    await waitFor(() => expect(posted.find((p) => p.url === "/api/profile/alignments/confirm")?.body).toEqual({ password: "right horse battery" }));
+    await waitFor(() => expect(posted.filter((p) => p.url === "/api/profile/alignments")).toHaveLength(2));
+  });
+
+  it("once in force, the drawer and the card carry the Aligned stamp beside both chips", async () => {
+    answer = () =>
+      json({
+        application: {
+          ...SERVED,
+          status: "adopted",
+          alignment: {
+            ...ALIGNMENT,
+            state: "in-force",
+            why: null,
+            sealed: true,
+            parties: ALIGNMENT.parties.map((p) => ({ ...p, aligned: true, at: "2026-10-09T10:00:00.000Z" })),
+            you: { partyKey: "user:u-ana", aligned: true, alignedAt: "2026-10-09T10:00:00.000Z", mayAlign: false },
+          },
+          you: { isCandidate: true, mayAdopt: false, mayPutToVillage: false, mayWithdraw: false, holdsThePower: false },
+        },
+      });
+    render(<SeatApplication />);
+    await screen.findByText("You aligned on 9 Oct 2026");
+    // One stamp in each seat's drawer tray and one on the card.
+    expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(3);
+    expect(screen.getAllByText("Ana Quillfeather, aligned").length).toBe(3);
+    expect(screen.queryByRole("button", { name: "Align" })).toBeNull();
+  });
+});
