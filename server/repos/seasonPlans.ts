@@ -79,6 +79,26 @@ function rowToPlan(r: any): StoredPlan {
  * saves at once can never both become version n+1.
  */
 export async function insertPlanVersion(pool: Pool, userId: string, seasonId: string, plan: PlanInput): Promise<StoredPlan> {
+  /*
+   * RETRIED ON A LOST RACE (red team D6). The first save reads MAX(version)
+   * over an empty range FOR UPDATE, which takes a gap lock; two first saves at
+   * once both hold one and both insert into it, and InnoDB kills one as a
+   * deadlock (1213), MariaDB with snapshot isolation as 1020, and a save that
+   * raced past the read meets the unique key (1062). Each is a clean
+   * rollback, so the save runs again and reads the version the winner wrote.
+   */
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await insertPlanVersionOnce(pool, userId, seasonId, plan);
+    } catch (err: any) {
+      const raced = err?.errno === 1213 || err?.errno === 1020 || err?.errno === 1062 || err?.code === "ER_LOCK_DEADLOCK" || err?.code === "ER_DUP_ENTRY";
+      if (!raced || attempt >= 8) throw err;
+      await new Promise((r) => setTimeout(r, 5 + Math.floor(Math.random() * 20) * attempt));
+    }
+  }
+}
+
+async function insertPlanVersionOnce(pool: Pool, userId: string, seasonId: string, plan: PlanInput): Promise<StoredPlan> {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
