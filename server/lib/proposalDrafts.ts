@@ -335,11 +335,8 @@ export function applicationDraftProblem(payload: Record<string, unknown>): strin
   return null;
 }
 
-/** A departed member's unfinished proposals go with them (erasure step `proposal-drafts`). */
-export async function deleteDraftsOf(pool: Pool, userId: string): Promise<number> {
-  const [result] = await pool.query<any>("DELETE FROM proposal_drafts WHERE user_id = ?", [userId]);
-  return Number(result.affectedRows ?? 0);
-}
+/** A departed member's unfinished proposals go with them (erasure step `proposal-drafts`); the statement lives in server/repos. */
+export { deleteDraftsOf } from "../repos/proposalDraftErasure";
 
 export async function draftsOf(pool: Pool, userId: string): Promise<ProposalDraftRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
