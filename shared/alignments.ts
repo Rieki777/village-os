@@ -195,8 +195,14 @@ export const STATE_WORDS: Record<AlignmentState, string> = {
 };
 
 /** "9 Oct 2026", from an instant or a date. */
-export function alignedOnWords(iso: string): string {
+export function alignedOnWords(iso: string, timeZone?: string | null): string {
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  // A civil date reads as written; an instant reads in the village's zone (red team U6).
+  const zone = iso.length === 10 || !timeZone ? "UTC" : timeZone;
+  try {
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: zone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  }
 }

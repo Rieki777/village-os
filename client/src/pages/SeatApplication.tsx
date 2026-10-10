@@ -44,6 +44,7 @@ import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { seatList } from "@shared/seatApplications";
+import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
@@ -92,7 +93,8 @@ function SeatCards({ app }: { app: ServedApplication }) {
       ? {
           how: app.adoptedVia === "holder" ? ("holder" as const) : ("vote" as const),
           holderName: app.adoptedBy,
-          on: app.decidedAt.slice(0, 10),
+          // The day in the village's calendar, as the server read it (red team U6).
+          on: app.decidedOn ?? app.decidedAt.slice(0, 10),
           href: app.adoptedVia === "ballot" && app.ballotId ? `/decisions/${app.ballotId}` : null,
         }
       : null;
@@ -243,8 +245,10 @@ export default function SeatApplication() {
                 {app.candidate.name ?? "A former member"} applies for {seatList(app.seats.map((s) => s.name))}
               </h1>
               <p className="mt-2 text-stone-600 leading-relaxed">
-                {app.term.followsSeason ? `Until the season ends on ${app.term.endsOn}.` : `Until ${app.term.endsOn}.`}
-                {app.startsOn ? ` From ${app.startsOn} at the earliest.` : ""}
+                {app.term.followsSeason
+                  ? `Until the season ends on ${civilDayWords(app.term.endsOn)}.`
+                  : `Until ${civilDayWords(app.term.endsOn)}.`}
+                {app.startsOn ? ` From ${civilDayWords(app.startsOn)} at the earliest.` : ""}
               </p>
             </header>
 

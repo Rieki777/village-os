@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2, ShieldCheck } from "lucide-react";
 import { ALIGN_WORDS, alignedOnWords } from "@shared/alignments";
+import { useSeason } from "@/lib/gameApi";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import { asksReconfirm, confirmIdentity, type Answer } from "./alignmentsApi";
 
@@ -115,6 +116,7 @@ export interface AlignButtonProps {
 }
 
 export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false }: AlignButtonProps) {
+  const season = useSeason();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
@@ -123,7 +125,7 @@ export default function AlignButton({ label = ALIGN_WORDS.align, sentence, align
     return (
       <p data-aligned="" className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
         <Check className="size-4 text-notice" aria-hidden="true" />
-        {ALIGN_WORDS.youAligned(alignedOnWords(alignedAt))}
+        {ALIGN_WORDS.youAligned(alignedOnWords(alignedAt, season?.timezone))}
       </p>
     );
   }

@@ -559,4 +559,13 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
     await h.call("POST", `/api/governance/role-applications/${a.body.id}/withdraw`);
     expect(await textsToSettle(pool)).not.toContain(textId);
   });
+
+  it("U6: the roll's notice names the day the vote closes in words, in the village's calendar", async () => {
+    const s = await seat("Dated seat");
+    const a = await apply({ seatIds: [s] });
+    expect(a.status).toBe(201);
+    await new Promise((r) => setTimeout(r, 200));
+    const opened = h.notices.find((x) => x.type === "ballot_opened");
+    expect(opened?.body).toMatch(/^Voting is open until \d{1,2} [A-Z][a-z]+ \d{4}\.$/);
+  });
 });

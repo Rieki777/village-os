@@ -130,7 +130,8 @@ describe("a member reading one", () => {
     expect(screen.getByText("Waiting for a seat holder")).toBeTruthy();
     expect(await screen.findAllByText("Recorded here. Paid outside the platform.")).not.toHaveLength(0);
     expect(screen.getByText("I kept the orchard ledger last season.")).toBeTruthy();
-    expect(screen.getByText("Until 2026-12-31.")).toBeTruthy();
+    // The civil day in words, never raw ISO (red team U6).
+    expect(screen.getByText("Until 31 December 2026.")).toBeTruthy();
   });
 
   it("gives a holder both doors, and adopting reads the application again", async () => {

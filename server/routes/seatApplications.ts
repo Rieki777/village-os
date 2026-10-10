@@ -375,7 +375,8 @@ export function register(app: Express, deps: Deps): void {
     void notifyRollRows({ pool, notify, link: decisionLink }, result.ballot, {
       type: "ballot_opened",
       title: applicationNoticeTitle("opened", ballotSeats.map((s) => s.name)),
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      // The day in the village's calendar, never the server's locale (red team U6).
+      body: `Voting is open until ${civilDayWords(civilDateKey(new Date(result.ballot.closesAt), seatCalendar().timezone || "UTC"))}.`,
       keySuffix: "open",
       except: [openedBy],
       roll: setup.electorate.map((e) => e.userId),
