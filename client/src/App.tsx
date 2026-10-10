@@ -281,6 +281,7 @@ const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
 const Review = lazyPage(() => import("./pages/Review"));
+const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
 const VillageHealth = lazyPage(() => import("./pages/VillageHealth"));
 const ExitPolicy = lazyPage(() => import("./pages/ExitPolicy"));
@@ -370,6 +371,7 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/badges" component={Badges} />
       <Route path="/powers" component={Powers} />
+      <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
       <Route path="/library" component={Library} />
       {/* /village-health, not /health: the server owns /health as the ops probe */}

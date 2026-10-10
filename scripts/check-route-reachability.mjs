@@ -89,6 +89,12 @@ const ALLOWLIST = {
 
   "/forgot-password": "one door, on the sign-in page, which is where a locked-out person already is",
 
+  // One page per arrival from an outside service, and meaningless without the
+  // arrival's id. Its door is that arrival's card on /review, which is where a
+  // steward already is when there is something to read; a nav entry could only
+  // point at no batch at all.
+  "/review/structure/:batchId": "one page per arrival, opened from that arrival's card on /review",
+
   // The alias. /tokens is what the nav links to and what a member sees;
   // /wallet stays mounted only because Stripe return URLs and order
   // notifications already carry it (server/index.ts). A second door would be
