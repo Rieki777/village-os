@@ -181,6 +181,8 @@ export interface OrgAssignment {
    * somebody asserted at seating time.
    */
   isAgent: boolean;
+  /** 0240: the seat application whose terms this seating holds. Absent for every other door. */
+  applicationId?: string;
 }
 
 const ROLE_COLS =
@@ -205,7 +207,9 @@ const ASSIGN_COLS =
   // 0142. Same reasoning `is_example` carries above: a flag that does not ride
   // through every SELECT is a flag downstream cannot act on, and the surfaces
   // that must not count an agent are exactly the ones furthest from here.
-  "is_agent";
+  "is_agent, " +
+  // 0240: the seat application whose terms a seating holds, null for every other door.
+  "application_id";
 
 /** MySQL hands JSON back already parsed on some drivers and as text on others. */
 function asList(v: unknown): string[] {
@@ -274,6 +278,8 @@ function rowToAssignment(r: any): OrgAssignment {
     endedReason: r.ended_reason ?? null,
     isExample: !!r.is_example,
     isAgent: !!r.is_agent,
+    // Only when set, so a reader that compares whole rows sees nothing new on every other seating.
+    ...(r.application_id ? { applicationId: String(r.application_id) } : {}),
   };
 }
 

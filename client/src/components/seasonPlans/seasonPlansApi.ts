@@ -31,6 +31,8 @@ export interface HeldSeat {
   name: string;
   termEndsOn: string | null;
   lapsed: boolean;
+  /** The application this seating came through, if any. */
+  heldThrough?: string | null;
 }
 
 export interface MinePayload {
@@ -49,6 +51,8 @@ export interface MinePayload {
   heldSeats: HeldSeat[];
   applications: PlanApplication[];
   questsThisMoon: { done: number };
+  /** False for a reader below the member rung: applying is not open to them yet. */
+  mayApply?: boolean;
 }
 
 export interface PlanCard {

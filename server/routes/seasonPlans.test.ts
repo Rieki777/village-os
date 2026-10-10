@@ -115,6 +115,7 @@ function harness() {
         res.status(refusal?.status ?? 401).json(refusal?.body ?? { error: "auth_required" });
         return false;
       },
+      capabilityCtx: async () => ctxFor(),
       getPool: () => state.pool(),
       notify: async () => ({ fresh: true }),
       overLimit: async () => false,
@@ -314,6 +315,15 @@ describe.skipIf(!configured)("planning a season, on a real schema", () => {
     const r = await h.call("GET", "/api/season-plans?handle=zed");
     expect(r.body.people.map((p: any) => p.userId)).toEqual(["u-zed"]);
     expect((await h.call("GET", "/api/season-plans?handle=nobody-here")).status).toBe(404);
+  });
+
+  it("tells a guest up front that applying is not open to them yet, and a member that it is (red team U5)", async () => {
+    h.state.viewer = { id: "u-guest", stage: "guest" };
+    const guest = await h.call("GET", "/api/season-plans/mine");
+    expect(guest.status).toBe(200);
+    expect(guest.body.mayApply).toBe(false);
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    expect((await h.call("GET", "/api/season-plans/mine")).body.mayApply).toBe(true);
   });
 
   it("hands back only a seat you hold, and files it with the plan", async () => {

@@ -46,11 +46,11 @@ export const MY_SEASON_WORDS = {
   notSure: "Not sure",
   handingBackLine: "You hand this seat back when the season turns.",
   carryingOn: "You asked to carry on",
+  heldThrough: "You hold it through your application",
+  applyMembersOnly: "Applying for a seat opens at the member rung. Once you reach it, you can apply here.",
   applyHeading: "Apply for a seat",
   applyLine: "Ask the village for any seat on the chart. You pick up to five in one application.",
   apply: "Apply for a seat",
-  proposeLine: "The seat you want is not on the chart yet? Start a proposal for it.",
-  propose: "Propose a seat",
   applicationsHeading: "Your applications this season",
   partHeading: "Your part",
   partLine: "What you will do this season. You file it. Nobody votes on it.",
@@ -273,7 +273,9 @@ export default function MySeason() {
                         </div>
                         {app ? (
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <span className="text-sm text-stone-700">{MY_SEASON_WORDS.carryingOn}:</span>
+                            <span className="text-sm text-stone-700">
+                              {seat.heldThrough === app.id ? MY_SEASON_WORDS.heldThrough : MY_SEASON_WORDS.carryingOn}:
+                            </span>
                             <ApplicationChip app={app} />
                           </div>
                         ) : (
@@ -314,22 +316,24 @@ export default function MySeason() {
               <h2 id="ms-apply" className="text-lg font-bold text-stone-900">
                 {MY_SEASON_WORDS.applyHeading}
               </h2>
-              <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.applyLine}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  href={applyHref({ seasonId: season.id })}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  {MY_SEASON_WORDS.apply}
-                </Link>
-              </div>
-              <p className="mt-3 text-sm text-stone-700">
-                {MY_SEASON_WORDS.proposeLine}{" "}
-                <Link href="/propose" className="font-medium text-teal-deep underline underline-offset-2">
-                  {MY_SEASON_WORDS.propose}
-                </Link>
-              </p>
+              {data.mayApply === false ? (
+                // A guest is told before the wizard, never at its Review step (red team U5).
+                <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.applyMembersOnly}</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-stone-700">{MY_SEASON_WORDS.applyLine}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      href={applyHref({ seasonId: season.id })}
+                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                      {MY_SEASON_WORDS.apply}
+                    </Link>
+                  </div>
+                </>
+              )}
+              {/* "Propose a seat" waits for the seat-proposal kind (PR7): the wizard has no such kind yet (red team U11). */}
               {data.applications.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.applicationsHeading}</h3>

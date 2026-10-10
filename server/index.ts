@@ -19511,7 +19511,7 @@ ${inner}
       await roleHoldersRepo.replaceAll(loadRoleHolders().map((h) => (to.has(h.id) ? { ...h, termEndsAt: to.get(h.id)! } : h)));
     }),
   });
-  registerSeasonPlanRoutes(app, { authedUser, guardCapability, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
+  registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the

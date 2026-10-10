@@ -197,6 +197,30 @@ describe("your own season", () => {
     expect(await screen.findByText("Filed. The village can read your season.")).toBeTruthy();
   });
 
+  it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a seat (red team U5, U11)", async () => {
+    mine = () => json({ ...MINE, mayApply: false });
+    render(<MySeason />);
+    expect(await screen.findByText("Applying for a seat opens at the member rung. Once you reach it, you can apply here.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Apply for a seat" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Propose a seat" })).toBeNull();
+  });
+
+  it("says carry on only of a seat held before the application, never of one it seated (red team U9)", async () => {
+    const app = { id: "sa-0000000000000001", href: "/seat-applications/sa-0000000000000001", status: "adopted", statusWords: "Adopted", seats: [{ id: "seat-host", name: "Host" }, { id: "seat-gate", name: "Gate keeper" }] };
+    mine = () =>
+      json({
+        ...MINE,
+        heldSeats: [
+          { id: "seat-host", name: "Host", termEndsOn: "2027-03-01", lapsed: false, heldThrough: app.id },
+          { id: "seat-gate", name: "Gate keeper", termEndsOn: null, lapsed: false, heldThrough: "sa-00000000000000ff" },
+        ],
+        applications: [app],
+      });
+    render(<MySeason />);
+    expect(await screen.findByText("You hold it through your application:")).toBeTruthy();
+    expect(screen.getByText("You asked to carry on:")).toBeTruthy();
+  });
+
   it("says so when there is no season to plan yet", async () => {
     mine = () => json({ season: null, window: null, plan: null, filed: null, heldSeats: [], applications: [], questsThisMoon: { done: 0 } });
     render(<MySeason />);

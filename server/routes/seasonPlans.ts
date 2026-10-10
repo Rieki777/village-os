@@ -44,6 +44,7 @@
  */
 import type { Express, RequestHandler } from "express";
 import type { CycleClock } from "../../shared/cycleClock";
+import { hasCapability } from "../../shared/capabilities";
 import {
   fileRefusal,
   parsePlanInput,
@@ -78,6 +79,8 @@ const SAVE_WINDOW_MS = 10 * 60 * 1000;
 const WAITING: readonly ApplicationStatus[] = ["awaiting-holder", "voting"];
 
 type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "getPool" | "notify" | "overLimit" | "members" | "isPresent"> & {
+  /** The one gate's context, so the page can say whether this member may apply (terms.read) before they try (red team U5). */
+  capabilityCtx?: AppDeps["capabilityCtx"];
   /** `seasonState()`: the dated seasons, goals and hand-set windows, and the village's zone. */
   seasonState(): { seasons: PlanSeason[]; timezone: string };
   /** The village clock. Defaults to the live `cycle.mode` (`villageClock`); tests hand one in. */
@@ -127,12 +130,12 @@ export function register(app: Express, deps: Deps): void {
   }
 
   /** The member's live seats, by member, with names. Examples and documented holders are left out. */
-  async function heldSeats(): Promise<Map<string, Array<{ id: string; name: string; termEndsOn: string | null; lapsed: boolean }>>> {
+  async function heldSeats(): Promise<Map<string, Array<{ id: string; name: string; termEndsOn: string | null; lapsed: boolean; heldThrough: string | null }>>> {
     const pool = getPool();
     const tz = seasonState().timezone || "UTC";
     const [live, roles] = await Promise.all([listOrgAssignments(pool, { ...lapse(), now: now() }), listOrgRoles(pool)]);
     const nameOf = new Map(roles.map((r) => [r.id, r.name]));
-    const out = new Map<string, Array<{ id: string; name: string; termEndsOn: string | null; lapsed: boolean }>>();
+    const out = new Map<string, Array<{ id: string; name: string; termEndsOn: string | null; lapsed: boolean; heldThrough: string | null }>>();
     for (const a of live) {
       if (a.holderKind !== "member" || !a.userId || a.isExample) continue;
       const list = out.get(a.userId) ?? [];
@@ -142,6 +145,8 @@ export function register(app: Express, deps: Deps): void {
         name: nameOf.get(a.orgRoleId) ?? a.orgRoleId,
         termEndsOn: a.termEndsAt ? civilDateKey(a.termEndsAt, tz) : null,
         lapsed: !!a.lapsed,
+        // The application this seating came through, so "carry on" is said only of a seat held before it (red team U9).
+        heldThrough: a.applicationId ?? null,
       });
       out.set(a.userId, list);
     }
@@ -307,7 +312,9 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/season-plans/mine", async (req, res) => {
     const user = await yours(req, res);
     if (!user) return;
-    res.json(await mineOut(String(user.id)));
+    // Applying for a seat opens at the member rung (`terms.read`); a guest is told so up front (red team U5).
+    const mayApply = deps.capabilityCtx ? hasCapability("terms.read", await deps.capabilityCtx(user)) : true;
+    res.json({ ...(await mineOut(String(user.id))), mayApply });
   });
 
   app.put("/api/season-plans/mine", async (req, res) => {
