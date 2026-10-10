@@ -141,8 +141,19 @@ export async function rewriteDraftChangePeople(
  * the moves then change.
  */
 export async function readCirclesForPreview(conn: Pool | PoolConnection): Promise<any[]> {
-  const [rows]: any = await conn.query("SELECT id, name, parent_circle_id, is_example FROM circles");
+  const [rows]: any = await conn.query("SELECT id, name, parent_circle_id, is_example, status FROM circles");
   return rows as any[];
+}
+
+/*
+ * THE SEATS SOMEBODY HOLDS RIGHT NOW (0243), for the preview's check that a
+ * steward retiring the old chart never unseats anybody. On the caller's
+ * connection for the same reason as the circles above: inside a publish, the
+ * check reads the rows the transaction is about to change.
+ */
+export async function readHeldSeatIds(conn: Pool | PoolConnection): Promise<Set<string>> {
+  const [rows]: any = await conn.query("SELECT DISTINCT org_role_id FROM org_role_assignments WHERE ended_at IS NULL");
+  return new Set((rows as any[]).map((r) => String(r.org_role_id)));
 }
 
 /*
