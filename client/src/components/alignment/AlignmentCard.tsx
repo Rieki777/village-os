@@ -38,7 +38,8 @@ export default function AlignmentCard({
   return (
     <section data-alignment-card="" aria-label={a.title} className="sheet-night rounded-2xl border border-border bg-card p-5 text-card-foreground">
       <div className="flex flex-wrap items-center gap-2">
-        <H className="min-w-0 flex-1 font-display text-lg font-bold text-foreground">{a.title}</H>
+        {/* The title takes its own line on a phone, so the state and the stamp never squeeze it to one word a line. */}
+        <H className="min-w-0 basis-full font-display text-lg font-bold text-foreground sm:basis-auto sm:flex-1">{a.title}</H>
         <StateTag state={a.state} />
         {a.state === "in-force" && <AlignedStamp sealed={a.sealed} />}
       </div>
