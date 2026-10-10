@@ -1,7 +1,7 @@
 /**
  * Daily exchange rates for DISPLAY (0083, P8, N4).
  *
- * One job a day fetches the ECB's daily reference list (base EUR) through
+ * One job a day fetches `open.er-api.com/v6/latest/EUR` through
  * `guardedFetchJson`, the SAME pinned, range-checked dialer every other
  * outbound call uses, and upserts one row per (quote, day) into `fx_rates`.
  * The route serves the newest table with an hour of cache. NOTHING here
@@ -10,11 +10,31 @@
  * write outside fx_rates (pinned by visionNeverApplies.test.ts).
  *
  * The quote list is fixed in code, not admin input: the URL is built from
- * these literals only, so no stored string can steer the fetch. CRC is
- * deliberately ABSENT: measured 2026-08-21, the ECB daily list does not
- * carry it (a request for CRC returns the other series and no CRC), so a
- * colones amount shows unconverted until an admin records a `manual` row,
- * and the currency picker says so.
+ * `FX_BASE` alone, and `FX_QUOTES` only FILTERS the response, so no stored
+ * string can steer the fetch. Widening the list therefore costs nothing in
+ * reach and nothing in safety.
+ *
+ * ── CRC, AND A COMMENT THAT OUTLIVED ITS MEASUREMENT ─────────────────────
+ *
+ * This paragraph used to say CRC was "deliberately ABSENT: measured
+ * 2026-08-21, the ECB daily list does not carry it". Both halves had stopped
+ * being true and the sentence sat here pointing the next reader at a dead
+ * end. Re-measured 2026-10-09:
+ *
+ *     provider open.er-api.com   166 quotes, EUR->CRC = 509.859732
+ *     FX_QUOTES                  165 codes, CRC among them
+ *     live GET /api/fx/rates     165 stored, CRC = 509.859732, asOf today
+ *
+ * So colones convert, and the currency picker's "no daily rate" warning no
+ * longer fires for CRC. What that warning still protects is real and the
+ * `manual` row path stays: a code this provider does not quote shows
+ * unconverted rather than guessing, which is the honest answer and is what
+ * `shared/money.ts`'s `crossRate` returning null means.
+ *
+ * THE LESSON WORTH LEAVING: a comment recording a measurement needs its date
+ * AND its command, because the date alone cannot tell you whether the world
+ * moved or the code did. Here the code moved — somebody widened FX_QUOTES to
+ * 165 codes — and the prose had no way to notice. Prose is not compiled.
  */
 import type { Pool } from "mysql2/promise";
 import { guardedFetchJson } from "./toolcheck";
