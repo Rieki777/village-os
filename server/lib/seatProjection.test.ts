@@ -26,7 +26,6 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { hasCapability } from "../../shared/capabilities";
-import { hasCapability } from "../../shared/capabilities";
 import type { OrgAssignment, OrgRole } from "./orgChart";
 import {
   PUBLIC_AGENT_NAME,
