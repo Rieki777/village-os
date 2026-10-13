@@ -193,6 +193,55 @@ const jAdmin = await api("GET", "/api/journal/entries", undefined, founder);
 check("an admin does not either", jAdmin.status === 200 && !jAdmin.json.some((e) => e.id === jEntry.json?.id));
 check("the guide refuses honestly without a key", (await api("POST", "/api/journal/guide", { practice: "evening", messages: [{ role: "user", content: "hello" }] }, aT)).status === 503);
 
+console.log("\n── LIVE SESSIONS ──");
+// Alice opens the room and facilitates; Bob joins. The checks walk the privacy
+// line in shared/sessions.ts: members only, arrival seen while open and erased
+// at close, facilitation feedback unsigned, the record read by the people who
+// were there and by admins, and shareable minutes that name nobody.
+const sNew = await api("POST", "/api/sessions", { title: `Garden circle ${RUN}`, durationMin: 30 }, aT);
+check("open a session", sNew.status === 200 && !!sNew.json?.id, `${sNew.status} ${JSON.stringify(sNew.json).slice(0,120)}`);
+const sid = sNew.json?.id;
+const sAct = (action) => api("POST", `/api/sessions/${sid}/act`, { action }, aT);
+check("a stranger cannot look in", (await api("GET", `/api/sessions/${sid}`)).status === 401);
+await api("POST", `/api/sessions/${sid}/join`, {}, aT);
+const sJoin = await api("POST", `/api/sessions/${sid}/join`, {}, bT);
+check("a member joins", sJoin.status === 200, `${sJoin.status} ${JSON.stringify(sJoin.json).slice(0,120)}`);
+await sAct({ type: "start" });
+await sAct({ type: "go", stage: "arrival" });
+const sArriveA = await api("POST", `/api/sessions/${sid}/arrival`, { score: 8, wish: "A slower morning" }, aT);
+const sArriveB = await api("POST", `/api/sessions/${sid}/arrival`, { score: 6 }, bT);
+check("both give a number", sArriveA.status === 200 && sArriveB.status === 200, `${sArriveA.status}/${sArriveB.status} ${JSON.stringify(sArriveB.json).slice(0,120)}`);
+const sOpen = await api("GET", `/api/sessions/${sid}`, undefined, bT);
+check("the room sees each other's number while open", sOpen.status === 200 && (sOpen.json?.people ?? []).some((p) => p.arrival === 8));
+await sAct({ type: "go", stage: "agenda" });
+const sItem = await api("POST", `/api/sessions/${sid}/items`, { title: `Water rota ${RUN}`, aim: "decide", minutes: 10 }, aT);
+check("add an agenda item", sItem.status === 200 && !!sItem.json?.id, `${sItem.status} ${JSON.stringify(sItem.json).slice(0,120)}`);
+await sAct({ type: "go", stage: "items" });
+await sAct({ type: "item", itemId: sItem.json?.id ?? null });
+const sTodo = await api("POST", `/api/sessions/${sid}/entries`, { kind: "action", text: "Fix the tank valve", itemId: sItem.json?.id }, aT);
+check("catch an action", sTodo.status === 200 && !!sTodo.json?.id, `${sTodo.status} ${JSON.stringify(sTodo.json).slice(0,120)}`);
+await sAct({ type: "go", stage: "actions" });
+const sEarly = await api("POST", `/api/sessions/${sid}/close`, {}, aT);
+check("the close waits while an action has nobody", sEarly.status === 409 && (sEarly.json?.unowned ?? []).includes(sTodo.json?.id), `${sEarly.status} ${JSON.stringify(sEarly.json).slice(0,120)}`);
+const sClaim = await api("PATCH", `/api/sessions/${sid}/entries/${sTodo.json?.id}`, { claim: true }, bT);
+check("a member claims it", sClaim.status === 200, `${sClaim.status} ${JSON.stringify(sClaim.json).slice(0,120)}`);
+await sAct({ type: "go", stage: "close" });
+const sFeed = await api("POST", `/api/sessions/${sid}/respond`, { target: "facilitation", value: "flowed", text: "A calm pace." }, bT);
+check("feedback on the facilitation", sFeed.status === 200, `${sFeed.status} ${JSON.stringify(sFeed.json).slice(0,120)}`);
+const sClose = await api("POST", `/api/sessions/${sid}/close`, {}, aT);
+check("the facilitator closes the session", sClose.status === 200, `${sClose.status} ${JSON.stringify(sClose.json).slice(0,120)}`);
+const sAfter = await api("GET", `/api/sessions/${sid}`, undefined, aT);
+check("arrival words and numbers are erased at close", sAfter.status === 200 && (sAfter.json?.people ?? []).length === 2 && sAfter.json.people.every((p) => p.arrival === null && p.wish === null));
+check("only the spread is kept", sAfter.json?.arrival?.count === 2 && sAfter.json?.arrival?.median === 7);
+check("facilitation feedback reaches the facilitator unsigned", Array.isArray(sAfter.json?.facilitation) && sAfter.json.facilitation.length === 1 && !("userId" in sAfter.json.facilitation[0]));
+check("the record is on the list for the people who were there", ((await api("GET", "/api/sessions", undefined, bT)).json?.recent ?? []).some((r) => r.id === sid));
+check("an admin reads the record", (await api("GET", `/api/sessions/${sid}`, undefined, founder)).status === 200);
+const carol = await api("POST", "/api/auth/register", { email: `carol-${RUN}@village.test`, password: "Member123!", name: "Carol Weaver", paths: ["resident"] });
+const sNot = await api("GET", `/api/sessions/${sid}`, undefined, carol.json?.token);
+check("somebody who was not there does not", [403, 404].includes(sNot.status), `${sNot.status}`);
+const sMin = await api("GET", `/api/sessions/${sid}/minutes.md?for=shareable`, undefined, aT);
+check("the shareable minutes name nobody", sMin.status === 200 && typeof sMin.json === "string" && sMin.json.includes(`Water rota ${RUN}`) && !/Alice|Bob/.test(sMin.json), `${sMin.status}`);
+
 console.log("\n── EXIT (F12) ──");
 check("exit policy is published", (await api("GET", "/api/exit-policy")).json.policy.voluntary.noticePeriodDays > 0);
 const exitOpen = await api("POST", "/api/profile/request-exit", { password: "Member123!" }, bT);

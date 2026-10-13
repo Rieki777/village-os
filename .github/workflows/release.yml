@@ -245,6 +245,13 @@ jobs:
       # for.
       mysql:
         image: mysql:8
+        # Authenticated pull, for the reason spelled out in ci.yml's own
+        # service block: anonymous pulls from a shared runner address can be
+        # refused outright, and a service container is pulled before step one,
+        # so no login step can reach it. Absent secrets fall back to anonymous.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           MYSQL_ROOT_PASSWORD: ci-rollback
         ports:

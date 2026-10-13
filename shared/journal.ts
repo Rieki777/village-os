@@ -17,10 +17,15 @@
  * words, with a guide that reflects back and never speaks for them.
  *
  * THE PRIVACY LINE, which every shape below follows:
- *   - An entry is its author's. No route returns one to anybody else, an admin
- *     included. There is no admin read.
+ *   - An entry is its author's inside the village. No route returns one to
+ *     anybody else, an admin included. There is no admin read.
+ *   - An entry is SHARED with the village's organisational memory unless the
+ *     author marks it private (ruling 2026-10-05: "All journal entries go to
+ *     Saberra (if that module is on) unless specifically marked private").
+ *     What crosses goes under code-names with member names swapped out of the
+ *     prose; a `private` entry never crosses. See `JOURNAL_PRIVACY`.
  *   - The pulse's NUMBERS aggregate (above a floor the village sets, one by
- *     default). Its words stay in the author's entry.
+ *     default). Its words travel with the entry they were written in.
  *   - Feedback reaches its recipient only, unsigned, in words the author
  *     approved, and only when the recipient said they want it.
  *   - Nothing here is ever written to an event, because `recordEvent` defaults
@@ -48,16 +53,32 @@ export function isJournalDepth(v: unknown): v is JournalDepth {
 }
 
 /**
- * The three privacy tiers a steward's debrief carries into their own notes.
- * Everything in the journal is held privately whatever this says; the tier
- * only travels with an EXPORT, so a person's own second brain knows what it
- * may later share.
+ * Where an entry may travel. Inside the village every tier reads the same:
+ * the author alone.
+ *
+ *   private   stays in this village and never crosses to organisational
+ *             memory. The member's own choice, made per entry.
+ *   internal  THE DEFAULT. Shared with the village's organisational memory
+ *             when that module is on, under code-names.
+ *   clear     shared too, and also fine to leave the village (a steward's
+ *             portable reasoning, exported to their own notes).
+ *
+ * The tier also travels with an EXPORT, so a person's own second brain knows
+ * what it may later share.
  */
 export const JOURNAL_PRIVACY = ["private", "internal", "clear"] as const;
 export type JournalPrivacy = (typeof JOURNAL_PRIVACY)[number];
 
 export function isJournalPrivacy(v: unknown): v is JournalPrivacy {
   return typeof v === "string" && (JOURNAL_PRIVACY as readonly string[]).includes(v);
+}
+
+/** A new entry's tier when the author did not choose one. Ruling 2026-10-05. */
+export const JOURNAL_DEFAULT_PRIVACY: JournalPrivacy = "internal";
+
+/** True when this entry may cross to the village's organisational memory. */
+export function sharesWithMemory(privacy: JournalPrivacy): boolean {
+  return privacy !== "private";
 }
 
 export interface JournalQuestion {
@@ -115,12 +136,34 @@ export const JOURNAL_PRACTICE_DEFS: Record<JournalPractice, JournalPracticeDef> 
   pulse: {
     id: "pulse",
     label: "Weekly pulse",
-    blurb: "How the week really felt. Your numbers join the village's; your words stay yours.",
+    blurb: "How the week really felt, what your role is carrying, and what nobody is picking up yet.",
     rhythm: "weekly",
+    // The first three are the founder's own (2026-10-05): what a role is
+    // straining against, the work that falls between roles, and the growth
+    // nobody is reaching for. They are what an organisational memory most
+    // needs to hear, and they lead the light pass for that reason.
     questions: [
-      { key: "help-most", prompt: "What would help the team most this week?", light: true },
+      {
+        key: "role-tension",
+        prompt: "What tension are you experiencing in your role right now?",
+        hint: "Something in what your seat holds that is not working, or could work better.",
+        light: true,
+      },
+      {
+        key: "unowned-work",
+        prompt: "What do you see that needs doing and is not part of your role?",
+        hint: "Name it even if you would rather not take it on.",
+        light: true,
+      },
+      { key: "opportunity", prompt: "What opportunity for growth or revenue is {village} not acting on?", light: true },
+      { key: "help-most", prompt: "What would help the team most this week?", light: false },
       { key: "meetings", prompt: "Is there anything in how we meet that could flow better?", light: false },
-      { key: "tension", prompt: "Is anything between you and someone on the team asking for attention?", hint: "This stays in your journal. The guide can help you turn it into feedback if you want.", light: false },
+      {
+        key: "tension",
+        prompt: "Is anything between you and someone on the team asking for attention?",
+        hint: "Keep this entry private if you would like it to stay with you. The guide can help you turn it into feedback.",
+        light: false,
+      },
     ],
   },
   debrief: {

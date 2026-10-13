@@ -553,4 +553,101 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(taken.json.blockedLines[0].blocked).toContain("A seat holds between 1 and 50 people");
     expect((await stuckOn()).map((d) => d.draftId)).toContain(taken.json.createdRef);
   });
+
+  it("makes a vendor's circles under their own name and places that vendor's seats in them, in one draft", async () => {
+    // THE FIRST REAL SYNC. Circles arrived under the vendor's own field names
+    // ("Circle Name", "Notes", ...) and the accept path read `name` alone, so
+    // every circle previewed as `Create the circle ""` and blocked. The seats in
+    // the same batch named those circles in words, were placed against the
+    // LIVE circles only, and blocked as "There is no circle called X yet"
+    // beside the line that creates it. The structure lands FIRST in the batch,
+    // as the sync route sends it, so the circles cannot ride on arrival order.
+    const SAB = "batch-saberra-circles";
+    const structure = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: SAB,
+      kind: "org.proposed",
+      payload: {
+        title: "Structure suggested by the connected service",
+        rationale: "The connected service suggests one seat.",
+        seats: [{ name: "Regeneration Lead", circleName: "regenerative development", aim: "The land heals.", id: "rec-role-regen" }],
+      },
+    });
+    expect(structure.ok, JSON.stringify(structure)).toBe(true);
+    const circle = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: SAB,
+      kind: "circle.proposed",
+      sourceRef: "rec-circle-regen",
+      payload: {
+        "Circle Name": "Regenerative Development",
+        Sector: "Land",
+        Status: "Active",
+        Notes: "[Rewritten 2026-09-22 per Team Structure V5]",
+        "Last Review Date": { start: "2026-09-22" },
+        vendorRecordId: "rec-circle-regen",
+      },
+    });
+    expect(circle.ok, JSON.stringify(circle)).toBe(true);
+    const circleProposalId = circle.ok ? circle.id : "";
+
+    const changesOf = async (draftId: string) => {
+      const [rows] = await pool.query<any[]>( // module-review-ok: reading back the scratch schema this suite provisioned
+        "SELECT op, org_role_id, payload FROM org_draft_changes WHERE draft_id = ? ORDER BY sort_order, id", [draftId],
+      );
+      return rows.map((r) => ({
+        op: String(r.op),
+        orgRoleId: String(r.org_role_id),
+        payload: (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload) as Record<string, unknown>,
+      }));
+    };
+    const expectPlaced = async (draftId: string) => {
+      const changes = await changesOf(draftId);
+      // The circle first, which is the order publish applies them in.
+      expect(changes.map((c) => c.op)).toEqual(["create_circle", "create_seat"]);
+      expect(changes[0]).toMatchObject({
+        orgRoleId: "circle:regenerative-development",
+        // The vendor's change log is not a purpose.
+        payload: { name: "Regenerative Development", purpose: null, parentCircleId: null },
+      });
+      expect(changes[1].payload).toMatchObject({ name: "Regeneration Lead", circleId: "regenerative-development" });
+      expect(changes[1].payload).not.toHaveProperty("circleName");
+    };
+
+    // The tests above leave drafts open, and this village takes only so many
+    // at once. Withdrawn here so this accept is refused for nothing but itself.
+    const [open] = await pool.query<any[]>("SELECT id FROM org_drafts WHERE status = 'open'"); // module-review-ok: reading back the scratch schema this suite provisioned
+    for (const d of open) {
+      const w = await call("POST", `/api/review/drafts/${String(d.id)}/withdraw`, {}, kiraToken);
+      expect(w.status, w.text).toBe(200);
+    }
+
+    const first = await call("POST", `/api/review/batches/${SAB}/accept`, {}, kiraToken);
+    expect(first.status, first.text).toBe(200);
+    expect(first.json.blockedLines).toEqual([]);
+    expect(first.json.blocked).toBe(0);
+    await expectPlaced(first.json.draftId);
+
+    // THE RE-ACCEPT PATH. A withdraw puts both back in the queue, and an edit
+    // the steward makes to the circle card still carries the vendor's key.
+    const out = await call("POST", `/api/review/drafts/${first.json.draftId}/withdraw`, {}, kiraToken);
+    expect(out.status, out.text).toBe(200);
+    expect(out.json.reopened).toBe(2);
+    const again = await call("POST", `/api/review/batches/${SAB}/accept`, {
+      edits: { [circleProposalId]: { "Circle Name": "Regenerative Development", Sector: "Land" } },
+    }, kiraToken);
+    expect(again.status, again.text).toBe(200);
+    expect(again.json.blockedLines).toEqual([]);
+    await expectPlaced(again.json.draftId);
+
+    // And it publishes: the circle exists under its name, and the seat sits in it.
+    const published = await call("POST", `/api/admin/org/drafts/${again.json.draftId}/publish`, {});
+    expect(published.status, published.text).toBe(200);
+    const [[made]] = await pool.query<any[]>("SELECT name FROM circles WHERE id = 'regenerative-development'"); // module-review-ok: reading back the scratch schema this suite provisioned
+    expect(made?.name).toBe("Regenerative Development");
+    const [[seat]] = await pool.query<any[]>("SELECT circle_id FROM org_roles WHERE name = 'Regeneration Lead'"); // module-review-ok: reading back the scratch schema this suite provisioned
+    expect(seat?.circle_id).toBe("regenerative-development");
+  });
 });

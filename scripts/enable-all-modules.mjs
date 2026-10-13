@@ -57,6 +57,9 @@ const TARGETS = [
   // A member's own journal is never anybody else's to read, and the module
   // has no public surface to probe.
   ["journal", "members"],
+  // A circle's calls are for the people in them, members only and no guests,
+  // and the module has no public surface to probe.
+  ["sessions", "members"],
   // AFTER messaging, which it requires. Measured: with introductions ahead of
   // it the server answered 409 "requires messaging to be enabled first", the
   // module stayed off, and this script still exited 0. Order is load-bearing

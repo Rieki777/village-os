@@ -635,7 +635,7 @@ export default function Layout({ children }: LayoutProps) {
                 </li>
                 <li>
                   <Link href="/quests" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Community Quests
+                    Quest Board
                   </Link>
                 </li>
                 {commerceModule && (

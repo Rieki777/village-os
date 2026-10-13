@@ -109,7 +109,7 @@ describe.skipIf(!configured)("the change limit on one outside batch", () => {
 
     const published = await publishDraft(pool, id, "steward", draftChangeCap());
     // Seat creations seat nobody, so the transaction names nobody to tell.
-    expect(published).toEqual({ ok: true, applied: SEATS, seated: [] });
+    expect(published).toEqual({ ok: true, applied: SEATS, seated: [], circleMoves: [] });
     expect(await listOrgRoles(pool)).toHaveLength(SEATS);
   });
 

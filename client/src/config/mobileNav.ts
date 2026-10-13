@@ -24,6 +24,7 @@ import {
   Shield,
   Compass,
   NotebookPen,
+  Orbit,
 } from "lucide-react";
 
 /**
@@ -111,6 +112,18 @@ export const FAB_ACTIONS: FabAction[] = [
   { key: "profile", label: "Profile", href: "/profile", Icon: User, requiresAuth: true },
   { key: "signin", label: "Sign in", href: "/login", Icon: UserPlus, requiresAuth: false },
   { key: "work-with-us", label: "Work with us", href: "/work-with-us", Icon: MessageCircle },
+  {
+    // A call is something a member reaches for mid-week, a step further from
+    // the thumb than the daily pair below it, and only while the module is on.
+    key: "sessions",
+    label: "Live sessions",
+    href: "/sessions",
+    Icon: Orbit,
+    requiresAuth: true,
+    module: "sessions",
+    // On the list or inside a room, the row would link to where they already are.
+    anchorPath: "/sessions",
+  },
   {
     key: "journal",
     label: "Journal",

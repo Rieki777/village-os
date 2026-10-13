@@ -398,18 +398,36 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     emblem: "Handshake",
   },
   journal: {
-    promise: "A private practice for each member, and the few numbers a village may read back from it.",
+    promise: "A practice for each member, and what a village learns from it.",
     benefits: [
       "Morning and evening practices, light or deep, plus a debrief after calls and an open page",
+      "A weekly pulse: five numbers, the tensions in each role, the work between roles, and missed opportunities",
       "A guide that asks one question at a time and checks it heard you right",
-      "A weekly pulse the village reads as numbers, never as words",
+      "Entries shared with organisational memory under code-names, unless a member keeps one private",
       "Feedback that arrives unsigned, in a weekly batch, only to people who asked for it",
     ],
     forWhom: "Teams that want to notice how people are really doing before it becomes a crisis.",
     setupSummary: "Nothing to set up. The pulse shows from the first answer, and the village can raise that floor.",
-    dataSummary: "Each member's own entries, readable by nobody else, admins included; pulse numbers; and feedback between members who opted in.",
+    dataSummary: "Each member's own entries, readable by nobody else in the village, admins included, and shared with organisational memory under code-names unless marked private; pulse numbers; and feedback between members who opted in.",
     hue: 28,
     emblem: "NotebookPen",
+  },
+  sessions: {
+    promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
+    benefits: [
+      "Six stages the facilitator moves the room through: drop in, arrival, agenda, items, actions and close",
+      "An agenda built together, every item with an aim and its own clock, consented to before the work starts",
+      "Proposals decided in a consent round the whole room can see",
+      "Every action leaves with a person or a seat on it, and what nobody can hold waits in the backlog for next time",
+      "Feedback on the facilitation reaches the facilitator unsigned, and ideas for the tool land in your feedback inbox",
+    ],
+    forWhom: "Circles that meet often and want each call to end with clear decisions and actions somebody holds.",
+    setupSummary:
+      "Nothing to set up. Write your village's place line and choose a usual length when you want your own words and rhythm.",
+    dataSummary:
+      "Who took part, the agenda, notes, decisions and who holds each action. Arrival words and numbers are erased at close, and the record is read by the people who were there and your admins.",
+    hue: 140,
+    emblem: "Orbit",
   },
   hypha: {
     promise: "Your DAO's real numbers from Base, on your own pages.",

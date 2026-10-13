@@ -92,6 +92,8 @@ import {
   type NodeKind,
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { applyCircleStatusChanges } from "../lib/circleTreasury";
+import { listBudgets } from "../lib/resources";
 import { submissionStatusNotice } from "../lib/submissionNotices";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 
@@ -326,6 +328,18 @@ export function register(app: Express, deps: Deps): void {
      */
     const reloaded = await reloadCircles();
     /*
+     * A CIRCLE THE DRAFT RETIRED (0243) went dormant inside the transaction,
+     * and a dormant circle holds no treasury. Same hook, same order as every
+     * other writer of a circle's status: after the commit, each circle on its
+     * own, a failure carried on the 200 by name and never as "not published".
+     */
+    let treasury: Awaited<ReturnType<typeof applyCircleStatusChanges>> = [];
+    try {
+      treasury = await applyCircleStatusChanges(getPool(), r.circleMoves, actor?.id ?? null, listBudgets);
+    } catch (e) {
+      console.error("[org] a published draft could not run the dormancy hook:", req.params.id, e);
+    }
+    /*
      * TELL THE PEOPLE THE DRAFT SEATED.
      *
      * The direct seating route has notified since F5. Publishing a draft did
@@ -371,7 +385,7 @@ export function register(app: Express, deps: Deps): void {
     } catch (e) {
       console.error("[org] a published draft could not write its journal lines:", req.params.id, e);
     }
-    res.json({ success: true, applied: r.applied, reloaded });
+    res.json({ success: true, applied: r.applied, reloaded, treasury });
   });
 
   /**

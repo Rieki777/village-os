@@ -178,6 +178,13 @@ Trail and Signal are where clarity wins.
 | Getting in | Sign in, Create an account | Sign In, Log in, Create Account, Register |
 | A module, in player copy | a room | module |
 | The founder's tour | Your First Walk (founders and admins only) | Meet your village |
+| One of the four ways in (Investor, Village Steward, Resident, Prosperity Creator) | a path ("Walk this path") | a character |
+| Who a member plays on their sheet | a character ("Play this character", "Add a character"). Characters fill roles. | a path |
+| A unit of community training | a lesson | a module |
+
+Path, character and lesson are the founder's rulings of 2026-10-09: "path is
+the investor, resident, etc. the others should be character and then
+characters fill roles", and "Lessons or learning journey's" for training.
 
 Never XP, gold, loot or "level up": Gratitude is thanks, never pay. Growth
 words do the job instead: you grow into a stage, and a room opens.
