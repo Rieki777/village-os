@@ -34,7 +34,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import { CALENDAR_CLOCK } from "../../shared/cycleClock";
 import type { PlanSeason } from "../../shared/seasonPlans";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
 import { eraseSeasonPlanWords, planVersions } from "../repos/seasonPlans";
 import { insertApplication } from "../repos/seatApplications";
@@ -194,7 +194,7 @@ describe.skipIf(!configured)("planning a season, on a real schema", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     h.state.pool = () => pool;
     await h.start();
     for (const p of PEOPLE) {

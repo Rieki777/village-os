@@ -16,7 +16,7 @@ import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { CapabilityCtx } from "../../shared/capabilities";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { register } from "./seatPresets";
 
 const LADDER = ["visitor", "guest", "member"];
@@ -108,7 +108,7 @@ describe.skipIf(!testDbConfigured())("the presets document, read and written", (
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 2 });
     h.state.pool = () => pool;
     await h.start();
   });

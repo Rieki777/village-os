@@ -35,7 +35,7 @@ import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SeatCalendar } from "../../shared/seatTerms";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
@@ -217,7 +217,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     h.state.pool = () => pool;
     await h.start();
   });

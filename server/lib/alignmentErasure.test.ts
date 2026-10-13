@@ -15,7 +15,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { SEAT_PRESETS_DOC } from "../../shared/seatTermsOffer";
 import { userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import { createOrgRole } from "./orgChart";
@@ -59,7 +59,7 @@ describe.skipIf(!configured)("erasure keeps the words, takes the name, and the s
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     resetSigningKeyForTests();
     await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: "b".repeat(64) });
   });

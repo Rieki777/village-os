@@ -14,7 +14,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { OFFER_WORDS } from "../../shared/seatTermsOffer";
 import { createOrgRole, listOrgRoles } from "./orgChart";
 import { addChange, createDraft, offerColumns, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
@@ -61,7 +61,7 @@ const offerOf = async (id: string) => (await listOrgRoles(pool)).find((r) => r.i
 describe.skipIf(!configured)("terms on offer ride a draft a member wrote, and only that", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     for (const name of ["Terms Vendor Seat", "Terms Human Seat", "Terms Revert Seat", "Terms Bad Seat"]) {
       await createOrgRole(pool, { name });
     }

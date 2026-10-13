@@ -11,7 +11,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "./testDb";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[primaryKeys] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
@@ -21,7 +21,7 @@ describe.skipIf(!configured)("every migrated table has a primary key", () => {
   let pool: mysql.Pool;
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 2 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 2 });
   });
   afterAll(async () => {
     await pool?.end();

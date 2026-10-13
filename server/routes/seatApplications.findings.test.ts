@@ -18,7 +18,7 @@ import type { SeatCalendar } from "../../shared/seatTerms";
 import { isSeatSubject } from "../../shared/governanceKinds";
 import { whoMayPutHandToVillage } from "../../shared/powerHands";
 import { APPLICATION_CLOSED_NOTE, ballotNamesItsCloser, closeNoteFor, putToVillageRefusal } from "../../shared/seatApplications";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole, isLapsed, seatHolder } from "../lib/orgChart";
@@ -210,7 +210,7 @@ describe.skipIf(!configured)("the member door, over a scratch schema", () => {
   let n = 0;
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 8 });
     h.state.pool = () => pool;
     await h.start();
   });
