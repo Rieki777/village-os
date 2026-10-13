@@ -1219,6 +1219,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "sessions",
+    guild: [],
     tier: "included",
     // Every row names a person: who was in the room, the number each gave on
     // arrival while the session was open, who holds each action, who wrote

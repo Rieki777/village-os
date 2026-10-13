@@ -275,7 +275,7 @@ A circle holds a working call together in real time: drop in with a shared breat
 | Capabilities it adds | none |
 | Variable keys it owns | `sessions.place_line`, `sessions.default_minutes` |
 | API prefixes | `/api/sessions` |
-| What a village plants | not declared |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [live-sessions.md](modules/live-sessions.md) |
 
 ## Recognise
