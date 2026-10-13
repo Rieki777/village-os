@@ -1036,6 +1036,15 @@ describe("helpers moved here", () => {
     expect(formatDay("nonsense")).toBeNull();
   });
 
+  it("reads an instant as its day in the village's zone, whatever the viewer's (red team U6)", () => {
+    // A term ending at midnight starting 21 March in UTC is 20 March in Los Angeles.
+    expect(formatDay("2027-03-21T00:00:00.000Z", true, "UTC")).toBe("21 Mar 2027");
+    expect(formatDay("2027-03-21T00:00:00.000Z", true, "America/Los_Angeles")).toBe("20 Mar 2027");
+    expect(formatDay("2027-03-21T07:30:00.000Z", true, "Asia/Tokyo")).toBe("21 Mar 2027");
+    // The sheet carries the season's zone to the term fact.
+    expect(seasonForSheet({ current: { name: "S", endsOn: "2027-03-21" }, daysLeft: 3, timezone: "Asia/Tokyo" })?.timezone).toBe("Asia/Tokyo");
+  });
+
   it("names no deficit in the files that now hold the succession words", () => {
     const files = ["shared/roleSheet.ts", "shared/roleSheetInputs.ts", "shared/roleSheetWords.ts", "shared/permissionSheet.ts"].map((f) =>
       fs.readFileSync(path.join(ROOT, f), "utf8"),

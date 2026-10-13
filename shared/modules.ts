@@ -1239,7 +1239,8 @@ export const MODULES: ModuleDef[] = [
       "governance.consent_window_days",
       "governance.default_method",
     ],
-    apiPrefixes: ["/api/governance", "/api/admin/governance"],
+    // `/api/season-plans`: each member's season plan and the village page of them (season plans RC1).
+    apiPrefixes: ["/api/governance", "/api/admin/governance", "/api/season-plans"],
   },
   {
     id: "hypha",

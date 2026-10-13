@@ -744,3 +744,46 @@ describe("keys that carry other keys", () => {
     ).toBe(false);
   });
 });
+
+/*
+ * THE OPEN BOOK (seat settings PR2). Every member reads every seat's terms,
+ * money included; a visitor and a signed-in guest read none of it. One key,
+ * unlocked at the member rung, so the bar is a dial the village can move and
+ * never a rung check somebody wrote inline. Nothing reads it yet: PR3 wires
+ * the seat projection and the presets route to it.
+ */
+describe("terms.read, the open book", () => {
+  it("unlocks at the member rung, and never at guest", () => {
+    expect(STAGE_UNLOCKS["terms.read"]).toBe("member");
+    // The reason it is its own key: map.viewPeople opens at guest.
+    expect(STAGE_UNLOCKS["map.viewPeople"]).toBe("guest");
+    expect(STAGE_UNLOCKS["terms.read"]).not.toBe(STAGE_UNLOCKS["map.viewPeople"]);
+  });
+
+  it("a visitor and a guest lack it, a member holds it", () => {
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("visitor") }))).toBe(false);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("guest") }))).toBe(false);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("member") }))).toBe(true);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("co-creator") }))).toBe(true);
+  });
+
+  it("a guest holding map.viewPeople still cannot read terms", () => {
+    const guest = ctx({ stageIndex: stageIndexOf("guest") });
+    expect(hasCapability("map.viewPeople", guest)).toBe(true);
+    expect(hasCapability("terms.read", guest)).toBe(false);
+  });
+
+  it("follows a village that moves the rung", () => {
+    const guest = ctx({ stageIndex: stageIndexOf("guest"), stageUnlockOverrides: { "terms.read": "guest" } });
+    expect(hasCapability("terms.read", guest)).toBe(true);
+    const closed = ctx({ stageIndex: stageIndexOf("co-creator"), stageUnlockOverrides: { "terms.read": "none" } });
+    expect(hasCapability("terms.read", closed)).toBe(false);
+  });
+
+  it("is a member's own read: listed, labelled, never transferable", () => {
+    expect(ALL_CAPABILITIES).toContain("terms.read");
+    expect(CAPABILITY_LABELS["terms.read"].length).toBeGreaterThan(10);
+    expect(TRANSFERABLE["terms.read"]).toBe(false);
+    expect(HANDOVER_SET).not.toContain("terms.read");
+  });
+});

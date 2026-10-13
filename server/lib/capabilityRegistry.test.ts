@@ -163,3 +163,23 @@ describe("the powers registry", () => {
     }
   });
 });
+
+/*
+ * terms.read (seat settings PR2) is a member's own read, so it is NOT a power
+ * a village holds and it belongs in neither list. The invariant above
+ * (`undescribedPowers` empty) already covers it because it is not
+ * transferable; this pins that reading, so a later edit that marks it
+ * transferable has to come here and name where it lives.
+ */
+describe("terms.read is a member's own read, not a power", () => {
+  it("is not transferable, so neither list names it", () => {
+    expect(TRANSFERABLE["terms.read"]).toBe(false);
+    expect(POWERS.some((p) => p.capability === "terms.read")).toBe(false);
+    expect(Object.keys(NOT_YET_WIRED)).not.toContain("terms.read");
+    expect(undescribedPowers()).toEqual([]);
+  });
+
+  it("carries a consequence sentence an admin can read", () => {
+    expect(CAPABILITY_CONSEQUENCE["terms.read"]).toMatch(/money included/);
+  });
+});

@@ -198,6 +198,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** The auth context when one is mounted, undefined otherwise: for a field that only reads who is signed in. */
+export function useOptionalAuth(): AuthContextType | undefined {
+  return useContext(AuthContext);
+}
+
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

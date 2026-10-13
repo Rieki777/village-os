@@ -128,7 +128,7 @@ export interface SeatInput {
 export interface SheetContext {
   now: Date;
   /** null = unread. */
-  season: { name: string | null; endsOn: string | null; daysLeft: number | null } | null;
+  season: { name: string | null; endsOn: string | null; daysLeft: number | null; timezone?: string | null } | null;
   /** The village's own class names from /api/archetypes; null = unread. */
   classNames: Record<string, string> | null;
 }
@@ -180,7 +180,12 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * village's zone when the seat was made) is read in the reader's own zone,
  * which is where the member reading it lives.
  */
-export function formatDay(iso: string | null | undefined, withYear = true): string | null {
+/**
+ * "21 Mar 2027". A civil date reads as written. An instant reads as the day it
+ * falls on in `timeZone`, the village's zone (red team U6), and in the
+ * viewer's own zone only when no zone is known.
+ */
+export function formatDay(iso: string | null | undefined, withYear = true, timeZone?: string | null): string | null {
   const s = String(iso ?? "").trim();
   if (!s) return null;
   const civil = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -195,11 +200,23 @@ export function formatDay(iso: string | null | undefined, withYear = true): stri
   } else {
     const t = new Date(s);
     if (Number.isNaN(t.getTime())) return null;
-    y = t.getFullYear();
-    m = t.getMonth();
-    d = t.getDate();
+    const zoned = timeZone ? zonedParts(t, timeZone) : null;
+    y = zoned ? zoned.y : t.getFullYear();
+    m = zoned ? zoned.m : t.getMonth();
+    d = zoned ? zoned.d : t.getDate();
   }
   return withYear ? `${d} ${MONTHS[m]} ${y}` : `${d} ${MONTHS[m]}`;
+}
+
+/** The civil day an instant falls on in a zone, or null for a zone this runtime does not know. */
+function zonedParts(t: Date, timeZone: string): { y: number; m: number; d: number } | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(t);
+    const n = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    return { y: n("year"), m: n("month") - 1, d: n("day") };
+  } catch {
+    return null;
+  }
 }
 
 /** "a", "a and b", "a, b and c". */
@@ -741,14 +758,14 @@ function wayWords(id: string, gloss: string | null | undefined): string | null {
   return id === "other" ? (textOrNull(gloss) ?? def.label) : def.label;
 }
 
-function factsFor(input: SeatInput, now: Date): SeatSheetView["facts"] {
+function factsFor(input: SeatInput, now: Date, timeZone?: string | null): SeatSheetView["facts"] {
   // The date is the earliest term on the seat, lapsed seatings included. It
   // says only that: whether anyone is ready to be re-chosen is the state
   // line's to say, from the holders themselves, so a fact about one date can
   // never contradict a clock counting down another holder's term.
   let term: Fact | null = null;
   if (typeof input.termEnds === "string" && input.termEnds.trim()) {
-    const date = formatDay(input.termEnds);
+    const date = formatDay(input.termEnds, true, timeZone);
     const d = daysUntil(input.termEnds, now);
     if (date && d !== null) {
       term =
@@ -875,7 +892,7 @@ export function seatSheet(input: SeatInput, ctx: SheetContext): SeatSheetView {
       accountabilities: input.accountabilities.map((a) => a.trim()).filter(Boolean),
       why: textOrNull(input.whyItMatters),
     },
-    facts: factsFor(input, ctx.now),
+    facts: factsFor(input, ctx.now, ctx.season?.timezone ?? null),
     flip: {
       title: SHEET_WORDS.flipTitle,
       sub: describesWork
