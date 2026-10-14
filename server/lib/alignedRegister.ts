@@ -100,6 +100,7 @@ export async function registerRow(v: TextView, viewerId: string, nameOf: NameOf,
     village,
     href: served.href,
     contentHash: isParty ? served.contentHash : null,
+    endingLine: served.endingLine,
   };
 }
 

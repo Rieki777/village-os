@@ -25,7 +25,13 @@ export interface HeldTerms {
   settings: unknown;
   adoptedVia: "holder" | "ballot" | null;
   decidedOn: string | null;
-  alignment: { state: string; sealed: boolean; parties: Array<{ partyKey: string; label: string; capacity: string; required: boolean; aligned: boolean; at: string | null; method: string | null }> } | null;
+  alignment: {
+    state: string;
+    sealed: boolean;
+    parties: Array<{ partyKey: string; label: string; capacity: string; required: boolean; aligned: boolean; at: string | null; method: string | null }>;
+    /** "Notice given, ends 9 Nov 2026", "Superseded by version 2" (PR8), or null. */
+    endingLine: string | null;
+  } | null;
 }
 
 /** The held terms behind these seatings, by application id. */
@@ -48,7 +54,7 @@ export async function heldTermsFor(
       settings: a.settings,
       adoptedVia: a.adoptedVia,
       decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, opts.timezone || "UTC") : null,
-      alignment: served ? { state: served.state, sealed: served.sealed, parties: served.parties } : null,
+      alignment: served ? { state: served.state, sealed: served.sealed, parties: served.parties, endingLine: served.endingLine } : null,
     });
   }
   return out;

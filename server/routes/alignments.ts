@@ -10,6 +10,11 @@
  *   GET  /api/profile/alignments/:id/receipt   your receipt for one text
  *   GET  /api/alignments?party=<handle>        what another member has aligned with (terms.read)
  *   GET  /api/aligned?q=&kind=&offset=          the village's register, every text and version (terms.read, PR6)
+ *   POST /api/profile/alignments/:id/notice     give notice on terms you are a party to (PR8)
+ *   POST /api/profile/alignments/:id/end-by-agreement
+ *                                              ask to end them by agreement (PR8)
+ *   POST /api/profile/alignments/:id/endings/:endingId/take-back
+ *                                              take a notice or an ask back before it takes effect (PR8)
  *
  * ── ONE CLICK, NO TYPED NAME ───────────────────────────────────────────────
  *
@@ -35,18 +40,33 @@
  * salt. Visitors and guests get 401. Nothing here is public, and nothing here
  * calls `recordEvent`.
  *
+ * ── ENDING TERMS (PR8) ─────────────────────────────────────────────────────
+ *
+ * A party gives notice, asks to end by agreement, or takes either back
+ * (server/lib/alignmentEndings.ts writes the rows). A member acts for their
+ * own party. `{"as": "village"}` acts for the village, under the adoption
+ * rule exactly: a live holder of org.seat who is not the candidate. When the
+ * village holds that power, or nobody holds it live, ending for the village
+ * needs a vote, and that vote is not built: the route refuses in a sentence
+ * that says so, and either party can still give notice through the other
+ * door. Notice never unseats anybody.
+ *
  * REGISTERED from server/index.ts with one exempt line, beside the seat
  * application door.
  */
 import type { Express } from "express";
-import { ALIGN_WORDS, carriesMoney, HASH, RECONFIRM_FRESH_MS, TEXT_ID, intentSentence, userParty } from "../../shared/alignments";
-import { APPLICATION_ID, OPEN_STATUSES } from "../../shared/seatApplications";
+import { ALIGN_WORDS, carriesMoney, ENDING_ID, HASH, RECONFIRM_FRESH_MS, TEXT_ID, intentSentence, userParty, VILLAGE_PARTY } from "../../shared/alignments";
+import { ADOPTING_POWER, adoptRefusal, APPLICATION_ID, OPEN_STATUSES, seatList } from "../../shared/seatApplications";
+import { isVillageHeld, type Capability, type CapabilityCtx } from "../../shared/capabilities";
+import { whoMayPutHandToVillage } from "../../shared/powerHands";
+import { askToEnd, giveNotice, takeBack, type EndingAct } from "../lib/alignmentEndings";
 import { civilDateKey } from "../../shared/lunar";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import type { AppDeps } from "../lib/appDeps";
 import {
   ensureApplicationText,
   presentView,
+  tellParties,
   recordAlignment,
   seatNamesFor,
   seatTermsWords,
@@ -70,7 +90,6 @@ import {
   REGISTER_SEARCH_READS,
   type RegisterPage,
 } from "../../shared/alignedRegister";
-import type { Capability } from "../../shared/capabilities";
 import { inApplicationTransaction, readApplication } from "../repos/seatApplications";
 import { publicKeyBlock, signingKey } from "../lib/villageExport";
 
@@ -92,10 +111,23 @@ type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "getPool" | "notify
   now?: () => Date;
   /** A member's id from their handle. Defaults to the users table (server/lib/profile.ts); tests hand in their own. */
   idForHandle?: (handle: string) => Promise<string | null>;
+  /**
+   * Who may act for the village on ending terms (PR8): the viewer's
+   * capability context and who holds org.seat live, the two the adoption
+   * rule reads. Absent, nobody may act for the village here.
+   */
+  capabilityCtx?: (user: any) => Promise<CapabilityCtx>;
+  liveHoldersOf?: (capability: string) => Promise<string[]>;
 };
 
 const MEMBERS_ONLY = { error: "auth_required", message: "Members read what other members have aligned with." };
 const REGISTER_MEMBERS_ONLY = { error: "auth_required", message: "Members read what the village has aligned with." };
+
+/** What a refused act for the village says (PR8). */
+const VILLAGE_ACT_REFUSED = "Ending terms for the village is for a live holder of the power that seats people.";
+const VILLAGE_OWN_TERMS = "Your own terms are ended for the village by another holder, or by a vote.";
+const VILLAGE_NEEDS_VOTE =
+  "Nobody holds the power that seats people live, so ending these terms for the village needs a vote of the village, and that vote is not built yet. Either party can still give notice.";
 
 /** Thirty searches in ten minutes per member: each one indexes up to a thousand texts. */
 const SEARCHES = 30;
@@ -144,8 +176,9 @@ export async function alignmentsForExport(pool: any, userId: string, nameOf: (id
 export function register(app: Express, deps: Deps): void {
   const { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members } = deps;
   const now = () => (deps.now ? deps.now() : new Date());
-  const today = () => civilDateKey(now(), deps.seatCalendar().timezone || "UTC");
-  const settleDeps: SettleDeps = { getPool, notify, notifyAdmins, today };
+  const tz = () => deps.seatCalendar().timezone || "UTC";
+  const today = () => civilDateKey(now(), tz());
+  const settleDeps: SettleDeps = { getPool, notify, notifyAdmins, today, now, timezone: tz };
   const nameOf = async (id: string) => {
     const m = await members.byId(id);
     return m ? String(m.name ?? "") || null : null;
@@ -245,7 +278,7 @@ export function register(app: Express, deps: Deps): void {
     if (!TEXT_ID.test(textId) || !HASH.test(hash)) {
       return res.status(400).json({ error: "Name the text and the hash of the words you read." });
     }
-    const v = await viewText(pool, textId, today());
+    const v = await viewText(pool, textId, today(), tz(), now());
     if (!v) return res.status(404).json({ error: "There is no text by that id." });
     const party = v.parties.find((p) => p.partyKey === me);
     if (!party) return res.status(403).json({ error: "not_a_party", message: "You are not a party to these terms, so there is nothing for you to align with." });
@@ -276,7 +309,7 @@ export function register(app: Express, deps: Deps): void {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
-    const views = await viewTexts(pool, await textsForParty(pool, String(user.id)), today());
+    const views = await viewTexts(pool, await textsForParty(pool, String(user.id)), today(), tz(), now());
     res.json({ alignments: await Promise.all(views.map((v) => presentView(v, String(user.id), nameOf, true))) });
   });
 
@@ -330,7 +363,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const userId = deps.idForHandle ? await deps.idForHandle(handle) : await userIdForHandle(pool, handle);
     if (!userId) return res.json({ alignments: [] });
-    const views = await viewTexts(pool, await textsForParty(pool, userId), today());
+    const views = await viewTexts(pool, await textsForParty(pool, userId), today(), tz(), now());
     const served = await Promise.all(views.map((v) => presentView(v, String(viewer.id), nameOf, false)));
     // Another member's list carries no hash and no salt. Their terms are open book to members, words included.
     res.json({ alignments: served.map((s) => ({ ...s, contentHash: null })) });
@@ -367,7 +400,7 @@ export function register(app: Express, deps: Deps): void {
         return res.status(429).json({ error: "too_many_asks", message: "That is a lot of searching in a few minutes. Wait a little and try again." });
       }
       const texts = await registerTexts(pool, { subjectTypes, limit: REGISTER_SEARCH_READS, offset: 0 });
-      const views = await viewTexts(pool, texts, today(), tz);
+      const views = await viewTexts(pool, texts, today(), tz, now());
       const rows = await Promise.all(views.map((v) => registerRow(v, viewerId, nameOf, tz)));
       const page: RegisterPage = { kinds: kindList, rows: searchRegister(rows, q, REGISTER_SEARCH_HITS), more: false, query: q };
       return res.json(page);
@@ -379,9 +412,82 @@ export function register(app: Express, deps: Deps): void {
     const offset = Number.isFinite(offsetAsked) && offsetAsked > 0 ? Math.floor(offsetAsked) : 0;
     // One more than the page, so `more` is a fact and never a guess.
     const texts = await registerTexts(pool, { subjectTypes, limit: limit + 1, offset });
-    const views = await viewTexts(pool, texts.slice(0, limit), today(), tz);
+    const views = await viewTexts(pool, texts.slice(0, limit), today(), tz, now());
     const rows = await Promise.all(views.map((v) => registerRow(v, viewerId, nameOf, tz)));
     const page: RegisterPage = { kinds: kindList, rows, more: texts.length > limit, query: null };
     res.json(page);
   });
+
+  // ── Ending terms (PR8) ────────────────────────────────────────────────────
+  /**
+   * The party this member acts for on a text, or a refusal. Their own party
+   * by default; the village's with `as: "village"`, under the adoption rule:
+   * a live holder of org.seat who is not the candidate. With no live holder,
+   * ending for the village needs a vote, which this village cannot open yet.
+   */
+  async function actingParty(user: any, textId: string, as: unknown): Promise<{ ok: true; partyKey: string } | { ok: false; status: number; body: Record<string, unknown> }> {
+    const userId = String(user.id);
+    if (as !== "village") return { ok: true, partyKey: userParty(userId) };
+    if (!deps.capabilityCtx || !deps.liveHoldersOf) {
+      return { ok: false, status: 403, body: { error: "not_a_holder", message: VILLAGE_ACT_REFUSED } };
+    }
+    const ctx = await deps.capabilityCtx(user);
+    const rule = whoMayPutHandToVillage(isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), await deps.liveHoldersOf(ADOPTING_POWER));
+    if (rule.who !== "live-holders") return { ok: false, status: 409, body: { error: "needs_vote", message: VILLAGE_NEEDS_VOTE } };
+    const parties = await partiesOf(getPool(), [textId]);
+    const candidate = parties.find((p) => p.partyKey !== VILLAGE_PARTY && p.userId)?.userId ?? "";
+    const refusal = adoptRefusal(rule, userId, candidate);
+    if (refusal) {
+      return { ok: false, status: refusal.status, body: { error: refusal.error, message: refusal.error === "own_terms" ? VILLAGE_OWN_TERMS : VILLAGE_ACT_REFUSED } };
+    }
+    return { ok: true, partyKey: VILLAGE_PARTY };
+  }
+
+  type EndingInput = { textId: string; partyKey: string; actorId: string; now: Date; timezone: string; endingId: string };
+
+  /** The three acts, what the other parties hear about each, and the key it is told under. */
+  const ENDING_ACTS: Record<"notice" | "ask" | "take-back", { act: (pool: any, input: EndingInput) => Promise<EndingAct>; tell: (seats: string) => string }> = {
+    notice: { act: giveNotice, tell: (seats) => `Notice given on the terms for ${seats}` },
+    ask: { act: askToEnd, tell: (seats) => `Asked to end by agreement: the terms for ${seats}` },
+    "take-back": { act: takeBack, tell: (seats) => `Taken back: a notice or an ask on the terms for ${seats}` },
+  };
+
+  /** The common door: sign-in, the limit, the ids, the acting party, then the act and what the other parties hear. */
+  async function endingRoute(req: any, res: any, keySuffix: keyof typeof ENDING_ACTS) {
+    const { act, tell } = ENDING_ACTS[keySuffix];
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to act on your terms." });
+    const userId = String(user.id);
+    if (await overLimit(`align-end:${userId}`, ASKS, WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_asks", message: "That is a lot in a few minutes. Wait a little and try again." });
+    }
+    const textId = String(req.params.id ?? "");
+    const endingId = String(req.params.endingId ?? "");
+    if (!TEXT_ID.test(textId)) return res.status(400).json({ error: "Name the text by its id." });
+    if (req.params.endingId !== undefined && !ENDING_ID.test(endingId)) return res.status(400).json({ error: "Name the notice or the ask by its id." });
+    const party = await actingParty(user, textId, req.body?.as);
+    if (!party.ok) return res.status(party.status).json(party.body);
+    const out = await act(getPool(), { textId, partyKey: party.partyKey, actorId: userId, now: now(), timezone: tz(), endingId });
+    if (!out.ok) return res.status(out.status).json({ error: out.error, message: out.message });
+    const after = await viewText(getPool(), textId, today(), tz(), now());
+    // The other parties hear, with the seat names and a link only. Agreement completed says so instead.
+    const done = after?.derived.endedBy === "ending" && after.derived.ending?.kind === "mutual";
+    await tellParties(
+      settleDeps,
+      after ?? out.view,
+      done ? `Ended by agreement: the terms for ${seatList(out.view.seatNames)}` : tell(seatList(out.view.seatNames)),
+      done ? "ended-by-agreement" : `${keySuffix}:${out.endingId}`,
+      done ? null : userId,
+    );
+    res.status(201).json({
+      success: true,
+      endingId: out.endingId,
+      effectiveAt: out.effectiveAt.toISOString(),
+      alignment: after ? await presentView(after, userId, nameOf, true, { actsForVillage: party.partyKey === VILLAGE_PARTY }) : null,
+    });
+  }
+
+  app.post("/api/profile/alignments/:id/notice", (req, res) => endingRoute(req, res, "notice"));
+  app.post("/api/profile/alignments/:id/end-by-agreement", (req, res) => endingRoute(req, res, "ask"));
+  app.post("/api/profile/alignments/:id/endings/:endingId/take-back", (req, res) => endingRoute(req, res, "take-back"));
 }

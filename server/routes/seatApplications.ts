@@ -94,7 +94,7 @@ import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import type { LapseContext } from "../lib/orgChart";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { adoptApplication, seatApplicationCloser, settleDepsOf, tellOutcome } from "../lib/seatApplicationCloser";
-import { carriesMoney, intentSentence, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
+import { carriesMoney, intentSentence, noticeDaysOf, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
 import {
   prepareSeatTermsText,
   presentView,
@@ -167,6 +167,8 @@ type Deps = Pick<
 };
 
 const MEMBERS_ONLY = { error: "auth_required", message: "Members read seat applications." };
+/** A text not written yet has nothing to end (PR8). */
+const NO_ACTS = { mayGiveNotice: false, notice: null, mayEndByAgreement: false, ask: null };
 const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these seats. Withdraw it first, or wait for it.";
 
 /** A seat's term as a civil date, from the terms' own length when no date is written. */
@@ -233,11 +235,12 @@ export function register(app: Express, deps: Deps): void {
    * before PR5 has no text yet: its words render from the stored terms, and
    * the candidate's Align writes the text (POST /api/profile/alignments).
    */
-  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[], known?: TextView | null) {
+  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[], known?: TextView | null, actsForVillage = false) {
     if (a.textId) {
       const v = known !== undefined ? known : await viewText(getPool(), a.textId, today(), seatCalendar().timezone || "UTC");
       // The hash is for a party (red team S5): the candidate reads it, other members do not.
-      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId);
+      // A live holder of org.seat who is not the candidate may end the terms for the village (PR8).
+      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId, { actsForVillage });
     }
     const words = seatTermsWords(seatNames, a.settings);
     const closed = a.status === "withdrawn" || a.status === "not-adopted";
@@ -257,9 +260,12 @@ export function register(app: Express, deps: Deps): void {
         { partyKey: userParty(a.candidateUserId), label: (await nameOf(a.candidateUserId)) || "A former member", capacity: "individually", required: true, aligned: false, at: null, method: null },
         { partyKey: "village", label: "The village", capacity: "for the village", required: true, aligned: false, at: null, method: null },
       ],
-      you: isCandidate ? { partyKey: userParty(a.candidateUserId), aligned: false, alignedAt: null, mayAlign: !closed } : null,
+      you: isCandidate ? { partyKey: userParty(a.candidateUserId), aligned: false, alignedAt: null, mayAlign: !closed, acts: NO_ACTS } : null,
+      village: null,
       contentHash: null,
       createdAt: null,
+      endingLine: null,
+      noticeDays: noticeDaysOf(a.settings),
       retrofit: true,
     };
   }
@@ -323,7 +329,15 @@ export function register(app: Express, deps: Deps): void {
       decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, tz) : null,
       decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       createdAt: a.createdAt ? a.createdAt.toISOString() : null,
-      alignment: await alignmentOf(a, viewerId, seatNames, known ? known.view : undefined),
+      // The application this one amends, and the version its text is (PR8).
+      supersedesId: a.supersedesId,
+      alignment: await alignmentOf(
+        a,
+        viewerId,
+        seatNames,
+        known ? known.view : undefined,
+        !!viewerId && !!rule && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
+      ),
       ...(viewerId && rule
         ? {
             you: {
@@ -433,6 +447,30 @@ export function register(app: Express, deps: Deps): void {
     }
     const later = !!startsAt && startsAt.getTime() > now.getTime();
 
+    /*
+     * AN AMENDMENT (PR8). `supersedesId` names the application whose terms
+     * this one replaces: the member's own, adopted, its terms in force, for
+     * the same seats. It takes the same road as any application, so the same
+     * power adopts it; adopted, its text is version n+1, and version n stays in
+     * force until n+1 is, then reads as superseded. Renewing on the same terms
+     * is an amendment too.
+     */
+    let supersedes: { id: string; version: number } | null = null;
+    if (input.supersedesId) {
+      const old = await readApplication(pool, input.supersedesId);
+      if (!old) return res.status(404).json({ error: "There is no application by that id to amend.", field: "supersedesId" });
+      if (old.candidateUserId !== userId) return res.status(403).json({ error: "Only the member who holds these terms can propose to amend them.", field: "supersedesId" });
+      const sameSeats = old.seatIds.length === input.seatIds.length && old.seatIds.every((s) => input.seatIds.includes(s));
+      if (!sameSeats) {
+        return res.status(409).json({ error: "An amendment names the same seats as the terms it replaces. Apply for other seats in an application of their own.", field: "seatIds" });
+      }
+      const oldView = old.textId ? await viewText(pool, old.textId, today(), tz) : null;
+      if (old.status !== "adopted" || !oldView || oldView.derived.state !== "in-force") {
+        return res.status(409).json({ error: "Only terms in force can be amended. These are not in force now.", field: "supersedesId" });
+      }
+      supersedes = { id: oldView.text.id, version: oldView.text.version };
+    }
+
     // The seats: real, the village's own, live, and each with a place for this member.
     const seats = await seatsForUpdate(pool, input.seatIds);
     const live = await liveSeatingsOf(pool, input.seatIds);
@@ -488,6 +526,7 @@ export function register(app: Express, deps: Deps): void {
       termSeasonId: term.seasonId,
       termFollowsSeason: term.followsSeason,
       startsAt,
+      supersedesId: input.supersedesId,
     };
     const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? sid);
 
@@ -497,7 +536,7 @@ export function register(app: Express, deps: Deps): void {
      * longer match, because a seat was renamed or the terms moved, are refused
      * before anything is written. Money asks the re-confirm first.
      */
-    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz);
+    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz, supersedes);
     if (req.body?.alignedWords !== undefined && String(req.body.alignedWords) !== prepared.text.body) {
       return res.status(409).json({ error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
     }
