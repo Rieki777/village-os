@@ -180,6 +180,19 @@ export async function launchedAtOf(pool: Pool): Promise<string | null> {
   return (await readState(pool)).launchedAt;
 }
 
+/**
+ * Whether this village's LAUNCH BALLOT has carried: the module switch's
+ * meaning of "launched" (Rye, 2026-10-09: "launch = the launch ballot
+ * carries"). Read off `launchedByBallotId`, which only `recordLaunchCarried`
+ * writes, and never off `game-start`: migration 0112 wrote a start row for
+ * villages that were issuing before the vote existed, with no ballot behind
+ * it, and those villages never held the vote that hands modules to the
+ * village. See `server/routes/moduleLibrary.ts`.
+ */
+export async function launchBallotCarried(pool: Pool): Promise<boolean> {
+  return !!(await readState(pool)).launchedByBallotId;
+}
+
 /** Resolve every applicable requirement into live status. */
 export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<LaunchStatus> {
   const state = await readState(pool);
