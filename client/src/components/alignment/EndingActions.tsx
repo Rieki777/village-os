@@ -130,11 +130,13 @@ export default function EndingActions({
   noticeDays: number;
   onDone?: () => void;
 }) {
-  if (!you && !village) return null;
+  // Nothing either party may do (ended terms, or none to act on): no divider, no empty block.
+  const any = (a: PartyActs | null | undefined) => !!a && (!!a.notice || !!a.ask || a.mayGiveNotice || a.mayEndByAgreement);
+  if (!any(you) && !any(village)) return null;
   return (
     <div className="mt-4 space-y-3 border-t border-border/50 pt-3">
-      {you && <PartyEnding textId={textId} acts={you} noticeDays={noticeDays} asVillage={false} onDone={onDone} />}
-      {village && <PartyEnding textId={textId} acts={village} noticeDays={noticeDays} asVillage onDone={onDone} />}
+      {any(you) && you && <PartyEnding textId={textId} acts={you} noticeDays={noticeDays} asVillage={false} onDone={onDone} />}
+      {any(village) && village && <PartyEnding textId={textId} acts={village} noticeDays={noticeDays} asVillage onDone={onDone} />}
     </div>
   );
 }
