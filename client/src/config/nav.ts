@@ -55,6 +55,13 @@ export type NavLink = {
    * is where every link, bookmark and notification already goes.
    */
   token?: "recognition";
+  /**
+   * Shown only while this module is OFF. For a plain page that a module's
+   * richer surface replaces in the menu: the separate Circles and Roles pages
+   * fold into the map's "Circles & Roles" view, and come back as their own
+   * entries on a village that runs no map, so neither page loses its door.
+   */
+  unlessModule?: string;
 };
 
 export type NavGroup = {
@@ -67,26 +74,27 @@ export type NavEntry = NavLink | NavGroup;
 export const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
 
 /**
- * The bar, left to right. Seven entries plus the account menu.
+ * The bar, left to right. Seven entries plus the account menu (Rye,
+ * 2026-10-09: the menu restructure).
  *
  * The width rule that produced this shape still governs it: at seventeen
  * TOP-LEVEL links the bar measured ~1250px and could only render from `xl`,
  * which left every viewport between 768px and ~1310px with no desktop
- * navigation at all. What costs bar width is an entry, not an item — a group
- * of nine costs exactly what a group of four costs, because the items live in
- * a dropdown. So the seventeen pages the app had mounted and never linked from
- * the header cost nothing here; they are items, and the bar stays short.
+ * navigation at all. What costs bar width is an entry, not an item, because the
+ * items live in a dropdown. So a page the menu never linked costs nothing to
+ * add as an item, and the bar stays short.
  *
- * Groups run 6-9 items each on purpose. A group past ~10 is a list nobody
- * reads, which is why the reference docs split off into Guides rather than
- * making About fourteen entries long: About is what the village IS, Guides is
- * how to take part in it.
+ * Each group answers one question, and runs 5-12 items so it stays readable:
+ *   Community  who is here and what are they saying
+ *   Village    the place, and what you can do in it (Quests live here now)
+ *   Decide     how the village decides, and where to put something to it
+ *   Join       ways in, and ways to put something in
+ *   Guides     how to take part well
+ *   About      what the village is
  *
- * Two links carry a `module` because their pages render NotFound when that
- * module is off (Network, Contribute) — an ungated link to either would be a
- * dead end on a fresh fork. Everything else added here is ungated core content.
- * Gratitude needs no gate for the same reason Quests does not: both are `core`
- * in shared/modules.ts and cannot be turned off in v1.
+ * A `module` gate is for a page that renders NotFound or a gate with its module
+ * off, so an ungated link to it would be a dead end on a fresh fork.
+ * Gratitude and Quests need none: both are `core` in shared/modules.ts.
  */
 export const NAV: readonly NavEntry[] = [
   /*
@@ -95,7 +103,6 @@ export const NAV: readonly NavEntry[] = [
    * carries Home. Its width paid for the Module Library below: with both, the
    * bar crowded the village name out of the header at 1024px.
    */
-  { href: "/quests", label: "Quests" },
   /**
    * Top level, and worth the bar width.
    *
@@ -107,7 +114,7 @@ export const NAV: readonly NavEntry[] = [
   { href: "/map", label: "Living Map", module: "map" },
   /**
    * Top level, and the second entry to earn the bar width (Rye, 2026-10-09).
-   * It took Home's slot, which was a duplicate of the village-name link.
+   * It took the slot of Home, which duplicated the village-name link.
    *
    * The library is the village's "what is possible here" window, and it sat
    * as the last item of Guides, under the rules-of-play pages, where nobody
@@ -123,10 +130,12 @@ export const NAV: readonly NavEntry[] = [
       { href: "/forum", label: "Forum", module: "forum" },
       { href: "/messages", label: "Messages", module: "messaging" },
       { href: "/introductions", label: "Introductions", module: "introductions" },
-      { href: "/circles", label: "Circles" },
-      { href: "/roles", label: "Roles" },
-      { href: "/gratitude", label: "Gratitude", token: "recognition" },
       { href: "/events", label: "Events", module: "events" },
+      // The circle calls a member takes part in. It sat in the account menu,
+      // where only a member already looking for it would find it. The
+      // shortcuts button carries the other door (config/mobileNav.ts).
+      { href: "/sessions", label: "Live Sessions", module: "sessions" },
+      { href: "/gratitude", label: "Gratitude", token: "recognition" },
       { href: "/seasonal-festivals", label: "Seasonal Festivals" },
       { href: "/feedback", label: "Share Feedback" },
     ],
@@ -134,26 +143,83 @@ export const NAV: readonly NavEntry[] = [
   {
     label: "Village",
     items: [
-      // The map itself is a top-level entry now; this is the org view.
+      // Quests left the bar for here (Rye, 2026-10-09): they are something
+      // you do in the village. Phones keep them in the bottom tab bar.
+      { href: "/quests", label: "Quests" },
+      // The org view. The plain Circles and Roles pages fold into it, and
+      // return as their own entries only on a village with no map.
       { href: "/map/circles", label: "Circles & Roles", module: "map" },
+      { href: "/circles", label: "Circles", unlessModule: "map" },
+      { href: "/roles", label: "Roles", unlessModule: "map" },
       { href: "/places", label: "Places", module: "map" },
       { href: "/photographs", label: "Photographs", module: "map" },
       { href: "/stay", label: "Stay", module: "stays" },
+      { href: "/housing", brochure: true, label: "Housing" },
       { href: "/library", label: "Library", module: "library" },
       { href: "/tools", label: "Tools", module: "tools" },
-      { href: "/village-health", label: "Health", module: "health" },
       { href: "/tokens", label: "The Exchange", module: "exchange" },
-      { href: "/housing", brochure: true, label: "Housing" },
-      { href: "/network", label: "Village Network", module: "network" },
-      { href: "/contribute", label: "Contribute", module: "commerce" },
+      { href: "/village-health", label: "Health", module: "health" },
+    ],
+  },
+  {
+    /**
+     * How the village decides (Rye, 2026-10-09). Make a Proposal had no link
+     * anywhere in the menu, and the review queue and the powers page sat in
+     * the account menu, where they read as personal settings.
+     */
+    label: "Decide",
+    items: [
+      // The live surface, module-gated: /governance (under About) explains
+      // how the village decides and is always there; /decisions shows what it
+      // is deciding and exists only where the engine is switched on.
+      { href: "/decisions", label: "Decisions", module: "governance" },
+      // Signed out, the page itself asks the visitor to sign in to write one.
+      { href: "/propose", label: "Make a Proposal", module: "governance" },
       /**
-       * The crowdpool bridge. It shipped with no entry here and none in the
-       * footer, so the only link to /campaigns in the whole client sat on the
-       * campaign page, which is reachable only from /campaigns: a closed loop
-       * with no door from outside it. It sits next to Contribute because both
-       * answer "how do I put something in".
+       * 0140. What an outside service has proposed, waiting for somebody to
+       * read it. Capability-gated in the page so that a steward who is not an
+       * admin can keep this queue: a menu entry only admins could see would put
+       * the capability straight back behind the panel it was written to
+       * escape. Signed in only, because a stranger cannot hold the capability.
        */
-      { href: "/campaigns", label: "Our Raisings", module: "crowdpool" },
+      { href: "/review", label: "Review Queue", roles: ["member", "admin", "founder"] },
+      // 0098. What the village looks after, and who holds each one: who do I
+      // ask. Open to visitors, and the page says what signing in adds.
+      { href: "/powers", label: "What We Look After" },
+      /**
+       * R12 opened this page to every member. `POST /api/dry-run` answers any
+       * signed-in member, so a member could run the village test run and had
+       * no way to find it short of being told the URL.
+       *
+       * SIGNED IN, NOT EVERYONE: `visible()` in Layout.tsx passes a link with
+       * no `roles` to a stranger too, and this page meets a stranger with a
+       * sign-in wall. `PUT /api/admin/users/:id/role` refuses any value outside
+       * `["member", "admin", "founder"]`, so listing all three is the whole
+       * signed-in population. A fourth role would have to be added here too.
+       *
+       * NO `module`. The dry-run route mounts outside `requireModule()`, so a
+       * module gate here would hide a working page on every fresh fork.
+       */
+      {
+        href: "/journey-to-launch",
+        label: "🌳 Launch Plan",
+        roles: ["member", "admin", "founder"],
+        accent: true,
+      },
+      /**
+       * /project-history is the Command Centre, not a public history page. Its
+       * own gate auto-unlocks for admin and founder and shows everyone else a
+       * sign-in wall, so an ungated entry would put a locked door in the public
+       * menu. Same amber as the Launch Plan, because it is the same kind of
+       * entry.
+       */
+      {
+        href: "/project-history",
+        brochure: true,
+        label: "🛠 Command Centre",
+        roles: ["admin", "founder"],
+        accent: true,
+      },
     ],
   },
   {
@@ -167,20 +233,27 @@ export const NAV: readonly NavEntry[] = [
       { href: "/visit", brochure: true, label: "Plan a Visit" },
       { href: "/love-letter", brochure: true, label: "Sign the Love Letter" },
       { href: "/work-with-us", brochure: true, label: "Work With Us" },
+      // The two ways to put something in, beside the ways to come in.
+      { href: "/contribute", label: "Contribute", module: "commerce" },
+      /**
+       * The crowdpool bridge. It shipped with no entry anywhere, so the only
+       * link to /campaigns in the whole client sat on the campaign page,
+       * reachable only from /campaigns: a closed loop with no door in.
+       */
+      { href: "/campaigns", label: "Our Raisings", module: "crowdpool" },
     ],
   },
   {
     /**
      * The reference shelf: what a member reads to take part well. Ordered as a
-     * newcomer meets them — the guide, then the walk, then the rules of play,
-     * then the two rights pages, then the one about leaving. Rights sit here
-     * rather than under Join because they matter most AFTER someone has joined.
+     * newcomer meets them: the guide, then the walk, then the rules of play,
+     * then the two rights pages, then the one about leaving.
      */
     label: "Guides",
     items: [
       { href: "/co-creators-guide", brochure: true, label: "Co-Creators Guide" },
       // Founders and admins only (R47): every stop stands on a practice
-      // example and the page ends at the settings, so it is the team's tour.
+      // example and the page ends at the settings, so it is the team tour.
       { href: "/first-walk", label: "Your First Walk", roles: ["admin", "founder"] },
       { href: "/game-mechanics", label: "Game Mechanics" },
       { href: "/good-neighbor", brochure: true, label: "Good Neighbor" },
@@ -195,54 +268,10 @@ export const NAV: readonly NavEntry[] = [
     items: [
       { href: "/how-we-create", brochure: true, label: "How We Create" },
       { href: "/governance", label: "Governance" },
-      // The live surface, module-gated: /governance explains how the village
-      // decides and is always there, /decisions shows what it is deciding and
-      // exists only where the engine is switched on.
-      { href: "/decisions", label: "Decisions", module: "governance" },
       { href: "/master-plan", brochure: true, label: "Master Plan" },
       { href: "/team", brochure: true, label: "Our Team" },
-      /**
-       * R12 opened this page to every member, and the menu was the last door
-       * still shut. `POST /api/dry-run` answers any signed-in member ("any
-       * member as all members may suggest upgrades and will need to run models
-       * and tests"), the page renders a test-run card for one, and the admin
-       * door it used to sit behind is gone. So a member could run the village's
-       * test run and had no way to find it short of being told the URL.
-       *
-       * SIGNED IN, NOT EVERYONE, and the three roles are how this file says
-       * that. `visible()` in Layout.tsx passes a link with no `roles` to a
-       * stranger too, and this page meets a stranger with a sign-in wall, which
-       * is the locked-door-in-a-public-menu defect the Command Centre entry
-       * below was written to avoid. `PUT /api/admin/users/:id/role` refuses any
-       * value outside `["member", "admin", "founder"]`, so listing all three is
-       * the whole signed-in population and not a guess. A fourth role would
-       * have to be added here as well as there.
-       *
-       * NO `module`. The dry-run route mounts outside `requireModule()`, so a
-       * module gate here would hide a working page on every fork that has that
-       * module off, which is every fresh fork.
-       */
-      {
-        href: "/journey-to-launch",
-        label: "🌳 Launch Plan",
-        roles: ["member", "admin", "founder"],
-        accent: true,
-      },
-      /**
-       * /project-history is the Command Centre, not a public history page. Its
-       * own gate auto-unlocks for admin and founder and shows everyone else a
-       * sign-in wall — signed out it renders 94 characters and no heading — so
-       * an ungated entry here would have put a locked door in the public menu.
-       * Same roles and the same amber as the Launch Plan above it, because it
-       * is the same kind of entry.
-       */
-      {
-        href: "/project-history",
-        brochure: true,
-        label: "🛠 Command Centre",
-        roles: ["admin", "founder"],
-        accent: true,
-      },
+      // The other villages this one is linked with: part of what it is.
+      { href: "/network", label: "Village Network", module: "network" },
     ],
   },
 ];
@@ -262,22 +291,7 @@ export const ACCOUNT_MENU: readonly NavLink[] = [
   // button carries the other door (config/mobileNav.ts); both hide while the
   // journal module is off for this viewer.
   { href: "/journal", label: "Journal", module: "journal" },
-  // The circle calls a member takes part in: the one happening now, and the
-  // records of the ones they were in. The shortcuts button carries the other
-  // door (config/mobileNav.ts); both hide while the module is off.
-  { href: "/sessions", label: "Live sessions", module: "sessions" },
   { href: "/profile#wallet", label: "Wallet", module: "exchange" },
   { href: "/badges", label: "Badges", module: "badges" },
-  // 0098. What the village looks after, and who holds each one. In the
-  // account menu rather than under Village because it answers a question a
-  // member asks about themselves as often as about the place: who do I ask.
-  { href: "/powers", label: "What we look after" },
-  // 0140. What an outside service has proposed, waiting for somebody to read
-  // it. Deliberately carries NO `roles` filter, which is the whole point of
-  // the page: it is capability-gated so that a steward who is not an admin can
-  // keep this queue, and a menu entry only admins could see would put the
-  // capability straight back behind the panel it was written to escape. A
-  // member who opens it without the capability is told so in a sentence.
-  { href: "/review", label: "Review queue" },
   { href: "/admin", label: "Village Settings", roles: ["admin", "founder"] },
 ];
