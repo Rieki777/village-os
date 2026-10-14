@@ -95,6 +95,10 @@ const BASE_SECRET_KEYS = [
   "stripe_secret_key",
   "stripe_webhook_secret",
   "resend_api_key",
+  // Village Comms: the signing secret the email provider's delivery reports
+  // carry, checked by server/routes/commsWebhook.ts. Declared beside the key it
+  // belongs to, the way the Stripe pair sits together.
+  "resend_webhook_secret",
   "assistant_api_key",
   "riverside_webhook_secret",
   "governance_hub_secret",
@@ -138,6 +142,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   stripe_secret_key: "STRIPE_SECRET_KEY",
   stripe_webhook_secret: "STRIPE_WEBHOOK_SECRET",
   resend_api_key: "RESEND_API_KEY",
+  resend_webhook_secret: "RESEND_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   assistant_api_key: "ANTHROPIC_API_KEY",
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",

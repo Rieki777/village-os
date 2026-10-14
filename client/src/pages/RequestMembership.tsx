@@ -20,6 +20,7 @@ import { useState } from "react";
 import { ArrowRight, CalendarDays, HeartHandshake } from "lucide-react";
 
 import Layout from "@/components/Layout";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
 
 const FIELD =
@@ -32,6 +33,7 @@ export default function RequestMembership() {
   const [why, setWhy] = useState("");
   const [heardFrom, setHeardFrom] = useState("");
   const [hp, setHp] = useState("");
+  const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +50,7 @@ export default function RequestMembership() {
         body: JSON.stringify({
           type: "membership-request",
           hp,
-          data: { name: name.trim(), email: email.trim(), why: why.trim(), heardFrom: heardFrom.trim() },
+          data: { name: name.trim(), email: email.trim(), why: why.trim(), heardFrom: heardFrom.trim(), [FORM_CONSENT_FIELD]: consent },
         }),
       });
       if (res.status === 429) {
@@ -168,6 +170,7 @@ export default function RequestMembership() {
                     className={FIELD}
                   />
                 </div>
+                <PathConsentBox checked={consent} onChange={setConsent} />
                 {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
                 <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>
                   <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />

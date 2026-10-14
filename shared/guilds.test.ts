@@ -72,7 +72,8 @@ describe("the Resend pilot is fully specified", () => {
   const key = SEEDS_BY_ID["resend-api-key"]!;
 
   it("asks for a sending-only key restricted to the village's domain", () => {
-    expect(key.certainty).toBe("verified");
+    // Unverified only because its live send is not built; the open list says so.
+    expect(key.open).toHaveLength(1);
     expect(key.scopes).toEqual(["permission: sending_access", "domain_id: the village's verified sending domain"]);
     expect(key.risk).toBe("keystone");
     expect(key.nursery).not.toBeNull();
@@ -150,8 +151,9 @@ describe("intake refuses", () => {
   });
 
   it("a guess presented as a page", () => {
-    expect(problems(MODULES, withSeed({ provider: { name: "Resend", url: null } }))).toContain(
-      'seed "resend-api-key": has no provider url, so it must be marked unverified',
+    const verified = { ...SEEDS_BY_ID["stripe-webhook"]!, provider: { name: "Stripe", url: null } };
+    expect(problems(MODULES, [...SEEDS.filter((x) => x.id !== verified.id), verified])).toContain(
+      'seed "stripe-webhook": has no provider url, so it must be marked unverified',
     );
   });
 
@@ -227,15 +229,15 @@ describe("the rulings of 2026-10-13", () => {
     expect(SEEDS_BY_ID["railway-root"]!.dependsOn).toContain("village-secrets-key");
   });
 
-  it("Q3: every seed that cannot yet turn green is listed, and the Resend key is not among them", () => {
+  it("Q3: every seed that cannot yet turn green is listed, and the Resend key says its send is unbuilt", () => {
     const notAlive = seedsNotYetAlive().map((s) => s.id);
     for (const id of ["auth-token-secret", "village-secrets-key", "stripe-secret-key", "stripe-webhook", "anthropic-api-key"]) {
       expect(notAlive).toContain(id);
     }
+    // Its check is a real send, so it is listed as alive-capable. That send is
+    // not built yet (see its open list), which is a separate fact.
     expect(notAlive).not.toContain("resend-api-key");
-    const probe = SEEDS_BY_ID["resend-api-key"]!.liveCheck;
-    expect(probe.via === "probe" && probe.builtAt).toBe("server/routes/emailProbe.ts");
-    expect(fs.existsSync(path.join(__dirname, "..", "server", "routes", "emailProbe.ts"))).toBe(true);
+    expect(SEEDS_BY_ID["resend-api-key"]!.open?.join(" ")).toContain("not built");
   });
 
   it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {

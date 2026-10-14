@@ -1800,6 +1800,182 @@ export const VARIABLES: VariableDef[] = [
     unit: "per day",
   },
 
+  // ── Village Comms (0244): the post office and its automations ─────────────
+  // Owned by the `comms` module (shared/modules.ts). Four are founder held:
+  // retention is a privacy window, the send rate is the provider's limit, and
+  // both trackers watch people, which is not a game rule a vote should turn on.
+  {
+    key: "comms.quiet_start_hour",
+    category: "Email and reminders",
+    label: "Earliest hour a path email is sent",
+    description:
+      "Path, welcome and joining emails wait for this hour in the reader's own time zone, or the village's when theirs is unknown. Gathering reminders follow the gathering's own clock and are not held.",
+    type: "integer",
+    default: "8",
+    min: 0,
+    max: 23,
+    unit: "o'clock",
+  },
+  {
+    key: "comms.quiet_end_hour",
+    category: "Email and reminders",
+    label: "Latest hour a path email is sent",
+    description:
+      "From this hour in the reader's own time zone, a path, welcome or joining email waits for the next morning. Keep it later than the earliest hour.",
+    type: "integer",
+    default: "20",
+    min: 1,
+    max: 24,
+    unit: "o'clock",
+  },
+  {
+    key: "comms.daily_cap",
+    category: "Email and reminders",
+    label: "Most automated emails one person receives per day",
+    description:
+      "Counts path emails and letters to one person in a rolling 24 hours. Over it, the next one waits for the following window and is never dropped. Gathering reminders, notices and the emails a person asked for do not count.",
+    type: "integer",
+    default: "2",
+    min: 1,
+    max: 20,
+    unit: "per day",
+  },
+  {
+    key: "comms.event_reminder_minutes",
+    category: "Email and reminders",
+    label: "When gathering reminders go out",
+    description:
+      "Minutes before a gathering starts, separated by commas. The default sends one a day before and one two hours before. Leave it empty to send none, unless a gathering sets its own.",
+    type: "text",
+    default: "1440,120",
+    unit: "minutes before",
+  },
+  {
+    key: "comms.host_nudge_minutes",
+    category: "Email and reminders",
+    label: "When a host is asked for the recap",
+    description:
+      "Minutes after a gathering ends before its host is asked to write the recap. Nobody is asked when nobody said yes, or when the recap has already gone.",
+    type: "integer",
+    default: "60",
+    min: 0,
+    max: 1440,
+    unit: "minutes",
+  },
+  {
+    key: "comms.recap_window_days",
+    category: "Email and reminders",
+    label: "How long a recap can still be sent",
+    description: "Days after a gathering in which its host can still send the recap to the people who said yes.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 30,
+    unit: "days",
+  },
+  {
+    key: "comms.guests_default",
+    category: "Email and reminders",
+    label: "Guests may say they are coming",
+    description:
+      "When on, somebody with no account can say yes to a free public gathering and confirm by email. Each gathering can turn this on or off for itself. Guests need the comms module open to everyone.",
+    type: "boolean",
+    default: "true",
+  },
+  {
+    key: "comms.time_poll_freeze_hours",
+    category: "Email and reminders",
+    label: "When a voted time stops moving",
+    description:
+      "Hours before a gathering in which its time no longer follows the vote. A one-off vote closes this long before its earliest time, and a weekly series never moves an evening this close.",
+    type: "integer",
+    default: "48",
+    min: 0,
+    max: 336,
+    unit: "hours",
+  },
+  {
+    key: "comms.time_poll_settle_minutes",
+    category: "Email and reminders",
+    label: "How long a time must lead before the gathering moves",
+    description:
+      "Minutes a time must lead the vote before the gathering moves to it. Zero follows the vote live, so the time that is winning is the time on the calendar.",
+    type: "integer",
+    default: "0",
+    min: 0,
+    max: 1440,
+    unit: "minutes",
+  },
+  {
+    key: "comms.letters_per_day",
+    category: "Email and reminders",
+    label: "Most letters the village sends in a day",
+    description: "How many letters can go out in one day. A letter also waits ten minutes after the one before it.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 20,
+    unit: "per day",
+  },
+  {
+    key: "comms.retention_months",
+    category: "Email and reminders",
+    label: "How long the record of each email is kept",
+    description:
+      "Months the record of a sent email, its words included, is kept before it is deleted. Whoever runs the village's email reads those words. The words of essential mail are never kept, and the provider's delivery reports are cleared after 30 days whatever this says.",
+    type: "integer",
+    default: "18",
+    min: 1,
+    max: 120,
+    unit: "months",
+    ring: "founder",
+  },
+  {
+    key: "comms.send_rate_per_second",
+    category: "Email and reminders",
+    label: "Emails sent per second",
+    description:
+      "How fast queued emails go out. Keep it at or under what your email provider allows on your plan, or sends are refused and retried later.",
+    type: "integer",
+    default: "2",
+    min: 1,
+    max: 50,
+    unit: "per second",
+    ring: "founder",
+  },
+  {
+    key: "comms.notice_expiry_minutes",
+    category: "Email and reminders",
+    label: "How long a notification email may wait",
+    description:
+      "A notification email still unsent this many minutes after it was written is dropped, because a late notice surprises more than a missed one. The notification itself stays in the app.",
+    type: "integer",
+    default: "120",
+    min: 5,
+    max: 2880,
+    unit: "minutes",
+  },
+  {
+    key: "comms.open_tracking",
+    category: "Email and reminders",
+    label: "Count when emails are opened",
+    description:
+      "Off by default. Some mail apps open every email by themselves, so an open count misleads, and counting needs a hidden image in every email.",
+    type: "boolean",
+    default: "false",
+    ring: "founder",
+  },
+  {
+    key: "comms.click_tracking",
+    category: "Email and reminders",
+    label: "Count which links are clicked",
+    description:
+      "Off by default. When on, links in automated emails pass through the email provider first so a journey can see what people did next. Links in the emails a person asked for are never rewritten.",
+    type: "boolean",
+    default: "false",
+    ring: "founder",
+  },
+
   // ── Abuse guards: throttles on the public writers ─────────────────────────
   // Per-IP unless stated. These are ceilings on ABUSE, not on members: keep
   // them generous — a whole village behind one NAT shares each IP bucket.
@@ -3354,6 +3530,23 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
       }
       const seen = new Set(codes.map((c) => c.toUpperCase()));
       if (seen.size !== codes.length) return "Each currency can only be listed once.";
+    }
+    /*
+     * A REMINDER LIST IS MINUTES OR IT IS NOTHING. A typo here would not fail
+     * loudly: every gathering reminder in the village reads this list, so
+     * "1440;120" or "a day before" would quietly send no reminders at all.
+     * Blank is a real answer and means none. Ten minutes is the floor, since a
+     * reminder that lands as the gathering starts reminds nobody, and two weeks
+     * is the ceiling.
+     */
+    if (def.key === "comms.event_reminder_minutes" && raw.trim() !== "") {
+      const parts = raw.split(",").map((p) => p.trim());
+      const minutes = parts.map((p) => (/^\d+$/.test(p) ? Number(p) : NaN));
+      if (minutes.some((m) => !Number.isInteger(m) || m < 10 || m > 20160)) {
+        return "Must be whole minutes before the start, separated by commas, such as 1440,120. Each one from 10 to 20160, or leave it blank for none.";
+      }
+      if (minutes.length > 4) return "At most four reminders for one gathering.";
+      if (new Set(minutes).size !== minutes.length) return "Each reminder time can only be listed once.";
     }
     // Contract addresses must look like addresses, or a typo silently reads a
     // balance from nowhere and the member sees zero holdings.

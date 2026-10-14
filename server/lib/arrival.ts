@@ -31,6 +31,8 @@
  * nobody for a notification to reach. Those are skipped when counting whether
  * the seat is filled, the same way the map's contact surface skips them.
  */
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "./commsSink";
 
 /** The shape this needs from a seating row. Structural, so the repo owns it. */
 export interface SeatRow {
@@ -187,6 +189,7 @@ export async function memberJoined(
   member: { id: string; name: string; handle: string },
   host: JoinHost,
 ): Promise<string[]> {
+  commsSink.fire({ type: "member_joined", userId: member.id });
   try {
     await host.addActivity("join", `${host.firstName(member.name)} stepped into the village as a Guest`, {
       actorUserId: member.id,

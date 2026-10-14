@@ -109,6 +109,20 @@ const ELSEWHERE: Record<string, { tab: string; what: string }> = {
   map: { tab: "circles-map", what: "How this village says power is held is declared on the living map itself." },
 };
 
+/**
+ * A dial whose number IS the exposure gets that number said back in words,
+ * recomputed as the field changes, so the size of the choice is in view at the
+ * moment it is made. No confirmation step: the sentence is the warning.
+ * Rye, 2026-10-09, on the email record: "show it and put a dial".
+ */
+const ECHO: Record<string, (value: string) => string> = {
+  "comms.retention_months": (value) => {
+    const n = Math.trunc(Number(value));
+    if (!Number.isFinite(n) || n < 1) return "";
+    return `Each email is kept ${n} month${n === 1 ? "" : "s"} with its words, except essential mail, which keeps none, and whoever runs the village's email can read them.`;
+  },
+};
+
 const inputCls =
   "border border-gray-200 rounded-lg px-3 py-2 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep";
 const saveCls =
@@ -391,6 +405,7 @@ export default function ModuleSettingsSection({
                       {v.applyTiming === "cycle-close" && (
                         <p className="text-[11px] text-gray-600 mt-0.5">A change here takes effect at the next cycle close.</p>
                       )}
+                      {ECHO[v.key] && <p className="text-xs text-gray-700 mt-1" aria-live="polite">{ECHO[v.key](draft)}</p>}
                     </div>
                     {v.type === "boolean" ? (
                       <select

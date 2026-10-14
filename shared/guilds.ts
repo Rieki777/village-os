@@ -747,7 +747,6 @@ export const SEEDS: readonly GuildSeed[] = [
       how: "The send-only key minted later sends to delivered@resend.dev. Alive means Resend accepts it.",
       strength: "alive",
       proves: "The account exists and can send.",
-      builtAt: "server/routes/emailProbe.ts",
     },
     nursery: null,
     compost: ["Delete the Resend account once its keys are revoked and its domain removed."],
@@ -818,12 +817,12 @@ export const SEEDS: readonly GuildSeed[] = [
     dependsOn: ["resend-setup-key"],
     launchRequirement: "email-domain",
     liveCheck: {
-      via: "probe",
-      probe: "resend-domain-status",
-      how:
-        "POST https://api.resend.com/domains/{id}/verify, then GET https://api.resend.com/domains/{id} until the domain's status says verified. Each record carries its own status, which the game shows per record.",
-      strength: "alive",
-      proves: "Resend itself has checked the records.",
+      via: "launch-check",
+      // Comms Settings' own check (server/lib/comms/setup.ts): Resend's answer
+      // about the domain when the key may ask, a founder's tick when it may not.
+      checkKey: "comms:domain",
+      strength: "confirmed",
+      proves: "Resend reports the domain as verified, or a founder confirmed it does where the key cannot ask.",
     },
     nursery: {
       how: "Plant the records on a subdomain first, such as mail.<domain>, so a mistake never touches the main domain's mail.",
@@ -833,7 +832,8 @@ export const SEEDS: readonly GuildSeed[] = [
     holder: { who: "account-owner", account: "the account at the DNS host that holds the domain" },
     certainty: "unverified",
     open: [
-      "The probe is not built.",
+      "The exact record names and types. Resend generates them per domain, so the game shows what Resend shows.",
+      "A sending-only key cannot read the domain's status, so with one the check is a founder's confirmation in Comms Settings. A key with full access reads it from Resend.",
       "The full list of domain status values. Resend links them from a separate page; only not_started appears in the examples read.",
       "Verification is asynchronous and Resend reports the result by webhook; polling GET /domains/{id} is assumed to show the same status.",
     ],
@@ -864,10 +864,9 @@ export const SEEDS: readonly GuildSeed[] = [
       via: "probe",
       probe: "resend-send-probe",
       how:
-        "POST https://api.resend.com/emails from the village's sender to delivered@resend.dev. Alive means Resend accepts it. Admin, Integrations runs it with Send a test.",
+        "A test send from EMAIL_FROM to delivered@resend.dev through the village's post office. Alive means Resend answers 200 with an email id.",
       strength: "alive",
       proves: "The key authenticates, may send, and may send from this domain and this sender.",
-      builtAt: "server/routes/emailProbe.ts",
     },
     nursery: {
       how: "Send only to Resend's test recipient delivered@resend.dev, which simulates a delivery and reaches no person.",
@@ -879,10 +878,51 @@ export const SEEDS: readonly GuildSeed[] = [
     ],
     rotation: { every: "year" },
     holder: { who: "account-owner", account: "the Resend account's role address" },
-    certainty: "verified",
+    certainty: "unverified",
+    open: [
+      "The test send is not built. The post office has no test-send path yet, and the one-mail-door rule refuses any probe that sends through the real provider from outside it. Which of the two gives way is Rye's call.",
+    ],
     source:
       RESEND_API + ": POST /api-keys with permission sending_access and domain_id restricts a key to sending from one domain, and returns its id and token. " +
-      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts. Probe: server/lib/email.ts probeResendSend.",
+      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts.",
+  },
+  {
+    id: "resend-webhook-secret",
+    kind: "hand-carried",
+    title: "Let Resend tell the village what became of each email",
+    provider: { name: "Resend", url: "https://resend.com/webhooks" },
+    scopes: ["email.sent", "email.delivered", "email.delivery_delayed", "email.bounced", "email.complained"],
+    handles: [
+      { store: "village-secret", slot: "resend_webhook_secret" },
+      { store: "env", name: "RESEND_WEBHOOK_SECRET" },
+    ],
+    need: "recommended",
+    risk: "ordinary",
+    lifespan: "lasting",
+    consequence:
+      "Resend calls /api/comms/webhooks/resend when an email is delivered, bounces or is marked as spam, so a dead address stops being written to and Sent mail says what became of each email.",
+    undo: "Delete the webhook in Resend and clear the secret in Comms Settings. Email still goes out; the village just stops hearing what became of it.",
+    cost: "Free.",
+    dependsOn: ["resend-api-key", "frontend-url"],
+    launchRequirement: "email-delivery-reports",
+    liveCheck: {
+      via: "launch-check",
+      checkKey: "comms:delivery-reports",
+      strength: "present",
+      proves: "A signing secret is set. Comms Settings says when a signed report last arrived, which is what proves it.",
+    },
+    nursery: { how: "Connect it while the module is in rehearsal: reports for the test sends arrive before anyone else is written to." },
+    compost: [
+      "Delete the webhook at resend.com/webhooks.",
+      "Clear the delivery reports secret in Comms Settings.",
+      "Delete RESEND_WEBHOOK_SECRET from Railway if it was set there.",
+    ],
+    rotation: { every: "year" },
+    holder: { who: "account-owner", account: "the Resend account's role address" },
+    certainty: "verified",
+    source:
+      "server/routes/commsWebhook.ts (the endpoint, Svix-signed), server/lib/comms/resendAdmin.ts DELIVERY_REPORT_EVENTS, " +
+      "server/lib/comms/setup.ts the delivery reports item. Slot: server/lib/secrets.ts. Launch row: email-delivery-reports.",
   },
   {
     id: "email-from",
@@ -906,7 +946,6 @@ export const SEEDS: readonly GuildSeed[] = [
       how: "The same test send as the key. Resend refuses a sender outside the key's domain.",
       strength: "alive",
       proves: "The sender sits on the verified domain.",
-      builtAt: "server/routes/emailProbe.ts",
     },
     nursery: { how: "A sender on the staging subdomain." },
     compost: ["Delete EMAIL_FROM from Railway."],

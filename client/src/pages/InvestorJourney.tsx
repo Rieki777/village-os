@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import { altOr, statedFacts, useBrandImages, useVillageLinks, useVillageSettings } from "@/lib/gameApi";
 import WhyCostaRica from "@/components/WhyCostaRica";
 import FaqSection from "@/components/FaqSection";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
 import InvestorSummary from "@/components/InvestorSummary";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
@@ -201,6 +202,9 @@ export default function InvestorJourney() {
   const [showCallForm, setShowCallForm] = useState(false);
   const [packFormData, setPackFormData] = useState({ name: "", email: "", investmentRange: "", message: "", accredited: false });
   const [callFormData, setCallFormData] = useState({ name: "", email: "", preferredTime: "", message: "" });
+  // The "walk me through the next steps" box on each form (5.11): unticked unless the person ticks it.
+  const [packConsent, setPackConsent] = useState(false);
+  const [callConsent, setCallConsent] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   // This village's own destinations. Blank hides the control that uses one.
   const { eventsUrl, contactEmail, mailTo } = useVillageLinks();
@@ -255,6 +259,7 @@ export default function InvestorJourney() {
           name: packFormData.name,
           email: packFormData.email,
           accredited: packFormData.accredited,
+          [FORM_CONSENT_FIELD]: packConsent,
         }),
       });
       if (response.ok) {
@@ -262,6 +267,7 @@ export default function InvestorJourney() {
         setFormSuccess(result.message || "Check your email - we've sent you the full investor packet.");
         setShowPackForm(false);
         setPackFormData({ name: "", email: "", investmentRange: "", message: "", accredited: false });
+        setPackConsent(false);
         setTimeout(() => setFormSuccess(null), 6000);
       } else {
         setFormSuccess(retryNote);
@@ -282,13 +288,14 @@ export default function InvestorJourney() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "investor-call",
-          data: callFormData
+          data: { ...callFormData, [FORM_CONSENT_FIELD]: callConsent }
         })
       });
       if (response.ok) {
         setFormSuccess("Thank you! Our team will be in touch within 48 hours.");
         setShowCallForm(false);
         setCallFormData({ name: "", email: "", preferredTime: "", message: "" });
+        setCallConsent(false);
         setTimeout(() => setFormSuccess(null), 5000);
       }
     } catch (error) {
@@ -888,6 +895,7 @@ export default function InvestorJourney() {
                 I confirm I am an accredited investor.
               </span>
             </label>
+            <PathConsentBox checked={packConsent} onChange={setPackConsent} />
             <button
               type="submit"
               className="w-full bg-teal-deep text-white py-2 rounded-lg font-medium hover:bg-teal-deep-dark transition-colors flex items-center justify-center gap-2 pointer-coarse:min-h-11"
@@ -950,6 +958,7 @@ export default function InvestorJourney() {
                 className="w-full px-4 py-2 bg-muted rounded-lg border border-muted text-foreground focus:outline-none focus:ring-2 focus:ring-teal-deep resize-none"
               />
             </div>
+            <PathConsentBox checked={callConsent} onChange={setCallConsent} />
             <button
               type="submit"
               className="w-full bg-teal-deep text-white py-2 rounded-lg font-medium hover:bg-teal-deep-dark transition-colors flex items-center justify-center gap-2 pointer-coarse:min-h-11"

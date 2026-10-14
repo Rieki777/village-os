@@ -214,6 +214,10 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // before it does. Same family, same preference; it clears the daily cap
     // (`clearsDailyEmailCap`) and nothing else.
     case "season_ending":
+    // Village Comms 5.10: a host asked you to pick the times you can make for
+    // a gathering. A vote you are invited to is the same conversation as a
+    // ballot opening, so it rides the same preference and needs no new knob.
+    case "time_poll_open":
       return p.governanceEmail;
     // A lunation's pool landed in somebody's wallet. Fixed daily for the
     // same reason stage_advanced is: welcome, never urgent, and nobody is
@@ -277,17 +281,56 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // written to name no one and quote nothing.
     case "moderation":
       return "immediate";
+    // Village Comms (the comms build spec 5.9 and 5.11). A path's contact
+    // person asked to write to somebody three weeks in, and a host asked for
+    // the recap while the gathering is fresh. Both ask a person to act today,
+    // and a digest tomorrow is a day the other person waits. Without these
+    // two cases both would be in-app only, and silently so.
+    case "comms_path_handoff":
+    case "comms_host_recap":
+      return "immediate";
     default:
       return "off";
   }
+}
+
+/**
+ * One notification email, handed to the post office (server/lib/comms) under
+ * a key of the spine's own, so the same email is one row however many times a
+ * job runs: `notify:<notificationId>` for an immediate email,
+ * `digest:<userId>:<YYYY-MM-DD>` for the daily digest, and
+ * `brief:<weekKey>:<userId>` for the weekly brief.
+ */
+export interface NoticeEmail {
+  to: string[];
+  subject: string;
+  html: string;
+  idempotencyKey: string;
+  /** What made it, for Sent mail: `notify.immediate`, `notify.digest` or `notify.brief`. */
+  origin: string;
+  /** The member it is for. */
+  userId?: string | null;
+}
+
+/** What the post office did with one notice. */
+export interface NoticeSendResult {
+  /**
+   * True when the post office took the row: it is waiting for the drain, it
+   * went, or it was already taken under this key. False when it refused it:
+   * no provider, a suppressed address, no permission, already too late.
+   */
+  accepted: boolean;
+  /** The post office's own word for it, `duplicate` included. */
+  status: string;
+  reason?: string;
 }
 
 export interface NotifyDeps {
   pool: Pool;
   /** Load the recipient (email + prefs). Injected so the spine never imports the server. */
   memberById(id: string): Promise<any | null>;
-  /** The one mailer. Never throws. */
-  sendEmail(opts: { to: string[]; subject: string; html: string }): Promise<void>;
+  /** The one mailer: the post office, for notices. Never throws. */
+  sendEmail(opts: NoticeEmail): Promise<NoticeSendResult>;
   /** Absolute origin for links in emails, e.g. https://amora.regencivics.earth */
   origin(): string;
   projectName(): string;
@@ -378,7 +421,7 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
   if (!clearsDailyEmailCap(n.type) && !(await underDailyCap(deps.pool, n.userId))) return;
 
   const url = deps.origin() + (n.link ?? "/profile");
-  await deps.sendEmail({
+  const mail = await deps.sendEmail({
     to: [user.email],
     subject: n.title,
     html: emailShell(
@@ -388,9 +431,21 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
         `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#2D5A5A;color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">See it on your profile</a></p>` +
         `<p style="color:#9ca3af;font-size:12px;margin-top:18px">Choose which emails you get on your profile page.</p>`,
     ),
+    idempotencyKey: `notify:${n.id}`,
+    origin: "notify.immediate",
+    userId: n.userId,
   });
-  // Stamped even when the provider quietly declined — a late retry email
-  // surprises more than a missed one (regen's rule, kept deliberately).
+  /*
+   * STAMPED WHEN THE POST OFFICE TOOK THE ROW, never when it refused it.
+   *
+   * Regen's rule stays: a late retry surprises more than a missed one, so the
+   * stamp does not wait for the provider, and the post office's own expiry
+   * drops a notice that waits too long. What changed is the refusal. A notice
+   * the post office would not take (no provider, a suppressed address) was
+   * stamped as emailed and counted against the member's daily cap for an
+   * email that never existed.
+   */
+  if (!mail.accepted) return;
   await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [n.id]);
 }
 
@@ -414,6 +469,8 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
 
   let sent = 0;
   let included = 0;
+  // One digest per member per day, by key, whichever run writes it.
+  const day = new Date().toISOString().slice(0, 10);
   for (const [userId, list] of Array.from(byUser.entries())) {
     const user = await deps.memberById(userId);
     if (!user?.email || !deps.isPresent(user)) continue;
@@ -428,19 +485,29 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
       .map((r) => `<li style="margin:4px 0"><a href="${escapeHtml(deps.origin() + (r.link ?? "/profile"))}" style="color:#2D5A5A">${escapeHtml(String(r.title))}</a></li>`)
       .join("");
     const more = daily.length > 10 ? `<p style="color:#6b7280">…and ${daily.length - 10} more.</p>` : "";
-    await deps.sendEmail({
+    const mail = await deps.sendEmail({
       to: [user.email],
       subject,
       html: emailShell(deps.projectName(), `<h2 style="margin:0 0 10px;font-size:17px">While you were away</h2><ul style="padding-left:18px;margin:0 0 10px">${items}</ul>${more}<p><a href="${escapeHtml(deps.origin() + "/profile")}" style="color:#2D5A5A;font-weight:600">See everything</a></p>`),
+      idempotencyKey: `digest:${userId}:${day}`,
+      origin: "notify.digest",
+      userId,
     });
+    /*
+     * Stamped only when the post office took THIS digest. A refused one leaves
+     * the rows unstamped for tomorrow's. So does a duplicate: today's digest
+     * already went under this key without these rows in it, and stamping them
+     * would mark as emailed a list nobody was sent.
+     */
+    if (!mail.accepted || mail.status === "duplicate") continue;
     await deps.pool.query(
       `UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id IN (${daily.map(() => "?").join(",")})`,
       daily.map((r) => r.id),
     );
     sent++;
     included += daily.length;
-    // Be gentle with the mail provider's rate limits.
-    await new Promise((r) => setTimeout(r, 300));
+    // No pause between members any more: the post office's drain paces every
+    // send at `comms.send_rate_per_second`, and this only writes rows.
   }
   return { users: sent, rows: included };
 }
@@ -522,7 +589,7 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
 
     if (!prefs.emailsOff && user.email && deps.isPresent(user) && (await underDailyCap(deps.pool, user.id))) {
       try {
-        await deps.sendEmail({
+        const mail = await deps.sendEmail({
           to: [user.email],
           subject: rendered.subject,
           html: emailShell(
@@ -532,13 +599,16 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
               `<p style="margin:16px 0 0"><a href="${escapeHtml(deps.origin() + `/events?brief=${opts.weekKey}`)}" style="display:inline-block;background:#2D5A5A;color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">Open the calendar</a></p>` +
               `<p style="color:#9ca3af;font-size:12px;margin-top:18px">You can turn the weekly brief off on the calendar page, under the brief itself.</p>`,
           ),
+          // The same key as the in-app row, so a brief is one email per member per week.
+          idempotencyKey: `brief:${opts.weekKey}:${user.id}`,
+          origin: "notify.brief",
+          userId: user.id,
         });
-        if (inserted.id) {
+        // Counted and stamped only when the post office took it.
+        if (inserted.id && mail.accepted) {
           await deps.pool.query("UPDATE notifications SET emailed_at = CURRENT_TIMESTAMP WHERE id = ? AND emailed_at IS NULL", [inserted.id]);
         }
-        summary.emailed += 1;
-        // Be gentle with the mail provider's rate limits, same as the digest.
-        await new Promise((r) => setTimeout(r, 300));
+        if (mail.accepted) summary.emailed += 1;
       } catch (e) {
         console.error("[brief] email failed (in-app row stands)", e);
       }

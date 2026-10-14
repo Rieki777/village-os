@@ -8,6 +8,7 @@ import { Bell, Download, ShieldOff } from "lucide-react";
 import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
+import EmailFromVillage from "@/components/EmailFromVillage";
 
 const CADENCES: Record<string, Array<{ v: string; label: string }>> = {
   questsEmail: [
@@ -251,6 +252,10 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
       </label>
 
       {notifyNote && <p role="alert" className="text-xs text-destructive mb-4">{notifyNote}</p>}
+
+      {/* Village Comms: gathering reminders, path emails and letters, with a
+          link to the full preferences page (EmailFromVillage.tsx). */}
+      <EmailFromVillage />
 
       {contactable !== null && (
         <div className="mb-4">

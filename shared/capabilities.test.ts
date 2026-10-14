@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is nineteen keys, which is the number the ruling was given in", () => {
+    it("is twenty keys: the nineteen the ruling was given in, and the comms power after it", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -385,8 +385,17 @@ describe("hasCapability truth table", () => {
        * the count is a change to what he agreed to. Whoever moves it is
        * answering that question rather than breaking an invariant, and this is
        * where they find out they are being asked.
+       *
+       * TWENTY SINCE 2026-10-02, and this is the answer given. Rye approved the
+       * Village Comms plan that day, and its section 8 says of `comms.manage`:
+       * "It can be handed to a role, and the village can hold it." Holding is
+       * what TRANSFERABLE means, so the founding stewards take it at launch with
+       * the nineteen, and the handover counts it. The comms foundation lane
+       * moved this number and named it in its report for the integrator to
+       * confirm, because the plan approved the power and never said the count.
        */
-      expect(HANDOVER_SET).toHaveLength(19);
+      expect(HANDOVER_SET).toHaveLength(20);
+      expect(HANDOVER_SET).toContain("comms.manage");
     });
 
     it("carries the steward's veto, which is what opens the break-glass", () => {

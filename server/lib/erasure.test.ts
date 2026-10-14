@@ -391,10 +391,13 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    // The needs and journal deletions sit after the tombstone, so a break AT
-    // the tombstone leaves them undone and the resume runs them.
+    // The comms rows, the needs deletion and the journal deletion sit after the
+    // tombstone, so a break AT the tombstone leaves them undone and the resume
+    // runs them. The ORDER here is the order erasure.ts declares its steps in;
+    // the merge of wt/comms with main checks it against the source below.
     expect(out.ran).toEqual([
       "tombstone",
+      "comms",
       "needs-after-tombstone",
       "journal-after-tombstone",
       "sessions-after-tombstone",
