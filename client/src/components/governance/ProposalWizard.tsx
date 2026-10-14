@@ -117,6 +117,15 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const cfg = type ? typeConfig(type) : null;
   const problems = problemsFor(type, answers);
   const stepProblems = problemsInStep(type, step, answers);
+  /*
+   * NO ERROR BEFORE ANY INPUT (red team U11). A field's problem shows once the
+   * member has left that field, or once they have moved on from its step
+   * with Next, never on arrival. Review still lists everything not ready.
+   */
+  const [touched, setTouched] = useState<ReadonlySet<string>>(() => new Set());
+  const [triedSteps, setTriedSteps] = useState<ReadonlySet<StepKey>>(() => new Set());
+  const shownProblem = (key: string) => (touched.has(key) || triedSteps.has(step) ? stepProblems.get(key) : undefined);
+  const markTouched = (key: string) => setTouched((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   // A type that picks a role with powers shows that role as a card once it is
   // picked. One `/api/roles` read serves the picker and the preview
   // (`loadPermissionRoles`), so the two cannot disagree about a role.
@@ -135,7 +144,12 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const previewPick = seatPreview ? seatPick : rolePick;
   const preview = (look: "rail" | "inline") =>
     seatPreview ? (
-      <WizardSeatPreview seatId={seatPreview} settings={settingsField ? answers[settingsField.key] : undefined} look={look} />
+      <WizardSeatPreview
+        seatId={seatPreview}
+        picked={seatPick ? pickedSeats(answers[seatPick.key]).length : 1}
+        settings={settingsField ? answers[settingsField.key] : undefined}
+        look={look}
+      />
     ) : rolePreview ? (
       <WizardRolePreview roleId={rolePreview} look={look} />
     ) : null;
@@ -295,6 +309,8 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   };
 
   const goTo = async (next: StepKey, fromHistory = false) => {
+    // Moving on with Next is submitting the step: its problems show if the member comes back.
+    if (walk.findIndex((s) => s.key === next) > stepIndex) setTriedSteps((prev) => new Set(prev).add(step));
     setStep(next);
     setFeedback(null);
     // One history entry per step, so the browser's Back walks the steps (red team U3).
@@ -309,6 +325,23 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     const first = nextStep(id, "type");
     if (first) setStep(first);
   };
+
+  /*
+   * FOCUS FOLLOWS THE STEP (red team U10). Each step's heading takes focus
+   * when the step changes, so a keyboard or screen reader user lands on the
+   * new question and hears its name, instead of staying on Next with some
+   * forty tab stops between them and the first field. Never on the first
+   * render: arriving at the page does not move anybody's focus.
+   */
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (!arrived.current) {
+      arrived.current = true;
+      return;
+    }
+    stepHeadingRef.current?.focus();
+  }, [step]);
 
   // Back and Forward move between the steps the member walked.
   const goToRef = useRef(goTo);
@@ -451,6 +484,12 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
           <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
         </div>
 
+        {stepMeta && step !== "type" && step !== "review" && (
+          <h2 ref={stepHeadingRef} tabIndex={-1} className="mb-2 font-display text-xl font-bold text-stone-900 focus:outline-none">
+            {stepMeta.label}
+          </h2>
+        )}
+
         {stepMeta?.intro && step !== "type" && (
           <p className="mb-4 text-stone-700 leading-relaxed">{stepMeta.intro}</p>
         )}
@@ -472,7 +511,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               <>
                 <DraftCards drafts={drafts} busyId={busyDraft} onContinue={continueDraft} onDiscard={discardDraft} />
                 <div>
-                  <h2 className="text-base font-bold text-stone-900">What kind of decision is this?</h2>
+                  <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+                    What kind of decision is this?
+                  </h2>
                   <p className="mt-0.5 text-sm text-stone-600">
                     Each kind asks different questions and travels a different road. Pick the one that fits and the
                     rest follows.
@@ -496,15 +537,17 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
         {step !== "type" && step !== "review" && (
           <div className="space-y-6">
             {fieldsFor(type, step).map((field) => (
-              <WizardField
-                key={field.key}
-                field={field}
-                value={answers[field.key]}
-                problem={stepProblems.get(field.key)}
-                onChange={(v) => set(field.key, v)}
-                dials={dials}
-                answers={answers}
-              />
+              // Leaving any control inside the field marks it touched (focusout bubbles in React).
+              <div key={field.key} onBlur={() => markTouched(field.key)}>
+                <WizardField
+                  field={field}
+                  value={answers[field.key]}
+                  problem={shownProblem(field.key)}
+                  onChange={(v) => set(field.key, v)}
+                  dials={dials}
+                  answers={answers}
+                />
+              </div>
             ))}
             {/* On a phone the preview sits under the question that picked it. */}
             {previewPick && (fieldsFor(type, step).includes(previewPick) || (settingsField && fieldsFor(type, step).includes(settingsField))) && (
@@ -516,7 +559,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
         {step === "review" && cfg && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-bold text-stone-900">Read it back</h2>
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+                Read it back
+              </h2>
               <p className="mt-0.5 text-sm text-stone-600">
                 This is what the village will see. Everything here is still yours to change.
               </p>

@@ -108,7 +108,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           placeholder: "By the end of the season, the spring runs clear and two people besides me know how to keep it that way.",
           help: "Write what will be TRUE at season's end, so anyone can check it without asking you. Members read this; a vote never shows it.",
           required: true,
-          problem: atLeast(40, "Your deliverables"),
+          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
+          problem: atLeast(40, "Your list of deliverables"),
         },
         {
           key: "fitStatement",
@@ -118,7 +119,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           label: "Why you",
           placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
           required: true,
-          problem: atLeast(30, "Your fit statement"),
+          // The member reads the label "Why you", so the problem names it the same way (red team U11).
+          problem: atLeast(30, '"Why you"'),
         },
       ],
     },

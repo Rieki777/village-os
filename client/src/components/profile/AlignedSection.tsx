@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ScrollText } from "lucide-react";
 import { ALIGN_WORDS, type AlignmentState } from "@shared/alignments";
+import { ALIGNED_WORDS } from "@shared/alignedRegister";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { ReconfirmPanel } from "@/components/alignment/AlignButton";
 import { fetchMyAlignments, fetchTheirAlignments, type ServedAlignment } from "@/components/alignment/alignmentsApi";
@@ -32,6 +33,7 @@ export const ALIGNED_SECTION_WORDS = {
   empty: "Nothing yet. When you apply for seats, the terms you align with are kept here.",
   readWords: "Read the application",
   confirmed: ALIGN_WORDS.reconfirmed,
+  register: ALIGNED_WORDS.profileDoor,
 } as const;
 
 const ORDER: Record<AlignmentState, number> = { pending: 0, "in-force": 1, ended: 2 };
@@ -91,6 +93,13 @@ function Own() {
         </p>
       )}
       {rows.length === 0 ? <p className="mt-2 text-muted-foreground">{ALIGNED_SECTION_WORDS.empty}</p> : <Rows rows={rows} onChanged={() => void load()} />}
+      {/* The village's register (PR6): every member's terms, every version. */}
+      <Link
+        href="/aligned"
+        className="mt-4 inline-flex min-h-11 items-center px-1 text-sm font-medium text-notice underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {ALIGNED_SECTION_WORDS.register}
+      </Link>
     </section>
   );
 }

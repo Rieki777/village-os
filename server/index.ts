@@ -4055,8 +4055,8 @@ async function departureStrandingRefusal(target: any, self: boolean): Promise<st
  * suffixed per recipient so "each admin hears it once" and "the event fires
  * once" stay separate concerns.
  */
-async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin"): Promise<void> {
-  const admins = (await members.all()).filter((u: any) => u.role === "admin" || u.role === "founder");
+async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = []): Promise<void> {
+  const admins = (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && !except.includes(String(u.id)));
   for (const a of admins) {
     await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}` });
   }
