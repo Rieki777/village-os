@@ -38,6 +38,8 @@ import { claimPaths } from "../../shared/gameConfig";
 import type { InviteDoor } from "../lib/inviteDoor";
 import { INVITE_REFUSALS, readInviteToken } from "../lib/invites";
 import { numberVar } from "../lib/variables";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "../lib/commsSink";
 
 export interface RegisterDeps {
   overLimit(bucket: string, max: number, windowMs: number): Promise<boolean>;
@@ -115,6 +117,7 @@ export function register(app: Express, deps: RegisterDeps): void {
       throw err;
     }
     await deps.joined({ id: userId, name, handle: user.handle });
+    for (const pathId of user.paths) commsSink.fire({ type: "path_joined", personKey: userId, userId, email, name, pathId, source: "signup" });
     if (inviter) await deps.invites.welcome(inviter, userId);
     res.json({ success: true, token: deps.encodeToken(userId, email), user: deps.publicUser(user) });
   });

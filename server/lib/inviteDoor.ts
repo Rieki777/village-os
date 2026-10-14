@@ -21,6 +21,8 @@ import { recordVouch, vouchesFor } from "../repos/vouches";
 import { INVITATION_NEEDED, INVITE_REFUSALS, hashInviteToken, inviteStanding } from "./invites";
 import { boolVar, numberVar } from "./variables";
 import { refuseVouch, vouchBar, vouchState } from "./vouches";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "./commsSink";
 
 export type InviteLookup = { ok: true; id: string } | { ok: false; error: string };
 
@@ -93,6 +95,7 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
           await host.members.update(userId, (m: any) => {
             m.membershipGranted = true;
           });
+          commsSink.fire({ type: "member_admitted", userId });
         }
       } catch (err) {
         console.warn(`[invites] the arrival vouch for ${userId} was not recorded: ${String((err as Error)?.message ?? err)}`);

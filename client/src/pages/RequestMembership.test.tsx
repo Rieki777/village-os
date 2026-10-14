@@ -41,7 +41,9 @@ describe("RequestMembership", () => {
     await user.click(screen.getByRole("button", { name: /send my request/i }));
 
     expect(fetchMock).toHaveBeenCalledWith("/api/forms/submit", expect.objectContaining({ method: "POST" }));
-    const sent = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    // The consent box reads its words first (/api/comms/consent), so find the submit by its address.
+    const submit = fetchMock.mock.calls.find((c) => c[0] === "/api/forms/submit");
+    const sent = JSON.parse(String(submit?.[1]?.body));
     expect(sent.type).toBe("membership-request");
     expect(sent.hp).toBe("");
     expect(sent.data).toMatchObject({ name: "Juno Reed", email: "juno@example.test" });
