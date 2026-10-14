@@ -122,7 +122,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           label: "Why you",
           placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
           required: true,
-          problem: atLeast(30, "Your fit statement"),
+          // The member reads the label "Why you", so the problem names it the same way (red team U11).
+          problem: atLeast(30, '"Why you"'),
         },
       ],
     },

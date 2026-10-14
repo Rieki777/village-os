@@ -90,3 +90,50 @@ describe("focus follows the step (red team U10)", () => {
     await waitFor(() => expect(document.activeElement).toBe(terms));
   });
 });
+
+describe("no error before any input (red team U11)", () => {
+  const PICK = "Pick the seat you are applying for.";
+  const SHORT_DELIVERABLES = /^Your list of deliverables needs at least 40 characters/;
+  const SHORT_WHY = /^"Why you" needs at least 30 characters/;
+
+  it("arriving at a step shows no error; leaving a field shows its own; Next then Back shows the step's", async () => {
+    window.history.replaceState(null, "", "/propose?type=role_application");
+    render(<ProposalWizard start={{ type: "role_application", answers: {} }} />);
+    const label = (key: string) => walkFor("role_application").find((s) => s.key === key)!.label;
+    await screen.findByRole("heading", { level: 2, name: label("subject") });
+    // Arrival: the empty seat pick is not yet a mistake.
+    expect(screen.queryByText(PICK)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { level: 2, name: label("details") });
+    expect(screen.queryByText(SHORT_DELIVERABLES)).toBeNull();
+    // Writing too little and leaving the field: that field's problem, and only that one.
+    const deliverables = screen.getByLabelText(/Deliverables for the season/);
+    fireEvent.focus(deliverables);
+    fireEvent.change(deliverables, { target: { value: "Too short." } });
+    fireEvent.blur(deliverables);
+    expect(await screen.findByText(SHORT_DELIVERABLES)).toBeTruthy();
+    expect(screen.queryByText(SHORT_WHY)).toBeNull();
+
+    // Moving on submits the step; coming back to it shows what it still lacks, in the label's words.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("heading", { level: 2, name: label("terms") });
+    fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${label("details")}, completed`) })[0]);
+    await screen.findByRole("heading", { level: 2, name: label("details") });
+    expect(await screen.findByText(SHORT_WHY)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${label("subject")}, completed`) })[0]);
+    await screen.findByRole("heading", { level: 2, name: label("subject") });
+    expect(await screen.findByText(PICK)).toBeTruthy();
+  });
+});
+
+describe("the seat preview says what it shows (red team U11)", () => {
+  it("one seat: the seat you picked; several: the first, and the terms cover them all", async () => {
+    const one = render(<ProposalWizard start={{ type: "role_application", answers: { seatIds: ["seat-1"] } }} />);
+    expect((await screen.findAllByText("Shows the seat you picked.")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Shows the role you picked.")).toBeNull();
+    one.unmount();
+    render(<ProposalWizard start={{ type: "role_application", answers: { seatIds: ["seat-1", "seat-2"] } }} />);
+    expect((await screen.findAllByText("Shows the first seat you picked. Your terms cover every seat you picked.")).length).toBeGreaterThan(0);
+  });
+});
