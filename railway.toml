@@ -21,11 +21,15 @@ buildCommand = "pnpm run build"
 [deploy]
 # startCommand is DELIBERATELY ABSENT. The image is self-contained: it sets
 # ENV NODE_ENV=production and ENV PORT=3000, runs ENTRYPOINT ["/usr/bin/tini",
-# "--"] and CMD ["node", "dist/index.js"]. Overriding the start command here
-# would not only reintroduce the shell-versus-exec bug above, it would BYPASS
-# TINI AS PID 1, and the graceful-shutdown work added on 2026-08-31 depends on
-# this process receiving SIGTERM to drain in-flight requests instead of being
-# killed with them still open. The image knows how to start itself. Let it.
+# "--", "/usr/local/bin/village-entrypoint"] and CMD ["node", "dist/index.js"].
+# Overriding the start command here would not only reintroduce the
+# shell-versus-exec bug above, it would BYPASS TINI AS PID 1, and the
+# graceful-shutdown work added on 2026-08-31 depends on this process receiving
+# SIGTERM to drain in-flight requests instead of being killed with them still
+# open. It would also skip the entrypoint that hands the volume to `node`, so
+# every upload would fail again (2026-10-14). The image knows how to start
+# itself. Let it. Nor set RAILWAY_RUN_UID: the entrypoint already starts as
+# root only long enough to fix the volume, and the server stays `node`.
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
