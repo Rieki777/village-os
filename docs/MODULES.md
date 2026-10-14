@@ -713,6 +713,7 @@ The village's email in one place: reminders for the gatherings people said yes t
 | Capabilities it adds | `comms.manage` |
 | Variable keys it owns | `comms.quiet_start_hour`, `comms.quiet_end_hour`, `comms.daily_cap`, `comms.event_reminder_minutes`, `comms.host_nudge_minutes`, `comms.recap_window_days`, `comms.guests_default`, `comms.time_poll_freeze_hours`, `comms.time_poll_settle_minutes`, `comms.letters_per_day`, `comms.retention_months`, `comms.send_rate_per_second`, `comms.notice_expiry_minutes`, `comms.open_tracking`, `comms.click_tracking` |
 | API prefixes | `/api/admin/comms` |
+| What a village plants | `resend-account`, `resend-sending-domain`, `resend-api-key`, `resend-webhook-secret`, `village-secrets-key` |
 | Contract doc | [comms.md](modules/comms.md) |
 
 ## What depends on what
