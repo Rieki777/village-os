@@ -17,7 +17,7 @@ import type { RowDataPacket } from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { COMMS_SETTINGS_KEY, DEFAULT_CONSENT_TEXT, DEFAULT_RECAP_QUESTIONS } from "../../../shared/comms/settings";
 import { LAUNCH_REQUIREMENTS } from "../../../shared/launchRequirements";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { insertMessage, markSent, storeProviderEvent } from "../../repos/commsMessages";
 import { makeWebhookSecret } from "../../testkit/fakeResend";
 import { launchStatus, type LaunchDeps } from "../launch";
@@ -64,7 +64,7 @@ async function clearAll(): Promise<void> {
 beforeAll(async () => {
   if (!configured) return;
   db = await provisionTestDb();
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+  pool = testPool(db, { connectionLimit: 4 });
   // The secrets store reads this schema's (empty) document, so the launch
   // rows below resolve keys from the environment the tests set.
   await loadSecrets(pool);

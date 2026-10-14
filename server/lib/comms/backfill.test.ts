@@ -14,7 +14,7 @@
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FORM_CONSENT_FIELD } from "../../../shared/comms/contracts";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { usersRepo } from "../../repos/users";
 import { backfillContacts } from "./backfill";
 import { permissionFor, suppressionsPortFor, type PeopleDeps } from "./permissions";
@@ -48,7 +48,7 @@ const run = () =>
 describe.skipIf(!configured)("the address book backfill", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     const users = usersRepo(pool);
     await users.add({ id: "bf-ada", name: "Ada Member", email: "ada@example.test", passwordHash: "x", paths: ["resident"], joinedAt: "2026-01-01T10:00:00.000Z" });
     await users.add({ id: "bf-bo", name: "Bo Member", email: "bo@example.test", passwordHash: "x", paths: [], joinedAt: "2026-05-01T10:00:00.000Z" });

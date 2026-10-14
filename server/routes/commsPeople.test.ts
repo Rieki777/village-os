@@ -14,7 +14,7 @@ import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { ensureContact } from "../lib/comms/contacts";
 import { enroll } from "../lib/comms/journeys";
 import { signLink } from "../lib/comms/links";
@@ -93,7 +93,7 @@ async function stranger(name: string | null = null): Promise<{ id: string; email
 describe.skipIf(!configured)("the address book's routes", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     const members = usersRepo(pool);
     await members.add({ id: "route-member", name: "Morgan Member", email: "morgan@example.test", passwordHash: "x", paths: ["resident"] });
 

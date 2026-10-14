@@ -14,7 +14,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../db/testDb";
 import { usersRepo } from "../../repos/users";
 import { ensureContact } from "./contacts";
 import { enroll } from "./journeys";
@@ -123,7 +123,7 @@ const allowed = async (email: string, kind: Parameters<typeof permissionFor>[2],
 describe.skipIf(!configured)("permissionFor and stopping", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
   });
   afterAll(async () => {
     await pool?.end();
