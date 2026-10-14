@@ -101,6 +101,8 @@ export interface RegisterRow {
   href: string | null;
   /** Only to a party. Null for everybody else. */
   contentHash: string | null;
+  /** How the terms are ending or ended (PR8): "Notice given, ends 9 Nov 2026", "Superseded by version 2". Null when nothing is. */
+  endingLine: string | null;
 }
 
 export interface RegisterPage {

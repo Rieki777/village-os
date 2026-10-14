@@ -197,5 +197,9 @@ describe("the door it opens", () => {
   it("opens the member door on a held seat for this season, or with no seat picked", () => {
     expect(applyHref({ seasonId: "s-2", renew: "seat-host" })).toBe("/propose?type=role_application&seat=seat-host&renew=seat-host&season=s-2");
     expect(applyHref({ seasonId: "s-2" })).toBe("/propose?type=role_application&season=s-2");
+    // A seat held through an application renews as an amendment of those terms (seat settings PR8).
+    expect(applyHref({ seasonId: "s-2", renew: "seat-host", supersedes: "sa-00000000000000a1" })).toBe(
+      "/propose?type=role_application&seat=seat-host&renew=seat-host&supersedes=sa-00000000000000a1&season=s-2",
+    );
   });
 });

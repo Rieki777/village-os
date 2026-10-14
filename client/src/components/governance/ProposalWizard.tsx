@@ -44,7 +44,7 @@ import { settingsWords } from "@shared/seatSettings";
 import WizardStepper from "./WizardStepper";
 import { isSearchSource, labelFor, loadOrg, loadPickOptions, type PickOption } from "./pickSources";
 import { pickedSeats } from "./SeatPicksField";
-import { offerPrefill } from "./roleApplicationType";
+import { offerPrefill, renewalPrefill } from "./roleApplicationType";
 import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
@@ -170,9 +170,19 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
    */
   const firstSeat = seatPreview;
   const settingsKey = settingsField?.key ?? null;
+  const renewing = answers.supersedesId;
   useEffect(() => {
     if (!firstSeat || !settingsKey || answers[settingsKey] !== undefined) return;
     let alive = true;
+    // A renewal (PR8) starts from the terms and seats it renews; anything else from the seat's offer.
+    if (renewing) {
+      void renewalPrefill(renewing).then((r) => {
+        if (alive && r) setAnswers((prev) => (prev[settingsKey] === undefined ? { ...prev, seatIds: r.seatIds, [settingsKey]: r.settings } : prev));
+      });
+      return () => {
+        alive = false;
+      };
+    }
     void loadOrg().then((org) => {
       const offer = offerPrefill([firstSeat], org);
       if (!alive || offer === undefined) return;
@@ -181,7 +191,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     return () => {
       alive = false;
     };
-  }, [firstSeat, settingsKey, answers]);
+  }, [firstSeat, settingsKey, answers, renewing]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -132,6 +132,19 @@ describe("a wizard opened from a seat", () => {
     expect(ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["s-1"] })).not.toHaveProperty("seasonId");
   });
 
+  it("a renewal names the terms it supersedes, and the route reads it (seat settings PR8)", () => {
+    expect(roleApplicationStart("?type=role_application&seat=seat-lead&renew=seat-lead&supersedes=sa-00000000000000a1&season=s-next")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-lead"], seasonId: "s-next", supersedesId: "sa-00000000000000a1" },
+    });
+    const body = ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["seat-lead"], supersedesId: "sa-00000000000000a1" });
+    const parsed = parseApplicationInput(body);
+    expect(parsed.ok && parsed.input.supersedesId).toBe("sa-00000000000000a1");
+    // Not a renewal: nothing is sent, and a malformed id is refused by the parser.
+    expect(ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["s-1"] })).not.toHaveProperty("supersedesId");
+    expect(parseApplicationInput({ ...body, supersedesId: "not-an-id" }).ok).toBe(false);
+  });
+
   it("starts the terms from the first seat's terms on offer, and from the preset when there are none", () => {
     const org = {
       roles: [

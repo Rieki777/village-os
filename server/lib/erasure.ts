@@ -109,6 +109,7 @@ import { forgetMemberJournal } from "./journal";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
 import { eraseFromAlignments } from "./alignmentErasure";
+import { recordPartyLeft } from "./alignmentEndings";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { isExampleUser } from "./examples";
@@ -310,6 +311,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "quest-proposals",
       run: async () => {
         await forgetProposer(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Aligned terms (0251, seat settings PR8): every text the member is a
+       * party to that has not ended gets a `party_left` ending, so the record
+       * says how it ended. Leaving never waits on terms; this only writes.
+       * BEFORE the holdings and the org seatings are released, because a released seating ends
+       * seat terms by the derivation and the record would then never say why.
+       * Keyed on the text, so a resume writes nothing twice.
+       */
+      name: "alignment-party-left",
+      run: async () => {
+        await recordPartyLeft(pool, target.id, new Date());
       },
     },
     {

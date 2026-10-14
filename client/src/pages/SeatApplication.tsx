@@ -43,7 +43,7 @@ import { useSeason } from "@/lib/gameApi";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
-import { seatList } from "@shared/seatApplications";
+import { applicationHref, seatList } from "@shared/seatApplications";
 import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
@@ -68,6 +68,8 @@ export const APPLICATION_WORDS = {
   withdrawYes: "Yes, withdraw it",
   withdrawNo: "Keep it",
   votingLine: "The village is voting on this application.",
+  amends: "These terms amend earlier ones. The earlier terms stay in force until these are.",
+  readEarlier: "Read the earlier terms",
   readTheVote: "Read the vote",
   laterLine: "Adopted. The seats are taken up on the first day it names.",
   packageTerms: "One set of terms covers every seat above.",
@@ -265,6 +267,14 @@ export default function SeatApplication() {
 
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
+            {app.supersedesId && (
+              <p className="text-sm text-stone-700">
+                {APPLICATION_WORDS.amends}{" "}
+                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-teal-deep underline underline-offset-2">
+                  {APPLICATION_WORDS.readEarlier}
+                </a>
+              </p>
+            )}
 
             <section aria-labelledby="sa-words">
               <h2 id="sa-words" className="text-lg font-bold text-stone-900">

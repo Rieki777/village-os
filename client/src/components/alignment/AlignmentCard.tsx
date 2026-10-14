@@ -6,15 +6,20 @@
  * they have, and the receipt. Used on /seat-applications/:id and in the
  * profile's "What you have aligned with".
  *
+ * How the terms are ending (PR8) sits under the title in one line, and a
+ * party's own acts, give notice, end by agreement, take either back, sit
+ * under the parties (`EndingActions`).
+ *
  * An application from before PR5 has no text yet (`retrofit`): its words are
  * rendered from the stored, never-updated terms, and the candidate's Align
  * sends those words back so the server writes the text it showed.
  */
 import { useState } from "react";
 import { Download } from "lucide-react";
-import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
+import { ALIGN_WORDS, DEFAULT_NOTICE_DAYS, intentSentence } from "@shared/alignments";
 import AlignButton from "./AlignButton";
-import { AlignedStamp, PartyChips, StateTag } from "./AlignmentMarks";
+import { AlignedStamp, EndingLine, PartyChips, StateTag } from "./AlignmentMarks";
+import EndingActions from "./EndingActions";
 import { alignWithApplication, alignWithText, downloadReceipt, type ServedAlignment } from "./alignmentsApi";
 
 export default function AlignmentCard({
@@ -43,7 +48,12 @@ export default function AlignmentCard({
         <StateTag state={a.state} />
         {a.state === "in-force" && <AlignedStamp sealed={a.sealed} />}
       </div>
-      {a.why && a.state !== "in-force" && <p className="mt-1 text-sm text-muted-foreground">{a.why}</p>}
+      {a.why && a.state !== "in-force" && a.why !== a.endingLine && <p className="mt-1 text-sm text-muted-foreground">{a.why}</p>}
+      {a.endingLine && (
+        <div className="mt-2">
+          <EndingLine line={a.endingLine} />
+        </div>
+      )}
 
       {showWords && (
         <pre
@@ -85,6 +95,9 @@ export default function AlignmentCard({
           </button>
         )}
       </div>
+      {a.textId && (
+        <EndingActions textId={a.textId} you={a.you?.acts ?? null} village={a.village ?? null} noticeDays={a.noticeDays?.days ?? DEFAULT_NOTICE_DAYS} onDone={onChanged} />
+      )}
       {receiptError && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {receiptError}

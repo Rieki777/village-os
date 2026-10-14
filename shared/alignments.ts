@@ -130,6 +130,141 @@ export function renderSeatTermsText(seatNames: readonly string[], settings: Seat
 
 export type AlignmentState = "pending" | "in-force" | "ended";
 
+// ── Endings (PR8) ────────────────────────────────────────────────────────────
+
+/** How a text stops being in force (0251). Insert only: a withdrawal is its own row. */
+export const ENDING_KINDS = ["notice", "notice_withdrawn", "superseded", "mutual", "term_end", "party_left"] as const;
+export type EndingKind = (typeof ENDING_KINDS)[number];
+
+/** An ending id: `ae-` and sixteen hex characters. */
+export const ENDING_ID = /^ae-[0-9a-f]{16}$/;
+
+/**
+ * The notice a party gives when the terms name none, in days. Two weeks, the
+ * figure every platform term preset and the ending preset carry
+ * (shared/seatPresets.ts), so terms written without an ending group read the
+ * same as the presets a member most likely started from.
+ */
+export const DEFAULT_NOTICE_DAYS = 14;
+
+/**
+ * The notice these terms ask for: the ending group's days, else the term
+ * group's, else the default. `from` says which, so the page can say it.
+ */
+export function noticeDaysOf(settings: SeatSettings | null | undefined): { days: number; from: "ending" | "term" | "default" } {
+  const ending = settings?.ending?.noticeDays;
+  if (typeof ending === "number" && Number.isFinite(ending) && ending >= 0) return { days: Math.floor(ending), from: "ending" };
+  const term = settings?.term?.noticeDays;
+  if (typeof term === "number" && Number.isFinite(term) && term >= 0) return { days: Math.floor(term), from: "term" };
+  return { days: DEFAULT_NOTICE_DAYS, from: "default" };
+}
+
+/** One ending row, as the derivation reads it. `effectiveAt` and `at` are ISO instants. */
+export interface EndingInput {
+  id: string;
+  kind: EndingKind;
+  refersTo: string | null;
+  partyKey: string | null;
+  effectiveAt: string;
+}
+
+/** The ending that ended a text, or the one running toward it. */
+export interface DerivedEnding {
+  kind: Exclude<EndingKind, "notice_withdrawn">;
+  /** When it took or takes effect, ISO. */
+  at: string;
+  /** The party who gave it, for a notice; null for a fact the sweep wrote. */
+  partyKey: string | null;
+  /** For superseded, the text that superseded it. */
+  refersTo: string | null;
+}
+
+/** A notice or an ask to end by agreement that has not taken effect and was not taken back. */
+export interface OpenAsk {
+  id: string;
+  partyKey: string;
+  /** For a notice, when it takes effect. For an ask, when it was made. ISO. */
+  at: string;
+}
+
+/**
+ * Read the endings: which one (if any) has ended the text by `now`, the
+ * notices still running, and the asks to end by agreement still open.
+ *
+ * A NOTICE OR AN ASK TAKEN BACK ENDS NOTHING: a `notice_withdrawn` row names
+ * it in `refers_to`. A notice ends the text at its `effective_at`. An ask to
+ * end by agreement ends it once EVERY required party has one open, at the
+ * moment the last of them asked. Superseded, term_end and party_left end it at
+ * their own instant. The earliest ending that has taken effect wins.
+ */
+export function readEndings(
+  endings: readonly EndingInput[],
+  requiredParties: readonly string[],
+  now: string,
+): { ended: DerivedEnding | null; notices: OpenAsk[]; asks: OpenAsk[] } {
+  const withdrawn = new Set(endings.filter((e) => e.kind === "notice_withdrawn" && e.refersTo).map((e) => e.refersTo as string));
+  const live = endings.filter((e) => e.kind !== "notice_withdrawn" && !withdrawn.has(e.id));
+  const taken: DerivedEnding[] = [];
+  const notices: OpenAsk[] = [];
+  for (const e of live) {
+    if (e.kind === "mutual") continue;
+    if (e.effectiveAt <= now) taken.push({ kind: e.kind as DerivedEnding["kind"], at: e.effectiveAt, partyKey: e.partyKey, refersTo: e.refersTo });
+    else if (e.kind === "notice" && e.partyKey) notices.push({ id: e.id, partyKey: e.partyKey, at: e.effectiveAt });
+  }
+  // One open ask per party: the earliest that was not taken back.
+  const asks: OpenAsk[] = [];
+  for (const e of [...live].filter((x) => x.kind === "mutual" && x.partyKey).sort((a, b) => (a.effectiveAt < b.effectiveAt ? -1 : 1))) {
+    if (!asks.some((a) => a.partyKey === e.partyKey)) asks.push({ id: e.id, partyKey: e.partyKey as string, at: e.effectiveAt });
+  }
+  const agreed = requiredParties.length > 0 && requiredParties.every((p) => asks.some((a) => a.partyKey === p));
+  if (agreed) {
+    const last = asks.filter((a) => requiredParties.includes(a.partyKey)).reduce((m, a) => (a.at > m ? a.at : m), "");
+    if (last <= now) taken.push({ kind: "mutual", at: last, partyKey: null, refersTo: null });
+  }
+  taken.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  const ended = taken[0] ?? null;
+  return { ended, notices: ended ? [] : notices, asks: ended || agreed ? [] : asks };
+}
+
+/**
+ * One line about how the terms are ending or ended, as every surface prints
+ * it: the drawer, the profile, the application page and /aligned. `on` is a
+ * day already in words, in the village's zone. Keyed by the kind, so a new
+ * kind cannot print blank.
+ */
+export const ENDING_WORDS: Record<DerivedEnding["kind"], (on: string, version: number) => string> = {
+  notice: (on) => `Ended by notice on ${on}`,
+  mutual: (on) => `Ended by agreement on ${on}`,
+  superseded: (_on, version) => `Superseded by version ${version}`,
+  term_end: (on) => `The term ended on ${on}`,
+  party_left: (on) => `Ended on ${on}, when a party left the village`,
+};
+
+export const ENDINGS_WORDS = {
+  noticeRunning: (on: string) => `Notice given, ends ${on}`,
+  asked: (who: string) => `${who} asked to end by agreement`,
+  giveNotice: "Give notice",
+  giveNoticeFor: "Give notice for the village",
+  noticeLine: (days: number) =>
+    `Giving notice ends these terms ${days === 0 ? "at once" : `in ${days} ${days === 1 ? "day" : "days"}`}. Nothing unseats anybody: the seat ends through the village's own doors. You can take it back until it takes effect.`,
+  confirmNotice: "Give notice now",
+  takeBackNotice: "Take back the notice",
+  endByAgreement: "End by agreement",
+  endByAgreementFor: "End by agreement for the village",
+  agreementLine: "The terms end once every party asks. Until then you can take your ask back.",
+  takeBackAsk: "Take back the ask",
+  cancel: "Keep the terms",
+  yourNotice: (on: string) => `Your notice runs until ${on}.`,
+  villageNotice: (on: string) => `The village's notice runs until ${on}.`,
+  youAsked: "You asked to end these terms by agreement.",
+  villageAsked: "The village asked to end these terms by agreement.",
+  forTheVillage: "For the village",
+  /** On the way out: the member reads which terms their leaving ends. */
+  leavingEnds: "Leaving ends these terms you have aligned with:",
+  leavingNeverWaits: "Leaving never waits on terms. Each one is recorded as ended when a party left the village.",
+  leftEnded: "These terms ended when you left:",
+} as const;
+
 export interface StateInput {
   contentHash: string;
   /** Every party, required or not. */
@@ -148,6 +283,12 @@ export interface StateInput {
   seatings: { open: number; total: number } | null;
   /** The subject closed before the terms could hold, in words, or null. */
   closed: string | null;
+  /** The text's endings (PR8). Absent reads as none. */
+  endings?: readonly EndingInput[];
+  /** Now, ISO. Endings take effect against it. Absent: the start of `today`'s day after, so only the day counts. */
+  now?: string;
+  /** The instant the term ends, ISO, so a term's end and an ending can be put in order. */
+  termEndAt?: string | null;
 }
 
 export interface DerivedState {
@@ -158,6 +299,14 @@ export interface DerivedState {
   waitingOn: string[];
   /** Why it is pending or ended, in words. Null when in force. */
   why: string | null;
+  /** What ended it (PR8): an ending row, the term, the seating, or the application closing. Null while not ended. */
+  endedBy: "ending" | "term" | "seating" | "closed" | null;
+  /** The ending that ended it, when `endedBy` is "ending", or the term's end when "term". */
+  ending: DerivedEnding | null;
+  /** Notices given and still running. Empty once ended. */
+  notices: OpenAsk[];
+  /** Open asks to end by agreement. Empty once ended. */
+  asks: OpenAsk[];
 }
 
 /**
@@ -171,17 +320,41 @@ export interface DerivedState {
  */
 export function deriveAlignmentState(s: StateInput): DerivedState {
   const matched = new Set(s.alignments.filter((a) => a.contentHash === s.contentHash).map((a) => a.partyKey));
-  const waitingOn = s.parties.filter((p) => p.required && !matched.has(p.partyKey)).map((p) => p.partyKey);
+  const required = s.parties.filter((p) => p.required).map((p) => p.partyKey);
+  const waitingOn = required.filter((p) => !matched.has(p));
   const allAligned = waitingOn.length === 0;
-  const out = (state: AlignmentState, why: string | null): DerivedState => ({ state, allAligned, waitingOn, why });
+  // With no instant handed in, an ending counts once its day has begun after today.
+  const now = s.now ?? `${s.today}T23:59:59.999Z`;
+  const read = readEndings(s.endings ?? [], required, now);
+  const out = (state: AlignmentState, why: string | null, endedBy: DerivedState["endedBy"] = null, ending: DerivedEnding | null = null): DerivedState => ({
+    state,
+    allAligned,
+    waitingOn,
+    why,
+    endedBy,
+    ending,
+    notices: state === "ended" ? [] : read.notices,
+    asks: state === "ended" ? [] : read.asks,
+  });
 
-  if (s.closed) return out("ended", s.closed);
-  if (s.effectiveTo && s.today > s.effectiveTo) return out("ended", "The term these terms ran for has ended.");
+  if (s.closed) return out("ended", s.closed, "closed");
+  /*
+   * AN ENDING AND THE TERM'S END, IN ORDER (PR8). A non-withdrawn ending whose
+   * moment has passed ends the text; so does the term. When both have, the
+   * earlier one is what ended it, so a notice that ran out before the term
+   * reads as notice and a notice running past the term reads as the term.
+   */
+  const termOver = !!s.effectiveTo && s.today > s.effectiveTo;
+  const termAt = termOver ? (s.termEndAt ?? "") : null;
+  if (read.ended && (termAt === null || read.ended.at < termAt)) return out("ended", null, "ending", read.ended);
+  if (termOver) {
+    return out("ended", "The term these terms ran for has ended.", "term", { kind: "term_end", at: termAt ?? "", partyKey: null, refersTo: null });
+  }
   if (!allAligned) return out("pending", "Waiting for every party to align.");
   if (s.effectiveFrom && s.today < s.effectiveFrom) return out("pending", "Aligned, and waiting for the first day it names.");
   if (s.seatings) {
     if (s.seatings.open > 0) return out("in-force", null);
-    if (s.seatings.total > 0) return out("ended", "The seating these terms were held on has ended.");
+    if (s.seatings.total > 0) return out("ended", "The seating these terms were held on has ended.", "seating");
     return out("pending", "Aligned, and waiting for the seats to be taken up.");
   }
   return out("in-force", null);

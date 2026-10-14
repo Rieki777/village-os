@@ -14,7 +14,7 @@ import { Link } from "wouter";
 import { CircleCheck, Circle } from "lucide-react";
 import { ALIGNED_WORDS, type RegisterRow } from "@shared/alignedRegister";
 import { civilDayWords } from "@shared/seasonPlans";
-import { AlignedStamp, StateTag } from "./AlignmentMarks";
+import { AlignedStamp, EndingLine, StateTag } from "./AlignmentMarks";
 
 const linkClass =
   "inline-flex min-h-11 items-center px-1 text-sm font-medium text-notice underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring";
@@ -35,7 +35,13 @@ export default function RegisterEntry({ row, headingLevel = 3 }: { row: Register
         <StateTag state={row.state} />
         {row.state === "in-force" && <AlignedStamp sealed={row.sealed} />}
       </div>
-      {row.why && row.state !== "in-force" && <p className="mt-1 text-sm text-muted-foreground">{row.why}</p>}
+      {/* An ending says itself in its own line (PR8); any other reason keeps the quiet one. */}
+      {row.why && row.state !== "in-force" && row.why !== row.endingLine && <p className="mt-1 text-sm text-muted-foreground">{row.why}</p>}
+      {row.endingLine && (
+        <div className="mt-2">
+          <EndingLine line={row.endingLine} />
+        </div>
+      )}
       {day && <p className="mt-2 text-sm font-medium text-foreground">{day}</p>}
 
       <ul className="mt-3 space-y-1.5" aria-label={ALIGNED_WORDS.parties}>

@@ -9,7 +9,7 @@
  * Fetches nothing and imports nothing from `@/lib/gameApi`, like the drawer it
  * sits in: the drawer's tests mock that module down.
  */
-import { BadgeCheck, Circle, CircleCheck } from "lucide-react";
+import { BadgeCheck, Circle, CircleCheck, Hourglass } from "lucide-react";
 import { ALIGN_WORDS, STATE_WORDS, type AlignmentState } from "@shared/alignments";
 
 export interface ChipParty {
@@ -64,12 +64,42 @@ export function StateTag({ state }: { state: AlignmentState }) {
   );
 }
 
-/** The tray's alignment block: the stamp once in force, and the chips. */
-export default function AlignmentMarks({ state, sealed, parties }: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[] }) {
+/**
+ * How the terms are ending or ended (PR8), in the one line the server wrote:
+ * "Notice given, ends 9 Nov 2026", "Ended by agreement on 2 Dec 2026",
+ * "Superseded by version 2". Nothing when nothing is ending them.
+ */
+export function EndingLine({ line }: { line: string | null | undefined }) {
+  if (!line) return null;
+  return (
+    <p data-ending-line="" className="flex items-start gap-1.5 text-sm font-medium text-foreground">
+      <Hourglass className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
+      <span>{line}</span>
+    </p>
+  );
+}
+
+/** The tray's alignment block: the stamp once in force, the chips, and how the terms are ending. */
+export default function AlignmentMarks({
+  state,
+  sealed,
+  parties,
+  endingLine = null,
+}: {
+  state: AlignmentState;
+  sealed: boolean;
+  parties: readonly ChipParty[];
+  endingLine?: string | null;
+}) {
   return (
     <div data-alignment-marks="" className="flex flex-wrap items-center gap-3 border-t border-border/50 pt-2">
       {state === "in-force" && <AlignedStamp sealed={sealed} />}
       <PartyChips parties={parties} />
+      {endingLine && (
+        <div className="basis-full">
+          <EndingLine line={endingLine} />
+        </div>
+      )}
     </div>
   );
 }

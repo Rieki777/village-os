@@ -32,6 +32,7 @@ import { ALIGN_WORDS } from "@shared/alignments";
 import type { WizardTypeConfig } from "./wizardConfig";
 import { atLeast } from "./wizardValidators";
 import { pickedSeats } from "./SeatPicksField";
+import { fetchApplication } from "./seatApplicationsApi";
 
 /** The whole preset the terms step starts from when nothing is written yet. */
 export const ROLE_APPLICATION_PREFILL = "platform:whole-volunteer-seat";
@@ -77,6 +78,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
       ...(String(a.startsNoEarlierThan ?? "").trim() ? { startsNoEarlierThan: String(a.startsNoEarlierThan).trim() } : {}),
       // From the member's season plan: a season still to come sets the first day to its own.
       ...(String(a.seasonId ?? "").trim() ? { seasonId: String(a.seasonId).trim() } : {}),
+      // A renewal of terms the member holds (PR8): adopted, it supersedes them.
+      ...(String(a.supersedesId ?? "").trim() ? { supersedesId: String(a.supersedesId).trim() } : {}),
     }),
   },
   steps: {
@@ -162,10 +165,27 @@ export function roleApplicationStart(search: string): { type: "role_application"
   if (q.get("type") !== "role_application") return null;
   const seat = String(q.get("seat") ?? q.get("renew") ?? "").trim();
   const season = String(q.get("season") ?? "").trim();
+  const supersedes = String(q.get("supersedes") ?? "").trim();
   return {
     type: "role_application",
-    answers: { ...(seat ? { seatIds: [seat] } : {}), ...(season ? { seasonId: season } : {}) },
+    answers: { ...(seat ? { seatIds: [seat] } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
   };
+}
+
+/**
+ * A RENEWAL STARTS FROM THE TERMS IT RENEWS (seat settings PR8). The term
+ * warning's "Carry on" names the application the member holds the seat
+ * through; the wizard then starts from that application's seats and terms,
+ * so renewing on the same terms is one pass through Review. Undefined when the
+ * application cannot be read: the wizard then starts as it always has.
+ */
+export async function renewalPrefill(supersedesId: unknown): Promise<{ seatIds: string[]; settings: unknown } | undefined> {
+  const id = String(supersedesId ?? "").trim();
+  if (!/^sa-[0-9a-f]{16}$/.test(id)) return undefined;
+  const a = await fetchApplication(id);
+  if (!a.ok) return undefined;
+  const app = a.data.application;
+  return { seatIds: app.seats.map((s) => s.id), settings: app.settings };
 }
 
 /**
