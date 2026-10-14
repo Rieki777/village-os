@@ -298,7 +298,9 @@ export default function ModuleDetail() {
 
         {history && <ModuleHistoryStrip events={history.events} />}
 
-        {viewer.mode !== "visitor" && !steward && (m.dialKeys ?? []).length > 0 && <SuggestDial dialKeys={m.dialKeys ?? []} />}
+        {/* Only once the module is on for members: a preview stays unsaid below
+            steward, and its settings would say it is there. */}
+        {viewer.mode !== "visitor" && !steward && m.on === true && (m.dialKeys ?? []).length > 0 && <SuggestDial dialKeys={m.dialKeys ?? []} />}
 
         {steward && adminRow && (
           <ModuleStewardPanel m={adminRow} all={adminRows ?? []} extra={extra} viewer={viewer} onChanged={reloadAdmin} />
