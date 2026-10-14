@@ -212,6 +212,10 @@ COPY --from=build /app/package.json ./package.json
 #   docs/knowledge/, docs/modules/   server/lib/knowledge.ts:378 and :387
 #   docs/skills/                     server/index.ts:6649
 #   docs/prototypes/grounds-v0.html  server/index.ts:31976 (the Living Map)
+#   server/assets/avatars/           server/routes/stockAvatars.ts (STOCK_AVATAR_DIR)
+#                                    The stock character art, served at
+#                                    /images/avatars/. Kept out of dist/public
+#                                    so it is not charged to the client budget.
 #
 # The rest of docs/ is not copied. It is 21 MB, of which 19 MB is
 # docs/prototypes, and nothing outside the paths above is opened at runtime.
@@ -220,6 +224,7 @@ COPY --from=build /app/package.json ./package.json
 # constants (the six above) plus DATA_DIR/uploads, which is runtime state.
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/server/seeds ./server/seeds
+COPY --from=build /app/server/assets ./server/assets
 COPY --from=build /app/docs/knowledge ./docs/knowledge
 COPY --from=build /app/docs/modules ./docs/modules
 COPY --from=build /app/docs/skills ./docs/skills

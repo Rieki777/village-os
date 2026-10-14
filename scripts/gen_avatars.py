@@ -2,7 +2,8 @@
 """Character card portraits for the class selection page.
 
 Five classes x two presentations x three skin tones = 30 card portraits at
-`client/public/images/avatars/<archetype>-<f|m>-<tone>.webp`.
+`server/assets/avatars/<archetype>-<f|m>-<tone>.webp`, which the server
+serves at /images/avatars/ (server/routes/stockAvatars.ts).
 
 The style guide is reused verbatim from the platform repo's character-art
 prompt: solarpunk meets elven meets regenerative future, deep forest greens,
@@ -53,7 +54,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT_DIR = os.path.join(REPO, "client", "public", "images", "avatars")
+OUT_DIR = os.path.join(REPO, "server", "assets", "avatars")
 BASE_DIR = os.path.join(REPO, "scripts", "avatar-bases")
 MANIFEST = os.path.join(OUT_DIR, "manifest.json")
 
@@ -475,7 +476,7 @@ def run_samples(key: str, man: dict, dry: bool, force: bool) -> None:
     build_asset(key, "building", "f", "olive", man, dry, force)
     print("\nSamples done. Review them before running the full set:")
     for a in ("building-f-deep", "building-m-light", "building-f-olive"):
-        print(f"  client/public/images/avatars/{a}.webp")
+        print(f"  server/assets/avatars/{a}.webp")
 
 
 def main() -> int:

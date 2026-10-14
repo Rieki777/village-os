@@ -475,9 +475,10 @@ jobs:
         #   /                           dist/public, the SPA shell
         #   /grounds/manifest.json      docs/prototypes/grounds-v0.html
         #   /api/agent/v1/openapi.json  docs/skills/references
+        #   /images/avatars/...webp     server/assets/avatars
         run: |
           set -euo pipefail
-          for path in / /grounds/manifest.json /api/agent/v1/openapi.json; do
+          for path in / /grounds/manifest.json /api/agent/v1/openapi.json /images/avatars/building-f-deep.webp; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000${path}")
             echo "${code}  ${path}"
             if [ "$code" != "200" ]; then
