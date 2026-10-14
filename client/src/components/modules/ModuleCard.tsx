@@ -3,7 +3,9 @@
  * few pills that change what a reader can do: tier (included is silent, as
  * everywhere), the pool badge in POOL_REASON_COPY's wording, a price where
  * one exists, "Always on" for core, "On in this village" for signed-in
- * viewers, "Preview" for admins only, and a withdrawn line that never hides.
+ * viewers, "Preview" and "Not on yet" for stewards only, and a withdrawn line
+ * that never hides. State pills are the only additions R55 allows on a tile:
+ * the tile stays one link, with no button inside it.
  */
 import { Link } from "wouter";
 import { POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
@@ -18,6 +20,8 @@ export interface CatalogModule {
   tier: string;
   dataClass: ModuleDataClass;
   group: string | null;
+  /** The domain a module serves, where it names one. */
+  provides?: string | null;
   setup: string;
   requires: string[];
   recommends: string[];
@@ -43,11 +47,15 @@ export interface CatalogModule {
   imageUrl: string | null;
   on?: boolean;
   lifecycle?: string;
+  /** Signed-in readers: the modules it is waiting on, when it is resting for want of one. */
+  demotedBecause?: string[] | null;
+  /** The dials this module owns that the village may suggest changes to. */
+  dialKeys?: string[];
 }
 
 const PILL = "text-[10px] px-1.5 py-0.5 rounded-full border";
 
-export default function ModuleCard({ module: m }: { module: CatalogModule }) {
+export default function ModuleCard({ module: m, steward = false }: { module: CatalogModule; steward?: boolean }) {
   /*
    * The pill answers one question a browser has: does running this send $ReGen
    * to somebody outside the platform. So it shows for a share that is PAID and
@@ -89,6 +97,11 @@ export default function ModuleCard({ module: m }: { module: CatalogModule }) {
           )}
           {m.lifecycle === "preview" && (
             <span className={`${PILL} bg-amber-50 text-amber-700 border-amber-200`}>Preview</span>
+          )}
+          {/* A steward reads the whole shelf as a plan, so "not on" is a
+              state worth a pill for them. Never a call to action (R55). */}
+          {steward && !m.core && (m.lifecycle ?? "off") === "off" && (
+            <span className={`${PILL} bg-muted text-muted-foreground border-border`}>Not on yet</span>
           )}
           {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border-sky-200`}>{TIER_PILL.connected}</span>}
           {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border-violet-200`}>{TIER_PILL.managed}</span>}

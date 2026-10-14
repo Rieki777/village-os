@@ -17,7 +17,8 @@ describe("the settings door", () => {
 
   it("does not swallow the admin page itself", () => {
     expect(isVillageSettingsRoute("/admin")).toBe(false);
-    expect(isVillageSettingsRoute("/admin?tab=modules")).toBe(false);
+    expect(isVillageSettingsRoute("/admin?tab=integrations")).toBe(false);
+    expect(isVillageSettingsRoute("/modules/stays")).toBe(false);
     expect(isVillageSettingsRoute("/admin?tab=setup&x=1")).toBe(true);
   });
 
@@ -65,7 +66,7 @@ describe("who the door is answered for", () => {
     for (const may of [true, false]) {
       const l = land();
       let opened = false;
-      expect(takeSettingsDoor("/admin?tab=modules", may, l.land, () => { opened = true; })).toBe(false);
+      expect(takeSettingsDoor("/modules/stays", may, l.land, () => { opened = true; })).toBe(false);
       expect(opened).toBe(false);
       expect(l.closed()).toBe(false);
     }

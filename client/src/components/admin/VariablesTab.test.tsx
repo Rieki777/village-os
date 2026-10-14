@@ -193,7 +193,7 @@ describe("VariablesTab", () => {
     // The server tagged this one as owned by a module, so it is edited there.
     expect(screen.queryByText("Report hide threshold")).toBeNull();
     const link = screen.getByRole("link", { name: "Forum & Decisions" });
-    expect(link.getAttribute("href")).toBe("/admin?tab=modules&module=forum");
+    expect(link.getAttribute("href")).toBe("/modules/forum");
     expect(screen.getByText(/1 setting, module off/)).toBeInTheDocument();
   });
 

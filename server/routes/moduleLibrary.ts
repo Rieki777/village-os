@@ -16,7 +16,8 @@
  * bundle and check-voice keeps holding every sentence.
  *
  * State rides the `/api/modules` viewer filter: signed-in members get `on`
- * (true at members or public), admins also get `lifecycle`, and an anonymous
+ * (true at members or public) and `lifecycle` where it is members or public,
+ * stewards get `lifecycle` always, and an anonymous
  * reader gets no state key at all, so what a village is trying out never leaks.
  *
  * NEW: `viewer` says how this reader sees the page, decided HERE, so the client
@@ -68,10 +69,12 @@ import {
   LIFECYCLE_RANK,
   MODULES,
   MODULES_BY_ID,
+  modulesOwning,
   priceLine,
   supportRoute,
   type ModuleLifecycle,
 } from "../../shared/modules";
+import { VARIABLES, ringOf } from "../../shared/gameVariables";
 import { BUILD_A_MODULE_URL, BUILDERS_POOL_URL, MODULE_CATALOG, MODULE_GROUPS } from "../../shared/moduleCatalog";
 import { poolStatus } from "../../shared/modulePool";
 import {
@@ -108,6 +111,8 @@ type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "firstName" | "projectName"
   /** Reveal a module's standing examples the first time it turns on. A courtesy; never throws. */
   seedExamplesOnEnable: (moduleId: string) => Promise<void>;
 };
+
+const OPEN_DIALS = VARIABLES.filter((v) => ringOf(v) === "open").map((v) => v.key);
 
 const visibleToMembers = (lc: string | null | undefined) =>
   isLifecycle(lc) && LIFECYCLE_RANK[lc] >= LIFECYCLE_RANK.members;
@@ -176,8 +181,19 @@ export function register(app: Express, deps: Deps): void {
           priceLine: m.pricing ? priceLine(m.pricing) : null,
           card: MODULE_CATALOG[m.id] ?? null,
           imageUrl,
+          // The dials this module owns that the village may propose changes
+          // to (the open ring). A member suggests a change beside the dial
+          // through the ordinary mechanics proposal (Rye, 2026-09-25).
+          dialKeys: OPEN_DIALS.filter((key) => modulesOwning(key).includes(m.id)),
           ...(authed ? { on: m.core || lc === "members" || lc === "public", demotedBecause } : {}),
-          ...(seesState ? { lifecycle: m.core ? "public" : lc } : {}),
+          // A member is told how wide a module they can already see stands
+          // (members or everyone), so a proposal never asks for what is there.
+          // Preview and off stay unsaid below steward.
+          ...(seesState
+            ? { lifecycle: m.core ? "public" : lc }
+            : authed && (m.core || visibleToMembers(lc))
+              ? { lifecycle: m.core ? "public" : lc }
+              : {}),
         };
       }),
     });
