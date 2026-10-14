@@ -141,6 +141,7 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
+import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
@@ -21072,6 +21073,7 @@ ${inner}
       await addActivity("governance", `${firstName(user.name)} proposed a change to the game's rules: ${title}`, {
         actorUserId: user.id, entityType: "mechanics_proposal", entityRef: id,
       });
+      await tellSwitchHolders({ liveHoldersOf, notify }, { proposalId: id, proposerId: String(user.id), proposerFirstName: firstName(user.name), changes: normalized });
     }
     res.json({
       id,
