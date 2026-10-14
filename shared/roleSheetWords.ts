@@ -72,6 +72,14 @@ export const SHEET_WORDS = {
   livePreviewSub: "Shows the role you picked.",
 } as const;
 
+/**
+ * The line under a seat's live preview. "Shows the role you picked." was wrong
+ * twice over for a seat application with several seats: it is a seat, and the
+ * card shows only the first (red team U11). No count: the line says which.
+ */
+export const seatPreviewSub = (picked: number): string =>
+  picked > 1 ? "Shows the first seat you picked. Your terms cover every seat you picked." : "Shows the seat you picked.";
+
 export const suitsLabel = (className: string): string => `Suits ${className}`;
 export const speaksForLabel = (circle: string): string => `Speaks for ${circle}`;
 export const speaksForGloss = (circle: string): string => `This seat speaks for ${circle} on how it decides.`;
