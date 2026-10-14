@@ -445,8 +445,16 @@ export function register(app: Express, deps: Deps): void {
 
   type EndingInput = { textId: string; partyKey: string; actorId: string; now: Date; timezone: string; endingId: string };
 
+  /** The three acts, what the other parties hear about each, and the key it is told under. */
+  const ENDING_ACTS: Record<"notice" | "ask" | "take-back", { act: (pool: any, input: EndingInput) => Promise<EndingAct>; tell: (seats: string) => string }> = {
+    notice: { act: giveNotice, tell: (seats) => `Notice given on the terms for ${seats}` },
+    ask: { act: askToEnd, tell: (seats) => `Asked to end by agreement: the terms for ${seats}` },
+    "take-back": { act: takeBack, tell: (seats) => `Taken back: a notice or an ask on the terms for ${seats}` },
+  };
+
   /** The common door: sign-in, the limit, the ids, the acting party, then the act and what the other parties hear. */
-  const endingDoor = (act: (pool: any, input: EndingInput) => Promise<EndingAct>, tell: (seats: string) => string, keySuffix: string) => async (req: any, res: any) => {
+  async function endingRoute(req: any, res: any, keySuffix: keyof typeof ENDING_ACTS) {
+    const { act, tell } = ENDING_ACTS[keySuffix];
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to act on your terms." });
     const userId = String(user.id);
@@ -477,9 +485,9 @@ export function register(app: Express, deps: Deps): void {
       effectiveAt: out.effectiveAt.toISOString(),
       alignment: after ? await presentView(after, userId, nameOf, true, { actsForVillage: party.partyKey === VILLAGE_PARTY }) : null,
     });
-  };
+  }
 
-  app.post("/api/profile/alignments/:id/notice", endingDoor(giveNotice, (seats) => `Notice given on the terms for ${seats}`, "notice"));
-  app.post("/api/profile/alignments/:id/end-by-agreement", endingDoor(askToEnd, (seats) => `Asked to end by agreement: the terms for ${seats}`, "ask"));
-  app.post("/api/profile/alignments/:id/endings/:endingId/take-back", endingDoor(takeBack, (seats) => `Taken back: a notice or an ask on the terms for ${seats}`, "take-back"));
+  app.post("/api/profile/alignments/:id/notice", (req, res) => endingRoute(req, res, "notice"));
+  app.post("/api/profile/alignments/:id/end-by-agreement", (req, res) => endingRoute(req, res, "ask"));
+  app.post("/api/profile/alignments/:id/endings/:endingId/take-back", (req, res) => endingRoute(req, res, "take-back"));
 }
