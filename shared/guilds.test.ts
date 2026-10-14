@@ -235,8 +235,9 @@ describe("the rulings of 2026-10-13", () => {
     }
     expect(notAlive).not.toContain("resend-api-key");
     const probe = SEEDS_BY_ID["resend-api-key"]!.liveCheck;
-    expect(probe.via === "probe" && probe.builtAt).toBe("server/lib/comms/probe.ts");
-    expect(fs.existsSync(path.join(__dirname, "..", "server", "lib", "comms", "probe.ts"))).toBe(true);
+    // The post office's own test email, read by item 13's reader (Rye: reuse it).
+    expect(probe.via === "probe" && probe.builtAt).toBe("server/lib/comms/setup.ts");
+    expect(fs.readFileSync(path.join(__dirname, "..", "server", "lib", "comms", "setup.ts"), "utf8")).toContain("export function testEmailDelivered");
   });
 
   it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {

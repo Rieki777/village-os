@@ -198,7 +198,6 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect((await call("GET", "/api/admin/comms/overview", { token: null })).status).toBe(401);
     expect((await call("PUT", "/api/admin/comms/settings", { body: { paused: true }, token: null })).status).toBe(403);
     expect((await call("POST", "/api/admin/comms/settings/test", { body: {}, token: null })).status).toBe(403);
-    expect((await call("POST", "/api/admin/comms/settings/probe", { body: {}, token: null })).status).toBe(403);
     expect((await call("POST", "/api/admin/comms/settings/webhook", { body: {}, token: null })).status).toBe(403);
   });
 
@@ -334,6 +333,11 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(c.done["test-email"]).toBe(false);
     expect(c.body.testEmail).toMatchObject({ status: "sent", toEmail: FOUNDER_EMAIL, delivered: false });
     expect(await moduleReady()).toBe(false);
+    // The launch row reads the same answer (server/lib/comms/keyHealth.ts): sent is not yet alive.
+    expect(await launchRow("resend-key")).toMatchObject({
+      state: "partial",
+      detail: "The last test email was sent and is waiting for its delivery report",
+    });
 
     const report = await fake!.deliverWebhook(WEBHOOK(), "delivered", { emailId: email.id, svixId: "msg_setup_report_2" });
     expect(report.status, report.body).toBe(200);
@@ -341,50 +345,8 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(c.done["test-email"]).toBe(true);
     expect(c.ready).toBe(true);
     expect(await moduleReady(), "items 1 to 5 and 13 are green").toBe(true);
-  });
-
-  it("checks the key with one ledgered send to Resend's test address, which no caller can redirect", async () => {
-    const before = fake!.emails().length;
-    expect((await checklist()).body.probe).toEqual({ state: "none", at: null, reason: null });
-
-    // A member who does not run the village's email is refused, and nothing is sent.
-    const member = await call("POST", "/api/auth/register", {
-      body: { name: "Probe Member", email: "probe-member@example.test", password: PASSWORD, paths: ["resident"] },
-      token: null,
-    });
-    const memberToken = String(member.json?.token ?? "");
-    expect(memberToken, JSON.stringify(member.json)).toBeTruthy();
-    const refused = await call("POST", "/api/admin/comms/settings/probe", { body: {}, token: memberToken });
-    expect(refused.status).toBe(403);
-    expect(fake!.emails()).toHaveLength(before);
-
-    // Every way a caller might name a recipient is ignored.
-    const ran = await call("POST", "/api/admin/comms/settings/probe", {
-      body: { to: "someone@example.test", email: "someone@example.test", recipient: "someone@example.test" },
-    });
-    expect(ran.status, JSON.stringify(ran.json)).toBe(200);
-    expect(ran.json.result.status).toBe("sent");
-    const emails = fake!.emails();
-    expect(emails).toHaveLength(before + 1);
-    expect(emails[emails.length - 1].body.to).toEqual(["delivered@resend.dev"]);
-    expect(JSON.stringify(emails)).not.toContain("someone@example.test");
-
-    // On the ledger like any other email, as essential mail whose words are not kept.
-    const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
-      "SELECT origin, kind, status, to_email, body_html FROM comms_messages WHERE id = ?",
-      [ran.json.result.messageId],
-    );
-    expect(rows[0]).toMatchObject({ origin: "comms.probe", kind: "essential", status: "sent", to_email: "delivered@resend.dev", body_html: null });
-
-    // Recorded, so a plant's health and the launch row can read it.
-    expect(ran.json.probe.state).toBe("alive");
-    expect(ran.json.probe.at).toEqual(expect.any(Number));
-    expect((await launchRow("resend-key")).state).toBe("ok");
-
-    // Once a minute for the whole village.
-    const again = await call("POST", "/api/admin/comms/settings/probe", { body: {} });
-    expect(again.status).toBe(429);
-    expect(fake!.emails()).toHaveLength(before + 1);
+    // Delivered is what turns the key green, on the launch journey and in the setup game's seed alike.
+    expect(await launchRow("resend-key")).toMatchObject({ state: "ok", detail: "The last test email was reported delivered" });
   });
 
   it("keeps Pause all and the rehearsal inbox in the stored document, and only what was changed", async () => {

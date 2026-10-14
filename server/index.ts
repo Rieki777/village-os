@@ -636,7 +636,7 @@ import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from
 import { commsMode } from "./lib/comms/settings";
 import { createPermissionFor, suppressionsPortFor } from "./lib/comms/permissions";
 import { sweepCommsRetention } from "./lib/comms/retention";
-import { resendKeyLaunchCheck } from "./lib/comms/probe";
+import { resendKeyLaunchCheck } from "./lib/comms/keyHealth";
 import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
 import { registerGatheringJourneyParts } from "./lib/comms/gatheringJourney";
@@ -12258,7 +12258,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       // THE REGISTRY, never `brand.currency.name`: mergedConfig() prefers `tokens`.`name` over the brand overlay, so the old read here was red after a correct rename and green after the wizard's dead box. Rule, reasons and test: shared/launchRequirements.ts.
       "brand-token-names": () => recognitionNameCheck(tokenDef(HEARTS)?.name, GAME_CONFIG.currency.name),
-      // Green means alive (2026-10-13): the last test send to Resend's test address, never the key's presence alone.
+      // Green means alive (2026-10-13): the post office's own test email reported delivered (comms item 13), never the key's presence alone.
       "resend-key": () => resendKeyLaunchCheck(getPool(), allSecretStatuses().find((x) => x.key === "resend_api_key")!),
       "stripe-keys": () => (stripeConfigured()
         ? { state: "ok" as const, detail: "Stripe secret key is set" }

@@ -743,11 +743,11 @@ export const SEEDS: readonly GuildSeed[] = [
     dependsOn: [],
     liveCheck: {
       via: "probe",
-      probe: "resend-send-probe",
-      how: "The send-only key minted later sends to delivered@resend.dev. Alive means Resend accepts it.",
+      probe: "comms-test-delivered",
+      how: "The post office's own test email, sent and then reported delivered. The same check as the key's.",
       strength: "alive",
       proves: "The account exists and can send.",
-      builtAt: "server/lib/comms/probe.ts",
+      builtAt: "server/lib/comms/setup.ts",
     },
     nursery: null,
     compost: ["Delete the Resend account once its keys are revoked and its domain removed."],
@@ -863,12 +863,12 @@ export const SEEDS: readonly GuildSeed[] = [
     launchRequirement: "resend-key",
     liveCheck: {
       via: "probe",
-      probe: "resend-send-probe",
+      probe: "comms-test-delivered",
       how:
-        "One send from the village's sender to delivered@resend.dev, through the post office and onto the ledger. Comms Settings runs it with Check the key, at most once a minute. Alive means Resend accepted it; the launch row resend-key reads the same result.",
+        "Send me a test, in Comms Settings, posts a comms.test email to the signed-in admin's own address through the post office and onto the ledger. Alive means the latest comms.test row is reported delivered: item 13 of the comms setup checklist (testEmailDelivered). The launch row resend-key reads the same answer (server/lib/comms/keyHealth.ts).",
       strength: "alive",
       proves: "The key authenticates, may send, and may send from this domain and this sender.",
-      builtAt: "server/lib/comms/probe.ts",
+      builtAt: "server/lib/comms/setup.ts",
     },
     nursery: {
       how: "Send only to Resend's test recipient delivered@resend.dev, which simulates a delivery and reaches no person.",
@@ -883,7 +883,7 @@ export const SEEDS: readonly GuildSeed[] = [
     certainty: "verified",
     source:
       RESEND_API + ": POST /api-keys with permission sending_access and domain_id restricts a key to sending from one domain, and returns its id and token. " +
-      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts. Probe: server/lib/comms/probe.ts, POST /api/admin/comms/settings/probe, through the post office (Rye, 2026-10-13).",
+      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts. Live check: the post office's own test email (POST /api/admin/comms/settings/test, origin comms.test), read by testEmailDelivered in server/lib/comms/setup.ts (Rye, 2026-10-13: reuse it).",
   },
   {
     id: "resend-webhook-secret",
@@ -941,11 +941,11 @@ export const SEEDS: readonly GuildSeed[] = [
     dependsOn: ["resend-sending-domain"],
     liveCheck: {
       via: "probe",
-      probe: "resend-send-probe",
-      how: "The same test send as the key. Resend refuses a sender outside the key's domain.",
+      probe: "comms-test-delivered",
+      how: "The same test email as the key. Resend refuses a sender outside the key's domain, so a delivered test proves the sender too.",
       strength: "alive",
       proves: "The sender sits on the verified domain.",
-      builtAt: "server/lib/comms/probe.ts",
+      builtAt: "server/lib/comms/setup.ts",
     },
     nursery: { how: "A sender on the staging subdomain." },
     compost: ["Delete EMAIL_FROM from Railway."],

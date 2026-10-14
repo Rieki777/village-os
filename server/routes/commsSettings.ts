@@ -20,7 +20,6 @@
  *   POST /settings/webhook         connect delivery reports with one press
  *   PUT  /settings/webhook         paste the signing secret by hand, or clear it
  *   POST /settings/test            send yourself a test email
- *   POST /settings/probe           the key's live check: one send to Resend's test address
  *   GET  /overview                 the Overview screen
  *
  * The provider key itself is saved through the existing secrets route,
@@ -46,7 +45,6 @@ import { GAME_CONFIG } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
 import { escapeHtml, validEmailSender } from "../lib/comms/mailer";
 import { post } from "../lib/comms/postOffice";
-import { PROBE_COOLDOWN_MS, latestProbe, probeEmail } from "../lib/comms/probe";
 import {
   DELIVERY_REPORT_EVENTS,
   manualDomainSteps,
@@ -191,8 +189,6 @@ export function register(app: Express, deps: CommsSettingsDeps): void {
             delivered: testEmailDelivered(facts.testEmail),
           }
         : null,
-      // The key's live check (server/lib/comms/probe.ts): what the last one found.
-      probe: await latestProbe(getPool()),
       me: { email: user?.email ? String(user.email) : null },
       secretsKeySet: villageSecretsConfigured(),
     };
@@ -465,24 +461,6 @@ export function register(app: Express, deps: CommsSettingsDeps): void {
       text: lines.join("\n\n"),
       urgent: true,
     });
-    res.json({ result, ...(await settingsPayload(req)) });
-  });
-
-  /**
-   * THE KEY'S LIVE CHECK. One send, through the post office and onto the
-   * ledger, to Resend's test address and nowhere else: the recipient is fixed
-   * in server/lib/comms/probe.ts and this route reads nothing from the body.
-   * Once a minute for the whole village, because each one spends a send.
-   */
-  let lastProbeAt = 0;
-  app.post("/api/admin/comms/settings/probe", async (req, res) => {
-    if (!(await guardCapability(req, res, "comms.manage", REFUSED))) return;
-    const now = Date.now();
-    if (now - lastProbeAt < PROBE_COOLDOWN_MS) {
-      return res.status(429).json({ error: "The key was checked in the last minute. Wait a moment and check again." });
-    }
-    lastProbeAt = now;
-    const result = await post(commsPostOffice, probeEmail(projectName(), crypto.randomUUID()));
     res.json({ result, ...(await settingsPayload(req)) });
   });
 
