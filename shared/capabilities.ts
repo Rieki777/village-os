@@ -99,6 +99,17 @@ export type Capability =
   // decided it means, and there is no vacancy to detect, only a key nobody was
   // given.
   | "redemption.confirm" // agree that a member was paid, and destroy their tokens
+  // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
+  //
+  // Before launch the founders turn modules on from the library. After launch
+  // turning one ON follows who holds the power: a live holder of this key
+  // turns it on directly, and with no holder a proposal goes to a binding
+  // village vote. Admins keep pause and off as a safety valve, logged and
+  // announced. The rule lives in `shared/moduleSwitch.ts`; the holder is
+  // counted by `liveHoldersOfCapability`, which leaves the admin
+  // short-circuit out on purpose, so an admin who was never given this key is
+  // exactly the "nobody holds it" case.
+  | "module.switch" // turn a module on for the village after launch
   /*
    * The steward's veto, and the reason it has to carry.
    *
@@ -155,6 +166,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "dial.set",
   "quest.approve",
   "redemption.confirm",
+  "module.switch",
   "steward.veto",
 ];
 
@@ -210,6 +222,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
+  "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
 };
 
@@ -379,6 +392,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // village hands to a named circle. Its two routes ask `guardCapability`, so
   // the escape hatch and the public record this column promises are both there.
   "redemption.confirm": true,
+  // Turning a module on after launch. Its route counts live holders without
+  // the admin short-circuit, so the escape hatch this column describes is the
+  // village vote itself: with no holder, anybody may propose it.
+  "module.switch": true,
   "library.keep": true,
   "story.tell": true,
   "org.seat": true,
@@ -693,6 +710,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   // as a say in what the village decides, and nothing at all about their own
   // right to ask to redeem.
   "redemption.confirm": true,
+  // A job as well. Pausing it stops somebody switching modules on alone; the
+  // village can still propose one, and the vote decides.
+  "module.switch": true,
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
@@ -810,6 +830,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "dial.set": true,
   "quest.approve": true,
   "redemption.confirm": true,
+  "module.switch": true,
 };
 
 /**

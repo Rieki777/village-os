@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is nineteen keys, which is the number the ruling was given in", () => {
+    it("is twenty keys: the nineteen the ruling was given in, plus module.switch (Rye, 2026-10-09)", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -385,8 +385,13 @@ describe("hasCapability truth table", () => {
        * the count is a change to what he agreed to. Whoever moves it is
        * answering that question rather than breaking an invariant, and this is
        * where they find out they are being asked.
+       *
+       * 2026-10-09: twenty. Rye ruled that after launch a live holder of the
+       * modules power turns a module on directly, so `module.switch` is a power
+       * a village hands to a seat, and the founding stewards take it with the
+       * rest at launch. Flagged to him in the lane report.
        */
-      expect(HANDOVER_SET).toHaveLength(19);
+      expect(HANDOVER_SET).toHaveLength(20);
     });
 
     it("carries the steward's veto, which is what opens the break-glass", () => {
