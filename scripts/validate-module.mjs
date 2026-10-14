@@ -76,11 +76,16 @@ const note = (line) => cannotCheck.push(line);
  * `shared/modules.ts` and `shared/launchRequirements.ts` come out
  * self-contained apart from each other.
  */
+// `VALIDATE_MODULE_SHARED` points the loader at another copy of `shared/`. It
+// exists for `scripts/validate-module.test.mjs`, which breaks a copy of the
+// registry on purpose to prove this script goes red; nothing else sets it.
+const SHARED_DIR = process.env.VALIDATE_MODULE_SHARED || path.join(ROOT, "shared");
+
 async function loadShared(entry, alsoNeeds = []) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "validate-module-"));
   try {
     for (const name of [entry, ...alsoNeeds]) {
-      const src = fs.readFileSync(path.join(ROOT, "shared", `${name}.ts`), "utf8");
+      const src = fs.readFileSync(path.join(SHARED_DIR, `${name}.ts`), "utf8");
       const js = ts.transpileModule(src, {
         compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
       }).outputText.replace(/(from\s+")(\.\/[A-Za-z0-9_-]+)(")/g, "$1$2.mjs$3");
@@ -147,6 +152,7 @@ const wanted = args.filter((a) => !a.startsWith("--"));
 const registry = await loadShared("modules");
 const launch = await loadShared("launchRequirements", ["modules"]);
 const poolLib = await loadShared("modulePool", ["modules"]);
+const guilds = await loadShared("guilds");
 
 const { MODULES, moduleListingProblems, priceLine, isPaid } = registry;
 const { poolStatus, modulePayoutProblems } = poolLib;
@@ -189,6 +195,57 @@ console.log("Registry shape (shared/modules.ts:moduleListingProblems)");
   if (others > 0) {
     console.log(`    (${others} further problem(s) elsewhere in the registry, not attributed to a selected id)`);
   }
+}
+
+// ── 1b. The guild, from the one function that owns its rules ────────────────
+//
+// Every module declares the seeds the setup game plants for it, from the
+// closed catalog in shared/guilds.ts. A module with no guild, or a seed in its
+// guild with no consequence line, undo line, live check or compost step, is a
+// module the setup game cannot honestly ask a founder to consent to, so it
+// fails here. Catalog problems that name no selected module (a stray seed, a
+// dependency circle) are charged to every run, because a broken catalog breaks
+// every guild that reads it.
+
+console.log("\nGuild manifest (shared/guilds.ts:guildProblems)");
+{
+  const launchIds = launch.LAUNCH_REQUIREMENTS.map((r) => r.id);
+  const checkKeys = launch.LAUNCH_REQUIREMENTS.map((r) => r.checkKey);
+  const all = guilds.guildProblems(MODULES, launchIds, checkKeys);
+  const ids = new Set(targets.map((m) => m.id));
+  // A seed is charged to this run when a selected module plants it, or when a
+  // platform layer does, because every village plants those.
+  const charged = new Set([
+    ...targets.flatMap((m) => m.guild ?? []),
+    ...guilds.PLATFORM_GUILDS.flatMap((g) => g.seeds),
+  ]);
+  const mine = all.filter((p) => {
+    const mod = /^module "([^"]+)"/.exec(p);
+    if (mod) return ids.has(mod[1]);
+    const seed = /^seed "([^"]+)"/.exec(p);
+    if (seed) return charged.has(seed[1]);
+    return true;
+  });
+  if (mine.length) {
+    for (const p of mine) console.log(`    ${p}`);
+    bad(`guild problems for the selected module(s): ${mine.length}`);
+  } else {
+    ok("guild problems for the selected module(s): 0");
+  }
+  if (all.length > mine.length) {
+    console.log(`    (${all.length - mine.length} further guild problem(s) elsewhere, not attributed to a selected id)`);
+  }
+  for (const m of targets) {
+    const unverified = (m.guild ?? []).filter((id) => guilds.SEEDS_BY_ID[id]?.certainty === "unverified");
+    if (unverified.length) {
+      note(`${m.id}: guild seed(s) ${unverified.join(", ")} are marked unverified. A reviewer confirms what each one's \`open\` list names.`);
+    }
+    const unwired = (m.guild ?? []).filter((id) => guilds.SEEDS_BY_ID[id]?.liveCheck?.via === "driver-health");
+    if (unwired.length) {
+      note(`${m.id}: seed(s) ${unwired.join(", ")} rely on a driver health method, and no such interface exists yet (contract clause 2).`);
+    }
+  }
+  note("Whether each guild's consequence and undo lines are TRUE. The shape is checked; a reviewer reads the words against the code.");
 }
 
 // ── 2. Per listing ───────────────────────────────────────────────────────────
