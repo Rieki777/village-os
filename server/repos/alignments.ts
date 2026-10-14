@@ -244,6 +244,26 @@ export async function textsForParty(db: Db, userId: string): Promise<StoredText[
   return rows.map(rowToText);
 }
 
+/**
+ * The register's read (PR6): every text of the given kinds, every version,
+ * newest first, one page at a time. The route asks only for the kinds the
+ * viewer holds the capability for. No kinds, no rows, and no query.
+ */
+export async function registerTexts(
+  db: Db,
+  opts: { subjectTypes: readonly string[]; limit: number; offset: number },
+): Promise<StoredText[]> {
+  if (opts.subjectTypes.length === 0 || opts.limit <= 0) return [];
+  const limit = Math.max(1, Math.min(1000, Math.floor(opts.limit)));
+  const offset = Math.max(0, Math.floor(opts.offset));
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${TEXT_COLUMNS} FROM alignment_texts WHERE subject_type IN (${opts.subjectTypes.map(() => "?").join(",")}) ` +
+      "ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+    [...opts.subjectTypes, limit, offset],
+  );
+  return rows.map(rowToText);
+}
+
 /** Texts whose words carry a phrase, for the erasure step's search. */
 export async function textsMentioning(db: Db, phrase: string): Promise<StoredText[]> {
   const like = `%${phrase.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;

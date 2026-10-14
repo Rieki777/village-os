@@ -189,6 +189,9 @@ export const NAV: readonly NavEntry[] = [
       // Season plans (RC1): everyone's plan for the season, by name. Members
       // read it (terms.read), so it is listed for the signed-in roles only.
       { href: "/season-plans", label: "Season Plans", module: "governance", roles: ["member", "admin", "founder"] },
+      // The aligned register (seat settings PR6): every set of terms members
+      // have aligned with. Members read it (terms.read), so signed-in roles only.
+      { href: "/aligned", label: "Aligned", module: "governance", roles: ["member", "admin", "founder"] },
       { href: "/master-plan", brochure: true, label: "Master Plan" },
       { href: "/team", brochure: true, label: "Our Team" },
       /**

@@ -8,6 +8,7 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { AlignmentState, AlignMethod } from "@shared/alignments";
+import type { RegisterPage } from "@shared/alignedRegister";
 
 export interface PartyChip {
   partyKey: string;
@@ -82,7 +83,16 @@ export const alignWithText = (textId: string, contentHash: string) =>
   call<{ alignment: ServedAlignment | null; already?: boolean }>("/api/profile/alignments", "POST", { textId, contentHash });
 export const alignWithApplication = (applicationId: string, words: string) =>
   call<{ alignment: ServedAlignment | null }>("/api/profile/alignments", "POST", { applicationId, words });
-export const fetchConfirmState = () => call<ConfirmState>("/api/profile/alignments/confirm");
+/** The village's register (PR6): a page of the record, or a search over it. Members only; a 401 is the answer to anybody else. */
+export const fetchRegister = (opts: { q?: string; offset?: number; kind?: string } = {}) => {
+  const p = new URLSearchParams();
+  if (opts.q) p.set("q", opts.q);
+  if (opts.kind) p.set("kind", opts.kind);
+  if (opts.offset) p.set("offset", String(opts.offset));
+  const qs = p.toString();
+  return call<RegisterPage>(qs ? `/api/aligned?${qs}` : "/api/aligned");
+};
+export const fetchConfirmState =() => call<ConfirmState>("/api/profile/alignments/confirm");
 export const confirmIdentity = (password?: string) =>
   call<ConfirmState & { success: true }>("/api/profile/alignments/confirm", "POST", password ? { password } : {});
 export const receiptHref = (textId: string) => `/api/profile/alignments/${encodeURIComponent(textId)}/receipt`;

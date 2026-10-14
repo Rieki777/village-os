@@ -9,6 +9,7 @@
  *   POST /api/profile/alignments/confirm       confirm it is you (password, or a fresh Google sign-in)
  *   GET  /api/profile/alignments/:id/receipt   your receipt for one text
  *   GET  /api/alignments?party=<handle>        what another member has aligned with (terms.read)
+ *   GET  /api/aligned?q=&kind=&offset=          the village's register, every text and version (terms.read, PR6)
  *
  * ── ONE CLICK, NO TYPED NAME ───────────────────────────────────────────────
  *
@@ -58,7 +59,18 @@ import {
 import { confirmedUntil, confirmWithFor, stampConfirmed, type GateOutcome } from "../lib/identityConfirm";
 import { userIdForHandle } from "../lib/profile";
 import { registerJob } from "../lib/scheduler";
-import { alignmentsByUser, partiesOf, readText, sealsOf, textsForParty } from "../repos/alignments";
+import { alignmentsByUser, partiesOf, readText, registerTexts, sealsOf, textsForParty } from "../repos/alignments";
+import { readableKinds, registerRow, searchRegister } from "../lib/alignedRegister";
+import {
+  REGISTER_KINDS,
+  REGISTER_PAGE,
+  REGISTER_PAGE_MAX,
+  REGISTER_QUERY_MAX,
+  REGISTER_SEARCH_HITS,
+  REGISTER_SEARCH_READS,
+  type RegisterPage,
+} from "../../shared/alignedRegister";
+import type { Capability } from "../../shared/capabilities";
 import { inApplicationTransaction, readApplication } from "../repos/seatApplications";
 import { publicKeyBlock, signingKey } from "../lib/villageExport";
 
@@ -83,6 +95,10 @@ type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "getPool" | "notify
 };
 
 const MEMBERS_ONLY = { error: "auth_required", message: "Members read what other members have aligned with." };
+const REGISTER_MEMBERS_ONLY = { error: "auth_required", message: "Members read what the village has aligned with." };
+
+/** Thirty searches in ten minutes per member: each one indexes up to a thousand texts. */
+const SEARCHES = 30;
 
 /** Everything a member downloads about their alignments, for /api/profile/export. Counterparties as name and capacity only. */
 export async function alignmentsForExport(pool: any, userId: string, nameOf: (id: string) => Promise<string | null>) {
@@ -318,5 +334,54 @@ export function register(app: Express, deps: Deps): void {
     const served = await Promise.all(views.map((v) => presentView(v, String(viewer.id), nameOf, false)));
     // Another member's list carries no hash and no salt. Their terms are open book to members, words included.
     res.json({ alignments: served.map((s) => ({ ...s, contentHash: null })) });
+  });
+
+  // ── The register (PR6) ────────────────────────────────────────────────────
+  /*
+   * Every text of a kind the viewer may read, every version, newest first, or
+   * a search over them. Members only: a visitor and a signed-in guest get 401
+   * before the database is read. No count, ever: `more` says a full page came
+   * back, which is all paging needs (R55).
+   *
+   * THE KINDS A VIEWER READS. Every kind today names `terms.read`, the gate
+   * this route passes first, so `passed` holds it. A kind that names another
+   * capability joins `passed` through its own gate here before it can show.
+   */
+  app.get("/api/aligned", async (req, res) => {
+    if (!(await guardCapability(req, res, "terms.read", { status: 401, body: REGISTER_MEMBERS_ONLY }))) return;
+    const viewer = await authedUser(req);
+    if (!viewer) return res.status(401).json(REGISTER_MEMBERS_ONLY);
+    const viewerId = String(viewer.id);
+    const passed = new Set<Capability>(["terms.read"]);
+    const kinds = readableKinds((c) => passed.has(c));
+    const wanted = typeof req.query.kind === "string" && req.query.kind ? req.query.kind : null;
+    if (wanted && !REGISTER_KINDS.some((k) => k.id === wanted)) return res.status(400).json({ error: "There is no kind of terms by that name." });
+    const subjectTypes = kinds.filter((k) => !wanted || k.id === wanted).map((k) => k.id);
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, REGISTER_QUERY_MAX) : "";
+    const tz = deps.seatCalendar().timezone || "UTC";
+    const pool = getPool();
+    const kindList = kinds.map((k) => ({ id: k.id, label: k.label }));
+
+    if (q) {
+      if (await overLimit(`aligned-search:${viewerId}`, SEARCHES, WINDOW_MS)) {
+        return res.status(429).json({ error: "too_many_asks", message: "That is a lot of searching in a few minutes. Wait a little and try again." });
+      }
+      const texts = await registerTexts(pool, { subjectTypes, limit: REGISTER_SEARCH_READS, offset: 0 });
+      const views = await viewTexts(pool, texts, today(), tz);
+      const rows = await Promise.all(views.map((v) => registerRow(v, viewerId, nameOf, tz)));
+      const page: RegisterPage = { kinds: kindList, rows: searchRegister(rows, q, REGISTER_SEARCH_HITS), more: false, query: q };
+      return res.json(page);
+    }
+
+    const asked = Number(req.query.limit);
+    const limit = Number.isFinite(asked) && asked > 0 ? Math.min(REGISTER_PAGE_MAX, Math.floor(asked)) : REGISTER_PAGE;
+    const offsetAsked = Number(req.query.offset);
+    const offset = Number.isFinite(offsetAsked) && offsetAsked > 0 ? Math.floor(offsetAsked) : 0;
+    // One more than the page, so `more` is a fact and never a guess.
+    const texts = await registerTexts(pool, { subjectTypes, limit: limit + 1, offset });
+    const views = await viewTexts(pool, texts.slice(0, limit), today(), tz);
+    const rows = await Promise.all(views.map((v) => registerRow(v, viewerId, nameOf, tz)));
+    const page: RegisterPage = { kinds: kindList, rows, more: texts.length > limit, query: null };
+    res.json(page);
   });
 }
