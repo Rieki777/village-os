@@ -747,6 +747,7 @@ export const SEEDS: readonly GuildSeed[] = [
       how: "The send-only key minted later sends to delivered@resend.dev. Alive means Resend accepts it.",
       strength: "alive",
       proves: "The account exists and can send.",
+      builtAt: "server/lib/comms/probe.ts",
     },
     nursery: null,
     compost: ["Delete the Resend account once its keys are revoked and its domain removed."],
@@ -864,9 +865,10 @@ export const SEEDS: readonly GuildSeed[] = [
       via: "probe",
       probe: "resend-send-probe",
       how:
-        "A test send from EMAIL_FROM to delivered@resend.dev through the village's post office. Alive means Resend answers 200 with an email id.",
+        "One send from the village's sender to delivered@resend.dev, through the post office and onto the ledger. Comms Settings runs it with Check the key, at most once a minute. Alive means Resend accepted it; the launch row resend-key reads the same result.",
       strength: "alive",
       proves: "The key authenticates, may send, and may send from this domain and this sender.",
+      builtAt: "server/lib/comms/probe.ts",
     },
     nursery: {
       how: "Send only to Resend's test recipient delivered@resend.dev, which simulates a delivery and reaches no person.",
@@ -878,13 +880,10 @@ export const SEEDS: readonly GuildSeed[] = [
     ],
     rotation: { every: "year" },
     holder: { who: "account-owner", account: "the Resend account's role address" },
-    certainty: "unverified",
-    open: [
-      "The test send is not built. The post office has no test-send path yet, and the one-mail-door rule refuses any probe that sends through the real provider from outside it. Which of the two gives way is Rye's call.",
-    ],
+    certainty: "verified",
     source:
       RESEND_API + ": POST /api-keys with permission sending_access and domain_id restricts a key to sending from one domain, and returns its id and token. " +
-      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts.",
+      "Test recipients: Resend's send-test-emails page. Slot: server/lib/secrets.ts. Probe: server/lib/comms/probe.ts, POST /api/admin/comms/settings/probe, through the post office (Rye, 2026-10-13).",
   },
   {
     id: "resend-webhook-secret",
@@ -946,6 +945,7 @@ export const SEEDS: readonly GuildSeed[] = [
       how: "The same test send as the key. Resend refuses a sender outside the key's domain.",
       strength: "alive",
       proves: "The sender sits on the verified domain.",
+      builtAt: "server/lib/comms/probe.ts",
     },
     nursery: { how: "A sender on the staging subdomain." },
     compost: ["Delete EMAIL_FROM from Railway."],

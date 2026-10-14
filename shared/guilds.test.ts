@@ -72,8 +72,7 @@ describe("the Resend pilot is fully specified", () => {
   const key = SEEDS_BY_ID["resend-api-key"]!;
 
   it("asks for a sending-only key restricted to the village's domain", () => {
-    // Unverified only because its live send is not built; the open list says so.
-    expect(key.open).toHaveLength(1);
+    expect(key.certainty).toBe("verified");
     expect(key.scopes).toEqual(["permission: sending_access", "domain_id: the village's verified sending domain"]);
     expect(key.risk).toBe("keystone");
     expect(key.nursery).not.toBeNull();
@@ -229,15 +228,15 @@ describe("the rulings of 2026-10-13", () => {
     expect(SEEDS_BY_ID["railway-root"]!.dependsOn).toContain("village-secrets-key");
   });
 
-  it("Q3: every seed that cannot yet turn green is listed, and the Resend key says its send is unbuilt", () => {
+  it("Q3: every seed that cannot yet turn green is listed, and the Resend key is not among them", () => {
     const notAlive = seedsNotYetAlive().map((s) => s.id);
     for (const id of ["auth-token-secret", "village-secrets-key", "stripe-secret-key", "stripe-webhook", "anthropic-api-key"]) {
       expect(notAlive).toContain(id);
     }
-    // Its check is a real send, so it is listed as alive-capable. That send is
-    // not built yet (see its open list), which is a separate fact.
     expect(notAlive).not.toContain("resend-api-key");
-    expect(SEEDS_BY_ID["resend-api-key"]!.open?.join(" ")).toContain("not built");
+    const probe = SEEDS_BY_ID["resend-api-key"]!.liveCheck;
+    expect(probe.via === "probe" && probe.builtAt).toBe("server/lib/comms/probe.ts");
+    expect(fs.existsSync(path.join(__dirname, "..", "server", "lib", "comms", "probe.ts"))).toBe(true);
   });
 
   it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {

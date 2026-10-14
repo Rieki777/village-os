@@ -22,6 +22,9 @@ const VILLAGE = "local";
 /** The origin every "send me a test" email is posted under. */
 export const TEST_EMAIL_ORIGIN = "comms.test";
 
+/** The origin the key's live check posts under (server/lib/comms/probe.ts). */
+export const PROBE_EMAIL_ORIGIN = "comms.probe";
+
 const epoch = (v: unknown): number | null => (v == null ? null : Number(v));
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
@@ -40,19 +43,20 @@ export interface TestEmailRow {
 }
 
 /**
- * The most recent test email, with whether the provider has reported it
+ * The most recent test email (or, given `PROBE_EMAIL_ORIGIN`, the key's live
+ * check), with whether the provider has reported it
  * delivered. The report is read beside the row's own status because the row
  * is moved to `delivered` by the step that applies reports, and a report that
  * has arrived and is still waiting to be applied is already the provider's
  * word that the email reached somebody.
  */
-export async function latestTestEmail(pool: Pool): Promise<TestEmailRow | null> {
+export async function latestTestEmail(pool: Pool, origin: string = TEST_EMAIL_ORIGIN): Promise<TestEmailRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the setup checklist's read of its own test email, newest first
     "SELECT id, to_email, status, skip_reason, last_error, provider_message_id, " +
       "UNIX_TIMESTAMP(created_at) AS created_at, UNIX_TIMESTAMP(sent_at) AS sent_at, " +
       "UNIX_TIMESTAMP(delivered_at) AS delivered_at FROM comms_messages " +
       "WHERE village_id = ? AND origin = ? ORDER BY created_at DESC, sent_at DESC LIMIT 1",
-    [VILLAGE, TEST_EMAIL_ORIGIN],
+    [VILLAGE, origin],
   );
   const r = rows[0];
   if (!r) return null;

@@ -53,6 +53,8 @@ export interface SettingsPayload {
   holders: Array<{ id: string; name: string }>;
   admins: string[];
   testEmail: { status: string; toEmail: string; createdAt: number; delivered: boolean } | null;
+  /** The key's live check: the last send to Resend's test address (server/lib/comms/probe.ts). */
+  probe: { state: "alive" | "failed" | "pending" | "none"; at: number | null; reason: string | null };
   me: { email: string | null };
   secretsKeySet: boolean;
   /** Present on the answers to the domain routes. */

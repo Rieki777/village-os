@@ -88,6 +88,7 @@ function payload(done: string[] = [], over: Record<string, unknown> = {}) {
     holders: [],
     admins: ["founder@example.test"],
     testEmail: null,
+    probe: { state: "none", at: null, reason: null },
     me: { email: "founder@example.test" },
     secretsKeySet: true,
     ...over,

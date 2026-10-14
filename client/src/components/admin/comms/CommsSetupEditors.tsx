@@ -480,6 +480,13 @@ export function TestEmailEditor(props: EditorProps) {
   const [checking, setChecking] = useState(false);
   const { busy, refused, save } = useSaver(props);
 
+  const probe = async () => {
+    const r = await save("/admin/comms/settings/probe", "POST", {}, "");
+    if (!r?.result) return;
+    if (r.result.status === "sent") toast.success("Resend accepted the check. The key works.");
+    else toast.error(`The check did not go: ${r.result.reason ?? r.result.status}.`);
+  };
+  const p = data.probe;
   const send = async () => {
     const r = await save("/admin/comms/settings/test", "POST", {}, "");
     if (!r?.result) return;
@@ -505,12 +512,22 @@ export function TestEmailEditor(props: EditorProps) {
         <button type="button" onClick={send} disabled={busy || !data.me.email} className={primaryCls}>
           {busy ? "Sending..." : "Send me a test"}
         </button>
+        <button type="button" onClick={probe} disabled={busy} className={secondaryCls}>
+          Check the key
+        </button>
         {t && !t.delivered && (
           <button type="button" onClick={check} disabled={checking} className={secondaryCls}>
             {checking ? "Checking..." : "Check again"}
           </button>
         )}
       </div>
+      <p className="text-xs text-gray-500">
+        Check the key sends one email to Resend's own test address, which reaches nobody.{" "}
+        {p.state === "alive" && `The last check, on ${whenOf(p.at)}, went through.`}
+        {p.state === "failed" && `The last check, on ${whenOf(p.at)}, did not go: ${p.reason}.`}
+        {p.state === "pending" && "The last check is still waiting for Resend's answer."}
+        {p.state === "none" && "It has not been run yet."}
+      </p>
       {t && !t.delivered && t.status === "sent" && (
         <p className="text-xs text-gray-500">Delivery reports usually arrive within a minute of the email.</p>
       )}

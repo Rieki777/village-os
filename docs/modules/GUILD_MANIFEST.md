@@ -190,10 +190,11 @@ whether a consequence line is true.
 Resend is the worked example: `resend-account`, `resend-setup-key`, `resend-sending-domain`,
 `resend-api-key` and `email-from` in the `email` platform guild. The key the village keeps can only
 send, and only from the village's own domain. It grows in the nursery by sending only to Resend's
-test recipient. Its live check is meant to be a real send to that recipient, and it is not built:
-every email leaves through the post office (`server/lib/comms/transport.ts` is the one mail door,
-held by `scripts/check-one-mail-door.mjs`), the post office has no test send yet, and that gate
-refuses a probe that sends through the real provider from anywhere else. Until that is settled the
-key cannot turn green, and its seed says so. The domain's own check is built: Comms Settings asks
-Resend for the domain's status when the key may, and asks a founder when it may not
-(`comms:domain`). Copy its shape.
+test recipient, and its live check is a real send there (`server/lib/comms/probe.ts`). The check is
+an email like any other: it goes through the post office, so it passes the one mail door
+(`server/lib/comms/transport.ts`, held by `scripts/check-one-mail-door.mjs`) with no exception carved
+for it, and it lands on the comms ledger with the provider's answer. Its recipient is fixed in code,
+so nobody can point it at a person. Check the key, in Comms Settings, runs it at most once a minute,
+and both the seed's health and the launch row `resend-key` read the last result. The domain's own
+check is built too: Comms Settings asks Resend for the domain's status when the key may, and asks a
+founder when it may not (`comms:domain`). Copy its shape.
