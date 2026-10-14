@@ -343,7 +343,7 @@ export function breathAt(b: { pattern: BreathKey; rounds: number; startedAt: num
 export interface SessionState {
   stage: SessionStage;
   stageStartedAt: number | null;
-  /** When the facilitator started the session clock. */
+  /** When the session clock started: "Begin", or the facilitator's first move of the room, whichever came first. */
   startedAt: number | null;
   /** The agenda item on screen during the items stage. */
   activeItemId: number | null;
@@ -464,7 +464,10 @@ export function applySessionAction(state: SessionState, action: SessionAction, n
   switch (action.type) {
     case "go":
       if (action.stage === state.stage) return state;
-      return { ...state, stage: action.stage, stageStartedAt: now, round: { label: null, order: [], at: 0 } };
+      // The first move starts the clock. A facilitator who goes straight on
+      // without pressing "Begin" still gets a room that counts its minutes,
+      // so the agenda's fit and the session's length always have a start.
+      return { ...state, stage: action.stage, stageStartedAt: now, startedAt: state.startedAt ?? now, round: { label: null, order: [], at: 0 } };
     case "start":
       return state.startedAt != null ? state : { ...state, startedAt: now, stageStartedAt: state.stageStartedAt ?? now };
     case "breath":
@@ -552,15 +555,63 @@ export interface ConsentAnswer {
  */
 export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
   const t = { consent: 0, concern: 0, object: 0 };
-  const said = new Set<number>();
-  for (const a of answers) {
-    t[a.value] += 1;
-    said.add(a.who);
+  for (const a of answers) t[a.value] += 1;
+  const waitingIds = consentWaitingIds(answers, presentIds);
+  const heardHere = presentIds.some((id) => answers.some((a) => a.who === id));
+  return { ...t, waiting: waitingIds.length, consented: heardHere && waitingIds.length === 0 && t.object === 0 };
+}
+
+/**
+ * The people here now who have not answered a consent round, in the order
+ * they were given, each once. `consentTally` counts this same list, so the
+ * number under a tally and the names under it can never disagree.
+ */
+export function consentWaitingIds(answers: readonly Pick<ConsentAnswer, "who">[], presentIds: readonly number[]): number[] {
+  const said = new Set(answers.map((a) => a.who));
+  return Array.from(new Set(presentIds)).filter((id) => !said.has(id));
+}
+
+/** The consent questions a room asks: the agenda, and the round on each proposal. */
+export type ConsentTarget = "agenda" | `decision:${number}`;
+
+/** Someone here who has not answered yet, named the way the room names people. */
+export interface WaitingPerson {
+  userId: number;
+  name: string;
+}
+
+/**
+ * Who each open consent question is still waiting on, by target: "agenda"
+ * while the session is open, and "decision:<entryId>" for each proposal still
+ * open. A target with nobody waiting holds an empty list. The room reads it to
+ * name the people a tally's "still to answer" counts; it never reaches the
+ * minutes, which keep only the counts.
+ */
+export type ConsentWaiting = Partial<Record<ConsentTarget, WaitingPerson[]>>;
+
+/**
+ * Who each open consent question is waiting on, from the room's own wire
+ * shapes: the people here now (`present`), the proposals still open, and the
+ * consent answers given. The server builds the view's `waiting` with it, and
+ * the tally beside it counts the same people through `consentWaitingIds`.
+ */
+export function consentWaiting(
+  people: readonly Pick<SessionPerson, "userId" | "name" | "present">[],
+  entries: readonly Pick<SessionEntry, "id" | "kind" | "status">[],
+  responses: readonly Pick<SessionResponse, "target" | "userId" | "value">[],
+): ConsentWaiting {
+  const here = people.filter((p) => p.present);
+  const nameOf = new Map(here.map((p) => [p.userId, p.name] as const));
+  const targets: ConsentTarget[] = [
+    "agenda",
+    ...entries.filter((e) => e.kind === "decision" && e.status === "open").map((e) => `decision:${e.id}` as const),
+  ];
+  const out: ConsentWaiting = {};
+  for (const target of targets) {
+    const answers = responses.filter((r) => r.target === target && isConsentValue(r.value)).map((r) => ({ who: r.userId }));
+    out[target] = consentWaitingIds(answers, here.map((p) => p.userId)).map((userId) => ({ userId, name: nameOf.get(userId) ?? "" }));
   }
-  const here = Array.from(new Set(presentIds));
-  const waiting = here.filter((id) => !said.has(id)).length;
-  const heardHere = here.some((id) => said.has(id));
-  return { ...t, waiting, consented: heardHere && waiting === 0 && t.object === 0 };
+  return out;
 }
 
 export interface ArrivalSummary {
@@ -589,10 +640,26 @@ export function arrivalIsLow(summary: ArrivalSummary): boolean {
 export interface SessionStamp {
   /** e.g. "Waxing gibbous" */
   moonName: string;
+  /** A text moon for places that can only carry text; the room draws `moonPhase` instead. */
   moonGlyph: string;
+  /**
+   * The moon's phase as the session opened: 0 new, 0.5 full, running back
+   * toward 1 as it wanes, the fraction calendar/MoonGlyph.tsx draws. Null on a
+   * stamp stored before it was kept. Optional only so older fixtures still
+   * type; the server always sends it.
+   */
+  moonPhase?: number | null;
+  /** Which way the drawn moon is lit, from `calendar.hemisphere`. Null on an older stamp; draw it as the north. */
+  hemisphere?: "north" | "south" | null;
   /** The village's own moon count, when it keeps one. */
   moonOrdinal: number | null;
-  /** The season by the village's hemisphere, e.g. "spring". */
+  /**
+   * The season as the session opened, in the village's own words when it has
+   * named its seasons (`calendar.seasons`), else one of SESSION_SEASONS by its
+   * hemisphere. Null in the tropics when the village has named none, and on a
+   * stamp that could not tell. Any string can arrive here, so whatever shows
+   * it prints the name as given and maps nothing.
+   */
   season: string | null;
   /** The village's place line, read at drop in. */
   placeLine: string | null;
@@ -683,6 +750,13 @@ export interface SessionView {
   responses: SessionResponse[];
   /** Feedback on the facilitation, unsigned. Only the facilitator and admins receive it. */
   facilitation: { value: FacilitationValue; text: string | null }[] | null;
+  /**
+   * Who each open consent question is still waiting on, for a viewer who sees
+   * the answers (the people in the room and admins). Empty for anyone else and
+   * once the session closes. Optional only so older fixtures still type; the
+   * server always sends it.
+   */
+  waiting?: ConsentWaiting;
   seats: SeatOption[];
   /** After close: the arrival round as numbers only. */
   arrival: ArrivalSummary | null;
@@ -981,7 +1055,12 @@ export const SESSION_REFUSALS = {
 /** What a person is called when the village no longer holds their name. */
 export const SESSION_SOMEONE = "A member";
 
-/** The season names a stamp carries, by the village's own hemisphere. */
+/**
+ * The platform's own season names, turned by the village's hemisphere. A stamp
+ * carries one of these only when the village has named no seasons of its own
+ * and its land is outside the tropics; otherwise `season` is the village's word
+ * or null, so nothing may assume a stamp's season is in this list.
+ */
 export const SESSION_SEASONS = ["spring", "summer", "autumn", "winter"] as const;
 export type SessionSeason = (typeof SESSION_SEASONS)[number];
 
@@ -1029,9 +1108,14 @@ export const ROOM_COPY = {
   youFacilitate: "You are facilitating.",
   joinLede: "You can look around. Join to give your number, add to the agenda and take actions.",
   moonOrdinal: (n: number) => `Moon ${n}`,
-  clockWaiting: "The clock starts when the facilitator begins the session.",
+  clockWaiting: "The clock starts when the facilitator begins the session or moves the room on.",
+  clockWaitingYou: "The clock starts when you begin, or when you first move the room on.",
+  facilitatedBy: (name: string) => `Facilitated by ${name}`,
   clockLine: (elapsedMin: number, durationMin: number) => `${elapsedMin} of ${durationMin} min`,
   beginSession: "Begin the session",
+  // Said once to a screen reader when Begin lands, because the same spot on
+  // the bar then turns into the Next stage button.
+  sessionBegun: "The session has begun. The clock is running.",
   nextStage: "Next stage",
   moveHere: "Move the room here",
   liveBadge: "Now",
@@ -1059,6 +1143,10 @@ export const ROOM_COPY = {
   breathStop: "Stop the breath",
   breathAgain: "Breathe again",
   breathRound: (n: number, of: number) => `Round ${n} of ${of}`,
+  breathStepLine: (secondsLeft: number, round: number, of: number) =>
+    `${secondsLeft === 1 ? "1 second" : `${secondsLeft} seconds`} · Round ${round} of ${of}`,
+  breathCounts: (secs: readonly number[]) => secs.join(" · "),
+  breathStartedSay: (rounds: number) => `The shared breath has started, ${rounds} rounds.`,
 
   giveNumber: "Give my number",
   changeNumber: "Change my number",
@@ -1105,6 +1193,7 @@ export const ROOM_COPY = {
   talliedLine: (t: { consent: number; concern: number; object: number }) =>
     `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting`,
   consented: "Everyone here consents.",
+  waitingFor: (names: readonly string[]) => `Waiting for ${names.join(", ")}`,
   proposalConsentAsk: "Do you consent to this proposal?",
 
   startItem: "Start this item",

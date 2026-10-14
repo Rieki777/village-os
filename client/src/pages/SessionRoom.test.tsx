@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   CLOSE_REFUSAL,
   ROOM_COPY,
@@ -154,10 +154,14 @@ describe("the open room", () => {
     expect(posted("/act")[0]!.body).toEqual({ action: { type: "go", stage: "arrival" } });
   });
 
-  it("the facilitator begins the session clock", async () => {
+  it("the facilitator begins the session clock from the one forward button in their bar", async () => {
     room = makeView({ me: { userId: 1, joined: true, facilitates: true, secretary: false, admin: false } });
     render(<SessionRoom />);
-    fireEvent.click(await screen.findByRole("button", { name: ROOM_COPY.beginSession }));
+    const bar = await screen.findByRole("region", { name: ROOM_COPY.youFacilitate });
+    // One Begin on the page, in the bar, and no Next stage beside it until the clock runs.
+    expect(screen.getAllByRole("button", { name: ROOM_COPY.beginSession })).toHaveLength(1);
+    expect(within(bar).queryByRole("button", { name: new RegExp(`^${ROOM_COPY.nextStage}`) })).not.toBeInTheDocument();
+    fireEvent.click(within(bar).getByRole("button", { name: ROOM_COPY.beginSession }));
     await waitFor(() => expect(posted("/act")[0]?.body).toEqual({ action: { type: "start" } }));
   });
 

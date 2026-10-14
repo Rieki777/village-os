@@ -139,6 +139,28 @@ describe("the token layer", () => {
     expect(woven.fonts.display).toContain("Cormorant Garamond");
   });
 
+  it("a pinned accent keeps its own hue and is still measured", () => {
+    // A deep green seed under every card rotates to aqua or blue at most, so a
+    // guide whose accent is gold can only reach it by pinning it.
+    const seed = "#14362b";
+    const gold = "#b08d57";
+    for (const card of CHARACTER_CARDS) {
+      const t = deriveTheme(seed, card.id, gold)!;
+      const sun = hexToHsl(t.vars["--tone-sun"])!;
+      expect(Math.abs(sun.h - hexToHsl(gold)!.h), card.id).toBeLessThan(3);
+      expect(contrastRatio(t.vars["--foreground"], t.vars["--tone-sun"]), card.id).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(t.vars["--tone-sun-on-band"], t.vars["--tone-brand-band"]), card.id).toBeGreaterThanOrEqual(4.5);
+      expect(t.contrast.status, card.id).not.toBe("fail");
+    }
+  });
+
+  it("a blank, invalid or non-string accent falls back to the card's own", () => {
+    const own = deriveTheme("#14362b", "civic")!.vars["--tone-sun"];
+    expect(deriveTheme("#14362b", "civic", "")!.vars["--tone-sun"]).toBe(own);
+    expect(deriveTheme("#14362b", "civic", "gold")!.vars["--tone-sun"]).toBe(own);
+    expect(deriveTheme("#14362b", "civic", 7 as unknown as string)!.vars["--tone-sun"]).toBe(own);
+  });
+
   it("atContrast changes lightness as little as necessary", () => {
     const seed = hexToHsl("#157f7d")!;
     const adjusted = atContrast(seed, "#ffffff", 4.5, true);

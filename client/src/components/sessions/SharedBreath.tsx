@@ -3,10 +3,21 @@
  * because every screen reads `breathAt` against the room's clock (the server's
  * time, carried as an offset), never against its own.
  *
- * A soft circle grows on the in breath, rests full on the hold, shrinks on the
- * out breath and rests small. The facilitator picks the pattern and the rounds
- * and starts it for everyone. With reduced motion asked for, the circle holds
- * still and the words carry the breath: the step, its seconds and the round.
+ * It is drawn as a calm orb in the village's own tone: a thin hairline ring
+ * that holds still, a soft glow inside it, and a solid seed at the centre. The
+ * seed grows on the in breath, rests full on the hold, shrinks on the out
+ * breath and rests small, and the glow swells a little with it. Every colour
+ * comes from the theme's tokens, so a village's brand reaches it.
+ *
+ * With reduced motion asked for, nothing scales: the orb holds still and the
+ * words carry the breath, the step, its seconds and the round.
+ *
+ * A screen reader hears the breath begin and end, once each. The step words
+ * change every few seconds, and reading each one aloud would talk over the
+ * quiet the breath is for, so they are on the screen and not announced.
+ *
+ * The facilitator picks the pattern and the rounds from small tiles that show
+ * their counts, and starts it for everyone.
  */
 import { useState } from "react";
 import {
@@ -21,7 +32,8 @@ import {
   type SessionState,
 } from "@shared/sessions";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
-import { BTN_PRIMARY, BTN_SECONDARY, H3, HINT, INPUT, LABEL } from "./roomUi";
+import { radioArrows } from "@/lib/radioArrows";
+import { BTN_PRIMARY, BTN_SECONDARY, H3, HINT, LABEL, tile } from "./roomUi";
 import { useRoomNow, type RoomActions } from "./useSessionRoom";
 
 /** How full the circle is at this moment of the breath, from 0.55 to 1. */
@@ -47,6 +59,17 @@ export function breathEndsAt(b: SessionState["breath"]): number | null {
   return b.startedAt + steps.reduce((sum, step) => sum + step.secs, 0) * b.rounds * 1000;
 }
 
+/**
+ * What a screen reader is told about the breath: that it started, then that
+ * it ended. The sentence changes only at those two moments, so the polite
+ * live region holding it speaks twice a breath and is quiet in between.
+ */
+export function breathAnnouncement(m: BreathMoment, rounds: number): string {
+  if (m.state === "breathing") return ROOM_COPY.breathStartedSay(rounds);
+  if (m.state === "done") return ROOM_COPY.breathDone;
+  return "";
+}
+
 export interface SharedBreathProps {
   breath: SessionState["breath"];
   offset: number;
@@ -56,7 +79,7 @@ export interface SharedBreathProps {
 
 export default function SharedBreath({ breath, offset, facilitates, actions }: SharedBreathProps) {
   const reduced = useReducedMotion();
-  // Five beats a second while the room breathes, so the circle moves softly;
+  // Five beats a second while the room breathes, so the seed moves softly;
   // once a second otherwise, which is all the words need.
   const ends = breathEndsAt(breath);
   const running = ends != null && Date.now() + offset < ends;
@@ -76,63 +99,93 @@ export default function SharedBreath({ breath, offset, facilitates, actions }: S
   };
 
   const scale = reduced ? 0.8 : breathScale(moment);
-  const word =
-    moment.state === "breathing" ? BREATH_WORDS[moment.kind] : moment.state === "done" ? ROOM_COPY.breathDone : ROOM_COPY.breathTitle;
+  // The glow follows the seed at a quarter of its swing, so it breathes
+  // without ever filling the ring.
+  const glow = reduced ? 1 : 0.8 + 0.25 * scale;
+  const motion = reduced ? "none" : "transform 260ms linear";
+  const word = moment.state === "breathing" ? BREATH_WORDS[moment.kind] : moment.state === "done" ? ROOM_COPY.breathDone : null;
 
   return (
     <section aria-labelledby="breath-title" className="space-y-4">
       <h3 id="breath-title" className={H3}>
         {ROOM_COPY.breathTitle}
       </h3>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {breathAnnouncement(moment, breath.rounds)}
+      </p>
       <div className="flex flex-col items-center gap-3 py-2">
         <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64" aria-hidden="true">
-          <div className="absolute inset-0 rounded-full border border-teal-deep/20" />
+          <div className="absolute inset-0 rounded-full border border-border" />
           <div
-            className="absolute inset-0 rounded-full bg-teal-deep/15 ring-1 ring-teal-deep/25"
-            style={{
-              transform: `scale(${scale})`,
-              transition: reduced ? "none" : "transform 260ms linear",
-            }}
+            className="absolute inset-3 rounded-full bg-radial from-teal-deep/25 via-teal-deep/10 via-45% to-transparent to-70%"
+            style={{ transform: `scale(${glow})`, transition: motion }}
           />
           <div
-            className="absolute inset-0 rounded-full bg-teal-deep/10"
-            style={{ transform: `scale(${Math.max(0.3, scale - 0.25)})`, transition: reduced ? "none" : "transform 260ms linear" }}
+            className="h-2/5 w-2/5 rounded-full bg-teal-deep shadow-sm"
+            style={{ transform: `scale(${scale})`, transition: motion }}
           />
-          {moment.state === "breathing" && (
-            <span className="relative font-display text-4xl font-bold tabular-nums text-foreground/70">{moment.secondsLeft}</span>
-          )}
         </div>
-        <p className="text-center font-display text-2xl font-semibold text-foreground" aria-live="polite">
-          {word}
-        </p>
+        {word && <p className="text-center font-display text-2xl font-semibold text-foreground">{word}</p>}
         {moment.state === "breathing" && (
-          <p className={HINT}>{ROOM_COPY.breathRound(moment.round, breath.rounds)}</p>
+          <p className={`${HINT} tabular-nums`}>
+            {ROOM_COPY.breathStepLine(moment.secondsLeft, moment.round, breath.rounds)}
+          </p>
         )}
         {moment.state === "idle" && <p className={`${HINT} max-w-sm text-center`}>{ROOM_COPY.breathIdle}</p>}
       </div>
 
       {facilitates && (
-        <div className="flex flex-wrap items-end justify-center gap-3">
-          <label className="min-w-[9rem]">
-            <span className={LABEL}>{ROOM_COPY.breathPattern}</span>
-            <select className={INPUT} value={pattern} onChange={(e) => setPattern(e.target.value as BreathKey)} disabled={busy}>
+        <div className="flex flex-wrap items-end justify-center gap-4">
+          <div>
+            <p id="breath-pattern" className={LABEL}>
+              {ROOM_COPY.breathPattern}
+            </p>
+            <div role="radiogroup" aria-labelledby="breath-pattern" className="mt-1 flex flex-wrap gap-2">
               {BREATH_KEYS.map((k) => (
-                <option key={k} value={k}>
-                  {BREATH_PATTERNS[k].label}
-                </option>
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={pattern === k}
+                  tabIndex={pattern === k ? 0 : -1}
+                  className={tile(pattern === k)}
+                  disabled={busy}
+                  onClick={() => setPattern(k)}
+                  onKeyDown={radioArrows(BREATH_KEYS, pattern, setPattern)}
+                >
+                  {BREATH_PATTERNS[k].label}{" "}
+                  {/* No opacity here: on the chosen tile this is white on the
+                      brand, which is derived so white only just clears AA, and
+                      any fade drops it below. The lighter weight sets it apart. */}
+                  <span className="ml-1 font-normal tabular-nums">
+                    {ROOM_COPY.breathCounts(BREATH_PATTERNS[k].steps.map((s) => s.secs))}
+                  </span>
+                </button>
               ))}
-            </select>
-          </label>
-          <label className="min-w-[6rem]">
-            <span className={LABEL}>{ROOM_COPY.breathRounds}</span>
-            <select className={INPUT} value={rounds} onChange={(e) => setRounds(Number(e.target.value))} disabled={busy}>
+            </div>
+          </div>
+          <div>
+            <p id="breath-rounds" className={LABEL}>
+              {ROOM_COPY.breathRounds}
+            </p>
+            <div role="radiogroup" aria-labelledby="breath-rounds" className="mt-1 flex gap-2">
               {BREATH_ROUNDS.map((r) => (
-                <option key={r} value={r}>
+                <button
+                  key={r}
+                  type="button"
+                  role="radio"
+                  aria-checked={rounds === r}
+                  tabIndex={rounds === r ? 0 : -1}
+                  className={`${tile(rounds === r)} min-w-11 tabular-nums`}
+                  disabled={busy}
+                  onClick={() => setRounds(r)}
+                  onKeyDown={radioArrows(BREATH_ROUNDS, rounds, setRounds)}
+                >
                   {r}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           {moment.state === "breathing" ? (
             <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void run(false)}>
               {ROOM_COPY.breathStop}

@@ -63,7 +63,11 @@ import * as repo from "../repos/liveSessions";
 import { listOrgAssignments, listOrgRoles } from "./orgChart";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
-import { moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
+import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
+import { orderParcels } from "../../shared/land";
+import { isTropicalLatitude, parseVillageSeasons, villageSeasonOn } from "../../shared/villageSeasons";
+import { villageLandRows } from "../repos/villageLand";
+import { villageTimezone } from "./villageReaders";
 import {
   CLOSE_REFUSAL,
   ENTRY_STATUSES,
@@ -85,6 +89,7 @@ import {
   cleanText,
   consentNeedsWords,
   consentTally,
+  consentWaiting,
   defaultSessionState,
   isArrivalScore,
   isConsentValue,
@@ -96,6 +101,7 @@ import {
   type ArrivalSummary,
   type ConsentTally,
   type ConsentValue,
+  type ConsentWaiting,
   type EntryKind,
   type EntryStatus,
   type FacilitationValue,
@@ -188,6 +194,10 @@ export function readStamp(raw: unknown): SessionStamp {
   return {
     moonName: typeof s.moonName === "string" ? s.moonName : "",
     moonGlyph: typeof s.moonGlyph === "string" ? s.moonGlyph : "",
+    // Both arrived later than the stamp itself, so a stamp stored before them
+    // reads null, and so does anything that is not what the room can draw.
+    moonPhase: typeof s.moonPhase === "number" && Number.isFinite(s.moonPhase) && s.moonPhase >= 0 && s.moonPhase <= 1 ? s.moonPhase : null,
+    hemisphere: s.hemisphere === "north" || s.hemisphere === "south" ? s.hemisphere : null,
     moonOrdinal: Number.isInteger(s.moonOrdinal) ? s.moonOrdinal : null,
     season: typeof s.season === "string" ? s.season : null,
     placeLine: typeof s.placeLine === "string" && s.placeLine ? s.placeLine : null,
@@ -531,6 +541,64 @@ export function defaultDuration(): number {
   return Math.min(SESSION_LIMITS.durationMax, Math.max(SESSION_LIMITS.durationMin, n || SESSION_LIMITS.durationDefault));
 }
 
+/**
+ * The season a stamp names, in this order:
+ *
+ *   1. The village's own seasons (`calendar.seasons`), when it has written a
+ *      list the room can read whole: the one whose start most recently passed
+ *      on the village's own calendar day, wrapping the year.
+ *   2. None, when the village's land sits between the tropics and it has
+ *      named no seasons. Spring and autumn do not describe a year that turns
+ *      on rain, and a wrong word on every record is worse than no word.
+ *   3. The temperate four by hemisphere, as before, when the land is outside
+ *      the tropics or the village has not said where it is.
+ *
+ * Pure, so each branch is tested without a database: the caller reads the
+ * dial, the latitude and the zone.
+ */
+export function stampSeason(
+  now: Date,
+  village: { seasons: string | null; latitude: number | null; hemisphere: "north" | "south"; timeZone: string },
+): string | null {
+  const own = parseVillageSeasons(village.seasons);
+  if (own) {
+    let day: { month: number; day: number };
+    try {
+      day = civilDate(now, village.timeZone);
+    } catch {
+      day = civilDate(now, "UTC");
+    }
+    return villageSeasonOn(own, day.month, day.day);
+  }
+  if (village.latitude != null && isTropicalLatitude(village.latitude)) return null;
+  return seasonAt(now, village.hemisphere);
+}
+
+/** This deployment is one village; the land table keys its rows by it (0069). */
+const VILLAGE = "local";
+
+/**
+ * The latitude of the village's first parcel of land, or null when it has not
+ * said where it is. Read only to tell the tropics from the rest; the stamp
+ * carries no coordinate. `=== null` against the column, never a truthiness
+ * test, because a village on the equator stands at latitude 0.
+ */
+export async function villageLatitude(pool: Pool): Promise<number | null> {
+  try {
+    const parcels = orderParcels(
+      (await villageLandRows(pool, VILLAGE)).map((r) => ({
+        sortOrder: Number(r.sort_order ?? 0),
+        createdAt: r.created_at ? String(r.created_at) : null,
+        lat: r.centre_lat === null || r.centre_lat === undefined ? null : Number(r.centre_lat),
+      })),
+    );
+    const placed = parcels.find((p) => p.lat !== null && Number.isFinite(p.lat));
+    return placed?.lat ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** What the sky and the place say as a session opens. Each part degrades to null on its own. */
 export async function sessionStamp(pool: Pool, now: Date): Promise<SessionStamp> {
   const phase = moonPhase(now);
@@ -540,13 +608,30 @@ export async function sessionStamp(pool: Pool, now: Date): Promise<SessionStamp>
   } catch {
     moonOrdinal = null;
   }
-  let season: SessionSeason | null = null;
+  let hemisphere: "north" | "south" | null = null;
   try {
-    season = seasonAt(now, stringVar("calendar.hemisphere") === "south" ? "south" : "north");
+    hemisphere = stringVar("calendar.hemisphere") === "south" ? "south" : "north";
+  } catch {
+    hemisphere = null;
+  }
+  let season: string | null = null;
+  try {
+    const seasons = stringVar("calendar.seasons");
+    // The land is read only when the village has named no seasons of its own.
+    const latitude = parseVillageSeasons(seasons) ? null : await villageLatitude(pool);
+    season = hemisphere ? stampSeason(now, { seasons, latitude, hemisphere, timeZone: villageTimezone() }) : null;
   } catch {
     season = null;
   }
-  return { moonName: moonPhaseName(phase), moonGlyph: moonPhaseGlyph(phase), moonOrdinal, season, placeLine: placeLine() };
+  return {
+    moonName: moonPhaseName(phase),
+    moonGlyph: moonPhaseGlyph(phase),
+    moonPhase: Math.round(phase * 10_000) / 10_000,
+    hemisphere,
+    moonOrdinal,
+    season,
+    placeLine: placeLine(),
+  };
 }
 
 // ── Reading a body ──────────────────────────────────────────────────────────
@@ -1459,6 +1544,10 @@ export async function buildView(
   const responsesOut: SessionResponse[] = responses
     .map((r) => ({ target: parseResponseTarget(r.target), userId: r.no, value: r.value, text: r.text }))
     .filter((r): r is SessionResponse => r.target != null && r.target !== "facilitation");
+  // Who each open consent question is still waiting on, named the way the
+  // room names people. Only for a viewer who sees the answers: anyone else
+  // receives no answers to count from, and would read everyone as waiting.
+  const waiting: ConsentWaiting = open && seesAnswers ? consentWaiting(peopleOut, entries, responsesOut) : {};
 
   let carried: SessionView["carried"] = null;
   if (carriedFrom) {
@@ -1492,6 +1581,7 @@ export async function buildView(
     entries: entries.map((e) => entryOut(e, names, seats)),
     responses: responsesOut,
     facilitation,
+    waiting,
     seats: seats.options,
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
