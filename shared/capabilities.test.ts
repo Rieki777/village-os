@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty keys: the nineteen the ruling was given in, and the comms power after it", () => {
+    it("is twenty-one keys: the nineteen the ruling was given in, the comms power, and module.switch", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -393,9 +393,14 @@ describe("hasCapability truth table", () => {
        * the nineteen, and the handover counts it. The comms foundation lane
        * moved this number and named it in its report for the integrator to
        * confirm, because the plan approved the power and never said the count.
+       * TWENTY-ONE SINCE 2026-10-09. Rye ruled that after launch a live holder of the
+       * modules power turns a module on directly, so `module.switch` is a power
+       * a village hands to a seat, and the founding stewards take it with the
+       * rest at launch. Flagged to him in the lane report.
        */
-      expect(HANDOVER_SET).toHaveLength(20);
+      expect(HANDOVER_SET).toHaveLength(21);
       expect(HANDOVER_SET).toContain("comms.manage");
+      expect(HANDOVER_SET).toContain("module.switch");
     });
 
     it("carries the steward's veto, which is what opens the break-glass", () => {

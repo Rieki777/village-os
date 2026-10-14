@@ -173,6 +173,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/redemptions/:id/confirm", "/api/redemptions/:id/refuse"],
   },
   {
+    capability: "module.switch",
+    title: "Which modules the village runs",
+    surface: "Turning a module on after launch, without a vote",
+    routes: ["/api/admin/modules/:id/lifecycle"],
+  },
+  {
     capability: "quest.consent",
     title: "Releasing value on finished work",
     surface: "Consenting to somebody else's finished quest",

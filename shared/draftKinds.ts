@@ -182,6 +182,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "quest.approve": "put a proposed quest on the board, and set what finishing it pays",
   "redemption.confirm":
     "agree that a member has been paid off the platform, and destroy the tokens they redeemed",
+  "module.switch": "turn a module on for the whole village, without a vote",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",
   "comms.manage":
