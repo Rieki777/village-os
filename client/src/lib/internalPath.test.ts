@@ -10,6 +10,7 @@ describe("internalPath", () => {
   it.each([
     ["/profile", "/profile"],
     ["/admin?tab=modules&module=saberra", "/admin?tab=modules&module=saberra"],
+    ["/modules/saberra#setting-config", "/modules/saberra#setting-config"],
     ["/forum/thread-1#reply-3", "/forum/thread-1#reply-3"],
     ["/", "/"],
   ])("keeps the internal path %s", (raw, kept) => {

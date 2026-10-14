@@ -94,12 +94,15 @@ import { applyMintRuleChanges } from "./economy";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
+import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
- * One entry, and it is the module the vote itself runs on.
+ * One entry, and it is the module the vote itself runs on. Held in
+ * `shared/moduleSwitch.ts` now, so the validator that refuses a proposal and
+ * this executor read one set.
  */
-export const NEVER_BY_CHANGESET: ReadonlySet<string> = new Set(["governance"]);
+export { NEVER_BY_CHANGESET };
 
 /**
  * The kinds this build can actually carry out, in the order they are applied.

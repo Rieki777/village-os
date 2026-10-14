@@ -105,6 +105,9 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       // to tune it in the same visit.
       title: MODULES_GROUP_TITLE,
       items: [
+        // A door, not a tab, since 2026-10-09: the admin Module Library is one
+        // page with the public library, and choosing this row lands on
+        // /modules (Admin.tsx redirects `?tab=modules`, deep links included).
         { key: "modules", label: "Module Library", icon: ToggleLeft },
         // Second in the group, and directly under the master switch, because
         // it is the answer the rest of the group is FOR (R1, lane N2): which
