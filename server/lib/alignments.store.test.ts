@@ -79,7 +79,9 @@ describe("insert only: the four tables are mutated in one file", () => {
 });
 
 describe("the retention sweep never touches the alignment store", () => {
-  const index = fs.readFileSync(path.join(ROOT, "server/index.ts"), "utf8");
+  // Line endings normalised first: a Windows checkout of index.ts is CRLF, and the
+  // slice below looks for "\n}\n".
+  const index = fs.readFileSync(path.join(ROOT, "server/index.ts"), "utf8").replace(/\r\n/g, "\n");
   const start = index.indexOf("async function runRetentionSweep");
   const body = index.slice(start, index.indexOf("\n}\n", start));
 
