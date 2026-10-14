@@ -1609,10 +1609,16 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const memberTools = memberCat.json.modules.find((m: any) => m.id === "tools");
     expect(memberTools.on).toBe(false);
     expect(memberTools).not.toHaveProperty("lifecycle");
+    // How each reader sees the one library page, decided by the server
+    // (Rye, 2026-10-09). The harness village holds no launch ballot, so the
+    // founder still switches directly.
+    expect(anonCat.json.viewer).toMatchObject({ mode: "visitor", canSwitch: false });
+    expect(memberCat.json.viewer).toMatchObject({ mode: "member", canSwitch: false, canPause: false });
     const adminCat = await api("GET", "/api/modules/catalog", undefined, founderToken);
     const adminTools = adminCat.json.modules.find((m: any) => m.id === "tools");
     expect(adminTools.on).toBe(false);
     expect(adminTools.lifecycle).toBe("preview");
+    expect(adminCat.json.viewer).toMatchObject({ mode: "steward", launched: false, canSwitch: true, canPause: true });
 
     // The admin payload's library facts.
     const adminView = await api("GET", "/api/admin/modules", undefined, founderToken);
