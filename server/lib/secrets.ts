@@ -161,6 +161,17 @@ export function envNameFor(key: SecretKey): string | null {
   return String(key).toUpperCase();
 }
 
+/**
+ * The Integrations cards for the two master roots, which `integrationCards()`
+ * in server/index.ts lists after the platform's own. Kept beside the slots
+ * they write, so the copy that says "no host variable stands in" sits next to
+ * the `null` that makes it true.
+ */
+export const ROOT_SLOT_CARDS: ReadonlyArray<{ key: BaseSecretKey; title: string; unlocks: string; getAt: string; placeholder: string }> = [
+  { key: "railway_project_token", title: "Railway, one project", unlocks: "Lets the setup game set and remove this village's hosting variables inside one Railway project and environment. It reaches no other project, and nothing ever reads it back out.", getAt: "railway.com → your project → Settings → Tokens", placeholder: "a token for this project only" },
+  { key: "dns_zone_token", title: "DNS, one domain", unlocks: "Lets the setup game add the records email and your address need, in this one domain only. It is removed after launch and planted again when a record has to change.", getAt: "your DNS host → API tokens → a token limited to this one zone", placeholder: "a token for this zone only" },
+];
+
 /** The env value a slot falls back to, or "" for a slot with no fallback. */
 function envFallback(key: SecretKey, env: NodeJS.ProcessEnv): string {
   const name = envNameFor(key);
