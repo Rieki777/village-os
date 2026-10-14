@@ -1360,6 +1360,10 @@ export const MODULES: ModuleDef[] = [
     // every email written to them. A named person's data from the first row.
     dataClass: "member-pii",
     group: "connect",
+    // What a village plants before its email works: the Resend account, its
+    // verified sending domain, a key for it, and the sealing key the stored
+    // provider key and delivery-report secret are kept under.
+    guild: ["resend-account", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
     /*
      * REQUIRED, because the parts that make email arrive are the village's own
      * and no default can stand in for them: its provider key, a sending
