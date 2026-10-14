@@ -327,6 +327,7 @@ two from the admin panel and almost never touches the first.
   volume is content-addressed, cached correctly and swappable;
   `client/public` is served one-year-immutable and cannot be replaced for a
   year once a browser has it.
+- **The stock character art ships in the image, not in `client/public`** (2026-10-13): the thirty class drawings live in `server/assets/avatars/` and the server answers them at their old `/images/avatars/` URLs, with or without a volume. No env var and no seed; a fork with its own Dockerfile or deploy script must ship `server/assets/` beside `dist/`, as the stock `Dockerfile` does, or the class art falls back to sigils.
 - **Member uploads are shrunk in the browser** by
   `client/src/lib/imagePrep.ts`: it draws to a canvas, encodes WebP and
   returns the ORIGINAL file whenever it cannot do that safely (SVG, GIF, a

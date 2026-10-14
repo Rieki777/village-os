@@ -259,6 +259,7 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
   it("answers 404 for a missing file, never the shell with a 200", async () => {
     for (const route of [
       "/images/modules/zzz-does-not-exist.webp",
+      "/images/avatars/zzz-does-not-exist.webp",
       "/images/nope",
       "/favicon-definitely-missing.png",
       "/apple-touch-icon.png",
@@ -278,5 +279,47 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
       expect(res.headers.get("content-type") ?? "").toMatch(/text\/html/);
       expect(await res.text()).toContain(SHELL);
     }
+  });
+});
+
+/*
+ * THE STOCK CHARACTER ART, FROM THE SERVER, ON AN EMPTY VOLUME.
+ *
+ * The thirty drawings left `client/public` on 2026-10-13 so they stop counting
+ * against the client budget, and the BUILT server now answers their old URLs
+ * from `server/assets/avatars` (server/routes/stockAvatars.ts). This suite's
+ * DATA_DIR is a fresh empty directory, which is the uploads volume of a new
+ * fork and of an upgraded village that never held the art, so a green here
+ * says the URLs work without anything having been seeded.
+ *
+ * The URLs are the ones the code computes (avatarFor, portraitFor), and the
+ * picker's own template, never a list typed for the test.
+ */
+describe.skipIf(!DB_CONFIGURED)("stock character art from the built server", () => {
+  it("is not in dist/public, so the client budget no longer pays for it", () => {
+    expect(fs.existsSync(path.resolve(process.cwd(), "dist/public/images/avatars"))).toBe(false);
+  });
+
+  it("answers every computed URL with the drawing, its type and a day of cache", async () => {
+    const { ARCHETYPE_KEYS, PRESENTATIONS, TONES, avatarFor } = await import("./lib/characters");
+    const { portraitFor } = await import("../shared/roleSheet");
+    const urls = new Set<string>(["/images/avatars/catalyzing-m-olive.webp"]);
+    for (const a of ARCHETYPE_KEYS) for (const p of PRESENTATIONS) for (const t of TONES) {
+      const u = avatarFor(a, p, t);
+      if (u) urls.add(u);
+    }
+    const seat = portraitFor({ id: "seat-hygiene", name: "Seat" }, ["researching"]);
+    if (seat.kind === "class") urls.add(seat.src);
+    expect(urls.size).toBe(30);
+    for (const u of urls) {
+      const res = await fetch(BASE + u); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
+      expect(res.status, u).toBe(200);
+      expect(res.headers.get("content-type"), u).toBe("image/webp");
+      expect(res.headers.get("cache-control"), u).toBe("public, max-age=86400");
+      expect((await res.arrayBuffer()).byteLength, u).toBeGreaterThan(10000);
+    }
+    const manifest = await fetch(`${BASE}/images/avatars/manifest.json`); // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type") ?? "").toMatch(/application\/json/);
   });
 });
