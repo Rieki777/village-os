@@ -91,6 +91,7 @@ import { launchBallotCarried } from "../lib/launch";
 import { recordEvent } from "../lib/events";
 import { getPool } from "../db/pool";
 import { liveModuleProposal, moduleLifecycleRows, moduleVoteWrites } from "../repos/moduleHistory";
+import { moduleNeeds } from "../../shared/moduleNeeds";
 
 /**
  * What the change-set validator needs to take a module switch to a vote.
@@ -180,6 +181,10 @@ export function register(app: Express, deps: Deps): void {
           withdrawn: m.withdrawn ?? null,
           priceLine: m.pricing ? priceLine(m.pricing) : null,
           card: MODULE_CATALOG[m.id] ?? null,
+          // What has to be planted before it runs: its guild, in the seed
+          // catalog's own words. Public, because it describes keys and never
+          // holds one, and a visitor deciding about a village reads it too.
+          needs: moduleNeeds(m.guild),
           imageUrl,
           // The dials this module owns that the village may propose changes
           // to (the open ring). A member suggests a change beside the dial

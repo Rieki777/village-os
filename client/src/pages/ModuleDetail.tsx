@@ -196,6 +196,37 @@ export default function ModuleDetail() {
           </div>
         </section>
 
+        {/* Its guild: the keys and accounts that have to be in place before
+            it runs, in the seed catalog's own words. Every reader sees it,
+            because a founder choosing modules and a member proposing one both
+            need to know what comes with it. */}
+        {m.needs && m.needs.length > 0 && (
+          <section className="mt-6" aria-labelledby="module-needs">
+            <h2 id="module-needs" className="font-semibold text-foreground mb-2">What it needs</h2>
+            <ul className="space-y-3">
+              {m.needs.map((n) => (
+                <li key={n.id} className="rounded-xl border border-border p-4 text-sm">
+                  <p className="font-medium text-foreground">
+                    {n.title}
+                    <span className="font-normal text-muted-foreground"> · {n.provider}</span>
+                    {n.keystone && (
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber/20 text-foreground align-middle">
+                        Keystone: a second founder agrees
+                      </span>
+                    )}
+                    {!n.required && <span className="ml-2 text-xs text-muted-foreground">Optional</span>}
+                  </p>
+                  <p className="text-muted-foreground mt-1 leading-relaxed">{n.consequence}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {n.cost} {n.rotation}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">To undo: {n.undo}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {m.requires.length > 0 && (
           <p className="mt-4 text-sm text-muted-foreground">
             Needs {m.requires.map((dep) => names[dep] ?? dep).join(" and ")} to run.

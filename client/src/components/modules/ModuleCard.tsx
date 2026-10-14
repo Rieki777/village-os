@@ -10,10 +10,13 @@
 import { Link } from "wouter";
 import { POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
 import type { ModuleDataClass } from "@shared/modules";
+import type { ModuleNeed } from "@shared/moduleNeeds";
 import ModuleArt from "./ModuleArt";
 
 export interface CatalogModule {
   id: string;
+  /** What has to be planted before it runs (shared/moduleNeeds.ts). */
+  needs?: ModuleNeed[] | null;
   name: string;
   description: string;
   core: boolean;

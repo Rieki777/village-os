@@ -22,6 +22,7 @@
 import { useEffect, useState } from "react";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { turnOnPlan, type PlanModule } from "@shared/moduleSwitch";
+import { planNeeds, type ModuleNeed } from "@shared/moduleNeeds";
 
 const KEY = "modules.planBasket";
 export const BASKET_EVENT = "modules:basket";
@@ -60,17 +61,25 @@ export function useBasket(): string[] {
 export interface BasketModule extends PlanModule {
   pricing?: { amount: number; currency: string; period: "month" | "year" | "once" } | null;
   priceLine?: string | null;
+  needs?: ModuleNeed[] | null;
 }
 
-/** One thing a plan needs set up before it can run. Empty until guild seeds land. */
+/** One thing a plan needs set up before it can run, from the guild seeds. */
 export interface NeedLine {
   moduleId: string;
   text: string;
 }
 
-/** THE SEAM. See the header: guild seeds fill this in once shared/guilds.ts lands. */
-export function needsFor(_plan: readonly BasketModule[]): NeedLine[] {
-  return [];
+/**
+ * The guild seeds the whole plan needs, each once. Two money modules share
+ * the card-payment key, and a founder plants it once, so it reads once with
+ * both names. Keystones say so, because those need a second founder.
+ */
+export function needsFor(plan: readonly BasketModule[]): NeedLine[] {
+  return planNeeds(plan).map(({ need, forModules }) => ({
+    moduleId: need.id,
+    text: `${need.title} (${forModules.join(", ")}): ${need.provider}.${need.keystone ? " A keystone, so a second founder agrees to it." : ""}`,
+  }));
 }
 
 export interface PlanSummary {

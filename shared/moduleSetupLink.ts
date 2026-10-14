@@ -103,5 +103,5 @@ export function setupAside(
   opts: { on: boolean },
 ): string | null {
   if (!target || opts.on || target.kind !== "tab") return null;
-  return "Turn it on in preview first: this is made on the module's own screen, which opens with it.";
+  return "Turn it on in preview first. You set this up on its own page, which opens once it is on.";
 }
