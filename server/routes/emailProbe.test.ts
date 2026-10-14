@@ -48,7 +48,8 @@ describe("POST /api/admin/integrations/resend/probe", () => {
     resendCalls.length = 0;
     // The route's own outbound call to Resend is the only one intercepted.
     globalThis.fetch = (async (url: any, init: any) => {
-      if (String(url).startsWith("https://api.resend.com")) {
+      const target = new URL(String(url));
+      if (target.protocol === "https:" && target.host === "api.resend.com") {
         resendCalls.push({ url: String(url), body: JSON.parse(init.body), auth: init.headers.Authorization });
         return new Response(resendStatus === 200 ? '{"id":"e_1"}' : '{"message":"refused"}', { status: resendStatus });
       }
