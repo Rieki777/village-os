@@ -358,7 +358,8 @@ export async function viewText(db: Db, textId: string, today: string, timezone =
 export interface SettleDeps {
   getPool: () => Pool;
   notify: (input: { userId: string; type: string; title: string; body?: string | null; link?: string | null; actorUserId?: string | null; dedupeKey: string }) => Promise<unknown>;
-  notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string) => Promise<unknown>;
+  /** `except` names members already told, so an admin who is also a party hears once (red team U11). */
+  notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[]) => Promise<unknown>;
   /** Today in the village's calendar, YYYY-MM-DD. */
   today: () => string;
 }
@@ -406,6 +407,8 @@ export async function settleText(deps: SettleDeps, textId: string): Promise<Text
     const seats = seatList(v.seatNames);
     const title = `Aligned and in force: the terms for ${seats}`;
     const link = v.application ? applicationHref(v.application.id) : null;
+    // A member who is a party hears as a party, and never again as the village's holder or admin.
+    const partyUsers = v.parties.map((p) => p.userId).filter((id): id is string => !!id);
     for (const p of v.parties) {
       const key = `alignment:${v.text.id}:${p.partyKey}:in-force`.slice(0, 191);
       if (p.userId) {
@@ -413,8 +416,9 @@ export async function settleText(deps: SettleDeps, textId: string): Promise<Text
       } else if (p.partyKey === VILLAGE_PARTY) {
         // The village is told through the holder who aligned for it, or, for a vote, its admins.
         const holder = v.alignments.find((a) => a.partyKey === VILLAGE_PARTY && a.method === "holder" && a.userId)?.userId ?? null;
-        if (holder) await deps.notify({ userId: holder, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
-        else await deps.notifyAdmins("governance", title, key, link ?? undefined);
+        if (holder) {
+          if (!partyUsers.includes(holder)) await deps.notify({ userId: holder, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
+        } else await deps.notifyAdmins("governance", title, key, link ?? undefined, partyUsers);
       }
     }
   }

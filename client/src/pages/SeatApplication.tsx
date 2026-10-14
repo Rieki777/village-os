@@ -70,6 +70,7 @@ export const APPLICATION_WORDS = {
   votingLine: "The village is voting on this application.",
   readTheVote: "Read the vote",
   laterLine: "Adopted. The seats are taken up on the first day it names.",
+  packageTerms: "One set of terms covers every seat above.",
 } as const;
 
 function SeatCards({ app }: { app: ServedApplication }) {
@@ -98,48 +99,56 @@ function SeatCards({ app }: { app: ServedApplication }) {
           href: app.adoptedVia === "ballot" && app.ballotId ? `/decisions/${app.ballotId}` : null,
         }
       : null;
+  /*
+   * ONE SET OF TERMS, ONE DRAWER (red team U11). An application for several
+   * seats asks for them on one set of terms, so the drawer is drawn once: in
+   * the card's tray when there is one seat, under the cards when there are
+   * more. Three identical drawers read as three sets of terms.
+   */
+  const drawer = (
+    <SeatTermsDrawer
+      settings={parsed.ok ? parsed.settings : null}
+      unreadable={!parsed.ok}
+      villagePresets={villagePresets}
+      adopted={adopted}
+      alignment={marks}
+      defaultOpen
+    />
+  );
+  const single = app.seats.length === 1;
   return (
-    <ul className="space-y-6">
-      {app.seats.map((seat) => {
-        const row = roles.find((r) => String(r?.id ?? "") === seat.id);
-        return (
-          <li key={seat.id}>
-            {row ? (
-              <SeatTradingCard
-                input={{ ...fromOrgSeat(row, org?.circles, org?.people, org?.village), mode: "proposal" as const }}
-                ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
-                faces="stacked"
-                settings={
-                  <SeatTermsDrawer
-                    settings={parsed.ok ? parsed.settings : null}
-                    unreadable={!parsed.ok}
-                    villagePresets={villagePresets}
-                    adopted={adopted}
-                    alignment={marks}
-                    defaultOpen
-                  />
-                }
-              />
-            ) : (
-              <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
-                <p className="font-display text-lg font-bold">{seat.name}</p>
-                {seat.aim && <p className="mt-1 text-sm text-muted-foreground">{seat.aim}</p>}
-                <div className="mt-3">
-                  <SeatTermsDrawer
-                    settings={parsed.ok ? parsed.settings : null}
-                    unreadable={!parsed.ok}
-                    villagePresets={villagePresets}
-                    adopted={adopted}
-                    alignment={marks}
-                    defaultOpen
-                  />
+    <div className="space-y-6">
+      <ul className="space-y-6">
+        {app.seats.map((seat) => {
+          const row = roles.find((r) => String(r?.id ?? "") === seat.id);
+          return (
+            <li key={seat.id}>
+              {row ? (
+                // The seat as it stands in the village today, held or open (red team U11): never "Proposed".
+                <SeatTradingCard
+                  input={fromOrgSeat(row, org?.circles, org?.people, org?.village)}
+                  ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
+                  faces="stacked"
+                  settings={single ? drawer : undefined}
+                />
+              ) : (
+                <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
+                  <p className="font-display text-lg font-bold">{seat.name}</p>
+                  {seat.aim && <p className="mt-1 text-sm text-muted-foreground">{seat.aim}</p>}
+                  {single && <div className="mt-3">{drawer}</div>}
                 </div>
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {!single && (
+        <div data-package-terms="" className="sheet-night rounded-xl bg-card p-4 text-foreground">
+          <p className="text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>
+          <div className="mt-3">{drawer}</div>
+        </div>
+      )}
+    </div>
   );
 }
 

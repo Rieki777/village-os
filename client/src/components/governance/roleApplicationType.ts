@@ -108,7 +108,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           placeholder: "By the end of the season, the spring runs clear and two people besides me know how to keep it that way.",
           help: "Write what will be TRUE at season's end, so anyone can check it without asking you. Members read this; a vote never shows it.",
           required: true,
-          problem: atLeast(40, "Your deliverables"),
+          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
+          problem: atLeast(40, "Your list of deliverables"),
         },
         {
           key: "fitStatement",

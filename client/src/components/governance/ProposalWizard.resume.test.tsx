@@ -9,8 +9,9 @@
  * (`?draft=<id>`), and the page opened at that address resumes it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProposalWizard, { draftFromUrl } from "./ProposalWizard";
+import { walkFor } from "./wizardWalk";
 
 vi.mock("@/components/natural", () => ({ BreathingLoader: () => null }));
 vi.mock("@/components/natural/useReducedMotion", () => ({ useReducedMotion: () => true, prefersReducedMotion: () => true }));
@@ -71,5 +72,21 @@ describe("the wizard's address", () => {
     render(<ProposalWizard />);
     expect(await screen.findByDisplayValue("I kept the orchard ledger last season.")).toBeTruthy();
     expect(window.location.search).toBe("?draft=pd-resume-1");
+  });
+});
+
+describe("focus follows the step (red team U10)", () => {
+  it("arriving moves no focus; each Next puts focus on the new step's heading, named for the step", async () => {
+    const label = (key: string) => walkFor("role_application").find((s) => s.key === key)!.label;
+    window.history.replaceState(null, "", "/propose?type=role_application&seat=seat-1");
+    render(<ProposalWizard start={{ type: "role_application", answers: { seatIds: ["seat-1"] } }} />);
+    const subject = await screen.findByRole("heading", { level: 2, name: label("subject") });
+    expect(document.activeElement).not.toBe(subject);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const details = await screen.findByRole("heading", { level: 2, name: label("details") });
+    await waitFor(() => expect(document.activeElement).toBe(details));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    const terms = await screen.findByRole("heading", { level: 2, name: label("terms") });
+    await waitFor(() => expect(document.activeElement).toBe(terms));
   });
 });

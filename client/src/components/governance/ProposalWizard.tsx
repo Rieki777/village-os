@@ -310,6 +310,23 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     if (first) setStep(first);
   };
 
+  /*
+   * FOCUS FOLLOWS THE STEP (red team U10). Each step's heading takes focus
+   * when the step changes, so a keyboard or screen reader user lands on the
+   * new question and hears its name, instead of staying on Next with some
+   * forty tab stops between them and the first field. Never on the first
+   * render: arriving at the page does not move anybody's focus.
+   */
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (!arrived.current) {
+      arrived.current = true;
+      return;
+    }
+    stepHeadingRef.current?.focus();
+  }, [step]);
+
   // Back and Forward move between the steps the member walked.
   const goToRef = useRef(goTo);
   goToRef.current = goTo;
@@ -451,6 +468,12 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
           <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
         </div>
 
+        {stepMeta && step !== "type" && step !== "review" && (
+          <h2 ref={stepHeadingRef} tabIndex={-1} className="mb-2 font-display text-xl font-bold text-stone-900 focus:outline-none">
+            {stepMeta.label}
+          </h2>
+        )}
+
         {stepMeta?.intro && step !== "type" && (
           <p className="mb-4 text-stone-700 leading-relaxed">{stepMeta.intro}</p>
         )}
@@ -472,7 +495,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               <>
                 <DraftCards drafts={drafts} busyId={busyDraft} onContinue={continueDraft} onDiscard={discardDraft} />
                 <div>
-                  <h2 className="text-base font-bold text-stone-900">What kind of decision is this?</h2>
+                  <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+                    What kind of decision is this?
+                  </h2>
                   <p className="mt-0.5 text-sm text-stone-600">
                     Each kind asks different questions and travels a different road. Pick the one that fits and the
                     rest follows.
@@ -516,7 +541,9 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
         {step === "review" && cfg && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-bold text-stone-900">Read it back</h2>
+              <h2 ref={stepHeadingRef} tabIndex={-1} className="text-base font-bold text-stone-900 focus:outline-none">
+                Read it back
+              </h2>
               <p className="mt-0.5 text-sm text-stone-600">
                 This is what the village will see. Everything here is still yours to change.
               </p>
