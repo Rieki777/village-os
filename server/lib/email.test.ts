@@ -15,6 +15,7 @@ import {
   parseSmtpReply,
   sendEmail,
   sendViaSmtp,
+  RESEND_PROBE_RECIPIENT,
   verifyEmailTransport,
   verifySmtpTransport,
   type EmailOpts,
@@ -345,5 +346,62 @@ describe("sendEmail and verifyEmailTransport both record through integration_hea
     const result = await verifyEmailTransport({});
     expect(result).toEqual({ ok: false, transport: "none", detail: expect.stringContaining("No email transport") });
     expect(integrationHealth("email", "resend-verify")).toEqual(before);
+  });
+});
+
+describe("the Resend live check is a real send to Resend's test recipient", () => {
+  const withFetch = async (status: number, body: string, run: (calls: Array<{ url: string; init: any }>) => Promise<void>) => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init: any }> = [];
+    globalThis.fetch = (async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      return new Response(body, { status });
+    }) as any;
+    try {
+      await run(calls);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  };
+
+  it("sends from the village's own sender to delivered@resend.dev and records the check", async () => {
+    await withFetch(200, '{"id":"e_1"}', async (calls) => {
+      const r = await verifyEmailTransport({ resendApiKey: "re_send_only" }, "hello@village.example");
+      expect(r).toEqual({ ok: true, transport: "resend", detail: "Resend accepted a test send from hello@village.example." });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe("https://api.resend.com/emails");
+      expect(calls[0].init.method).toBe("POST");
+      const sent = JSON.parse(calls[0].init.body);
+      expect(sent.to).toEqual([RESEND_PROBE_RECIPIENT]);
+      expect(sent.from).toBe("hello@village.example");
+      expect(calls[0].init.headers.Authorization).toBe("Bearer re_send_only");
+    });
+    expect(integrationHealth("email", "resend-verify")?.lastSuccessAt).toBeTruthy();
+  });
+
+  it("never lists API keys, so a send-only key can pass", async () => {
+    await withFetch(200, "{}", async (calls) => {
+      await verifyEmailTransport({ resendApiKey: "re_send_only" }, "hello@village.example");
+      expect(calls.some((c) => c.url.includes("/api-keys"))).toBe(false);
+    });
+  });
+
+  it("says plainly when there is no sender, and spends no call", async () => {
+    await withFetch(200, "{}", async (calls) => {
+      const r = await verifyEmailTransport({ resendApiKey: "re_send_only" }, "  ");
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("No sender address");
+      expect(calls).toHaveLength(0);
+    });
+  });
+
+  it("records a refusal as a failure, with Resend's own words", async () => {
+    await withFetch(403, '{"message":"domain not verified"}', async () => {
+      const r = await verifyEmailTransport({ resendApiKey: "re_send_only" }, "hello@unverified.example");
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("403");
+      expect(r.detail).toContain("domain not verified");
+    });
+    expect(integrationHealth("email", "resend-verify")?.consecutiveFailures).toBeGreaterThan(0);
   });
 });

@@ -43,6 +43,7 @@ import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import { EmailProbeButton } from "@/components/admin/EmailProbeButton";
 import LandTab from "@/components/admin/LandTab";
 import GameRolesTab from "@/components/admin/GameRolesTab";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
@@ -1185,6 +1186,7 @@ export function IntegrationsTab({ password }: { password: string }) {
                     {h.operation}: {h.detail}
                   </p>
                 ))}
+                {c.probe && s?.configured && <EmailProbeButton password={password} onDone={load} />}
                 {/* How the value is HELD, which the pill above cannot say.
                     Both states read as "Not connected" or as an ordinary
                     "Connected" pill, so a steward looking at this card had no

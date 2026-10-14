@@ -29,21 +29,17 @@
  *      mechanism. Every real send updates `integration_health` under
  *      `moduleId: "email"`, and `verifyEmailTransport` gives a steward an
  *      on-demand check (SMTP: connect, EHLO, STARTTLS, AUTH, then QUIT - NO
- *      message sent; Resend: `GET /api-keys`, a real Resend endpoint that
- *      authenticates the key and sends no mail either) that ALSO records
- *      through the same wrapper, so "test my connection" and "my last real
- *      send" read from one honest record instead of two.
+ *      message sent; Resend: one real send to Resend's own test recipient,
+ *      `probeResendSend` below) that ALSO records through the same wrapper,
+ *      so "test my connection" and "my last real send" read from one honest
+ *      record instead of two.
  *
- * WHAT THIS FILE DOES NOT DO, because `server/index.ts` (32k lines, owned by
- * another lane this round) is where it would have to happen: it does not
- * wire itself in. `sendResendEmail` in `server/index.ts` still calls
- * `api.resend.com` directly and nothing here is on that path yet, and
- * `integrationCards()` in the same file does not yet attach a `health`
- * array to the "Resend, email" card the way it already does for every
- * vendor-module listing (`server/index.ts:20049`), so a steward cannot see
- * the `integration_health` rows this file writes until that one small
- * addition lands. The exact wiring (both are a few lines, not a redesign)
- * is filed in the ledger's blocker list rather than guessed at here.
+ * WHAT IS WIRED AND WHAT IS NOT. `integrationCards()` in `server/index.ts`
+ * attaches this file's `email` health rows to the Resend card, and the card's
+ * "Send a test" button runs `verifyEmailTransport` through
+ * `server/routes/emailProbe.ts`, so a steward sees what the last check found.
+ * `sendResendEmail` in `server/index.ts` still calls `api.resend.com` directly
+ * and is not on this file's path yet, so a real send records nothing here.
  */
 import net from "net";
 import tls from "tls";
@@ -127,20 +123,33 @@ async function sendViaResend(apiKey: string, from: string, to: string[], opts: E
   }
 }
 
-/** A real Resend endpoint that authenticates the key and sends nothing:
- *  https://resend.com/docs/api-reference/api-keys/list-api-keys - a GET
- *  that lists the account's API keys. `res.ok` is the whole check, matching
- *  how every other vendor call in this codebase trusts a provider's status
- *  line rather than a hardcoded status number. */
-async function verifyResendKey(apiKey: string): Promise<void> {
-  const res = await fetch("https://api.resend.com/api-keys", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${apiKey}` },
+/**
+ * Resend's own test recipient. A send to it is accepted, recorded as
+ * delivered, and reaches no person (resend.com/docs, "Send test emails").
+ */
+export const RESEND_PROBE_RECIPIENT = "delivered@resend.dev";
+
+/**
+ * THE BEE FOR THE EMAIL GUILD: one real send, from the village's own sender,
+ * to Resend's test recipient. Alive means Resend accepted it.
+ *
+ * WHY A SEND AND NOT A READ. This used to be `GET /api-keys`, which lists the
+ * account's keys and sends nothing. Two things were wrong with it. A key that
+ * can only send (`sending_access`, the narrowest Resend offers and the one the
+ * setup game plants) is documented as able to send and nothing else, so the
+ * check would refuse exactly the key it should bless. And a key that CAN list
+ * keys proves nothing about the sender domain, which is the failure that
+ * actually bites here: Resend answers 200 for a key and delivers nothing from
+ * a domain it never verified. A send through the real sender exercises the key,
+ * its permission, the domain restriction and the sender address in one call.
+ * It was also wired to nothing; `server/routes/emailProbe.ts` is its caller now.
+ */
+export async function probeResendSend(apiKey: string, from: string): Promise<void> {
+  await sendViaResend(apiKey, from, [RESEND_PROBE_RECIPIENT], {
+    to: [RESEND_PROBE_RECIPIENT],
+    subject: "Email check",
+    html: "<p>This message checks that this village can send email. It goes to a test address and reaches nobody.</p>",
   });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Resend answered ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
-  }
 }
 
 // ── SMTP: a small, real client on Node's own net/tls. No third-party
@@ -392,20 +401,32 @@ export interface EmailHealthCheck {
   detail: string;
 }
 
-/** The on-demand "does sending actually work" check a steward can trigger,
- *  without spending a real send to find out. Recorded through the same
+/** The on-demand "does sending actually work" check a steward can trigger.
+ *  SMTP spends no send; Resend spends one, to a test address that reaches
+ *  nobody, because nothing short of a send proves a send. Recorded through the same
  *  `callVendor` wrapper as a real send, under a distinct operation name
  *  (`${transport}-verify`), so `integration_health` shows both what the
  *  last REAL send did and what the last deliberate CHECK found - two
  *  different questions a steward might be asking. */
-export async function verifyEmailTransport(cfg: EmailTransportConfig): Promise<EmailHealthCheck> {
+export async function verifyEmailTransport(cfg: EmailTransportConfig, from = ""): Promise<EmailHealthCheck> {
   const transport: "resend" | "smtp" | null = cfg.resendApiKey ? "resend" : cfg.smtp ? "smtp" : null;
   if (!transport) return { ok: false, transport: "none", detail: "No email transport is configured (neither Resend nor SMTP)." };
+  // A Resend check is a send, and a send needs a sender. Refusing here keeps
+  // "no sender" from being recorded as a failure of the key.
+  if (transport === "resend" && !from.trim()) {
+    return { ok: false, transport, detail: "No sender address is set, so there is nothing to send from yet." };
+  }
   try {
     await callVendor("email", `${transport}-verify`, () =>
-      transport === "resend" ? verifyResendKey(cfg.resendApiKey!) : verifySmtpTransport(cfg.smtp!),
+      transport === "resend" ? probeResendSend(cfg.resendApiKey!, from.trim()) : verifySmtpTransport(cfg.smtp!),
     );
-    return { ok: true, transport, detail: transport === "resend" ? "Resend accepted the API key." : "The SMTP server accepted the connection and credentials." };
+    return {
+      ok: true,
+      transport,
+      detail: transport === "resend"
+        ? `Resend accepted a test send from ${from.trim()}.`
+        : "The SMTP server accepted the connection and credentials.",
+    };
   } catch (e) {
     return { ok: false, transport, detail: (e as Error)?.message ?? String(e) };
   }

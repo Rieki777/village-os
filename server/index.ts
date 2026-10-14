@@ -81,6 +81,7 @@ import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerSaberraRoutes } from "./routes/saberra";
+import { EMAIL_PROBE_PATH, register as registerEmailProbeRoutes } from "./routes/emailProbe";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
@@ -17782,6 +17783,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
     { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" },
+    // The setup game's two master roots (shared/guilds.ts). Store only: no host variable stands in for either.
+    { key: "railway_project_token", title: "Railway, one project", unlocks: "Lets the setup game set and remove this village's hosting variables inside one Railway project and environment. It reaches no other project, and nothing ever reads it back out.", getAt: "railway.com → your project → Settings → Tokens", placeholder: "a token for this project only" },
+    { key: "dns_zone_token", title: "DNS, one domain", unlocks: "Lets the setup game add the records email and your address need, in this one domain only. It is removed after launch and planted again when a record has to change.", getAt: "your DNS host → API tokens → a token limited to this one zone", placeholder: "a token for this zone only" },
   ];
 
   interface IntegrationCard {
@@ -17812,10 +17816,18 @@ Send an empty drafts array when you are still listening. A role payload is {name
     /** Managed only: does the platform's own key exist for this deployment. */
     entitled?: boolean | null;
     health?: Array<{ operation: string } & ReturnType<typeof healthReading>>;
+    /** Where a live check for this card runs, on the one card that has one. */
+    probe?: string;
   }
 
   function integrationCards(): IntegrationCard[] {
-    const platform: IntegrationCard[] = PLATFORM_CARDS.map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true }));
+    // The Resend card carries the email guild's live check: what the last
+    // probe found (server/routes/emailProbe.ts), and where to run another.
+    const emailHealth = () => allIntegrationHealth("email").map((h) => ({ operation: h.operation, ...healthReading(h, { mode: "on-demand" }) }));
+    const platform: IntegrationCard[] = PLATFORM_CARDS.map((c) => ({
+      ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true,
+      ...(c.key === "resend_api_key" ? { health: emailHealth(), probe: EMAIL_PROBE_PATH } : {}),
+    }));
     const listings: IntegrationCard[] = vendorModules().flatMap((m): IntegrationCard[] => {
       const support = supportRoute(m);
       const base = {
@@ -26047,6 +26059,7 @@ ${inner}
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
+  registerEmailProbeRoutes(app, { isAdmin, adminActor, getPool, sender: resolvedEmailSender });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
