@@ -561,7 +561,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Capabilities it adds | none |
 | Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
-| What a village plants | `governance-hub-secret`, `basescan-api-key`, `hypha-voice-webhook-secret` |
+| What a village plants | `basescan-api-key` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
@@ -713,7 +713,7 @@ The village's email in one place: reminders for the gatherings people said yes t
 | Capabilities it adds | `comms.manage` |
 | Variable keys it owns | `comms.quiet_start_hour`, `comms.quiet_end_hour`, `comms.daily_cap`, `comms.event_reminder_minutes`, `comms.host_nudge_minutes`, `comms.recap_window_days`, `comms.guests_default`, `comms.time_poll_freeze_hours`, `comms.time_poll_settle_minutes`, `comms.letters_per_day`, `comms.retention_months`, `comms.send_rate_per_second`, `comms.notice_expiry_minutes`, `comms.open_tracking`, `comms.click_tracking` |
 | API prefixes | `/api/admin/comms` |
-| What a village plants | `resend-account`, `resend-sending-domain`, `resend-api-key`, `resend-webhook-secret`, `village-secrets-key` |
+| What a village plants | `resend-account`, `resend-setup-key`, `resend-sending-domain`, `resend-api-key`, `resend-webhook-secret`, `village-secrets-key` |
 | Contract doc | [comms.md](modules/comms.md) |
 
 ## What depends on what

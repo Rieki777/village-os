@@ -245,6 +245,21 @@ console.log("\nGuild manifest (shared/guilds.ts:guildProblems)");
       note(`${m.id}: seed(s) ${unwired.join(", ")} rely on a driver health method, and no such interface exists yet (contract clause 2).`);
     }
   }
+  // Green means alive (ruling of 2026-10-13). A seed whose strongest check is
+  // presence, or a person's say-so, can never turn green. That is reported
+  // and never failed: most platform keys are in that state today, and the
+  // honest move is to say so on every run until each has a live check.
+  const notAlive = guilds.seedsNotYetAlive().filter((s) => charged.has(s.id));
+  if (notAlive.length) {
+    note(
+      `${notAlive.length} seed(s) can never turn green, because their strongest check is presence or a person's word: ` +
+        notAlive.map((s) => `${s.id} (${s.liveCheck.strength})`).join(", ") + ".",
+    );
+  }
+  const toBuild = guilds.SEEDS.filter((s) => charged.has(s.id) && s.handles.some((h) => h.store === "slot-to-build"));
+  if (toBuild.length) {
+    note(`seed(s) ${toBuild.map((s) => s.id).join(", ")} land in a slot that does not exist yet; their flow is modelled and not built.`);
+  }
   note("Whether each guild's consequence and undo lines are TRUE. The shape is checked; a reviewer reads the words against the code.");
 }
 

@@ -619,7 +619,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses,
+  allSecretStatuses, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -636,6 +636,7 @@ import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from
 import { commsMode } from "./lib/comms/settings";
 import { createPermissionFor, suppressionsPortFor } from "./lib/comms/permissions";
 import { sweepCommsRetention } from "./lib/comms/retention";
+import { resendKeyLaunchCheck } from "./lib/comms/keyHealth";
 import { commsSink } from "./lib/commsSink";
 import { createCommsDispatcher } from "./lib/comms/dispatch";
 import { registerGatheringJourneyParts } from "./lib/comms/gatheringJourney";
@@ -12257,11 +12258,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       },
       // THE REGISTRY, never `brand.currency.name`: mergedConfig() prefers `tokens`.`name` over the brand overlay, so the old read here was red after a correct rename and green after the wizard's dead box. Rule, reasons and test: shared/launchRequirements.ts.
       "brand-token-names": () => recognitionNameCheck(tokenDef(HEARTS)?.name, GAME_CONFIG.currency.name),
-      "resend-key": () => {
-        const s = allSecretStatuses().find((x) => x.key === "resend_api_key")!;
-        if (!s.configured) return { state: "missing" as const, detail: "No Resend key, no email leaves this deployment" };
-        return { state: "ok" as const, detail: s.source === "env" ? "Key provided by the host environment" : `Key set from the admin panel${s.setBy ? ` by ${s.setBy}` : ""}` };
-      },
+      // Green means alive (2026-10-13): the post office's own test email reported delivered (comms item 13), never the key's presence alone.
+      "resend-key": () => resendKeyLaunchCheck(getPool(), allSecretStatuses().find((x) => x.key === "resend_api_key")!),
       "stripe-keys": () => (stripeConfigured()
         ? { state: "ok" as const, detail: "Stripe secret key is set" }
         : { state: "missing" as const, detail: "No Stripe key: card checkout answers 503; the manual payment path still works" }),
@@ -17592,7 +17590,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" },
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {

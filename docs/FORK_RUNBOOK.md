@@ -1975,3 +1975,7 @@ cannot open them.
 `MEMBER_SECRETS_KEY` takes the same shape and is set the same way, as its own
 variable with its own value. When members' agents miss deliveries for want of
 it, Admin, What's Failing names what is wrong with it in the same words.
+
+## The setup game's two root slots (2026-10-13, guild rulings lane)
+
+Admin, Integrations has two new cards, `railway_project_token` (one Railway project and environment) and `dns_zone_token` (one DNS zone), the setup game's master roots from `shared/guilds.ts`. They are store-only: no environment variable stands in for either, so do not set one in Railway. Both are optional, and every variable and record they would plant can still be planted by hand.

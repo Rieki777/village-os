@@ -1280,7 +1280,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "hypha",
-    guild: ["governance-hub-secret", "basescan-api-key", "hypha-voice-webhook-secret"],
+    guild: ["basescan-api-key"],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
@@ -1363,7 +1363,7 @@ export const MODULES: ModuleDef[] = [
     // What a village plants before its email works: the Resend account, its
     // verified sending domain, a key for it, and the sealing key the stored
     // provider key and delivery-report secret are kept under.
-    guild: ["resend-account", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
+    guild: ["resend-account", "resend-setup-key", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
     /*
      * REQUIRED, because the parts that make email arrive are the village's own
      * and no default can stand in for them: its provider key, a sending

@@ -213,7 +213,8 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
   });
 
   it("turns the launch journey's sender row red with a key and no sender", async () => {
-    expect((await launchRow("resend-key")).state).toBe("ok");
+    // A key that is only SET is not green (2026-10-13): the row waits for the key's live check.
+    expect((await launchRow("resend-key")).state).toBe("partial");
     const sender = await launchRow("email-sender");
     expect(sender).toMatchObject({ checkKey: "comms:sender", state: "missing" });
     expect(sender.detail).toBe("No sender yet. With none, nothing is sent.");
@@ -332,6 +333,11 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(c.done["test-email"]).toBe(false);
     expect(c.body.testEmail).toMatchObject({ status: "sent", toEmail: FOUNDER_EMAIL, delivered: false });
     expect(await moduleReady()).toBe(false);
+    // The launch row reads the same answer (server/lib/comms/keyHealth.ts): sent is not yet alive.
+    expect(await launchRow("resend-key")).toMatchObject({
+      state: "partial",
+      detail: "The last test email was sent and is waiting for its delivery report",
+    });
 
     const report = await fake!.deliverWebhook(WEBHOOK(), "delivered", { emailId: email.id, svixId: "msg_setup_report_2" });
     expect(report.status, report.body).toBe(200);
@@ -339,6 +345,8 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms setup, every item through the fou
     expect(c.done["test-email"]).toBe(true);
     expect(c.ready).toBe(true);
     expect(await moduleReady(), "items 1 to 5 and 13 are green").toBe(true);
+    // Delivered is what turns the key green, on the launch journey and in the setup game's seed alike.
+    expect(await launchRow("resend-key")).toMatchObject({ state: "ok", detail: "The last test email was reported delivered" });
   });
 
   it("keeps Pause all and the rehearsal inbox in the stored document, and only what was changed", async () => {
