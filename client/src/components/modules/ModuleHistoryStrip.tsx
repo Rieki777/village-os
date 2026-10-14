@@ -13,7 +13,8 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en", { year: "num
 
 export function historySentence(e: HistoryEvent): string {
   const to = lifecycleWords(e.to).toLowerCase();
-  const what = e.to === "off" ? "Turned off" : e.from === "off" ? `Turned on, ${to}` : `Moved to ${to}`;
+  const reach: Record<string, string> = { preview: "in preview", members: "for members", public: "for everyone" };
+  const what = e.to === "off" ? "Turned off" : e.from === "off" ? `Turned on ${reach[e.to] ?? ""}`.trim() : `Moved to ${to}`;
   return e.ballot ? `${what}, by the village's vote` : e.by ? `${what} by ${e.by}` : what;
 }
 
