@@ -164,6 +164,22 @@ jobs:
             exit 1
           fi
 
+      - name: The stock character art answers from the image, on an empty volume
+        # The drawings ship in server/assets/avatars, copied by the Dockerfile,
+        # and are served at their old /images/avatars/ URLs. This volume is
+        # brand new and holds nothing, so a 200 here is the image alone.
+        # No cache-header check: an older published image (inputs.image)
+        # served these from dist/public, and the URL answering is what must
+        # hold across versions. The headers are held by the route's own tests.
+        run: |
+          set -euo pipefail
+          for f in building-f-deep catalyzing-m-olive storytelling-f-light; do
+            curl -fsS -D headers.txt -o art.webp "$BASE/images/avatars/${f}.webp"
+            grep -qi '^content-type: image/webp' headers.txt
+            [ "$(wc -c < art.webp)" -gt 10000 ]
+            echo "ok  /images/avatars/${f}.webp"
+          done
+
       - name: A restart applies nothing and comes back
         run: |
           set -euo pipefail

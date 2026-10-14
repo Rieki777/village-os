@@ -231,7 +231,7 @@ const TONES = ["olive", "deep", "light"] as const;
  * that border reads as a cream frame inside the art window. The card zooms
  * these nine inside the window so the margin falls outside it, and leaves the
  * others untouched. `roleSheet.test.ts` reads the edges of every file in
- * `client/public/images/avatars` and holds this list to exactly the files
+ * `server/assets/avatars` (served at /images/avatars) and holds this list to exactly the files
  * that have a margin, so a new bordered drawing cannot arrive unlisted.
  */
 export const FRAMED_PORTRAITS: ReadonlySet<string> = new Set([
