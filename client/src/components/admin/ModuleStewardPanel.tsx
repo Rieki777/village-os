@@ -249,7 +249,7 @@ export default function ModuleStewardPanel({
           </p>
         )}
         {needs && viewer.canSwitch && <p className="mt-1 text-sm text-gray-700">{needs}. Turning it on turns those on first.</p>}
-        {lifecycle === "off" && <p className="mt-1 text-sm text-gray-600">Turn it on in preview to look before anyone else does. You go live from here when it is ready.</p>}
+        {lifecycle === "off" && viewer.canSwitch && <p className="mt-1 text-sm text-gray-600">Turn it on in preview to look before anyone else does. You go live from here when it is ready.</p>}
       </div>
 
       {pending && (
