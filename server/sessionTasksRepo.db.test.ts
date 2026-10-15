@@ -90,7 +90,7 @@ describe.skipIf(!configured)("the task layer's store against a real schema", () 
     const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, MIGRATION), "utf8");
     const insert = splitStatements(sql).filter((s) => /^INSERT IGNORE/i.test(s));
     expect(insert, "the migration holds exactly one backfill").toHaveLength(1);
-    const [r] = await pool.query<any>(insert[0]);
+    const [r] = await pool.query<any>(insert[0]); // module-review-ok: the migration's own backfill, re-run against the suite's scratch schema
     return Number(r.affectedRows ?? 0);
   };
 

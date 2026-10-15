@@ -124,7 +124,7 @@ beforeEach(() => {
 /** One request as `who`, answered as status and JSON. */
 async function call(who: string | null, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   world.me = who;
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetch(`${base}${path}`, { // module-review-ok: a test calling its own local server, never an outside host
     method,
     headers: body === undefined ? {} : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
