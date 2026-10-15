@@ -471,16 +471,33 @@ describe("the dials and the notices this module registers", () => {
     expect(validateVariable(def, "90")).toBeNull();
   });
 
-  it("declares both notices, and sends each in the daily digest", () => {
-    const prefs = resolveNotifyPrefs({});
-    for (const type of ["session_record_ready", "session_action_held"]) {
+  it("declares every notice it sends, and none of them celebrates", () => {
+    for (const type of ["session_record_ready", "session_action_held", "session_action_due", "session_task_back", "session_task_unheld"]) {
       expect(NOTIFICATION_KINDS[type], type).toBeTruthy();
-      expect(NOTIFICATION_KINDS[type].celebrate).toBe(false);
-      expect(emailCadenceFor(type, prefs)).toBe("daily");
+      expect(NOTIFICATION_KINDS[type].celebrate, type).toBe(false);
+      expect(NOTIFICATION_KINDS[type].blurb, type).not.toMatch(DASHES);
     }
+    const prefs = resolveNotifyPrefs({});
+    // Mail for the admins and the facilitator: the digest, whatever the task preference.
+    for (const type of ["session_record_ready", "session_task_back", "session_task_unheld"]) expect(emailCadenceFor(type, prefs), type).toBe("daily");
     // A seat holder who was not in the room gets no link to the record, so the
     // notice's own description promises the action and its date, not the record.
     expect(NOTIFICATION_KINDS.session_action_held.blurb).not.toMatch(/record/i);
+  });
+
+  it("rides the task email preference: immediate by default, and the task layer's own email is the immediate one", () => {
+    expect(resolveNotifyPrefs({}).tasksEmail).toBe("immediate");
+    expect(resolveNotifyPrefs({ notify: { tasksEmail: "weekly" } }).tasksEmail).toBe("immediate");
+    // Immediate reads "off" here because server/lib/sessionTaskMail.ts posts the
+    // fuller email itself; a second, flattened copy from the spine would double it.
+    const expected = { immediate: "off", daily: "daily", off: "off" } as const;
+    for (const setting of ["immediate", "daily", "off"] as const) {
+      const prefs = resolveNotifyPrefs({ notify: { tasksEmail: setting } });
+      expect(prefs.tasksEmail).toBe(setting);
+      for (const type of ["session_action_held", "session_action_due"]) expect(emailCadenceFor(type, prefs), `${type} ${setting}`).toBe(expected[setting]);
+    }
+    // Every email off silences these too.
+    expect(emailCadenceFor("session_action_due", resolveNotifyPrefs({ notify: { emailsOff: true, tasksEmail: "daily" } }))).toBe("off");
   });
 
   it("writes its notices in the house voice", () => {

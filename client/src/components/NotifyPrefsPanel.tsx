@@ -9,6 +9,8 @@ import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import EmailFromVillage from "@/components/EmailFromVillage";
+import { useModuleOn } from "@/modules/ModuleProvider";
+import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
 
 const CADENCES: Record<string, Array<{ v: string; label: string }>> = {
   questsEmail: [
@@ -87,6 +89,8 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
    * where they left it and brings it into view.
    */
   const identity = useIdentityConfirm("delete-account");
+  /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
+  const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (identity.confirmed || identity.returnError) setConfirming(true);
@@ -224,6 +228,30 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               </select>
             </div>
           ))}
+          {/* The tasks a member took on in a live session: the email when a
+              call closes and a gentle note near each date, only the digest, or
+              nothing. Immediate until they choose, because Rye asked for these
+              emails. Its words live with the rest of the task board's. Its
+              longest choice is a sentence, so on a phone the choice sits under
+              its label at full width. */}
+          {sessionsOn && (
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <label htmlFor="notify-tasks-email" className="text-sm text-muted-foreground">
+                {TASK_COPY.pref.label}
+              </label>
+              <select
+                id="notify-tasks-email"
+                value={isTaskEmailPref(prefs.tasksEmail) ? prefs.tasksEmail : "immediate"}
+                disabled={saving}
+                onChange={(e) => save({ tasksEmail: e.target.value })}
+                className="min-h-11 w-full sm:w-auto sm:max-w-[60%] text-xs border border-border rounded-lg px-2 py-1.5 bg-card"
+              >
+                {TASK_EMAIL_PREFS.map((v) => (
+                  <option key={v} value={v}>{TASK_COPY.pref.options[v]}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 

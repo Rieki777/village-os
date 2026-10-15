@@ -19,15 +19,26 @@
  * A session that closed while this member was in it greets them with a low
  * dawn, once. One that closed a while ago opens quietly, because a record read
  * next week is not news.
+ *
+ * WHERE EACH TASK STANDS NOW. The words said in the call never change, so each
+ * action is drawn exactly as it was written down, and beside it sits where the
+ * task stands today, read once from the task layer (`/task-record`): Holding,
+ * Done, Let go or Back with the circle, the new date when it moved, and the
+ * latest answer's line. The facilitator and admins also find Send the task
+ * emails here (`TaskMailButton`). If the task layer does not answer, the record
+ * still reads whole, as it was said.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { Copy } from "lucide-react";
 import { AIM_DEFS, ENTRY_LABELS, ROOM_COPY, SESSIONS_API, SESSION_COPY, type SessionEntry, type SessionItem, type SessionView } from "@shared/sessions";
+import { TASK_COPY, taskDateWords, taskRecordUrl, type TaskCard, type TaskRecordPayload } from "@shared/sessionTasks";
 import { gameFetch } from "@/lib/gameApi";
+import { roomDay } from "./FromLastTime";
 import { BTN_SECONDARY, CARD, CHIP, H3, HINT, LABEL_CAPS, LEARNED_QUOTE, agendaOrder, consentOn, heldLine } from "./roomUi";
 import { FacilitationReading } from "./StageClose";
+import TaskMailButton from "./TaskMailButton";
 
 /** How recently a close still counts as news to whoever opens the record. */
 const JUST_CLOSED_MS = 2 * 60 * 1000;
@@ -38,7 +49,35 @@ function itemOutcome(item: SessionItem): string {
   return ROOM_COPY.itemStatus[item.status];
 }
 
-function EntryLines({ view, list }: { view: SessionView; list: SessionEntry[] }) {
+/** Each task the record knows, by the entry it came from. */
+type TaskBook = ReadonlyMap<number, TaskCard>;
+
+/**
+ * Where one action stands now, as a chip and a line: the status, the new date
+ * when the date moved since the call, and the latest answer's own words.
+ */
+export function taskStanding(t: TaskCard, said: Pick<SessionEntry, "dueOn">, today: string): { chip: string; moved: string | null; note: string | null } {
+  const L = TASK_COPY.statusLabels;
+  const movedDate = t.status === "open" && t.dueOn && t.dueOn !== said.dueOn ? taskDateWords(t.dueOn, today) : "";
+  const chip =
+    t.status === "done" ? L.done : t.status === "let_go" ? L.let_go : t.heldAs === "circle" ? L.circle : movedDate ? L.newDate : L.open;
+  const words = t.latest?.note?.trim();
+  const note = words ? (t.latest?.byFacilitator ? TASK_COPY.latestByFacilitator(words) : TASK_COPY.latest(words)) : null;
+  return { chip, moved: movedDate ? TASK_COPY.newDate(movedDate) : null, note };
+}
+
+function TaskStanding({ task, said, today }: { task: TaskCard; said: SessionEntry; today: string }) {
+  const { chip, moved, note } = taskStanding(task, said, today);
+  return (
+    <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1" data-task-standing={task.status}>
+      <span className={CHIP}>{chip}</span>
+      {moved && <span className="text-xs text-muted-foreground">{moved}</span>}
+      {note && <span className="block w-full whitespace-pre-line break-words text-sm text-foreground">{note}</span>}
+    </span>
+  );
+}
+
+function EntryLines({ view, list, tasks, today }: { view: SessionView; list: SessionEntry[]; tasks: TaskBook; today: string }) {
   const decisions = list.filter((e) => e.kind === "decision");
   const seeds = list.filter((e) => e.kind === "seed");
   const acts = list.filter((e) => e.kind === "action" && e.status !== "parked");
@@ -81,6 +120,7 @@ function EntryLines({ view, list }: { view: SessionView; list: SessionEntry[] })
                   {heldLine(a)}
                   {a.dueOn ? ` · ${ROOM_COPY.dueLabel} ${a.dueOn}` : ""}
                 </span>
+                {tasks.get(a.id) && <TaskStanding task={tasks.get(a.id)!} said={a} today={today} />}
               </li>
             ))}
           </ul>
@@ -169,6 +209,29 @@ export default function ClosedRecord({ view }: { view: SessionView }) {
     return Number.isFinite(at) && Date.now() - at < JUST_CLOSED_MS;
   });
   const dawn = useMomentWindow(justClosed ? view.closedAt : null);
+  const today = roomDay(view.serverNow);
+
+  // Where each task stands now, read once per record (and again after a send).
+  // A refusal or a dead network leaves the record as it was said, with no chips.
+  const [record, setRecord] = useState<TaskRecordPayload | null>(null);
+  const [reads, setReads] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const res = await gameFetch(taskRecordUrl(view.id));
+        if (!res.ok) return;
+        const body = (await res.json()) as TaskRecordPayload;
+        if (live && body && Array.isArray(body.tasks)) setRecord(body);
+      } catch {
+        // The record reads whole without the task layer.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [view.id, reads]);
+  const tasks: TaskBook = new Map((record?.tasks ?? []).map((t) => [t.entryId, t]));
 
   return (
     <div className="space-y-5">
@@ -221,7 +284,7 @@ export default function ClosedRecord({ view }: { view: SessionView }) {
                   </span>
                   <span>· {itemOutcome(item)}</span>
                 </p>
-                <EntryLines view={view} list={view.entries.filter((e) => e.itemId === item.id)} />
+                <EntryLines view={view} list={view.entries.filter((e) => e.itemId === item.id)} tasks={tasks} today={today} />
               </li>
             ))}
           </ol>
@@ -235,7 +298,13 @@ export default function ClosedRecord({ view }: { view: SessionView }) {
           <h3 id="record-loose" className={H3}>
             {ROOM_COPY.outsideAgenda}
           </h3>
-          <EntryLines view={view} list={loose.filter((e) => e.kind !== "tension")} />
+          <EntryLines view={view} list={loose.filter((e) => e.kind !== "tension")} tasks={tasks} today={today} />
+        </section>
+      )}
+
+      {record?.mail.canSend && (
+        <section className={CARD} aria-label={TASK_COPY.mail.button}>
+          <TaskMailButton sessionId={view.id} today={today} lastSend={record.mail.lastSend} onSent={() => setReads((n) => n + 1)} />
         </section>
       )}
 

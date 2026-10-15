@@ -63,8 +63,10 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
+import { exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
 import { avatarFor } from "./characters";
-import { listOrgAssignments, listOrgRoles } from "./orgChart";
+import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
+import { circleTasksFor } from "./sessionTasks";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
@@ -1281,10 +1283,14 @@ export interface ClosedRecord {
   held: { entryId: number; text: string; dueOn: string | null; ownerNo: number | null; ownerSeatId: string | null }[];
 }
 
-/** What a close and the view need from the routes: names, and circles' names. */
+/**
+ * What a close and the view need from the routes: names, circles' names, and
+ * the season's reading of who still sits in a seat (the task cards' seats).
+ */
 export interface RoomContext {
   lookup: MemberLookup;
   circleName: (id: string | null) => string | null;
+  lapseContext?: () => LapseContext;
 }
 
 /**
@@ -1340,6 +1346,9 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
     minutesShareable: minutes.shareable,
     closedAt: now,
   });
+  // The task layer's state rows (0252), in this transaction: a task exists the
+  // moment the close does, whichever close it was. A second run adds nothing.
+  await seedStateForSession(conn, sessionId);
   return done({
     id: sessionId,
     title: s.title,
@@ -1439,6 +1448,14 @@ export async function closeStaleRooms(pool: Pool, ctx: RoomContext, deps: Notice
 export interface NoticeDeps {
   notify(input: { userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }): Promise<unknown>;
   notifyAdmins(type: string, title: string, dedupeKey: string, link?: string): Promise<void>;
+  /** The season's reading of who still sits in a seat. Absent: every live seating counts. */
+  lapseContext?: () => LapseContext;
+  /**
+   * Start the closed session's task emails (server/lib/sessionTaskMail.ts
+   * `queueCloseMail`). Started and never waited on: the caller's function
+   * returns at once and catches its own failure. Absent: no task emails.
+   */
+  closeMail?: (sessionId: number) => void;
 }
 
 /**
@@ -1449,7 +1466,13 @@ export interface NoticeDeps {
  * The record opens only to the people who were in the room (and admins), so a
  * member who sits in the seat and was not there hears what the action is and
  * by when, with no link to a page that would refuse them.
+ * A seat counts its members whose term has not lapsed: a lapsed holder is
+ * still in the chart, and a task is a new ask that waits for the next term.
  * A failure is a log line; the session is closed either way.
+ *
+ * THE ONE SITE THE TASK EMAILS START FROM. Both closes, the facilitator's and
+ * a quiet room's, come through here, so the last thing this does is start
+ * `deps.closeMail`, and it never waits for it.
  */
 export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: NoticeDeps): Promise<void> {
   const link = `/sessions/${closed.id}`;
@@ -1464,7 +1487,7 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
     const roomNos = (await repo.peopleRows(pool, closed.id)).map((r) => Number(r.member_no));
     const wasThere = new Set((await repo.memberUserIdRows(pool, roomNos)).map((r) => String(r.user_id)));
     const seated = closed.held.some((h) => h.ownerSeatId)
-      ? (await listOrgAssignments(pool)).filter((a) => a.holderKind === "member" && a.userId && !a.isExample)
+      ? (await listOrgAssignments(pool, deps.lapseContext?.())).filter((a) => a.holderKind === "member" && a.userId && !a.isExample && !a.lapsed)
       : [];
     for (const h of closed.held) {
       const to = new Set<string>();
@@ -1484,6 +1507,11 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
     }
   } catch (e) {
     console.error("[sessions] the people holding actions were not all told", e);
+  }
+  try {
+    deps.closeMail?.(closed.id);
+  } catch (e) {
+    console.error("[sessions] the task emails were not started", e);
   }
 }
 
@@ -1562,7 +1590,7 @@ export async function buildView(
   s: SessionRec,
   viewer: Viewer,
   joined: boolean,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null },
+  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext },
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
@@ -1639,6 +1667,9 @@ export async function buildView(
     }
   }
 
+  // Every open task of the circle's earlier sessions, as this viewer may see it.
+  const circle = await circleTasksFor(pool, s, viewer, ctx);
+
   return {
     id: s.id,
     title: s.title,
@@ -1663,6 +1694,8 @@ export async function buildView(
     seats: seats.options,
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
+    circleTasks: circle.cards,
+    circleLastMetAt: circle.lastMetAt,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },
   };
 }
@@ -1703,16 +1736,20 @@ export async function listSessions(
  * Everything this module holds about one member, for GET /api/profile/export:
  * the sessions they were in, the agenda items they added or present, the
  * entries they wrote or hold, and their own answers, feedback on the
- * facilitation included, because it is theirs.
+ * facilitation included, because it is theirs. From the task layer: the tasks
+ * they hold now, and every answer they gave a task, with its words. A note
+ * somebody else left on a task they hold is that person's, and stays out.
  */
 export async function exportMemberSessions(pool: Pool, userId: string): Promise<{
   sessions: Record<string, unknown>[];
   items: Record<string, unknown>[];
   entries: Record<string, unknown>[];
   responses: Record<string, unknown>[];
+  tasks: Record<string, unknown>[];
+  taskAnswers: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -1763,7 +1800,27 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     text: r.text == null ? null : String(r.text),
     at: toIso(r.updated_at),
   }));
-  return { sessions, items, entries, responses };
+  const taskRows = await exportTaskRowsFor(pool, no);
+  const tasks = taskRows.held.map((r) => ({
+    sessionId: Number(r.session_id),
+    entryId: Number(r.entry_id),
+    sessionTitle: String(r.title ?? ""),
+    text: String(r.text ?? ""),
+    status: String(r.status),
+    dueOn: r.due_on == null ? null : String(r.due_on),
+    latestKind: String(r.latest_kind),
+    latestNote: Number(r.changed_by_no) === no && r.latest_note != null ? String(r.latest_note) : null,
+    changedAt: toIso(r.changed_at),
+  }));
+  const taskAnswers = taskRows.answers.map((r) => ({
+    sessionId: Number(r.session_id),
+    entryId: Number(r.entry_id),
+    kind: String(r.kind),
+    dueOn: r.due_on == null ? null : String(r.due_on),
+    note: r.note == null ? null : String(r.note),
+    at: toIso(r.created_at),
+  }));
+  return { sessions, items, entries, responses, tasks, taskAnswers };
 }
 
 /**
@@ -1792,6 +1849,9 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
       decisionTargets.set(sid, [...(decisionTargets.get(sid) ?? []), `decision:${Number(e.id)}`]);
     }
     for (const [sid, targets] of Array.from(decisionTargets)) await repo.deleteResponsesForTargets(conn, sid, targets);
+    // The task layer first: the tasks of the entries about to go, and the
+    // leaver's number wherever else a task names it.
+    await forgetTaskRowsFor(conn, no, written.map((e) => Number(e.id)));
     await repo.forgetMemberRows(conn, no, written.map((e) => Number(e.id)));
 
     for (const sid of touched) {
