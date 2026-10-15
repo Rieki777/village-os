@@ -43,7 +43,7 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, or object, and a concern or an objection is said in one sentence. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a seed line (what we now know) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with a seed. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a seat, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
@@ -67,12 +67,42 @@ new round: the answers given to the old words are cleared.
 **The close refuses while any action has nobody.** An open action with no person and no seat on it
 stops the close with a sentence and the list of those actions. Claim it, name a seat, or park it.
 
+**Editing in the room.** Every box in the room can be put right while the session is open, by the
+people it belongs to:
+
+- **An entry's words** (a note, an idea, what we learned, a proposal, an action, a tension) are
+  changed by the person who wrote it, the facilitator, the secretary, or an admin who has joined
+  the room.
+- **An item's title** is changed by the person who added it until the item is done, and by the
+  facilitator, the secretary or a joined admin at any time. **Its aim and minutes** stay with the
+  person who added it only while it waits: once it starts, the item's clock reads its minutes, so
+  they are the hosts' to change. A form that sends the whole item back with only the title retyped
+  still goes through, because a field sent unchanged asks for no right.
+- **The session's title** has its own door, `PATCH /api/sessions/:id { title }`, open to the
+  facilitator, the secretary and a joined admin. It is cleaned to one line and cut to 120
+  characters, any other key is ignored, and sending the title it already has moves nothing.
+
+Some things stay final on purpose, and the room says why where each one shows:
+
+- A proposal decided by consent keeps its words and cannot be removed.
+- The person holding an action they did not write sets its date and lets it go; its words stay
+  with its author and the hosts.
+- A consent answer, an arrival number and wish, and a closing word belong to the person who gave
+  them, who changes them by answering again.
+- Feedback on the facilitation stays unsigned and never comes back to the room; sending again
+  replaces what was sent before.
+- An idea for the tool is sent one way, to the village's feedback inbox.
+- A closed session takes no writes, and its record reads as it closed.
+
+An admin still joins before writing anything, and the room shows a joined admin the editing
+controls. Who changed a card is not shown yet: entries keep no editor or edit time.
+
 ## Roles
 
 - **Facilitator.** Whoever opened the room, until they or an admin hand it to somebody in the room.
   Moves the stage, starts the clock, the breath and the rounds, names the secretary, marks a consented
   proposal decided, and closes. The cues for each stage are shown to the facilitator only.
-- **Secretary.** Optional, named by the facilitator. Can change notes and entries alongside the
+- **Secretary.** Optional, named by the facilitator. Can rename the session and change items and entries alongside the
   facilitator.
 - **Members in the room.** Join, give a number, add items and entries, claim and let go of actions,
   answer consent rounds, leave a word and feedback.
@@ -113,7 +143,7 @@ every half minute while its tab is visible.
   facilitator and admins receive it, and only once the session has closed, as one batch sorted by
   answer. While the room is open nobody reads it, because an answer showing up on the next poll
   would say who had just pressed send.
-- **The record of a closed session** (agenda, outcomes, decisions, seeds, actions and backlog) is
+- **The record of a closed session** (agenda, outcomes, decisions, what we learned on each item, actions and backlog) is
   read by the people who were in it and by the village's admins, and by nobody else.
 - **Nothing is written to `health_events`.** `recordEvent` defaults to a public audience, and the
   Village Pulse reads public events.
@@ -129,7 +159,7 @@ or joins a session one number, and every person column in the other five holds t
 | `live_sessions` | Title, circle, status, facilitator, secretary, length, the room's state, its version, the stamp (moon, season, place line), and at close the summary (the arrival spread, every proposal's tally, a few counts) and the minutes in both audiences. |
 | `live_session_people` | Who joined, when they were last seen, and their arrival number and words while the session is open. |
 | `live_session_items` | The agenda: title, aim, minutes, position, status, the seconds it was active, and which earlier session it came over from. |
-| `live_session_entries` | Notes, ideas, seeds, proposals, actions and tensions, each with its author, and for an action its person or seat and a due date. |
+| `live_session_entries` | Notes, ideas, what we learned (stored as the kind `seed`), proposals, actions and tensions, each with its author, and for an action its person or seat and a due date. |
 | `live_session_responses` | One answer per person per target: consent to the agenda, consent on a proposal, the closing word, and feedback on the facilitation. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
@@ -159,7 +189,7 @@ came back to stays open (`closeStaleRooms` in `server/lib/liveSessions.ts`).
 - Nothing from the arrival round or the check-out crosses except the numbers: how many took part,
   and the arrival median and range.
 - Notes and ideas stay in the record for the people who were there. The shareable version carries
-  the agenda, decisions with their tallies, seeds, actions by seat, and the backlog.
+  the agenda, decisions with their tallies, what we learned (stored as the kind `seed`), actions by seat, and the backlog.
 
 The room shows these minutes under "Shareable minutes", with a line asking the reader to read them
 through before copying them anywhere, and a copy button. **An admin who keeps the village's

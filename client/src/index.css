@@ -1564,3 +1564,66 @@ button, a, [role="button"], input, textarea, select, summary {
     var(--sheet-earned-deep) 100%);
   box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
 }
+
+/*
+ * ============================================================================
+ * THE LIVE ROOM'S NIGHT: `.room-night`, beside `.sheet-night`
+ * ============================================================================
+ *
+ * A working call is held in the same world as the character sheet, so the
+ * open room (pages/SessionRoom.tsx) carries `sheet-night` and this class on
+ * one element. `.sheet-night` does the theme change; this block only sets the
+ * `--sheet-*` knobs that block already reads, so the room's night is the
+ * VILLAGE's night and not the platform's forest black. Nothing here touches a
+ * semantic token directly.
+ *
+ * WHERE THE COLOURS COME FROM. The brand overlay already derives a band and
+ * an accent that reads as text on it (shared/brandTokens.ts, --tone-brand-band
+ * and --tone-sun-on-band), measured as a pair for every seed. The room reads
+ * those two and nothing else:
+ *
+ *   ground        the band, sunk toward black, so panels lift off it
+ *   panel         the band itself (a card)
+ *   panel-raised  the band lifted toward white, for tiles inside a card
+ *   earned        the accent: the gold of every notice, ring and eyebrow
+ *   earned-shadow / earned-highlight
+ *                 the accent's two ends, which the foil and the gold button
+ *                 are drawn from
+ *   ink-dim, edge the quiet ink and the hairline, mixed from the moonlight
+ *                 and the band, so they keep their contrast on whatever band
+ *                 a village has. The sheet's own fixed greys measured 4.06
+ *                 (quiet ink) and 2.24 (edge) on a canopy tile, under the
+ *                 4.5 and 3 floors; mixed, they clear both.
+ *
+ * WHY color-mix. A derived pair is a fixed pair of hexes per village, and the
+ * room needs a few steps between them. color-mix makes those steps in the
+ * stylesheet from the two the village already has, with no new token, no new
+ * server output and no JavaScript, and a brand change in Admin moves every
+ * step with it. The black and white it mixes toward are the platform's own
+ * ends, which is why they are literal here in the token layer.
+ *
+ * Measured for the untouched fork and for a canopy seed with a pinned
+ * champagne accent in client/src/components/sessions/roomNight.test.ts.
+ *
+ * THE FACE. `.sheet-night` swaps --font-display for the sheet's carved face
+ * unless --sheet-font-display is set. The room wants the village's own
+ * display face, so `.room-world` sits on a wrapper OUTSIDE the night element
+ * and copies the village's --font-display into --room-display while it is
+ * still the village's. The night element then hands that on as
+ * --sheet-font-display. Read on the night element itself, --font-display
+ * would already be the swapped one.
+ */
+.room-night {
+  --sheet-ground: color-mix(in srgb, var(--color-teal-band) 70%, #000);
+  --sheet-panel: var(--color-teal-band);
+  --sheet-panel-raised: color-mix(in srgb, var(--color-teal-band) 88%, #fff);
+  --sheet-earned: var(--color-amber-on-band);
+  --sheet-earned-shadow: color-mix(in srgb, var(--color-amber-on-band) 45%, #000);
+  --sheet-earned-highlight: color-mix(in srgb, var(--color-amber-on-band) 70%, #fff);
+  --sheet-ink-dim: color-mix(in srgb, var(--sheet-ink, #e9efe6) 76%, var(--color-teal-band));
+  --sheet-edge: color-mix(in srgb, var(--sheet-ink, #e9efe6) 55%, var(--color-teal-band));
+  --sheet-font-display: var(--room-display);
+}
+.room-world {
+  --room-display: var(--font-display);
+}

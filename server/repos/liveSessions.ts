@@ -2,7 +2,8 @@
  * Live Sessions' six tables (0238): `live_session_members`, `live_sessions`,
  * `live_session_people`, `live_session_items`, `live_session_entries` and
  * `live_session_responses`. Every statement `server/lib/liveSessions.ts` runs
- * against them, one function each.
+ * against them, one function each, and the one read it makes outside them:
+ * `avatarRows`, the character each person in a room fronts.
  *
  * ── WHAT LIVES HERE, AND WHAT DELIBERATELY DOES NOT ─────────────────────
  *
@@ -97,6 +98,23 @@ export async function memberUserIdRows(q: Queryable, nos: readonly number[]): Pr
 
 export async function deleteMemberNo(q: Queryable, no: number): Promise<void> {
   await q.query("DELETE FROM `live_session_members` WHERE `no` = ?", [no]);
+}
+
+/**
+ * The character each member fronts, for the faces in a room: the same read
+ * the gratitude wall makes (server/lib/gratitudeVoices.ts `peopleFor`). It
+ * names the character's three closed fields and never `users`.`avatar`, so an
+ * uploaded portrait cannot come back from here. Standing examples are left out.
+ */
+export async function avatarRows(q: Queryable, userIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (none(userIds)) return [];
+  return rowsOf(
+    q,
+    "SELECT u.`id`, pc.`archetype_key`, pc.`presentation`, pc.`tone` " +
+      "FROM `users` u LEFT JOIN `player_characters` pc ON pc.`id` = u.`primary_character_id` " +
+      "WHERE u.`is_example` = 0 AND u.`id` IN (?)",
+    [userIds],
+  );
 }
 
 // ── live_sessions ───────────────────────────────────────────────────────────
@@ -201,6 +219,11 @@ export async function bumpVersion(q: Queryable, id: number): Promise<void> {
 
 export async function writeState(q: Queryable, id: number, state: string): Promise<void> {
   await q.query("UPDATE `live_sessions` SET `state` = ? WHERE `id` = ?", [state, id]);
+}
+
+/** A new title for the session. The caller has cleaned it to the column's 120. */
+export async function writeSessionTitle(q: Queryable, id: number, title: string): Promise<void> {
+  await q.query("UPDATE `live_sessions` SET `title` = ? WHERE `id` = ?", [title, id]);
 }
 
 export async function writeHosts(q: Queryable, id: number, facilitatorNo: number, secretaryNo: number | null): Promise<void> {

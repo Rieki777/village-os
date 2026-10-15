@@ -3,11 +3,12 @@
  * because every screen reads `breathAt` against the room's clock (the server's
  * time, carried as an offset), never against its own.
  *
- * It is drawn as a calm orb in the village's own tone: a thin hairline ring
- * that holds still, a soft glow inside it, and a solid seed at the centre. The
- * seed grows on the in breath, rests full on the hold, shrinks on the out
- * breath and rests small, and the glow swells a little with it. Every colour
- * comes from the theme's tokens, so a village's brand reaches it.
+ * It is drawn as a calm orb in the room's gold: a thin gold ring that holds
+ * still on a faint gold wash, a soft glow inside it, and a solid seed at the
+ * centre. The seed grows on the in breath, rests full on the hold, shrinks on
+ * the out breath and rests small, and the glow swells a little with it. Every
+ * colour comes from the theme's tokens (`notice` is the earned gold on the
+ * room's night), so a village's brand reaches it.
  *
  * With reduced motion asked for, nothing scales: the orb holds still and the
  * words carry the breath, the step, its seconds and the round.
@@ -115,17 +116,17 @@ export default function SharedBreath({ breath, offset, facilitates, actions }: S
       </p>
       <div className="flex flex-col items-center gap-3 py-2">
         <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64" aria-hidden="true">
-          <div className="absolute inset-0 rounded-full border border-border" />
+          <div className="absolute inset-0 rounded-full bg-notice/10 ring-1 ring-notice/60" />
           <div
-            className="absolute inset-3 rounded-full bg-radial from-teal-deep/25 via-teal-deep/10 via-45% to-transparent to-70%"
+            className="absolute inset-3 rounded-full bg-radial from-notice/30 via-notice/10 via-45% to-transparent to-70%"
             style={{ transform: `scale(${glow})`, transition: motion }}
           />
           <div
-            className="h-2/5 w-2/5 rounded-full bg-teal-deep shadow-sm"
+            className="h-2/5 w-2/5 rounded-full bg-notice shadow-sm"
             style={{ transform: `scale(${scale})`, transition: motion }}
           />
         </div>
-        {word && <p className="text-center font-display text-2xl font-semibold text-foreground">{word}</p>}
+        {word && <p className="text-center font-display text-3xl text-foreground">{word}</p>}
         {moment.state === "breathing" && (
           <p className={`${HINT} tabular-nums`}>
             {ROOM_COPY.breathStepLine(moment.secondsLeft, moment.round, breath.rounds)}
@@ -154,9 +155,9 @@ export default function SharedBreath({ breath, offset, facilitates, actions }: S
                   onKeyDown={radioArrows(BREATH_KEYS, pattern, setPattern)}
                 >
                   {BREATH_PATTERNS[k].label}{" "}
-                  {/* No opacity here: on the chosen tile this is white on the
-                      brand, which is derived so white only just clears AA, and
-                      any fade drops it below. The lighter weight sets it apart. */}
+                  {/* No opacity here: on the chosen tile this is the dark
+                      ground on the gold, and any fade lowers a pair that was
+                      measured whole. The lighter weight sets it apart. */}
                   <span className="ml-1 font-normal tabular-nums">
                     {ROOM_COPY.breathCounts(BREATH_PATTERNS[k].steps.map((s) => s.secs))}
                   </span>

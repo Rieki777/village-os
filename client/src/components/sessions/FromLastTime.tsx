@@ -4,11 +4,14 @@
  * backlog; and the items it parked. Anything here can come onto today's agenda
  * with one tap, carrying where it came from, and once it is there it is no
  * longer offered.
+ *
+ * These cards belong to the earlier session, which is closed and keeps its
+ * record as it was, so they are drawn as the room draws every card (glyph and
+ * all) with no pencil and no remove.
  */
 import { useState } from "react";
 import {
   AIM_DEFS,
-  ENTRY_LABELS,
   ROOM_COPY,
   ROOM_ITEM_MINUTES_DEFAULT,
   SESSION_COPY,
@@ -16,7 +19,8 @@ import {
   cleanLine,
   type ItemAim,
 } from "@shared/sessions";
-import { BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H3, HINT, heldLine, type StageProps } from "./roomUi";
+import EntryCard from "./EntryCard";
+import { BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H3, HINT, LABEL_CAPS, heldLine, type StageProps } from "./roomUi";
 
 export default function FromLastTime({ view, actions }: Omit<StageProps, "now">) {
   const carried = view.carried;
@@ -50,7 +54,7 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
       {carriedActions.length > 0 && (
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-foreground">{SESSION_COPY.carriedActions}</h4>
+            <h4 className={LABEL_CAPS}>{SESSION_COPY.carriedActions}</h4>
             {canAdd && !checkAdded && (
               <button
                 type="button"
@@ -62,14 +66,21 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
               </button>
             )}
           </div>
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 space-y-2">
             {carriedActions.map((a) => (
-              <li key={a.id} className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
-                <span className="text-foreground">{a.text}</span>
-                <span className="block text-muted-foreground">
-                  {heldLine(a)}
-                  {a.dueOn ? ` · ${ROOM_COPY.dueLabel} ${a.dueOn}` : ""}
-                </span>
+              <li key={a.id}>
+                <EntryCard
+                  view={view}
+                  actions={actions}
+                  entry={a}
+                  readOnly
+                  extra={
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {heldLine(a)}
+                      {a.dueOn ? ` · ${ROOM_COPY.dueLabel} ${a.dueOn}` : ""}
+                    </p>
+                  }
+                />
               </li>
             ))}
           </ul>
@@ -78,10 +89,10 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
 
       {(backlog.length > 0 || parkedItems.length > 0) && (
         <div className="mt-4">
-          <h4 className="text-sm font-semibold text-foreground">{SESSION_COPY.carriedBacklog}</h4>
-          <ul className="mt-2 space-y-1.5">
+          <h4 className={LABEL_CAPS}>{SESSION_COPY.carriedBacklog}</h4>
+          <ul className="mt-2 space-y-2">
             {parkedItems.map((p, i) => (
-              <li key={`p${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+              <li key={`p${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted px-3.5 py-3 text-sm">
                 <span className="min-w-0">
                   <span className="text-foreground">{p.title}</span>{" "}
                   <span className={CHIP}>
@@ -101,20 +112,27 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
               </li>
             ))}
             {backlog.map((e) => (
-              <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
-                <span className="min-w-0">
-                  <span className={CHIP}>{ENTRY_LABELS[e.kind]}</span> <span className="text-foreground">{e.text}</span>
-                </span>
-                {canAdd && (
-                  <button
-                    type="button"
-                    className={BTN_SECONDARY}
-                    disabled={busy != null}
-                    onClick={() => void bring(`e${e.id}`, e.text, "explore", ROOM_ITEM_MINUTES_DEFAULT)}
-                  >
-                    {ROOM_COPY.addToAgenda}
-                  </button>
-                )}
+              <li key={e.id}>
+                <EntryCard
+                  view={view}
+                  actions={actions}
+                  entry={e}
+                  readOnly
+                  extra={
+                    canAdd ? (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          className={BTN_SECONDARY}
+                          disabled={busy != null}
+                          onClick={() => void bring(`e${e.id}`, e.text, "explore", ROOM_ITEM_MINUTES_DEFAULT)}
+                        >
+                          {ROOM_COPY.addToAgenda}
+                        </button>
+                      </div>
+                    ) : null
+                  }
+                />
               </li>
             ))}
           </ul>
