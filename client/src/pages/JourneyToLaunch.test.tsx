@@ -288,7 +288,7 @@ describe("what the member's run does", () => {
 });
 
 /*
- * THE CANVAS VIEW (0252). Members read the canvas as well as admins, so the
+ * THE CANVAS VIEW (0253). Members read the canvas as well as admins, so the
  * tab has to be on the member's copy of this page too, and it must not ask
  * the server for anything until somebody opens it.
  */
