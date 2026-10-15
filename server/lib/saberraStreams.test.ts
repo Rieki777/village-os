@@ -112,3 +112,38 @@ describe("splitting a vendor read into two streams", () => {
     expect(r.facts).toEqual([]);
   });
 });
+
+/**
+ * An assignment's `Role` and a risk's `Owner Role` are relations in the
+ * service's store, a list of page ids. Read as a string only, each attached to
+ * nothing, the same blind spot that lost every seat's circle on 2026-10-09.
+ */
+describe("attaching through a relation", () => {
+  const ROLE = "3ed0a88e-f36a-8104-80fa-cd2bfe15c0aa";
+
+  it("RESOLVES AN ASSIGNMENT'S ROLE RELATION to the role's name in the same read", () => {
+    const r = splitStreams([
+      rec("a-1", "roleAssignment", { Role: [ROLE], "Energization Level": "Partial" }),
+      rec(ROLE, "role", { "Role Name": "Water Steward" }),
+    ]);
+    expect(r.facts.find((f) => f.vendorRecordId === "a-1")?.attachesTo).toBe("Water Steward");
+  });
+
+  it("resolves a list of { id } objects the same way", () => {
+    const r = splitStreams([
+      rec(ROLE, "role", { "Role Name": "Water Steward" }),
+      rec("k-1", "risk", { Risk: "The well runs dry", "Owner Role": [{ id: ROLE }] }),
+    ]);
+    expect(r.facts.find((f) => f.vendorRecordId === "k-1")?.attachesTo).toBe("Water Steward");
+  });
+
+  it("attaches to nothing when the relation names a record the read does not hold", () => {
+    const r = splitStreams([rec("a-1", "roleAssignment", { Role: ["3ed0a88e-f36a-8104-80fa-cd2bfe15c0ff"], "Term Length": "1 year" })]);
+    expect(r.facts[0].attachesTo).toBeNull();
+  });
+
+  it("still attaches by a plain name", () => {
+    const r = splitStreams([rec("a-1", "roleAssignment", { Role: "Water Steward", "Term Length": "1 year" })]);
+    expect(r.facts[0].attachesTo).toBe("Water Steward");
+  });
+});

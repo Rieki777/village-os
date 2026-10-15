@@ -266,3 +266,107 @@ describe("decideStructure", () => {
     expect(decideStructure(blank, { exclude: ["xc"] }).untouched).toEqual(["xc"]);
   });
 });
+
+/**
+ * THE SOURCE'S STATUS, as agreed with its founder: Active and Proposed may be
+ * proposed, Vacant is a seat nobody holds, Archived is never proposed as new.
+ * The live sync of 2026-10-09 proposed nine archived circles as new ones.
+ */
+describe("what the source says about each record", () => {
+  function sourceBatch(): PlanProposal[] {
+    return [
+      {
+        id: "xprop-s",
+        kind: "org.proposed",
+        payload: {
+          title: "t",
+          rationale: "r",
+          seats: [
+            { name: "Water Steward", circleName: "Land Circle", sourceStatus: "Active", sourceCircleStatus: "Active", id: "r-water" },
+            { name: "Treasurer", circleName: "Land Circle", sourceStatus: { name: "Proposed" }, id: "r-treasurer" },
+            { name: "Orchard Keeper", circleName: "Land Circle", sourceStatus: "Vacant", id: "r-orchard" },
+            { name: "Cook", circleName: "Old Hearth", sourceCircleStatus: "Archived", id: "r-cook" },
+            { name: "Retired Scribe", circleName: "Land Circle", sourceStatus: "Archived", id: "r-scribe" },
+            { name: "Sales Lead", circleName: "Land Circle", sourceStatus: "Archived", id: "r-sales" },
+            { name: "Bridge", circleName: "Land Circle", sourceOtherCircles: ["Old Hearth"], sourceCircleUnresolved: false, id: "r-bridge" },
+          ],
+        },
+      },
+      circle("xc-land", "Land Circle"),
+      circle("xc-old", "Old Hearth", { Status: "Archived" }),
+      circle("xc-dev", "Development Circle", { Status: "Archived" }),
+      circle("xc-new", "Seed Circle", { Status: "Proposed" }),
+    ];
+  }
+  const p = () => planStructure(sourceBatch(), LIVE_CIRCLES, LIVE_SEATS);
+
+  it("NEVER PROPOSES AN ARCHIVED CIRCLE AS NEW, and lists it apart with its reason", () => {
+    const plan = p();
+    expect(plan.circles.map((c) => c.name)).toEqual(["Land Circle", "Seed Circle"]);
+    const old = plan.archived.find((a) => a.key === "xc-old");
+    expect(old).toMatchObject({ kind: "circle", reason: "archived", name: "Old Hearth", liveMatch: null });
+  });
+
+  it("NOTES AN ARCHIVED CIRCLE THAT IS STILL LIVE HERE, and never retires it", () => {
+    const plan = p();
+    expect(plan.archived.find((a) => a.key === "xc-dev")?.liveMatch).toBe("Development Circle");
+    const d = decideStructure(plan, {});
+    expect(d.changes.some((c) => c.orgRoleId === "circle:development-circle")).toBe(false);
+    expect(d.untouched).toContain("xc-dev");
+  });
+
+  it("keeps an archived seat, and a seat in an archived circle, out of the change", () => {
+    const plan = p();
+    expect(plan.seats.map((s) => s.name)).toEqual(["Water Steward", "Treasurer", "Orchard Keeper", "Bridge"]);
+    expect(plan.archived.filter((a) => a.kind === "seat").map((a) => [a.name, a.reason])).toEqual([
+      ["Cook", "circle-archived"],
+      ["Retired Scribe", "archived"],
+      ["Sales Lead", "archived"],
+    ]);
+    // Sales Lead is live here: a note, never a match to settle or a retirement.
+    expect(plan.archived.find((a) => a.name === "Sales Lead")?.liveMatch).toBe("Sales Lead");
+    expect(plan.seats.some((s) => s.match?.seatId === "sales-lead")).toBe(false);
+  });
+
+  it("finds an archived circle by name when an older payload carries no circle status", () => {
+    const b = sourceBatch();
+    const seats = (b[0].payload.seats as Record<string, unknown>[]).map((s) => {
+      const { sourceCircleStatus: _drop, ...rest } = s;
+      return rest;
+    });
+    b[0] = { ...b[0], payload: { ...b[0].payload, seats } };
+    const plan = planStructure(b, LIVE_CIRCLES, LIVE_SEATS);
+    expect(plan.archived.find((a) => a.name === "Cook")?.reason).toBe("circle-archived");
+  });
+
+  it("tags Proposed and Vacant, and carries further circles and an unresolved relation", () => {
+    const plan = p();
+    const by = (n: string) => plan.seats.find((s) => s.name === n)!;
+    expect(by("Treasurer").sourceStatus).toBe("proposed");
+    expect(by("Orchard Keeper").sourceStatus).toBe("vacant");
+    expect(by("Water Steward").sourceStatus).toBe("active");
+    expect(by("Bridge").otherCircles).toEqual(["Old Hearth"]);
+    expect(plan.circles.find((c) => c.name === "Seed Circle")?.sourceStatus).toBe("proposed");
+  });
+
+  it("a Vacant seat is created like any other, and never as recruiting", () => {
+    const d = decideStructure(p(), {});
+    const orchard = d.changes.find((c) => c.op === "create_seat" && c.payload.name === "Orchard Keeper");
+    expect(orchard).toBeDefined();
+    expect(orchard!.payload).not.toHaveProperty("recruiting");
+    expect(orchard!.payload).not.toHaveProperty("sourceStatus");
+  });
+
+  it("SPLITS THE STRUCTURE SO THE ARCHIVED SEATS STAY IN THE QUEUE, never marked accepted", () => {
+    const d = decideStructure(p(), {});
+    expect(d.problems).toEqual([]);
+    expect(d.accepted).not.toContain("xprop-s");
+    expect(d.split).toEqual([{ proposalId: "xprop-s", kept: [0, 1, 2, 6], left: [3, 4, 5] }]);
+  });
+
+  it("is unchanged for a payload that says nothing about status", () => {
+    const plain = plan();
+    expect(plain.archived).toEqual([]);
+    expect(plain.seats.every((s) => s.sourceStatus === null && s.otherCircles.length === 0)).toBe(true);
+  });
+});
