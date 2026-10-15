@@ -31,7 +31,14 @@ import { MONEY_GROUPS, settingsWords, type SeatSettings } from "./seatSettings";
  * arrives with its own PR.
  */
 export const SEAT_TERMS = "seat_terms";
-export type AlignmentSubject = typeof SEAT_TERMS | "membership";
+/**
+ * The membership letter (PR9). Named here as well as in
+ * shared/membershipLetter.ts, which is typed against this union, so a page
+ * that only needs the name (the profile's list) does not pull the letter's
+ * words into its own chunk.
+ */
+export const MEMBERSHIP = "membership";
+export type AlignmentSubject = typeof SEAT_TERMS | typeof MEMBERSHIP;
 
 /** The village, as a party. A member is `user:<id>`. */
 export const VILLAGE_PARTY = "village";

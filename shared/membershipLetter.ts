@@ -34,8 +34,15 @@
  * Pure, so the page and the server import it alike, and a test pins it.
  */
 
-/** The subject type a membership letter's text is stored under. */
-export const MEMBERSHIP = "membership";
+import type { AlignmentSubject } from "./alignments";
+
+/**
+ * The subject type a membership letter's text is stored under. Typed against
+ * the store's own union (shared/alignments.ts), so the two names cannot drift;
+ * the import is a type only, so the page that draws the letter loads nothing
+ * of the store.
+ */
+export const MEMBERSHIP: Extract<AlignmentSubject, "membership"> = "membership";
 
 /** What the village calls the letter when it has not named it. The platform's word, as shared/gameConfig.ts holds it. */
 export const DEFAULT_COMMITMENT_NAME = "membership agreement";

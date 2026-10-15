@@ -29,9 +29,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ScrollText } from "lucide-react";
-import { ALIGN_WORDS, type AlignmentState } from "@shared/alignments";
+import { ALIGN_WORDS, MEMBERSHIP, type AlignmentState } from "@shared/alignments";
 import { ALIGNED_WORDS } from "@shared/alignedRegister";
-import { MEMBERSHIP } from "@shared/membershipLetter";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { ReconfirmPanel } from "@/components/alignment/AlignButton";
 import { fetchMyAlignments, fetchTheirAlignments, type ServedAlignment } from "@/components/alignment/alignmentsApi";
