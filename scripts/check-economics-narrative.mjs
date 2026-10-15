@@ -32,8 +32,10 @@
  *
  * ── WHY server/index.ts IS MATCHED BY HUNK AND NOT WHOLE ───────────────────
  *
- * The mint-rule routes, the exit routes, the cycle-close route and the admin
- * mint all live in `server/index.ts`, so the surface genuinely includes them.
+ * The mint-rule routes, the cycle-close route and the admin mint all live in
+ * `server/index.ts`, so the surface genuinely includes them. (The exit routes
+ * did too until 2026-09-27; they are `server/routes/exits.ts` now, on the
+ * surface whole through SURFACE_ALWAYS.)
  * That file is also the most-edited file in the repository by a wide margin
  * (283 of 962 commits at the time the file-lines ratchet measured it), and
  * almost none of those edits are about the economy. Putting it on the surface
@@ -160,6 +162,11 @@ export const SURFACE_ALWAYS = [
   // The published exit terms. Section 14's central claim, that nothing is
   // decided in code, is a claim about this file's DEFAULT_EXIT_POLICY.
   "server/lib/exitPolicy.ts",
+  // The exit routes, section 14's "Who can trigger it": who may open, sweep
+  // and resolve a departure. They post nothing themselves (the sweep is
+  // `sweepBalances` in server/lib/exit.ts), so derivation cannot find them,
+  // and they left server/index.ts's hunk symbols when they moved here.
+  "server/routes/exits.ts",
   // The seeded mint rules and their amounts, which section 4 and section 15
   // both derive from. It writes rows, not postings.
   "server/lib/economySeed.ts",

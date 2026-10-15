@@ -6,7 +6,7 @@
     "subtitle": "Be the first hello a newcomer remembers.",
     "description": "Be the first warm face new visitors and guests encounter. Orient newcomers at community events, answer questions, and help them feel at home in the village.",
     "impact": "Every visitor who feels welcomed is a potential member of this community for life.",
-    "story": "Most people decide how they feel about a place within their first hour on the land. Ambassadors shape that hour. You turn a nervous arrival into someone who knows three names, where the kitchen is, and what happens next. Years later, people still tell the story of who welcomed them.",
+    "story": "Most people decide how they feel about a place within their first hour there. Ambassadors shape that hour. You turn a nervous arrival into someone who knows three names, where things are, and what happens next. Years later, people still tell the story of who welcomed them.",
     "firstStep": "At the next gathering, introduce yourself to one person you have never met and walk them to wherever they are headed.",
     "steps": [
       "Pick an upcoming event from the calendar and plan to arrive early.",
@@ -23,7 +23,7 @@
     "gratitude": "50-100",
     "duration": "Per event (3-6 hrs)",
     "difficulty": "Beginner",
-    "circle": "Community Development",
+    "circle": "",
     "status": "Open",
     "icon": "Users",
     "tags": [
@@ -37,14 +37,14 @@
     "order": 2,
     "title": "Food Forest Tender",
     "subtitle": "Learn the land by feeding it.",
-    "description": "Assist with planting, pruning, weeding, and harvesting in our food forests and community gardens. Learn regenerative growing practices hands-on.",
-    "impact": "Directly grows the food that feeds the village and builds our ARI score.",
-    "story": "The food forests are the village pantry and its longest promise: a tree planted this season feeds people who have not arrived yet. Tending them puts your hands in the daily work of regeneration, with growers beside you who love to teach. Nobody leaves a session without learning at least one new plant.",
-    "firstStep": "Walk a food forest path and photograph three plants you cannot name yet. Bring the photos to your first session.",
+    "description": "Assist with planting, pruning, weeding, and harvesting in a food forest or community garden. Learn regenerative growing practices hands-on.",
+    "impact": "Grows food people can eat, and the living soil that keeps growing it.",
+    "story": "A food forest is a pantry and a long promise: a tree planted this season feeds people who have not arrived yet. Tending one puts your hands in the daily work of regeneration, and most growers love to teach. Aim to leave every session knowing at least one new plant.",
+    "firstStep": "Walk a garden or food forest near you and photograph three plants you cannot name yet. Bring the photos to your first session.",
     "steps": [
-      "Check the board or ask the agriculture circle when the next tending session runs.",
-      "Show up with water, sun cover, and closed shoes. Tools live on site.",
-      "Work alongside the session lead: planting, pruning, weeding, or harvesting, whatever the season asks.",
+      "Find out when the next tending session runs, or agree one with whoever keeps the garden.",
+      "Show up with water, sun cover, and closed shoes, and ask ahead which tools to bring.",
+      "Work alongside whoever leads the session: planting, pruning, weeding, or harvesting, whatever the season asks.",
       "Log what you worked on so the next tender knows where things stand."
     ],
     "deliverable": "Photos from your session and a note on what you planted, pruned, or harvested.",
@@ -56,7 +56,7 @@
     "gratitude": "40-80",
     "duration": "4-6 hours",
     "difficulty": "Beginner",
-    "circle": "Regenerative Agriculture",
+    "circle": "",
     "status": "Open",
     "icon": "Sprout",
     "tags": [
@@ -70,12 +70,12 @@
     "order": 3,
     "title": "Potluck & Celebration Organizer",
     "subtitle": "Feed fifty people and watch a village happen.",
-    "description": "Plan, coordinate, and host monthly community potlucks and seasonal celebrations. Handle logistics, theme-setting, and the little touches that make gatherings memorable.",
+    "description": "Plan, coordinate, and host community potlucks and seasonal celebrations. Handle logistics, theme-setting, and the little touches that make gatherings memorable.",
     "impact": "Community bonds form strongest over shared meals and joy.",
-    "story": "Shared meals are where the village becomes real: friendships start, plans take shape, and the week's tensions dissolve over someone's grandmother's recipe. Hosting one well is logistics in service of joy. You set the table, and the community does the rest.",
+    "story": "Shared meals are where a village becomes real: friendships start, plans take shape, and the week's tensions dissolve over someone's grandmother's recipe. Hosting one well is logistics in service of joy. You set the table, and the people who come do the rest.",
     "firstStep": "Pick a date with the events calendar and write one sentence describing the gathering's theme.",
     "steps": [
-      "Choose the date, place, and theme with the community development circle.",
+      "Choose the date, place, and theme, and ask two or three people to plan it with you.",
       "Invite widely: the board, the feed, and personal asks each reach different people.",
       "Coordinate who brings what, plus setup and cleanup crews.",
       "Host the evening: welcome people, open the meal, and let the theme do its work.",
@@ -90,7 +90,7 @@
     "gratitude": "100-200",
     "duration": "Per event",
     "difficulty": "Intermediate",
-    "circle": "Community Development",
+    "circle": "",
     "status": "Open",
     "icon": "ChefHat",
     "tags": [
@@ -104,15 +104,15 @@
     "order": 4,
     "title": "Trail Builder & Maintainer",
     "subtitle": "Open the paths that stitch the land together.",
-    "description": "Help create, mark, and maintain the walking trails connecting all areas of the land. Includes clearing, signage, and stewardship.",
+    "description": "Help create, mark, and maintain walking trails across the land. Includes clearing, signage, and stewardship.",
     "impact": "Connects the land and makes it accessible for all beings.",
     "story": "Land only feels like one place when you can walk it. Trails decide what people see, where they linger, and which corners of the land get loved. Building them is honest outdoor work with a result you can walk on the same day.",
-    "firstStep": "Walk an existing trail end to end and note the two spots that most need attention.",
+    "firstStep": "Walk a trail or a path people already use, end to end, and note the two spots that most need attention.",
     "steps": [
-      "Meet the land stewardship circle to pick your section and the season's priorities.",
+      "Agree your section and the season's priorities with whoever looks after the land.",
       "Clear, grade, and mark the route as agreed, with care for what grows beside the path.",
       "Add or repair signage so a first-time walker never has to guess.",
-      "Report the finished section with photos so the map stays true."
+      "Report the finished section with photos so the next walker can find it."
     ],
     "deliverable": "Before and after photos of your section and a note on any signage added.",
     "tips": [
@@ -123,7 +123,7 @@
     "gratitude": "60-120",
     "duration": "Full day",
     "difficulty": "Intermediate",
-    "circle": "Land Stewardship",
+    "circle": "",
     "status": "Seasonal",
     "icon": "TreePine",
     "tags": [
@@ -137,14 +137,14 @@
     "order": 5,
     "title": "Circle Scribe",
     "subtitle": "Keep the village's memory.",
-    "description": "Document circle meetings, proposals, decisions, and community knowledge. Maintain the living record of how this village governs and creates together.",
+    "description": "Document meetings, proposals, decisions, and community knowledge. Keep a living record of how the village governs and creates together.",
     "impact": "Institutional memory is what makes governance last across generations.",
     "story": "Decisions fade, notes last. The scribe turns an evening of discussion into a record the whole village can trust: what was decided, who carries it, and why. Governance outlives any single founder only when someone writes things down well.",
-    "firstStep": "Read the last two published circle notes and list what a newcomer would still not understand.",
+    "firstStep": "Read the notes from the last two meetings, if any were kept, and list what a newcomer would still not understand.",
     "steps": [
-      "Join the circle meeting and capture proposals, decisions, and owners as they land.",
+      "Join a meeting and capture proposals, decisions, and owners as they land.",
       "Write the notes the same day, while the nuance is fresh.",
-      "Publish them where the circle keeps its records, and link any proposals they reference.",
+      "Publish them where the village keeps its records, and link any proposals they reference.",
       "Flag open questions clearly so the next meeting starts where this one ended."
     ],
     "deliverable": "A published set of meeting notes: decisions, owners, and open questions.",
@@ -156,7 +156,7 @@
     "gratitude": "40-80",
     "duration": "Per meeting (2-3 hrs)",
     "difficulty": "Beginner",
-    "circle": "Governance",
+    "circle": "",
     "status": "Open",
     "icon": "BookOpen",
     "tags": [
@@ -167,56 +167,22 @@
     "minStage": "member"
   },
   {
-    "id": "q-retreat-center-host",
-    "order": 6,
-    "title": "Retreat Center Host",
-    "subtitle": "Hold the space guests remember.",
-    "description": "Welcome and support guests at the retreat center. Coordinate check-ins, facilitate space, and create a smooth guest experience that embodies the village's values.",
-    "impact": "Every retreat guest is a potential community member-or ambassador.",
-    "story": "Retreat guests meet the village before the village meets them: the welcome, the room, the small kindnesses. Hosts carry that first impression. Do it well and a stranger leaves as an ambassador, already planning their return.",
-    "firstStep": "Shadow one guest check-in from arrival to settled, and write down every question the guest asked.",
-    "steps": [
-      "Take the arrival schedule for your retreat and prepare rooms and welcome notes.",
-      "Meet guests as they land: orientation, house rhythms, and who to find for what.",
-      "Stay reachable through the retreat and solve small problems before they grow.",
-      "Close out: gather feedback, reset the spaces, and hand your notes to the next host."
-    ],
-    "deliverable": "Your host notes: what guests asked, what ran smoothly, what needs fixing before the next retreat.",
-    "tips": [
-      "The first ten minutes decide the whole stay.",
-      "A handwritten welcome note costs two minutes and gets mentioned for years."
-    ],
-    "imageUrl": null,
-    "gratitude": "80-150",
-    "duration": "Per retreat",
-    "difficulty": "Intermediate",
-    "circle": "Tourism & Retreat",
-    "status": "Open",
-    "icon": "Home",
-    "tags": [
-      "hospitality",
-      "guests",
-      "tourism"
-    ],
-    "requiresRole": "practitioners"
-  },
-  {
     "id": "q-village-photographer-storyteller",
     "order": 7,
     "title": "Village Photographer & Storyteller",
     "subtitle": "Show the world what daily life here looks like.",
-    "description": "Document life here through photos, short videos, and written stories. Capture the real, daily magic of regenerative village life for the community archive and outreach.",
-    "impact": "Authentic stories are how this village attracts aligned souls worldwide.",
-    "story": "The people meant to find this village will find it through honest pictures of real days: muddy boots, full tables, work in progress. Documentation is also a gift to the future, because the village will want to remember what year two looked like. Your eye becomes part of the archive.",
+    "description": "Document life here through photos, short videos, and written stories. Capture real days, for the village's own record and for the people who might join it.",
+    "impact": "Honest stories are how the right people find a village.",
+    "story": "The people meant to find a village find it through honest pictures of real days: muddy boots, full tables, work in progress. Documentation is also a gift to the future, because a village will want to remember what its early years looked like. Your eye becomes part of that record.",
     "firstStep": "Spend twenty minutes photographing one everyday scene, then pick the single frame that tells it best.",
     "steps": [
       "Choose a rhythm: an event, a work day, or a week of small moments.",
       "Shoot what actually happens. Real beats staged every time.",
       "Ask before photographing people up close, always.",
       "Edit a small set: five strong images beat fifty loose ones.",
-      "File your set in the archive and share one to the village feed."
+      "File your set where the village keeps its pictures, and share one to the feed."
     ],
-    "deliverable": "A small edited set in the archive and one image or story shared to the feed.",
+    "deliverable": "A small edited set, filed where others can find it, and one image or story shared to the feed.",
     "tips": [
       "Golden hour flatters the land.",
       "Caption with a sentence of context. Future you will be grateful."
@@ -225,7 +191,7 @@
     "gratitude": "60-120",
     "duration": "Flexible / ongoing",
     "difficulty": "Intermediate",
-    "circle": "Arts & Culture",
+    "circle": "",
     "status": "Open",
     "icon": "Camera",
     "tags": [
@@ -239,10 +205,10 @@
     "order": 8,
     "title": "Children's Play Day Facilitator",
     "subtitle": "Give the kids a wild morning.",
-    "description": "Co-design and run monthly Children's Play Days-wild games, nature crafts, story circles, and the kind of unstructured magic kids rarely get. A core ritual of village life.",
-    "impact": "Children who grow up here will tend this land for generations.",
-    "story": "Play Days are a village ritual: nature crafts, story circles, mud, and the kind of open time childhood runs on. The children who grow up loving this land will be the ones tending it decades from now. A morning of play is land stewardship wearing a silly hat.",
-    "firstStep": "Ask two village kids what they would do with a whole free morning outdoors, and write down their answers.",
+    "description": "Co-design and run a Children's Play Day: wild games, nature crafts, story circles, and the kind of unstructured time kids rarely get.",
+    "impact": "Children who grow up loving a place grow up to look after it.",
+    "story": "A Play Day is open time: nature crafts, story circles, mud, and the kind of room childhood runs on. The children who grow up loving the land are the ones who will tend it decades from now. A morning of play is land stewardship wearing a silly hat.",
+    "firstStep": "Ask two children you know what they would do with a whole free morning outdoors, and write down their answers.",
     "steps": [
       "Co-design the morning with another facilitator: one anchor activity, lots of open space.",
       "Gather materials the day before and walk the play area for hazards.",
@@ -256,9 +222,9 @@
     ],
     "imageUrl": null,
     "gratitude": "70-130",
-    "duration": "Half day (monthly)",
+    "duration": "Half day",
     "difficulty": "Beginner",
-    "circle": "Education",
+    "circle": "",
     "status": "Open",
     "icon": "Baby",
     "tags": [
@@ -272,12 +238,12 @@
     "order": 9,
     "title": "Tech & Platform Steward",
     "subtitle": "Keep the digital village standing.",
-    "description": "Help maintain and improve the village's digital ecosystem-website, game platform, forms, community tools. Bug reports, UX improvements, documentation, and light development.",
-    "impact": "Scales the village's reach to people who haven't found us yet.",
-    "story": "The platform is village infrastructure the same way the water system is: invisible when it works, everyone's problem when it breaks. Stewarding it means bug reports that name the actual problem, small fixes that ship, and documentation the next person can follow. Quiet work, long reach.",
+    "description": "Help maintain and improve the village's digital tools: this platform, its forms, and the other tools members use. Bug reports, UX improvements, documentation, and light development.",
+    "impact": "Helps the village reach people who have not found it yet.",
+    "story": "A platform is village infrastructure the same way a water system is: invisible when it works, everyone's problem when it breaks. Stewarding it means bug reports that name the actual problem, small fixes that ship, and documentation the next person can follow. Quiet work, long reach.",
     "firstStep": "Use the site for ten minutes as a newcomer would and file the first paper cut you hit, with steps to reproduce.",
     "steps": [
-      "Pick up an open issue from the tech circle, or file the ones you find.",
+      "Pick up an open issue, or file the ones you find.",
       "Reproduce before you fix: a bug you can trigger twice is half solved.",
       "Ship the smallest change that solves it, and write down what you changed.",
       "Leave the docs better than you found them."
@@ -291,7 +257,7 @@
     "gratitude": "80-200",
     "duration": "Flexible / project-based",
     "difficulty": "Advanced",
-    "circle": "Technology",
+    "circle": "",
     "status": "Open",
     "icon": "Laptop",
     "tags": [
@@ -305,15 +271,15 @@
     "order": 10,
     "title": "Healing Arts Practitioner",
     "subtitle": "Offer your practice.",
-    "description": "Offer wellness sessions to community members-yoga, meditation, somatic practices, plant medicine ceremonies, massage, or other healing modalities you're trained in.",
+    "description": "Offer wellness sessions to community members: yoga, meditation, somatic practices, massage, or another healing modality you are trained in.",
     "impact": "Wellbeing is regenerative. When people are well, the village thrives.",
     "story": "A village that works hard needs places to be worked on. Sessions from trained hands, whether yoga, somatics, massage, or ceremony, keep the people well who keep everything else going. Offering your modality here turns your training into village wellbeing.",
     "firstStep": "Write a three sentence description of the session you want to offer: what it is, who it serves, what to bring.",
     "steps": [
-      "Confirm your offering and any space or equipment needs with the wellness circle.",
+      "Confirm your offering, and any space or equipment it needs, with whoever arranges gatherings.",
       "Schedule the session and post it where members look for gatherings.",
       "Hold the session with clear consent and comfort agreements up front.",
-      "Gather a word of feedback after, and log the session for the circle."
+      "Gather a word of feedback after, and log the session."
     ],
     "deliverable": "A note on the session you held: attendance, how it went, whether it should recur.",
     "tips": [
@@ -324,9 +290,10 @@
     "gratitude": "50-150",
     "duration": "Per session",
     "difficulty": "Intermediate",
-    "circle": "Wellness",
+    "circle": "",
     "status": "Open",
     "roleRequired": "Trained practitioner",
+    "requiresRole": "practitioners",
     "icon": "Leaf",
     "tags": [
       "wellness",
@@ -339,12 +306,12 @@
     "order": 11,
     "title": "Infrastructure Builder",
     "subtitle": "Build the bones of the village.",
-    "description": "Support construction, repair, and improvement of shared village infrastructure: composting systems, water catchment, communal kitchen, raised beds, fencing, and more.",
+    "description": "Support construction, repair, and improvement of shared infrastructure: composting systems, water catchment, a communal kitchen, raised beds, fencing, and more.",
     "impact": "Built systems are the skeleton the village lives inside.",
     "story": "Compost systems, water catchment, raised beds, fencing: built systems are the skeleton everything else hangs on. This work rewards people who like problems you can touch. What you build this month gets used every day for years.",
-    "firstStep": "Visit the current build site and ask the lead what the next blocked task is waiting on.",
+    "firstStep": "Ask whoever is leading a build what the next blocked task is waiting on.",
     "steps": [
-      "Join a build day through the land stewardship circle and get briefed on the project.",
+      "Join a build day and get briefed on the project by whoever leads it.",
       "Work the task with the crew: measure twice, lift with friends.",
       "Photograph what got built and note any materials running low.",
       "Flag anything unsafe or unfinished before you leave the site."
@@ -358,7 +325,7 @@
     "gratitude": "80-160",
     "duration": "Full day",
     "difficulty": "Advanced",
-    "circle": "Land Stewardship",
+    "circle": "",
     "status": "Open",
     "icon": "Hammer",
     "tags": [
@@ -372,17 +339,17 @@
     "order": 12,
     "title": "Arts & Mural Maker",
     "subtitle": "Paint what words miss.",
-    "description": "Create art that lives in the village-murals, sculptures, fiber works, installations. Bring beauty to shared spaces and express the village's soul through your medium.",
-    "impact": "Beauty communicates what words can't. This is how the village speaks.",
+    "description": "Create art that lives in the village: murals, sculptures, fiber works, installations. Bring beauty to shared spaces through your medium.",
+    "impact": "Beauty communicates what words can't. This is how a village speaks.",
     "story": "Beauty is how a place speaks. Murals, sculpture, fiber, and installations turn shared walls into shared meaning, and they outlast every meeting about how the village should feel. Bring your medium. The village brings the walls.",
     "firstStep": "Walk the shared spaces and photograph the one surface that most wants art. Write a sentence on what belongs there.",
     "steps": [
-      "Pitch your piece to the arts circle: sketch, surface, materials, timeline.",
+      "Pitch your piece to the people who share the space: sketch, surface, materials, timeline.",
       "Gather materials and prep the surface properly. Prep decides how long it lasts.",
       "Create, and let people watch. Working in public is half the gift.",
-      "Seal or weatherproof the finished piece and photograph it for the archive."
+      "Seal or weatherproof the finished piece and photograph it."
     ],
-    "deliverable": "The finished piece on the land, photographed for the archive with a title and a line about it.",
+    "deliverable": "The finished piece in place, photographed, with a title and a line about it.",
     "tips": [
       "Sketch approval first saves repainting later.",
       "Kids will ask to help. Let them do a corner."
@@ -391,7 +358,7 @@
     "gratitude": "100-300",
     "duration": "Project-based",
     "difficulty": "Intermediate",
-    "circle": "Arts & Culture",
+    "circle": "",
     "status": "Open",
     "icon": "Brush",
     "tags": [
@@ -405,9 +372,9 @@
     "order": 13,
     "title": "Community Music Circle Host",
     "subtitle": "Start the rhythm.",
-    "description": "Lead or organize regular music circles, drum jams, singing circles, or informal concerts. Music is how the village celebrates, grieves, and stays alive.",
+    "description": "Lead or organize regular music circles, drum jams, singing circles, or informal concerts. Music is how a village celebrates, grieves, and stays alive.",
     "impact": "Rhythm holds community together in ways nothing else can.",
-    "story": "Music is how the village celebrates, grieves, and remembers itself. A circle needs no stage and no skill floor: a few instruments, a fire, and someone willing to hold the container. That someone is you.",
+    "story": "Music is how a village celebrates, grieves, and remembers itself. A circle needs no stage and no skill floor: a few instruments, a fire, and someone willing to hold the container. That someone is you.",
     "firstStep": "Pick a date and invite three people directly. A circle of four is already a circle.",
     "steps": [
       "Set the time and place, and post the invitation to the feed.",
@@ -424,7 +391,7 @@
     "gratitude": "50-100",
     "duration": "Per session",
     "difficulty": "Beginner",
-    "circle": "Arts & Culture",
+    "circle": "",
     "status": "Open",
     "icon": "Music",
     "tags": [
@@ -438,13 +405,13 @@
     "order": 14,
     "title": "Security & Night Watch",
     "subtitle": "Watch over the night.",
-    "description": "Participate in the village safety rotation-nighttime presence, gate awareness, and care for the boundary between the village and the wider world.",
+    "description": "Keep watch at night as part of a safety rotation: nighttime presence, awareness at the entrances, and care for the boundary between the village and the wider world.",
     "impact": "Collective safety is how all other contributions stay protected.",
-    "story": "Every open-hearted place needs people who mind the edges. Night watch is quiet, real responsibility: presence at the gate, eyes on the boundary, care for everyone sleeping inside it. The village rests because someone is awake.",
-    "firstStep": "Walk the property boundary once in daylight with a current watch member and learn the checkpoints.",
+    "story": "Every open-hearted place needs people who mind the edges. Night watch is quiet, real responsibility: presence at the entrance, eyes on the boundary, care for everyone sleeping inside it. The village rests because someone is awake.",
+    "firstStep": "Walk the boundary once in daylight with someone who knows it, and agree the points a round should check.",
     "steps": [
-      "Take a rotation slot through the governance circle and get the handover briefing.",
-      "Walk the rounds on schedule: gate, common spaces, boundary points.",
+      "Agree a rotation slot with the others keeping watch, and get a handover briefing.",
+      "Walk the rounds on schedule: entrances, common spaces, boundary points.",
       "Log anything unusual, and wake the right person for anything urgent.",
       "Hand over clearly at the end of your shift, with notes for the next watch."
     ],
@@ -457,7 +424,7 @@
     "gratitude": "60-100",
     "duration": "Night shift (6-8 hrs)",
     "difficulty": "Intermediate",
-    "circle": "Governance",
+    "circle": "",
     "status": "Open",
     "roleRequired": "Resident or Immersant",
     "icon": "ShieldCheck",

@@ -4,12 +4,21 @@
  *
  * Two of these descriptions once named one village outright, so every village
  * that installed this platform opened its training page and read another
- * village's name back at itself on day one. The name is a parameter, read at
- * seed time from the merged config (brand overlay over the gameConfig
- * default), which is not known at module load.
+ * village's name back at itself on day one. The first fix swapped that name
+ * for the new village's own, which kept the claim and changed its subject:
+ * "the foundation of how we talk to each other at <your village>" and "how
+ * <your village> makes decisions together" told members that a village which
+ * had chosen nothing yet already talks in NVC and decides by consent. That is
+ * the never-build rule "seeding aspirational structure"
+ * (docs/COORDINATION_SUBSTRATE.md, section 7).
  *
- * Only the identity moved. The practices are the platform's opinion about what
- * a village should learn first and they stay exactly as written.
+ * So each description now says what the practice IS and never that this
+ * village practises it. The list itself stays: the practices are the
+ * platform's opinion about what a village might learn first, and whether one
+ * is required is the village's choice to make later (the canvas plan's Team
+ * block). The caller still hands in the village name; nothing here reads it,
+ * which is why the parameter is marked unused rather than removed, and a
+ * description that starts using it again is making the claim again.
  *
  * ── EVERY ONE SAYS `mandatory: true`, AND IT HAS TO ─────────────────────────
  *
@@ -20,13 +29,13 @@
  *
  * Moved here out of server/index.ts, whose line ratchet only turns down.
  */
-export function starterTrainingModules(village: string) {
+export function starterTrainingModules(_village?: string) {
   return [
     {
       id: "nvc-intro",
       title: "Introduction to Nonviolent Communication",
       description:
-        `The foundation of how we talk to each other at ${village}. Learn the four components of NVC and why they matter.`,
+        "The four components of Nonviolent Communication, and why they matter when people live and work side by side.",
       type: "Video",
       url: "",
       mandatory: true,
@@ -46,7 +55,7 @@ export function starterTrainingModules(village: string) {
       id: "consent-decisions",
       title: "Consent-Based Decision Making",
       description:
-        `How ${village} makes decisions together: the difference between consensus and consent, and why it matters.`,
+        "The difference between consensus and consent, and why it matters when a group decides together.",
       type: "Article",
       url: "",
       mandatory: true,

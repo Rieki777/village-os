@@ -74,6 +74,7 @@
  */
 import type { Pool } from "mysql2/promise";
 import {
+  carriesChangeSet,
   defaultTimingFor,
   executesAtPassWithNoWindow,
   isSeatSubject,
@@ -304,8 +305,8 @@ const nowOf = (deps: VetoDeps): Date => (deps.now ? deps.now() : new Date());
  * binding it. The repo functions below take a `Date` and format it themselves.
  */
 
-/** Is this subject's ballot backed by a mechanics proposal row? */
-const hasProposal = (subjectType: string): boolean => subjectType === "mechanics" || subjectType === "mint_rule";
+/** Is this subject's ballot backed by a mechanics proposal row? The list lives in shared/governanceKinds.ts. */
+const hasProposal = (subjectType: string): boolean => carriesChangeSet(subjectType);
 
 // ── Stamping ────────────────────────────────────────────────────────────────
 

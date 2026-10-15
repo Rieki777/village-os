@@ -357,6 +357,19 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
 
     const before = await pool.query<any[]>("SELECT COUNT(*) n FROM rate_hits WHERE bucket LIKE 'assistant-day:member%'");
     stubBodies = [];
+    // Wave 4, the companion: before a member's words first go to a model,
+    // they read one line naming the provider and whoever holds the key, and
+    // say yes. Until then the record answers and nothing goes upstream, even
+    // on the member's own key.
+    const unasked = await call("POST", "/api/agent/ask", { messages: [{ role: "user", content: "should I go to the kitchen crew gathering?" }] }, ana.token);
+    expect(unasked.status, JSON.stringify(unasked.json)).toBe(200);
+    expect(unasked.json.fromRecord).toBe("no-consent");
+    expect(unasked.json.consent).toMatchObject({ required: true, provider: "Anthropic", operator: "you", source: "member" });
+    expect(stubBodies, "nothing went upstream before the yes").toHaveLength(0);
+    const yes = await call("POST", "/api/agent/companion/consent", {
+      provider: unasked.json.consent.provider, operator: unasked.json.consent.operator, source: unasked.json.consent.source,
+    }, ana.token);
+    expect(yes.status, JSON.stringify(yes.json)).toBe(200);
     const ask = await call("POST", "/api/agent/ask", { messages: [{ role: "user", content: "should I go to the kitchen crew gathering?" }] }, ana.token);
     expect(ask.status, JSON.stringify(ask.json)).toBe(200);
     expect(ask.json.keySource).toBe("member");
@@ -364,7 +377,11 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     expect(stubBodies[0].headers["x-api-key"]).toBe(MEMBER_LLM_KEY);
     // The framing, verbatim, in the member-mode prompt.
     expect(String(stubBodies[0].body.system)).toContain("Names, events and labels about a person come word for word from a tool result or from the member's own note. If it is not there, say: I don't see that anywhere.");
-    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' ORDER BY created_at DESC LIMIT 1", [ana.id]);
+    // Selected by path and never by recency: the answer from the record just
+    // above wrote Ana a zero-token row too, and `created_at` has second
+    // precision, so two rows inside one second let ORDER BY pick either (CI
+    // did, on 731a180).
+    const [[usage]] = await pool.query<any[]>("SELECT key_source, user_id, mode, path FROM assistant_usage WHERE user_id = ? AND mode = 'member' AND path <> 'deterministic' ORDER BY created_at DESC LIMIT 1", [ana.id]); // module-review-ok: reading back the scratch schema this suite booted the server on
     expect(usage.key_source).toBe("member");
     expect(usage.user_id).toBe(ana.id);
     const after = await pool.query<any[]>("SELECT COUNT(*) n FROM rate_hits WHERE bucket LIKE 'assistant-day:member%'");

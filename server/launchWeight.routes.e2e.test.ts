@@ -38,6 +38,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -242,8 +243,15 @@ beforeAll(async () => {
           "The village agrees what would put it right",
           "Whoever asked for this says whether it did",
         ],
+        // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+        ...CONFLICT_DOOR_READY,
       },
     },
+  })).status).toBe(200);
+  // What closing means, named AND adopted: blocking since Rye's ruling of
+  // 2026-09-25. Its own "no" and "yes" are server/closingPolicy.routes.e2e.test.ts.
+  expect((await call("PUT", "/api/admin/exit-policy/closing", {
+    body: { policyId: "own-words", statement: "If Larksfield closes, the barn and the land pass to the parish trust and the cash is shared among the members still here.", adopt: true },
   })).status).toBe(200);
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "backups-drilled", done: true } })).status).toBe(200);
 
@@ -272,6 +280,11 @@ beforeAll(async () => {
   expect((await call("PUT", "/api/admin/purpose", {
     body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
+
+  // EVERY CANVAS BLOCK ON RECORD, which blocks the vote (2026-09-27). One reading
+  // each, at Absent with its sentence, through the real route. The refusal is
+  // driven row by row in server/lib/launchGovernance.db.test.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {

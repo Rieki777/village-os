@@ -534,7 +534,7 @@ export default function Layout({ children }: LayoutProps) {
               <ul className="space-y-2">
                 <li>
                   <Link href="/governance" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Governance
+                    How we work together
                   </Link>
                 </li>
                 <li>

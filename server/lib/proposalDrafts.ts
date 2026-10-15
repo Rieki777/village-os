@@ -83,6 +83,9 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
   "role_seat",
   // The route opens the change and the closer writes the statement (0219).
   "gps_change",
+  // The route opens the vote and the closer adopts the stored words at the
+  // landing (server/routes/governanceAgreements.ts, server/lib/agreementCloser.ts).
+  "agreement",
 ];
 
 /**

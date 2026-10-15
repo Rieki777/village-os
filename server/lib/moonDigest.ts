@@ -64,6 +64,9 @@ import {
 import { sentencesAppliedBetween } from "../repos/governanceElementLedger";
 import { claimDigest, digestRow, markDigestPosted } from "../repos/moonDigests";
 import { recordEvent } from "./events";
+import { canvasMoonTitles } from "./calendarBrief";
+import { newMoonNear } from "./canvasMoon";
+import { canvasMoonLine } from "../../shared/canvasRevisit";
 
 export interface DigestDeps {
   pool: Pool;
@@ -139,7 +142,7 @@ export async function digestFacts(pool: Pool, startedAt: Date, endedAt: Date): P
  * that forgot, and a village needs to be able to tell "nothing was stopped"
  * from "we did not look".
  */
-export function digestText(cycleId: string, facts: DigestFacts): string {
+export function digestText(cycleId: string, facts: DigestFacts, canvasMoon: string | null = null): string {
   const lines: string[] = [`What changed this moon (${cycleId})`, ""];
 
   lines.push("What landed");
@@ -164,6 +167,16 @@ export function digestText(cycleId: string, facts: DigestFacts): string {
   if (facts.stalled > 0) lines.push(`  ${facts.stalled} decision(s) came due while landing was switched off.`);
   if (facts.expired > 0) lines.push(`  ${facts.expired} decision(s) waited too long and were closed.`);
 
+  // The canvas moon (plan 4.4): the new moon's question, block titles only.
+  // Absent, and no heading, when no reader is registered or no new moon sits
+  // at this boundary, because a heading that says nothing would read as a
+  // question the village was asked and forgot.
+  if (canvasMoon) {
+    lines.push("");
+    lines.push("The canvas moon");
+    lines.push(`  ${canvasMoon}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -177,7 +190,11 @@ export function digestText(cycleId: string, facts: DigestFacts): string {
  */
 export async function composeMoonDigest(deps: DigestDeps): Promise<DigestResult> {
   const facts = await digestFacts(deps.pool, deps.startedAt, deps.endedAt);
-  const text = digestText(deps.cycleId, facts);
+  // The new moon at this boundary, if the village's clock is lunar enough to
+  // have one within three days of it; a village on another clock gets no line.
+  const newMoon = newMoonNear(deps.endedAt, 3);
+  const titles = newMoon ? await canvasMoonTitles(deps.pool, newMoon) : null;
+  const text = digestText(deps.cycleId, facts, titles ? canvasMoonLine(titles) : null);
 
   const claimed = await claimDigest(deps.pool, {
     cycleId: deps.cycleId,

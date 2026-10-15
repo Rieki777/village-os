@@ -27,6 +27,8 @@
 import { faucetFor } from "./economy";
 import { isListedForTrade } from "./exchange";
 import { allTokens } from "./ledger";
+import { closingForReaders, type ClosingSection, type ClosingSectionForReaders } from "../../shared/closingPolicies";
+import { AGREEMENT_NAME_MAX, AGREEMENT_REACH_MAX, AGREEMENT_REPLY_HOURS_MAX } from "../../shared/conflictAgreement";
 
 export interface ExitPolicyVoluntary {
   noticePeriodDays: number;
@@ -62,9 +64,45 @@ export interface ExitPolicyInvoluntary {
   grounds: string[];
 }
 
+/**
+ * Somebody OUTSIDE the village a member can bring a conflict to (2026-09-27).
+ *
+ * A village of founders has nobody inside it who is not also one of the
+ * people a conflict could be about, so the launch checklist's `conflict-door`
+ * row asks for one of these wherever fewer than three members are not
+ * founders (server/lib/launchGovernance.ts). Season Two names one cohort
+ * ombuds for every project.
+ *
+ * NAMED means a name and a way to reach them. The organisation is optional,
+ * because the contact may be a service whose name is its organisation.
+ */
+export interface OutsideContact {
+  name: string;
+  organisation: string;
+  howToReach: string;
+}
+
 export interface ExitPolicyRestorative {
   intakeContactRole: string;
   steps: string[];
+  /*
+   * THE THREE CONFLICT-DOOR FIELDS (2026-09-27), OPTIONAL IN THE TYPE ON
+   * PURPOSE. Every policy saved before they existed lacks all three, and
+   * `withPolicyDefaults` below fills them on read, so no stored document has
+   * to be rewritten for a village to keep saving its terms. Nothing in
+   * `EXIT_POLICY_TERMS` names them, so the publish gate is untouched.
+   */
+  /** A second permission role that covers when the care role's holders cannot. Empty means none. */
+  coverRole?: string;
+  /**
+   * How many hours a member waits, at most, for a reply to a request for care.
+   * Null means nobody has promised one. There is NO platform default, and that
+   * is the ruling rather than an oversight: a number the platform chose would
+   * be a promise nobody here made (the notice period's comment below says the
+   * same thing about teaching founders to type 31).
+   */
+  replyHours?: number | null;
+  outsideContact?: OutsideContact;
 }
 
 export interface ExitPolicy {
@@ -72,6 +110,14 @@ export interface ExitPolicy {
   voluntary: ExitPolicyVoluntary;
   involuntary: ExitPolicyInvoluntary;
   restorative: ExitPolicyRestorative;
+  /**
+   * WHAT CLOSING THIS VILLAGE MEANS (Rye, 2026-09-25), or absent when the
+   * village has not started on it, which is every policy saved before this
+   * existed. Written only by `PUT /api/admin/exit-policy/closing`, carried
+   * through every other save by `normalizeExitPolicy`, and served to readers
+   * without `adoptedBy` by `withPolicyDefaults`. shared/closingPolicies.ts.
+   */
+  closing?: ClosingSection | ClosingSectionForReaders;
 }
 
 /**
@@ -123,6 +169,9 @@ export const DEFAULT_EXIT_POLICY: ExitPolicy = {
       "A facilitated repair conversation",
       "A written agreement with a review date; only the agreement and its status enter the record",
     ],
+    coverRole: "",
+    replyHours: null,
+    outsideContact: { name: "", organisation: "", howToReach: "" },
   },
 };
 
@@ -146,12 +195,19 @@ const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const steps = (v: unknown): string[] =>
   Array.isArray(v) ? v.map((s) => text(s)).filter((s) => s.length > 0) : [];
 
-/** Whitespace and case are formatting, so they never count as new words. */
-const same = (a: string, b: string): boolean =>
-  a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
+/**
+ * Whitespace and case are formatting, so they never count as new words.
+ *
+ * Type-checked before comparing because a STORED document reaches these too
+ * (the public `GET /api/exit-policy` asks `platformDefaultTermKeys`), and a
+ * stored field is whatever some release wrote. A null there is not the
+ * platform's words, and it must not turn the public page into a 500.
+ */
+const same = (a: unknown, b: string): boolean =>
+  typeof a === "string" && a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
 
-const sameSteps = (a: string[], b: string[]): boolean =>
-  a.length === b.length && a.every((s, i) => same(s, b[i]));
+const sameSteps = (a: unknown, b: string[]): boolean =>
+  Array.isArray(a) && a.length === b.length && a.every((s, i) => same(s, b[i]));
 
 /**
  * Coerce an admin body into a whole policy document.
@@ -160,14 +216,20 @@ const sameSteps = (a: string[], b: string[]): boolean =>
  * defaults at the TOP level only, so a client that sent `voluntary` without
  * `unwindSteps` replaced the whole section and silently dropped published
  * terms. Merging per section means a partial body can only add.
+ *
+ * `stored` is the document on record, and the ONE thing taken from it is the
+ * closing section, which this save must neither drop nor rewrite: it has its
+ * own writer (server/lib/closingPolicy.ts says why), and any `closing` in the
+ * body is ignored.
  */
-export function normalizeExitPolicy(body: any): ExitPolicy {
+export function normalizeExitPolicy(body: any, stored?: any): ExitPolicy {
   const v = body?.voluntary ?? {};
   const i = body?.involuntary ?? {};
   const r = body?.restorative ?? {};
   const notice = Number(v.noticePeriodDays);
   return {
     placeholder: body?.placeholder === true,
+    ...(stored?.closing ? { closing: stored.closing } : {}),
     voluntary: {
       noticePeriodDays: Number.isFinite(notice) && notice >= 0 ? Math.floor(notice) : DEFAULT_EXIT_POLICY.voluntary.noticePeriodDays,
       valuationMethod: text(v.valuationMethod) || DEFAULT_EXIT_POLICY.voluntary.valuationMethod,
@@ -195,8 +257,126 @@ export function normalizeExitPolicy(body: any): ExitPolicy {
     restorative: {
       intakeContactRole: text(r.intakeContactRole),
       steps: steps(r.steps).length ? steps(r.steps) : [...DEFAULT_EXIT_POLICY.restorative.steps],
+      coverRole: text(r.coverRole),
+      replyHours: replyHoursOf(r.replyHours),
+      outsideContact: outsideContactOf(r.outsideContact),
     },
   };
+}
+
+/*
+ * ── THE CONFLICT DOOR'S THREE FIELDS (2026-09-27) ─────────────────────────
+ *
+ * The launch checklist's `conflict-door` row reads these, and the admin route
+ * refuses a malformed one with `restorativeDoorProblem` before
+ * `normalizeExitPolicy` ever sees it. The readers below are what both of them,
+ * and every stored document, go through: a stored field is whatever some
+ * release wrote, so a read must survive a null, a string or an object where a
+ * number belongs, and answer "not set" rather than throw.
+ */
+
+/** The longest promised reply the editor accepts: thirty days, in hours. */
+export const REPLY_HOURS_MAX = AGREEMENT_REPLY_HOURS_MAX;
+
+/** The longest a contact's name or organisation may be. */
+export const CONTACT_FIELD_MAX = AGREEMENT_NAME_MAX;
+
+/** The longest a way of reaching the contact may be. */
+export const CONTACT_REACH_MAX = AGREEMENT_REACH_MAX;
+
+/**
+ * A promised reply time, as whole hours from 1 to `REPLY_HOURS_MAX`, or null.
+ *
+ * A digit string counts, because a form field hands one over. Anything else,
+ * including 0, a fraction, a negative and a blank, reads as null: not promised.
+ */
+export function replyHoursOf(v: unknown): number | null {
+  const raw = typeof v === "string" ? v.trim() : v;
+  if (typeof raw !== "number" && !(typeof raw === "string" && /^\d+$/.test(raw))) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= REPLY_HOURS_MAX ? n : null;
+}
+
+/** The outside contact, trimmed, with every field present. Anything unreadable is blank. */
+export function outsideContactOf(v: unknown): OutsideContact {
+  const o = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  return { name: text(o.name), organisation: text(o.organisation), howToReach: text(o.howToReach) };
+}
+
+/** A contact is NAMED when it carries a name and a way to reach them. */
+export function outsideContactNamed(v: unknown): boolean {
+  const c = outsideContactOf(v);
+  return c.name.length > 0 && c.howToReach.length > 0;
+}
+
+/**
+ * Why the restorative block of an admin body cannot be saved, or null.
+ *
+ * The admin route asks this before it normalizes anything, and answers 400
+ * with it. `roleIds` is every permission role this village has.
+ *
+ * The first refusal keeps the exact words the route used before this existed,
+ * so a caller that matched on them still does.
+ */
+export function restorativeDoorProblem(
+  restorative: unknown,
+  roleIds: readonly string[],
+): { error: string; message: string } | null {
+  const r = restorative && typeof restorative === "object" ? (restorative as Record<string, unknown>) : {};
+  const intake = text(r.intakeContactRole);
+  const cover = text(r.coverRole);
+  if (intake && !roleIds.includes(intake)) {
+    return { error: "unknown_role", message: `Unknown intake role "${intake}"` };
+  }
+  if (cover && !roleIds.includes(cover)) {
+    return { error: "unknown_role", message: `Unknown cover role "${cover}"` };
+  }
+  if (cover && !intake) {
+    return {
+      error: "cover_without_intake",
+      message: "A cover role covers the intake role, so choose the intake role first.",
+    };
+  }
+  if (cover && cover === intake) {
+    return {
+      error: "cover_is_intake",
+      message: "The cover role is the intake role itself, so nobody covers when its holders cannot. Choose a second role, or leave cover empty.",
+    };
+  }
+  const hours = typeof r.replyHours === "string" ? r.replyHours.trim() : r.replyHours;
+  if (hours !== undefined && hours !== null && hours !== "" && replyHoursOf(hours) === null) {
+    return {
+      error: "bad_reply_hours",
+      message: `A promised reply time is a whole number of hours, from 1 to ${REPLY_HOURS_MAX}.`,
+    };
+  }
+  const raw = r.outsideContact;
+  if (raw !== undefined && raw !== null) {
+    if (typeof raw !== "object" || Array.isArray(raw)) {
+      return { error: "bad_outside_contact", message: "The outside contact needs a name and a way to reach them." };
+    }
+    const c = outsideContactOf(raw);
+    if (c.name.length > CONTACT_FIELD_MAX || c.organisation.length > CONTACT_FIELD_MAX) {
+      return {
+        error: "bad_outside_contact",
+        message: `Keep the outside contact's name and organisation to ${CONTACT_FIELD_MAX} characters each.`,
+      };
+    }
+    if (c.howToReach.length > CONTACT_REACH_MAX) {
+      return {
+        error: "bad_outside_contact",
+        message: `Keep how to reach the outside contact to ${CONTACT_REACH_MAX} characters.`,
+      };
+    }
+    const any = c.name || c.organisation || c.howToReach;
+    if (any && !(c.name && c.howToReach)) {
+      return {
+        error: "bad_outside_contact",
+        message: "An outside contact needs a name and a way to reach them. The organisation is optional.",
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -224,6 +404,8 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
     ...(stored ?? {}),
     ...d,
     ...(stored ?? {}),
+    // Who adopted the closing words stays in the record; the page says when.
+    ...(stored?.closing ? { closing: closingForReaders(stored.closing) } : {}),
     voluntary: { ...d.voluntary, ...(stored?.voluntary ?? {}) },
     involuntary: {
       ...d.involuntary,
@@ -233,8 +415,38 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
       // one saved before the field existed, and both want the seed.
       grounds: steps(inv.grounds).length ? steps(inv.grounds) : [...d.involuntary.grounds],
     },
-    restorative: { ...d.restorative, ...(stored?.restorative ?? {}) },
+    restorative: {
+      ...d.restorative,
+      ...(stored?.restorative ?? {}),
+      /*
+       * The conflict door's contact is an object, so it is merged one level
+       * down as well: a document that carries a partial contact still reads
+       * with every field present. A stored value that is not an object at all
+       * reads as the empty contact, and so as "no contact named".
+       */
+      outsideContact: outsideContactOf(stored?.restorative?.outsideContact),
+    },
   } as ExitPolicy;
+}
+
+/**
+ * The KEYS of every rendered term whose text is still the platform's.
+ *
+ * Keys and not labels because other pages read this too. `/governance` and
+ * `/roles` print the village's restorative steps as its conflict process, and
+ * they must not print the platform's starting steps as though the village had
+ * written them. `GET /api/exit-policy` hands them this list as `platformWording`
+ * so they ask the same comparison the publish gate asks, rather than a copy of
+ * it that drifts.
+ */
+export function platformDefaultTermKeys(policy: ExitPolicy): ExitPolicyTermKey[] {
+  const d = DEFAULT_EXIT_POLICY;
+  const stale: ExitPolicyTermKey[] = [];
+  if (same(policy.voluntary.valuationMethod, d.voluntary.valuationMethod)) stale.push("valuationMethod");
+  if (sameSteps(policy.voluntary.unwindSteps, d.voluntary.unwindSteps)) stale.push("unwindSteps");
+  if (same(policy.involuntary.process, d.involuntary.process)) stale.push("involuntaryProcess");
+  if (sameSteps(policy.restorative.steps, d.restorative.steps)) stale.push("restorativeSteps");
+  return stale;
 }
 
 /**
@@ -244,14 +456,8 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
  * community decided these terms.
  */
 export function platformDefaultTerms(policy: ExitPolicy): string[] {
-  const d = DEFAULT_EXIT_POLICY;
-  const stale: string[] = [];
   const label = (key: ExitPolicyTermKey) => EXIT_POLICY_TERMS.find((t) => t.key === key)!.label;
-  if (same(policy.voluntary.valuationMethod, d.voluntary.valuationMethod)) stale.push(label("valuationMethod"));
-  if (sameSteps(policy.voluntary.unwindSteps, d.voluntary.unwindSteps)) stale.push(label("unwindSteps"));
-  if (same(policy.involuntary.process, d.involuntary.process)) stale.push(label("involuntaryProcess"));
-  if (sameSteps(policy.restorative.steps, d.restorative.steps)) stale.push(label("restorativeSteps"));
-  return stale;
+  return platformDefaultTermKeys(policy).map(label);
 }
 
 /** The labels of every rendered term a founder emptied. A blank policy is not a policy. */

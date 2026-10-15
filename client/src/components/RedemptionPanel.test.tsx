@@ -22,6 +22,7 @@ vi.mock("@/lib/gameApi", () => ({ authToken: () => "a-session" }));
 
 import RedemptionPanel from "./RedemptionPanel";
 import RedemptionQueue from "./RedemptionQueue";
+import { CLOSING_REDEMPTION_NOTICE } from "@shared/closingPolicies";
 
 const answering = (payload: unknown) =>
   vi.fn(async () => ({ ok: true, json: async () => payload })) as unknown as typeof fetch;
@@ -120,6 +121,35 @@ describe("what the member is told about a process the village never wrote", () =
     render(<RedemptionPanel />);
     expect(await screen.findByText(/Call Suzy and she will send a bank transfer\./)).toBeInTheDocument();
     expect(screen.queryByText(/has not written it down yet/)).toBeNull();
+  });
+});
+
+/*
+ * WHAT REDEEMING GIVES UP UNDER THE CLOSING POLICY (Rye, 2026-09-25), said
+ * before the button and only when it applies.
+ *
+ * The server decides whether it applies (`redemptionClosingNotice`, pinned in
+ * shared/closingPolicies.test.ts, and driven over HTTP in
+ * server/closingPolicy.routes.e2e.test.ts) and sends the sentence or null.
+ * What this pins is the screen's half: the sentence the server sent is on the
+ * page ABOVE "Ask to redeem", and a null leaves no trace of it.
+ */
+describe("the closing-policy notice on the redemption form", () => {
+  it("prints the server's sentence before the button when the village's policy reads closing-day balances", async () => {
+    vi.stubGlobal("fetch", answering({ ...MEMBER_PAYLOAD, money: MONEY, closingNotice: CLOSING_REDEMPTION_NOTICE }));
+    render(<RedemptionPanel />);
+    const notice = await screen.findByText(CLOSING_REDEMPTION_NOTICE);
+    const button = screen.getByRole("button", { name: "Ask to redeem" });
+    // DOCUMENT_POSITION_FOLLOWING: the button comes after the sentence, so it is read first.
+    expect(notice.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says nothing about closing when the server sends no notice", async () => {
+    vi.stubGlobal("fetch", answering({ ...MEMBER_PAYLOAD, money: MONEY, closingNotice: null }));
+    render(<RedemptionPanel />);
+    await screen.findByRole("button", { name: "Ask to redeem" });
+    expect(screen.queryByText(/closing policy/)).toBeNull();
+    expect(screen.queryByText(/closing day/)).toBeNull();
   });
 });
 

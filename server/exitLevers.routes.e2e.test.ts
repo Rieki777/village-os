@@ -89,6 +89,29 @@ let siblingAfterBundle: string | null = null;
 
 interface Answer { status: number; json: any }
 
+/**
+ * Runs `fn` as the village was before its Game started, then puts the start
+ * back exactly as it was. `provisionTestDb()` starts every village by default,
+ * and after the Birthing the conflict path (the restorative block) changes only
+ * by a village vote on its conflict agreement (`saveExitPolicy`,
+ * server/routes/exits.ts, Wave 3a audit). The writes wrapped here are a
+ * founder setting the village up, which is the side of that moment they belong on.
+ */
+async function beforeTheBirthing<T>(query: (sql: string, args?: unknown[]) => Promise<any>, fn: () => Promise<T>): Promise<T> {
+  const [rows] = await query("SELECT value FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  const row = (rows as any[])[0];
+  await query("DELETE FROM app_config WHERE config_key = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  try {
+    return await fn();
+  } finally {
+    if (row) {
+      await query("INSERT INTO app_config (config_key, value) VALUES ('game-start', ?)", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        typeof row.value === "string" ? row.value : JSON.stringify(row.value),
+      ]);
+    }
+  }
+}
+
 async function call(method: string, route: string, opts: { body?: unknown; token?: string | null } = {}): Promise<Answer> {
   const token = opts.token === undefined ? founderToken : opts.token;
   const res = await fetch(BASE + route, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
@@ -289,14 +312,16 @@ describe.skipIf(!DB_CONFIGURED)("what the variables route refuses about a depart
     // stays TRUE: clearing it while the terms are still word for word the
     // platform's is a 409 from a different guard in the same file, and this
     // case is about the notice period and not about that one.
-    const published = await call("PUT", "/api/admin/exit-policy", {
-      body: {
-        placeholder: true,
-        voluntary: { noticePeriodDays: 60 },
-        involuntary: {},
-        restorative: {},
-      },
-    });
+    const published = await beforeTheBirthing((sql, args) => pool.query(sql, args as any), () => // module-review-ok: hands the suite's own scratch-schema pool to the fixture helper above
+      call("PUT", "/api/admin/exit-policy", {
+        body: {
+          placeholder: true,
+          voluntary: { noticePeriodDays: 60 },
+          involuntary: {},
+          restorative: {},
+        },
+      }),
+    );
     expect(published.status, `publish: ${JSON.stringify(published.json)}`).toBe(200);
     const r = await setDial("exit.cooling_days", "45");
     expect(r.status).toBe(200);

@@ -469,20 +469,27 @@ permanently: nothing recomputes it afterwards.
 
 ## What arrives at boot
 
-**A village with an empty `quests` table is seeded with fourteen real quests.** The block in
-`server/index.ts` guards on `existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)` and loops
-`questsRepo.add` over `server/seeds/quests-seed.json`. `QUEST_COLS` omits `is_example`, whose
-column default is 0, so all fourteen are **real** rows: claimable, consentable and payable from the
+**A village with an empty `quests` table is seeded with thirteen real quests.** The block in
+`server/index.ts` guards on `existing.length === 0 && fs.existsSync(QUESTS_SEED_FILE)` and hands
+`server/seeds/quests-seed.json` to `seedEmptyQuestBoard` (`server/lib/questSeed.ts`), which checks
+the table is empty again and loops `questsRepo.add`. Since 2026-09-27 the thirteen describe a
+practice and claim none for the village: no food forest, watch team or named circle it has not
+made, and no quest carries a `circle`, so the board shows no filter chip for a circle the village
+never formed. Until then the seed was one village's own board, and every fork served it as its
+own. The village that board came from keeps its rows: the seed never reaches a table that holds a
+quest (`server/lib/questSeed.test.ts` proves it on a board built from the old seed's rows).
+`QUEST_COLS` omits `is_example`, whose
+column default is 0, so all thirteen are **real** rows: claimable, consentable and payable from the
 faucet. They advertise 40 to 300 recognition apiece (`50-100`, `40-80`, `100-200`, `80-200`,
-`100-300` and so on), one carries `minStage: "member"`, one carries
-`requiresRole: "practitioners"`, and one ships `status: "Seasonal"`. Reviewing those fourteen reward
+`100-300` and so on), one carries `minStage: "member"`, one (Healing Arts Practitioner) carries
+`requiresRole: "practitioners"`, and one ships `status: "Seasonal"`. Reviewing those thirteen reward
 labels is the first thing a fork operator does before go-live, because on the day the village opens
 they are the contract.
 
-Two things the code comment beside that block gets wrong, and a reader should not inherit. It says
-"INSERT IGNORE + the empty check", and `questsRepo.add` uses a plain `INSERT INTO`. It says "a
-village that deleted quests on purpose never has them resurrected", and the guard is
-table-emptiness: a village that deletes every quest gets all fourteen back on the next restart.
+The guard is table-emptiness, and the code comment beside that block now says so (until
+2026-09-27 it claimed "INSERT IGNORE", and `questsRepo.add` is a plain `INSERT INTO`): a village
+that deletes some starter quests never has them back, and one that deletes every quest gets all
+thirteen back on the next restart.
 
 Three more boot paths write `quests`:
 
@@ -491,11 +498,12 @@ Three more boot paths write `quests`:
   a human confirmed or cleared is never overwritten and a fresh village is never left with classes
   that appear to open nothing.
 - **`backfillQuestStories`** fills subtitle, story, first step, deliverable, poster, steps and tips
-  from the seed file into live rows, and only where the live value is empty. It is a `runOnce`
+  from the seed file into live rows, and only where the live value is empty (the fill is
+  `fillQuestStoriesFromSeed` in `server/lib/questSeed.ts`). It is a `runOnce`
   one-shot, twice (`quest-story-2026-08-10`, `quest-posters-2026-08-10`). It **throws** when the
   seed file is missing, which deliberately leaves the id unrecorded so the next boot retries rather
   than recording a job that filled nothing.
-- **The voice sweep** (`voice-sweep-2026-08-01-part-2`, also a `runOnce`) walks
+- **The voice sweep** (`voice-sweep-2026-08-01`, `applyVoiceSweepToSeededRows`, also a `runOnce`) walks
   `questsRepo.all()`, matches rows against the seed file by id, and rewrites a string field only
   where `sameWords(have, want)` holds: same words, different punctuation. An edit that changed a
   word is left alone by construction. A fork that repunctuated seeded quest prose can have that
@@ -693,8 +701,8 @@ consented.
 `status: "Open"`, `acceptQuestProposal` writes `"Open"` too, and the Admin edit form offers `Open`
 and `Closed`. The column default from 0001 is lowercase `open`, and the boot seeder spreads the
 seed row **after** its own default (`questsRepo.add({ ..., status: "open", ...q })`), so the seed
-file wins: `server/seeds/quests-seed.json` ships `"Open"` on thirteen of its fourteen quests and
-`"Seasonal"` on the fourteenth. Only `server/seeds/examples-seed.json` ships lowercase, and those
+file wins: `server/seeds/quests-seed.json` ships `"Open"` on twelve of its thirteen quests and
+`"Seasonal"` on the thirteenth. Only `server/seeds/examples-seed.json` ships lowercase, and those
 are the example rows the SQL readers exclude with `is_example = 0` anyway.
 
 JavaScript readers normalise (`statusIs`, and the related-quest filter in

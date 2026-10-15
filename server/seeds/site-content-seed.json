@@ -1,227 +1,52 @@
 {
   "faqs": {
-    "investor": [
-      {
-        "id": "inv-1",
-        "question": "What is the legal structure?",
-        "answer": "Individual ownership of a home site, with the commons held and managed together. The exact legal form depends on where the village sits, so write yours here."
-      },
-      {
-        "id": "inv-2",
-        "question": "How does debt vs equity work?",
-        "answer": "We prefer debt financing to keep community ownership intact. Investors lend to the project and receive interest plus priority on lot purchases."
-      },
-      {
-        "id": "inv-3",
-        "question": "What is the minimum investment?",
-        "answer": "Minimum amounts vary by vehicle. Contact the team to discuss options that match your capacity."
-      },
-      {
-        "id": "inv-4",
-        "question": "What are my exit options?",
-        "answer": "Investors can exit through lot sale at appreciated value, business equity stake, or structured buy-back options. We prioritize liquidity for investors who need it."
-      },
-      {
-        "id": "inv-5",
-        "question": "What if the project doesn't complete?",
-        "answer": "Investors hold debt secured against the land. If the project fails, debt holders have first claim on the property. Put your own acreage and your own appraisal here once you have them."
-      },
-      {
-        "id": "inv-6",
-        "question": "Can I live here as an investor?",
-        "answer": "Yes. Investors who become residents get priority access to lots, and you can build a home on your lot. Your investment can apply toward your Land Share Agreement."
-      },
-      {
-        "id": "inv-7",
-        "question": "What fees are involved?",
-        "answer": "Annual village contribution fee covers shared services, infrastructure maintenance, and circle operations. Exact amounts will be detailed in your investor pack."
-      },
-      {
-        "id": "inv-8",
-        "question": "How does governance work?",
-        "answer": "Resident investors gain voice in village decisions through our consent-based circle system. The more you contribute over time, the more governance weight you earn."
-      },
-      {
-        "id": "inv-9",
-        "question": "When is ROI expected?",
-        "answer": "The 15-year financial model projects returns from resort, retail, and residential components. Year-by-year projections are in the Investor Pack."
-      }
-    ],
-    "steward": [
-      {
-        "id": "stw-1",
-        "question": "How are decisions made?",
-        "answer": "Through sociocratic circles using consent-based decision making. No single person, including the founders, can override a community consent vote."
-      },
-      {
-        "id": "stw-2",
-        "question": "Do I get paid as a Village Steward?",
-        "answer": "Contributions are recognised in Gratitude, the village's signal of appreciation. Gratitude carries no financial value on its own. Each cycle the community shares a real pool of value tokens across everyone's Gratitude, and as the village's shared businesses generate revenue those tokens can convert to cash, equity, or community currency."
-      },
-      {
-        "id": "stw-3",
-        "question": "How much time does stewardship require?",
-        "answer": "Roles are seasonal (3-month commitments). The time varies by role: some are a few hours per week, others are near full-time."
-      }
-    ],
-    "resident": [
-      {
-        "id": "res-1",
-        "question": "What internet is available?",
-        "answer": "Say what connection the land has today and what the village plans for residents and home offices."
-      },
-      {
-        "id": "res-2",
-        "question": "What schooling options exist for children?",
-        "answer": "Plans include an on-site learning center. Local bilingual schools are within 20 minutes. Many resident families are worldschoolers."
-      },
-      {
-        "id": "res-3",
-        "question": "Can I own my home outright?",
-        "answer": "Land Share Agreements provide long-term secure access, renewable and inheritable by your children tax-free. The community co-owns the land, you own your structure."
-      }
-    ],
-    "prosperity": [
-      {
-        "id": "pro-1",
-        "question": "What businesses are needed?",
-        "answer": "The Prosperity Packet details all opportunities. High-priority needs include food production, wellness services, childcare, construction, and technology."
-      },
-      {
-        "id": "pro-2",
-        "question": "How does revenue sharing work?",
-        "answer": "A percentage of revenue (exact structure in the Prosperity Packet) flows back to the village community. Contributions are acknowledged in Gratitude, and value reaches members through the cycle pool of value tokens. You operate your business; the community benefits from your success."
-      },
-      {
-        "id": "pro-3",
-        "question": "Do I need to live here to run a business?",
-        "answer": "Some businesses require on-site presence. Others can be managed remotely. Discuss your model with the team during your Prosperity Call."
-      }
-    ]
+    "investor": [],
+    "steward": [],
+    "resident": [],
+    "prosperity": []
   },
-  "milestones": [
-    {
-      "id": "land-acquired",
-      "phase": "Phase 0",
-      "title": "Land Secured",
-      "description": "The land this village will grow on is secured. Say how much and where.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 1
-    },
-    {
-      "id": "land-valued",
-      "phase": "Phase 0",
-      "title": "Land Valued",
-      "description": "An independent appraisal of the property. Put your own figure and date here.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 2
-    },
-    {
-      "id": "founding-team",
-      "phase": "Phase 1",
-      "title": "Founding Team Assembled",
-      "description": "The founding circle is formed and meeting.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 3
-    },
-    {
-      "id": "site-planning",
-      "phase": "Phase 1",
-      "title": "Site Planning & Design",
-      "description": "Master plan, infrastructure layout, and first home designs.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 4
-    },
-    {
-      "id": "retreat-center",
-      "phase": "Phase 2",
-      "title": "Retreat Center",
-      "description": "A place for guests to stay. Say how many rooms once you know.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 5
-    },
-    {
-      "id": "show-homes",
-      "phase": "Phase 2",
-      "title": "First Homes",
-      "description": "The first residential structures, built and ready to move into.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 6
-    },
-    {
-      "id": "health-center",
-      "phase": "Phase 3",
-      "title": "Health + Wellness Center",
-      "description": "On-site medical and holistic wellness facility.",
-      "status": "upcoming",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 7
-    },
-    {
-      "id": "full-village",
-      "phase": "Phase 4",
-      "title": "Full Village",
-      "description": "The whole build finished, with the shared infrastructure in place.",
-      "status": "future",
-      "completedDate": null,
-      "updateNote": "",
-      "order": 8
-    }
-  ],
+  "milestones": [],
   "visitConfig": {
     "hero_subtitle": "Experience the land, meet the people, and decide if this is where you belong.",
     "visit_types": [
       {
         "id": "community-call",
         "title": "Community Call",
-        "duration": "90 minutes",
-        "format": "Virtual (Zoom)",
-        "cost": "Free",
-        "description": "Meet the founding team and current members. Ask any question. Hear the vision directly. This is your first step.",
+        "duration": "To be confirmed",
+        "format": "To be confirmed",
+        "cost": "To be confirmed",
+        "description": "Say when the next call is, who hosts it, and what a newcomer can ask.",
         "cta_label": "Join the Next Call",
         "cta_url": "",
         "order": 1
       },
       {
         "id": "land-tour",
-        "title": "Land Tour Visit",
-        "duration": "1-3 days",
-        "format": "In Person",
-        "cost": "Details TBD",
-        "description": "Walk the land with a founding team member. See the infrastructure underway. Stay nearby or camp on the land. Meals with the community included.",
+        "title": "Land Visit",
+        "duration": "To be confirmed",
+        "format": "To be confirmed",
+        "cost": "To be confirmed",
+        "description": "Say what a visit to the land looks like, how long it lasts, and where visitors stay.",
         "cta_label": "Request a Visit",
         "cta_url": "",
         "order": 2
       },
       {
         "id": "immersion",
-        "title": "Village Weaving Immersion",
-        "duration": "2-4 weeks",
-        "format": "In Person",
-        "cost": "Details TBD",
-        "description": "Live and work alongside the founding community. Shadow circle meetings, contribute to active projects, and discover where your gifts are most needed. This is the deepest way to know before you commit.",
-        "cta_label": "Apply for Immersion",
+        "title": "Longer Stay",
+        "duration": "To be confirmed",
+        "format": "To be confirmed",
+        "cost": "To be confirmed",
+        "description": "Say whether the village hosts longer stays, for how long, and what a guest takes part in.",
+        "cta_label": "Ask About a Longer Stay",
         "cta_url": "",
         "order": 3
       }
     ],
     "logistics": {
       "getting_there": "Say where the land is, which airport people fly into, and how long the drive takes.",
-      "accommodation": "Accommodation details will be provided when you book. Options range from nearby guesthouses to on-land camping.",
-      "what_to_bring": "Comfortable outdoor clothes, sun protection, rain gear. Add what your own seasons ask for.",
+      "accommodation": "Say where visitors stay and how they book it.",
+      "what_to_bring": "Say what your land and your seasons ask visitors to bring.",
       "contact_note": "Ready to visit? Fill in the form below or email the team directly."
     }
   },
@@ -239,8 +64,8 @@
       {
         "id": "structure",
         "label": "Investment Structure",
-        "value": "Debt (secured notes)",
-        "note": "We prioritize debt over equity so the community retains ownership. You lend to the project and receive interest plus priority on lot purchases.",
+        "value": "To be confirmed",
+        "note": "Say how the village takes investment, if it does.",
         "icon": "shield"
       },
       {
@@ -254,28 +79,28 @@
         "id": "interest-rate",
         "label": "Interest Rate",
         "value": "To be confirmed",
-        "note": "Rates for early investors will be detailed in the Investor Pack.",
+        "note": "Say what rate applies, if any.",
         "icon": "percent"
       },
       {
         "id": "term",
         "label": "Investment Term",
         "value": "To be confirmed",
-        "note": "Multiple term options are available. Details in the Investor Pack.",
+        "note": "Say how long an investment runs.",
         "icon": "calendar"
       },
       {
         "id": "exit",
         "label": "Exit Options",
-        "value": "Lot sale, equity stake, or structured buyback",
-        "note": "We prioritize liquidity for investors who need it.",
+        "value": "To be confirmed",
+        "note": "Say how an investor can leave, and on what terms.",
         "icon": "arrow-right"
       },
       {
         "id": "governance",
         "label": "Governance Rights",
-        "value": "Voice in village decisions",
-        "note": "Resident investors participate in consent-based circle governance. The more you contribute over time, the more governance weight you earn.",
+        "value": "To be confirmed",
+        "note": "Say what say, if any, an investment carries in village decisions.",
         "icon": "users"
       }
     ],

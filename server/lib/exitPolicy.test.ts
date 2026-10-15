@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXIT_POLICY,
+  EXIT_POLICY_TERMS,
   blankTerms,
   exitElementRefusal,
   exitLeverFindings,
@@ -17,8 +18,16 @@ import {
   exitLeverRefusal,
   exitSetRefusals,
   normalizeExitPolicy,
+  platformDefaultTermKeys,
   platformDefaultTerms,
   withPolicyDefaults,
+  restorativeDoorProblem,
+  replyHoursOf,
+  outsideContactOf,
+  outsideContactNamed,
+  REPLY_HOURS_MAX,
+  CONTACT_FIELD_MAX,
+  CONTACT_REACH_MAX,
   type ExitLeverReading,
   type ExitLeverToken,
 } from "./exitPolicy";
@@ -83,6 +92,54 @@ describe("the acknowledgement cannot be ticked over the platform's words", () =>
   it("the notice period is deliberately not a term: 30 days can be a real decision", () => {
     const sameNotice = { ...own(), voluntary: { ...own().voluntary, noticePeriodDays: 30 } };
     expect(platformDefaultTerms(normalizeExitPolicy(sameNotice))).toEqual([]);
+  });
+});
+
+/*
+ * The KEYS behind those labels, which `GET /api/exit-policy` hands the public
+ * pages as `platformWording`. /governance and /roles print the restorative
+ * steps as the village's conflict process only when "restorativeSteps" is
+ * absent here, so this is the line between the village's words and the
+ * platform's on two public pages.
+ */
+describe("platformDefaultTermKeys, what the public pages read", () => {
+  it("names the key of every term still at the platform default, in the labels' order", () => {
+    expect(platformDefaultTermKeys(normalizeExitPolicy(DEFAULT_EXIT_POLICY))).toEqual([
+      "valuationMethod",
+      "unwindSteps",
+      "involuntaryProcess",
+      "restorativeSteps",
+    ]);
+    expect(platformDefaultTerms(normalizeExitPolicy(DEFAULT_EXIT_POLICY))).toEqual(
+      platformDefaultTermKeys(normalizeExitPolicy(DEFAULT_EXIT_POLICY)).map(
+        (k) => EXIT_POLICY_TERMS.find((t) => t.key === k)!.label,
+      ),
+    );
+  });
+
+  it("names restorativeSteps alone when only the restorative path is the platform's", () => {
+    const half = { ...own(), restorative: { intakeContactRole: "", steps: [...DEFAULT_EXIT_POLICY.restorative.steps] } };
+    expect(platformDefaultTermKeys(normalizeExitPolicy(half))).toEqual(["restorativeSteps"]);
+    expect(platformDefaultTermKeys(normalizeExitPolicy(own()))).toEqual([]);
+  });
+
+  it("reads a never-saved village as all platform words, which is what the public route serves it", () => {
+    // `readExitPolicy()` is `withPolicyDefaults(stored)`, and a village that
+    // never saved has no stored document at all.
+    expect(platformDefaultTermKeys(withPolicyDefaults(undefined))).toContain("restorativeSteps");
+  });
+
+  it("does not throw on a stored document whose fields are the wrong type, and counts them as not the platform's", () => {
+    // The public page calls this on whatever some release stored. A throw here
+    // would take /exit-policy, /governance and /roles down with a 500.
+    const odd = withPolicyDefaults({
+      placeholder: true,
+      voluntary: { valuationMethod: null, unwindSteps: "one line" },
+      involuntary: { process: 7 },
+      restorative: { steps: null },
+    });
+    expect(() => platformDefaultTermKeys(odd)).not.toThrow();
+    expect(platformDefaultTermKeys(odd)).toEqual([]);
   });
 });
 
@@ -600,5 +657,155 @@ describe("a stored policy gets fields it was saved before", () => {
   it("keeps a village's own edited questions over the platform's", () => {
     const theirs = { ...preGrounds(), involuntary: { ...preGrounds().involuntary, grounds: ["Only our question?"] } };
     expect(withPolicyDefaults(theirs).involuntary.grounds).toEqual(["Only our question?"]);
+  });
+});
+
+/*
+ * ── THE CONFLICT DOOR'S THREE FIELDS (2026-09-27) ─────────────────────────
+ *
+ * The launch checklist's `conflict-door` row reads a cover role, a promised
+ * reply time and an outside contact off the restorative block. These hold the
+ * write (`restorativeDoorProblem`, which the admin route answers 400 with),
+ * the normaliser, and the read-through that keeps every policy saved before
+ * the fields existed valid.
+ */
+describe("the conflict door's fields: what a save may carry", () => {
+  const ROLES = ["care", "elders"];
+
+  it("accepts a policy that says nothing about them, which is every policy saved before they existed", () => {
+    expect(restorativeDoorProblem({ intakeContactRole: "", steps: ["Tea"] }, ROLES)).toBeNull();
+    expect(restorativeDoorProblem({}, ROLES)).toBeNull();
+    expect(restorativeDoorProblem(undefined, ROLES)).toBeNull();
+  });
+
+  it("accepts the whole door, written well", () => {
+    expect(
+      restorativeDoorProblem(
+        {
+          intakeContactRole: "care",
+          coverRole: "elders",
+          replyHours: 48,
+          outsideContact: { name: "Jo Bell", organisation: "", howToReach: "ombuds@example.org" },
+        },
+        ROLES,
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps the intake role's refusal word for word", () => {
+    expect(restorativeDoorProblem({ intakeContactRole: "ghost" }, ROLES)).toEqual({
+      error: "unknown_role",
+      message: 'Unknown intake role "ghost"',
+    });
+  });
+
+  it("refuses a cover role the village does not have", () => {
+    expect(restorativeDoorProblem({ intakeContactRole: "care", coverRole: "ghost" }, ROLES)).toEqual({
+      error: "unknown_role",
+      message: 'Unknown cover role "ghost"',
+    });
+  });
+
+  it("refuses a cover role with no intake role to cover", () => {
+    expect(restorativeDoorProblem({ intakeContactRole: "", coverRole: "elders" }, ROLES)?.error).toBe("cover_without_intake");
+  });
+
+  it("refuses a cover role that is the intake role itself", () => {
+    const r = restorativeDoorProblem({ intakeContactRole: "care", coverRole: "care" }, ROLES);
+    expect(r?.error).toBe("cover_is_intake");
+    expect(r?.message).toContain("nobody covers");
+  });
+
+  it("takes a reply time as whole hours from 1 to 720, as a number or a typed digit string", () => {
+    for (const ok of [1, 24, 720, "48", " 72 ", null, "", undefined]) {
+      expect(restorativeDoorProblem({ replyHours: ok }, ROLES), String(ok)).toBeNull();
+    }
+    for (const bad of [0, -3, 1.5, 721, "soon", "4.5", {}, true]) {
+      expect(restorativeDoorProblem({ replyHours: bad }, ROLES), JSON.stringify(bad)).toEqual({
+        error: "bad_reply_hours",
+        message: `A promised reply time is a whole number of hours, from 1 to ${REPLY_HOURS_MAX}.`,
+      });
+    }
+  });
+
+  it("refuses an outside contact with a name and no way to reach them, or the reverse", () => {
+    const message = "An outside contact needs a name and a way to reach them. The organisation is optional.";
+    expect(restorativeDoorProblem({ outsideContact: { name: "Jo Bell" } }, ROLES)).toEqual({ error: "bad_outside_contact", message });
+    expect(restorativeDoorProblem({ outsideContact: { howToReach: "ombuds@example.org" } }, ROLES)?.message).toBe(message);
+    expect(restorativeDoorProblem({ outsideContact: { organisation: "Cohort Care" } }, ROLES)?.message).toBe(message);
+  });
+
+  it("accepts an emptied contact, which is how a village takes one off", () => {
+    expect(restorativeDoorProblem({ outsideContact: { name: " ", organisation: "", howToReach: "" } }, ROLES)).toBeNull();
+    expect(restorativeDoorProblem({ outsideContact: null }, ROLES)).toBeNull();
+  });
+
+  it("refuses a contact that is not an object, and one too long to print", () => {
+    expect(restorativeDoorProblem({ outsideContact: "Jo Bell" }, ROLES)?.error).toBe("bad_outside_contact");
+    expect(restorativeDoorProblem({ outsideContact: ["Jo"] }, ROLES)?.error).toBe("bad_outside_contact");
+    const long = "x".repeat(CONTACT_FIELD_MAX + 1);
+    expect(restorativeDoorProblem({ outsideContact: { name: long, howToReach: "a" } }, ROLES)?.error).toBe("bad_outside_contact");
+    const far = "x".repeat(CONTACT_REACH_MAX + 1);
+    expect(restorativeDoorProblem({ outsideContact: { name: "Jo", howToReach: far } }, ROLES)?.message).toContain(String(CONTACT_REACH_MAX));
+  });
+});
+
+describe("the conflict door's fields: what is stored and read", () => {
+  it("normalizes them onto the restorative block, trimmed, with no default reply time", () => {
+    const next = normalizeExitPolicy({
+      ...own(),
+      restorative: {
+        intakeContactRole: "care",
+        steps: ["Tea"],
+        coverRole: "  elders ",
+        replyHours: "36",
+        outsideContact: { name: " Jo Bell ", organisation: "Cohort Care", howToReach: " ombuds@example.org " },
+      },
+    });
+    expect(next.restorative.coverRole).toBe("elders");
+    expect(next.restorative.replyHours).toBe(36);
+    expect(next.restorative.outsideContact).toEqual({ name: "Jo Bell", organisation: "Cohort Care", howToReach: "ombuds@example.org" });
+    const bare = normalizeExitPolicy(own());
+    expect(bare.restorative.replyHours, "the platform promises nothing on a village's behalf").toBeNull();
+    expect(bare.restorative.coverRole).toBe("");
+    expect(bare.restorative.outsideContact).toEqual({ name: "", organisation: "", howToReach: "" });
+    expect(DEFAULT_EXIT_POLICY.restorative.replyHours).toBeNull();
+  });
+
+  it("fills them on read for a policy saved before they existed, and touches nothing it wrote", () => {
+    const old = {
+      placeholder: false,
+      voluntary: { noticePeriodDays: 14, valuationMethod: "Ours.", unwindSteps: ["Our step"] },
+      involuntary: { decidingDomainId: "", appealDomainId: "", process: "Ours." },
+      restorative: { intakeContactRole: "care", steps: ["Our repair step"] },
+    };
+    const filled = withPolicyDefaults(old);
+    expect(filled.restorative.intakeContactRole).toBe("care");
+    expect(filled.restorative.steps).toEqual(["Our repair step"]);
+    expect(filled.restorative.coverRole).toBe("");
+    expect(filled.restorative.replyHours).toBeNull();
+    expect(filled.restorative.outsideContact).toEqual({ name: "", organisation: "", howToReach: "" });
+    // And it still publishes: none of the three is a term the publish gate reads.
+    expect(platformDefaultTerms(normalizeExitPolicy(filled))).toEqual([]);
+    expect(blankTerms(normalizeExitPolicy(filled))).toEqual([]);
+  });
+
+  it("reads a partial or broken stored contact without throwing", () => {
+    const part = withPolicyDefaults({ restorative: { outsideContact: { name: "Jo" } } });
+    expect(part.restorative.outsideContact).toEqual({ name: "Jo", organisation: "", howToReach: "" });
+    expect(outsideContactNamed(part.restorative.outsideContact)).toBe(false);
+    const broken = withPolicyDefaults({ restorative: { outsideContact: "Jo", replyHours: "soon" } });
+    expect(broken.restorative.outsideContact).toEqual({ name: "", organisation: "", howToReach: "" });
+    expect(replyHoursOf(broken.restorative.replyHours)).toBeNull();
+  });
+
+  it("reads a reply time the way the editor and the check both do", () => {
+    expect(replyHoursOf(24)).toBe(24);
+    expect(replyHoursOf("24")).toBe(24);
+    expect(replyHoursOf(0)).toBeNull();
+    expect(replyHoursOf(2.5)).toBeNull();
+    expect(replyHoursOf(REPLY_HOURS_MAX + 1)).toBeNull();
+    expect(replyHoursOf(null)).toBeNull();
+    expect(outsideContactOf(undefined)).toEqual({ name: "", organisation: "", howToReach: "" });
   });
 });

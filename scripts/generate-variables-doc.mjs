@@ -91,6 +91,10 @@ export const SOURCES = [
   // subject constant from here, the same way it imports the settlement's, so
   // the registry reaches this file transitively.
   "shared/governingPurpose.ts",
+  // Added with the conflict agreement (Wave 3a), for the same reason again:
+  // `shared/ballotSubjects.ts` imports the `conflict_agreement` subject
+  // constant from here.
+  "shared/conflictAgreement.ts",
   // Added with the village's own seasons: `validateVariable` refuses a
   // `calendar.seasons` list through the grammar this file holds.
   "shared/villageSeasons.ts",
