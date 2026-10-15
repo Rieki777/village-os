@@ -97,12 +97,19 @@ describe("possessives and punctuation", () => {
 });
 
 describe("overlapping names", () => {
-  it("TRIES THE LONGER NAME FIRST, so Anna is never swapped as Ann plus an a", () => {
+  /*
+   * HELD TWICE, measured by mutation: with the word boundary removed the
+   * longer-name-first order still finds Anna, and with the order reversed the
+   * boundary after "Ann" refuses the "a" and the regex backtracks to Anna. Only
+   * breaking both turns this red. The order on its own is pinned by the
+   * full-name case below, where a space IS a boundary.
+   */
+  it("NEVER SWAPS Anna AS Ann PLUS AN a, in either order", () => {
     expect(swap("Anna and Ann")).toBe("tidy-marmot-77 and calm-heron-12");
     expect(swap("Ann and Anna")).toBe("calm-heron-12 and tidy-marmot-77");
   });
 
-  it("prefers the full name to the first name it starts with", () => {
+  it("TRIES THE LONGER NAME FIRST: the full name wins over the first name it starts with", () => {
     expect(swap("Jess Mora came")).toBe("brisk-otter-41 came");
   });
 
