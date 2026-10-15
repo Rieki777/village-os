@@ -50,6 +50,13 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* rounded-2xl follows the village's corners too. Tailwind's own value is a
+     fixed 1rem, which left the large cards round on a village that chose
+     square corners. Twice --radius is exactly 1rem on the platform default
+     (0.5rem), so an untouched fork looks the same everywhere, and a village's
+     card choice now reaches these cards: 8px on the squarest card, 32px on
+     the roundest. */
+  --radius-2xl: calc(var(--radius) * 2);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

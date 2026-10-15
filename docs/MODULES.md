@@ -274,7 +274,7 @@ A circle holds a working call together in real time: drop in with a shared breat
 | Requires | nothing |
 | Recommends | `gratitude` |
 | Capabilities it adds | none |
-| Variable keys it owns | `sessions.place_line`, `sessions.default_minutes` |
+| Variable keys it owns | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
 | API prefixes | `/api/sessions` |
 | What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [live-sessions.md](modules/live-sessions.md) |
@@ -747,7 +747,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 28 modules own 112 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 28 modules own 113 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -1400,7 +1400,8 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "capabilities": [],
       "variableKeys": [
         "sessions.place_line",
-        "sessions.default_minutes"
+        "sessions.default_minutes",
+        "calendar.seasons"
       ],
       "apiPrefixes": [
         "/api/sessions"

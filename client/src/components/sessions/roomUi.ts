@@ -9,9 +9,11 @@
 import { useState } from "react";
 import {
   ROOM_COPY,
+  SESSION_SOMEONE,
   consentTally,
   isConsentValue,
   type ConsentTally,
+  type ConsentTarget,
   type ConsentValue,
   type ResponseTarget,
   type SessionEntry,
@@ -95,6 +97,27 @@ export function consentOn(view: Pick<SessionView, "responses" | "people">, targe
  */
 export function seesAnswers(view: Pick<SessionView, "me">): boolean {
   return view.me.joined || view.me.admin;
+}
+
+/**
+ * Who a consent question is still waiting on, by first name, in the order the
+ * server gave them. The server names them (`view.waiting`) only for viewers
+ * who already see the answers, and only while the session is open, so anybody
+ * else, and an older view without the field, gets an empty list.
+ */
+export function waitingNames(view: Pick<SessionView, "waiting">, target: ResponseTarget): string[] {
+  if (target !== "agenda" && !target.startsWith("decision:")) return [];
+  const people = view.waiting?.[target as ConsentTarget] ?? [];
+  // The server says SESSION_SOMEONE for a person whose name the village no
+  // longer holds. That is a phrase, so it stays whole: cut to its first word
+  // it would read "Waiting for A". And two people who share a first name are
+  // given their full names, so the facilitator can tell which one to ask.
+  const first = people.map((p) => (p.name === SESSION_SOMEONE ? p.name : firstName(p.name)));
+  const count = new Map<string, number>();
+  for (const f of first) count.set(f, (count.get(f) ?? 0) + 1);
+  return people
+    .map((p, i) => (p.name !== SESSION_SOMEONE && (count.get(first[i]) ?? 0) > 1 ? p.name.trim() : first[i]))
+    .filter(Boolean);
 }
 
 /** This member's own answer on a target, if they gave one. */

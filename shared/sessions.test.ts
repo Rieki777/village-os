@@ -25,6 +25,8 @@ import {
   cleanText,
   consentNeedsWords,
   consentTally,
+  consentWaiting,
+  consentWaitingIds,
   defaultSessionState,
   normalizeSessionState,
   parseResponseTarget,
@@ -61,6 +63,20 @@ describe("the room's state", () => {
     const a = applySessionAction(defaultSessionState(), { type: "start" }, T0);
     const b = applySessionAction(a, { type: "start" }, T0 + 9999);
     expect(b.startedAt).toBe(T0);
+  });
+
+  it("starts the clock with the first move of the room, so a room never runs without one", () => {
+    const moved = applySessionAction(defaultSessionState(), { type: "go", stage: "arrival" }, T0);
+    expect(moved.startedAt).toBe(T0);
+    // Later moves keep the first start, and "Begin" after a move changes nothing.
+    const later = applySessionAction(moved, { type: "go", stage: "agenda" }, T0 + 60_000);
+    expect(later.startedAt).toBe(T0);
+    expect(applySessionAction(later, { type: "start" }, T0 + 90_000)).toBe(later);
+    // A clock "Begin" started stays where it was when the room moves.
+    const begun = applySessionAction(defaultSessionState(), { type: "start" }, T0);
+    expect(applySessionAction(begun, { type: "go", stage: "arrival" }, T0 + 5000).startedAt).toBe(T0);
+    // Going to the stage the room is already on is no move, and starts nothing.
+    expect(applySessionAction(defaultSessionState(), { type: "go", stage: "dropin" }, T0).startedAt).toBeNull();
   });
 
   it("an item's clock starts with the item, and its grace resets when another starts", () => {
@@ -168,6 +184,41 @@ describe("consent and arrival", () => {
     expect(consentTally([a(1, "consent")], []).consented).toBe(false);
     expect(consentNeedsWords("consent")).toBe(false);
     expect(consentNeedsWords("object")).toBe(true);
+  });
+
+  it("names who a round is still waiting on: people here, once each, in order, and nobody who left", () => {
+    const a = (who: number) => ({ who });
+    expect(consentWaitingIds([a(2)], [1, 2, 3, 1])).toEqual([1, 3]);
+    expect(consentWaitingIds([a(9)], [])).toEqual([]);
+    // The tally's count is the same list's length.
+    const answers = [{ who: 2, value: "consent" as const }];
+    expect(consentTally(answers, [1, 2, 3]).waiting).toBe(consentWaitingIds(answers, [1, 2, 3]).length);
+  });
+
+  it("lists the waiting people for the agenda and each open proposal, by name", () => {
+    const people = [
+      { userId: 1, name: "Ada", present: true },
+      { userId: 2, name: "Bo", present: true },
+      { userId: 3, name: "Cy", present: false },
+    ];
+    const entries = [
+      { id: 10, kind: "decision" as const, status: "open" as const },
+      { id: 11, kind: "decision" as const, status: "done" as const },
+      { id: 12, kind: "action" as const, status: "open" as const },
+    ];
+    const responses = [
+      { target: "agenda" as const, userId: 1, value: "consent" },
+      { target: "agenda" as const, userId: 3, value: "consent" },
+      { target: "decision:10" as const, userId: 2, value: "object" },
+      // A closing word is no consent answer, and never takes someone off a list.
+      { target: "word" as const, userId: 1, value: "grateful" },
+    ];
+    expect(consentWaiting(people, entries, responses)).toEqual({
+      agenda: [{ userId: 2, name: "Bo" }],
+      "decision:10": [{ userId: 1, name: "Ada" }],
+    });
+    // Nobody here: every question waits on nobody.
+    expect(consentWaiting(people.map((p) => ({ ...p, present: false })), entries, [])).toEqual({ agenda: [], "decision:10": [] });
   });
 
   it("the arrival round keeps numbers only, and a low room is two or more at five or under", () => {

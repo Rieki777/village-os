@@ -24,7 +24,32 @@ import {
   type ConsentValue,
   type ResponseTarget,
 } from "@shared/sessions";
-import { BTN_PRIMARY, H3, HINT, INPUT, consentOn, myResponse, nameOf, seesAnswers, tile, useDraft, type StageProps } from "./roomUi";
+import {
+  BTN_PRIMARY,
+  H3,
+  HINT,
+  INPUT,
+  consentOn,
+  myResponse,
+  nameOf,
+  seesAnswers,
+  tile,
+  useDraft,
+  waitingNames,
+  type StageProps,
+} from "./roomUi";
+
+/**
+ * "Waiting for Ana, Luz", in small muted words under a tally, so the
+ * facilitator can ask the people still to answer by name. The server sends the
+ * names only to viewers who see the answers and only while the session is
+ * open, so for anybody else, and once everyone has answered, it says nothing.
+ */
+export function WaitingLine({ view, target, className = "" }: { view: StageProps["view"]; target: ResponseTarget; className?: string }) {
+  const names = seesAnswers(view) && view.status === "open" ? waitingNames(view, target) : [];
+  if (!names.length) return null;
+  return <p className={`text-sm text-muted-foreground ${className}`}>{ROOM_COPY.waitingFor(names)}</p>;
+}
 
 export interface ConsentRoundProps extends Omit<StageProps, "now"> {
   target: ResponseTarget;
@@ -114,6 +139,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
       <p className={HINT} aria-live="polite">
         {seesAnswers(view) ? ROOM_COPY.tallyLine(tally) : ROOM_COPY.answersHeardInRoom}
       </p>
+      <WaitingLine view={view} target={target} />
       {seesAnswers(view) && tally.consented && <p className="text-sm font-semibold text-open">{ROOM_COPY.consented}</p>}
       {heard.length > 0 && (
         <ul className="space-y-1.5">

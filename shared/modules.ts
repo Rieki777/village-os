@@ -1244,7 +1244,20 @@ export const MODULES: ModuleDef[] = [
     // `isAdmin`. A facilitation capability can come later without a
     // migration, because nothing stores one.
     capabilities: [],
-    variableKeys: ["sessions.place_line", "sessions.default_minutes"],
+    /*
+     * `calendar.seasons` is listed here as well as owned by the calendar's
+     * namespace, because the room is the only surface that reads it: the
+     * close stamps the village's own season on the record. A village running
+     * Live Sessions with the calendar switched off would otherwise have no
+     * card in Admin that shows the dial. A blank list is a right answer, so
+     * it does not change this module's `setup: none`.
+     *
+     * `calendar.hemisphere` stays with the calendar alone. It is a
+     * place-dependent dial, and owning one would oblige this module to say
+     * setup is required, while the room only uses it to light the drawn
+     * moon and falls back to the north on an older stamp.
+     */
+    variableKeys: ["sessions.place_line", "sessions.default_minutes", "calendar.seasons"],
     apiPrefixes: ["/api/sessions"],
     // No openStateCheck: a session holds no value anybody is owed. Off hides
     // the surface, and closed records stay in their tables for when it is

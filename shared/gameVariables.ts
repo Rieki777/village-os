@@ -24,6 +24,7 @@ import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
 import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
+import { villageSeasonsProblem } from "./villageSeasons";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -2860,9 +2861,10 @@ export const VARIABLES: VariableDef[] = [
 
   // ── Calendar (0085; the village's one calendar, twelve months and thirteen moons) ──
   //
-  // Three knobs, all three READ: the sky rows and the Moons view take the
-  // year anchor and the hemisphere, and the sky job writes cross-quarters
-  // only when asked. A white-label platform cannot hard-code the north.
+  // Four knobs, all four READ: the sky rows and the Moons view take the
+  // year anchor and the hemisphere, the sky job writes cross-quarters only
+  // when asked, and a live session's stamp reads the village's own seasons.
+  // A white-label platform cannot hard-code the north, or the temperate year.
   {
     key: "calendar.year_anchor",
     category: "Calendar",
@@ -2909,6 +2911,23 @@ export const VARIABLES: VariableDef[] = [
       "Also put the four midpoints between the solstices and equinoxes on the calendar. Off by default; the quarter days themselves are always shown.",
     type: "boolean",
     default: "false",
+  },
+  // READ by server/lib/liveSessions.ts (`stampSeason`): the season a live
+  // session's stamp names when it opens. The grammar and its parser are
+  // shared/villageSeasons.ts, and `validateVariable` below refuses a list it
+  // cannot read whole, so the room never guesses at half a list. It sits with
+  // the calendar dials (the `calendar.` namespace puts it on the Village
+  // Calendar card) because the seasons are a fact about the village's year,
+  // the same as the hemisphere the room already reads from there.
+  {
+    key: "calendar.seasons",
+    category: "Calendar",
+    label: "Your village's own seasons",
+    description:
+      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
+    type: "text",
+    default: "",
+    unit: "list",
   },
 
   // ── Introductions (0086; visible in Admin only while the module is non-off) ──
@@ -3512,6 +3531,14 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
     // here, at the only door that writes it.
     if (def.key === "village.first_moon_at" && !isAnchorDateAcceptable(raw)) {
       return "Must be a date such as 2026-03-19, or blank to count from the moon this village launched under.";
+    }
+    // A village's seasons are a list or they are nothing. A part the room
+    // could not read would stretch the season before it over months, with
+    // nothing saying why, so the whole list is refused here instead
+    // (shared/villageSeasons.ts holds the grammar). Blank passes.
+    if (def.key === "calendar.seasons") {
+      const problem = villageSeasonsProblem(raw);
+      if (problem) return problem;
     }
     /*
      * A CURRENCY LIST IS CODES OR IT IS NOTHING (ruling 23).

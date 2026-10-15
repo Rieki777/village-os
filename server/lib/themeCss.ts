@@ -36,6 +36,12 @@ export interface BrandThemeFields {
   seed?: string;
   character?: string;
   place?: string;
+  /**
+   * The optional pinned accent, for a guide whose accent is a different
+   * family from its seed. deriveTheme measures it like a derived one; blank
+   * or invalid keeps the character's rotation.
+   */
+  accent?: string;
   /** URL of a CSS file carrying the village's @font-face declarations. */
   fontImportUrl?: string;
   /** Full font-family stacks; blank = keep the platform default. */
@@ -116,7 +122,7 @@ export function buildThemeCss(theme: BrandThemeFields | null | undefined): strin
   // output is our own hex — no sanitising needed — and its absence is the
   // neutral fork emitting nothing. The card also implies a type pairing,
   // which an EXPLICIT font choice below always beats.
-  const derived = deriveTheme(theme.seed, theme.character);
+  const derived = deriveTheme(theme.seed, theme.character, theme.accent);
   if (derived) {
     for (const [k, v] of Object.entries(derived.vars)) vars.push(`  ${k}: ${v};`);
   }

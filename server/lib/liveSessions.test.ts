@@ -38,6 +38,7 @@ import {
   rolesIn,
   seasonAt,
   selectCarried,
+  stampSeason,
   sessionEtag,
   staleAfterMs,
 } from "./liveSessions";
@@ -333,14 +334,54 @@ describe("the stamp", () => {
   });
 
   it("reads a stored stamp, and junk as an empty one", () => {
+    // A stamp stored before the phase and the hemisphere were kept reads them as null.
     expect(readStamp('{"moonName":"Full moon","moonGlyph":"x","moonOrdinal":12,"season":"spring","placeLine":"On this land"}')).toEqual({
       moonName: "Full moon",
       moonGlyph: "x",
+      moonPhase: null,
+      hemisphere: null,
       moonOrdinal: 12,
       season: "spring",
       placeLine: "On this land",
     });
-    expect(readStamp("not json")).toEqual({ moonName: "", moonGlyph: "", moonOrdinal: null, season: null, placeLine: null });
+    expect(readStamp("not json")).toEqual({ moonName: "", moonGlyph: "", moonPhase: null, hemisphere: null, moonOrdinal: null, season: null, placeLine: null });
+  });
+
+  it("reads the moon's phase and the hemisphere a newer stamp keeps, and nothing the room cannot draw", () => {
+    expect(readStamp('{"moonName":"Full moon","moonPhase":0.5,"hemisphere":"south","season":"Dry"}')).toMatchObject({
+      moonPhase: 0.5,
+      hemisphere: "south",
+      season: "Dry",
+    });
+    for (const bad of ['"0.5"', "-0.1", "1.5", "null"]) {
+      expect(readStamp(`{"moonPhase":${bad},"hemisphere":"east"}`)).toMatchObject({ moonPhase: null, hemisphere: null });
+    }
+  });
+
+  it("names the village's own season first, wrapping December to April on the village's calendar day", () => {
+    const village = { seasons: "Dry: 12-01, Green: 05-01", latitude: 9.2, hemisphere: "north" as const, timeZone: "America/Costa_Rica" };
+    expect(stampSeason(new Date("2026-12-15T12:00:00Z"), village)).toBe("Dry");
+    expect(stampSeason(new Date("2027-03-10T12:00:00Z"), village)).toBe("Dry");
+    expect(stampSeason(new Date("2026-04-30T12:00:00Z"), village)).toBe("Dry");
+    expect(stampSeason(new Date("2026-08-01T12:00:00Z"), village)).toBe("Green");
+    // 01:00 UTC on May 1 is still April 30 in the village, six hours behind.
+    expect(stampSeason(new Date("2026-05-01T01:00:00Z"), village)).toBe("Dry");
+    expect(stampSeason(new Date("2026-05-01T12:00:00Z"), village)).toBe("Green");
+    // A zone the platform cannot read falls back to UTC's day.
+    expect(stampSeason(new Date("2026-05-01T01:00:00Z"), { ...village, timeZone: "Nowhere/Else" })).toBe("Green");
+  });
+
+  it("names no season in the tropics when the village has named none, and the temperate four outside them", () => {
+    const at = new Date("2026-10-15T12:00:00Z");
+    expect(stampSeason(at, { seasons: "", latitude: 9.2, hemisphere: "north", timeZone: "UTC" })).toBeNull();
+    expect(stampSeason(at, { seasons: "", latitude: 0, hemisphere: "north", timeZone: "UTC" })).toBeNull();
+    expect(stampSeason(at, { seasons: "", latitude: -15, hemisphere: "south", timeZone: "UTC" })).toBeNull();
+    expect(stampSeason(at, { seasons: "", latitude: 47.4, hemisphere: "north", timeZone: "UTC" })).toBe("autumn");
+    expect(stampSeason(at, { seasons: "", latitude: -38, hemisphere: "south", timeZone: "UTC" })).toBe("spring");
+    // A village that has not said where it is keeps the hemisphere's seasons.
+    expect(stampSeason(at, { seasons: "", latitude: null, hemisphere: "north", timeZone: "UTC" })).toBe("autumn");
+    // A stored list the room cannot read whole counts as no list.
+    expect(stampSeason(at, { seasons: "Dry: 12-01, Green", latitude: 47.4, hemisphere: "north", timeZone: "UTC" })).toBe("autumn");
   });
 
   it("reads a stored row whose state is junk as the room's default state", () => {

@@ -159,6 +159,11 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(v.body.facilitatorUserId).toBe(v.body.me.userId);
     expect(v.body.people).toEqual([expect.objectContaining({ name: "Ana Reyes", handle: "ana", present: true })]);
     expect(v.body.stamp.moonName).not.toBe("");
+    // The phase the room draws, kept beside the name. This village has named no
+    // seasons and said nothing about its land, so the temperate four stand.
+    expect(v.body.stamp.moonPhase).toBeGreaterThanOrEqual(0);
+    expect(v.body.stamp.moonPhase).toBeLessThanOrEqual(1);
+    expect(v.body.stamp.hemisphere).toBe("north");
     expect(SESSION_SEASONS).toContain(v.body.stamp.season);
     expect(v.body.state.stage).toBe("dropin");
     // The garden circle's own seat comes first, and neither a retired seat nor an example seat is offered.
@@ -184,8 +189,11 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect((await as("m-ben", "POST /api/sessions/:id/here", { params: room(sid) })).body).toEqual({ ok: true });
     const afterHere = await view("m-ben", sid);
     expect(afterHere.body.version).toBe(first.body.version);
-    // A write does.
-    await as("m-ana", "POST /api/sessions/:id/act", { params: room(sid), body: { action: { type: "go", stage: "arrival" } } });
+    // A write does. Nobody pressed "Begin" in this story, so this first move
+    // of the room is also what starts the session's clock.
+    expect(afterHere.body.state.startedAt).toBeNull();
+    const went = await as("m-ana", "POST /api/sessions/:id/act", { params: room(sid), body: { action: { type: "go", stage: "arrival" } } });
+    expect(went.body.state.startedAt).toEqual(expect.any(Number));
     const moved = await as("m-ben", "GET /api/sessions/:id", { params: room(sid), headers: { "if-none-match": tag } });
     expect(moved.status).toBe(200);
     expect(moved.body.version).toBeGreaterThan(first.body.version);
@@ -312,8 +320,15 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const [{ no: deeNo }] = await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-dee'");
     const [{ last_seen_at: deeSeen }] = await q("SELECT `last_seen_at` FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [sid, deeNo]);
     await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [new Date(Date.now() - 10 * 60_000), sid, deeNo]);
-    const here = (await view("m-ana", sid)).body.people.filter((p: any) => p.present).map((p: any) => p.name);
+    const seen = await view("m-ana", sid);
+    const here = seen.body.people.filter((p: any) => p.present).map((p: any) => p.name);
     expect(here.sort()).toEqual(["Ana Reyes", "Ben Ortiz"]);
+    // The room names who it is still waiting on: Ben, and never Dee, whose
+    // answer stands but who is not here.
+    expect(seen.body.waiting[`decision:${gate}`].map((p: any) => p.name)).toEqual(["Ben Ortiz"]);
+    expect(seen.body.waiting.agenda).toEqual([]);
+    // Somebody who has not joined sees no answers, so nobody is named to them.
+    expect((await view("m-cai", sid)).body.waiting).toEqual({});
     expect(await mark()).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [deeSeen, sid, deeNo]);
     await beat(sid, "m-dee");

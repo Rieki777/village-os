@@ -20,7 +20,10 @@
  * belongs. This file is HARD-CLEAN territory: no village's name, ever.
  *
  * Adding an offering = one entry here + the matching latin-subset imports in
- * client/src/main.tsx. Nothing else; theme.css does the rest at runtime.
+ * client/src/main.tsx + its pinned @fontsource dependency + its row in the
+ * STACKS table of cardFontStacks (shared/brandTokens.ts). The test beside
+ * this file fails when any of the four is missed. theme.css does the rest at
+ * runtime.
  */
 
 export type FontRole = "display" | "body" | "accent";
@@ -54,6 +57,9 @@ export const FONT_CATALOG: FontOffering[] = [
     hint: "Geometric and airy, with a vintage warmth.",
   },
   {
+    // Also bundled at 300 and in 400 and 500 italic, so a heading set light
+    // and an italic place line render in the real cuts. Without them the
+    // browser fakes both, and a faked italic on a fine serif looks broken.
     id: "cormorant-garamond",
     family: "Cormorant Garamond",
     role: "display",
@@ -97,6 +103,17 @@ export const FONT_CATALOG: FontOffering[] = [
     stack: '"Raleway", system-ui, sans-serif',
     hint: "Match the default display for a single-family look.",
   },
+  {
+    // Bundled at 300, 400 and 500, the weights a light body face is set in,
+    // plus 600 and 700, because buttons, tiles, labels and headings across
+    // the app (the live room's chrome among them) are set semibold, and
+    // without the real cuts the browser fakes a thickened 500.
+    id: "jost",
+    family: "Jost",
+    role: "body",
+    stack: '"Jost", -apple-system, BlinkMacSystemFont, sans-serif',
+    hint: "Light and geometric; calm across long pages.",
+  },
 
   // ── Accent: handwritten moments — quotes, celebrations, margins ──────────
   {
@@ -112,6 +129,16 @@ export const FONT_CATALOG: FontOffering[] = [
     role: "accent",
     stack: '"Caveat", cursive',
     hint: "Quicker and looser; a note left on the kitchen table.",
+  },
+  {
+    // A formal copperplate script, one weight. Beautiful for a name, a place
+    // line or a signature, and unreadable by the third line, so the hint says
+    // so where the admin makes the choice.
+    id: "pinyon-script",
+    family: "Pinyon Script",
+    role: "accent",
+    stack: '"Pinyon Script", cursive',
+    hint: "Formal copperplate; for a single line or a signature, never body text.",
   },
 ];
 

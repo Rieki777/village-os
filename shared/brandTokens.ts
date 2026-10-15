@@ -173,10 +173,24 @@ export const HOVER_STEP = 1.4;
 /**
  * Derive everything from (seed, card). Returns null when seed is absent or
  * invalid — the neutral case, which MUST emit nothing.
+ *
+ * `accentHex` is the one optional pinned colour (Admin, Look). A card finds
+ * its accent by turning the seed's hue a fixed step, and no step turns a deep
+ * green into gold. A village whose guide names its accent passes it here: its
+ * hue and saturation are kept as given, and its lightness still goes through
+ * the same measurements as a derived accent (ink on it, and it as a label on
+ * the band). An absent or invalid value falls back to the card's rotation,
+ * so a stray string can only ever cost the village its pin, never the page.
  */
-export function deriveTheme(seedHex: string | undefined | null, cardId: string | undefined | null): DerivedTheme | null {
+export function deriveTheme(
+  seedHex: string | undefined | null,
+  cardId: string | undefined | null,
+  accentHex?: string | null,
+): DerivedTheme | null {
   const seed = seedHex ? hexToHsl(seedHex) : null;
   if (!seed) return null;
+  // The stored theme is merged blindly on write, so the type is a hope here.
+  const pinnedAccent = typeof accentHex === "string" && accentHex ? hexToHsl(accentHex) : null;
   const card = cardById(cardId) ?? CHARACTER_CARDS[0];
 
   const sat = (mul: number) => Math.max(0.04, Math.min(0.95, seed.s * card.chromaMul * mul));
@@ -239,9 +253,11 @@ export function deriveTheme(seedHex: string | undefined | null, cardId: string |
   // Enforced upward: some rotations land in hues that are perceptually dark
   // at the same nominal lightness (teal+45° → blue read 2.65:1 under ink),
   // so the accent RISES until the ink clears large-text contrast on it.
-  const sun = atContrast({ h: seed.h + card.accentRotation, s: sat(1.05), l: 0.62 }, inkHex, AA_LARGE, false);
+  // A pinned accent starts from its own colour and is held to the same floor.
+  const sunStart = pinnedAccent ?? { h: seed.h + card.accentRotation, s: sat(1.05), l: 0.62 };
+  const sun = atContrast(sunStart, inkHex, AA_LARGE, false);
   const sunHex = hslToHex(sun);
-  measured("ink on accent", inkHex, sunHex, AA_LARGE, Math.abs(sun.l - 0.62) > 0.02);
+  measured("ink on accent", inkHex, sunHex, AA_LARGE, Math.abs(sun.l - sunStart.l) > 0.02);
 
   /*
    * THE ACCENT AS A LABEL ON THE BRAND SURFACE — the pairing this file did not
@@ -369,7 +385,9 @@ export function deriveTheme(seedHex: string | undefined | null, cardId: string |
 }
 
 /** Resolve a card's FONT_CATALOG ids to full stacks without importing the
- * catalogue here (shared→shared import cycles bite); the caller joins them. */
+ * catalogue here (shared→shared import cycles bite); the caller joins them.
+ * STACKS mirrors every catalogue offering, and shared/fontCatalog.test.ts
+ * fails when an offering is added there and forgotten here. */
 export function cardFontStacks(card: CharacterCard): { display: string; body: string; accent: string } {
   const STACKS: Record<string, string> = {
     "raleway": '"Raleway", system-ui, sans-serif',
@@ -379,8 +397,11 @@ export function cardFontStacks(card: CharacterCard): { display: string; body: st
     "marcellus": '"Marcellus", Georgia, serif',
     "montserrat": '"Montserrat", -apple-system, BlinkMacSystemFont, sans-serif',
     "nunito-sans": '"Nunito Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    "raleway-body": '"Raleway", system-ui, sans-serif',
+    "jost": '"Jost", -apple-system, BlinkMacSystemFont, sans-serif',
     "kalam": '"Kalam", cursive',
     "caveat": '"Caveat", cursive',
+    "pinyon-script": '"Pinyon Script", cursive',
   };
   const [d, b, a] = card.fonts;
   return {

@@ -131,7 +131,7 @@ export default function SessionRoom() {
     <Layout>
       <div className="bg-gradient-to-b from-teal-deep/5 to-background">
         <div className="container max-w-5xl py-6 md:py-10">
-          <RoomHeader view={view} now={now} actions={actions} />
+          <RoomHeader view={view} now={now} actions={actions} shown={shown} />
         </div>
       </div>
 

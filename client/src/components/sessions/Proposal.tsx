@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import { ROOM_COPY, type SessionEntry } from "@shared/sessions";
-import ConsentRound from "./ConsentRound";
+import ConsentRound, { WaitingLine } from "./ConsentRound";
 import { BTN_PRIMARY, CARD, CHIP, H3, HINT, consentOn, leads, nameOf, seesAnswers, type StageProps } from "./roomUi";
 
 /** "Decided by consent", for the facilitator, once the room has consented. */
@@ -85,6 +85,7 @@ export function OpenProposals({ view, actions }: Omit<StageProps, "now">) {
               {itemTitle && <span className={CHIP}>{itemTitle}</span>}
               <p className="mt-1 whitespace-pre-line font-medium text-foreground">{e.text}</p>
               <p className={`${HINT} mt-1`}>{answers ? ROOM_COPY.tallyLine(tally) : ROOM_COPY.answersHeardInRoom}</p>
+              <WaitingLine view={view} target={`decision:${e.id}`} className="mt-0.5" />
               {answers && tally.consented && <p className="text-sm font-semibold text-open">{ROOM_COPY.consented}</p>}
               <DecideButton view={view} actions={actions} entry={e} className="mt-2" />
             </li>

@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 209 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-234 dials in 35 categories. 140 carry a minimum and a maximum. By type: 103 integer, 20 decimal, 18 percentage, 27 boolean, 29 choice, 36 text, 1 longtext.
+235 dials in 35 categories. 140 carry a minimum and a maximum. By type: 103 integer, 20 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -69,7 +69,7 @@ Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
 | Platform | 1 | 0 | 1 |
-| Calendar | 3 | 3 | 0 |
+| Calendar | 4 | 4 | 0 |
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
@@ -294,6 +294,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
+| Your village's own seasons | `calendar.seasons` | Calendar | text | blank | the whole village |
 | Introductions one person receives per day | `introductions.recipient_daily_cap` | Introductions | integer | `3` | the whole village |
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
@@ -3744,7 +3745,7 @@ A copy of each bug report and idea submitted here reaches the platform team who 
 
 ## Calendar
 
-3 dials. 3 for the whole village.
+4 dials. 4 for the whole village.
 
 ### The solar event that opens the village year
 
@@ -3797,6 +3798,21 @@ Also put the four midpoints between the solstices and equinoxes on the calendar.
 | Type | boolean, on or off |
 | Default | `false` |
 | Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Your village's own seasons
+
+The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
+
+| Fact | Value |
+| --- | --- |
+| Key | `calendar.seasons` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Counted in | list |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -4185,6 +4201,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`
+- `shared/villageSeasons.ts`
 
 The registry is transpiled and IMPORTED to read it, which is what makes the generated dials visible. The multiplier, quest-threshold and unlock dials under Progression are built at module load from the village's own stage ladder, so a reader of the array literal alone would print a document that looked complete and was missing a fifth of the registry.
 

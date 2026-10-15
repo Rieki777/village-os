@@ -179,9 +179,12 @@ and the admins.
 - **Gratitude.** The close opens a gratitude round. A thank-you goes through the gratitude door like
   any other, from the sender's own allowance, and lands in the current moon's cycle. That is why the
   module recommends `gratitude`, which is core and always on.
-- **The moon and the season.** Every session is stamped when it starts with the moon's phase, the
-  village's own moon count when it keeps one, the season by the village's hemisphere, and the place
-  line. The stamp is on the record and at the top of the minutes.
+- **The moon and the season.** Every session is stamped when it starts with the moon's phase (drawn,
+  lit on the side the village's hemisphere sees), the village's own moon count when it keeps one, the
+  season, and the place line. The season is the village's own when it has named its seasons in
+  `calendar.seasons`; none when its land sits between the tropics and it has named none, since the
+  four temperate seasons do not describe a year that turns on rain; and otherwise the four by the
+  village's hemisphere. The stamp is on the record and at the top of the minutes.
 - **The backlog seeds the next session.** When a circle meets again, the room shows "From last
   time": the open actions from its last closed session, for an action check, and its backlog
   (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
@@ -199,6 +202,7 @@ and the admins.
 |---|---|
 | `sessions.place_line` | The village's own sentence, read at drop in. Empty means the room reads the platform's neutral line, "Take a moment to feel where you are." |
 | `sessions.default_minutes` | How long a new session runs unless the person opening it says otherwise. |
+| `calendar.seasons` | The village's own seasons, each with the day it starts, as `Name: MM-DD` separated by commas (for example `Dry: 12-01, Green: 05-01`). Blank uses the platform's seasons, or none in the tropics. Read by the stamp; shared with the calendar. |
 
 ## The module boundary
 
@@ -207,7 +211,7 @@ and the admins.
 | API prefixes | `/api/sessions` |
 | Data class | `member-pii`: every row names a person |
 | Capabilities | none: each door is a member's own, and facilitation belongs to the session |
-| Variables | `sessions.place_line`, `sessions.default_minutes` |
+| Variables | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
 | Recommends | `gratitude` |
 | Open state | none: a session holds no value anybody is owed |
 

@@ -1,30 +1,49 @@
 /**
  * The room's header: what this session is, which circle, under which moon and
- * season, how far into its time it is, and who is here. Someone who has not
- * joined yet is offered the door here, once, at the top.
+ * season, who is facilitating, and how far into its time it is. Someone who
+ * has not joined yet is offered the door here, once, at the top.
+ *
+ * The header holds no forward button. Beginning the session and moving the
+ * room on both live in the facilitator's bar, in one slot, so the facilitator
+ * never meets two primary buttons asking for the same thing.
+ *
+ * Each thing is said once on the screen. Drop in carries who is here in full,
+ * beside the place line and the breath, so on that stage the header leaves the
+ * people out; on every other stage it keeps a compact row of them, because a
+ * consent round is counted against who is here.
  */
 import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
-import { ROOM_COPY, SESSION_COPY, type SessionView } from "@shared/sessions";
+import { ROOM_COPY, SESSION_COPY, type SessionStage, type SessionView } from "@shared/sessions";
 import PeopleHere from "./PeopleHere";
-import { BTN_PRIMARY, BTN_QUIET, CHIP, dayLabel } from "./roomUi";
+import RoomMoon from "./RoomMoon";
+import { BTN_PRIMARY, BTN_QUIET, CHIP, dayLabel, nameOf } from "./roomUi";
 import type { RoomActions } from "./useSessionRoom";
 
-export default function RoomHeader({ view, now, actions }: { view: SessionView; now: number; actions: RoomActions }) {
+export default function RoomHeader({
+  view,
+  now,
+  actions,
+  shown,
+}: {
+  view: SessionView;
+  now: number;
+  actions: RoomActions;
+  /** The stage on this screen; Drop in shows the people itself. */
+  shown?: SessionStage;
+}) {
   const [busy, setBusy] = useState(false);
   const open = view.status === "open";
   const started = view.state.startedAt != null;
   const elapsedMin = started ? Math.max(0, Math.floor((now - (view.state.startedAt as number)) / 60000)) : 0;
   const share = started ? Math.min(1, elapsedMin / Math.max(1, view.durationMin)) : 0;
-  const sky = [view.stamp.moonOrdinal != null ? ROOM_COPY.moonOrdinal(view.stamp.moonOrdinal) : null, view.stamp.moonName, view.stamp.season]
-    .filter(Boolean)
-    .join(" · ");
+  const facilitator = nameOf(view, view.facilitatorUserId);
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const join = async () => {
     setBusy(true);
     try {
-      await fn();
+      await actions.join();
     } finally {
       setBusy(false);
     }
@@ -40,14 +59,10 @@ export default function RoomHeader({ view, now, actions }: { view: SessionView; 
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {view.circleName && <span className={CHIP}>{view.circleName}</span>}
-            {view.stamp.moonGlyph && (
-              <span aria-hidden="true" className="text-base leading-none">
-                {view.stamp.moonGlyph}
-              </span>
-            )}
-            <span>{sky}</span>
+            <RoomMoon stamp={view.stamp} />
           </p>
           <h1 className="mt-1 font-display text-3xl font-bold text-foreground sm:text-4xl">{view.title}</h1>
+          {facilitator && <p className="mt-1 text-sm text-muted-foreground">{ROOM_COPY.facilitatedBy(facilitator)}</p>}
           {!open && view.closedAt && <p className="mt-1 text-sm text-muted-foreground">{ROOM_COPY.closedOn(dayLabel(view.closedAt))}</p>}
         </div>
         {open && (
@@ -64,23 +79,21 @@ export default function RoomHeader({ view, now, actions }: { view: SessionView; 
                   />
                 </div>
               </>
-            ) : view.me.facilitates ? (
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void run(() => actions.act({ type: "start" }))}>
-                {ROOM_COPY.beginSession}
-              </button>
             ) : (
-              <p className="max-w-xs text-sm text-muted-foreground">{ROOM_COPY.clockWaiting}</p>
+              <p className="max-w-xs text-sm text-muted-foreground sm:ml-auto">
+                {view.me.facilitates ? ROOM_COPY.clockWaitingYou : ROOM_COPY.clockWaiting}
+              </p>
             )}
           </div>
         )}
       </div>
 
-      {open && <PeopleHere view={view} compact />}
+      {open && shown !== "dropin" && <PeopleHere view={view} compact />}
 
       {open && !view.me.joined && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-deep/30 bg-teal-deep/5 px-5 py-4">
           <p className="text-sm text-foreground">{ROOM_COPY.joinLede}</p>
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void run(() => actions.join())}>
+          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void join()}>
             {SESSION_COPY.joinButton}
           </button>
         </div>

@@ -1,6 +1,10 @@
 /**
  * DROP IN. The place line read out loud, a breath taken together, and a look
  * at who is here. Nothing is asked of anybody yet.
+ *
+ * Each thing is said once: the moon and the season sit in the room's header,
+ * so this stage leaves them out, and the people are listed here in full while
+ * the header leaves them out on this stage.
  */
 import { ROOM_COPY, SESSION_COPY } from "@shared/sessions";
 import PeopleHere from "./PeopleHere";
@@ -16,10 +20,6 @@ export default function StageDropIn({ view, actions, offset }: StageProps & { of
         <blockquote className="mx-auto max-w-2xl font-display text-xl leading-relaxed text-foreground sm:text-2xl">
           {placeLine}
         </blockquote>
-        <figcaption className="mt-3 text-sm text-muted-foreground">
-          <span aria-hidden="true">{view.stamp.moonGlyph}</span> {view.stamp.moonName}
-          {view.stamp.season ? ` · ${view.stamp.season}` : ""}
-        </figcaption>
       </figure>
       <div className={CARD}>
         <SharedBreath breath={view.state.breath} offset={offset} facilitates={view.me.facilitates} actions={actions} />
