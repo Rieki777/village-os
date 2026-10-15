@@ -6,6 +6,7 @@
  *   GET    /api/sessions                          { open, recent, circles }
  *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
+ *   PATCH  /api/sessions/:id                      { title } -> { ok }
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok }
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -76,6 +77,7 @@ import {
   parseId,
   patchEntry,
   patchItem,
+  patchSession,
   readMinutes,
   removeEntry,
   respond,
@@ -291,6 +293,17 @@ export function register(app: Express, deps: Deps): void {
     res.setHeader("Vary", "Authorization");
     if (etagMatches(req.headers?.["if-none-match"], tag)) return res.status(304).end();
     res.json(await buildView(pool, found.s, viewer, found.joined, ctx, now));
+  });
+
+  /**
+   * The session's title: the facilitator, the secretary, or an admin who has
+   * joined. Behind the same gates as an item's PATCH, and an unchanged title
+   * answers ok without moving the room's version.
+   */
+  app.patch("/api/sessions/:id", async (req, res) => {
+    const w = await writer(req, res);
+    if (!w) return;
+    answer(res, await patchSession(w.pool, w.id, w.actor, req.body), () => ({ ok: true }));
   });
 
   app.post("/api/sessions/:id/join", async (req, res) => {

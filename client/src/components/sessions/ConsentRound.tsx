@@ -11,6 +11,11 @@
  * to the people who joined and to admins, so anybody else reads that sentence
  * in place of a tally that would count everyone as still to answer. The
  * sentence being typed is a draft, so moving the room does not lose it.
+ *
+ * An answer belongs to the person who gave it, so nobody else changes it, and
+ * the person changes it by answering again: the server keeps one answer per
+ * person and the newest wins. The line under the button says so, once they
+ * have answered. Once the round is no longer open there is no box at all.
  */
 import { useState } from "react";
 import {
@@ -24,11 +29,11 @@ import {
   type ConsentValue,
   type ResponseTarget,
 } from "@shared/sessions";
+import GrowingText from "./GrowingText";
 import {
   BTN_PRIMARY,
   H3,
   HINT,
-  INPUT,
   consentOn,
   myResponse,
   nameOf,
@@ -113,16 +118,15 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
             ))}
           </div>
           {choice && consentNeedsWords(choice) && (
-            <label className="block">
-              <span className="sr-only">{ROOM_COPY.consentSentence}</span>
-              <input
-                className={INPUT}
-                value={words}
-                maxLength={SESSION_LIMITS.text}
-                placeholder={ROOM_COPY.consentSentence}
-                onChange={(e) => draft.set(e.target.value)}
-              />
-            </label>
+            <GrowingText
+              value={words}
+              onValue={draft.set}
+              onSubmit={() => void send()}
+              label={ROOM_COPY.consentSentence}
+              max={SESSION_LIMITS.text}
+              minRows={2}
+              singleLine
+            />
           )}
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" className={BTN_PRIMARY} disabled={!choice || busy} onClick={() => void send()}>
@@ -134,6 +138,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
               </p>
             )}
           </div>
+          {mine && <p className={`${HINT} text-xs`}>{ROOM_COPY.answerAgain}</p>}
         </>
       )}
       <p className={HINT} aria-live="polite">
@@ -144,7 +149,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
       {heard.length > 0 && (
         <ul className="space-y-1.5">
           {heard.map((r) => (
-            <li key={`${r.userId}`} className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-foreground">
+            <li key={`${r.userId}`} className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground">
               <span className="font-semibold">{nameOf(view, r.userId) ?? ""}</span>{" "}
               <span className="text-muted-foreground">{isConsentValue(r.value) ? CONSENT_LABELS[r.value] : ""}:</span> {r.text}
             </li>

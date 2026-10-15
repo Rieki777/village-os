@@ -22,6 +22,7 @@ const DOORS = [
   "GET /api/sessions",
   "POST /api/sessions",
   "GET /api/sessions/:id",
+  "PATCH /api/sessions/:id",
   "POST /api/sessions/:id/join",
   "POST /api/sessions/:id/here",
   "POST /api/sessions/:id/arrival",
