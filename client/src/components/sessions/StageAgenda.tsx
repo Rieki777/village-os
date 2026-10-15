@@ -3,12 +3,16 @@
  * backlog, parked items), then the agenda itself, what it asks for against the
  * time the session has left, and the consent to it, which makes the agenda the
  * circle's and not only the facilitator's.
+ *
+ * The consent round is this stage's one foil card: it is the moment the
+ * agenda becomes the circle's, so it wears the same frame the item page and
+ * the role card wear.
  */
 import { ROOM_COPY, SESSION_COPY, STAGE_DEFS, agendaFit } from "@shared/sessions";
 import AgendaList, { AddItem } from "./AgendaList";
 import ConsentRound from "./ConsentRound";
 import FromLastTime from "./FromLastTime";
-import { CARD, H3, HINT, type StageProps } from "./roomUi";
+import { CARD, H3, HERO_CONTENT, HERO_INNER, HERO_SHELL, HINT, type StageProps } from "./roomUi";
 
 export default function StageAgenda({ view, now, actions }: StageProps) {
   const fit = agendaFit(view.items, view.durationMin, view.state.startedAt, now);
@@ -26,7 +30,7 @@ export default function StageAgenda({ view, now, actions }: StageProps) {
           </p>
         </div>
         {fit.over && (
-          <p role="status" className="mt-2 rounded-lg bg-amber-light px-3 py-2 text-sm text-foreground">
+          <p role="status" className="mt-2 rounded-lg border border-notice/50 bg-muted px-3 py-2 text-sm text-foreground">
             {SESSION_COPY.agendaOver}
           </p>
         )}
@@ -39,14 +43,18 @@ export default function StageAgenda({ view, now, actions }: StageProps) {
         </div>
       </section>
 
-      <section className={CARD}>
-        <ConsentRound
-          view={view}
-          actions={actions}
-          target="agenda"
-          ask={SESSION_COPY.agendaConsentAsk}
-          readOnly={!view.me.joined || view.status !== "open"}
-        />
+      <section className={HERO_SHELL}>
+        <div className={HERO_INNER}>
+          <div className={HERO_CONTENT}>
+            <ConsentRound
+              view={view}
+              actions={actions}
+              target="agenda"
+              ask={SESSION_COPY.agendaConsentAsk}
+              readOnly={!view.me.joined || view.status !== "open"}
+            />
+          </div>
+        </div>
       </section>
     </div>
   );

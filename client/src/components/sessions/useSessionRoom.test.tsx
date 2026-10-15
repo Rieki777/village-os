@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { ROOM_COPY } from "@shared/sessions";
+import { ROOM_COPY, SESSION_REFUSALS, sessionUrl } from "@shared/sessions";
 import { json, makeView, record, type Call } from "./__tests__/roomFixture";
 
 const toastError = vi.fn();
@@ -245,6 +245,44 @@ describe("the doors", () => {
       await result.current.actions.respond("agenda", "consent", null, { quiet: true });
     });
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("renaming the session sends PATCH to the session itself with the title, and the room the server holds replaces the one on screen", async () => {
+    let renamed = false;
+    answer = (c) => {
+      if (c.method === "PATCH") {
+        renamed = true;
+        return json({ ok: true });
+      }
+      return json(renamed ? makeView({ title: "Water and roofs", version: 4 }) : makeView());
+    };
+    const { result } = renderHook(() => useSessionRoom(7, { pollMs: 60_000, hereMs: 60_000 }));
+    await settle();
+    expect(result.current.view?.title).toBe("Water circle");
+    let r: Awaited<ReturnType<typeof result.current.actions.patchSession>> | undefined;
+    await act(async () => {
+      r = await result.current.actions.patchSession({ title: "Water and roofs" }, { quiet: true });
+    });
+    const patch = calls.find((c) => c.method === "PATCH")!;
+    expect(patch.url).toBe(sessionUrl(7));
+    expect(patch.body).toEqual({ title: "Water and roofs" });
+    expect(r?.ok).toBe(true);
+    expect(r?.room?.title).toBe("Water and roofs");
+    expect(result.current.view?.title).toBe("Water and roofs");
+  });
+
+  it("a refused rename hands back the server's sentence, and a quiet one leaves the saying to its caller", async () => {
+    answer = (c) => (c.method === "PATCH" ? json({ error: SESSION_REFUSALS.notesOnly }, 403) : json(makeView()));
+    const { result } = renderHook(() => useSessionRoom(7, { pollMs: 60_000, hereMs: 60_000 }));
+    await settle();
+    let r: Awaited<ReturnType<typeof result.current.actions.patchSession>> | undefined;
+    await act(async () => {
+      r = await result.current.actions.patchSession({ title: "Mine now" }, { quiet: true });
+    });
+    expect(r?.ok).toBe(false);
+    expect(r && !r.ok ? r.error : "").toBe(SESSION_REFUSALS.notesOnly);
+    expect(toastError).not.toHaveBeenCalled();
+    expect(result.current.view?.title).toBe("Water circle");
   });
 
   it("every door posts to its own path with the contract's body", async () => {

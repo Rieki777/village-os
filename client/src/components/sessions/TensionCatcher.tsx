@@ -2,11 +2,24 @@
  * NAME A TENSION, open on every stage. Something sensed that wants its own
  * time goes straight to the backlog, so it is held without taking over the
  * item the room is on.
+ *
+ * The box is the room's growing box with the voice button beside it, so a
+ * tension can be said aloud as easily as typed. Enter sends it; Shift and
+ * Enter starts a new line; Escape puts the box away.
+ *
+ * WHAT IS IN THE BACKLOG SO FAR. Under the catcher, every tension this
+ * session has named so far, each an EntryCard: whoever named it, the hosts
+ * and an admin in the room can fix its words or take it out before the
+ * session closes and the backlog goes to next time. The panel is drawn only
+ * once there is something in it.
  */
 import { useState } from "react";
-import { Sprout } from "lucide-react";
 import { ROOM_COPY, SESSION_COPY, SESSION_LIMITS, cleanText } from "@shared/sessions";
-import { BTN_PRIMARY, BTN_QUIET, INPUT, type StageProps } from "./roomUi";
+import EntryCard from "./EntryCard";
+import GrowingText from "./GrowingText";
+import { BTN_PRIMARY, BTN_QUIET, ENTRY_GLYPH, LABEL_CAPS, PANEL, UNDER_BOX, type StageProps } from "./roomUi";
+
+const Feather = ENTRY_GLYPH.tension;
 
 export default function TensionCatcher({ view, actions }: Omit<StageProps, "now">) {
   const [open, setOpen] = useState(false);
@@ -14,6 +27,7 @@ export default function TensionCatcher({ view, actions }: Omit<StageProps, "now"
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   if (!view.me.joined || view.status !== "open") return null;
+  const tensions = view.entries.filter((e) => e.kind === "tension");
 
   const send = async () => {
     const clean = cleanText(text, SESSION_LIMITS.text);
@@ -31,55 +45,77 @@ export default function TensionCatcher({ view, actions }: Omit<StageProps, "now"
     }
   };
 
-  if (!open) {
-    return (
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          className={BTN_QUIET}
-          onClick={() => {
-            setOpen(true);
-            setSaved(false);
-          }}
-        >
-          <Sprout className="h-4 w-4" aria-hidden="true" />
-          {SESSION_COPY.addTension}
-        </button>
-        {saved && (
-          <p role="status" className="text-sm text-open">
-            {ROOM_COPY.tensionSaved}
-          </p>
-        )}
-      </div>
-    );
-  }
+  const backlog =
+    tensions.length > 0 ? (
+      <section className={PANEL} aria-labelledby="tension-backlog">
+        <h3 id="tension-backlog" className={`${LABEL_CAPS} mb-3`}>
+          {ROOM_COPY.backlogSoFar}
+        </h3>
+        <ul className="space-y-2">
+          {tensions.map((e) => (
+            <li key={e.id}>
+              <EntryCard view={view} actions={actions} entry={e} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
 
   return (
-    <form
-      className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-start"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void send();
-      }}
-    >
-      <label className="min-w-0 flex-1">
-        <span className="sr-only">{SESSION_COPY.addTension}</span>
-        <textarea
-          className={`${INPUT} min-h-16`}
-          value={text}
-          maxLength={SESSION_LIMITS.text}
-          placeholder={ROOM_COPY.tensionPlaceholder}
-          onChange={(e) => setText(e.target.value)}
-        />
-      </label>
-      <div className="flex gap-2">
-        <button type="submit" className={BTN_PRIMARY} disabled={busy || !text.trim()}>
-          {ROOM_COPY.send}
-        </button>
-        <button type="button" className={BTN_QUIET} onClick={() => setOpen(false)}>
-          {ROOM_COPY.cancel}
-        </button>
-      </div>
-    </form>
+    <div className="space-y-4">
+      {open ? (
+        <form
+          className="space-y-2 rounded-xl border border-border bg-card p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
+          }}
+        >
+          <label className="sr-only" htmlFor="tension-text">
+            {SESSION_COPY.addTension}
+          </label>
+          <GrowingText
+            id="tension-text"
+            value={text}
+            onValue={setText}
+            onSubmit={() => void send()}
+            onCancel={() => setOpen(false)}
+            label={ROOM_COPY.tensionPlaceholder}
+            max={SESSION_LIMITS.text}
+            minRows={3}
+            mic
+            autoFocus
+          />
+          <div className={UNDER_BOX}>
+            <button type="submit" className={BTN_PRIMARY} disabled={busy || !text.trim()}>
+              {ROOM_COPY.send}
+            </button>
+            <button type="button" className={BTN_QUIET} onClick={() => setOpen(false)}>
+              {ROOM_COPY.cancel}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={BTN_QUIET}
+            onClick={() => {
+              setOpen(true);
+              setSaved(false);
+            }}
+          >
+            <Feather className="h-4 w-4" aria-hidden="true" />
+            {SESSION_COPY.addTension}
+          </button>
+          {saved && (
+            <p role="status" className="text-sm text-open">
+              {ROOM_COPY.tensionSaved}
+            </p>
+          )}
+        </div>
+      )}
+      {backlog}
+    </div>
   );
 }

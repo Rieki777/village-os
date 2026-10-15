@@ -25,10 +25,13 @@
  *          A decided proposal is final: its words, its status and the row
  *          itself stay as they are, and a proposal whose words change while
  *          open starts its consent round again.
- *   notes  runs, or the secretary: edits any item's words, and any entry's
- *          text, status, seat and date.
+ *   notes  runs, or the secretary: renames the session, edits any item's
+ *          words, and any entry's text, status, seat and date. An admin is
+ *          here too, through runs, once they have joined.
  *   author the person who wrote an entry edits or deletes it; the person who
- *          added an item edits its words while it is still waiting.
+ *          added an item changes its title until it is done, and its aim,
+ *          minutes and presenter while it is still waiting, because the
+ *          item's clock reads its minutes once it starts.
  *   anyone in the room claims an action nobody holds; the holder or the
  *          facilitator lets it go.
  *
@@ -60,6 +63,7 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
+import { avatarFor } from "./characters";
 import { listOrgAssignments, listOrgRoles } from "./orgChart";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
@@ -466,8 +470,21 @@ export function entryRights(e: Pick<EntryRec, "authorNo" | "ownerNo">, actorNo: 
   };
 }
 
-/** May this person change an item's words: notes always, its adder while it waits. */
-export function mayEditItemWords(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
+/**
+ * May this person change an item's title: notes always, and the person who
+ * added it until it is done. A typo in a title is fixed while the item runs;
+ * a finished item's title is what the record says was talked about.
+ */
+export function mayEditItemTitle(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
+  return roles.notes || (item.addedBy === actorNo && item.status !== "done");
+}
+
+/**
+ * May this person change an item's plan (its aim, minutes and presenter):
+ * notes always, and the person who added it only while it waits. Once the
+ * item starts, its clock reads the minutes, so the hosts hold them.
+ */
+export function mayEditItemPlan(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
   return roles.notes || (item.addedBy === actorNo && item.status === "waiting");
 }
 
@@ -682,11 +699,17 @@ interface Room {
   conn: PoolConnection;
   s: SessionRec;
   roles: Roles;
+  /**
+   * Set by work that found nothing to change, so the version stays where it
+   * is and every open page keeps its 304. A yes that moved nothing.
+   */
+  still: boolean;
 }
 
 /**
  * Lock the session, check it is open and the writer is in it, run `work`,
- * and bump the version if the work succeeded. A refusal writes nothing.
+ * and bump the version if the work succeeded and moved something. A refusal
+ * writes nothing.
  */
 async function inRoom<T>(pool: Pool, sessionId: number, actor: Actor, work: (room: Room) => Promise<Outcome<T>>): Promise<Outcome<T>> {
   return repo.inTransaction(pool, async (conn) => {
@@ -695,8 +718,9 @@ async function inRoom<T>(pool: Pool, sessionId: number, actor: Actor, work: (roo
     const s = mapSession(rows[0]);
     if (s.status !== "open") return refuse(409, R.closed);
     if (!(await repo.personRow(conn, sessionId, actor.no)).length) return refuse(403, R.joinFirst);
-    const out = await work({ conn, s, roles: rolesIn(s, actor) });
-    if (out.ok) await repo.bumpVersion(conn, sessionId);
+    const room: Room = { conn, s, roles: rolesIn(s, actor), still: false };
+    const out = await work(room);
+    if (out.ok && !room.still) await repo.bumpVersion(conn, sessionId);
     return out;
   });
 }
@@ -754,6 +778,29 @@ export async function saveArrival(pool: Pool, sessionId: number, actor: Actor, r
   const wish = cleanLine(b.wish, SESSION_LIMITS.wish);
   return inRoom(pool, sessionId, actor, async ({ conn }) => {
     await repo.writeArrival(conn, sessionId, actor.no, score, wish, now);
+    return done(null);
+  });
+}
+
+// ── The session's own words ─────────────────────────────────────────────────
+
+/**
+ * Rename the session: the facilitator, the secretary, or an admin who has
+ * joined. The title is cleaned to one line and cut to its limit, the same way
+ * the start cleans it; any other key in the body is ignored. Sending the title
+ * it already has is a quiet yes that moves no version, so a save pressed twice
+ * costs every open page nothing.
+ */
+export async function patchSession(pool: Pool, sessionId: number, actor: Actor, raw: unknown): Promise<Outcome<null>> {
+  const title = cleanLine(bodyOf(raw).title, SESSION_LIMITS.title);
+  if (!title) return refuse(400, R.titleNeeded);
+  return inRoom(pool, sessionId, actor, async (room) => {
+    if (!room.roles.notes) return refuse(403, R.notesOnly);
+    if (title === room.s.title) {
+      room.still = true;
+      return done(null);
+    }
+    await repo.writeSessionTitle(room.conn, sessionId, title);
     return done(null);
   });
 }
@@ -841,12 +888,23 @@ export async function patchItem(
     const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
     const item = items.find((i) => i.id === itemId);
     if (!item) return refuse(404, R.itemUnknown);
-    const changesWords = Object.keys(words).length > 0;
-    if (changesWords && !mayEditItemWords(item, actor.no, roles)) return refuse(403, R.notesOnly);
+    // The title and the plan answer to different rules. A field sent with the
+    // value it already has changes nothing, so it asks for no right: a form
+    // that sends the whole item back with only the title retyped still works
+    // for the person who added it.
+    const titleMoves = words.title !== undefined && words.title !== item.title;
+    const planMoves =
+      (words.aim !== undefined && words.aim !== item.aim) ||
+      (words.minutes !== undefined && words.minutes !== item.minutes) ||
+      (words.presenter !== undefined && words.presenter !== item.presenterUserId);
+    if (titleMoves && !mayEditItemTitle(item, actor.no, roles)) return refuse(403, R.notesOnly);
+    if (planMoves && !mayEditItemPlan(item, actor.no, roles)) {
+      return refuse(403, item.addedBy === actor.no ? R.aimMinutesNotes : R.notesOnly);
+    }
     if ((position != null || status != null) && !roles.runs) return refuse(403, R.facilitatorOnly);
     if (words.presenter != null && !(await repo.personRow(conn, sessionId, words.presenter)).length) return refuse(400, R.hostsPerson);
 
-    if (changesWords) {
+    if (titleMoves || planMoves) {
       await repo.writeItemWords(conn, item.id, {
         title: words.title ?? item.title,
         aim: words.aim ?? item.aim,
@@ -1480,6 +1538,24 @@ export async function sessionForViewer(pool: Pool, sessionId: number, viewer: Vi
   return { s: mapSession(rows[0]), joined };
 }
 
+/**
+ * The face each person in the room fronts: the stock art of their primary
+ * character, keyed by their member id. One query for the whole room, never
+ * one per person. Only the village's own character art can come back from
+ * here (`avatarFor` answers from a fixed set of shipped files), so a portrait
+ * a member uploaded never reaches the room this way. A member who fronts no
+ * character, or whose character has no art, is simply absent.
+ */
+async function facesFor(pool: Pool, userIds: readonly (string | null)[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const wanted = Array.from(new Set(userIds.filter((u): u is string => !!u)));
+  for (const r of await repo.avatarRows(pool, wanted)) {
+    const face = r.archetype_key ? avatarFor(String(r.archetype_key), String(r.presentation), String(r.tone)) : null;
+    if (face) out.set(String(r.id), face);
+  }
+  return out;
+}
+
 /** Everything the room shows one viewer. The caller has already decided they may see it. */
 export async function buildView(
   pool: Pool,
@@ -1530,12 +1606,14 @@ export async function buildView(
   if (s.secretaryNo) nos.add(s.secretaryNo);
   for (const e of [...entries, ...(carriedFrom?.entries ?? [])]) if (e.ownerNo != null) nos.add(e.ownerNo);
   const [names, seats] = await Promise.all([namesFor(pool, nos, ctx.lookup), seatBook(pool, s.circleId)]);
+  const faces = await facesFor(pool, people.map((p) => names.get(p.no)?.userId ?? null));
 
   const open = s.status === "open";
   const peopleOut: SessionPerson[] = people.map((p) => ({
     userId: p.no,
     name: nameIn(names, p.no) ?? SESSION_SOMEONE,
     handle: names.get(p.no)?.handle ?? null,
+    avatar: faces.get(names.get(p.no)?.userId ?? "") ?? null,
     present: open && isPresentAt(p, now),
     // The arrival round is heard by the people in the room, and only while it is open.
     arrival: open && joined ? p.arrival : null,

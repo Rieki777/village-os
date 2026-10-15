@@ -29,6 +29,7 @@
  * bundle's <link> after this one, and load order must not decide who wins.
  */
 
+import { createHash } from "node:crypto";
 import { deriveTheme } from "../../shared/brandTokens";
 
 export interface BrandThemeFields {
@@ -136,4 +137,34 @@ export function buildThemeCss(theme: BrandThemeFields | null | undefined): strin
   if (vars.length) parts.push(`:root:root {\n${vars.join("\n")}\n}`);
 
   return parts.length ? parts.join("\n") + "\n" : "";
+}
+
+// ── A stylesheet URL that moves when the brand moves ────────────────────────
+//
+// The stylesheet is render-blocking, so it is linked from client/index.html,
+// and a cache in front of the village (Cloudflare's default browser TTL is
+// four hours) can hold it whatever `no-cache` says. So the URL itself changes
+// when the content does: the server writes `?v=<version>` into the shell's
+// link on every page it sends, and the version is the same hash the route
+// sends as its ETag. A new brand is a new URL, and no cache can keep the old
+// one in its place.
+
+/** The stylesheet's path, exactly as client/index.html links it. */
+export const THEME_HREF = "/api/brand/theme.css";
+
+/** The stylesheet's version: the first 16 hex of its sha1, the route's ETag and the shell's `?v=`. */
+export function themeCssVersion(css: string): string {
+  return createHash("sha1").update(css).digest("hex").slice(0, 16);
+}
+
+/**
+ * The shell with its stylesheet link versioned. Only the exact attribute
+ * `href="/api/brand/theme.css"` is touched, so a shell without it comes back
+ * unchanged and this never throws. An untouched fork's empty stylesheet still
+ * hashes, so its link is versioned too.
+ */
+export function withThemeVersion(html: string, version: string): string {
+  const anchor = `href="${THEME_HREF}"`;
+  if (typeof html !== "string" || !html.includes(anchor)) return html;
+  return html.split(anchor).join(`href="${THEME_HREF}?v=${encodeURIComponent(version)}"`);
 }
