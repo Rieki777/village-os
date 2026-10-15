@@ -45,6 +45,23 @@
  * `alignment:<textId>:<partyKey>:in-force`, with the seat names and a link
  * only. No `recordEvent` and no `addActivity`: both reach the village's public
  * record, and the alignment row is the record.
+ *
+ * ── THE SECOND SUBJECT: THE MEMBERSHIP LETTER (PR9) ────────────────────────
+ *
+ * `membership` texts are written by the Love Letter signing
+ * (server/lib/membershipLetter.ts), one per signing, in the signing's own
+ * transaction. They share every rule above with three differences, kept in
+ * SUBJECT_RULES so no reader has to guess them:
+ *
+ *   - nobody is TOLD the letter is in force: it is in force at the member's
+ *     own click, and the village's desk already hears of the signing;
+ *   - it ends only when the member LEAVES (`party_left`) or aligns with the
+ *     letter again (`superseded`): notice and ending by agreement are for
+ *     terms two parties hold, and the village's side of the letter is the
+ *     letter itself;
+ *   - the member reading their own letter is told what the village did with
+ *     the signing it came from (waiting, welcomed, left), as the journey
+ *     section told them before PR9.
  */
 import crypto from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
@@ -66,7 +83,10 @@ import {
   type DerivedState,
 } from "../../shared/alignments";
 import { applicationHref, seatList, STATUS_WORDS } from "../../shared/seatApplications";
+import { letterIntent, MEMBERSHIP, readMembershipRef } from "../../shared/membershipLetter";
+import { signingAnswer, type SigningAnswer } from "../../shared/membershipSigning";
 import type { SeatSettings } from "../../shared/seatSettings";
+import { signingStatuses } from "../repos/membershipSignings";
 import { civilDateKey } from "../../shared/lunar";
 import { civilDateInstant } from "../../shared/seatTerms";
 import {
@@ -95,6 +115,21 @@ import { canSign, signDocument, signingKey } from "./villageExport";
 type Db = Pool | PoolConnection;
 
 export { SEAT_TERMS };
+
+/**
+ * What each subject does beyond the common store. A subject missing here
+ * reads as seat terms do: told, and ended by a party's act.
+ */
+const SUBJECT_RULES: Record<string, { tellsInForce: boolean; endsByAct: boolean }> = {
+  [SEAT_TERMS]: { tellsInForce: true, endsByAct: true },
+  [MEMBERSHIP]: { tellsInForce: false, endsByAct: false },
+};
+
+/** Whether a party may end a text of this subject by notice or by agreement. A membership letter ends when its member leaves. */
+export const endsByAct = (subjectType: string): boolean => SUBJECT_RULES[subjectType]?.endsByAct ?? true;
+
+/** Whether the parties of a text of this subject are told when it comes into force. */
+const tellsInForce = (subjectType: string): boolean => SUBJECT_RULES[subjectType]?.tellsInForce ?? true;
 
 const newId = (prefix: string) => `${prefix}-${crypto.randomBytes(8).toString("hex")}`;
 
@@ -310,6 +345,8 @@ export interface TextView {
   timezone: string;
   /** The window's last day as the derivation read it: a season-following term moves with its seating. */
   effectiveTo: string | null;
+  /** For a membership letter (PR9), the Love Letter signing it came from and that signing's status; null otherwise or once the signing is gone. */
+  signing: { id: string; status: string } | null;
 }
 
 /** Statuses that close an application before its terms could hold. */
@@ -331,13 +368,17 @@ const CLOSED: Partial<Record<string, string>> = {
 export async function viewTexts(db: Db, texts: readonly StoredText[], today: string, timezone = "UTC", now: Date = new Date()): Promise<TextView[]> {
   const ids = texts.map((t) => t.id);
   const appIds = Array.from(new Set(texts.filter((t) => t.subjectType === SEAT_TERMS).map((t) => t.subjectRef)));
-  const [parties, alignments, seals, apps, facts, endings] = await Promise.all([
+  // A membership letter's signing (PR9), named by the second half of its ref.
+  const signingOfText = (t: StoredText) => (t.subjectType === MEMBERSHIP ? (readMembershipRef(t.subjectRef)?.signingId ?? null) : null);
+  const signingIds = Array.from(new Set(texts.map(signingOfText).filter((s): s is string => !!s)));
+  const [parties, alignments, seals, apps, facts, endings, signings] = await Promise.all([
     partiesOf(db, ids),
     alignmentsOf(db, ids),
     sealsOf(db, ids),
     readApplications(db, appIds),
     seatingFacts(db, appIds),
     endingsOf(db, ids),
+    signingStatuses(db, signingIds),
   ]);
   const tz = timezone || "UTC";
   const seatIds = Array.from(new Set(apps.flatMap((a) => a.seatIds)));
@@ -354,6 +395,7 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
     const aligned = alignments.filter((a) => a.textId === text.id);
     const seal = seals.find((s) => s.textId === text.id) ?? null;
     const ends = endings.filter((e) => e.textId === text.id);
+    const signingId = signingOfText(text);
     out.push({
       text,
       parties: mine,
@@ -365,6 +407,7 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
       endings: ends,
       timezone: tz,
       effectiveTo,
+      signing: signingId && signings.has(signingId) ? { id: signingId, status: signings.get(signingId) as string } : null,
       derived: deriveAlignmentState({
         contentHash: text.contentHash,
         parties: mine,
@@ -487,7 +530,7 @@ export async function settleText(deps: SettleDeps, textId: string): Promise<Text
   if (!v) return null;
   if (v.derived.state === "in-force") {
     // A member who is a party hears as a party, and never again as the village's holder or admin.
-    await tellParties(deps, v, `Aligned and in force: the terms for ${seatList(v.seatNames)}`, "in-force");
+    if (tellsInForce(v.text.subjectType)) await tellParties(deps, v, `Aligned and in force: the terms for ${seatList(v.seatNames)}`, "in-force");
     /*
      * VERSION n ENDS WHEN VERSION n+1 IS IN FORCE (PR8). An amendment's text
      * names the text it supersedes; the moment it is in force, the earlier
@@ -576,6 +619,16 @@ export interface PartyActs {
 
 export interface ServedAlignment {
   textId: string | null;
+  /** The subject: `seat_terms`, or `membership` for the letter (PR9). */
+  kind: string;
+  /** The sentence beside the Align button for this text. */
+  intent: string;
+  /**
+   * For a member reading their OWN membership letter (PR9): what the village
+   * did with the signing it came from. Null for everything else, and never
+   * served to another reader.
+   */
+  answer: SigningAnswer | null;
   title: string;
   body: string;
   version: number;
@@ -624,9 +677,9 @@ export function endingLineOf(v: Pick<TextView, "derived" | "text" | "timezone">,
   return null;
 }
 
-/** What one party may do about the terms ending, from the derivation. */
-export function actsOf(v: Pick<TextView, "derived" | "timezone">, partyKey: string): PartyActs {
-  const open = v.derived.state !== "ended" && v.derived.allAligned;
+/** What one party may do about the terms ending, from the derivation. A subject that ends only when a party leaves offers nothing. */
+export function actsOf(v: Pick<TextView, "derived" | "timezone"> & { text?: Pick<StoredText, "subjectType"> }, partyKey: string): PartyActs {
+  const open = v.derived.state !== "ended" && v.derived.allAligned && (!v.text || endsByAct(v.text.subjectType));
   const notice = v.derived.notices.find((n) => n.partyKey === partyKey) ?? null;
   const ask = v.derived.asks.find((a) => a.partyKey === partyKey) ?? null;
   return {
@@ -666,8 +719,13 @@ export async function presentView(
   const mine = viewerId ? parties.find((p) => p.partyKey === userParty(viewerId)) ?? null : null;
   const labelOf = (key: string) => parties.find((p) => p.partyKey === key)?.label ?? "A party";
   const endingLine = endingLineOf(v, labelOf);
+  const letter = v.text.subjectType === MEMBERSHIP;
   return {
     textId: v.text.id,
+    kind: v.text.subjectType,
+    intent: letter ? letterIntent(v.text.title) : intentSentence(v.seatNames),
+    // The village's answer to the signing is the member's own business: only they read it.
+    answer: letter && mine && v.signing ? signingAnswer(v.signing.status) : null,
     title: v.text.title,
     body: v.text.body,
     version: v.text.version,

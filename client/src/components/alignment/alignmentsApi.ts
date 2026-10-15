@@ -8,6 +8,7 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { AlignmentState, AlignMethod } from "@shared/alignments";
+import type { SigningAnswer } from "@shared/membershipSigning";
 import type { RegisterPage } from "@shared/alignedRegister";
 
 export interface PartyChip {
@@ -30,6 +31,12 @@ export interface PartyActs {
 
 export interface ServedAlignment {
   textId: string | null;
+  /** The subject: `seat_terms`, or `membership` for the letter (PR9). Absent reads as seat terms. */
+  kind?: string;
+  /** The sentence beside the Align button for this text. */
+  intent?: string;
+  /** For your OWN membership letter: what the village did with the signing it came from (PR9). */
+  answer?: SigningAnswer | null;
   title: string;
   body: string;
   version: number;

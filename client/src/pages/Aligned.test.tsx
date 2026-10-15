@@ -185,6 +185,40 @@ describe("a member reads the record", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Show earlier terms" })).toBeNull());
   });
 
+  it("the Membership letter kind (PR9): a filter of its own, and the village reads as the letter's author, never as waiting", async () => {
+    const letter = row({
+      textId: "at-0000000000000004",
+      kind: "membership",
+      kindLabel: "Membership letter",
+      title: "Love Letter",
+      body: "Dear Future Fernhollow Family Member,\n",
+      seatNames: [],
+      money: false,
+      village: null,
+      href: null,
+      parties: [
+        { partyKey: "user:u-ana", label: "Ana Quillfeather", capacity: "individually", required: true, aligned: true, alignedOn: "2026-10-11" },
+        { partyKey: "village", label: "The village", capacity: "for the village", required: false, aligned: false, alignedOn: null },
+      ],
+    });
+    const kinds = [
+      { id: "seat_terms", label: "Seat terms" },
+      { id: "membership", label: "Membership letter" },
+    ];
+    serve((url) => json({ kinds, rows: url.includes("kind=membership") ? [letter] : [...ROWS, letter], more: false, query: null }));
+    render(<Aligned />);
+    const filter = await screen.findByRole("group", { name: "Kinds" });
+    fireEvent.click(within(filter).getByRole("button", { name: "Membership letter" }));
+    await waitFor(() => expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain("/api/aligned?kind=membership"));
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(1));
+    const article = screen.getByRole("article", { name: "Love Letter" });
+    expect(article.textContent).toContain("Membership letter");
+    expect(article.textContent).toContain("Ana Quillfeather, individually: aligned 11 October 2026");
+    expect(article.textContent).toContain("The village, for the village: wrote these words");
+    expect(article.textContent).not.toContain("not yet");
+    expect(within(article).queryByRole("link", { name: "Read the application" })).toBeNull();
+  });
+
   it("an empty register says so", async () => {
     serve(() => page([]));
     render(<Aligned />);

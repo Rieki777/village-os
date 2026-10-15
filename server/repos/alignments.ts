@@ -394,11 +394,15 @@ export async function sealsOf(db: Db, textIds: readonly string[]): Promise<Store
  */
 export async function textsToSettle(db: Db, recentDays = 400): Promise<string[]> {
   // A text whose application was withdrawn or not adopted can never be sealed
-  // or come into force, so the sweep does not read it again (red team D9).
+  // or come into force, so the sweep does not read it again (red team D9). A
+  // sealed membership letter (PR9) has nothing left to settle either: it was in
+  // force at the member's click, nobody is told, and the next signing writes its
+  // supersession. A village holds a letter per member, so the sweep skips them.
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT t.id FROM alignment_texts t LEFT JOIN alignment_seals s ON s.text_id = t.id " +
       "LEFT JOIN seat_applications a ON t.subject_type = 'seat_terms' AND a.id = t.subject_ref " +
       "WHERE (a.id IS NULL OR a.status NOT IN ('withdrawn','not-adopted')) " +
+      "AND (t.subject_type <> 'membership' OR s.text_id IS NULL) " +
       "AND (s.text_id IS NULL OR t.created_at >= UTC_TIMESTAMP() - INTERVAL ? DAY) ORDER BY t.created_at LIMIT 2000",
     [recentDays],
   );

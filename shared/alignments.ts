@@ -25,9 +25,20 @@
 import { seatList } from "./seatApplications";
 import { MONEY_GROUPS, settingsWords, type SeatSettings } from "./seatSettings";
 
-/** The subjects a text can be about. Seat terms today; the rest arrive with their own PRs. */
+/**
+ * The subjects a text can be about. Seat terms, and since PR9 the membership
+ * letter (`membership`, shared/membershipLetter.ts); the village agreement
+ * arrives with its own PR.
+ */
 export const SEAT_TERMS = "seat_terms";
-export type AlignmentSubject = typeof SEAT_TERMS;
+/**
+ * The membership letter (PR9). Named here as well as in
+ * shared/membershipLetter.ts, which is typed against this union, so a page
+ * that only needs the name (the profile's list) does not pull the letter's
+ * words into its own chunk.
+ */
+export const MEMBERSHIP = "membership";
+export type AlignmentSubject = typeof SEAT_TERMS | typeof MEMBERSHIP;
 
 /** The village, as a party. A member is `user:<id>`. */
 export const VILLAGE_PARTY = "village";
@@ -59,6 +70,12 @@ export const ALIGN_WORDS = {
   youAligned: (on: string) => `You aligned on ${on}`,
   partyAligned: (who: string) => `${who}, aligned`,
   partyWaiting: (who: string) => `${who}, not yet`,
+  /**
+   * A party who need not align and has not: on a membership letter, the
+   * village, whose side is the letter itself (PR9). Never "not yet": nobody
+   * is waiting on them.
+   */
+  partyWrote: (who: string) => `${who}, wrote these words`,
   village: "The village",
   formerMember: "A former member",
   sectionHeading: "What you have aligned with",

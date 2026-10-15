@@ -129,6 +129,11 @@ describe("no public event anywhere in the alignment store", () => {
     "server/lib/alignmentEndings.ts",
     "client/src/components/alignment/EndingActions.tsx",
     "client/src/components/alignment/LeavingEnds.tsx",
+    // The membership letter (PR9).
+    "shared/membershipLetter.ts",
+    "server/lib/membershipLetter.ts",
+    "server/routes/membershipLetter.ts",
+    "server/repos/membershipSignings.ts",
   ];
   const code = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 

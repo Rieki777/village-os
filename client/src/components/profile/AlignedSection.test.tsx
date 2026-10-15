@@ -5,6 +5,10 @@
  *   - your own: waiting on you first, with Align, then in force, then ended;
  *     every row a receipt;
  *   - empty: says so;
+ *   - your membership letter (PR9), the journey's old "Your signing": titled
+ *     with what the village calls it, the village's answer to the signing,
+ *     the words a tap away, the village as the letter's author and never as
+ *     waiting, and no notice or agreement to give;
  *   - another member's, for a reader the server answers: their rows, no Align,
  *     no hash; a 401 renders nothing at all (visitors get nothing).
  */
@@ -87,7 +91,42 @@ describe("your own", () => {
   it("says so when there is nothing yet", async () => {
     serve({ "/api/profile/alignments": () => json({ alignments: [] }) });
     render(<AlignedSection />);
-    expect(await screen.findByText("Nothing yet. When you apply for seats, the terms you align with are kept here.")).toBeTruthy();
+    expect(await screen.findByText("Nothing yet. When you align with the village's letter or apply for seats, the words you align with are kept here.")).toBeTruthy();
+  });
+
+  it("your membership letter sits beside your seat terms, says what the village did with the signing, and opens its words in place", async () => {
+    const letter = row({
+      textId: "at-0000000000000009",
+      kind: "membership",
+      intent: "I align with the Love Letter.",
+      answer: "welcomed",
+      title: "Love Letter",
+      body: "Dear Future Fernhollow Family Member,\n\nTamsin planted the first grove.\n",
+      seatNames: [],
+      href: null,
+      parties: [
+        { partyKey: "user:u-ana", label: "Ana Quillfeather", capacity: "individually", required: true, aligned: true, at: "2026-10-11T10:00:00.000Z", method: "click" },
+        { partyKey: "village", label: "The village", capacity: "for the village", required: false, aligned: false, at: null, method: null },
+      ],
+      you: { partyKey: "user:u-ana", aligned: true, alignedAt: "2026-10-11T10:00:00.000Z", mayAlign: false, acts: { mayGiveNotice: false, notice: null, mayEndByAgreement: false, ask: null } },
+      createdAt: "2026-10-11T10:00:00.000Z",
+    });
+    serve({ "/api/profile/alignments": () => json({ alignments: [ROWS[1], letter] }) });
+    render(<AlignedSection />);
+    const card = await screen.findByRole("region", { name: "Love Letter" });
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Love Letter", "Terms for Orchard steward"]);
+    expect(card.textContent).toContain("The village said yes, and you hold membership.");
+    expect(card.textContent).toContain("You aligned on 11 Oct 2026");
+    expect(card.textContent).toContain("The village, wrote these words");
+    expect(card.textContent).not.toContain("not yet");
+    expect(screen.queryByRole("button", { name: "Give notice" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "End by agreement" })).toBeNull();
+    // The words open in place: there is no application page for a letter.
+    const words = screen.getByText("Read the words you aligned with");
+    expect(words.closest("details")?.textContent).toContain("Tamsin planted the first grove.");
+    expect(screen.getAllByRole("link", { name: "Read the application" })).toHaveLength(1);
+    // The copy aligns; it never signs.
+    expect(card.textContent ?? "").not.toMatch(/\bsign/i);
   });
 
   it("sorts by state when nobody waits on you", () => {

@@ -8,6 +8,14 @@
  * then in force, then ended. A waiting one carries its Align button; every one
  * carries its receipt.
  *
+ * THE MEMBERSHIP LETTER LIVES HERE TOO (seat settings PR9). The journey
+ * section's "Your signing" moved in: a member who signs the Love Letter now
+ * aligns with its words, and that letter is one of these rows, titled with what
+ * the village calls it, with the words a tap away (there is no application
+ * page to send them to) and the village's answer to the signing it came from.
+ * A signing from before PR9 has no text and no hash, so it is never one of
+ * these rows; it stays in the journey section as a signing.
+ *
  * On another member's profile: the same list from
  * `GET /api/alignments?party=<handle>`, for a reader holding `terms.read`,
  * with no hash and no salt. Anybody else is answered 401 and this renders
@@ -21,7 +29,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ScrollText } from "lucide-react";
-import { ALIGN_WORDS, type AlignmentState } from "@shared/alignments";
+import { ALIGN_WORDS, MEMBERSHIP, type AlignmentState } from "@shared/alignments";
 import { ALIGNED_WORDS } from "@shared/alignedRegister";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { ReconfirmPanel } from "@/components/alignment/AlignButton";
@@ -30,8 +38,10 @@ import { fetchMyAlignments, fetchTheirAlignments, type ServedAlignment } from "@
 export const ALIGNED_SECTION_WORDS = {
   heading: ALIGN_WORDS.sectionHeading,
   theirs: ALIGN_WORDS.theirHeading,
-  empty: "Nothing yet. When you apply for seats, the terms you align with are kept here.",
+  empty: "Nothing yet. When you align with the village's letter or apply for seats, the words you align with are kept here.",
   readWords: "Read the application",
+  /** A membership letter has no application page: its words open in place (PR9). */
+  readLetter: "Read the words you aligned with",
   confirmed: ALIGN_WORDS.reconfirmed,
   register: ALIGNED_WORDS.profileDoor,
 } as const;
@@ -50,6 +60,19 @@ function Rows({ rows, onChanged }: { rows: ServedAlignment[]; onChanged?: () => 
       {sortForSheet(rows).map((r) => (
         <li key={r.textId ?? r.title}>
           <AlignmentCard alignment={r} headingLevel={3} showWords={false} onChanged={onChanged} />
+          {r.kind === MEMBERSHIP && (
+            <details className="mt-1">
+              <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-lg px-1 text-sm font-medium text-notice underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring">
+                {ALIGNED_SECTION_WORDS.readLetter}
+              </summary>
+              <pre
+                data-alignment-words=""
+                className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background p-4 font-sans text-sm leading-relaxed text-foreground"
+              >
+                {r.body}
+              </pre>
+            </details>
+          )}
           {r.href && (
             <Link
               href={r.href}

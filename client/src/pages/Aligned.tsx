@@ -10,10 +10,10 @@
  * count anywhere (R55). A year with one text and a year with forty get the
  * same heading.
  *
- * KINDS. "Seat terms" today. The kinds come from the server, which reads
- * them from REGISTER_KINDS (shared/alignedRegister.ts); the filter draws only
- * once there are two, so "Membership letter" and "Village agreement" arrive
- * with no change here.
+ * KINDS. "Seat terms" and, since seat settings PR9, "Membership letter". The
+ * kinds come from the server, which reads them from REGISTER_KINDS
+ * (shared/alignedRegister.ts); the filter draws once there are two, which the
+ * letter made true, and "Village agreement" will arrive with no change here.
  *
  * SEARCH runs on the server, over a BM25 index built for that one request
  * from the rows this member may read. It never reaches the concierge.
