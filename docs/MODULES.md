@@ -584,7 +584,7 @@ An outside service reads your meetings and records, and suggests changes to your
 | API prefixes | `/api/saberra` |
 | What a village plants | `saberra-api-secret` |
 | Contract doc | [organisational-memory.md](modules/organisational-memory.md) |
-| Config it seeds | `apiUrl`, `dashboardUrl` |
+| Config it seeds | `apiUrl`, `dashboardUrl`, `pollSchedule` |
 | Counterparty | Saberra LLC, https://saberra.com, support hello@saberra.com |
 
 ## Connect

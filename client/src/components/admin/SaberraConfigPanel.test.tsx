@@ -17,21 +17,27 @@
  *      checked and asks the server nothing about it. The control is the
  *      preview case, where it does ask.
  *   4. The key is never on this screen, not even its last four characters.
+ *   5. The schedule beside Sync now saves through the same config route, and
+ *      every run is reported under it in full, in the village's own time,
+ *      with the schedule's backoff said in words. While the module is off the
+ *      schedule can still be set and the log is never asked for.
  *
  * `fetch` is stubbed. The routes behind it have their own server tests.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import SaberraConfigPanel from "./SaberraConfigPanel";
+import { villageTime } from "./SaberraSyncSchedule";
 
 type Answer = { status: number; body: unknown };
 
 let lifecycle = "preview";
 let status: Answer;
 let sync: Answer;
+let runs: Answer;
 /**
  * What each read of the stored config answers, in order; the last one repeats.
  * The panel reads once on mount and `save` reads again just before it writes,
@@ -44,6 +50,40 @@ const READY = {
   held: 7,
   addressSet: true,
 };
+
+const EMPTY_LOG = {
+  schedule: "off",
+  schedulerOn: true,
+  timezone: "America/Costa_Rica",
+  nextAt: null,
+  blocked: null,
+  backoff: { failures: 0, factor: 1 },
+  runs: [],
+};
+
+/** One run as the server logs it: every field typed, nothing the service wrote. */
+const run = (over: Record<string, unknown>) => ({
+  at: "2026-10-15T18:00:00.000Z",
+  trigger: "scheduled",
+  outcome: "landed",
+  reason: null,
+  error: null,
+  ms: 1400,
+  records: 58,
+  facts: 58,
+  landed: 19,
+  refused: 0,
+  superseded: 1,
+  rebatched: 18,
+  held: 0,
+  addresses: 0,
+  skipped: ["tension", "risk"],
+  truncated: [],
+  failed: [],
+  plan: "schema",
+  circles: { placed: 56, unresolved: 0, absent: 0, several: 0, inArchived: 3, shapes: ["list of 1 id"] },
+  ...over,
+});
 
 const calls = () => (globalThis.fetch as unknown as { mock: { calls: [string, any][] } }).mock.calls;
 const callsTo = (path: string, method = "GET") =>
@@ -64,6 +104,7 @@ function stub() {
       }
       if (url === "/api/saberra/status") return reply(status);
       if (url === "/api/saberra/sync" && method === "POST") return reply(sync);
+      if (url === "/api/saberra/runs") return reply(runs);
       return reply({ status: 404, body: {} });
     }),
   );
@@ -77,6 +118,7 @@ beforeEach(() => {
   status = { status: 200, body: READY };
   sync = { status: 200, body: { landed: 0, facts: 0, failures: [], truncated: [], notOffered: [] } };
   stored = [{ apiUrl: "", dashboardUrl: "" }];
+  runs = { status: 200, body: { ...EMPTY_LOG } };
   stub();
 });
 
@@ -328,5 +370,137 @@ describe("Sync now", () => {
     renderPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
     expect((await screen.findByRole("alert")).textContent).toContain("no https address for the service yet");
+  });
+});
+
+describe("the schedule beside Sync now", () => {
+  it("SAVES THE SCHEDULE THROUGH THE MODULE CONFIG ROUTE, carrying only the schedule", async () => {
+    stored = [
+      { apiUrl: "https://a.example.org", dashboardUrl: "https://d1.example.org" },
+      { apiUrl: "https://a2.example.org", dashboardUrl: "https://d1.example.org" },
+    ];
+    renderPanel();
+    const select = (await screen.findByLabelText(/Sync by itself/)) as HTMLSelectElement;
+    expect(select.value).toBe("off");
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(["Off", "Daily", "Every 6 hours"]);
+    const readsBefore = callsTo("/api/saberra/runs").length;
+    fireEvent.change(select, { target: { value: "every-6-hours" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    await waitFor(() => expect(callsTo("/api/admin/modules/saberra/config", "PUT")).toHaveLength(1));
+    const [, init] = callsTo("/api/admin/modules/saberra/config", "PUT")[0]!;
+    // Another admin's address change since this tab loaded survives the save.
+    expect(JSON.parse(init.body).config).toEqual({
+      apiUrl: "https://a2.example.org",
+      dashboardUrl: "https://d1.example.org",
+      pollSchedule: "every-6-hours",
+    });
+    expect(init.headers.Authorization).toBe("Bearer secret");
+    // And the log is read again, so the next scheduled time follows the save.
+    await waitFor(() => expect(callsTo("/api/saberra/runs").length).toBeGreaterThan(readsBefore));
+  });
+
+  it("shows the stored schedule, and saves nothing that did not change", async () => {
+    stored = [{ apiUrl: "", dashboardUrl: "", pollSchedule: "daily" }];
+    renderPanel();
+    await waitFor(async () => expect(((await screen.findByLabelText(/Sync by itself/)) as HTMLSelectElement).value).toBe("daily"));
+    expect(screen.getByRole("button", { name: "Save schedule" })).toBeDisabled();
+  });
+
+  it("CAN BE SET WHILE THE MODULE IS OFF, and the log is never asked for then", async () => {
+    lifecycle = "off";
+    renderPanel();
+    expect(await screen.findByLabelText(/Sync by itself/)).toBeInTheDocument();
+    expect(screen.getByText(/A schedule saved now starts once the module is on/)).toBeInTheDocument();
+    expect(callsTo("/api/saberra/runs")).toHaveLength(0);
+  });
+});
+
+describe("the report of each run", () => {
+  it("TELLS THE TIME IN THE VILLAGE'S ZONE, never the server's", () => {
+    // Midnight UTC is six in the evening the day before in Costa Rica.
+    const shown = villageTime("2026-10-16T00:00:00.000Z", "America/Costa_Rica");
+    expect(shown).toContain("Oct 15");
+    expect(shown).toContain("6:00");
+    expect(shown).not.toContain("12:00");
+  });
+
+  it("SHOWS THE NEXT SCHEDULED SYNC AND EVERY RUN IN FULL", async () => {
+    const nextAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    runs = {
+      status: 200,
+      body: {
+        ...EMPTY_LOG,
+        schedule: "every-6-hours",
+        nextAt,
+        runs: [
+          run({ trigger: "by-hand" }),
+          run({ at: "2026-10-15T12:00:00.000Z", outcome: "no-change", landed: 0, rebatched: 0, superseded: 0, facts: 0, circles: null }),
+          run({
+            at: "2026-10-15T06:00:00.000Z",
+            outcome: "failed",
+            reason: "kind-failed",
+            error: "Some kinds could not be read, so this scheduled sync sent nothing to the review queue.",
+            records: 40,
+            landed: 0,
+            failed: [{ kind: "roleAssignment", why: "vendor-error" }],
+            circles: null,
+          }),
+          run({ at: "2026-10-15T00:00:00.000Z", outcome: "not-run", reason: "no-key", error: "Not run: no key is set for the service.", records: 0, plan: null, circles: null, skipped: [] }),
+        ],
+      },
+    };
+    renderPanel();
+    expect(await screen.findByText(`Next scheduled sync: ${villageTime(nextAt, "America/Costa_Rica")}.`)).toBeInTheDocument();
+    expect(screen.getByText("Times are village time, America/Costa Rica.")).toBeInTheDocument();
+    const log = screen.getByRole("list", { name: "Recent syncs, newest first" });
+    const text = log.textContent ?? "";
+    expect(text).toContain("Sent to the review queue · By hand · ");
+    expect(text).toContain("58 records read. 19 suggestions reached the review queue: 18 carried forward unchanged, 1 replaced by a changed claim, 0 refused. 58 facts stored.");
+    expect(text).toContain("Not offered by the service, so not asked for: tension, risk.");
+    expect(text).toContain(
+      "Circles: 56 placed, 0 unresolved, 0 with none, 0 naming several, 3 in an archived circle. The circle field arrived as: list of 1 id.",
+    );
+    expect(text).toContain("No changes · Scheduled · ");
+    expect(text).toContain("the same as the last sync that reached the review queue. Nothing in the queue was touched.");
+    expect(text).toContain("role assignment: the service said no.");
+    expect(text).toContain("Not run: no key is set for the service.");
+    expect(text).toContain("Not offered by the service, so not asked for: tension, risk. Kinds chosen from the service's own schema.");
+    expect(text).toContain(villageTime("2026-10-15T18:00:00.000Z", "America/Costa_Rica"));
+  });
+
+  it("SAYS SO WHEN THE SCHEDULE IS BACKING OFF, and how far", async () => {
+    runs = {
+      status: 200,
+      body: { ...EMPTY_LOG, schedule: "daily", nextAt: new Date(Date.now() + 86400000).toISOString(), backoff: { failures: 3, factor: 4 } },
+    };
+    renderPanel();
+    expect(
+      await screen.findByText("The last 3 syncs failed, so the schedule waits four times as long before it tries again."),
+    ).toBeInTheDocument();
+  });
+
+  it("says what the schedule is waiting for, and when it is off", async () => {
+    runs = { status: 200, body: { ...EMPTY_LOG, schedule: "daily", blocked: "no-key" } };
+    renderPanel();
+    expect(await screen.findByText(/Waiting for a key this server can use/)).toBeInTheDocument();
+    cleanup();
+    runs = { status: 200, body: { ...EMPTY_LOG } };
+    renderPanel();
+    expect(await screen.findByText("Off. A sync runs only when somebody presses Sync now.")).toBeInTheDocument();
+    expect(screen.getByText("No sync has run yet.")).toBeInTheDocument();
+  });
+
+  it("READS THE LOG AGAIN AFTER SYNC NOW, so the press appears under it", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
+    await screen.findByText(/reached the review queue/);
+    await waitFor(() => expect(callsTo("/api/saberra/runs").length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("says a log it cannot read is unreadable, and leaves the button working", async () => {
+    runs = { status: 200, body: { runs: "nope" } };
+    renderPanel();
+    expect(await screen.findByText(/sync log came back in a shape this screen cannot read/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync now" })).toBeEnabled();
   });
 });
