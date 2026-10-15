@@ -42,9 +42,12 @@ afterAll(async () => {
 
 const current = () => themeCssVersion(buildThemeCss(BRAND.theme));
 
+/** Every request in this file goes to the test server above, on 127.0.0.1, through this one line. */
+const get = (path: string, init?: RequestInit) => fetch(`${base}${path}`, init); // module-review-ok: a test calling its own local server, never an outside host
+
 describe("GET /api/brand/theme.css", () => {
   it("lets a link naming the current version keep the bytes for a year", async () => {
-    const res = await fetch(`${base}/api/brand/theme.css?v=${current()}`);
+    const res = await get(`/api/brand/theme.css?v=${current()}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(res.headers.get("etag")).toBe(`"${current()}"`);
@@ -53,14 +56,14 @@ describe("GET /api/brand/theme.css", () => {
   });
 
   it("sends a stale version current CSS that it must check again", async () => {
-    const res = await fetch(`${base}/api/brand/theme.css?v=0000000000000000`);
+    const res = await get(`/api/brand/theme.css?v=0000000000000000`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-cache");
     expect(await res.text()).toBe(buildThemeCss(BRAND.theme));
   });
 
   it("answers the bare link the way it always did", async () => {
-    const res = await fetch(`${base}/api/brand/theme.css`);
+    const res = await get(`/api/brand/theme.css`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-cache");
     // The ETag is the same hash the shell's link carries.
@@ -68,7 +71,7 @@ describe("GET /api/brand/theme.css", () => {
   });
 
   it("answers 304 to a browser that already holds these bytes", async () => {
-    const res = await fetch(`${base}/api/brand/theme.css`, { headers: { "If-None-Match": `"${current()}"` } });
+    const res = await get(`/api/brand/theme.css`, { headers: { "If-None-Match": `"${current()}"` } });
     expect(res.status).toBe(304);
   });
 
@@ -82,10 +85,10 @@ describe("GET /api/brand/theme.css", () => {
       expect(after).not.toBe(before);
       const v = /\?v=([0-9a-f]{16})"/.exec(after)?.[1];
       expect(v).toBeTruthy();
-      const res = await fetch(`${base}/api/brand/theme.css?v=${v}`);
+      const res = await get(`/api/brand/theme.css?v=${v}`);
       expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
       // The old version is now stale, so a cache can never hold the new bytes under it.
-      const old = await fetch(`${base}/api/brand/theme.css?v=${current()}`);
+      const old = await get(`/api/brand/theme.css?v=${current()}`);
       expect(old.headers.get("cache-control")).toBe("no-cache");
     } finally {
       brand = BRAND;
@@ -95,7 +98,7 @@ describe("GET /api/brand/theme.css", () => {
   it("reads a brand document with no theme as the untouched fork", async () => {
     brand = {};
     try {
-      const res = await fetch(`${base}/api/brand/theme.css`);
+      const res = await get(`/api/brand/theme.css`);
       expect(await res.text()).toBe("");
       expect(res.headers.get("etag")).toBe(`"${themeCssVersion("")}"`);
     } finally {
