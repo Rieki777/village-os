@@ -1346,7 +1346,7 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
     minutesShareable: minutes.shareable,
     closedAt: now,
   });
-  // The task layer's state rows (0252), in this transaction: a task exists the
+  // The task layer's state rows (0255), in this transaction: a task exists the
   // moment the close does, whichever close it was. A second run adds nothing.
   await seedStateForSession(conn, sessionId);
   return done({

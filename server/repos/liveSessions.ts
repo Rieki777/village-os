@@ -532,7 +532,7 @@ export async function sessionIdsNaming(q: Queryable, no: number): Promise<number
       "UNION SELECT `session_id` FROM `live_session_responses` WHERE `member_no` = ? " +
       "UNION SELECT `session_id` FROM `live_session_items` WHERE `added_by_no` = ? OR `presenter_no` = ? " +
       "UNION SELECT `id` FROM `live_sessions` WHERE `facilitator_no` = ? OR `secretary_no` = ? OR `created_by_no` = ? " +
-      // The task layer (0252, server/repos/sessionTasks.ts): what they hold,
+      // The task layer (0255, server/repos/sessionTasks.ts): what they hold,
       // the answers they gave, and the task emails they sent.
       "UNION SELECT `session_id` FROM `live_session_task_state` WHERE `owner_no` = ? OR `changed_by_no` = ? " +
       "UNION SELECT `session_id` FROM `live_session_task_events` WHERE `by_no` = ? OR `owner_no` = ? " +

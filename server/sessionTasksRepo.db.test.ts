@@ -1,8 +1,8 @@
 /**
- * The task layer's store against a real schema: drizzle/0252's three tables
+ * The task layer's store against a real schema: drizzle/0255's three tables
  * and every statement in server/repos/sessionTasks.ts.
  *
- * The harness migrates the scratch schema, 0252 included, before the first
+ * The harness migrates the scratch schema, 0255 included, before the first
  * case, so the tables here are the ones the migration made. The backfill is
  * then run again by hand over sessions this file writes, the way an instance
  * that already holds closed sessions meets it at boot, and once more to show
@@ -26,7 +26,7 @@ import { inTransaction, sessionIdsNaming } from "./repos/liveSessions";
 import * as tasks from "./repos/sessionTasks";
 import { applyAnswer, eventFor, type TaskState } from "../shared/sessionTasks";
 
-const MIGRATION = "0252_a_task_keeps_going_after_the_call.sql";
+const MIGRATION = "0255_a_task_keeps_going_after_the_call.sql";
 
 /** A state row as the store hands it back, in the contract's names. */
 const asState = (r: any): TaskState => ({

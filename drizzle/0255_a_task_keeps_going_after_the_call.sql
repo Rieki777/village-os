@@ -1,4 +1,4 @@
--- 0252: a task keeps going after the call.
+-- 0255: a task keeps going after the call.
 --
 -- Three new tables and one backfill into the first of them, so this file is
 -- expand-only: the previous release neither reads nor writes any of them, and

@@ -12,7 +12,7 @@ Provenance: platform
 > (below, "After the call: tasks") has its own contract in `shared/sessionTasks.ts`, its doors in
 > `server/routes/sessionTasks.ts`, its rules in `server/lib/sessionTasks.ts`, its emails in
 > `server/lib/sessionTaskMail.ts`, its statements in `server/repos/sessionTasks.ts` and its schema
-> in `drizzle/0252_a_task_keeps_going_after_the_call.sql`.
+> in `drizzle/0255_a_task_keeps_going_after_the_call.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -157,7 +157,7 @@ every half minute while its tab is visible.
 
 Nine tables, all new. A person is a number: `live_session_members` gives each member who ever opens
 or joins a session one number, and every person column in the other eight holds that number. The
-last three (0252) are the task layer, described under "After the call: tasks".
+last three (0255) are the task layer, described under "After the call: tasks".
 
 | Table | Holds |
 |---|---|

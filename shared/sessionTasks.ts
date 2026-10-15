@@ -10,7 +10,7 @@
  * THE RECORD STAYS AS SAID. The words a session wrote down never change after
  * close: `live_session_entries` and the frozen minutes are left alone, and the
  * room keeps refusing writes to a closed session. What happens to an action
- * afterwards lives in a separate state layer (drizzle/0252): one row per task
+ * afterwards lives in a separate state layer (drizzle/0255): one row per task
  * with where it stands now, and an append-only list of every answer given to
  * it. Each answer moves the state by one step, through `applyAnswer` below.
  *

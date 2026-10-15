@@ -1,5 +1,5 @@
 /**
- * The task layer's three tables (0252): `live_session_task_state`,
+ * The task layer's three tables (0255): `live_session_task_state`,
  * `live_session_task_events` and `live_session_task_sends`. Every statement
  * the task board, the answers, the task emails and the due-date notes run
  * against them, one function each, and the joins they make to the session
@@ -80,7 +80,7 @@ const TASK_FROM =
  * open or done, as the close left it. An open one nobody holds (its holder
  * left the village, say) is back with the circle, and its next call's action
  * check still shows it. The
- * same statement as 0252's backfill, scoped to one session, and run inside
+ * same statement as 0255's backfill, scoped to one session, and run inside
  * the close's own transaction on its connection, after `writeClosed`, so the
  * row and the close commit together. INSERT IGNORE: a second run changes
  * nothing, and a row that has been answered keeps its answers.

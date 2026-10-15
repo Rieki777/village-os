@@ -240,7 +240,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
   });
 
   it("changes nothing when the migration's backfill meets rows a close already seeded", async () => {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, "0252_a_task_keeps_going_after_the_call.sql"), "utf8");
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, "0255_a_task_keeps_going_after_the_call.sql"), "utf8");
     const [insert] = splitStatements(sql).filter((st) => /^INSERT IGNORE/i.test(st));
     for (let run = 0; run < 2; run++) {
       const [r] = await pool.query<any>(insert); // module-review-ok: the migration's own statement, run again against the scratch schema
@@ -389,7 +389,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     await q("DELETE FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
     await q("UPDATE `live_session_entries` SET `owner_no` = NULL WHERE `id` = ?", [pots]);
     await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` - INTERVAL 1 HOUR WHERE `id` = ?", [k1]);
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, "0252_a_task_keeps_going_after_the_call.sql"), "utf8");
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, "0255_a_task_keeps_going_after_the_call.sql"), "utf8");
     const [insert] = splitStatements(sql).filter((st) => /^INSERT IGNORE/i.test(st));
     const [r] = await pool.query<any>(insert); // module-review-ok: the migration's own statement, run again against the scratch schema
     expect(Number(r.affectedRows)).toBe(1);
