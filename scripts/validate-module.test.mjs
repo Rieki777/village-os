@@ -98,7 +98,13 @@ console.log("validate-module: guild manifests");
 
 {
   const dir = brokenShared("guilds.ts", (s) =>
-    s.replace(/(id: "stripe-webhook",[\s\S]*?compost: )\[[\s\S]*?\],\n/, "$1[],\n"),
+    // `\r?\n`, and the terminator CAPTURED rather than retyped, because this
+    // reads a WORKING COPY: a Windows checkout with core.autocrlf=true hands
+    // us `],\r\n`, a bare `\n` matches nothing, the replace silently does
+    // nothing, and brokenShared's guard throws `the edit changed nothing`.
+    // Three lanes lost time to this on 2026-10-13. Line 72 above already had
+    // it right; this was the missed twin.
+    s.replace(/(id: "stripe-webhook",[\s\S]*?compost: )\[[\s\S]*?\](,\r?\n)/, "$1[]$2"),
   );
   const r = run(dir, "stays");
   check("a guild seed with no compost steps fails", r.status === 1);
