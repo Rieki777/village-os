@@ -45,6 +45,8 @@ const state = vi.hoisted(() => ({
    * test is the client's own and never a stub's.
    */
   wire: {} as Record<string, string>,
+  /** Records per wire kind, for a read where circles and roles differ. Wins over `call`. */
+  byKind: {} as Record<string, unknown[]>,
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -75,6 +77,8 @@ vi.mock("../lib/saberraClient", async (importOriginal) => {
       if (bytes !== undefined) {
         return real.callTool({ ...c, fetchImpl: async () => new Response(bytes, { status: 200 }) }, s, t, args);
       }
+      const recs = state.byKind[String(args.kind)];
+      if (recs !== undefined) return { ok: true, records: recs, cursor: null };
       return state.call;
     },
   };
@@ -173,6 +177,7 @@ beforeEach(() => {
   state.asked = [];
   state.tools = { ok: true, tools: [] };
   state.wire = {};
+  state.byKind = {};
 });
 
 describe("who may cause a sync", () => {
@@ -371,6 +376,34 @@ describe("a sync that works", () => {
     expect(payload.seats[0].name).toBe("Water Steward");
     expect(payload.seats[0].circleName).toBe("Land & Ecology");
     expect(payload.title).toContain("suggested by");
+  });
+
+  it("PLACES A SEAT WHOSE CIRCLE ARRIVES AS A RELATION, by handing the translator the circles too", async () => {
+    // The live sync of 2026-10-09: `Circle` on a role is a list of page ids,
+    // and the route used to hand the translator the roles alone, so even a
+    // translator that read relations had nothing to resolve them against.
+    const LAND = "3ed0a88e-f36a-8104-80fa-cd2bfe15c001";
+    state.byKind = {
+      circle: [{ id: LAND, fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
+      role: [{ id: "r-1", fields: { "Role Name": "Water Steward", Circle: [LAND], Body: "Holds the water.", Status: "Vacant" } }],
+      role_assignment: [],
+    };
+    const r = await post("/api/saberra/sync");
+    const org = state.landedPayloads.find((p) => p.kind === "org.proposed");
+    const seat = (org!.payload as { seats: Record<string, unknown>[] }).seats[0];
+    expect(seat).toMatchObject({ name: "Water Steward", circleName: "Land & Ecology", aim: "Holds the water.", sourceStatus: "Vacant" });
+    expect(r.body.circles).toMatchObject({ placed: 1, unresolved: 0, absent: 0, shapes: ["list of 1 id"] });
+  });
+
+  it("ASKS EVERY LANDING TO CARRY A WAITING DUPLICATE FORWARD, so Sync now is safe to press again", async () => {
+    state.byKind = {
+      circle: [{ id: "c-1", fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
+      role: [{ id: "r-1", fields: { "Role Name": "Water Steward" } }],
+      role_assignment: [],
+    };
+    await post("/api/saberra/sync");
+    expect(state.landedPayloads.length).toBeGreaterThan(1);
+    for (const p of state.landedPayloads) expect(p.rebatchWaiting).toBe(true);
   });
 
   it("clips the batch id, because the spine refuses one over its limit", async () => {
