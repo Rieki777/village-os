@@ -37,6 +37,7 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import type { TaskCard } from "./sessionTasks";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
 
@@ -783,6 +784,19 @@ export interface SessionView {
   arrival: ArrivalSummary | null;
   /** From the last closed session in the same circle: its open actions and its backlog. */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
+  /**
+   * Every task from this circle's earlier sessions that is still open, or that
+   * was answered since the circle last met, with its latest answer, as this
+   * viewer may see it (shared/sessionTasks.ts). Always present; empty when the
+   * session has no circle or the circle has no tasks.
+   */
+  circleTasks: TaskCard[];
+  /**
+   * When the circle last met: the close of its last closed session, which the
+   * action check groups by. Null when there are no `circleTasks`, or the circle
+   * has never closed a session.
+   */
+  circleLastMetAt: string | null;
   me: { userId: number; joined: boolean; facilitates: boolean; secretary: boolean; admin: boolean };
 }
 
@@ -1005,7 +1019,7 @@ export const SESSION_COPY = {
   addTension: "Name a tension",
   addDecision: "Write the proposal",
   claim: "I'll take it",
-  release: "Let it go",
+  release: "Hand it back",
   nameSeat: "Name a seat",
   park: "Park it",
   unownedLeft: "still need someone",
@@ -1062,10 +1076,10 @@ export const SESSION_REFUSALS = {
   yoursFull: `One person can add ${SESSION_LIMITS.maxEntriesPerPerson} entries to a session, and you have.`,
   seatUnknown: "That seat is not an active seat in this village.",
   dueOn: "A due date reads like 2026-10-31.",
-  notAction: "Only an action can be claimed or let go.",
+  notAction: "Only an action can be claimed or handed back.",
   heldAlready: "Someone already holds this action.",
   notHeld: "Nobody holds this action yet.",
-  releaseNotYours: "Only the person holding it, or the facilitator, can let it go.",
+  releaseNotYours: "Only the person holding it, or the facilitator, can hand it back.",
   notYours: "Only the person who wrote it, the facilitator, the secretary or an admin in the room can change it.",
   entryStatusUnknown: "An entry is open, done or parked.",
   decisionNotConsented: "A proposal is decided once everyone here has answered and nobody objects.",

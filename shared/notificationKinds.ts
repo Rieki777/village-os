@@ -369,6 +369,28 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} actions from live sessions are held by you or your seats.",
     celebrate: false,
   },
+  // The task layer (server/lib/sessionTaskMail.ts, server/lib/sessionTasks.ts):
+  // a gentle note near a task's date, a task handed back to its circle, and a
+  // task sitting with a seat nobody holds. None of them celebrate: each one
+  // asks somebody to look at work, and none happened TO the reader.
+  session_action_due: {
+    group: "work",
+    blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",
+    many: "{n} tasks you hold are near their dates.",
+    celebrate: false,
+  },
+  session_task_back: {
+    group: "work",
+    blurb: "A task from a session you facilitated was handed back. It comes up at the circle's next action check.",
+    many: "{n} tasks came back to their circles.",
+    celebrate: false,
+  },
+  session_task_unheld: {
+    group: "work",
+    blurb: "A task from a live session sits with a seat nobody holds now. Give it to someone at the next call.",
+    many: "{n} tasks sit with seats nobody holds.",
+    celebrate: false,
+  },
 
   // ── People ────────────────────────────────────────────────────────────────
   arrival: {
