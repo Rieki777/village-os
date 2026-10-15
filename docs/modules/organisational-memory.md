@@ -148,6 +148,7 @@ and be sent the village's key.
 | Action | Gate |
 |---|---|
 | cause a sync, read connection status | `intake.moderate` |
+| read what the journal bridge would send (`GET /api/saberra/outbox`) | `intake.moderate`. Kind, date, code-name, length and status only, never the words. |
 | read what the service holds about a seat | signed in, module on. No capability. |
 
 The second is deliberate: the question that panel answers is whether to put your hand up
@@ -160,6 +161,13 @@ for a seat, and that is not a steward's question.
   lists them.
 - **Nothing is written back to the service.** The vendor's structure-write tools exist and
   no code here calls them.
+- **Journal entries are recorded and not sent.** The journal bridge (part 1, `drizzle/0252_a_journal_crosses_under_a_code_name.sql`)
+  queues every shared entry under a code-name with member names swapped out, plus a weekly
+  team signal, in `saberra_outbox`. The service has not named where journal entries land, so
+  no transport exists and nothing is sent; `docs/modules/journal.md` has the rules. When a
+  transport is wired, this listing's `dataClass` question comes back: pseudonymised member
+  writing is closer to `member-pii` than to `village-content`, and the registry comment on
+  the listing names what that class needs before it goes live.
 - **Seatings are not proposed.** That is the people half.
 
 ## Turning it off

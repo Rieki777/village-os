@@ -64,6 +64,20 @@ function stub() {
       }
       if (url === "/api/saberra/status") return reply(status);
       if (url === "/api/saberra/sync" && method === "POST") return reply(sync);
+      // The outbox listing has its own panel and its own tests (SaberraOutboxPanel.test.tsx).
+      if (url === "/api/saberra/outbox") {
+        return reply({
+          status: 200,
+          body: {
+            writePath: false,
+            journalOn: true,
+            counts: { queued: 0, sent: 0, failed: 0, held: 0 },
+            byKind: { journal_entry: 0, team_signal: 0 },
+            pendingVendorDelete: 0,
+            items: [],
+          },
+        });
+      }
       return reply({ status: 404, body: {} });
     }),
   );
@@ -192,6 +206,9 @@ describe("the connection", () => {
     renderPanel();
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeInTheDocument();
     expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0);
+    // The outbox listing sits behind the same gate and is asked for the same way.
+    expect(await screen.findByText("What Saberra would receive")).toBeInTheDocument();
+    await waitFor(() => expect(callsTo("/api/saberra/outbox").length).toBeGreaterThan(0));
   });
 
   it("SAYS PLAINLY WHEN THE MODULE IS OFF, and asks the server nothing about the connection", async () => {
@@ -202,6 +219,7 @@ describe("the connection", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
     expect(callsTo("/api/saberra/status")).toHaveLength(0);
+    expect(callsTo("/api/saberra/outbox")).toHaveLength(0);
     // The address can still be set while off: setup happens before going live.
     expect(await serviceField()).not.toBeDisabled();
   });

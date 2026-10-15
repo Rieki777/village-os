@@ -1,5 +1,6 @@
 /**
- * The outside governance service, as three routes.
+ * The outside governance service, as four routes: the status, the sync, a
+ * seat's facts, and what the journal bridge would send (nothing yet).
  *
  * ── WHY A PULL AND NOT AN INBOX ──────────────────────────────────────────
  *
@@ -62,6 +63,7 @@ import { callTool, listTools, openSession } from "../lib/saberraClient";
 import { KIND_LABEL, planKinds } from "../lib/saberraKinds";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "../lib/secrets";
 import { factsForEntity, moduleFactCount, upsertFacts } from "../repos/moduleFacts";
+import { outboxView } from "../lib/saberraOutbox";
 import type { VendorRecord } from "../lib/saberraProposals";
 import type { SaberraRecordKind } from "../lib/saberraRecords";
 
@@ -117,6 +119,25 @@ export function register(app: Express, deps: Deps): void {
       res.json({ connection, held, addressSet: serviceUrl() !== null });
     } catch {
       res.status(500).json({ error: "Could not read the connection." });
+    }
+  });
+
+  /**
+   * What the service WOULD receive from the journal, for the setup panel.
+   * Nothing is sent: the service has not named a write path.
+   *
+   * KIND, DATE, CODE-NAME, LENGTH AND STATUS, NEVER THE WORDS. Inside the
+   * village an entry is its author's alone and no admin reads it, so the
+   * payload never reaches this answer: the listing's SELECT does not name it
+   * (server/repos/saberraOutbox.ts). The same gate as the status read, since
+   * it is the same panel.
+   */
+  app.get("/api/saberra/outbox", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json(await outboxView(getPool()));
+    } catch {
+      res.status(500).json({ error: "Could not read what would be sent." });
     }
   });
 
