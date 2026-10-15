@@ -36,6 +36,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { Link } from "wouter";
 import { Home, ArrowLeft, Check, MapPin } from "lucide-react";
 import { hamletNumbers, homeChoices, preselectedHome, type PublicHome } from "@/lib/housingForm";
@@ -100,6 +101,8 @@ export default function ReserveHome() {
    * value set by anything else is visible on submit.
    */
   const [hp, setHp] = useState("");
+  // "Walk me through the next steps" (5.11): a housing request feeds the resident path.
+  const [consent, setConsent] = useState(false);
 
   const [entries, setEntries] = useState<HousingEntry[] | null>(null);
   /** The homes this village published (0131). Same route, same round trip. */
@@ -178,6 +181,7 @@ export default function ReserveHome() {
           structureKey: hamlet || null,
           arrivedFrom,
           hp,
+          [FORM_CONSENT_FIELD]: consent,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -396,6 +400,8 @@ export default function ReserveHome() {
                 className="w-full px-4 py-3 rounded-xl border border-border bg-card"
               />
             </label>
+
+            <PathConsentBox checked={consent} onChange={setConsent} />
 
             {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 

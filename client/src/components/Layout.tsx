@@ -186,7 +186,7 @@ export default function Layout({ children }: LayoutProps) {
               half the width. This breakpoint and the mobile button's below are
               a matched pair and must always move together, or some viewport
               gets no navigation at all. */}
-          <div className="hidden lg:flex items-center gap-4 xl:gap-6">
+          <div className="hidden lg:flex items-center gap-2.5 xl:gap-6">
             {navEntries.map((entry) =>
               isGroup(entry) ? (
                 <NavDropdown
@@ -635,7 +635,7 @@ export default function Layout({ children }: LayoutProps) {
                 </li>
                 <li>
                   <Link href="/quests" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                    Community Quests
+                    Quest Board
                   </Link>
                 </li>
                 {commerceModule && (

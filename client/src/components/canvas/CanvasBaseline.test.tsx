@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * THE CANVAS BASELINE, RENDERED (0232).
+ * THE CANVAS BASELINE, RENDERED (0252).
  *
  * The copy test reads the source for shapes a number can take. This file
  * renders the view and reads what a person would: every block's card in

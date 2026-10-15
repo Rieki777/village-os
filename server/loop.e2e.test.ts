@@ -27,9 +27,9 @@ import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { pathToFileURL } from "url";
 import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 import { verifyDocument } from "./lib/villageExport";
+import { startFakeResend, type FakeResend } from "./testkit/fakeResend";
 import { villageMoonLabel } from "../shared/villageMoon";
 
 /**
@@ -77,38 +77,23 @@ const DIST = path.resolve(process.cwd(), "dist", "index.js");
 /*
  * THE MAIL THIS SERVER SENDS, CAPTURED WHERE IT LEAVES.
  *
- * `sendResendEmail` in server/index.ts posts to a hardcoded
- * `https://api.resend.com/emails` and has no test seam, and with no key it
- * returns before building a request at all, so until now nothing in this suite
- * could see an email's subject or body. The child is started with the preload
- * below (`node --import`), which wraps the global `fetch` and turns any request
- * to api.resend.com into one JSON line in `mailLog` plus a 200. Every other
- * request passes straight through. The production code is unchanged: the
- * outbound request is the exact payload a real provider would have received.
+ * Every email goes out through the post office's one door
+ * (server/lib/comms/transport.ts), which posts to `RESEND_API_BASE`. The child
+ * is started with that pointed at the fake provider (server/testkit/fakeResend.ts),
+ * the same seam every comms suite uses, so nothing in this run can reach the
+ * real provider and the fake records every request it is handed: the exact
+ * payload a real provider would have received.
  *
  * It is inert until a Resend key is set, which the suite does only around the
- * one send it wants to read (the restorative intake), and a key set anywhere
- * else can no longer reach the real provider from a test run.
+ * one send it wants to read (the restorative intake), and the fake refuses any
+ * key but its own.
  */
-let mailLog = "";
-const MAIL_CAPTURE_PRELOAD = `
-import { appendFileSync } from "node:fs";
-const out = process.env.LOOP_MAIL_CAPTURE;
-const realFetch = globalThis.fetch;
-globalThis.fetch = async (input, init) => {
-  const url = typeof input === "string" ? input : input instanceof URL ? input.href : String(input?.url ?? "");
-  if (out && url.startsWith("https://api.resend.com/")) {
-    appendFileSync(out, JSON.stringify({ url, body: JSON.parse(String(init?.body ?? "{}")) }) + "\\n");
-    return new Response(JSON.stringify({ id: "captured-by-the-loop" }), { status: 200, headers: { "content-type": "application/json" } });
-  }
-  return realFetch(input, init);
-};
-`;
+const LOOP_PROVIDER_KEY = "re_LOOPCAPTURE_0000";
+let fake: FakeResend | undefined;
 
 /** Every email the child has handed to the provider so far, oldest first. */
-function capturedMail(): Array<{ url: string; body: { to: string[]; subject: string; html: string } }> {
-  if (!mailLog || !fs.existsSync(mailLog)) return [];
-  return fs.readFileSync(mailLog, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+function capturedMail(): Array<{ body: { to: string[]; subject: string; html: string } }> {
+  return fake ? fake.emails().map((e) => ({ body: e.body })) : [];
 }
 
 async function api(
@@ -222,21 +207,18 @@ beforeAll(async () => {
   // 200 on this port, so without this an orphan answers it and the whole
   // scenario runs against the wrong server. See waitForPortFree in ./db/testDb.
   await waitForPortFree(PORT);
-  // Beside the data dir, never inside it, so the server's own sweeps of DATA_DIR never meet it.
-  const harnessDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-mail-capture-"));
-  const preload = path.join(harnessDir, "capture-mail.mjs");
-  fs.writeFileSync(preload, MAIL_CAPTURE_PRELOAD);
-  mailLog = path.join(harnessDir, "mail.jsonl");
-  child = spawn(process.execPath, ["--import", pathToFileURL(preload).href, DIST], {
+  fake = await startFakeResend({ apiKey: LOOP_PROVIDER_KEY });
+  child = spawn(process.execPath, [DIST], {
     env: {
       ...process.env,
       NODE_ENV: "production",
       PORT: String(PORT),
       DATA_DIR: dataDir,
-      // Read by the preload above. A sender address is set so a send with a
-      // key reaches the provider request instead of stopping at "no sender";
-      // with no key (the rest of the run) neither of these does anything.
-      LOOP_MAIL_CAPTURE: mailLog,
+      // The fake provider above stands in for the real one. A sender address
+      // is set so a send with a key reaches the provider request instead of
+      // stopping at "no sender"; with no key (the rest of the run) neither of
+      // these does anything.
+      RESEND_API_BASE: fake.url,
       EMAIL_FROM: "loop@example.test",
       // The child runs its own boot migrations against the scratch schema —
       // the same self-migrating path production takes on deploy.
@@ -331,7 +313,7 @@ afterAll(async () => {
   if (dataDir && fs.existsSync(dataDir)) {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
-  if (mailLog) fs.rmSync(path.dirname(mailLog), { recursive: true, force: true });
+  await fake?.close();
   await testDb?.drop();
 });
 
@@ -1949,6 +1931,12 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // own entries are theirs to download even after a village switched it off.
     for (const key of ["entries", "pulse", "feedbackSent", "feedbackReceived"]) {
       expect(Array.isArray(exported.json.journal?.[key]), `journal.${key} is in the export`).toBe(true);
+    }
+    // Live Sessions (0238), present the same way: the rooms they joined, the
+    // entries they wrote or hold, and their own answers, empty for a member
+    // who never joined one.
+    for (const key of ["sessions", "entries", "responses"]) {
+      expect(Array.isArray(exported.json.sessions?.[key]), `sessions.${key} is in the export`).toBe(true);
     }
 
     // Deletion needs the password; then the account is a tombstone.
@@ -3754,9 +3742,9 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
      * THE EMAIL IS WHERE THE WORDS USED TO LEAVE. The intake is emailed at
      * once, and the notification email rendered the title ("A private intake
      * from <the sender's name>") and the body (their words), so both went to
-     * outside mailboxes. A Resend key is set around this one send so the mail
-     * reaches the provider request the capture preload records (see
-     * MAIL_CAPTURE_PRELOAD), and cleared straight after.
+     * outside mailboxes. A Resend key is set around this one send, the post
+     * office's drain is run while it is set so the queued email reaches the
+     * fake provider (see capturedMail), and the key is cleared straight after.
      *
      * The message names another member, as a real one usually does, and its
      * words are distinctive so a leak cannot hide behind a common one.
@@ -3767,16 +3755,19 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
         text.toLowerCase().includes(needle.toLowerCase()),
       );
     const mailBefore = capturedMail().length;
-    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "re_LOOPCAPTURE_0000" }, founderToken)).status).toBe(200);
+    expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: LOOP_PROVIDER_KEY }, founderToken)).status).toBe(200);
     const intake = await api("POST", "/api/exit/restorative-intake", { message: intakeWords }, peerToken);
+    // The notice is queued at once and leaves on the post office's drain, which
+    // this suite runs by hand (no background scheduler here).
+    const drained = await api("POST", "/api/admin/comms/run", { job: "drain" }, founderToken);
     expect((await api("PUT", "/api/admin/integrations/resend_api_key", { value: "" }, founderToken)).status).toBe(200);
     expect(intake.status).toBe(200);
     expect(intake.json.reached).toBeGreaterThan(0);
+    expect(drained.status, JSON.stringify(drained.json)).toBe(200);
 
     const intakeMail = capturedMail().slice(mailBefore);
     expect(intakeMail.length, "the intake is emailed at once, so the provider was handed at least one email").toBeGreaterThan(0);
     for (const m of intakeMail) {
-      expect(m.url).toBe("https://api.resend.com/emails");
       expect(leaksIn(m.body.subject), "the email subject names no one and quotes nothing").toEqual([]);
       expect(leaksIn(m.body.html), "the email body carries neither the sender's name nor their words").toEqual([]);
       expect(m.body.subject).toBe("A private intake is waiting for you");

@@ -143,6 +143,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/photographs": "Every photograph",
   "/admin": "Village settings",
   "/journal": "Journal",
+  // One line covers the list and every room, by the longest-prefix rule.
+  "/sessions": "Live sessions",
 };
 
 function PageTitle() {
@@ -244,8 +246,13 @@ const Mint = lazyPage(() => import("./pages/Mint"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
+// Three pages an email links to, from ONE module: the bundler keeps one chunk.
+const EmailPreferences = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailPreferences })));
+const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailUnsubscribe })));
+const EmailAction = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailAction })));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
+const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
 const CanvasWorkbook = lazyPage(() => import("./pages/CanvasWorkbook"));
@@ -280,6 +287,7 @@ const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
 const Review = lazyPage(() => import("./pages/Review"));
+const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
 const VillageHealth = lazyPage(() => import("./pages/VillageHealth"));
 const ExitPolicy = lazyPage(() => import("./pages/ExitPolicy"));
@@ -288,6 +296,8 @@ const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
+const Sessions = lazyPage(() => import("./pages/Sessions"));
+const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 
 /**
  * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
@@ -370,6 +380,7 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/badges" component={Badges} />
       <Route path="/powers" component={Powers} />
+      <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
       <Route path="/library" component={Library} />
       {/* /village-health, not /health: the server owns /health as the ops probe */}
@@ -405,8 +416,12 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/email/preferences" component={EmailPreferences} />
+      <Route path="/email/unsubscribe" component={EmailUnsubscribe} />
+      <Route path="/email/a" component={EmailAction} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />
+      <Route path="/village-email" component={VillageEmail} />
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
       <Route path="/resident-rights" component={ResidentRights} />
@@ -424,6 +439,11 @@ function Router() {
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
       <Route path="/journal" component={Journal} />
+      {/* A circle's live calls: the list, then one room. Both behind
+          ModuleGate("sessions") and sign-in; members only, no guests. The
+          list is declared before the room for the reason /decisions gives. */}
+      <Route path="/sessions" component={Sessions} />
+      <Route path="/sessions/:id" component={SessionRoom} />
       <Route path="/work-with-us" component={WorkWithUs} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

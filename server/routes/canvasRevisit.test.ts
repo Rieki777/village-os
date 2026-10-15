@@ -77,7 +77,7 @@ async function call(method: string, route: string, as: keyof typeof PEOPLE | nul
 const spine = (): NotifyDeps => ({
   pool,
   memberById: async (id) => Object.values(PEOPLE).find((p) => p.id === id) ?? null,
-  sendEmail: async () => {},
+  sendEmail: async () => ({ accepted: true, status: "queued" }),
   origin: () => "https://example.test",
   projectName: () => "Alder Creek",
   isPresent: (m: any) => !!m?.passwordHash,

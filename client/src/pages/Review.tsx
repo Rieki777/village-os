@@ -65,6 +65,10 @@ import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
+import { STRUCTURE_KINDS } from "@shared/structurePlan";
+
+/** The kinds that change the chart, as the structure review reads them. */
+const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
 
 interface ProposalCard {
   id: string;
@@ -834,6 +838,17 @@ export default function Review() {
               </h2>
               <p className="text-xs text-muted-foreground">Arrived {when(batch.receivedAt)}</p>
             </div>
+
+            {/* A batch that changes the chart opens whole, as one change, on its
+                own page: the map, the seats that already exist, and the draft. */}
+            {batch.items.some((i) => CHART_KINDS.includes(i.kind)) && (
+              <Link
+                href={`/review/structure/${encodeURIComponent(batch.batchId)}`}
+                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              >
+                Review it as one structure change
+              </Link>
+            )}
 
             {typeof batch.proposedChanges === "number" && typeof queue?.proposalChangeLimit === "number" && (
               <div className="mt-3">

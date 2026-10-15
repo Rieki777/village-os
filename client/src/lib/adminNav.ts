@@ -46,6 +46,16 @@ export const TAB_MODULE: Record<string, string> = {
   // weight route, so the allocation table is only a table while the engine is
   // on. Off, the tab hides instead of offering a form that 404s.
   "governance-weights": "governance",
+  // Village Comms: the five screens that drive the automations follow the
+  // module. `comms-sent` and `comms-settings` are deliberately NOT here: a
+  // village sets up its sending before it turns anything on, and the post
+  // office records every email (a password link included) whatever the
+  // module says, so both are platform tabs (server/routes/comms.ts).
+  "comms-overview": "comms",
+  "comms-journeys": "comms",
+  "comms-words": "comms",
+  "comms-people": "comms",
+  "comms-letters": "comms",
 };
 
 /** The badge an admin tab wears: where its module stands right now. */

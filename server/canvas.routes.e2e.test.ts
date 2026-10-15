@@ -1,5 +1,5 @@
 /**
- * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (0232), against the built server.
+ * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (0252), against the built server.
  *
  * server/routes/canvas.test.ts proves the routes against a real database with
  * a MODEL of `guardCapability`, because the real one lives inside
@@ -45,7 +45,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, never claimed by hand here.
-const PORT = 2500 + (process.pid % 100);
+const PORT = 3310 + (process.pid % 85);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "canvas-admin";
 const PASSWORD = "CanvasPen123!";

@@ -231,11 +231,11 @@ describe("what a save may carry", () => {
     answers: [{ questionKey: "went-well", prompt: "What went well today?", text: "the bread rose" }],
   };
 
-  it("accepts an ordinary evening entry and defaults privacy to private", () => {
+  it("accepts an ordinary evening entry and defaults it to shared", () => {
     const r = cleanEntryInput(base, NOW);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.value.privacy).toBe("private");
+      expect(r.value.privacy).toBe("internal");
       expect(r.value.answers[0].text).toBe("the bread rose");
     }
   });
@@ -269,6 +269,16 @@ describe("what a save may carry", () => {
 
   it("accepts the first instant of 2020, the floor itself", () => {
     expect(cleanEntryInput({ ...base, writtenAt: "2020-01-01T00:00:00Z" }, NOW).ok).toBe(true);
+  });
+
+  // Ruling 2026-10-05: "All journal entries go to Saberra (if that module is
+  // on) unless specifically marked private." Shared is the default; private
+  // is the author's own choice and is kept exactly.
+  it("shares an entry by default and keeps a private one private", () => {
+    const shared = cleanEntryInput({ ...base }, NOW);
+    expect(shared.ok && shared.value.privacy).toBe("internal");
+    const kept = cleanEntryInput({ ...base, privacy: "private" }, NOW);
+    expect(kept.ok && kept.value.privacy).toBe("private");
   });
 
   it("checks every pulse number against the contract's own range", () => {

@@ -40,7 +40,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, never claimed by hand here.
-const PORT = 4050 + (process.pid % 100);
+const PORT = 4050 + (process.pid % 50);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "season-admin";
 const PASSWORD = "SeasonPen123!";

@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberSessions } from "./liveSessions";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -116,6 +117,9 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
+import { forgetCommsPerson } from "../repos/commsPeople";
+import { emailKeyOf } from "../../shared/comms/address";
+import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
   erasureRecord,
@@ -527,6 +531,28 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0244 to 0246): their
+       * contacts and answers, journeys and paths, guest rows, votes,
+       * attendance and feedback, the delivery reports that name them, and no
+       * suppression kept, because a suppression is the address under another
+       * name. Their emails stay on the ledger with the address, subject and
+       * words blanked, so the village's counts still add up. The rows and
+       * their reasons are in server/repos/commsPeople.ts.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step below gives: the
+       * member's sessions die there, so nothing they do afterwards can write a
+       * fresh comms row behind this step. `target` is the record read before
+       * the sweep began, so its address is still the real one here; a resume
+       * reads the tombstone and finds the rest by user id alone.
+       */
+      name: "comms",
+      run: async () => {
+        const email = String(target.email ?? "");
+        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
+      },
+    },
+    {
+      /*
        * member_needs (0205) tells its member "Only you can read this", so it
        * leaves with them. A named step, so a resumed erasure knows whether it
        * already ran.
@@ -565,6 +591,25 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Live Sessions (0238): the member leaves every room. Their people rows,
+       * answers and written entries are deleted, the actions they held go back
+       * to nobody, the hosts and adders they were read 0, and every closed
+       * record that named them has its minutes written again from what is
+       * left, so the name is gone from the text too. De-attribution is not
+       * erasure, which is why the minutes are rebuilt and not only the rows.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: every door
+       * writes for anybody signed in, and the tombstone is where the member's
+       * sessions die. The names the rebuilt minutes print are read live, and by
+       * now nothing in those records points at the leaver.
+       */
+      name: "sessions-after-tombstone",
+      run: async () => {
+        await forgetMemberSessions(pool, target.id, (id) => members.byId(id));
       },
     },
     {

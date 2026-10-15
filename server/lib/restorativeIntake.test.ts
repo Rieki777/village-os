@@ -153,6 +153,7 @@ function spine() {
     memberById: async (id) => ({ id, email: `${id}@example.test`, prefs: {} }),
     sendEmail: async (opts) => {
       sent.push(opts);
+      return { accepted: true, status: "queued" };
     },
     origin: () => "https://village.example.test",
     projectName: () => "Test Village",

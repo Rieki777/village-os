@@ -54,6 +54,7 @@ import {
   zonedTimeToUtc,
 } from "../../shared/lunar";
 import { activeClock } from "./gratitude-cycles";
+import { pollSummariesFor, summaryForEvening } from "./comms/timePollSummary";
 
 // ── Row shape ───────────────────────────────────────────────────────────────
 
@@ -413,7 +414,15 @@ export async function listCalendarItems(pool: Pool, q: CalendarQuery): Promise<C
   const kept = occurrences.slice(0, limit);
 
   const counts = await rsvpCounts(pool, kept.map((o) => o.row.id), q.viewer.userId);
-  return kept.map((o) => toItem(o, counts, now, q.viewer));
+  // Village Comms 5.10: each gathering's live time vote, read once for the
+  // whole list (two queries however many items), and laid on every evening
+  // with whether that evening can still move.
+  const polls = await pollSummariesFor(pool, kept.map((o) => o.row.id), q.timezone);
+  return kept.map((o) => {
+    const item = toItem(o, counts, now, q.viewer);
+    const poll = polls.get(o.row.id);
+    return poll ? { ...item, timePoll: summaryForEvening(poll, o.startsAt.getTime(), now.getTime()) } : item;
+  });
 }
 
 /**

@@ -24,6 +24,7 @@ import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
 import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
+import { villageSeasonsProblem } from "./villageSeasons";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1800,6 +1801,182 @@ export const VARIABLES: VariableDef[] = [
     unit: "per day",
   },
 
+  // ── Village Comms (0244): the post office and its automations ─────────────
+  // Owned by the `comms` module (shared/modules.ts). Four are founder held:
+  // retention is a privacy window, the send rate is the provider's limit, and
+  // both trackers watch people, which is not a game rule a vote should turn on.
+  {
+    key: "comms.quiet_start_hour",
+    category: "Email and reminders",
+    label: "Earliest hour a path email is sent",
+    description:
+      "Path, welcome and joining emails wait for this hour in the reader's own time zone, or the village's when theirs is unknown. Gathering reminders follow the gathering's own clock and are not held.",
+    type: "integer",
+    default: "8",
+    min: 0,
+    max: 23,
+    unit: "o'clock",
+  },
+  {
+    key: "comms.quiet_end_hour",
+    category: "Email and reminders",
+    label: "Latest hour a path email is sent",
+    description:
+      "From this hour in the reader's own time zone, a path, welcome or joining email waits for the next morning. Keep it later than the earliest hour.",
+    type: "integer",
+    default: "20",
+    min: 1,
+    max: 24,
+    unit: "o'clock",
+  },
+  {
+    key: "comms.daily_cap",
+    category: "Email and reminders",
+    label: "Most automated emails one person receives per day",
+    description:
+      "Counts path emails and letters to one person in a rolling 24 hours. Over it, the next one waits for the following window and is never dropped. Gathering reminders, notices and the emails a person asked for do not count.",
+    type: "integer",
+    default: "2",
+    min: 1,
+    max: 20,
+    unit: "per day",
+  },
+  {
+    key: "comms.event_reminder_minutes",
+    category: "Email and reminders",
+    label: "When gathering reminders go out",
+    description:
+      "Minutes before a gathering starts, separated by commas. The default sends one a day before and one two hours before. Leave it empty to send none, unless a gathering sets its own.",
+    type: "text",
+    default: "1440,120",
+    unit: "minutes before",
+  },
+  {
+    key: "comms.host_nudge_minutes",
+    category: "Email and reminders",
+    label: "When a host is asked for the recap",
+    description:
+      "Minutes after a gathering ends before its host is asked to write the recap. Nobody is asked when nobody said yes, or when the recap has already gone.",
+    type: "integer",
+    default: "60",
+    min: 0,
+    max: 1440,
+    unit: "minutes",
+  },
+  {
+    key: "comms.recap_window_days",
+    category: "Email and reminders",
+    label: "How long a recap can still be sent",
+    description: "Days after a gathering in which its host can still send the recap to the people who said yes.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 30,
+    unit: "days",
+  },
+  {
+    key: "comms.guests_default",
+    category: "Email and reminders",
+    label: "Guests may say they are coming",
+    description:
+      "When on, somebody with no account can say yes to a free public gathering and confirm by email. Each gathering can turn this on or off for itself. Guests need the comms module open to everyone.",
+    type: "boolean",
+    default: "true",
+  },
+  {
+    key: "comms.time_poll_freeze_hours",
+    category: "Email and reminders",
+    label: "When a voted time stops moving",
+    description:
+      "Hours before a gathering in which its time no longer follows the vote. A one-off vote closes this long before its earliest time, and a weekly series never moves an evening this close.",
+    type: "integer",
+    default: "48",
+    min: 0,
+    max: 336,
+    unit: "hours",
+  },
+  {
+    key: "comms.time_poll_settle_minutes",
+    category: "Email and reminders",
+    label: "How long a time must lead before the gathering moves",
+    description:
+      "Minutes a time must lead the vote before the gathering moves to it. Zero follows the vote live, so the time that is winning is the time on the calendar.",
+    type: "integer",
+    default: "0",
+    min: 0,
+    max: 1440,
+    unit: "minutes",
+  },
+  {
+    key: "comms.letters_per_day",
+    category: "Email and reminders",
+    label: "Most letters the village sends in a day",
+    description: "How many letters can go out in one day. A letter also waits ten minutes after the one before it.",
+    type: "integer",
+    default: "3",
+    min: 1,
+    max: 20,
+    unit: "per day",
+  },
+  {
+    key: "comms.retention_months",
+    category: "Email and reminders",
+    label: "How long the record of each email is kept",
+    description:
+      "Months the record of a sent email, its words included, is kept before it is deleted. Whoever runs the village's email reads those words. The words of essential mail are never kept, and the provider's delivery reports are cleared after 30 days whatever this says.",
+    type: "integer",
+    default: "18",
+    min: 1,
+    max: 120,
+    unit: "months",
+    ring: "founder",
+  },
+  {
+    key: "comms.send_rate_per_second",
+    category: "Email and reminders",
+    label: "Emails sent per second",
+    description:
+      "How fast queued emails go out. Keep it at or under what your email provider allows on your plan, or sends are refused and retried later.",
+    type: "integer",
+    default: "2",
+    min: 1,
+    max: 50,
+    unit: "per second",
+    ring: "founder",
+  },
+  {
+    key: "comms.notice_expiry_minutes",
+    category: "Email and reminders",
+    label: "How long a notification email may wait",
+    description:
+      "A notification email still unsent this many minutes after it was written is dropped, because a late notice surprises more than a missed one. The notification itself stays in the app.",
+    type: "integer",
+    default: "120",
+    min: 5,
+    max: 2880,
+    unit: "minutes",
+  },
+  {
+    key: "comms.open_tracking",
+    category: "Email and reminders",
+    label: "Count when emails are opened",
+    description:
+      "Off by default. Some mail apps open every email by themselves, so an open count misleads, and counting needs a hidden image in every email.",
+    type: "boolean",
+    default: "false",
+    ring: "founder",
+  },
+  {
+    key: "comms.click_tracking",
+    category: "Email and reminders",
+    label: "Count which links are clicked",
+    description:
+      "Off by default. When on, links in automated emails pass through the email provider first so a journey can see what people did next. Links in the emails a person asked for are never rewritten.",
+    type: "boolean",
+    default: "false",
+    ring: "founder",
+  },
+
   // ── Abuse guards: throttles on the public writers ─────────────────────────
   // Per-IP unless stated. These are ceilings on ABUSE, not on members: keep
   // them generous — a whole village behind one NAT shares each IP bucket.
@@ -2684,9 +2861,10 @@ export const VARIABLES: VariableDef[] = [
 
   // ── Calendar (0085; the village's one calendar, twelve months and thirteen moons) ──
   //
-  // Three knobs, all three READ: the sky rows and the Moons view take the
-  // year anchor and the hemisphere, and the sky job writes cross-quarters
-  // only when asked. A white-label platform cannot hard-code the north.
+  // Four knobs, all four READ: the sky rows and the Moons view take the
+  // year anchor and the hemisphere, the sky job writes cross-quarters only
+  // when asked, and a live session's stamp reads the village's own seasons.
+  // A white-label platform cannot hard-code the north, or the temperate year.
   {
     key: "calendar.year_anchor",
     category: "Calendar",
@@ -2733,6 +2911,23 @@ export const VARIABLES: VariableDef[] = [
       "Also put the four midpoints between the solstices and equinoxes on the calendar. Off by default; the quarter days themselves are always shown.",
     type: "boolean",
     default: "false",
+  },
+  // READ by server/lib/liveSessions.ts (`stampSeason`): the season a live
+  // session's stamp names when it opens. The grammar and its parser are
+  // shared/villageSeasons.ts, and `validateVariable` below refuses a list it
+  // cannot read whole, so the room never guesses at half a list. It sits with
+  // the calendar dials (the `calendar.` namespace puts it on the Village
+  // Calendar card) because the seasons are a fact about the village's year,
+  // the same as the hemisphere the room already reads from there.
+  {
+    key: "calendar.seasons",
+    category: "Calendar",
+    label: "Your village's own seasons",
+    description:
+      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
+    type: "text",
+    default: "",
+    unit: "list",
   },
 
   // ── Introductions (0086; visible in Admin only while the module is non-off) ──
@@ -3073,6 +3268,36 @@ export const VARIABLES: VariableDef[] = [
     max: 1000,
     unit: "members",
   },
+
+  // ── Live Sessions: the room's own words and its usual length ──────────────
+  //
+  // READ by server/lib/liveSessions.ts: `placeLine` reads the first into the
+  // stamp a session takes when it opens, and `defaultDuration` reads the
+  // second when the opener names no length. The duration's bounds and default
+  // are SESSION_LIMITS in shared/sessions.ts, pinned together by
+  // server/lib/liveSessions.test.ts.
+  {
+    key: "sessions.place_line",
+    category: "Live Sessions",
+    label: "The place line read at drop in",
+    description:
+      "One line the facilitator reads out as a live session begins, to honour the land and the place the village meets on. Write it in your village's own words, the way you would say it aloud: whose land this is, what grows here, what the place asks of the people on it. Each session keeps the line it opened with. Leave it blank and the room offers a short neutral sentence instead.",
+    type: "text",
+    default: "",
+    unit: "line",
+  },
+  {
+    key: "sessions.default_minutes",
+    category: "Live Sessions",
+    label: "How long a live session runs unless its opener says otherwise",
+    description:
+      "The length a new live session starts with when whoever opens it names none. The room compares its agenda against this, and warns when the items ask for more time than the session has left. The opener can always choose another length between 10 and 480 minutes for one session.",
+    type: "integer",
+    default: "60",
+    min: 10,
+    max: 480,
+    unit: "minutes",
+  },
 ];
 
 // ── Progression: the ladder's economics and thresholds, GENERATED per stage ──
@@ -3307,6 +3532,14 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
     if (def.key === "village.first_moon_at" && !isAnchorDateAcceptable(raw)) {
       return "Must be a date such as 2026-03-19, or blank to count from the moon this village launched under.";
     }
+    // A village's seasons are a list or they are nothing. A part the room
+    // could not read would stretch the season before it over months, with
+    // nothing saying why, so the whole list is refused here instead
+    // (shared/villageSeasons.ts holds the grammar). Blank passes.
+    if (def.key === "calendar.seasons") {
+      const problem = villageSeasonsProblem(raw);
+      if (problem) return problem;
+    }
     /*
      * A CURRENCY LIST IS CODES OR IT IS NOTHING (ruling 23).
      *
@@ -3324,6 +3557,23 @@ export function validateVariable(def: VariableDef, raw: string): string | null {
       }
       const seen = new Set(codes.map((c) => c.toUpperCase()));
       if (seen.size !== codes.length) return "Each currency can only be listed once.";
+    }
+    /*
+     * A REMINDER LIST IS MINUTES OR IT IS NOTHING. A typo here would not fail
+     * loudly: every gathering reminder in the village reads this list, so
+     * "1440;120" or "a day before" would quietly send no reminders at all.
+     * Blank is a real answer and means none. Ten minutes is the floor, since a
+     * reminder that lands as the gathering starts reminds nobody, and two weeks
+     * is the ceiling.
+     */
+    if (def.key === "comms.event_reminder_minutes" && raw.trim() !== "") {
+      const parts = raw.split(",").map((p) => p.trim());
+      const minutes = parts.map((p) => (/^\d+$/.test(p) ? Number(p) : NaN));
+      if (minutes.some((m) => !Number.isInteger(m) || m < 10 || m > 20160)) {
+        return "Must be whole minutes before the start, separated by commas, such as 1440,120. Each one from 10 to 20160, or leave it blank for none.";
+      }
+      if (minutes.length > 4) return "At most four reminders for one gathering.";
+      if (new Set(minutes).size !== minutes.length) return "Each reminder time can only be listed once.";
     }
     // Contract addresses must look like addresses, or a typo silently reads a
     // balance from nowhere and the member sees zero holdings.

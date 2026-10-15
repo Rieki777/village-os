@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FONT_CATALOG } from "../shared/fontCatalog";
 import { buildThemeCss, fontFormatOf, sanitizeFontName, sanitizeFontStack, sanitizeImportUrl } from "./lib/themeCss";
 
 describe("theme.css emission", () => {
@@ -21,8 +22,28 @@ describe("theme.css emission", () => {
     expect(css).toContain(":root:root {");
   });
 
+  it("carries a pinned accent from the brand document into the stylesheet", () => {
+    // Admin, Look saves `theme.accent`. If emission ignored it, the founder
+    // would see a field that saves and changes nothing on the site.
+    const derived = buildThemeCss({ seed: "#14362b", character: "civic" });
+    const pinned = buildThemeCss({ seed: "#14362b", character: "civic", accent: "#b08d57" });
+    const sunOf = (css: string) => /--tone-sun: (#[0-9a-f]{6});/.exec(css)?.[1];
+    expect(sunOf(derived)).toBeTruthy();
+    expect(sunOf(pinned)).toBeTruthy();
+    expect(sunOf(pinned)).not.toBe(sunOf(derived));
+    // An accent alone, with no seed, is still the neutral fork.
+    expect(buildThemeCss({ accent: "#b08d57" })).toBe("");
+  });
+
   it("accepts a same-origin uploads path", () => {
     expect(sanitizeImportUrl("/api/uploads/brand-123-abcde.css")).toBe("/api/uploads/brand-123-abcde.css");
+  });
+
+  it("passes every catalogue stack through unchanged", () => {
+    // The picker saves the offering's stack verbatim. A stack the sanitiser
+    // refused would save fine and then emit nothing, so the admin would see
+    // their choice stored and the site still in the default face.
+    for (const f of FONT_CATALOG) expect(sanitizeFontStack(f.stack), f.id).toBe(f.stack);
   });
 
   describe("uploaded font packages", () => {

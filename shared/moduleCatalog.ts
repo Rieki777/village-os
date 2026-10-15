@@ -398,18 +398,36 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     emblem: "Handshake",
   },
   journal: {
-    promise: "A private practice for each member, and the few numbers a village may read back from it.",
+    promise: "A practice for each member, and what a village learns from it.",
     benefits: [
       "Morning and evening practices, light or deep, plus a debrief after calls and an open page",
+      "A weekly pulse: five numbers, the tensions in each role, the work between roles, and missed opportunities",
       "A guide that asks one question at a time and checks it heard you right",
-      "A weekly pulse the village reads as numbers, never as words",
+      "Entries shared with organisational memory under code-names, unless a member keeps one private",
       "Feedback that arrives unsigned, in a weekly batch, only to people who asked for it",
     ],
     forWhom: "Teams that want to notice how people are really doing before it becomes a crisis.",
     setupSummary: "Nothing to set up. The pulse shows from the first answer, and the village can raise that floor.",
-    dataSummary: "Each member's own entries, readable by nobody else, admins included; pulse numbers; and feedback between members who opted in.",
+    dataSummary: "Each member's own entries, readable by nobody else in the village, admins included, and shared with organisational memory under code-names unless marked private; pulse numbers; and feedback between members who opted in.",
     hue: 28,
     emblem: "NotebookPen",
+  },
+  sessions: {
+    promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
+    benefits: [
+      "Six stages the facilitator moves the room through: drop in, arrival, agenda, items, actions and close",
+      "An agenda built together, every item with an aim and its own clock, consented to before the work starts",
+      "Proposals decided in a consent round the whole room can see",
+      "Every action leaves with a person or a seat on it, and what nobody can hold waits in the backlog for next time",
+      "Feedback on the facilitation reaches the facilitator unsigned, and ideas for the tool land in your feedback inbox",
+    ],
+    forWhom: "Circles that meet often and want each call to end with clear decisions and actions somebody holds.",
+    setupSummary:
+      "Nothing to set up. Write your village's place line and choose a usual length when you want your own words and rhythm.",
+    dataSummary:
+      "Who took part, the agenda, notes, decisions and who holds each action. Arrival words and numbers are erased at close, and the record is read by the people who were there and your admins.",
+    hue: 140,
+    emblem: "Orbit",
   },
   hypha: {
     promise: "Your DAO's real numbers from Base, on your own pages.",
@@ -427,6 +445,22 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
       "Contract addresses, what those contracts call themselves, village-level supply and treasury figures, and a log of outcomes that arrived.",
     hue: 175,
     emblem: "Landmark",
+  },
+  comms: {
+    promise: "The village's email in one place: every email recorded, and every person able to say stop.",
+    benefits: [
+      "Reminders and changes for the gatherings people said yes to",
+      "A few emails that walk somebody along the path they chose",
+      "Guests with no account can say they are coming, and confirm by email",
+      "A live vote on a session time, where the time that is winning is the time",
+      "Letters to the people who agreed to get them, with a record of each one",
+    ],
+    forWhom: "Villages that want to stay in touch with everybody they meet, by email, from inside the village's own platform.",
+    setupSummary:
+      "Add your email provider key, your sending domain, a sender, delivery reports and a postal address in Comms Settings, then send yourself a test.",
+    dataSummary: "Email addresses, what each person agreed to receive, and a record of every email sent to them.",
+    hue: 235,
+    emblem: "Mail",
   },
   saberra: {
     promise: "An outside reading of how your village is organised, offered back as suggestions you decide on.",

@@ -24,6 +24,9 @@ import {
 } from "../../shared/gatherings";
 import { cleanRecurrence, iso } from "./calendar";
 import { chargeForPlace, refundPlace } from "./eventSeats";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "./commsSink";
+import { isGuestKey } from "../../shared/comms/kinds";
 
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -45,11 +48,23 @@ export function setPromotionSink(sink: PromotionSink | null): void {
   promotionSink = sink;
 }
 
-/** Called by the owners of the transactions, AFTER commit. Never throws. */
+/**
+ * Called by the owners of the transactions, AFTER commit. Never throws.
+ *
+ * Comms hears every promotion whether or not the notification sink is set,
+ * which is why its line comes before the early return.
+ *
+ * A GUEST IS NOT HANDED TO THE NOTIFICATION SINK. A guest's key
+ * (`guest:<contactId>`, the comms build spec 5.8) names no account, so an
+ * in-app notification for it would be a row nobody can ever read; the comms
+ * email that `waitlist_promoted` sends is how a guest hears.
+ */
 export async function firePromotionSink(promoted: PromotedEntry[]): Promise<void> {
-  if (!promoted.length || !promotionSink) return;
+  for (const p of promoted) commsSink.fire({ type: "waitlist_promoted", eventId: p.eventId, occurrenceKey: p.occurrenceKey, personKey: p.userId });
+  const members = promoted.filter((p) => !isGuestKey(p.userId));
+  if (!members.length || !promotionSink) return;
   try {
-    await promotionSink(promoted);
+    await promotionSink(members);
   } catch (e) {
     console.error("[waitlist] promotion sink failed (promotion stands)", e);
   }
@@ -278,6 +293,9 @@ export async function joinWaitlist(
     );
     return { ok: false, reason: "unpaid", message: charge.error };
   }
+  // Fired here and not in the route: only this function knows the evening the
+  // place is for, once a one-off's stray occurrence key has been read as "".
+  if (!queued.duplicate) commsSink.fire({ type: "waitlist_joined", eventId, occurrenceKey: queued.occ, personKey: userId });
   return {
     ok: true, position: queued.position, waiting: queued.waiting, duplicate: queued.duplicate,
     charged: charge.duplicate ? 0 : charge.charged, tokenType: charge.tokenType,

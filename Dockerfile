@@ -212,6 +212,10 @@ COPY --from=build /app/package.json ./package.json
 #   docs/knowledge/, docs/modules/   server/lib/knowledge.ts:378 and :387
 #   docs/skills/                     server/index.ts:6649
 #   docs/prototypes/grounds-v0.html  server/index.ts:31976 (the Living Map)
+#   server/assets/avatars/           server/routes/stockAvatars.ts (STOCK_AVATAR_DIR)
+#                                    The stock character art, served at
+#                                    /images/avatars/. Kept out of dist/public
+#                                    so it is not charged to the client budget.
 #
 # The rest of docs/ is not copied. It is 21 MB, of which 19 MB is
 # docs/prototypes, and nothing outside the paths above is opened at runtime.
@@ -220,6 +224,7 @@ COPY --from=build /app/package.json ./package.json
 # constants (the six above) plus DATA_DIR/uploads, which is runtime state.
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/server/seeds ./server/seeds
+COPY --from=build /app/server/assets ./server/assets
 COPY --from=build /app/docs/knowledge ./docs/knowledge
 COPY --from=build /app/docs/modules ./docs/modules
 COPY --from=build /app/docs/skills ./docs/skills
@@ -248,7 +253,24 @@ RUN node -e 'const fs=require("fs"),{createRequire}=require("module");const req=
 # directory is what lets the image run without one.
 RUN mkdir -p /app/data/uploads && chown -R node:node /app/data
 
-USER node
+# THE SERVER RUNS AS `node`, AND THE IMAGE STARTS AS ROOT ONLY TO SAY SO.
+# There used to be a `USER node` here. That is right for the empty directory
+# above and wrong for a real volume: a hosting platform mounts its volume over
+# /app/data owned by root, so `node` could not write a single upload. Every
+# photograph and logo on a Railway village failed with EACCES from the day
+# this Dockerfile shipped until 2026-10-14. scripts/docker-entrypoint.sh
+# gives the data directory to `node` and drops to `node` with setpriv before
+# the server starts, the same shape the official database images use. Its
+# header says exactly what runs as root and when.
+#
+# setpriv is util-linux, which Debian ships in every image including slim.
+# Checked here so a base image without it fails the build, not the boot.
+COPY --from=build /app/scripts/docker-entrypoint.sh /usr/local/bin/village-entrypoint
+RUN chmod 755 /usr/local/bin/village-entrypoint \
+ && sed -i 's/\r$//' /usr/local/bin/village-entrypoint \
+ && command -v setpriv \
+ && id node
+
 EXPOSE 3000
 
 # Asks the same question the platform health check asks. node 22 has a global
@@ -270,5 +292,5 @@ EXPOSE 3000
 HEALTHCHECK --start-period=600s --interval=30s --timeout=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/village-entrypoint"]
 CMD ["node", "dist/index.js"]

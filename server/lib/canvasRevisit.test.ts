@@ -234,6 +234,7 @@ describe.skipIf(!configured)("delivery through the real notification spine", () 
     },
     sendEmail: async (opts) => {
       sent.push(opts);
+      return { accepted: true, status: "queued" };
     },
     origin: () => "https://example.test",
     projectName: () => "Alder Creek",

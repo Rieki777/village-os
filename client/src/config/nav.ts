@@ -89,7 +89,12 @@ export const isGroup = (entry: NavEntry): entry is NavGroup => "items" in entry;
  * in shared/modules.ts and cannot be turned off in v1.
  */
 export const NAV: readonly NavEntry[] = [
-  { href: "/", label: "Home" },
+  /*
+   * No "Home" entry (Rye, 2026-10-09). The village name or logo at the left of
+   * the bar is already the home link, and on a phone the bottom tab bar
+   * carries Home. Its width paid for the Module Library below: with both, the
+   * bar crowded the village name out of the header at 1024px.
+   */
   { href: "/quests", label: "Quests" },
   /**
    * Top level, and worth the bar width.
@@ -100,6 +105,17 @@ export const NAV: readonly NavEntry[] = [
    * this is the one entry that earns it.
    */
   { href: "/map", label: "Living Map", module: "map" },
+  /**
+   * Top level, and the second entry to earn the bar width (Rye, 2026-10-09).
+   * It took Home's slot, which was a duplicate of the village-name link.
+   *
+   * The library is the village's "what is possible here" window, and it sat
+   * as the last item of Guides, under the rules-of-play pages, where nobody
+   * looking for what the village could switch on would think to open. It is
+   * ungated for the reason it always was (L1): public and read-only, the
+   * platform's own page, so a visitor sees it too.
+   */
+  { href: "/modules", label: "Module Library" },
   {
     label: "Community",
     items: [
@@ -167,14 +183,13 @@ export const NAV: readonly NavEntry[] = [
       // example and the page ends at the settings, so it is the team's tour.
       { href: "/first-walk", label: "Your First Walk", roles: ["admin", "founder"] },
       { href: "/game-mechanics", label: "Game Mechanics" },
+      // Every email the village sends and when, read-only, with a door to propose a change (comms build spec 5.13).
+      { href: "/village-email", label: "Village Email", module: "comms" },
       { href: "/good-neighbor", brochure: true, label: "Good Neighbor" },
       { href: "/training", label: "Training" },
       { href: "/resident-rights", brochure: true, label: "Resident Rights" },
       { href: "/steward-rights", brochure: true, label: "Steward Rights" },
       { href: "/exit-policy", label: "Leaving Well" },
-      // Ungated on purpose (L1): the library is public and read-only, the
-      // platform's own "what a village can be" page.
-      { href: "/modules", label: "Module Library" },
     ],
   },
   {
@@ -250,6 +265,10 @@ export const ACCOUNT_MENU: readonly NavLink[] = [
   // button carries the other door (config/mobileNav.ts); both hide while the
   // journal module is off for this viewer.
   { href: "/journal", label: "Journal", module: "journal" },
+  // The circle calls a member takes part in: the one happening now, and the
+  // records of the ones they were in. The shortcuts button carries the other
+  // door (config/mobileNav.ts); both hide while the module is off.
+  { href: "/sessions", label: "Live sessions", module: "sessions" },
   { href: "/profile#wallet", label: "Wallet", module: "exchange" },
   { href: "/badges", label: "Badges", module: "badges" },
   // 0098. What the village looks after, and who holds each one. In the

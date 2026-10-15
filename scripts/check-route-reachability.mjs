@@ -71,6 +71,13 @@ const ALLOWLIST = {
   // would be a link to an error message. /forgot-password keeps its one door
   // on the sign-in page, which is the only place a person wants it.
   "/set-password": "entered from a one-time email link; a site link has no token",
+  // The three pages Village Comms emails link to (the comms build spec
+  // 5.4). Each reads a signed `?t=` link that only an email carries, so a site
+  // link would open a page with nothing to act on. A member changes the same
+  // preferences from their own profile, which is a door of its own.
+  "/email/preferences": "entered from the signed preferences link in an email footer; a site link has no token",
+  "/email/unsubscribe": "entered from the signed unsubscribe link in an email; a site link has no token",
+  "/email/a": "entered from a signed one-click answer in an email; a site link has no token",
   // The founder's way in on day one, and the way back in after a lockout. It
   // is handed over out of band, the way a reset link is: FORK_RUNBOOK and the
   // provisioning docs name it, and the person who needs it has been told to go
@@ -81,6 +88,12 @@ const ALLOWLIST = {
   "/claim": "handed over in the runbook, like a reset link; a public door would invite the wrong people",
 
   "/forgot-password": "one door, on the sign-in page, which is where a locked-out person already is",
+
+  // One page per arrival from an outside service, and meaningless without the
+  // arrival's id. Its door is that arrival's card on /review, which is where a
+  // steward already is when there is something to read; a nav entry could only
+  // point at no batch at all.
+  "/review/structure/:batchId": "one page per arrival, opened from that arrival's card on /review",
 
   // The alias. /tokens is what the nav links to and what a member sees;
   // /wallet stays mounted only because Stripe return URLs and order

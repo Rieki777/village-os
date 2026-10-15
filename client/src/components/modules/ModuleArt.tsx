@@ -32,15 +32,15 @@
 import { useState } from "react";
 import {
   Activity, Award, BedDouble, CalendarDays, Circle, Coins, Globe, Hammer,
-  Handshake, Heart, Landmark, MessageCircle, MessagesSquare, Mic, Newspaper,
-  NotebookPen, Sparkles, TrendingUp, Users, Wrench, type LucideIcon,
+  Handshake, Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper,
+  NotebookPen, Orbit, Sparkles, TrendingUp, Users, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BUNDLED_MODULE_ART } from "./bundledModuleArt";
 
 const EMBLEMS: Record<string, LucideIcon> = {
   Activity, Award, BedDouble, CalendarDays, Coins, Globe, Hammer, Handshake,
-  Heart, Landmark, MessageCircle, MessagesSquare, Mic, Newspaper, NotebookPen,
-  Sparkles, TrendingUp, Users, Wrench,
+  Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper, NotebookPen,
+  Orbit, Sparkles, TrendingUp, Users, Wrench,
 };
 
 /** The platform art this build ships for a module, or null when it ships none. */
