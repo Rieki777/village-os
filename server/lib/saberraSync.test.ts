@@ -274,8 +274,12 @@ describe.skipIf(!configured)("the schedule beside Sync now", () => {
       state.entered = null;
       expect(state.calls).toBe(1);
 
-      expect(await pollOnce(pool, at(48 * HOUR))).toBe("a sync was already running, so this check waits for the next one");
-      expect(await syncByHand(pool)).toEqual({ status: 409, body: { error: BUSY_SENTENCE, state: "busy" } });
+      // Raced against a clock, so a second sync that DID go in, and is now
+      // waiting on the same held call, fails here by name instead of hanging.
+      const settle = <T,>(p: Promise<T>) =>
+        Promise.race([p, new Promise<string>((r) => setTimeout(() => r("it went in beside the press"), 3000))]);
+      expect(await settle(pollOnce(pool, at(48 * HOUR)))).toBe("a sync was already running, so this check waits for the next one");
+      expect(await settle(syncByHand(pool))).toEqual({ status: 409, body: { error: BUSY_SENTENCE, state: "busy" } });
       // Neither of them reached the service.
       expect(state.calls).toBe(1);
 
