@@ -11,7 +11,7 @@ is about how to get a release and how to stay on one.
 ## The image
 
 ```
-ghcr.io/rieki777/village-os
+ghcr.io/regen-civics/village-os
 ```
 
 The package is **public by ruling**. A village that leaves the fleet keeps its
@@ -23,7 +23,7 @@ would add token rotation for thirteen villages with nothing gained.
 The image bakes in no secrets. Every secret arrives as an environment
 variable at run time, which is what makes publishing it safe.
 
-The repository, `github.com/Rieki777/village-os`, is public too, under the
+The repository, `github.com/ReGen-Civics/village-os`, is public too, under the
 MIT licence. Nobody needs an account, an access token or access to the
 repository to pull and run a release.
 
@@ -37,14 +37,16 @@ user/packages/container/village-os` answers 404, and the packages REST API
 offers list, get, delete and restore only. It was a web page, and only the
 account holder could use it:
 
-> `https://github.com/users/Rieki777/packages/container/village-os/settings`
-> then Danger Zone, Change visibility, Public.
+> `https://github.com/orgs/ReGen-Civics/packages/container/village-os/settings`
+> then Danger Zone, Change visibility, Public. (Before 1.2.1 the package lived
+> under the personal account at `ghcr.io/rieki777/village-os`, where 1.2.0 and
+> older still are.)
 
 Every later release publishes into the package that already exists and keeps
 its visibility. To check it from any machine, with no account and no Docker:
 
 ```
-curl -s "https://ghcr.io/token?scope=repository:rieki777/village-os:pull&service=ghcr.io"
+curl -s "https://ghcr.io/token?scope=repository:regen-civics/village-os:pull&service=ghcr.io"
 ```
 
 A JSON body carrying a `token` means the package is public and a stranger can
@@ -82,12 +84,12 @@ container:
 
 ```
 node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org
-docker pull ghcr.io/rieki777/village-os:1.2.0
+docker pull ghcr.io/regen-civics/village-os:1.2.1
 
 docker run -d --name village -p 3000:3000 \
   --env-file .env \
   -v village-data:/app/data \
-  ghcr.io/rieki777/village-os:1.2.0
+  ghcr.io/regen-civics/village-os:1.2.1
 ```
 
 `DATABASE_URL` is the only variable the server refuses to start without. It
@@ -152,7 +154,7 @@ keep that jump small. `ops/README.md` has the unpinning procedure.
 Name the version in your own deploy and leave it there:
 
 ```
-ghcr.io/rieki777/village-os:1.2.0
+ghcr.io/regen-civics/village-os:1.2.1
 ```
 
 That is the whole pin, and every village should have one. Nothing moves it

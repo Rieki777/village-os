@@ -63,10 +63,10 @@ This lists every version ever published. It needs no account, no login, and no
 Docker:
 
 ```sh
-TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:rieki777/village-os:pull&service=ghcr.io" \
+TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:regen-civics/village-os:pull&service=ghcr.io" \
   | sed -E 's/.*"token":"([^"]+)".*/\1/')
 
-curl -s "https://ghcr.io/v2/rieki777/village-os/tags/list" -H "Authorization: Bearer $TOKEN" \
+curl -s "https://ghcr.io/v2/regen-civics/village-os/tags/list" -H "Authorization: Bearer $TOKEN" \
   | tr ',' '\n' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -V
 ```
 
@@ -128,9 +128,13 @@ Name the exact version number. Do not use `:stable` for the upgrade itself,
 because `:stable` moves and you want to know precisely what you installed.
 Never use `:edge`: it is the untested tip of `main`.
 
+**The image moved with 1.2.1.** From 1.2.1 it is `ghcr.io/regen-civics/village-os`.
+1.2.0 and older stay where they were, at `ghcr.io/rieki777/village-os`, and keep
+working, so going back to one of them names that older address.
+
 **On one computer with `docker-compose.yml`** (`START_HERE.md`, part A),
 change `VILLAGE_OS_IMAGE` in `.env` to the new version, for example
-`ghcr.io/rieki777/village-os:1.2.0`, then:
+`ghcr.io/regen-civics/village-os:1.2.1`, then:
 
 ```sh
 docker compose pull
@@ -147,7 +151,7 @@ version and redeploy. Its variables stay where they are.
 over again:
 
 ```sh
-docker pull ghcr.io/rieki777/village-os:1.2.0
+docker pull ghcr.io/regen-civics/village-os:1.2.1
 
 docker stop village
 docker rm village
@@ -155,7 +159,7 @@ docker rm village
 docker run -d --name village -p 3000:3000 \
   --env-file .env \
   -v village-data:/app/data \
-  ghcr.io/rieki777/village-os:1.2.0
+  ghcr.io/regen-civics/village-os:1.2.1
 ```
 
 **Carry over EVERY environment variable your village already had.** Only
