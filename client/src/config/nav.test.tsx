@@ -10,7 +10,7 @@
  *
  * THE CONTROL IS THE POINT. The Command Centre sits directly beneath the
  * Launch Plan in the same group and stays team-only, so every case here checks
- * both hrefs. A change that opened the whole About group, or that broke
+ * both hrefs. A change that opened the whole Decide group, or that broke
  * `visible()` into a pass-everything, would show up as the Command Centre
  * appearing for a member, and these tests would say so.
  */
@@ -25,12 +25,14 @@ const authMock = vi.fn();
  * village, which serves them, except the last, which is a new village.
  */
 const brochure = { on: true };
+/** The modules this village runs. Empty is a fresh village. */
+const running: { modules: { id: string; lifecycle?: string }[] } = { modules: [] };
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => authMock(),
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
-  useModules: () => ({ modules: [], loaded: true, failed: false }),
+  useModules: () => ({ modules: running.modules, loaded: true, failed: false }),
 }));
 vi.mock("@/lib/gameApi", () => ({
   useGameConfig: () => ({
@@ -56,11 +58,11 @@ const LAUNCH_PLAN = '/journey-to-launch';
 const COMMAND_CENTRE = '/project-history';
 
 /**
- * Render the shell as `who`, then open the About dropdown, because the desktop
+ * Render the shell as `who`, then open the Decide dropdown (the Launch Plan moved there from About on 2026-10-09), because the desktop
  * dropdown mounts its items only while it is open. `null` is a signed-out
  * visitor.
  */
-function openAbout(who: { id: string; name: string; role?: string } | null) {
+function openDecide(who: { id: string; name: string; role?: string } | null) {
   authMock.mockReturnValue({ user: who, loading: false, logout: vi.fn() });
   render(
     <Router>
@@ -69,7 +71,7 @@ function openAbout(who: { id: string; name: string; role?: string } | null) {
       </Layout>
     </Router>,
   );
-  const buttons = screen.getAllByRole("button", { name: /About/i });
+  const buttons = screen.getAllByRole("button", { name: /Decide/i });
   fireEvent.click(buttons[0]!);
 }
 
@@ -87,7 +89,7 @@ describe("the Launch Plan entry in the header", () => {
   it("is there for a signed-in member holding no admin role", () => {
     // R12: any member may run the village's test run, so any member has to be
     // able to find the page that offers it.
-    openAbout({ id: "u-wren", name: "Wren Ash", role: "member" });
+    openDecide({ id: "u-wren", name: "Wren Ash", role: "member" });
 
     expect(linksTo(LAUNCH_PLAN).length).toBeGreaterThan(0);
     // The control: the neighbouring entry is still shut, so this is the one
@@ -96,14 +98,14 @@ describe("the Launch Plan entry in the header", () => {
   });
 
   it("is still there for an admin, who did not lose the door they had", () => {
-    openAbout({ id: "u-admin", name: "Ada Stone", role: "admin" });
+    openDecide({ id: "u-admin", name: "Ada Stone", role: "admin" });
 
     expect(linksTo(LAUNCH_PLAN).length).toBeGreaterThan(0);
     expect(linksTo(COMMAND_CENTRE).length).toBeGreaterThan(0);
   });
 
   it("is still there for a founder", () => {
-    openAbout({ id: "u-founder", name: "Fen Oak", role: "founder" });
+    openDecide({ id: "u-founder", name: "Fen Oak", role: "founder" });
 
     expect(linksTo(LAUNCH_PLAN).length).toBeGreaterThan(0);
     expect(linksTo(COMMAND_CENTRE).length).toBeGreaterThan(0);
@@ -114,7 +116,7 @@ describe("the Launch Plan entry in the header", () => {
     // button. A menu entry onto that is a locked door in a public menu, which
     // is the defect the Command Centre entry was written to avoid, so opening
     // this one to members had to stop short of opening it to everyone.
-    openAbout(null);
+    openDecide(null);
 
     expect(linksTo(LAUNCH_PLAN)).toHaveLength(0);
     expect(linksTo(COMMAND_CENTRE)).toHaveLength(0);
@@ -125,9 +127,58 @@ describe("the Launch Plan entry in the header", () => {
     // page. A village that does not serve those has none, so its founder
     // keeps the Launch Plan and meets no door onto a missing page.
     brochure.on = false;
-    openAbout({ id: "u-founder", name: "Fen Oak", role: "founder" });
+    openDecide({ id: "u-founder", name: "Fen Oak", role: "founder" });
 
     expect(linksTo(LAUNCH_PLAN).length).toBeGreaterThan(0);
     expect(linksTo(COMMAND_CENTRE)).toHaveLength(0);
+  });
+});
+
+describe("the menu restructure (Rye, 2026-10-09)", () => {
+  beforeEach(() => {
+    authMock.mockReset();
+    brochure.on = true;
+    running.modules = [];
+  });
+
+  /**
+   * Links the dropdown ADDS when it opens. The footer carries some of the same
+   * hrefs (/roles among them), so counting the whole shell would pass with the
+   * menu entry gone; the difference is the menu alone.
+   */
+  function addedByOpening(label: RegExp, hrefs: string[]) {
+    authMock.mockReturnValue({ user: { id: "u-wren", name: "Wren Ash", role: "member" }, loading: false, logout: vi.fn() });
+    render(
+      <Router>
+        <Layout>
+          <p>page body</p>
+        </Layout>
+      </Router>,
+    );
+    const before = hrefs.map((h) => linksTo(h).length);
+    fireEvent.click(screen.getAllByRole("button", { name: label })[0]!);
+    return Object.fromEntries(hrefs.map((h, i) => [h, linksTo(h).length - before[i]!]));
+  }
+
+  it("puts Quests under Village", () => {
+    expect(addedByOpening(/Village/i, ["/quests"])["/quests"]).toBe(1);
+  });
+
+  it("gives the plain Circles and Roles pages back their own entries on a village with no map", () => {
+    // The mocked village runs no modules, so the map view is hidden and both
+    // plain pages must still have a door in the menu.
+    const added = addedByOpening(/Village/i, ["/circles", "/roles", "/map/circles"]);
+    expect(added).toEqual({ "/circles": 1, "/roles": 1, "/map/circles": 0 });
+  });
+
+  it("folds Circles and Roles into the map view where the map runs", () => {
+    running.modules = [{ id: "map", lifecycle: "public" }];
+    const added = addedByOpening(/Village/i, ["/circles", "/roles", "/map/circles"]);
+    expect(added).toEqual({ "/circles": 0, "/roles": 0, "/map/circles": 1 });
+  });
+
+  it("offers the review queue and the powers page under Decide", () => {
+    const added = addedByOpening(/Decide/i, ["/review", "/powers"]);
+    expect(added).toEqual({ "/review": 1, "/powers": 1 });
   });
 });
