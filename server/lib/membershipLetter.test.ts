@@ -449,7 +449,15 @@ describe.skipIf(!configured)("the membership letter, on a real schema", () => {
     expect(v.sealed).toBe(false);
     expect(await textsToSettle(pool)).toContain(v.text.id);
     await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: "c".repeat(64) });
-    await settleAll({ getPool: () => pool, notify: async () => ({}), notifyAdmins: async () => {}, today: () => "2026-10-14" } as any);
+    const told: string[] = [];
+    await settleAll({
+      getPool: () => pool,
+      notify: async (i: any) => void told.push(i.dedupeKey),
+      notifyAdmins: async (_t: string, _x: string, k: string) => void told.push(k),
+      today: () => "2026-10-14",
+    } as any);
+    // The sweep read it, sealed it, and told nobody: not the member, and not every admin through the village party.
+    expect(told.filter((k) => k.includes(v.text.id))).toEqual([]);
     const [seal] = await sealsOf(pool, [v.text.id]);
     expect(verifyDocument(seal.receipt, signingKey().publicKeyPem)).toBe(true);
     // Sealed, in force, nobody to tell: nothing left for the hourly sweep to read.
