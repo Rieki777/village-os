@@ -16,6 +16,8 @@ export interface ChipParty {
   partyKey: string;
   label: string;
   aligned: boolean;
+  /** False for a party who need not align: the village on a membership letter (PR9). Absent reads as required. */
+  required?: boolean;
 }
 
 export function AlignedStamp({ sealed }: { sealed: boolean }) {
@@ -37,13 +39,14 @@ export function PartyChips({ parties }: { parties: readonly ChipParty[] }) {
       {parties.map((p) => (
         <li
           key={p.partyKey}
-          data-party-chip={p.aligned ? "aligned" : "waiting"}
+          data-party-chip={p.aligned ? "aligned" : p.required === false ? "not-required" : "waiting"}
           className={`inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium ${
             p.aligned ? "border-notice/60 text-foreground" : "border-border text-muted-foreground"
           }`}
         >
           {p.aligned ? <CircleCheck className="size-3.5 text-notice" aria-hidden="true" /> : <Circle className="size-3.5" aria-hidden="true" />}
-          {p.aligned ? ALIGN_WORDS.partyAligned(p.label) : ALIGN_WORDS.partyWaiting(p.label)}
+          {/* Nobody waits on a party who need not align, so they never read "not yet" (PR9). */}
+          {p.aligned ? ALIGN_WORDS.partyAligned(p.label) : p.required === false ? ALIGN_WORDS.partyWrote(p.label) : ALIGN_WORDS.partyWaiting(p.label)}
         </li>
       ))}
     </ul>

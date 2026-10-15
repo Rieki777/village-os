@@ -24,6 +24,11 @@
  *
  * `superseded` and `term_end` are written by the sweep in alignmentSubjects.ts.
  *
+ * A MEMBERSHIP LETTER (PR9) takes neither notice nor an ask: it ends when its
+ * member leaves, by the PARTY LEFT row above, or when they align with the
+ * letter again (`superseded`, written with the new signing). Both acts refuse
+ * it in a sentence that says so.
+ *
  * WHO ACTS FOR WHICH PARTY is the route's question, asked through the one
  * adoption rule; here a party key is handed in and trusted.
  *
@@ -38,7 +43,7 @@ import { noticeDaysOf } from "../../shared/alignments";
 import { civilDateKey } from "../../shared/lunar";
 import { endingsOf, insertEnding, lockText, textsForParty } from "../repos/alignments";
 import { inApplicationTransaction } from "../repos/seatApplications";
-import { endingIdFor, newEndingId, viewText, viewTexts, type TextView } from "./alignmentSubjects";
+import { endingIdFor, endsByAct, newEndingId, viewText, viewTexts, type TextView } from "./alignmentSubjects";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -67,6 +72,10 @@ async function onText<T extends EndingAct>(pool: Pool, input: ActInput, work: (c
     if (!v) return refuse(404, "not_found", "There is no text by that id.");
     if (!v.parties.some((p) => p.partyKey === input.partyKey)) {
       return refuse(403, "not_a_party", "You are not a party to these terms, so there is nothing for you to end.");
+    }
+    // A membership letter (PR9) ends when its member leaves the village, never by notice or agreement.
+    if (!endsByAct(v.text.subjectType)) {
+      return refuse(409, "ends_on_leaving", "A membership letter ends when you leave the village, so there is no notice to give and nothing to agree.");
     }
     if (v.derived.state === "ended") return refuse(409, "ended", v.derived.why ?? "These terms have already ended.");
     if (!v.derived.allAligned) {

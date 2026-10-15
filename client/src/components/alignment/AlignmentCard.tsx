@@ -17,6 +17,7 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { ALIGN_WORDS, DEFAULT_NOTICE_DAYS, intentSentence } from "@shared/alignments";
+import { SIGNING_WORDS } from "@shared/membershipSigning";
 import AlignButton from "./AlignButton";
 import { AlignedStamp, EndingLine, PartyChips, StateTag } from "./AlignmentMarks";
 import EndingActions from "./EndingActions";
@@ -54,6 +55,8 @@ export default function AlignmentCard({
           <EndingLine line={a.endingLine} />
         </div>
       )}
+      {/* Your own membership letter says what the village did with the signing it came from (PR9). */}
+      {a.answer && <p data-signing-answer={a.answer} className="mt-1 text-sm text-foreground">{SIGNING_WORDS[a.answer]}</p>}
 
       {showWords && (
         <pre
@@ -71,7 +74,7 @@ export default function AlignmentCard({
       <div className="mt-4 flex flex-wrap items-end gap-4">
         {a.you && (a.you.aligned || mayAlign) && (
           <AlignButton
-            sentence={intentSentence(a.seatNames)}
+            sentence={a.intent ?? intentSentence(a.seatNames)}
             alignedAt={a.you.aligned ? a.you.alignedAt : null}
             onAlign={() =>
               a.textId && a.contentHash ? alignWithText(a.textId, a.contentHash) : alignWithApplication(String(applicationId), a.body)

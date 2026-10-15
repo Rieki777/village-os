@@ -107,6 +107,14 @@ const SIGNING = {
   signedAt: new Date().toISOString(),
 };
 
+/** The version of the letter a visitor's page would draw now (seat settings PR9): what a member's signing sends back. */
+async function letterVersion(): Promise<string> {
+  const letter = await call("GET", "/api/membership-letter", { token: null });
+  expect(letter.status, JSON.stringify(letter.json)).toBe(200);
+  expect(String(letter.json?.version ?? "")).toMatch(/^lv-[0-9a-f]{16}$/);
+  return String(letter.json.version);
+}
+
 /** How many people the live roll holds right now, straight through the gate. */
 async function onTheRoll(): Promise<number> {
   const status = await call("GET", "/api/admin/launch");
@@ -289,9 +297,19 @@ describe.skipIf(!DB_CONFIGURED)("a signed-in account names its own type", () => 
   it("still takes the signature, because signing is something a person may do", async () => {
     await forgetTheRateWindow();
     const before = await onTheRoll();
-    const posted = await call("POST", "/api/forms/submit", {
+    // Seat settings PR9: a member's signing aligns them with the letter's
+    // words, so it names the version of the letter the page drew. Without one
+    // there is no knowing what they read, and the door says so and keeps nothing.
+    const unread = await call("POST", "/api/forms/submit", {
       token: malloryToken,
       body: { type: "membership-508", data: SIGNING },
+    });
+    expect(unread.status, JSON.stringify(unread.json)).toBe(409);
+    expect(unread.json?.error).toBe("letter_changed");
+    expect(await submissionsOfType("membership-508")).toEqual([]);
+    const posted = await call("POST", "/api/forms/submit", {
+      token: malloryToken,
+      body: { type: "membership-508", data: { ...SIGNING, letterVersion: await letterVersion() } },
     });
     expect(posted.status, JSON.stringify(posted.json)).toBe(200);
     expect(posted.json?.success).toBe(true);
@@ -304,6 +322,12 @@ describe.skipIf(!DB_CONFIGURED)("a signed-in account names its own type", () => 
     expect(rows.length).toBe(1);
     expect(String(rows[0].user_id)).toBe(malloryId);
     expect(String(rows[0].status)).toBe("new");
+    // And the same act aligned her with the words she read, in the same transaction.
+    const [texts] = await pool.query<any[]>( // module-review-ok: fixture SQL reading back what the built server wrote to the S5 scratch schema
+      "SELECT t.subject_type, t.subject_ref, a.method FROM alignment_texts t JOIN alignments a ON a.text_id = t.id WHERE a.user_id = ?",
+      [malloryId],
+    );
+    expect(texts.map((t) => [t.subject_type, String(t.subject_ref).endsWith(`:${selfIssued}`), t.method])).toEqual([["membership", true, "click"]]);
 
     expect(await onTheRoll(), "the roll did not move when the letter was signed").toBe(before);
   });
@@ -324,7 +348,7 @@ describe.skipIf(!DB_CONFIGURED)("a signed-in account names its own type", () => 
     for (let i = 0; i < 2; i += 1) {
       const again = await call("POST", "/api/forms/submit", {
         token: malloryToken,
-        body: { type: "membership-508", data: { ...SIGNING, why: `attempt ${i}` } },
+        body: { type: "membership-508", data: { ...SIGNING, why: `attempt ${i}`, letterVersion: await letterVersion() } },
       });
       expect(again.status).toBe(200);
     }

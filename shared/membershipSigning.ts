@@ -80,6 +80,22 @@ export const SIGNING_TYPE = "membership-508";
 /** What the village has done with a signing, in words a member recognises. */
 export type SigningAnswer = "waiting" | "welcomed" | "left";
 
+/**
+ * The village's answer, in the member's own words.
+ *
+ * The pipeline underneath has five statuses and none of them is a sentence for
+ * a person, which is the ruling `server/lib/submissionNotices.ts` made for the
+ * notification spine. `signingAnswer` below maps those five onto these three.
+ * Read by the journey section for a legacy signing and, since seat settings
+ * PR9, by "What you have aligned with" for the signing a letter came from.
+ * Keyed by the union, so a new answer cannot render blank.
+ */
+export const SIGNING_WORDS: Record<SigningAnswer, string> = {
+  waiting: "Your membership request is with the village.",
+  welcomed: "The village said yes, and you hold membership.",
+  left: "The village left your membership request where it is for now.",
+};
+
 /** One member's signing, as their own profile reads it. */
 export interface MembershipSigning {
   at: string;

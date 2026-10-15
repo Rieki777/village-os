@@ -288,7 +288,11 @@ describe.skipIf(!configured)("the register, on a real schema", () => {
   it("a member reads every text and every version, newest first, with no count", async () => {
     const r = await h.call("GET", "/api/aligned");
     expect(r.status).toBe(200);
-    expect(r.body.kinds).toEqual([{ id: "seat_terms", label: "Seat terms" }]);
+    expect(r.body.kinds).toEqual([
+      { id: "seat_terms", label: "Seat terms" },
+      // Seat settings PR9 turned the letter on.
+      { id: "membership", label: "Membership letter" },
+    ]);
     const ids = r.body.rows.map((x: any) => x.textId);
     for (const t of [made.money.textId, made.honorary.textId, made.waiting.textId, "at-00000000000000e2"]) expect(ids).toContain(t);
     expect(rowOf(r.body, made.honorary.textId).version).toBe(1);

@@ -54,7 +54,13 @@ export default function RegisterEntry({ row, headingLevel = 3 }: { row: Register
             )}
             <span>
               <span className="font-semibold">{p.label}</span>, {p.capacity}:{" "}
-              {p.aligned ? (p.alignedOn ? `${ALIGNED_WORDS.aligned} ${civilDayWords(p.alignedOn)}` : ALIGNED_WORDS.aligned) : ALIGNED_WORDS.waiting}
+              {p.aligned
+                ? p.alignedOn
+                  ? `${ALIGNED_WORDS.aligned} ${civilDayWords(p.alignedOn)}`
+                  : ALIGNED_WORDS.aligned
+                : p.required
+                  ? ALIGNED_WORDS.waiting
+                  : ALIGNED_WORDS.wrote}
             </span>
           </li>
         ))}

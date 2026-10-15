@@ -7,10 +7,12 @@
  *
  * ── KINDS ──────────────────────────────────────────────────────────────────
  *
- * One kind ships today: "Seat terms", the words a member aligns with when they
- * apply to hold seats. Two more have their places kept and are not built:
+ * Two kinds ship: "Seat terms", the words a member aligns with when they apply
+ * to hold seats, and since seat settings PR9 "Membership letter", the Love
+ * Letter's words as each member aligned with them (subject type `membership`,
+ * server/lib/membershipLetter.ts). One more has its place kept and is not
+ * built:
  *
- *   "Membership letter"   seat settings PR9, subject type `membership`
  *   "Village agreement"   after the held agreements lane lands, subject `agreement`
  *
  * A kind joins the register by gaining an entry in REGISTER_KINDS, with the
@@ -44,7 +46,7 @@ export interface RegisterKind {
  */
 export const REGISTER_KINDS: readonly RegisterKind[] = [
   { id: "seat_terms", label: "Seat terms", capability: "terms.read" },
-  // Seat settings PR9: { id: "membership", label: "Membership letter", capability: "terms.read" },
+  { id: "membership", label: "Membership letter", capability: "terms.read" },
   // After the agreements lane lands: { id: "agreement", label: "Village agreement", capability: "terms.read" },
 ];
 
@@ -118,7 +120,7 @@ export const ALIGNED_WORDS = {
   menu: "Aligned",
   eyebrow: "The village's record",
   title: "Aligned",
-  lede: "Every set of terms members have aligned with, every version, and how the village aligned with each. Open to every member.",
+  lede: "Every set of terms and every membership letter members have aligned with, every version, and how the village aligned with each. Open to every member.",
   membersOnly: "Members read what the village has aligned with.",
   membersOnlyLine: "The register carries seat terms, money included, so it opens at the member rung.",
   kinds: "Kinds",
@@ -129,7 +131,7 @@ export const ALIGNED_WORDS = {
   clear: "Show the whole register",
   results: (q: string) => `Terms that match "${q}"`,
   noResults: "Nothing in the register matches that.",
-  empty: "Nothing has been aligned with yet. When a member applies for a seat on terms, the words land here.",
+  empty: "Nothing has been aligned with yet. When a member aligns with the village's letter or applies for a seat on terms, the words land here.",
   loading: "Reading the register",
   more: "Show earlier terms",
   readingMore: "Reading earlier terms…",
@@ -145,6 +147,8 @@ export const ALIGNED_WORDS = {
   parties: "Parties",
   aligned: "aligned",
   waiting: "not yet",
+  /** A party who need not align and has not: the village, on a membership letter, whose side is the letter itself (PR9). */
+  wrote: "wrote these words",
   money: "Recorded here. Paid outside the platform.",
   /** The door from a member's own profile. */
   profileDoor: "Read the village's register",
