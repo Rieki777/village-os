@@ -24,6 +24,26 @@
  * overwrite one that arrived first. "Due" is decided IN SQL against
  * CURRENT_TIMESTAMP, never against this process's clock.
  *
+ * NO DRAIN STATEMENT LOCKS A RANGE. Two drains do run at once (the scheduler's
+ * and one a request started), and InnoDB deadlocks two statements that take
+ * the same locks in opposite orders. An UPDATE that finds its rows through the
+ * (status, send_after) index locks each index entry first and its row second,
+ * and a claim by id locks the row first and the index entry second, so a sweep
+ * and a claim that meet on one row deadlock. CI measured exactly that on
+ * 2026-10-15: `failStaleEssential` lost to the other drain's claims and threw
+ * out of `drain()`, and on 2026-10-20 a local MariaDB 12.3 did the same with
+ * `expireDue` in 80 rounds of two drains. So the three sweeps READ their ids,
+ * which takes no lock, and then move each row by its id, asking the same
+ * question again in the UPDATE, so a row that moved on in between is left
+ * where it went. Every write the drain makes is one row by its primary key,
+ * row first, and two of those never take their locks in opposite orders.
+ *
+ * A LOST RACE IS TRIED AGAIN. A deadlock can still come from outside the drain
+ * (the retention pass, a test's reset), and InnoDB rolls the victim's
+ * statement back whole, so each drain write runs again after a short jittered
+ * pause, up to LOCK_TRIES times (`retryLostRace`). Every write is conditional
+ * on the status it expects, so running one twice moves its row once.
+ *
  * ESSENTIAL ROWS ARE NEVER DRAINED. They are born `sending` and sent inside
  * the request that asked for them, and their words are not kept, so the drain
  * would have nothing to send. One left behind by a crash is marked failed, in
@@ -31,8 +51,29 @@
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { EmailKind, MessageStatus, SkipReason } from "../../shared/comms/kinds";
+import { lostConcurrencyRace } from "../db/concurrency";
 
 const VILLAGE = "local";
+
+/** How many times one drain write is tried before its lost race is the caller's to answer. */
+export const LOCK_TRIES = 4;
+
+/**
+ * Run one statement, and run it again when it lost a lock race (the header).
+ * The pause grows a little each time and is jittered, so two drains that lost
+ * to each other do not meet again on the same millisecond. After LOCK_TRIES
+ * the race is thrown.
+ */
+async function retryLostRace<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      if (!lostConcurrencyRace(err) || attempt >= LOCK_TRIES) throw err;
+      await new Promise((r) => setTimeout(r, 10 * attempt + Math.floor(Math.random() * 40)));
+    }
+  }
+}
 
 export interface NewMessageRow {
   id: string;
@@ -159,50 +200,58 @@ export async function markSent(
   id: string,
   input: { provider: string; providerMessageId: string; status?: "sent" | "rehearsed"; rehearsalTo?: string | null },
 ): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = ?, provider = ?, provider_message_id = ?, rehearsal_to = ?, " +
-      "attempts = attempts + 1, sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, last_error = NULL, " +
-      "next_attempt_at = NULL WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
-    [
-      input.status === "rehearsed" ? "rehearsed" : "sent",
-      input.provider.slice(0, 32),
-      // Accepted with no id is still accepted, and an empty string is not an id.
-      input.providerMessageId ? input.providerMessageId.slice(0, 128) : null,
-      input.rehearsalTo ? input.rehearsalTo.slice(0, 320) : null,
-      VILLAGE,
-      id,
-    ],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = ?, provider = ?, provider_message_id = ?, rehearsal_to = ?, " +
+        "attempts = attempts + 1, sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, last_error = NULL, " +
+        "next_attempt_at = NULL WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
+      [
+        input.status === "rehearsed" ? "rehearsed" : "sent",
+        input.provider.slice(0, 32),
+        // Accepted with no id is still accepted, and an empty string is not an id.
+        input.providerMessageId ? input.providerMessageId.slice(0, 128) : null,
+        input.rehearsalTo ? input.rehearsalTo.slice(0, 320) : null,
+        VILLAGE,
+        id,
+      ],
+    ),
   );
   return res.affectedRows > 0;
 }
 
 /** The provider refused it, or the call never reached it. The words of the refusal are kept. */
 export async function markFailed(pool: Pool, id: string, input: { provider: string; error: string }): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'failed', provider = ?, last_error = ?, attempts = attempts + 1, " +
-      "next_attempt_at = NULL, updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
-    [input.provider.slice(0, 32), input.error.slice(0, 500), VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'failed', provider = ?, last_error = ?, attempts = attempts + 1, " +
+        "next_attempt_at = NULL, updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
+      [input.provider.slice(0, 32), input.error.slice(0, 500), VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
 
 /** It was never sent, and this is why, with a sentence when the reason needs one. */
 export async function markSkipped(pool: Pool, id: string, reason: SkipReason, lastError: string | null = null): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'skipped', skip_reason = ?, last_error = COALESCE(?, last_error), " +
-      "updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
-    [reason, lastError ? lastError.slice(0, 500) : null, VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'skipped', skip_reason = ?, last_error = COALESCE(?, last_error), " +
+        "updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
+      [reason, lastError ? lastError.slice(0, 500) : null, VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
 
 /** It is still unsent and its moment has passed. */
 export async function markExpired(pool: Pool, id: string): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'expired', skip_reason = 'expired', updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
-    [VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'expired', skip_reason = 'expired', updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND id = ? AND status IN ('queued', 'sending')",
+      [VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
@@ -262,33 +311,30 @@ export async function dueMessageIds(pool: Pool, opts: { limit: number; onlyKinds
  */
 export async function claimMessage(pool: Pool, id: string): Promise<OutboundRow | null> {
   /*
-   * TWO DRAINS CAN DEADLOCK ON THIS UPDATE, and the claim must survive it.
-   * Each UPDATE locks entries of the (status, send_after) index as well as the
-   * row, so two drains claiming neighbouring rows at once can take those locks
-   * in opposite orders. InnoDB then picks a victim and fails its statement with
-   * ER_LOCK_DEADLOCK (1213); MariaDB under snapshot isolation can answer 1020
-   * instead, and a long wait answers 1205. Measured on the composed tree: the
-   * "two drains at once" test threw 1213 out of drain() and lost the tick.
-   *
-   * The victim's statement was rolled back whole, so trying again is safe: the
-   * retry either claims the row or finds the other drain already did
-   * (affectedRows 0, answered as null). After three tries the row stays queued
-   * for the next drain, which is never a lost email.
+   * THE CLAIM SURVIVES A LOST LOCK RACE. It is one row by its id, so it no
+   * longer crosses a sweep (the header), and it is still tried again when
+   * InnoDB picks it as a victim (1213), when MariaDB under snapshot isolation
+   * answers 1020, or when a long wait answers 1205. The victim's statement was
+   * rolled back whole, so trying again is safe: the retry either claims the row
+   * or finds the other drain already did (affectedRows 0, answered as null).
+   * After LOCK_TRIES the row stays queued for the next drain, which is never a
+   * lost email.
    */
-  let res: ResultSetHeader | null = null;
-  for (let attempt = 0; attempt < 3 && !res; attempt++) {
-    try {
-      [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the claim one drain wins
+  let res: ResultSetHeader;
+  try {
+    [res] = await retryLostRace(() =>
+      pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the claim one drain wins
         "UPDATE comms_messages SET status = 'sending', updated_at = CURRENT_TIMESTAMP " +
           `WHERE village_id = ? AND id = ? AND status = 'queued' AND kind <> 'essential' AND ${DUE}`,
         [VILLAGE, id],
-      );
-    } catch (e: any) {
-      if (![1213, 1205, 1020].includes(Number(e?.errno))) throw e;
-      await new Promise((r) => setTimeout(r, 15 + Math.floor(Math.random() * 35)));
-    }
+      ),
+    );
+  } catch (err) {
+    if (!lostConcurrencyRace(err)) throw err;
+    console.warn(`[comms] the claim on ${id} lost a lock race ${LOCK_TRIES} times, so it stays queued for the next drain`);
+    return null;
   }
-  if (!res || res.affectedRows === 0) return null;
+  if (res.affectedRows === 0) return null;
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, the row this drain just claimed
     "SELECT id, kind, contact_id, user_id, to_email, email_key, subject, body_html, body_text, reply_to, attachments, " +
       "attempts, UNIX_TIMESTAMP(expires_at) AS expires_at FROM comms_messages WHERE village_id = ? AND id = ? LIMIT 1",
@@ -319,43 +365,76 @@ export async function scheduleRetry(
   id: string,
   input: { provider: string; error: string; delaySeconds: number },
 ): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'queued', provider = ?, last_error = ?, attempts = attempts + 1, " +
-      "next_attempt_at = CURRENT_TIMESTAMP + INTERVAL ? SECOND, updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND id = ? AND status = 'sending'",
-    [input.provider.slice(0, 32), input.error.slice(0, 500), Math.max(1, Math.trunc(input.delaySeconds)), VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'queued', provider = ?, last_error = ?, attempts = attempts + 1, " +
+        "next_attempt_at = CURRENT_TIMESTAMP + INTERVAL ? SECOND, updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND id = ? AND status = 'sending'",
+      [input.provider.slice(0, 32), input.error.slice(0, 500), Math.max(1, Math.trunc(input.delaySeconds)), VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
 
 /** Over the daily cap: back in the queue until the next window opens. Never dropped. */
 export async function deferMessage(pool: Pool, id: string, sendAfter: number): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'queued', send_after = FROM_UNIXTIME(?), updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND id = ? AND status = 'sending'",
-    [Math.trunc(sendAfter), VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'queued', send_after = FROM_UNIXTIME(?), updated_at = CURRENT_TIMESTAMP " +
+        "WHERE village_id = ? AND id = ? AND status = 'sending'",
+      [Math.trunc(sendAfter), VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
 
 /** Held (paused, or a question that could not be answered): back in the queue as it was. */
 export async function releaseClaim(pool: Pool, id: string): Promise<boolean> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
-    "UPDATE comms_messages SET status = 'queued', updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND status = 'sending'",
-    [VILLAGE, id],
+  const [res] = await retryLostRace(() =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, one row by id
+      "UPDATE comms_messages SET status = 'queued', updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND status = 'sending'",
+      [VILLAGE, id],
+    ),
   );
   return res.affectedRows > 0;
 }
 
+// ── The drain's three sweeps ────────────────────────────────────────────────
+//
+// Each one READS the ids its question matches, which locks nothing, and then
+// moves each row by its id with the same question in the UPDATE (the header).
+
+/** The most rows one sweep moves in one drain. The rest wait for the next drain, a minute later. */
+export const SWEEP_PAGE = 500;
+
+/** Move each listed row by its id, and answer how many moved. A row that no longer matches stays put. */
+async function moveEach(rows: RowDataPacket[], move: (id: string) => Promise<[ResultSetHeader, unknown]>): Promise<number> {
+  let moved = 0;
+  for (const r of rows) {
+    const [res] = await retryLostRace(() => move(String(r.id)));
+    moved += res.affectedRows;
+  }
+  return moved;
+}
+
+const EXPIRED = "status = 'queued' AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP";
+
 /** Every queued row whose moment has passed becomes `expired`. Answers how many. */
 export async function expireDue(pool: Pool): Promise<number> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's expiry pass
-    "UPDATE comms_messages SET status = 'expired', skip_reason = 'expired', updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND status = 'queued' AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP",
-    [VILLAGE],
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, the drain's expiry pass reads its ids
+    `SELECT id FROM comms_messages WHERE village_id = ? AND ${EXPIRED} ORDER BY id LIMIT ?`,
+    [VILLAGE, SWEEP_PAGE],
   );
-  return res.affectedRows;
+  return moveEach(rows, (id) =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's expiry pass, one row by id
+      "UPDATE comms_messages SET status = 'expired', skip_reason = 'expired', updated_at = CURRENT_TIMESTAMP " +
+        `WHERE village_id = ? AND id = ? AND ${EXPIRED}`,
+      [VILLAGE, id],
+    ),
+  );
 }
+
+const STALE = "COALESCE(updated_at, created_at) <= CURRENT_TIMESTAMP - INTERVAL ? MINUTE";
 
 /**
  * A row stuck in `sending` longer than `minutes` belonged to a drain that
@@ -364,13 +443,18 @@ export async function expireDue(pool: Pool): Promise<number> {
  * reached the provider.
  */
 export async function recoverStaleSending(pool: Pool, minutes: number): Promise<number> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's stale-claim pass
-    "UPDATE comms_messages SET status = 'queued', updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND status = 'sending' AND kind <> 'essential' " +
-      "AND COALESCE(updated_at, created_at) <= CURRENT_TIMESTAMP - INTERVAL ? MINUTE",
-    [VILLAGE, Math.max(1, Math.trunc(minutes))],
+  const question = `status = 'sending' AND kind <> 'essential' AND ${STALE}`;
+  const m = Math.max(1, Math.trunc(minutes));
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, the drain's stale-claim pass reads its ids
+    `SELECT id FROM comms_messages WHERE village_id = ? AND ${question} ORDER BY id LIMIT ?`,
+    [VILLAGE, m, SWEEP_PAGE],
   );
-  return res.affectedRows;
+  return moveEach(rows, (id) =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's stale-claim pass, one row by id
+      `UPDATE comms_messages SET status = 'queued', updated_at = CURRENT_TIMESTAMP WHERE village_id = ? AND id = ? AND ${question}`,
+      [VILLAGE, id, m],
+    ),
+  );
 }
 
 /**
@@ -381,13 +465,19 @@ export async function recoverStaleSending(pool: Pool, minutes: number): Promise<
  * it (server/lib/comms/webhook.ts).
  */
 export async function failStaleEssential(pool: Pool, minutes: number, why: string): Promise<number> {
-  const [res] = await pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's stale-claim pass
-    "UPDATE comms_messages SET status = 'failed', last_error = ?, updated_at = CURRENT_TIMESTAMP " +
-      "WHERE village_id = ? AND kind = 'essential' AND status IN ('queued', 'sending') " +
-      "AND COALESCE(updated_at, created_at) <= CURRENT_TIMESTAMP - INTERVAL ? MINUTE",
-    [why.slice(0, 500), VILLAGE, Math.max(1, Math.trunc(minutes))],
+  const question = `kind = 'essential' AND status IN ('queued', 'sending') AND ${STALE}`;
+  const m = Math.max(1, Math.trunc(minutes));
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the post office ledger, the drain's stale-claim pass reads its ids
+    `SELECT id FROM comms_messages WHERE village_id = ? AND ${question} ORDER BY id LIMIT ?`,
+    [VILLAGE, m, SWEEP_PAGE],
   );
-  return res.affectedRows;
+  return moveEach(rows, (id) =>
+    pool.query<ResultSetHeader>( // module-review-ok: the post office ledger, the drain's stale-claim pass, one row by id
+      "UPDATE comms_messages SET status = 'failed', last_error = ?, updated_at = CURRENT_TIMESTAMP " +
+        `WHERE village_id = ? AND id = ? AND ${question}`,
+      [why.slice(0, 500), VILLAGE, id, m],
+    ),
+  );
 }
 
 /**
