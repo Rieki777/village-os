@@ -17,13 +17,15 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { questsRepo as makeQuestsRepo } from "../repos/quests";
+import type { NotifyInput } from "./notify";
 import {
   acceptQuestProposal,
   proposeQuest,
   questBatchCap,
   questProposalQueue,
+  rejectQuestProposal,
   rewardProblem,
 } from "./questProposals";
 
@@ -45,7 +47,7 @@ const propose = (over: Record<string, unknown> = {}) => ({
 describe.skipIf(!configured)("a proposed quest and the reward a human types", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
     quests = makeQuestsRepo(pool);
   });
 
@@ -278,5 +280,77 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await proposeQuest(pool, propose({ prose: { title: "Ask ada@example.org about the swale" } }));
     expect(r.ok).toBe(false);
     expect(await questProposalQueue(pool)).toHaveLength(0);
+  });
+
+  // ── THE PERSON WHO PROPOSED IT HEARS THE ANSWER ──────────────────────────
+  //
+  // Both decisions used to tell nobody. These hand the decision a stub in
+  // place of the spine and read what it was given.
+
+  /** A stand-in for the notify spine that keeps what it was handed. */
+  const spine = () => {
+    const notices: NotifyInput[] = [];
+    const notify = async (n: NotifyInput) => {
+      notices.push(n);
+      return { fresh: true };
+    };
+    return { notices, notify };
+  };
+
+  /** An idea a signed-in member sent through the Propose a Quest form. */
+  const fromAda = (title = "Clear the north swale") =>
+    propose({ moduleId: "propose-quest", proposedBy: "u-ada", proposedByKind: "human", prose: { title, description: "Two hours with a mattock." } });
+
+  it("tells the member their idea is on the board, linked to the quest, with none of the idea's words", async () => {
+    const { notices, notify } = spine();
+    const p = await proposeQuest(pool, fromAda());
+    const r = await acceptQuestProposal(pool, quests, { id: p.ok ? p.id : "", decidedBy: "u-steward", reward: { gratitude: "50" } }, notify);
+    expect(r.ok).toBe(true);
+    expect(notices).toEqual([
+      {
+        userId: "u-ada",
+        type: "quest_idea_on_board",
+        title: "Your quest idea is on the board",
+        link: `/quests/${r.ok ? r.questId : ""}`,
+        dedupeKey: `quest-idea:${p.ok ? p.id : ""}:on_board`,
+      },
+    ]);
+    expect(JSON.stringify(notices)).not.toContain("swale");
+  });
+
+  it("tells the member the no, carrying the steward's reason and no other free text", async () => {
+    const { notices, notify } = spine();
+    const p = await proposeQuest(pool, fromAda());
+    const id = p.ok ? p.id : "";
+    expect(await rejectQuestProposal(pool, { id, decidedBy: "u-steward", note: "  The swale is already cleared this season.  " }, notify)).toBe(true);
+    expect(notices).toEqual([
+      {
+        userId: "u-ada",
+        type: "quest_idea_declined",
+        title: "A steward said no to your quest idea",
+        body: "The swale is already cleared this season.",
+        link: "/propose-quest",
+        dedupeKey: `quest-idea:${id}:declined`,
+      },
+    ]);
+  });
+
+  it("sends the no with no body when the steward typed no reason, and tells nobody twice", async () => {
+    const { notices, notify } = spine();
+    const p = await proposeQuest(pool, fromAda());
+    const id = p.ok ? p.id : "";
+    expect(await rejectQuestProposal(pool, { id, decidedBy: "u-steward", note: "" }, notify)).toBe(true);
+    expect(await rejectQuestProposal(pool, { id, decidedBy: "u-steward", note: "again" }, notify)).toBe(false);
+    expect(notices).toHaveLength(1);
+    expect(notices[0].body).toBeNull();
+  });
+
+  it("tells nobody about a visitor's idea or a machine's", async () => {
+    const { notices, notify } = spine();
+    const visitor = await proposeQuest(pool, propose({ moduleId: "propose-quest", proposedBy: null, proposedByKind: "human" }));
+    const machine = await proposeQuest(pool, propose({ prose: { title: "Mend the gate" }, proposedBy: "assistant", proposedByKind: "agent" }));
+    expect((await acceptQuestProposal(pool, quests, { id: visitor.ok ? visitor.id : "", decidedBy: "u-steward", reward: { gratitude: "5" } }, notify)).ok).toBe(true);
+    expect(await rejectQuestProposal(pool, { id: machine.ok ? machine.id : "", decidedBy: "u-steward", note: "No." }, notify)).toBe(true);
+    expect(notices).toEqual([]);
   });
 });

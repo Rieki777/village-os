@@ -596,10 +596,10 @@ export default function Review() {
     }
   };
 
-  const rejectQuest = async (q: QuestCard) => {
+  const rejectQuest = async (q: QuestCard, reason: string) => {
     setBusy(q.id);
     try {
-      if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
+      if (await post(`/api/review/quests/${q.id}/reject`, { note: reason })) {
         toast.success("Rejected");
         await load();
       }
@@ -953,7 +953,7 @@ export default function Review() {
             arrived={when(q.receivedAt)}
             busy={busy === q.id}
             onAccept={(typed) => void acceptQuest(q, typed)}
-            onReject={() => void rejectQuest(q)}
+            onReject={(reason) => void rejectQuest(q, reason)}
           />
         ))}
       </div>

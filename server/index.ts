@@ -25844,7 +25844,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo,
+    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, notify,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });

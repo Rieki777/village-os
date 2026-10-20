@@ -362,6 +362,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} claims were released.",
     celebrate: false,
   },
+  quest_idea_on_board: {
+    group: "work",
+    blurb: "A steward put the quest you proposed on the board, where anyone can take it on.",
+    many: "{n} of your quest ideas went on the board.",
+    celebrate: false,
+  },
+  quest_idea_declined: {
+    group: "work",
+    blurb: "A steward read the quest you proposed and left it off the board. You are welcome to propose another.",
+    many: "{n} of your quest ideas were left off the board.",
+    celebrate: false,
+  },
   quest_help: {
     group: "work",
     blurb: "Somebody flagged that they are stuck or wobbling on work they took on.",

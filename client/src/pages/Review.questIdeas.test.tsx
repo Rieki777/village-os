@@ -125,6 +125,19 @@ describe("a quest idea on /review says where it came from, and what the person a
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
   });
+
+  it("sends the reason a steward typed with a rejection, which the proposer reads", async () => {
+    // Rejecting always sent an empty note, so a no could never say why.
+    const fetchMock = serve([card()]);
+    renderReview();
+    await waitFor(() => expect(screen.getByText("Build a seed library shelf")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Why, if you reject it/), { target: { value: "  The shelf went up last moon.  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    const rejected = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/reject");
+    await waitFor(() => expect(rejected()).toBeTruthy());
+    expect(JSON.parse(String(rejected()![1]?.body))).toEqual({ note: "The shelf went up last moon." });
+  });
 });
 
 describe("the refusal count says what was kept", () => {

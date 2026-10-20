@@ -225,8 +225,10 @@ One route outside this module writes `quest_claims`:
 These write `quests`, and none of them is `questsRepo.add` from the admin form:
 
 - `POST /api/review/quests/:id/accept` and `/reject` (`server/routes/review.ts`) turn a proposal
-  into a real quest under `quest.approve`. They write `quests` and `quest_proposals`. Neither one
-  touches `quest_claims`, so an operator auditing what can create a claim will read this file and
+  into a real quest under `quest.approve`. They write `quests` and `quest_proposals`, and each tells
+  a signed-in proposer the outcome through the notify spine: `quest_idea_on_board` links to the new
+  quest, and `quest_idea_declined` carries the reason the steward typed, its only free text. A
+  visitor's or a machine's proposal tells nobody. Neither one touches `quest_claims`, so an operator auditing what can create a claim will read this file and
   correctly find nothing.
 - `POST /api/admin/seasons/roll` reaches `applyRoll` in `server/lib/seasonPatterns.ts`, which runs
   `UPDATE quests SET status = ?` in raw SQL, outside `questsRepo`. No calendar sync and no reward
