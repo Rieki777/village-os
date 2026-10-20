@@ -6,8 +6,12 @@
  *   - The public Module Library and the admin Module Library are ONE page. A
  *     signed-in founder or admin explores it and turns modules on directly
  *     before the village launches.
- *   - "Launch" is the launch ballot carrying, which is the moment
- *     `founderPowerStands()` (server/lib/gameStart.ts) goes false.
+ *   - "Launch" is the launch ballot carrying, read off the launch state's
+ *     `launchedByBallotId` (`launchBallotCarried` in server/lib/launch.ts).
+ *     Deliberately NOT `founderPowerStands()` (Rye, 2026-10-14): migration
+ *     0112 marked some villages started with no ballot behind them, and
+ *     their admins keep switching until a real launch vote. The full
+ *     reason is in server/routes/moduleLibrary.ts.
  *   - After launch, turning a module ON follows who holds the power. A live
  *     holder of `module.switch` turns it on directly. With no holder, anyone
  *     signed in may propose it, and the proposal is a binding village vote
