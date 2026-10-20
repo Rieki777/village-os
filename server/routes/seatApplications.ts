@@ -7,6 +7,7 @@
  *   POST /api/governance/role-applications/:id/adopt          a live org.seat holder adopts it for the village
  *   POST /api/governance/role-applications/:id/put-to-village a live org.seat holder sends it to a vote
  *   POST /api/governance/role-applications/:id/withdraw       the candidate takes it back
+ *   GET  /api/governance/waiting-on-me                        what waits on the reader's decision (task board)
  *
  * ── ONE FORMAL PROPOSAL, WHOEVER HOLDS THE POWER ───────────────────────────
  *
@@ -126,6 +127,8 @@ import {
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
 import { registerJob } from "../lib/scheduler";
+import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
+import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
@@ -143,6 +146,9 @@ const ASK_WINDOW_MS = 10 * 60 * 1000;
 /** At most three applications a day that open a village vote, per member (red team S6). */
 const BALLOTS_PER_DAY = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The reminder job's name and beat: hourly, so a reminder lands within an hour of the 48th. */
+export const REMIND_JOB = "seat-application-reminders";
+const REMIND_EVERY_MS = 60 * 60 * 1000;
 
 type Deps = Pick<
   AppDeps,
@@ -196,9 +202,12 @@ export function register(app: Express, deps: Deps): void {
   registerJob(SEASON_TURN_JOB, SEASON_TURN_EVERY_MS, turn);
   whenSeasonsSaved(turn);
 
+  // One gentle reminder to a holder an application still waits on after 48 hours (server/lib/seatApplicationWaiting.ts).
+  registerJob(REMIND_JOB, REMIND_EVERY_MS, async () => `${await remindWaitingHolders({ pool: getPool(), notify, liveHoldersOf })} reminder(s) asked`);
+
   /** Who adopts seats today, and why: the raised-hand door's one rule over `org.seat`. */
-  async function adoptionRule(viewer: any) {
-    const ctx = await capabilityCtx(viewer);
+  async function adoptionRule(viewer: any, known?: Awaited<ReturnType<typeof capabilityCtx>>) {
+    const ctx = known ?? (await capabilityCtx(viewer));
     return whoMayPutHandToVillage(isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), await liveHoldersOf(ADOPTING_POWER));
   }
 
@@ -554,7 +563,8 @@ export function register(app: Express, deps: Deps): void {
           userId: holder,
           type: "governance",
           title: applicationNoticeTitle("waiting", seatNames),
-          body: null,
+          // The link opens the application; the body says where it waits after the bell is cleared.
+          body: WAITING_COPY.holderNoticeBody,
           link: applicationHref(id),
           actorUserId: userId,
           dedupeKey: `sa:${id}:waiting:${holder}`,
@@ -618,6 +628,34 @@ export function register(app: Express, deps: Deps): void {
         ),
       ),
     });
+  });
+
+  /*
+   * ── WAITING ON YOU, for the profile's task board ───────────────────────
+   *
+   * The reader's own rows and nobody else's: applications they may adopt, and
+   * open drafts a proposal made when they may publish them. Members only, by
+   * the same `terms.read` door as every read here.
+   *
+   * Publishing a draft is an admin's today: `POST /api/admin/org/drafts/:id/publish`
+   * asks `isAdmin`, which is the account role `capabilityCtx` reads as `isAdmin`.
+   * TODO(org.decide): ask the gate for `org.decide` once wt/org-decide adds it.
+   */
+  app.get(WAITING_URL, async (req, res) => {
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    const viewerId = String(viewer.id);
+    const ctx = await capabilityCtx(viewer);
+    const pool = getPool();
+    const payload: WaitingPayload = {
+      applications: await applicationsWaitingOn(
+        { pool, allMembers: () => members.all(), firstName, timezone: seatCalendar().timezone || "UTC" },
+        await adoptionRule(viewer, ctx),
+        viewerId,
+      ),
+      drafts: ctx.isAdmin === true ? await draftsWaiting(pool) : [],
+    };
+    res.set("Cache-Control", "no-store").json(payload);
   });
 
   app.get("/api/governance/role-applications/:id", async (req, res) => {

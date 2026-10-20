@@ -191,6 +191,32 @@ export async function applicationsInSeason(db: Db, seasonId: string, candidateUs
   return rows.map(rowToApplication);
 }
 
+/**
+ * Every application waiting on a seat holder, oldest first. With `olderThanSeconds`,
+ * only those written at least that long ago: the age is worked out by MySQL
+ * against its own clock, so a session zone that differs from the server's
+ * cannot shift a TIMESTAMP read across the line (the reminder job asks this).
+ */
+export async function awaitingHolderApplications(db: Db, olderThanSeconds = 0): Promise<StoredApplication[]> {
+  const aged = olderThanSeconds > 0;
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications WHERE status = 'awaiting-holder'` +
+      `${aged ? " AND TIMESTAMPDIFF(SECOND, created_at, NOW()) >= ?" : ""} ORDER BY created_at, id`,
+    aged ? [Math.floor(olderThanSeconds)] : [],
+  );
+  return rows.map(rowToApplication);
+}
+
+/** Seats by id with the name of the circle each sits in, in one read. A seat with no circle reads null. */
+export async function seatsWithCircles(db: Db, seatIds: readonly string[]): Promise<Array<{ id: string; name: string; circle: string | null }>> {
+  if (seatIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT r.id, r.name, c.name AS circle_name FROM org_roles r LEFT JOIN circles c ON c.id = r.circle_id WHERE r.id IN (${seatIds.map(() => "?").join(",")})`,
+    [...seatIds],
+  );
+  return rows.map((r: any) => ({ id: String(r.id), name: String(r.name ?? r.id), circle: r.circle_name ? String(r.circle_name) : null }));
+}
+
 export interface StatusChange {
   adoptedVia?: "holder" | "ballot" | null;
   adoptedRef?: string | null;
