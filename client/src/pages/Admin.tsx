@@ -749,7 +749,7 @@ export function SubmissionsTab({ password }: { password: string }) {
     load();
   };
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: string, type = "") => {
     try {
       const res = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
         method: "PUT",
@@ -762,10 +762,10 @@ export function SubmissionsTab({ password }: { password: string }) {
       else if (data.admitted) toast.success("Accepted. They hold membership now.");
       // A stranger signed with no account, so the accept stands and admits nobody.
       else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // Whether the person who sent this heard about the move. Members hear;
-      // a public form filled in by a stranger has no account to reach, and a
-      // founder who knows which is which can pick up the phone.
+      // Whether the person who sent this heard about the move. Members hear; a stranger's form
+      // has no account to reach, so a yes to joining names the next step, which is an invitation.
       else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
+      else if (type === "membership-request" && status === "accepted") toast.success("Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
       else toast.success("Status updated");
       load();
     } catch { toast.error("Could not update status"); }
@@ -855,7 +855,7 @@ export function SubmissionsTab({ password }: { password: string }) {
                     <label className="text-xs font-medium text-gray-500">Status</label>
                     <select
                       value={s.status ?? "new"}
-                      onChange={(e) => setStatus(s.id, e.target.value)}
+                      onChange={(e) => setStatus(s.id, e.target.value, s.type)}
                       className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
                     >
                       {SUBMISSION_STATUSES.map((st) => (
