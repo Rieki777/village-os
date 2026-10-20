@@ -133,6 +133,9 @@ import { freezeSeatTerm } from "../repos/ballotSeatTerms";
 
 /** Exported for the job that turns the season (season plans): it seats an adopted application on its day. */
 export { seatFromApplication } from "../lib/seatApplicationCloser";
+// Read by server/index.ts through this route module's one import line, so the ballot and seat routes there add no counted lines.
+export { ballotNamesItsCloser, closeNoteFor } from "../../shared/seatApplications";
+export { heldTermsFor } from "../lib/heldTerms";
 
 /** At most ten asks in ten minutes per member per door, the raised-hand door's numbers. */
 const ASKS_PER_WINDOW = 10;
