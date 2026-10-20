@@ -232,7 +232,7 @@ export default function CarryAcross({
     <section id="carry" className="grid gap-3 scroll-mt-4" aria-labelledby="h-carry" data-testid="carry-across">
       <h2 id="h-carry" className="font-display text-[22px]">Carry people across</h2>
       <p className="text-base font-semibold" role="status" data-testid="carry-state">{carrySummary(carry)}</p>
-      {carry.rows.length > 0 && (
+      {carry.rows.length > 0 && carry.mayCarry && (
         <p className="text-sm text-muted-foreground max-w-[68ch]">
           Pick each person&apos;s seat on the new chart and confirm it. They get the new seat until the season ends, and their old
           seat ends with its history kept.
@@ -303,7 +303,11 @@ export default function CarryAcross({
                     Old seat: {r.oldSeatName}
                     {r.oldCircleName ? ` · ${r.oldCircleName}` : ""}
                   </p>
-                  {!r.suggestion && <p className="text-[13px] text-muted-foreground">No seat on the new chart has a name like it. Pick one.</p>}
+                  {!r.suggestion && (
+                    <p className="text-[13px] text-muted-foreground">
+                      {carry.mayCarry ? "No seat on the new chart has a name like it. Pick one." : "No seat on the new chart has a name like it."}
+                    </p>
+                  )}
                 </div>
                 {carry.mayCarry ? (
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] items-center min-w-0">
@@ -341,9 +345,7 @@ export default function CarryAcross({
                     )}
                   </div>
                 ) : (
-                  <p className="text-[13px] text-muted-foreground">
-                    {r.suggestion ? `Suggested: ${r.suggestion.seatName}` : "No suggestion yet"}
-                  </p>
+                  r.suggestion && <p className="text-[13px] text-muted-foreground">{`Suggested: ${r.suggestion.seatName}`}</p>
                 )}
               </li>
             );
@@ -369,7 +371,7 @@ export default function CarryAcross({
         <div className={`${card} p-4 grid gap-2.5`} data-testid="carry-retire">
           <h3 className="font-display text-[17px]">Retire the empty old chart</h3>
           <p className="text-sm text-muted-foreground">
-            {plural(carry.retire.seats.length, "old seat has", "old seats have")} nobody in it
+            {plural(carry.retire.seats.length, "old seat has nobody in it", "old seats have nobody in them")}
             {carry.retire.circles.length ? `, and ${plural(carry.retire.circles.length, "old circle is", "old circles are")} left empty` : ""}.
             Retiring rests them, keeps their history, and never unseats anybody.
           </p>
