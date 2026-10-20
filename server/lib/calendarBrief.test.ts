@@ -111,7 +111,8 @@ describe.skipIf(!configured)("the weekly brief, against a real schema", () => {
       const [[u]] = await pool.query<any[]>("SELECT * FROM users WHERE id = ?", [id]);
       return u ? { id: u.id, name: u.name, email: u.email, passwordHash: u.password_hash, prefs: typeof u.prefs === "string" ? JSON.parse(u.prefs) : u.prefs } : null;
     },
-    sendEmail: async (opts) => { sent.push(opts); },
+    // Answers as the post office does when it takes the row, so the brief is counted and stamped.
+    sendEmail: async (opts) => { sent.push(opts); return { accepted: true, status: "queued" }; },
     origin: () => "https://example.test",
     projectName: () => "Alder Creek",
     isPresent: presenceTest("calendar-brief-test-secret"),

@@ -38,6 +38,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { announceProfileChange } from "@/lib/profileRefresh";
+import { radioArrows } from "@/lib/radioArrows";
 import { Star, X } from "lucide-react";
 import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
 
@@ -85,38 +86,8 @@ const TONES: Array<{ key: Character["tone"]; label: string; swatch: string }> = 
 /** The thirty assets are named by class, presentation and tone. */
 const art = (key: string, p: string, t: string) => `/images/avatars/${key}-${p}-${t}.webp`;
 
-/**
- * ARROW KEYS INSIDE A RADIOGROUP, because saying `role="radio"` is a promise.
- *
- * A group that announces itself as radios and then behaves like a row of
- * buttons is worse than the row of buttons was: a screen reader user is told
- * to expect arrow-key selection and does not get it. So the two groups below
- * carry the whole pattern, which is this handler plus a roving tabindex
- * (`tabIndex={selected ? 0 : -1}`), the same shape the ARIA authoring
- * practices describe. Both groups always have exactly one selected value, so
- * the roving index can never leave the group unreachable.
- *
- * Focus moves by index within the group's own DOM, so it does not care which
- * of the two groups it is in or how many options that one has.
- */
-function radioArrows<T>(
-  values: readonly T[],
-  current: T,
-  pick: (v: T) => void,
-): (e: React.KeyboardEvent<HTMLButtonElement>) => void {
-  return (e) => {
-    const forward = e.key === "ArrowRight" || e.key === "ArrowDown";
-    const back = e.key === "ArrowLeft" || e.key === "ArrowUp";
-    if (!forward && !back) return;
-    e.preventDefault();
-    const at = values.indexOf(current);
-    const nextAt = (at + (forward ? 1 : -1) + values.length) % values.length;
-    pick(values[nextAt]);
-    const group = e.currentTarget.closest("[role='radiogroup']");
-    const radios = group ? Array.from(group.querySelectorAll<HTMLElement>("[role='radio']")) : [];
-    radios[nextAt]?.focus();
-  };
-}
+// Arrow keys inside the two radiogroups below: client/src/lib/radioArrows.ts,
+// which says why `role="radio"` is a promise. Shared with the live room.
 
 export default function Characters() {
   const { user } = useAuth();

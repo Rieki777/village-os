@@ -199,6 +199,43 @@ jobs:
           echo "applied-lines before ${before}, after ${after}"
           [ "$after" = "$before" ] || { echo "::error::the restart applied migrations again"; exit 1; }
 
+      - name: A volume owned by root, the way a host mounts one, still takes uploads
+        # Railway mounts its volume over /app/data owned by root. Under the old
+        # `USER node` every upload on such a host failed with EACCES, and this
+        # job never saw it because a compose named volume copies the image's
+        # node-owned directory. So the volume is handed to root here, the app
+        # restarts, and the entrypoint has to give it back to `node`
+        # (scripts/docker-entrypoint.sh). Skipped for a published image, which
+        # may predate that entrypoint.
+        if: ${{ !inputs.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm -v village-os_village-data:/data alpine sh -c 'mkdir -p /data/uploads && chown -R 0:0 /data && chmod 755 /data /data/uploads'
+          docker compose restart app
+          sleep 10
+          for _ in $(seq 1 120); do
+            curl -fsS "$BASE/health" > /dev/null 2>&1 && break
+            sleep 5
+          done
+          curl -fsS "$BASE/health" > /dev/null
+          # The server itself runs as node, never root.
+          node_uid=$(docker compose exec -T app id -u node | tr -d '\r')
+          server_uid=$(docker compose exec -T app sh -c 'for p in /proc/[0-9]*; do if tr "\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^node dist/index.js"; then awk "/^Uid:/{print \$2}" "$p/status"; fi; done' | tr -d '\r' | sort -u)
+          echo "the server runs as uid ${server_uid}; node is ${node_uid}"
+          [ -n "$server_uid" ] && [ "$server_uid" = "$node_uid" ]
+          # And an image upload lands on the volume and is served back.
+          token=$(jq -r '.token' login.json)
+          echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' | base64 -d > dot.png
+          code=$(curl -s -o upload.json -w '%{http_code}' -X POST "$BASE/api/admin/brand/image" \
+            -H "Authorization: Bearer ${token}" -F "file=@dot.png;type=image/png")
+          cat upload.json
+          echo
+          [ "$code" = "200" ] || { echo "::error::an upload onto a root-owned volume answered ${code}"; exit 1; }
+          url=$(jq -r '.url' upload.json)
+          case "$url" in /api/uploads/*) ;; *) echo "::error::the upload named no file"; exit 1 ;; esac
+          curl -fsS -o /dev/null "$BASE$url"
+          echo "ok  an upload onto a root-owned volume was stored and served"
+
       - name: Back up with the commands START_HERE.md gives a founder
         run: |
           set -euo pipefail

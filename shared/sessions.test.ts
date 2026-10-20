@@ -8,6 +8,8 @@ import {
   ARRIVAL_MAX,
   CONSENT_LABELS,
   ENTRY_LABELS,
+  ROOM_COPY,
+  SESSION_REFUSALS,
   SESSION_COPY,
   SESSION_LIMITS,
   SESSION_STAGES,
@@ -25,6 +27,8 @@ import {
   cleanText,
   consentNeedsWords,
   consentTally,
+  consentWaiting,
+  consentWaitingIds,
   defaultSessionState,
   normalizeSessionState,
   parseResponseTarget,
@@ -61,6 +65,20 @@ describe("the room's state", () => {
     const a = applySessionAction(defaultSessionState(), { type: "start" }, T0);
     const b = applySessionAction(a, { type: "start" }, T0 + 9999);
     expect(b.startedAt).toBe(T0);
+  });
+
+  it("starts the clock with the first move of the room, so a room never runs without one", () => {
+    const moved = applySessionAction(defaultSessionState(), { type: "go", stage: "arrival" }, T0);
+    expect(moved.startedAt).toBe(T0);
+    // Later moves keep the first start, and "Begin" after a move changes nothing.
+    const later = applySessionAction(moved, { type: "go", stage: "agenda" }, T0 + 60_000);
+    expect(later.startedAt).toBe(T0);
+    expect(applySessionAction(later, { type: "start" }, T0 + 90_000)).toBe(later);
+    // A clock "Begin" started stays where it was when the room moves.
+    const begun = applySessionAction(defaultSessionState(), { type: "start" }, T0);
+    expect(applySessionAction(begun, { type: "go", stage: "arrival" }, T0 + 5000).startedAt).toBe(T0);
+    // Going to the stage the room is already on is no move, and starts nothing.
+    expect(applySessionAction(defaultSessionState(), { type: "go", stage: "dropin" }, T0).startedAt).toBeNull();
   });
 
   it("an item's clock starts with the item, and its grace resets when another starts", () => {
@@ -170,6 +188,41 @@ describe("consent and arrival", () => {
     expect(consentNeedsWords("object")).toBe(true);
   });
 
+  it("names who a round is still waiting on: people here, once each, in order, and nobody who left", () => {
+    const a = (who: number) => ({ who });
+    expect(consentWaitingIds([a(2)], [1, 2, 3, 1])).toEqual([1, 3]);
+    expect(consentWaitingIds([a(9)], [])).toEqual([]);
+    // The tally's count is the same list's length.
+    const answers = [{ who: 2, value: "consent" as const }];
+    expect(consentTally(answers, [1, 2, 3]).waiting).toBe(consentWaitingIds(answers, [1, 2, 3]).length);
+  });
+
+  it("lists the waiting people for the agenda and each open proposal, by name", () => {
+    const people = [
+      { userId: 1, name: "Ada", present: true },
+      { userId: 2, name: "Bo", present: true },
+      { userId: 3, name: "Cy", present: false },
+    ];
+    const entries = [
+      { id: 10, kind: "decision" as const, status: "open" as const },
+      { id: 11, kind: "decision" as const, status: "done" as const },
+      { id: 12, kind: "action" as const, status: "open" as const },
+    ];
+    const responses = [
+      { target: "agenda" as const, userId: 1, value: "consent" },
+      { target: "agenda" as const, userId: 3, value: "consent" },
+      { target: "decision:10" as const, userId: 2, value: "object" },
+      // A closing word is no consent answer, and never takes someone off a list.
+      { target: "word" as const, userId: 1, value: "grateful" },
+    ];
+    expect(consentWaiting(people, entries, responses)).toEqual({
+      agenda: [{ userId: 2, name: "Bo" }],
+      "decision:10": [{ userId: 1, name: "Ada" }],
+    });
+    // Nobody here: every question waits on nobody.
+    expect(consentWaiting(people.map((p) => ({ ...p, present: false })), entries, [])).toEqual({ agenda: [], "decision:10": [] });
+  });
+
   it("the arrival round keeps numbers only, and a low room is two or more at five or under", () => {
     expect(arrivalSummary([])).toEqual({ count: 0, median: null, low: null, high: null });
     expect(arrivalSummary([7, 3, 11, null, 12, 0, 9])).toEqual({ count: 4, median: 8, low: 3, high: 11 });
@@ -266,7 +319,8 @@ describe("the minutes", () => {
     expect(md).toContain("held by a member, by 2026-10-16");
     expect(md).toContain("held by Water Steward.");
     expect(md).toContain("Moon 12 · Waxing gibbous · spring");
-    expect(md).toContain("**Seed:** The pump needs a second person.");
+    expect(md).toContain("**What we learned:** The pump needs a second person.");
+    expect(md).not.toContain("**Seed:**");
   });
 });
 
@@ -298,6 +352,61 @@ describe("the words", () => {
       expect(line, line).not.toMatch(/\b(delve|tapestry|foster|leverage|vibrant|crucial|seamless|robust|comprehensive|empower|utilize|unleash)\b/i);
       expect(line, line).not.toMatch(/\brather than\b|\bnot just\b|\bnot only\b/i);
     }
+  });
+
+  it("says what an item closes with as what we learned, while the stored kind stays seed", () => {
+    expect(ENTRY_LABELS.seed).toBe("What we learned");
+    expect(ROOM_COPY.seed).toBe("What we learned");
+    expect(ROOM_COPY.seedsHeading).toBe("What we learned");
+    expect(ROOM_COPY.seedSave).toBe("Add to the record");
+    expect(SESSION_COPY.itemSeedPrompt).toBe("What did this item teach us?");
+    expect(STAGE_DEFS.items.cues[2]).toBe("Close each item with what we learned, in one sentence for the record.");
+    // Nothing a member reads still calls it a seed.
+    const roomLines = (Object.values(ROOM_COPY) as unknown[]).filter((v): v is string => typeof v === "string");
+    for (const line of [...all, ...roomLines]) {
+      expect(line, line).not.toMatch(/\bseeds?\b/i);
+    }
+  });
+
+  it("gives every stage a glyph key the room can draw", () => {
+    expect(SESSION_STAGES.map((s) => STAGE_DEFS[s].glyph)).toEqual(["wind", "sunrise", "list", "sprout", "hands", "moon"]);
+  });
+
+  it("writes the editing words and the new refusals with no dash, and the helpers read as sentences", () => {
+    const fresh = [
+      ROOM_COPY.seedHelp,
+      ROOM_COPY.editThis("note"),
+      ROOM_COPY.saving,
+      ROOM_COPY.saved,
+      ROOM_COPY.editKeys,
+      ROOM_COPY.editKeysOneLine,
+      ROOM_COPY.countOf(450, 600),
+      ROOM_COPY.rewordWarn,
+      ROOM_COPY.decidedLock,
+      ROOM_COPY.backlogSoFar,
+      ROOM_COPY.sessionTitleLabel,
+      ROOM_COPY.itemTitleLabel,
+      ROOM_COPY.actionPlaceholder,
+      ROOM_COPY.actionHolderLabel,
+      ROOM_COPY.answerAgain,
+      ROOM_COPY.facilitationReplace,
+      ROOM_COPY.signoff,
+      ROOM_COPY.holding,
+      ROOM_COPY.noteTaking,
+      SESSION_REFUSALS.notesOnly,
+      SESSION_REFUSALS.aimMinutesNotes,
+      SESSION_REFUSALS.notYours,
+      SESSION_REFUSALS.entryKind,
+    ];
+    for (const line of fresh) {
+      expect(line, line).not.toMatch(DASHES);
+      expect(line, line).not.toMatch(/\brather than\b|\bnot just\b|\bnot only\b/i);
+    }
+    expect(ROOM_COPY.editThis("note")).toBe("Edit note");
+    expect(ROOM_COPY.countOf(450, 600)).toBe("450 of 600");
+    // The admin in the room is named wherever a host's right is refused.
+    expect(SESSION_REFUSALS.notesOnly).toBe("Only the facilitator, the secretary or an admin in the room can change that.");
+    expect(SESSION_REFUSALS.aimMinutesNotes).toBe("Once an item starts, its aim and minutes are for the facilitator or the secretary to change.");
   });
 
   it("leaves room in every limit for what it caps", () => {

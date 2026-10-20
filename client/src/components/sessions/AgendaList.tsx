@@ -1,10 +1,18 @@
 /**
  * THE AGENDA: anyone in the room adds an item with an aim and some minutes.
- * Whoever added an item can change its words while it waits, and the
- * facilitator or the note taker can change any item's words. The facilitator
- * orders it and takes an item off it (there is no delete door, so "off the
- * agenda" parks it, and it can be brought back), because an item's place and
- * status are the facilitator's to set (server/lib/liveSessions.ts, `rolesIn`).
+ * Whoever added an item can change its title until it is done, and its aim
+ * and minutes while it waits, because once it starts the room's clock reads
+ * its minutes (roomUi's `mayEditItemTitle` and `mayEditItemPlan`, the
+ * server's rule read for the screen). The facilitator, the note taker and an
+ * admin in the room can change any item's words, done ones included, so the
+ * record reads right. The facilitator orders it and takes an item off it
+ * (there is no delete door, so "off the agenda" parks it, and it can be
+ * brought back), because an item's place and status are the facilitator's to
+ * set (server/lib/liveSessions.ts, `rolesIn`).
+ *
+ * The title is the room's growing box on a row of its own, so a long title is
+ * read whole, and the aim and minutes sit underneath. Enter saves; Escape
+ * puts the form away.
  *
  * Editing an item opens its form on the words the room holds right then, and
  * saving sends only the fields this person changed, so a change somebody else
@@ -27,67 +35,102 @@ import {
   type ItemAim,
   type SessionItem,
 } from "@shared/sessions";
-import { BTN_ICON, BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CHIP, HINT, INPUT, LABEL, agendaOrder, keepsNotes, leads, nameOf, type StageProps } from "./roomUi";
+import GrowingText from "./GrowingText";
+import {
+  BTN_ICON,
+  BTN_PRIMARY,
+  BTN_QUIET,
+  BTN_SECONDARY,
+  CHIP,
+  HINT,
+  INPUT,
+  LABEL,
+  LABEL_CAPS,
+  UNDER_BOX,
+  agendaOrder,
+  leads,
+  mayEditItemPlan,
+  mayEditItemTitle,
+  nameOf,
+  type StageProps,
+} from "./roomUi";
 import type { ItemPatch } from "./useSessionRoom";
 
 const clampMinutes = (n: number) =>
   Math.min(SESSION_LIMITS.minutesMax, Math.max(SESSION_LIMITS.minutesMin, Math.round(Number.isFinite(n) ? n : SESSION_LIMITS.minutesMin)));
 
-/** The fields an item is made of, for adding and for editing. */
+/** The fields an item is made of, for adding and for editing. `plan` false shows the title alone. */
 function ItemFields({
   idBase,
   title,
   aim,
   minutes,
+  plan,
   onTitle,
   onAim,
   onMinutes,
+  onSubmit,
+  onCancel,
 }: {
   idBase: string;
   title: string;
   aim: ItemAim;
   minutes: number;
+  plan: boolean;
   onTitle: (v: string) => void;
   onAim: (v: ItemAim) => void;
   onMinutes: (v: number) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-[1fr_10rem_6rem]">
-      <label htmlFor={`${idBase}-title`} className="block">
-        <span className={LABEL}>{ROOM_COPY.itemTitleLabel}</span>
-        <input
+    <div className="space-y-3">
+      <div>
+        <label htmlFor={`${idBase}-title`} className={`${LABEL} mb-1`}>
+          {ROOM_COPY.itemTitleLabel}
+        </label>
+        <GrowingText
           id={`${idBase}-title`}
-          className={`${INPUT} mt-1`}
           value={title}
-          maxLength={SESSION_LIMITS.agendaTitle}
-          placeholder={ROOM_COPY.itemTitlePlaceholder}
-          onChange={(e) => onTitle(e.target.value)}
+          onValue={onTitle}
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+          label={ROOM_COPY.itemTitlePlaceholder}
+          max={SESSION_LIMITS.agendaTitle}
+          minRows={1}
+          singleLine
         />
-      </label>
-      <label htmlFor={`${idBase}-aim`} className="block">
-        <span className={LABEL}>{SESSION_COPY.agendaAimLabel}</span>
-        <select id={`${idBase}-aim`} className={`${INPUT} mt-1`} value={aim} onChange={(e) => onAim(e.target.value as ItemAim)}>
-          {ITEM_AIMS.map((a) => (
-            <option key={a} value={a}>
-              {AIM_DEFS[a].label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label htmlFor={`${idBase}-min`} className="block">
-        <span className={LABEL}>{SESSION_COPY.agendaMinutesLabel}</span>
-        <input
-          id={`${idBase}-min`}
-          type="number"
-          inputMode="numeric"
-          className={`${INPUT} mt-1`}
-          min={SESSION_LIMITS.minutesMin}
-          max={SESSION_LIMITS.minutesMax}
-          value={minutes}
-          onChange={(e) => onMinutes(Number(e.target.value))}
-        />
-      </label>
-      <p className={`${HINT} sm:col-span-3`}>{AIM_DEFS[aim].hint}</p>
+      </div>
+      {plan && (
+        <>
+          <div className={UNDER_BOX}>
+            <label htmlFor={`${idBase}-aim`} className="block min-w-[10rem]">
+              <span className={LABEL}>{SESSION_COPY.agendaAimLabel}</span>
+              <select id={`${idBase}-aim`} className={`${INPUT} mt-1`} value={aim} onChange={(e) => onAim(e.target.value as ItemAim)}>
+                {ITEM_AIMS.map((a) => (
+                  <option key={a} value={a}>
+                    {AIM_DEFS[a].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label htmlFor={`${idBase}-min`} className="block w-28">
+              <span className={LABEL}>{SESSION_COPY.agendaMinutesLabel}</span>
+              <input
+                id={`${idBase}-min`}
+                type="number"
+                inputMode="numeric"
+                className={`${INPUT} mt-1`}
+                min={SESSION_LIMITS.minutesMin}
+                max={SESSION_LIMITS.minutesMax}
+                value={minutes}
+                onChange={(e) => onMinutes(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <p className={HINT}>{AIM_DEFS[aim].hint}</p>
+        </>
+      )}
     </div>
   );
 }
@@ -122,8 +165,18 @@ export function AddItem({ view, actions }: Omit<StageProps, "now">) {
         void add();
       }}
     >
-      <h4 className="text-sm font-semibold text-foreground">{SESSION_COPY.agendaAdd}</h4>
-      <ItemFields idBase="agenda-new" title={title} aim={aim} minutes={minutes} onTitle={setTitle} onAim={setAim} onMinutes={setMinutes} />
+      <h4 className={LABEL_CAPS}>{SESSION_COPY.agendaAdd}</h4>
+      <ItemFields
+        idBase="agenda-new"
+        title={title}
+        aim={aim}
+        minutes={minutes}
+        plan
+        onTitle={setTitle}
+        onAim={setAim}
+        onMinutes={setMinutes}
+        onSubmit={() => void add()}
+      />
       <button type="submit" className={BTN_PRIMARY} disabled={busy || !title.trim()}>
         {ROOM_COPY.addItemButton}
       </button>
@@ -153,7 +206,8 @@ function ItemRow({
   const [aim, setAim] = useState<ItemAim>(item.aim);
   const [minutes, setMinutes] = useState(item.minutes);
   const [saving, setSaving] = useState(false);
-  const mayEdit = keepsNotes(view) || (view.status === "open" && view.me.joined && item.addedBy === view.me.userId && item.status === "waiting");
+  const mayEdit = mayEditItemTitle(view, item);
+  const mayPlan = mayEditItemPlan(view, item);
   const mayRun = leads(view);
   const parked = item.status === "parked";
 
@@ -169,9 +223,11 @@ function ItemRow({
     if (!clean || !opened) return;
     const patch: ItemPatch = {};
     if (clean !== opened.title) patch.title = clean;
-    if (aim !== opened.aim) patch.aim = aim;
+    // The aim and minutes go only from somebody who may set them; the form
+    // does not show them to anybody else, and the server would refuse them.
+    if (mayPlan && aim !== opened.aim) patch.aim = aim;
     const mins = clampMinutes(minutes);
-    if (mins !== opened.minutes) patch.minutes = mins;
+    if (mayPlan && mins !== opened.minutes) patch.minutes = mins;
     if (!Object.keys(patch).length) {
       setOpened(null);
       return;
@@ -196,15 +252,18 @@ function ItemRow({
 
   if (editing) {
     return (
-      <li className="rounded-xl border border-teal-deep/40 bg-card px-4 py-3">
+      <li className="rounded-xl border border-notice/60 bg-card px-4 py-3 ring-1 ring-notice/30">
         <ItemFields
           idBase={`agenda-${item.id}`}
           title={title}
           aim={aim}
           minutes={minutes}
+          plan={mayPlan}
           onTitle={setTitle}
           onAim={setAim}
           onMinutes={setMinutes}
+          onSubmit={() => void save()}
+          onCancel={() => setOpened(null)}
         />
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className={BTN_PRIMARY} disabled={saving || !title.trim()} onClick={() => void save()}>
@@ -253,7 +312,7 @@ function ItemRow({
             </button>
           </>
         )}
-        {mayEdit && !parked && item.status !== "done" && (
+        {mayEdit && !parked && (
           <button type="button" className={BTN_QUIET} onClick={startEdit}>
             {ROOM_COPY.edit}
           </button>
@@ -322,7 +381,7 @@ export default function AgendaList({ view, actions }: Omit<StageProps, "now">) {
       )}
       {off.length > 0 && (
         <div>
-          <h4 className="mb-2 text-sm font-semibold text-muted-foreground">{ROOM_COPY.offAgenda}</h4>
+          <h4 className={`${LABEL_CAPS} mb-2`}>{ROOM_COPY.offAgenda}</h4>
           <ul className="space-y-2">
             {off.map((item, i) => (
               <ItemRow key={item.id} view={view} actions={actions} item={item} index={i} count={off.length} onMove={() => {}} busy={moving} />

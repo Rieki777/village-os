@@ -37,6 +37,7 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import type { TaskCard } from "./sessionTasks";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
 
@@ -47,12 +48,19 @@ export function isSessionStage(v: unknown): v is SessionStage {
   return typeof v === "string" && (SESSION_STAGES as readonly string[]).includes(v);
 }
 
+/**
+ * The mark each stage carries on the room's path. A plain key, so the shared
+ * contract names no icon set: the room maps each key to the glyph it draws.
+ */
+export type StageGlyph = "wind" | "sunrise" | "list" | "sprout" | "hands" | "moon";
+
 export interface StageDef {
   title: string;
   short: string;
   lede: string;
   /** Prompts for whoever is facilitating; shown to the facilitator only. */
   cues: string[];
+  glyph: StageGlyph;
 }
 
 export const STAGE_DEFS: Record<SessionStage, StageDef> = {
@@ -65,6 +73,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
       "Start the breath. Let the quiet sit when it ends.",
       "Name who is here and who sent word they could not come.",
     ],
+    glyph: "wind",
   },
   arrival: {
     title: "How are you arriving?",
@@ -75,6 +84,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
       "Call two names at a time so the next person can get ready.",
       "If the room is low, offer to lighten the agenda and ask for consent.",
     ],
+    glyph: "sunrise",
   },
   agenda: {
     title: "Build the agenda",
@@ -85,6 +95,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
       "Read the agenda back with its timings, then ask for objections.",
       "More than the time allows? Park an item for next session.",
     ],
+    glyph: "list",
   },
   items: {
     title: "The work",
@@ -93,8 +104,9 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
     cues: [
       "Start the item's clock and say its aim out loud.",
       "Catch every action as it comes, with a name or a seat on it.",
-      "Close each item with a seed: one line on what we now know.",
+      "Close each item with what we learned, in one sentence for the record.",
     ],
+    glyph: "sprout",
   },
   actions: {
     title: "Who does what",
@@ -104,6 +116,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
       "Read each action out, then wait for a claim.",
       "No action leaves without an owner. Park it if nobody can hold it.",
     ],
+    glyph: "hands",
   },
   close: {
     title: "Close",
@@ -114,6 +127,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
       "Ask for feedback on the facilitation and on this tool.",
       "Close the session to keep the record and send it to the admins.",
     ],
+    glyph: "moon",
   },
 };
 
@@ -141,7 +155,9 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
 /**
  * note      anything worth keeping, on an item or on the session
  * idea      an idea in an exploration
- * seed      the one line an item closes with: what we now know
+ * seed      the one line an item closes with: what we learned. The room says
+ *           "What we learned"; the kind keeps its stored name, `seed`, in
+ *           the database, the API and the CSS hooks.
  * decision  a proposal text that a consent round runs on
  * action    something to do, which must leave with an owner
  * tension   something sensed that wants its own time; it goes to the backlog
@@ -156,7 +172,7 @@ export function isEntryKind(v: unknown): v is EntryKind {
 export const ENTRY_LABELS: Record<EntryKind, string> = {
   note: "Note",
   idea: "Idea",
-  seed: "Seed",
+  seed: "What we learned",
   decision: "Proposal",
   action: "Action",
   tension: "Tension",
@@ -343,7 +359,7 @@ export function breathAt(b: { pattern: BreathKey; rounds: number; startedAt: num
 export interface SessionState {
   stage: SessionStage;
   stageStartedAt: number | null;
-  /** When the facilitator started the session clock. */
+  /** When the session clock started: "Begin", or the facilitator's first move of the room, whichever came first. */
   startedAt: number | null;
   /** The agenda item on screen during the items stage. */
   activeItemId: number | null;
@@ -464,7 +480,10 @@ export function applySessionAction(state: SessionState, action: SessionAction, n
   switch (action.type) {
     case "go":
       if (action.stage === state.stage) return state;
-      return { ...state, stage: action.stage, stageStartedAt: now, round: { label: null, order: [], at: 0 } };
+      // The first move starts the clock. A facilitator who goes straight on
+      // without pressing "Begin" still gets a room that counts its minutes,
+      // so the agenda's fit and the session's length always have a start.
+      return { ...state, stage: action.stage, stageStartedAt: now, startedAt: state.startedAt ?? now, round: { label: null, order: [], at: 0 } };
     case "start":
       return state.startedAt != null ? state : { ...state, startedAt: now, stageStartedAt: state.stageStartedAt ?? now };
     case "breath":
@@ -552,15 +571,63 @@ export interface ConsentAnswer {
  */
 export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
   const t = { consent: 0, concern: 0, object: 0 };
-  const said = new Set<number>();
-  for (const a of answers) {
-    t[a.value] += 1;
-    said.add(a.who);
+  for (const a of answers) t[a.value] += 1;
+  const waitingIds = consentWaitingIds(answers, presentIds);
+  const heardHere = presentIds.some((id) => answers.some((a) => a.who === id));
+  return { ...t, waiting: waitingIds.length, consented: heardHere && waitingIds.length === 0 && t.object === 0 };
+}
+
+/**
+ * The people here now who have not answered a consent round, in the order
+ * they were given, each once. `consentTally` counts this same list, so the
+ * number under a tally and the names under it can never disagree.
+ */
+export function consentWaitingIds(answers: readonly Pick<ConsentAnswer, "who">[], presentIds: readonly number[]): number[] {
+  const said = new Set(answers.map((a) => a.who));
+  return Array.from(new Set(presentIds)).filter((id) => !said.has(id));
+}
+
+/** The consent questions a room asks: the agenda, and the round on each proposal. */
+export type ConsentTarget = "agenda" | `decision:${number}`;
+
+/** Someone here who has not answered yet, named the way the room names people. */
+export interface WaitingPerson {
+  userId: number;
+  name: string;
+}
+
+/**
+ * Who each open consent question is still waiting on, by target: "agenda"
+ * while the session is open, and "decision:<entryId>" for each proposal still
+ * open. A target with nobody waiting holds an empty list. The room reads it to
+ * name the people a tally's "still to answer" counts; it never reaches the
+ * minutes, which keep only the counts.
+ */
+export type ConsentWaiting = Partial<Record<ConsentTarget, WaitingPerson[]>>;
+
+/**
+ * Who each open consent question is waiting on, from the room's own wire
+ * shapes: the people here now (`present`), the proposals still open, and the
+ * consent answers given. The server builds the view's `waiting` with it, and
+ * the tally beside it counts the same people through `consentWaitingIds`.
+ */
+export function consentWaiting(
+  people: readonly Pick<SessionPerson, "userId" | "name" | "present">[],
+  entries: readonly Pick<SessionEntry, "id" | "kind" | "status">[],
+  responses: readonly Pick<SessionResponse, "target" | "userId" | "value">[],
+): ConsentWaiting {
+  const here = people.filter((p) => p.present);
+  const nameOf = new Map(here.map((p) => [p.userId, p.name] as const));
+  const targets: ConsentTarget[] = [
+    "agenda",
+    ...entries.filter((e) => e.kind === "decision" && e.status === "open").map((e) => `decision:${e.id}` as const),
+  ];
+  const out: ConsentWaiting = {};
+  for (const target of targets) {
+    const answers = responses.filter((r) => r.target === target && isConsentValue(r.value)).map((r) => ({ who: r.userId }));
+    out[target] = consentWaitingIds(answers, here.map((p) => p.userId)).map((userId) => ({ userId, name: nameOf.get(userId) ?? "" }));
   }
-  const here = Array.from(new Set(presentIds));
-  const waiting = here.filter((id) => !said.has(id)).length;
-  const heardHere = here.some((id) => said.has(id));
-  return { ...t, waiting, consented: heardHere && waiting === 0 && t.object === 0 };
+  return out;
 }
 
 export interface ArrivalSummary {
@@ -589,10 +656,26 @@ export function arrivalIsLow(summary: ArrivalSummary): boolean {
 export interface SessionStamp {
   /** e.g. "Waxing gibbous" */
   moonName: string;
+  /** A text moon for places that can only carry text; the room draws `moonPhase` instead. */
   moonGlyph: string;
+  /**
+   * The moon's phase as the session opened: 0 new, 0.5 full, running back
+   * toward 1 as it wanes, the fraction calendar/MoonGlyph.tsx draws. Null on a
+   * stamp stored before it was kept. Optional only so older fixtures still
+   * type; the server always sends it.
+   */
+  moonPhase?: number | null;
+  /** Which way the drawn moon is lit, from `calendar.hemisphere`. Null on an older stamp; draw it as the north. */
+  hemisphere?: "north" | "south" | null;
   /** The village's own moon count, when it keeps one. */
   moonOrdinal: number | null;
-  /** The season by the village's hemisphere, e.g. "spring". */
+  /**
+   * The season as the session opened, in the village's own words when it has
+   * named its seasons (`calendar.seasons`), else one of SESSION_SEASONS by its
+   * hemisphere. Null in the tropics when the village has named none, and on a
+   * stamp that could not tell. Any string can arrive here, so whatever shows
+   * it prints the name as given and maps nothing.
+   */
   season: string | null;
   /** The village's place line, read at drop in. */
   placeLine: string | null;
@@ -612,6 +695,12 @@ export interface SessionPerson {
    * the room then links to the gratitude wall instead of the thank-you form.
    */
   handle?: string | null;
+  /**
+   * Stock character art for the member's fronted character, or null. Never an
+   * uploaded portrait: the room shows a face the member chose from the
+   * village's own art, and nothing they uploaded leaves their profile this way.
+   */
+  avatar?: string | null;
 }
 
 export interface SessionItem {
@@ -683,12 +772,37 @@ export interface SessionView {
   responses: SessionResponse[];
   /** Feedback on the facilitation, unsigned. Only the facilitator and admins receive it. */
   facilitation: { value: FacilitationValue; text: string | null }[] | null;
+  /**
+   * Who each open consent question is still waiting on, for a viewer who sees
+   * the answers (the people in the room and admins). Empty for anyone else and
+   * once the session closes. Optional only so older fixtures still type; the
+   * server always sends it.
+   */
+  waiting?: ConsentWaiting;
   seats: SeatOption[];
   /** After close: the arrival round as numbers only. */
   arrival: ArrivalSummary | null;
   /** From the last closed session in the same circle: its open actions and its backlog. */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
+  /**
+   * Every task from this circle's earlier sessions that is still open, or that
+   * was answered since the circle last met, with its latest answer, as this
+   * viewer may see it (shared/sessionTasks.ts). Always present; empty when the
+   * session has no circle or the circle has no tasks.
+   */
+  circleTasks: TaskCard[];
+  /**
+   * When the circle last met: the close of its last closed session, which the
+   * action check groups by. Null when there are no `circleTasks`, or the circle
+   * has never closed a session.
+   */
+  circleLastMetAt: string | null;
   me: { userId: number; joined: boolean; facilitates: boolean; secretary: boolean; admin: boolean };
+}
+
+/** What the session door changes. Only the title, for now; other keys are ignored. */
+export interface SessionPatch {
+  title?: string;
 }
 
 export interface SessionListRow {
@@ -713,6 +827,7 @@ export interface SessionListRow {
  *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[] }
  *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
+ *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok } (presence, every HERE_EVERY_MS)
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -729,6 +844,11 @@ export interface SessionListRow {
  *   GET    /api/sessions/:id/minutes.md?for=shareable   text/markdown
  */
 export const SESSIONS_API = "/api/sessions";
+
+/** One session's own door: the GET of the room and the PATCH of its title. */
+export function sessionUrl(id: number): string {
+  return `${SESSIONS_API}/${id}`;
+}
 
 // ── Closing ──────────────────────────────────────────────────────────────────
 
@@ -819,7 +939,7 @@ export function buildMinutes(input: MinutesInput, audience: MinutesAudience): st
       const counts = t ? ` (${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting)` : "";
       lines.push(`- **${how}:** ${text(d.text)}${counts}`);
     }
-    for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **Seed:** ${text(s.text)}`);
+    for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **What we learned:** ${text(s.text)}`);
     for (const a of list.filter((e) => e.kind === "action" && e.status !== "parked")) {
       lines.push(`- **Action:** ${text(a.text)}, held by ${owner(a)}${a.dueOn ? `, by ${a.dueOn}` : ""}.`);
     }
@@ -891,7 +1011,7 @@ export const SESSION_COPY = {
   carriedActions: "Actions to check in on",
   carriedBacklog: "Waiting in the backlog",
   itemNone: "Choose an item to start.",
-  itemSeedPrompt: "One line on what we now know",
+  itemSeedPrompt: "What did this item teach us?",
   overChoices: "Time is up for this item. Add five minutes with the room's consent, park it, or wrap it up.",
   addNote: "Add a note",
   addIdea: "Add an idea",
@@ -899,7 +1019,7 @@ export const SESSION_COPY = {
   addTension: "Name a tension",
   addDecision: "Write the proposal",
   claim: "I'll take it",
-  release: "Let it go",
+  release: "Hand it back",
   nameSeat: "Name a seat",
   park: "Park it",
   unownedLeft: "still need someone",
@@ -939,7 +1059,8 @@ export const SESSION_REFUSALS = {
   circleUnknown: "That circle is not one of this village's circles.",
   durationRange: `A session runs from ${SESSION_LIMITS.durationMin} to ${SESSION_LIMITS.durationMax} minutes.`,
   facilitatorOnly: "Only the person facilitating can do that.",
-  notesOnly: "Only the facilitator or the secretary can change that.",
+  notesOnly: "Only the facilitator, the secretary or an admin in the room can change that.",
+  aimMinutesNotes: "Once an item starts, its aim and minutes are for the facilitator or the secretary to change.",
   itemUnknown: "That item is not on this agenda.",
   itemTitleNeeded: "Give the item a title.",
   aimNeeded: "An aim is report, explore or decide.",
@@ -948,18 +1069,18 @@ export const SESSION_REFUSALS = {
   positionNeeded: "A place on the agenda is a whole number.",
   itemStatusUnknown: "An item is waiting, done or parked. Start one from the room's controls.",
   fromSession: "That earlier session is not a closed session of this circle.",
-  entryKind: "An entry is a note, an idea, a seed, a proposal, an action or a tension.",
+  entryKind: "An entry is a note, an idea, a line on what we learned, a proposal, an action or a tension.",
   textNeeded: "Write a few words first.",
   entryUnknown: "That entry is not in this session.",
   entriesFull: `This session holds ${SESSION_LIMITS.maxEntries} entries, and that is all it can hold.`,
   yoursFull: `One person can add ${SESSION_LIMITS.maxEntriesPerPerson} entries to a session, and you have.`,
   seatUnknown: "That seat is not an active seat in this village.",
   dueOn: "A due date reads like 2026-10-31.",
-  notAction: "Only an action can be claimed or let go.",
+  notAction: "Only an action can be claimed or handed back.",
   heldAlready: "Someone already holds this action.",
   notHeld: "Nobody holds this action yet.",
-  releaseNotYours: "Only the person holding it, or the facilitator, can let it go.",
-  notYours: "Only the person who wrote it, the facilitator or the secretary can change it.",
+  releaseNotYours: "Only the person holding it, or the facilitator, can hand it back.",
+  notYours: "Only the person who wrote it, the facilitator, the secretary or an admin in the room can change it.",
   entryStatusUnknown: "An entry is open, done or parked.",
   decisionNotConsented: "A proposal is decided once everyone here has answered and nobody objects.",
   decisionClosed: "That proposal is no longer open for answers.",
@@ -981,7 +1102,12 @@ export const SESSION_REFUSALS = {
 /** What a person is called when the village no longer holds their name. */
 export const SESSION_SOMEONE = "A member";
 
-/** The season names a stamp carries, by the village's own hemisphere. */
+/**
+ * The platform's own season names, turned by the village's hemisphere. A stamp
+ * carries one of these only when the village has named no seasons of its own
+ * and its land is outside the tropics; otherwise `season` is the village's word
+ * or null, so nothing may assume a stamp's season is in this list.
+ */
 export const SESSION_SEASONS = ["spring", "summer", "autumn", "winter"] as const;
 export type SessionSeason = (typeof SESSION_SEASONS)[number];
 
@@ -1029,9 +1155,14 @@ export const ROOM_COPY = {
   youFacilitate: "You are facilitating.",
   joinLede: "You can look around. Join to give your number, add to the agenda and take actions.",
   moonOrdinal: (n: number) => `Moon ${n}`,
-  clockWaiting: "The clock starts when the facilitator begins the session.",
+  clockWaiting: "The clock starts when the facilitator begins the session or moves the room on.",
+  clockWaitingYou: "The clock starts when you begin, or when you first move the room on.",
+  facilitatedBy: (name: string) => `Facilitated by ${name}`,
   clockLine: (elapsedMin: number, durationMin: number) => `${elapsedMin} of ${durationMin} min`,
   beginSession: "Begin the session",
+  // Said once to a screen reader when Begin lands, because the same spot on
+  // the bar then turns into the Next stage button.
+  sessionBegun: "The session has begun. The clock is running.",
   nextStage: "Next stage",
   moveHere: "Move the room here",
   liveBadge: "Now",
@@ -1059,6 +1190,10 @@ export const ROOM_COPY = {
   breathStop: "Stop the breath",
   breathAgain: "Breathe again",
   breathRound: (n: number, of: number) => `Round ${n} of ${of}`,
+  breathStepLine: (secondsLeft: number, round: number, of: number) =>
+    `${secondsLeft === 1 ? "1 second" : `${secondsLeft} seconds`} · Round ${round} of ${of}`,
+  breathCounts: (secs: readonly number[]) => secs.join(" · "),
+  breathStartedSay: (rounds: number) => `The shared breath has started, ${rounds} rounds.`,
 
   giveNumber: "Give my number",
   changeNumber: "Change my number",
@@ -1082,7 +1217,7 @@ export const ROOM_COPY = {
   addToAgenda: "Add to the agenda",
   actionCheckTitle: "Action check from last time",
   addActionCheck: "Add an action check to the agenda",
-  itemTitleLabel: "Item",
+  itemTitleLabel: "Item title",
   itemTitlePlaceholder: "What needs the circle's time?",
   addItemButton: "Add it",
   agendaEmpty: "No items yet. Anyone in the room can add one.",
@@ -1105,6 +1240,7 @@ export const ROOM_COPY = {
   talliedLine: (t: { consent: number; concern: number; object: number }) =>
     `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting`,
   consented: "Everyone here consents.",
+  waitingFor: (names: readonly string[]) => `Waiting for ${names.join(", ")}`,
   proposalConsentAsk: "Do you consent to this proposal?",
 
   startItem: "Start this item",
@@ -1119,14 +1255,15 @@ export const ROOM_COPY = {
   notes: "Notes",
   ideas: "Ideas",
   proposal: "Proposal",
-  seed: "Seed",
+  seed: "What we learned",
+  seedHelp: "One sentence the circle wants to remember from this item. It goes into the record.",
   actionsHere: "Actions",
   nothingYet: "Nothing here yet.",
   writeHere: "Write it here",
   add: "Add",
   decide: "Decided by consent",
   decidedBadge: "Decided",
-  seedSave: "Keep this seed",
+  seedSave: "Add to the record",
   dueLabel: "Due by",
   seatLabel: "A seat holds it",
   noSeat: "No seat",
@@ -1170,7 +1307,7 @@ export const ROOM_COPY = {
   notReached: "Not reached",
   parkedNext: "Parked for next time",
   decisionsHeading: "Decisions",
-  seedsHeading: "Seeds",
+  seedsHeading: "What we learned",
   actionsHeading: "Actions",
   backlogHeading: "Backlog for next time",
   proposalOpen: "Proposal, not decided",
@@ -1179,6 +1316,30 @@ export const ROOM_COPY = {
   minutesFailed: "The minutes did not load. Try again.",
   copied: "Copied.",
   copyFailed: "This browser would not copy. Select the text and copy it by hand.",
+
+  // Editing in the room. Every box can be changed by whoever may change it,
+  // and the words say plainly what a key does and what stays final.
+  editThis: (what: string) => `Edit ${what}`,
+  saving: "Saving...",
+  /** Shown only after the server said yes. */
+  saved: "Saved.",
+  editKeys: "Enter saves. Shift and Enter starts a new line. Escape cancels.",
+  editKeysOneLine: "Enter saves. Escape cancels.",
+  countOf: (n: number, max: number) => `${n} of ${max}`,
+  rewordWarn: "Changing the words starts the consent round again.",
+  decidedLock: "Decided by consent. The words stay as the room agreed them.",
+  backlogSoFar: "In the backlog so far",
+  sessionTitleLabel: "Session title",
+  actionPlaceholder: "What needs doing, in a sentence",
+  actionHolderLabel: "Who holds it",
+  answerAgain: "Answer again to change it.",
+  facilitationReplace: "Sending again replaces what you sent before.",
+  /** The one hand-lettered moment in the room, under the closing words. */
+  signoff: "With gratitude",
+  /** The eyebrow over the people strip. */
+  holding: "Holding",
+  /** A screen reader's word for the note-taker's mark. */
+  noteTaking: "Taking notes",
 } as const;
 
 // ═════════════════════════════════════════════════════════════════════════════

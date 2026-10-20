@@ -2,18 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { GO_LIVE_ENV } from "../client/src/components/admin/goLivePlan";
-import { SECRET_KEYS } from "../server/lib/secrets";
+import { SECRET_KEYS, envNameFor } from "../server/lib/secrets";
 import {
   PLATFORM_GUILDS,
   SEEDS,
   SEEDS_BY_ID,
   guildProblems,
+  keystoneRule,
   plantingOrder,
+  seedsNotYetAlive,
   type GuildModule,
   type GuildSeed,
 } from "./guilds";
 import { LAUNCH_REQUIREMENTS } from "./launchRequirements";
 import { MODULES } from "./modules";
+import { VARIABLES_BY_KEY } from "./gameVariables";
 
 /**
  * The guild catalog is the setup game's only source of seeds and of consent
@@ -147,8 +150,9 @@ describe("intake refuses", () => {
   });
 
   it("a guess presented as a page", () => {
-    expect(problems(MODULES, withSeed({ provider: { name: "Resend", url: null } }))).toContain(
-      'seed "resend-api-key": has no provider url, so it must be marked unverified',
+    const verified = { ...SEEDS_BY_ID["stripe-webhook"]!, provider: { name: "Stripe", url: null } };
+    expect(problems(MODULES, [...SEEDS.filter((x) => x.id !== verified.id), verified])).toContain(
+      'seed "stripe-webhook": has no provider url, so it must be marked unverified',
     );
   });
 
@@ -172,5 +176,113 @@ describe("intake refuses", () => {
   it("a seed no guild plants", () => {
     const stray = { ...seed, id: "stray" };
     expect(problems(MODULES, [...SEEDS, stray])).toContain('seed "stray": belongs to no guild, so nothing would ever plant it');
+  });
+});
+
+describe("the rulings of 2026-10-13", () => {
+  it("Q1: a keystone always pauses, and asks for a co-sign only after launch", () => {
+    expect(keystoneRule("keystone", "before-launch")).toEqual({ readPause: true, approval: "one-founder", receiptToOthers: true });
+    expect(keystoneRule("keystone", "after-launch")).toEqual({ readPause: true, approval: "co-sign-or-cooling-off", receiptToOthers: true });
+    expect(keystoneRule("ordinary", "after-launch")).toEqual({ readPause: false, approval: "one-founder", receiptToOthers: false });
+  });
+
+  it("Q2: both master roots live in the one root cellar, with no environment fallback", () => {
+    for (const [id, slot] of [["railway-root", "railway_project_token"], ["dns-root", "dns_zone_token"]] as const) {
+      const seed = SEEDS_BY_ID[id]!;
+      expect(seed.handles).toEqual([{ store: "village-secret", slot }]);
+      expect(SECRET_KEYS).toContain(slot);
+      expect(envNameFor(slot)).toBeNull();
+      expect(seed.certainty).toBe("unverified");
+    }
+    expect(SEEDS_BY_ID["dns-root"]!.lifespan).toBe("until-launch");
+    expect(SEEDS_BY_ID["railway-root"]!.lifespan).toBe("lasting");
+    expect(SEEDS_BY_ID["railway-root"]!.risk).toBe("keystone");
+  });
+
+  it("Q2: Resend plants from one setup key that composts itself into a send-only key", () => {
+    const setup = SEEDS_BY_ID["resend-setup-key"]!;
+    const key = SEEDS_BY_ID["resend-api-key"]!;
+    expect(setup.lifespan).toBe("setup");
+    expect(setup.consumedBy).toBe("resend-api-key");
+    expect(setup.scopes).toEqual(["permission: full_access"]);
+    expect(setup.compost.join(" ")).toContain("DELETE https://api.resend.com/api-keys/{id}");
+    expect(key.kind).toBe("minted");
+    expect(key.dependsOn).toContain("resend-setup-key");
+    const ids = plantingOrder([]).map((s) => s.id);
+    expect(ids.indexOf("resend-setup-key")).toBeLessThan(ids.indexOf("resend-sending-domain"));
+    expect(ids.indexOf("resend-sending-domain")).toBeLessThan(ids.indexOf("resend-api-key"));
+  });
+
+  it("Q2: everything that lands in DNS or the environment can be planted by hand", () => {
+    const outside = (x: GuildSeed) =>
+      !x.handles.some((h) => h.store === "village-secret") && x.handles.some((h) => h.store === "dns" || h.store === "env");
+    for (const s of SEEDS.filter(outside)) {
+      expect(s.byHand?.how, s.id).toBeTruthy();
+    }
+    expect(SEEDS_BY_ID["dns-root"]!.need).toBe("optional");
+  });
+
+  it("Q2: the seeds the setup game needs before it can run are planted by hand, never through a root", () => {
+    const boot = SEEDS.filter((s) => s.bootstrap).map((s) => s.id).sort();
+    expect(boot).toEqual(["admin-password", "auth-token-secret", "database-url", "village-secrets-key"]);
+    expect(SEEDS_BY_ID["railway-root"]!.dependsOn).toContain("village-secrets-key");
+  });
+
+  it("Q3: every seed that cannot yet turn green is listed, and the Resend key is not among them", () => {
+    const notAlive = seedsNotYetAlive().map((s) => s.id);
+    for (const id of ["auth-token-secret", "village-secrets-key", "stripe-secret-key", "stripe-webhook", "anthropic-api-key"]) {
+      expect(notAlive).toContain(id);
+    }
+    expect(notAlive).not.toContain("resend-api-key");
+    const probe = SEEDS_BY_ID["resend-api-key"]!.liveCheck;
+    // The post office's own test email, read by item 13's reader (Rye: reuse it).
+    expect(probe.via === "probe" && probe.builtAt).toBe("server/lib/comms/setup.ts");
+    expect(fs.readFileSync(path.join(__dirname, "..", "server", "lib", "comms", "setup.ts"), "utf8")).toContain("export function testEmailDelivered");
+  });
+
+  it("Q4: the governance crossings are platform seeds, and only hypha keeps Basescan", () => {
+    const crossings = PLATFORM_GUILDS.find((g) => g.id === "crossings")!.seeds;
+    expect(crossings).toEqual(["governance-hub-secret", "hypha-voice-webhook-secret"]);
+    expect(MODULES.find((m) => m.id === "hypha")!.guild).toEqual(["basescan-api-key"]);
+  });
+
+  it("names only real settings in a condition, and skips a conditional seed whose setting is empty", () => {
+    for (const s of SEEDS.filter((x) => x.onlyWhen)) {
+      expect(VARIABLES_BY_KEY[s.onlyWhen!.setting], s.id).toBeTruthy();
+    }
+    const without = plantingOrder([], SEEDS, PLATFORM_GUILDS, () => false).map((s) => s.id);
+    expect(without).not.toContain("hypha-voice-webhook-secret");
+    expect(without).not.toContain("governance-hub-secret");
+    const withSpace = plantingOrder([], SEEDS, PLATFORM_GUILDS, (k) => k === "economy.hypha_space").map((s) => s.id);
+    expect(withSpace).toContain("hypha-voice-webhook-secret");
+  });
+});
+
+describe("intake refuses the new shapes when they are wrong", () => {
+  const seed = SEEDS_BY_ID["email-from"]!;
+  const withSeed = (over: Partial<GuildSeed>) => [...SEEDS.filter((s) => s.id !== seed.id), { ...seed, ...over }];
+
+  it("a seed landing in the environment with no way to plant it by hand", () => {
+    expect(problems(MODULES, withSeed({ byHand: undefined }))).toContain(
+      'seed "email-from": lands in the hosting environment or DNS and does not say how to plant it by hand',
+    );
+  });
+
+  it("a bootstrap seed planted through a root", () => {
+    expect(problems(MODULES, withSeed({ bootstrap: true }))).toContain(
+      'seed "email-from": must exist before the setup game runs, so it cannot be planted through a root',
+    );
+  });
+
+  it("a setup seed that plants nothing", () => {
+    expect(problems(MODULES, withSeed({ lifespan: "setup", plantedThrough: undefined }))).toContain(
+      'seed "email-from": is a setup seed and names no seed it plants',
+    );
+  });
+
+  it("a minted seed with no setup seed to mint it from", () => {
+    const minted = { ...SEEDS_BY_ID["resend-api-key"]!, dependsOn: ["resend-sending-domain"] };
+    const out = problems(MODULES, [...SEEDS.filter((s) => s.id !== minted.id), minted]);
+    expect(out).toContain('seed "resend-api-key": is minted and depends on no setup seed to mint it with');
   });
 });

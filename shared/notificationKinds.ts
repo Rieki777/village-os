@@ -79,6 +79,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes opened, and you are on the roll for each one.",
     celebrate: false,
   },
+  /*
+   * Village Comms 5.10: a host asked you to pick the times you can make for
+   * a gathering. Decisions, because the time with the most picks becomes the
+   * gathering's time.
+   */
+  time_poll_open: {
+    group: "decisions",
+    blurb: "Pick the times you can make. The time with the most picks becomes the gathering's time.",
+    many: "{n} gatherings are choosing a time.",
+    celebrate: false,
+  },
   ballot_closing: {
     group: "decisions",
     blurb: "The window is closing and your vote is still owed. Quorum is measured against everyone on the roll.",
@@ -358,6 +369,28 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} actions from live sessions are held by you or your seats.",
     celebrate: false,
   },
+  // The task layer (server/lib/sessionTaskMail.ts, server/lib/sessionTasks.ts):
+  // a gentle note near a task's date, a task handed back to its circle, and a
+  // task sitting with a seat nobody holds. None of them celebrate: each one
+  // asks somebody to look at work, and none happened TO the reader.
+  session_action_due: {
+    group: "work",
+    blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",
+    many: "{n} tasks you hold are near their dates.",
+    celebrate: false,
+  },
+  session_task_back: {
+    group: "work",
+    blurb: "A task from a session you facilitated was handed back. It comes up at the circle's next action check.",
+    many: "{n} tasks came back to their circles.",
+    celebrate: false,
+  },
+  session_task_unheld: {
+    group: "work",
+    blurb: "A task from a live session sits with a seat nobody holds now. Give it to someone at the next call.",
+    many: "{n} tasks sit with seats nobody holds.",
+    celebrate: false,
+  },
 
   // ── People ────────────────────────────────────────────────────────────────
   arrival: {
@@ -384,6 +417,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "people",
     blurb: "Somebody said thank you, and put their name to it.",
     many: "{n} people sent you appreciation.",
+    celebrate: false,
+  },
+  /*
+   * Village Comms, day 21 of a path (the comms build spec 5.11). The
+   * emails have done what emails can do, and the path's contact person is
+   * asked to write to somebody by name. People, because it is a person the
+   * reader is asked to reach.
+   */
+  comms_path_handoff: {
+    group: "people",
+    blurb: "Somebody has been on a path for three weeks. A note from a person is the next step.",
+    many: "{n} people on a path are ready to hear from a person.",
     celebrate: false,
   },
   message: {
@@ -488,6 +533,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "village",
     blurb: "Something was flagged for a steward to read, or a report you filed was closed.",
     many: "{n} reports moved.",
+    celebrate: false,
+  },
+  /*
+   * Village Comms (5.9): a gathering you hosted has ended and the people who
+   * came are waiting to hear back. The village group, because the recap is
+   * the village keeping its own record of what it did together.
+   */
+  comms_host_recap: {
+    group: "village",
+    blurb: "A gathering you hosted has ended. The people who came will hear from you once you write the recap.",
+    many: "{n} gatherings you hosted are waiting for a recap.",
     celebrate: false,
   },
   restorative_intake: {

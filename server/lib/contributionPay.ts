@@ -93,6 +93,11 @@ export const LEDGER_SOURCE_PAYS_A_CONTRIBUTION: Readonly<Record<string, boolean>
   voice_claim: false,
   voice_claim_settled: false,
   voice_decay: false,
+  // NOT A LEDGER SOURCE, listed because the scan cannot tell: the `source` of
+  // an email permission (comms_permissions.source, a person confirming they
+  // want letters, server/lib/comms/actions.ts). It moves no value, so it pays
+  // nobody, and it can never put a token in anyone's hands.
+  letters_confirm: false,
 };
 
 /** The sources that count, for the one query that asks. */

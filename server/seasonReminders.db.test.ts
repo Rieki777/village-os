@@ -52,8 +52,10 @@ function deps(sent: string[], prefs: unknown): NotifyDeps {
   return {
     pool,
     memberById: async (id: string) => ({ id, email: `${id}@example.test`, passwordHash: "hash", prefs }),
+    // Answers as the post office does when it takes the row, so the spine stamps `emailed_at`.
     sendEmail: async (o) => {
       sent.push(o.subject);
+      return { accepted: true, status: "queued" };
     },
     origin: () => "https://example.test",
     projectName: () => "Test village",

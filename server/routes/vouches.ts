@@ -50,6 +50,8 @@ import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
 import { refuseVouch, vouchBar, vouchingOffRefusal, vouchSentence, vouchState } from "../lib/vouches";
 import { recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "../lib/commsSink";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "stageOf" | "recordStageEvent">;
 
@@ -196,6 +198,7 @@ export function register(app: Express, deps: Deps): void {
       await members.update(targetId, (m: any) => {
         m.membershipGranted = true;
       });
+      commsSink.fire({ type: "member_admitted", userId: targetId });
     }
     res.json({ vouches: state, admitted: state.met, sentence: vouchSentence(state) });
   }

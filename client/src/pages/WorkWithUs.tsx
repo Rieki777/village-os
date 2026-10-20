@@ -5,6 +5,7 @@ import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage
 import { useAuth } from "@/contexts/AuthContext";
 import GuideChat from "@/components/GuideChat";
 import { submitProposal } from "@/lib/proposals";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import {
   Handshake,
   MessageCircle,
@@ -220,6 +221,8 @@ function ProposalForm({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [hp, setHp] = useState(""); // honeypot: real people never fill this
+  // "Walk me through the next steps" (5.11). Kept out of the saved draft: a yes is given once, here.
+  const [consent, setConsent] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const set = (key: keyof Proposal, value: any) => setForm({ ...form, [key]: value });
@@ -250,7 +253,7 @@ function ProposalForm({
     if (form.reciprocity.length === 0) { setError("Choose at least one form of reciprocity that fits."); return; }
     setError("");
     setSubmitting(true);
-    const ok = await submitProposal("work-with-us", form, hp);
+    const ok = await submitProposal("work-with-us", { ...form, [FORM_CONSENT_FIELD]: consent }, hp);
     setSubmitting(false);
     if (ok) onSubmitted(); else setError("That didn't send. Try again.");
   };
@@ -374,6 +377,8 @@ function ProposalForm({
         aria-hidden="true"
         className="hidden"
       />
+
+      <PathConsentBox checked={consent} onChange={setConsent} />
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={submitting} className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-teal-deep text-white font-semibold px-8 py-3 rounded-xl hover:bg-teal-deep-dark disabled:opacity-50 transition-colors">
