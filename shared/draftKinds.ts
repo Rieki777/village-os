@@ -176,6 +176,8 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
     "admit somebody as a member outright, without the vouches the village asks for",
   "org.seat": "seat people in the village's seats, and take them out again",
   "org.seatAgent": "seat software agents in the village's seats, and take them out again",
+  "org.decide":
+    "publish a change to the village's circles and seats straight onto the chart, or put it to the village for a vote",
   "intake.moderate": "work the queues the village puts things into, and act on what gets reported",
   "library.keep": "keep the shared library: what comes in, what goes out on loan, what comes back",
   "story.tell": "say what this village is, in public, in its own words",
