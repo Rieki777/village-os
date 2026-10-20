@@ -1,0 +1,200 @@
+{
+  "schema": "regen-civics/village-card@1",
+  "needs": [
+    {
+      "needKey": "vitality",
+      "depthTarget": "thriving",
+      "breadthTargetPct": 75,
+      "sortOrder": 1
+    },
+    {
+      "needKey": "play",
+      "depthTarget": "satisfied",
+      "breadthTargetPct": 100,
+      "sortOrder": 2
+    },
+    {
+      "needKey": "growth",
+      "depthTarget": "satisfied",
+      "breadthTargetPct": 100,
+      "sortOrder": 3
+    },
+    {
+      "needKey": "custom:spiritual-practice",
+      "label": "Spiritual practice",
+      "depthTarget": "thriving",
+      "breadthTargetPct": 100,
+      "sortOrder": 4
+    }
+  ],
+  "variables": {
+    "needs.totality_target_pct": 50
+  },
+  "needLinks": [
+    {
+      "needKey": "vitality",
+      "subjectType": "role",
+      "circle": "water",
+      "circleLabel": "Living Water"
+    },
+    {
+      "needKey": "vitality",
+      "subjectType": "role",
+      "circle": "food",
+      "circleLabel": "Food & Fertility"
+    },
+    {
+      "needKey": "play",
+      "subjectType": "role",
+      "circle": "festivals",
+      "circleLabel": "Festivals & Rites"
+    }
+  ],
+  "seats": [
+    {
+      "name": "Water keeper",
+      "circle": "water",
+      "circleLabel": "Living Water",
+      "seats": 1,
+      "aim": "Living water for every household on the land",
+      "domain": null,
+      "accountabilities": "The spring, the catchment, the water tests",
+      "why": "Meets Vitality",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "team",
+      "who": "Ana",
+      "contribution": {
+        "hoursPerWeek": 4,
+        "text": "4 hours a week"
+      },
+      "needLinks": [
+        {
+          "needKey": "vitality",
+          "subjectType": "role",
+          "weight": "primary"
+        }
+      ]
+    },
+    {
+      "name": "Initiation guide",
+      "circle": "festivals",
+      "circleLabel": "Festivals & Rites",
+      "seats": 1,
+      "aim": "Living water for every household on the land",
+      "domain": null,
+      "accountabilities": "The spring, the catchment, the water tests",
+      "why": "Meets Play",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "open",
+      "who": "",
+      "contribution": {
+        "hoursPerWeek": 4,
+        "text": "4 hours a week"
+      },
+      "needLinks": [
+        {
+          "needKey": "play",
+          "subjectType": "role",
+          "weight": "primary"
+        }
+      ]
+    }
+  ],
+  "circles": [
+    {
+      "circle": "water",
+      "label": "Living Water",
+      "needs": [
+        "vitality"
+      ],
+      "decidesOn": [
+        "when we irrigate"
+      ],
+      "decidesBy": "consent",
+      "decidesByGloss": null,
+      "decidesByAnswers": [
+        {
+          "by": "consent",
+          "gloss": null
+        }
+      ],
+      "startsWith": true
+    },
+    {
+      "circle": "own:Kitchen",
+      "label": "Kitchen",
+      "needs": [],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    },
+    {
+      "circle": "food",
+      "label": "Food & Fertility",
+      "needs": [
+        "vitality"
+      ],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    },
+    {
+      "circle": "festivals",
+      "label": "Festivals & Rites",
+      "needs": [
+        "play"
+      ],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    }
+  ],
+  "decisions": {
+    "together": [
+      "Who joins"
+    ],
+    "how": "Everyone, by consent or consensus",
+    "agreement": "Circles decide what's theirs"
+  },
+  "entry": "Come to a work day, then a welcome circle",
+  "quests": [
+    {
+      "quest": "Clear the spring",
+      "need": "vitality"
+    }
+  ],
+  "customNeeds": [
+    {
+      "needKey": "custom:wisdom",
+      "label": "wisdom"
+    }
+  ],
+  "firstLine": "future generations",
+  "players": {
+    "toStart": null,
+    "now": null
+  },
+  "shape": {
+    "shape": null,
+    "line": null
+  },
+  "from": {
+    "site": "regen-civics.example",
+    "project": "Templeofroots.com",
+    "applicationId": null,
+    "weeks": [
+      3,
+      4
+    ]
+  }
+}
