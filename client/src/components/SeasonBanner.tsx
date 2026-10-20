@@ -1,13 +1,33 @@
 import { Sun, Sunrise } from "lucide-react";
 import { Link } from "wouter";
 import { useSeason } from "@/lib/gameApi";
+import { useAuth } from "@/contexts/AuthContext";
+import { civilDayWords } from "@shared/seasonPlans";
+
+/**
+ * "Plan your season", while the window is open (season plans RC1). Members
+ * only: a visitor has no seat to keep and no plan to file. The window comes
+ * with /api/season, so the banner makes no second request.
+ */
+function PlanLine({ window }: { window: { seasonName: string; closesOn: string } }) {
+  return (
+    <span className="basis-full text-amber-on-band text-sm">
+      Plan your season{window.seasonName ? `: ${window.seasonName}` : ""}. Open until {civilDayWords(window.closesOn)}.{" "}
+      <Link href="/season-plans/mine" className="underline font-medium">
+        Plan your season
+      </Link>
+    </span>
+  );
+}
 
 /** The season strap. The server decides which season is current from today's
  *  date, so this can show an upcoming season or nothing at all — but it will
  *  never keep advertising a season that has already turned. */
 export default function SeasonBanner() {
   const season = useSeason();
+  const { user } = useAuth();
   if (!season) return null;
+  const plan = user && season.planWindow?.state === "open" ? <PlanLine window={season.planWindow} /> : null;
 
   const active = season.current;
   const next = season.upcoming;
@@ -27,6 +47,7 @@ export default function SeasonBanner() {
               ? `begins in ${season.daysUntilStart} day${season.daysUntilStart === 1 ? "" : "s"}`
               : "begins today"}
           </span>
+          {plan}
         </div>
       </section>
     );
@@ -68,6 +89,7 @@ export default function SeasonBanner() {
             </Link>
           </span>
         )}
+        {plan}
       </div>
     </section>
   );

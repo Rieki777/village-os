@@ -21,6 +21,10 @@
  *   pick              a select over a REMOTE list, or a search for members.
  *   changeSet         the mechanics dial editor, the one field with real
  *                     machinery behind it.
+ *   seatSettings      a seat's terms, group by group from presets
+ *                     (SeatSettingsEditor), judged by parseSeatSettings.
+ *   seatPicks         one to five seats from the org chart, as a list
+ *                     (SeatPicksField), for an application over several seats.
  *
  * ACCESSIBILITY. Every control has a real <label> tied by id, every problem is
  * announced through aria-describedby and role="alert", every target clears
@@ -33,6 +37,9 @@ import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
 import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from "./pickSources";
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
+import SeatSettingsEditor from "./SeatSettingsEditor";
+import SeatPicksField from "./SeatPicksField";
+import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
   key: string;
@@ -79,6 +86,9 @@ export default function WizardField({
   answers?: Record<string, unknown>;
 }) {
   const id = useId();
+  // The village's own presets, offered after the platform's (PR3). Asked only
+  // by a terms field, and a reader without terms.read is answered an empty list.
+  const villagePresets = useVillagePresets(field.kind === "seatSettings");
   const errorId = `${id}-problem`;
   const helpId = `${id}-help`;
   const describedBy = [problem ? errorId : null, field.help ? helpId : null].filter(Boolean).join(" ") || undefined;
@@ -217,6 +227,32 @@ export default function WizardField({
         </div>
       );
 
+    case "seatSettings":
+      // No single control to label: the editor is many, each labelled itself.
+      return (
+        <div>
+          <p className="block text-sm font-semibold text-stone-900">{field.label}</p>
+          {field.help && (
+            <p id={helpId} className="mt-1 text-xs text-stone-600 leading-relaxed">
+              {field.help}
+            </p>
+          )}
+          <div className="mt-3">
+            <SeatSettingsEditor
+              value={value}
+              onChange={onChange}
+              prefillWholeId={field.prefillWhole}
+              villagePresets={villagePresets}
+            />
+          </div>
+          {problem && (
+            <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-coral">
+              {problem}
+            </p>
+          )}
+        </div>
+      );
+
     case "choice":
       return (
         <div>
@@ -244,6 +280,11 @@ export default function WizardField({
           describedBy={describedBy}
           invalid={!!problem}
         />
+      );
+
+    case "seatPicks":
+      return (
+        <SeatPicksField field={field} value={value} onChange={onChange} describedBy={describedBy} invalid={!!problem} footerNode={footer} />
       );
 
     case "changeSet":

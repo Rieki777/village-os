@@ -20,7 +20,7 @@
  *     something different for each type and guessing is not a member's job.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowLeft, ArrowRight, Check, Loader2, Save, Send } from "lucide-react";
 import { BreathingLoader } from "@/components/natural";
 import {
@@ -38,21 +38,59 @@ import PracticeVote from "./PracticeVote";
 import TypeCards from "./TypeCards";
 import WizardField, { type MechanicsVariableLite } from "./WizardField";
 import WizardRolePreview from "./WizardRolePreview";
+import WizardSeatPreview from "./WizardSeatPreview";
+import AlignmentReview, { type ReviewAlignment } from "@/components/alignment/AlignmentReview";
+import { settingsWords } from "@shared/seatSettings";
 import WizardStepper from "./WizardStepper";
-import { isSearchSource, labelFor, loadPickOptions, type PickOption } from "./pickSources";
+import { isSearchSource, labelFor, loadOrg, loadPickOptions, type PickOption } from "./pickSources";
+import { pickedSeats } from "./SeatPicksField";
+import { offerPrefill } from "./roleApplicationType";
 import { authToken } from "@/lib/gameApi";
 
 const AUTOSAVE_PAUSE_MS = 1500;
 
+/** The draft the address names, `?draft=<id>`, or null. */
+export function draftFromUrl(search: string = typeof window === "undefined" ? "" : window.location.search): string | null {
+  const id = new URLSearchParams(search).get("draft");
+  return id && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+}
+
+/** Name the draft in the address, keeping the path and dropping a one-time start (`type`, `seat`). */
+function writeDraftToUrl(id: string, how: "replace" | "push"): void {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.pathname}?draft=${encodeURIComponent(id)}`;
+  if (window.location.search === `?draft=${encodeURIComponent(id)}`) return;
+  const state = window.history.state;
+  if (how === "replace") window.history.replaceState(state, "", url);
+  else window.history.pushState(state, "", url);
+}
+
+/** A history entry for a step, at the same address. */
+function pushStep(step: string): void {
+  if (typeof window === "undefined") return;
+  window.history.pushState({ ...(window.history.state ?? {}), wizardStep: step }, "", window.location.pathname + window.location.search);
+}
+
 type Feedback = { ok: boolean; text: string } | null;
 
-export default function ProposalWizard() {
+/**
+ * Where the walk starts. Absent, it opens on the type step. A seat card's door
+ * passes `role_application` with the seat already picked (`roleApplicationStart`).
+ */
+export interface WizardStart {
+  type: WizardType;
+  answers: Record<string, unknown>;
+}
+
+export default function ProposalWizard({ start = null }: { start?: WizardStart | null } = {}) {
   const [, navigate] = useLocation();
 
-  const [type, setType] = useState<WizardType | null>(null);
-  const [step, setStep] = useState<StepKey>("type");
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [type, setType] = useState<WizardType | null>(start?.type ?? null);
+  const [step, setStep] = useState<StepKey>(() => (start ? (nextStep(start.type, "type") ?? "type") : "type"));
+  const [answers, setAnswers] = useState<Record<string, unknown>>(start?.answers ?? {});
   const [draftId, setDraftId] = useState<string | null>(null);
+  // An untouched start is not work: a prefilled door (a seat card's) saves
+  // nothing until the member changes something or moves a step (red team U3).
   const [dirty, setDirty] = useState(false);
 
   const [drafts, setDrafts] = useState<ProposalDraft[]>([]);
@@ -70,6 +108,8 @@ export default function ProposalWizard() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [leaving, setLeaving] = useState(false);
   const [published, setPublished] = useState<{ id?: string; title: string } | null>(null);
+  // The words an aligning type's Review step showed, sent back so the server binds the click to them.
+  const [review, setReview] = useState<ReviewAlignment>({ words: null, ready: false });
 
   const walk = walkFor(type);
   const stepIndex = Math.max(0, walk.findIndex((s) => s.key === step));
@@ -80,8 +120,25 @@ export default function ProposalWizard() {
   // A type that picks a role with powers shows that role as a card once it is
   // picked. One `/api/roles` read serves the picker and the preview
   // (`loadPermissionRoles`), so the two cannot disagree about a role.
-  const rolePick = walk.flatMap((s) => fieldsFor(type, s.key)).find((f) => f.kind === "pick" && f.source === "roles");
+  //
+  // ONE preview, chosen by what the type picks: a seat from the org chart
+  // draws the seat card with its terms drawer (WizardSeatPreview), a role with
+  // powers draws the permission card (WizardRolePreview). A type picking both
+  // would show the seat, never two cards.
+  const walkFields = walk.flatMap((s) => fieldsFor(type, s.key));
+  // A list of seats (`seatPicks`) previews its first seat: the one whose terms the step starts from.
+  const seatPick = walkFields.find((f) => (f.kind === "pick" && f.source === "seats") || f.kind === "seatPicks");
+  const settingsField = walkFields.find((f) => f.kind === "seatSettings");
+  const seatPreview = seatPick ? (pickedSeats(answers[seatPick.key])[0] ?? null) : null;
+  const rolePick = seatPreview ? undefined : walkFields.find((f) => f.kind === "pick" && f.source === "roles");
   const rolePreview = rolePick && String(answers[rolePick.key] ?? "") ? String(answers[rolePick.key]) : null;
+  const previewPick = seatPreview ? seatPick : rolePick;
+  const preview = (look: "rail" | "inline") =>
+    seatPreview ? (
+      <WizardSeatPreview seatId={seatPreview} settings={settingsField ? answers[settingsField.key] : undefined} look={look} />
+    ) : rolePreview ? (
+      <WizardRolePreview roleId={rolePreview} look={look} />
+    ) : null;
   // The read-back names a picked value from the list its picker offered
   // (`labelFor`), where it printed the id. A searched source (members) has no
   // list to name from and still prints what was stored.
@@ -89,7 +146,13 @@ export default function ProposalWizard() {
   useEffect(() => {
     if (step !== "review" || !type) return;
     const picks = walkFor(type).flatMap((s) => fieldsFor(type, s.key));
-    const sources = Array.from(new Set(picks.flatMap((f) => (f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : []))));
+    const sources = Array.from(
+      new Set(
+        picks.flatMap((f) =>
+          f.kind === "seatPicks" ? ["seats" as const] : f.kind === "pick" && f.source && !isSearchSource(f.source) ? [f.source] : [],
+        ),
+      ),
+    );
     let alive = true;
     void Promise.all(sources.map(async (src) => [src, await loadPickOptions(src)] as const)).then((lists) => {
       if (alive) setPickLists(Object.fromEntries(lists));
@@ -98,6 +161,27 @@ export default function ProposalWizard() {
       alive = false;
     };
   }, [step, type]);
+
+  /*
+   * THE SEAT'S OWN TERMS AS THE STARTING POINT. When a seat is picked and the
+   * terms are still unwritten, the first seat's terms on offer fill them, so a
+   * member starts from what the seat offers and changes what does not fit.
+   * Written terms are never replaced: this only ever fills an empty field.
+   */
+  const firstSeat = seatPreview;
+  const settingsKey = settingsField?.key ?? null;
+  useEffect(() => {
+    if (!firstSeat || !settingsKey || answers[settingsKey] !== undefined) return;
+    let alive = true;
+    void loadOrg().then((org) => {
+      const offer = offerPrefill([firstSeat], org);
+      if (!alive || offer === undefined) return;
+      setAnswers((prev) => (prev[settingsKey] === undefined ? { ...prev, [settingsKey]: offer } : prev));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [firstSeat, settingsKey, answers]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,7 +195,14 @@ export default function ProposalWizard() {
         setMayOpenAdvisory(!!factsAnswer.data.mayOpenAdvisory);
         setSupportThreshold(factsAnswer.data.supportThreshold);
       }
-      if (draftsAnswer.ok) setDrafts(draftsAnswer.data.drafts);
+      if (draftsAnswer.ok) {
+        setDrafts(draftsAnswer.data.drafts);
+        // `?draft=<id>`: a refresh, Back or a shared tab resumes the same draft
+        // at the step it was left on, never a blank wizard (red team U3).
+        const resume = draftFromUrl();
+        const found = resume ? draftsAnswer.data.drafts.find((d) => d.id === resume) : undefined;
+        if (found) continueDraftRef.current(found);
+      }
       setLoading(false);
     })();
     return () => {
@@ -162,6 +253,8 @@ export default function ProposalWizard() {
         draftIdRef.current = answer.data.draft.id;
         setDraftId(answer.data.draft.id);
         setDirty(false);
+        // The address names the draft from its first save, so a refresh resumes it (red team U3).
+        writeDraftToUrl(answer.data.draft.id, "replace");
         return answer.data.draft.id;
       });
       // A rejection must not poison the chain for every later save.
@@ -201,21 +294,36 @@ export default function ProposalWizard() {
     setDirty(true);
   };
 
-  const goTo = async (next: StepKey) => {
+  const goTo = async (next: StepKey, fromHistory = false) => {
     setStep(next);
     setFeedback(null);
+    // One history entry per step, so the browser's Back walks the steps (red team U3).
+    if (!fromHistory) pushStep(next);
     const position = walk.findIndex((s) => s.key === next);
     if (type) await persist({ stepIndex: Math.max(0, position) });
   };
 
   const chooseType = (id: WizardType) => {
+    // Picking a kind is not yet work: nothing is saved until something is written (red team U3).
     setType(id);
-    setDirty(true);
     const first = nextStep(id, "type");
     if (first) setStep(first);
   };
 
+  // Back and Forward move between the steps the member walked.
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const s = (e.state as { wizardStep?: StepKey } | null)?.wizardStep;
+      if (s) void goToRef.current(s, true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const continueDraft = (draft: ProposalDraft) => {
+    writeDraftToUrl(draft.id, "replace");
     setBusyDraft(draft.id);
     setType(draft.wizardType as WizardType);
     setAnswers(draft.payload ?? {});
@@ -225,6 +333,8 @@ export default function ProposalWizard() {
     setDirty(false);
     setBusyDraft(null);
   };
+  const continueDraftRef = useRef(continueDraft);
+  continueDraftRef.current = continueDraft;
 
   const discardDraft = async (draft: ProposalDraft) => {
     setBusyDraft(draft.id);
@@ -255,7 +365,9 @@ export default function ProposalWizard() {
     if (!cfg || problems.length > 0) return;
     setBusy(true);
     setFeedback(null);
-    const answer = await publishProposal(cfg.publish.path, cfg.publish.body(answers));
+    if (cfg.aligns && !review.ready) return;
+    const body = cfg.publish.body(answers);
+    const answer = await publishProposal(cfg.publish.path, cfg.aligns ? { ...body, alignedWords: review.words } : body);
     if (!answer.ok) {
       setFeedback({ ok: false, text: answer.error });
       setBusy(false);
@@ -295,6 +407,16 @@ export default function ProposalWizard() {
           </p>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
+          {/* An application has a page of its own, where the holder adopts it
+              and the member can withdraw it. */}
+          {type === "role_application" && published.id && (
+            <Link
+              href={`/seat-applications/${encodeURIComponent(published.id)}`}
+              className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
+            >
+              Open the application
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => navigate("/decisions")}
@@ -322,7 +444,7 @@ export default function ProposalWizard() {
   }
 
   return (
-    <div className={`lg:grid lg:gap-8 ${rolePreview ? "lg:grid-cols-[1fr_22rem]" : "lg:grid-cols-[1fr_14rem]"}`}>
+    <div className={`lg:grid lg:gap-8 ${seatPreview || rolePreview ? "lg:grid-cols-[1fr_22rem]" : "lg:grid-cols-[1fr_14rem]"}`}>
       <div className="min-w-0">
         {/* Mobile stepper sits above the step; the desktop rail is on the right. */}
         <div className="mb-4 lg:hidden">
@@ -385,10 +507,8 @@ export default function ProposalWizard() {
               />
             ))}
             {/* On a phone the preview sits under the question that picked it. */}
-            {rolePreview && rolePick && fieldsFor(type, step).includes(rolePick) && (
-              <div className="lg:hidden">
-                <WizardRolePreview roleId={rolePreview} look="inline" />
-              </div>
+            {previewPick && (fieldsFor(type, step).includes(previewPick) || (settingsField && fieldsFor(type, step).includes(settingsField))) && (
+              <div className="lg:hidden">{preview("inline")}</div>
             )}
           </div>
         )}
@@ -402,11 +522,7 @@ export default function ProposalWizard() {
               </p>
             </div>
 
-            {rolePreview && (
-              <div className="lg:hidden">
-                <WizardRolePreview roleId={rolePreview} look="inline" />
-              </div>
-            )}
+            {(seatPreview || rolePreview) && <div className="lg:hidden">{preview("inline")}</div>}
 
             <dl className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
               {walk
@@ -417,14 +533,24 @@ export default function ProposalWizard() {
                   const shown =
                     field.kind === "changeSet"
                       ? (Array.isArray(v) ? v : []).map((c: any) => `${c.key} becomes ${c.to}`).join(", ")
-                      : field.kind === "seatTerm"
+                      : field.kind === "seatSettings"
+                        ? // The headline of every group that is set; the card above shows the rest.
+                          settingsWords(v as any)
+                            .filter((r) => r.set)
+                            .map((r) => `${r.label}: ${r.headline}`)
+                            .join("\n")
+                        : field.kind === "seatTerm"
                         ? // A blank end date is an answer: the seat ends with the season.
                           String(v ?? "").trim()
                           ? `Until ${String(v).trim()}`
                           : "Until the season ends"
                         : field.kind === "pick" && field.source && pickLists[field.source] && v
                           ? labelFor(pickLists[field.source], v)
-                          : String(v ?? "");
+                          : field.kind === "seatPicks"
+                            ? pickedSeats(v)
+                                .map((id) => (pickLists.seats ? labelFor(pickLists.seats, id) : id))
+                                .join(", ")
+                            : String(v ?? "");
                   return (
                     <div key={field.key} className="flex flex-wrap gap-x-4 gap-y-1 p-3">
                       <dt className="w-40 shrink-0 text-sm font-medium text-stone-600">{field.label}</dt>
@@ -465,6 +591,8 @@ export default function ProposalWizard() {
                 </ul>
               </div>
             )}
+
+            {cfg.aligns && <AlignmentReview body={cfg.publish.body(answers)} onState={setReview} />}
 
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
               <p className="text-sm font-semibold text-stone-900">What publishing does</p>
@@ -514,12 +642,12 @@ export default function ProposalWizard() {
           {step === "review" ? (
             <button
               type="button"
-              disabled={busy || problems.length > 0}
+              disabled={busy || problems.length > 0 || (!!cfg?.aligns && !review.ready)}
               onClick={publish}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
-              Put it in front of the village
+              {cfg?.publishLabel ?? "Put it in front of the village"}
             </button>
           ) : (
             nextStep(type, step) && (
@@ -562,7 +690,7 @@ export default function ProposalWizard() {
             <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>
           )}
           {!dirty && draftId && <p className="mt-4 px-2 text-xs text-stone-500">Saved. You can close this and come back.</p>}
-          {rolePreview && <WizardRolePreview roleId={rolePreview} look="rail" />}
+          {preview("rail")}
         </div>
       </aside>
 
