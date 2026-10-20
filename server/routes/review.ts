@@ -286,6 +286,19 @@ export function register(app: Express, deps: Deps): void {
     // one read above, and listed even when its preview throws (stuckQueueDrafts).
     // A reader given the quest half alone read no drafts, so it lists none.
     const stuckDrafts = drafts && previewContext ? stuckQueueDrafts(drafts, previewContext, proposalChangeLimit) : [];
+    // Every open draft this queue made, with the batch whose page shows it, so
+    // a steward can find the draft an accept made from the queue itself.
+    const openDrafts = await Promise.all(
+      (drafts ?? [])
+        .filter((d) => d.status === "open" && d.sourceProposalId)
+        .slice(0, 20)
+        .map(async (d) => ({
+          draftId: d.id,
+          title: d.title,
+          changes: d.changes.length,
+          batchId: (await proposalById(pool, String(d.sourceProposalId)))?.batchId ?? null,
+        })),
+    );
     const circles = circlesRepo.all() as LiveCircle[];
 
     res.json({
@@ -322,6 +335,7 @@ export function register(app: Express, deps: Deps): void {
       })),
       drops,
       stuckDrafts,
+      openDrafts,
       counts: { proposals: proposals.length, quests: quests.length },
       scope: { proposals: readsProposals, quests: readsQuests },
     });
