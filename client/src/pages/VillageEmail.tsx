@@ -10,10 +10,22 @@
  *
  * Reached from the Game Mechanics page, beside the dials it explains. A
  * member's page, so semantic tokens throughout and the theme the village chose.
+ *
+ * WITH THE COMMS MODULE OFF IT DOES NOT ASK. `/api/comms/village` sits behind
+ * `requireModule("comms")`, so on a village that has not switched it on the
+ * page asked anyway and was answered 404 `module_disabled`, which put a console
+ * error on every visit at every width. The module list the client already holds
+ * says whether it is on (`moduleIsOn`), so an off module gets a plain sentence
+ * naming who can switch it on, and no request. The menu entry is already
+ * hidden while it is off (`module: "comms"` in config/nav.ts), the same as
+ * every other off module's page; the route stays, so a shared link still lands
+ * on a sentence.
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
+import { SignInToSee } from "@/components/modules/ModuleGate";
+import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
 import {
   dialLink,
@@ -149,6 +161,10 @@ function DialRow({ dial }: { dial: MemberDialView }) {
 }
 
 export default function VillageEmail() {
+  const modules = useModules();
+  const commsOn = moduleIsOn(modules, "comms");
+  // Known to be off for this reader. Still loading is neither on nor off, so it asks nothing yet.
+  const off = modules.loaded && !commsOn;
   const [view, setView] = useState<MemberCommsView | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -166,19 +182,39 @@ export default function VillageEmail() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (commsOn) void load();
+  }, [commsOn, load]);
+
+  // A village that opens it to members only: a signed-out reader is one sign-in away, which is not "off".
+  if (off && modules.signInToSee.includes("comms")) return <SignInToSee moduleId="comms" name="How the village emails" />;
 
   return (
     <Layout>
       <section className="py-12 sm:py-16 bg-background min-h-[60vh]">
         <div className="container px-4 max-w-3xl mx-auto">
           <h1 className="font-display text-2xl font-bold text-card-foreground mb-2">How the village emails</h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            Every email the village sends, and when. Open any of them to read its words, and propose a change.
-          </p>
+          {off ? (
+            <div className="bg-card border border-border rounded-2xl p-5">
+              <h2 className="font-display text-lg font-semibold text-card-foreground">Village email isn't switched on yet</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Until it is, the village sends no journey emails and no letters. Account emails and your notices
+                still arrive.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Only an admin can switch it on, from{" "}
+                <Link href="/modules/comms" className="text-primary underline underline-offset-2">
+                  Village Comms in the Module Library
+                </Link>
+                , once the village's sending is set up.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-6">
+              Every email the village sends, and when. Open any of them to read its words, and propose a change.
+            </p>
+          )}
           {failed && <p className="text-sm text-destructive">{failed}</p>}
-          {!view && !failed && <p className="text-sm text-muted-foreground">Loading.</p>}
+          {!view && !failed && !off && <p className="text-sm text-muted-foreground">Loading.</p>}
           {view && (
             <div className="space-y-10">
               <section aria-labelledby="journeys-heading">

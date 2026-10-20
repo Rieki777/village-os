@@ -398,7 +398,10 @@ Ruling of 2026-09-25: the dials are visible and proposable. The member page (`/v
 `client/src/pages/VillageEmail.tsx`, reached from the Game Mechanics page and the Guides menu
 while the module is live) lists every journey with whether it is on, its steps and their timing,
 each email rendered with sample data greeting the reader by name, the emails no journey sends,
-and the comms dials. It is read-only.
+and the comms dials. It is read-only. While the module is off the page asks the server nothing:
+it reads the module list the client already holds (`moduleIsOn`) and says village email is not
+switched on yet and that only an admin can switch it on, from Village Comms in the Module Library.
+The Guides menu entry is hidden while it is off, the same as every other off module's page.
 
 Every item has a "Propose a change" door (`shared/comms/memberView.ts`):
 
