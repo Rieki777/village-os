@@ -10,6 +10,10 @@
  * 2026-10-09 turning a module on is a binding village vote proposed from the
  * module's own page (client/src/components/modules/switchDoor.ts says why the
  * advisory door went), so an old ask link lands there instead.
+ *
+ * `?type=role_application&seat=<id>` opens "Apply for a seat" with that seat
+ * picked (`roleApplicationStart`), the door a seat card's raised hand opens for
+ * a member who reads terms.
  */
 import { useState } from "react";
 import { Link, Redirect } from "wouter";
@@ -21,12 +25,16 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import ProposalWizard from "@/components/governance/ProposalWizard";
 import { askedModuleId } from "@/components/modules/switchDoor";
+import { roleApplicationStart } from "@/components/governance/roleApplicationType";
 
 export default function Propose() {
   const { user } = useAuth();
   const modules = useModules();
   const governance = useModule("governance");
   const [askModuleId] = useState(() => askedModuleId(window.location.search));
+  // `?type=role_application&seat=<id>`: a seat card's door, opening "Apply for a
+  // seat" with that seat picked. Read once, for the reason the ask is.
+  const [start] = useState(() => roleApplicationStart(window.location.search));
 
   if (askModuleId) return <Redirect to={`/modules/${encodeURIComponent(askModuleId)}#propose`} replace />;
 
@@ -51,7 +59,7 @@ export default function Propose() {
 
         <div className="mt-8">
           {user ? (
-            <ProposalWizard />
+            <ProposalWizard start={start} />
           ) : (
             <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
               <h2 className="font-display text-2xl font-bold text-stone-900">Sign in to write a proposal</h2>
@@ -63,7 +71,7 @@ export default function Propose() {
                   decision is this page's shape and a visitor who is not ready
                   to write a proposal should still be able to go and read one. */}
               <div className="mt-5">
-                <SignInDoors next="/propose" />
+                <SignInDoors next={`/propose${start ? window.location.search : ""}`} />
               </div>
             </div>
           )}

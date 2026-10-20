@@ -28,6 +28,7 @@ import InfoTip from "@/components/InfoTip";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatAction from "@/components/power/SeatAction";
+import { applyHrefFor, termsSlotFor } from "@/components/power/SeatTermsSlot";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatSheet from "@/components/power/SeatSheet";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
@@ -433,7 +434,8 @@ export default function Circles() {
                   <SeatTradingCard
                     input={fromOrgSeat(openRow, raw.circles, people, raw.village, { raiseHand })}
                     ctx={{ now: new Date(), season: seasonForSheet(season), classNames }}
-                    action={<SeatAction circleId={openRow.circleId ?? null} />}
+                    action={<SeatAction circleId={openRow.circleId ?? null} applyHref={applyHrefFor(openRow)} />}
+                    settings={termsSlotFor(openRow)}
                   />
                   {!openRow.isExample && (
                     <div className="mt-4 border-t border-border pt-3">
