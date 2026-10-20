@@ -18,10 +18,13 @@ import InvitePanel from "@/components/profile/InvitePanel";
 import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
+import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
+import AlignedSection from "@/components/profile/AlignedSection";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import TaskBoard from "@/components/profile/TaskBoard";
+import ProfileJournalCard from "@/components/journal/ProfileJournalCard";
 import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
@@ -457,6 +460,9 @@ export default function Profile() {
                 </div>
               )}
 
+              {/* The journal's door on the profile; renders nothing while it is off. */}
+              <div className="scroll-mt-28"><ProfileJournalCard /></div>
+
               {/* R20: what this member needs, and how they are doing on it.
                   Private to them; the village only ever reads counts. */}
               <div id="my-needs">
@@ -587,6 +593,8 @@ export default function Profile() {
                 failed={meFailed}
                 onGiven={reloadMe}
               />
+              {/* YOUR SEASON (season plans RC1): where your plan stands, and the door to it. */}
+              <SeasonPlanSection />
               {/*
                 THE ANCHOR THE SURFACED BANNER POINTS AT.
 
@@ -733,6 +741,7 @@ export default function Profile() {
 
               {/* Deeds: stage turns, firsts, recognition flows, the ledger */}
               <ProfileJourney />
+              <AlignedSection />
 
               {/* Standing, gratitude and this moon, from /api/me/profile */}
               <ProfileSheet />

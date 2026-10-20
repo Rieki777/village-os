@@ -234,6 +234,7 @@ export function seasonForSheet(state: any): SheetContext["season"] {
     name: str(current?.name),
     endsOn: str(current?.endsOn),
     daysLeft: typeof days === "number" && Number.isFinite(days) ? days : null,
+    ...(str(state.timezone) ? { timezone: str(state.timezone) } : {}),
   };
 }
 

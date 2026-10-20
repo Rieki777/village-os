@@ -198,12 +198,12 @@ describe("who hears it", () => {
     expect(Array.from(mem.rows.values()).map((row) => row.userId)).toContain("u-gina");
   });
 
-  it("gives admins the admin link and members the season calendar", async () => {
+  it("gives admins the admin link and members their own season page", async () => {
     const mem = memoryNotify();
     const r = await runSeasonReminders({ season: { current: SPRING, today: "2026-09-24" }, members: people, isPresent, isAdmin, notify: mem.notify });
     expect(r).toMatchObject({ recipients: 2, told: 2 });
     const byUser = new Map(Array.from(mem.rows.values()).map((row) => [row.userId, row.link]));
-    expect(byUser.get("u-ana")).toBe("/seasonal-festivals");
+    expect(byUser.get("u-ana")).toBe("/season-plans/mine");
     expect(byUser.get("u-rye")).toBe("/admin?tab=seasons-patterns");
   });
 

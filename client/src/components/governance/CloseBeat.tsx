@@ -104,7 +104,16 @@ export default function CloseBeat({
   });
   const words = (ballot.binding ? OUTCOME_WORDS : ADVISORY_WORDS)[outcome];
 
+  // A seat application's ballot records fixed words (red team U12): typed words
+  // could name the member who applied on a record built never to name them.
+  const fixedWords = ballot.subjectType === "role_application";
+
   const submit = async () => {
+    if (fixedWords) {
+      setProblem(null);
+      await onClose("");
+      return;
+    }
     if (note.trim().length < 10) {
       setProblem("Write the sentence somebody will read in a year. A few words is not a record.");
       return;
@@ -151,6 +160,12 @@ export default function CloseBeat({
         </p>
       </div>
 
+      {fixedWords ? (
+        <p className="mt-4 text-sm text-stone-700 leading-relaxed">
+          The record keeps fixed words for a seat application, so it never names the member who applied. Members read the
+          application on its own page.
+        </p>
+      ) : (
       <div className="mt-4">
         <label htmlFor="outcome-note" className="block text-sm font-semibold text-stone-900">
           {ballot.binding ? "What did the village decide?" : "What did the village say?"}
@@ -174,6 +189,7 @@ export default function CloseBeat({
           className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
         />
       </div>
+      )}
 
       {problem && (
         <p role="alert" className="mt-2 text-sm font-medium text-coral">
