@@ -284,7 +284,7 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
       {others.length ? (
         <ul aria-label="Other ways forward" className="mt-6 space-y-3 border-t border-border pt-5">
           {others.map((door) => (
-            <li key={door.href}>
+            <li key={door.href} className="max-w-xl">
               <Link
                 href={door.href}
                 className="group flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-muted px-4 py-2 font-medium text-foreground hover:border-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
