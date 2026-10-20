@@ -147,7 +147,7 @@ describe("the default journeys", () => {
       }
     }
     expect(defaultJourney("joining.request")!.stops).toEqual(
-      expect.arrayContaining(["joining_admitted", "joining_declined"]),
+      expect.arrayContaining(["joining_admitted", "joining_accepted", "joining_declined"]),
     );
   });
 

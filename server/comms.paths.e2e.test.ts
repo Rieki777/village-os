@@ -19,6 +19,7 @@
  *   - leaving the path stops it;
  *   - reserving housing stops the resident journey;
  *   - admission stops the joining journey;
+ *   - so does a yes to the request, before any account exists;
  *   - backfilled members get nothing, until an admin includes them;
  *   - the investor journey sends only the welcome and the hand-off until its
  *     words are reviewed.
@@ -362,6 +363,25 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the paths", () => {
       return e?.state === "stopped" ? e : null;
     });
     expect(stopped.stop_reason).toBe("joining_admitted");
+  });
+
+  it("a yes to the request stops the joining journey, before any account exists", async () => {
+    const email = `yes-${PORT}@example.test`;
+    const asked = await call("POST", "/api/forms/submit", {
+      body: { type: "membership-request", data: { name: "Yara Yes", email, why: "The orchard", commsConsent: true } },
+      token: null,
+    });
+    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
+    await waitFor("the joining journey", () => enrollment(email, "joining.request"));
+    const accepted = await call("PUT", `/api/admin/submissions/${asked.json.id}/status`, { body: { status: "accepted" } });
+    expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
+    // Nobody to tell in the bell, and nobody admitted: the answer is a person's to send.
+    expect(accepted.json).toMatchObject({ notified: false, admitted: null });
+    const stopped = await waitFor("the stop", async () => {
+      const e = await enrollment(email, "joining.request");
+      return e?.state === "stopped" ? e : null;
+    });
+    expect(stopped.stop_reason).toBe("joining_accepted");
   });
 
   it("backfilled members get nothing, until an admin includes them", async () => {
