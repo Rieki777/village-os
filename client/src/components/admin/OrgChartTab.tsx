@@ -27,6 +27,8 @@ import { CIRCLE_STATUSES } from "@shared/draftKinds";
 import { parentChoicesFor } from "@shared/circleView";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
+import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
+import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
@@ -437,6 +439,9 @@ export function OrgChartTab({ password }: { password: string }) {
                         >Save seat</button>
                       </div>
 
+                      {/* What the seat offers whoever holds it, through a draft (PR3). */}
+                      {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
+
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
                       )}
@@ -506,6 +511,9 @@ export function OrgChartTab({ password }: { password: string }) {
           payload this tab already holds instead of fetching them twice.
         */}
         <RelationsEditor password={password} circles={circles} roles={roles} />
+
+        {/* The village's own starting points for a seat's terms (PR3). */}
+        <VillagePresetsEditor password={password} />
       </div>
     </div>
   );
