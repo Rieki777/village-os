@@ -77,6 +77,15 @@ export interface NotifyPrefs {
    */
   governanceEmail: "immediate" | "daily" | "off";
   /**
+   * Live Sessions tasks (shared/sessionTasks.ts): the email listing what a
+   * member took on when a call closes, and the gentle note two days before a
+   * task's date and the morning after. IMMEDIATE by default, because these are
+   * the emails Rye asked for: the list arrives while the call is fresh.
+   * `daily` keeps them to the digest's one line each, and `off` keeps them to
+   * the bell.
+   */
+  tasksEmail: "immediate" | "daily" | "off";
+  /**
    * The weekly brief (L5b): the whole digest, in-app, email and agent inbox
    * together. One switch, default on, because the brief is the village
    * saying what the week holds and off must be one honest click.
@@ -105,6 +114,7 @@ export function resolveNotifyPrefs(prefs: any): NotifyPrefs {
     repliesEmail: pick(n.repliesEmail, ["immediate", "daily", "off"], "immediate"),
     messagesEmail: pick(n.messagesEmail, ["immediate", "daily", "off"], "immediate"),
     governanceEmail: pick(n.governanceEmail, ["immediate", "daily", "off"], "daily"),
+    tasksEmail: pick(n.tasksEmail, ["immediate", "daily", "off"], "immediate"),
     weeklyBrief: pick(n.weeklyBrief, ["on", "off"], "on"),
     celebrations: pick(n.celebrations, ["on", "off"], "on"),
   };
@@ -271,14 +281,28 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // forty emails. The digest collapses that run into one line each.
     case "feedback":
       return "daily";
-    // Live Sessions. The record of a closed session reaching the admins, and
-    // an action from one reaching the person or the seat holding it. Daily on
-    // purpose: everybody holding an action was told in the room, or sits in
-    // the seat that holds it, and a village closing three sessions in an
-    // evening would otherwise send three emails to every admin. The digest
-    // still carries each one the next morning.
+    // Live Sessions. The record of a closed session reaching the admins: daily
+    // on purpose, because a village closing three sessions in an evening would
+    // otherwise send three emails to every admin.
     case "session_record_ready":
+      return "daily";
+    // An action from a closed session reaching the person or the seat holding
+    // it, and the gentle note near its date. Both ride `tasksEmail`, and the
+    // EMAIL for `immediate` is not this notice's: the task layer posts its own
+    // fuller one (server/lib/sessionTaskMail.ts), every task with its date at
+    // close, and the note itself near the date. So `immediate` reads "off"
+    // here, the way `weekly_brief` does, or the member would get a flattened
+    // copy of the same email beside it. `daily` keeps the digest's one line,
+    // and `off` keeps the bell.
     case "session_action_held":
+    case "session_action_due":
+      return p.tasksEmail === "daily" ? "daily" : "off";
+    // A task handed back, told to its session's facilitator, and a task left
+    // with a seat nobody sits in, told to the admins and the facilitator.
+    // Daily: somebody gives it out at the next call, and the digest arrives
+    // before that.
+    case "session_task_back":
+    case "session_task_unheld":
       return "daily";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been
@@ -430,7 +454,12 @@ async function underDailyCap(pool: Pool, userId: string): Promise<boolean> {
   return Number(row?.n ?? 0) < Math.max(1, numberVar("notify.daily_email_cap") || DAILY_EMAIL_CAP);
 }
 
-function emailShell(projectName: string, inner: string): string {
+/**
+ * The frame every notice email wears: the village's name on a band, then the
+ * body. Exported for the Live Sessions task emails (server/lib/sessionTaskMail.ts),
+ * which pass the name already escaped.
+ */
+export function emailShell(projectName: string, inner: string): string {
   return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:18px 24px"><div style="font-size:16px;font-weight:700">${projectName}</div></div><div style="padding:22px 24px;line-height:1.6">${inner}</div></div></body></html>`;
 }
 
@@ -791,7 +820,8 @@ export async function markNotificationsRead(pool: Pool, userId: string, ids?: st
   return r.affectedRows ?? 0;
 }
 
-function escapeHtml(s: string): string {
+/** Escape a string for an email body. Every value interpolated into one. */
+export function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

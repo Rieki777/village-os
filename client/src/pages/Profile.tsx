@@ -21,10 +21,12 @@ import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
+import TaskBoard from "@/components/profile/TaskBoard";
+import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
-import { useModule } from "@/modules/ModuleProvider";
+import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2 } from "lucide-react";
@@ -82,6 +84,7 @@ export default function Profile() {
   const tokenName = useTokenName("Recognition");
   const { user, logout, loading, updateProfile } = useAuth();
   const redemptionModule = useModule("redemption");
+  const sessionsOn = useModuleOn("sessions");
   const [editingBio, setEditingBio] = useState(false);
   const [bioText, setBioText] = useState(user?.bio || "");
   const [savingBio, setSavingBio] = useState(false);
@@ -443,6 +446,16 @@ export default function Profile() {
                   }}
                 />
               ) : null}
+
+              {/* Every task taken on in a live session, and what this member's
+                  seats hold. Emails and notices land on #my-tasks, and
+                  `scroll-mt-28` keeps the board's heading clear of the fixed
+                  site header (about 96px) when they do. */}
+              {sessionsOn && (
+                <div id={TASK_BOARD_ANCHOR} className="scroll-mt-28">
+                  <TaskBoard />
+                </div>
+              )}
 
               {/* R20: what this member needs, and how they are doing on it.
                   Private to them; the village only ever reads counts. */}

@@ -87,6 +87,9 @@ export interface SheetSection {
 export const SHEET_SECTIONS: SheetSection[] = [
   // ── NOW: nothing has to happen first ───────────────────────────────────
   { id: "nextStep", band: "now", quiet: "" },
+  // The task board: what you took on in a live session, and what your seats
+  // hold. Answered today, with nothing earned first. Absent with the module off.
+  { id: "tasks", band: "now", quiet: "" },
   // Quests rides with nextStep inside GameDashboard, and belongs here anyway:
   // browsing and claiming a quest needs nothing earned first.
   { id: "quests", band: "now", quiet: "" },

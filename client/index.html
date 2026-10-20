@@ -38,6 +38,11 @@
       deployment data, not platform code) gets its @import and font-stack
       overrides emitted here. Render-blocking on purpose: a late font swap is
       worse than a moment of fallback text.
+
+      The server adds ?v=<version> to this link on every page it sends
+      (server/routes/brandTheme.ts), so the href below must stay byte-exact:
+      it is the anchor that splice looks for. The Vite dev server serves the
+      bare URL.
     -->
     <link rel="stylesheet" href="/api/brand/theme.css" />
     <!--

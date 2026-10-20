@@ -52,6 +52,7 @@ import {
   type EntryStatus,
   type ResponseTarget,
   type SessionAction,
+  type SessionPatch,
   type SessionState,
   type SessionView,
 } from "@shared/sessions";
@@ -102,6 +103,8 @@ export interface WriteOptions {
 
 export interface RoomActions {
   join(): Promise<WriteResult>;
+  /** PATCH the session itself: its title, for whoever edits the room's words. */
+  patchSession(patch: SessionPatch, opts?: WriteOptions): Promise<WriteResult>;
   arrival(score: number, wish: string | null): Promise<WriteResult>;
   addItem(input: ItemInput, opts?: WriteOptions): Promise<WriteResult<{ id?: number }>>;
   patchItem(itemId: number, patch: ItemPatch, opts?: WriteOptions): Promise<WriteResult>;
@@ -344,6 +347,7 @@ export function useSessionRoom(
 
   const actions = useMemo<RoomActions>(() => ({
     join: () => write("POST", "/join", {}),
+    patchSession: (patch, opts) => write("PATCH", "", patch, opts),
     arrival: (score, wish) => write("POST", "/arrival", wish ? { score, wish } : { score }),
     addItem: (input, opts) => write("POST", "/items", input, opts),
     patchItem: (itemId, patch, opts) => write("PATCH", `/items/${itemId}`, patch, opts),

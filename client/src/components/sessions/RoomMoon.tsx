@@ -10,6 +10,10 @@
  *
  * The season is printed as the stamp gives it: a village can name its own
  * seasons, so any word can arrive, and none is mapped to a picture.
+ *
+ * MoonGlyph fills from the tone layer with the platform's neutrals as the
+ * fallbacks, never a colour of its own, so on the room's night it is the
+ * village's band and cream, and on the linen record the same.
  */
 import { ROOM_COPY, type SessionStamp } from "@shared/sessions";
 import MoonGlyph from "@/components/calendar/MoonGlyph";

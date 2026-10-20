@@ -8,6 +8,8 @@ import {
   ARRIVAL_MAX,
   CONSENT_LABELS,
   ENTRY_LABELS,
+  ROOM_COPY,
+  SESSION_REFUSALS,
   SESSION_COPY,
   SESSION_LIMITS,
   SESSION_STAGES,
@@ -317,7 +319,8 @@ describe("the minutes", () => {
     expect(md).toContain("held by a member, by 2026-10-16");
     expect(md).toContain("held by Water Steward.");
     expect(md).toContain("Moon 12 · Waxing gibbous · spring");
-    expect(md).toContain("**Seed:** The pump needs a second person.");
+    expect(md).toContain("**What we learned:** The pump needs a second person.");
+    expect(md).not.toContain("**Seed:**");
   });
 });
 
@@ -349,6 +352,61 @@ describe("the words", () => {
       expect(line, line).not.toMatch(/\b(delve|tapestry|foster|leverage|vibrant|crucial|seamless|robust|comprehensive|empower|utilize|unleash)\b/i);
       expect(line, line).not.toMatch(/\brather than\b|\bnot just\b|\bnot only\b/i);
     }
+  });
+
+  it("says what an item closes with as what we learned, while the stored kind stays seed", () => {
+    expect(ENTRY_LABELS.seed).toBe("What we learned");
+    expect(ROOM_COPY.seed).toBe("What we learned");
+    expect(ROOM_COPY.seedsHeading).toBe("What we learned");
+    expect(ROOM_COPY.seedSave).toBe("Add to the record");
+    expect(SESSION_COPY.itemSeedPrompt).toBe("What did this item teach us?");
+    expect(STAGE_DEFS.items.cues[2]).toBe("Close each item with what we learned, in one sentence for the record.");
+    // Nothing a member reads still calls it a seed.
+    const roomLines = (Object.values(ROOM_COPY) as unknown[]).filter((v): v is string => typeof v === "string");
+    for (const line of [...all, ...roomLines]) {
+      expect(line, line).not.toMatch(/\bseeds?\b/i);
+    }
+  });
+
+  it("gives every stage a glyph key the room can draw", () => {
+    expect(SESSION_STAGES.map((s) => STAGE_DEFS[s].glyph)).toEqual(["wind", "sunrise", "list", "sprout", "hands", "moon"]);
+  });
+
+  it("writes the editing words and the new refusals with no dash, and the helpers read as sentences", () => {
+    const fresh = [
+      ROOM_COPY.seedHelp,
+      ROOM_COPY.editThis("note"),
+      ROOM_COPY.saving,
+      ROOM_COPY.saved,
+      ROOM_COPY.editKeys,
+      ROOM_COPY.editKeysOneLine,
+      ROOM_COPY.countOf(450, 600),
+      ROOM_COPY.rewordWarn,
+      ROOM_COPY.decidedLock,
+      ROOM_COPY.backlogSoFar,
+      ROOM_COPY.sessionTitleLabel,
+      ROOM_COPY.itemTitleLabel,
+      ROOM_COPY.actionPlaceholder,
+      ROOM_COPY.actionHolderLabel,
+      ROOM_COPY.answerAgain,
+      ROOM_COPY.facilitationReplace,
+      ROOM_COPY.signoff,
+      ROOM_COPY.holding,
+      ROOM_COPY.noteTaking,
+      SESSION_REFUSALS.notesOnly,
+      SESSION_REFUSALS.aimMinutesNotes,
+      SESSION_REFUSALS.notYours,
+      SESSION_REFUSALS.entryKind,
+    ];
+    for (const line of fresh) {
+      expect(line, line).not.toMatch(DASHES);
+      expect(line, line).not.toMatch(/\brather than\b|\bnot just\b|\bnot only\b/i);
+    }
+    expect(ROOM_COPY.editThis("note")).toBe("Edit note");
+    expect(ROOM_COPY.countOf(450, 600)).toBe("450 of 600");
+    // The admin in the room is named wherever a host's right is refused.
+    expect(SESSION_REFUSALS.notesOnly).toBe("Only the facilitator, the secretary or an admin in the room can change that.");
+    expect(SESSION_REFUSALS.aimMinutesNotes).toBe("Once an item starts, its aim and minutes are for the facilitator or the secretary to change.");
   });
 
   it("leaves room in every limit for what it caps", () => {

@@ -91,6 +91,7 @@ import {
   proposalRowById,
   proposalRowsInBatch,
   proposalsByStatus,
+  rebatchWaiting,
   reopenAcceptedFor,
 } from "../repos/externalProposals";
 import { deleteSubjectRowsForMember, proposalIdsNaming } from "../repos/externalProposalSubjects";
@@ -424,6 +425,12 @@ export interface LandInput {
   significance?: number | null;
   confidence?: number | null;
   audience?: "steward" | "member";
+  /**
+   * A duplicate that is still waiting moves into THIS delivery. For a sync a
+   * steward can press again (`rebatchWaiting` says why); a vendor's own
+   * redelivery leaves this off, and a duplicate stays where it first landed.
+   */
+  rebatchWaiting?: boolean;
 }
 
 export type DropReason =
@@ -441,6 +448,8 @@ export type LandResult =
       id: string;
       /** `stored` is new, `duplicate` means the same claim was already here. */
       outcome: "stored" | "duplicate";
+      /** A waiting duplicate moved into this delivery (`rebatchWaiting`). */
+      rebatched?: boolean;
       /** How many open rows about the same thing this one retired. */
       superseded: number;
       /** Reference fields this village could not resolve, now null on the row. */
@@ -580,7 +589,13 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
         "SELECT id FROM external_proposals WHERE dedupe_key = ?",
         [dedupeKey],
       );
-      return { ok: true, id: String(existing?.id ?? ""), outcome: "duplicate", superseded: 0, nulled };
+      const existingId = String(existing?.id ?? "");
+      // After the rollback, on the pool: a move is its own act, guarded on the
+      // record still waiting, and a failed one leaves the record where it was.
+      const rebatched = input.rebatchWaiting === true && existingId !== ""
+        ? await rebatchWaiting(pool, existingId, input.batchId)
+        : false;
+      return { ok: true, id: existingId, outcome: "duplicate", superseded: 0, nulled, ...(rebatched ? { rebatched } : {}) };
     }
     // EVERY SUBJECT, RESOLVED ONCE, THROUGH THE ONE RESOLVER.
     //

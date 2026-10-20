@@ -1,7 +1,23 @@
 /**
  * ONE AGENDA ITEM'S LIVE PAGE: its title and aim, its own clock, what people
- * add while it runs (notes, ideas, a proposal with its consent round, the seed
- * it closes with, the actions it leaves behind).
+ * add while it runs (notes, ideas, a proposal with its consent round, what we
+ * learned from it, the actions it leaves behind).
+ *
+ * It is the screen's one foil card, the way a role card is on a profile: the
+ * clock as a medallion, the aim as a gold eyebrow, the title set large in the
+ * village's display face. Notes and ideas sit side by side once the card is
+ * wide enough to give each a real column, and stack on a phone.
+ *
+ * EVERY BOX CAN BE CHANGED, by whoever may change it. The title is fixed in
+ * place by whoever added the item while it is not done, and by the hosts and
+ * an admin in the room at any time (roomUi's `mayEditItemTitle`). Each card
+ * under it is an EntryCard with its own pencil. Every box anybody writes in is
+ * the room's growing box, full width, so the words are read whole as they are
+ * typed.
+ *
+ * WHAT WE LEARNED. The record keeps one sentence per lesson, under its own
+ * heading and a line that says what it is for. It is stored as the kind
+ * `seed`, and the room never calls it that.
  *
  * When its time is up everyone reads the three choices, and the facilitator
  * makes one: add five minutes with the room's consent, park it, or wrap it up
@@ -14,39 +30,66 @@ import {
   ROOM_COPY,
   SESSION_COPY,
   SESSION_LIMITS,
+  SESSION_REFUSALS,
   cleanLine,
   cleanText,
   timebox,
   type SessionItem,
 } from "@shared/sessions";
 import { ActionRow, AddAction } from "./ActionRow";
+import EditableText from "./EditableText";
+import EntryCard from "./EntryCard";
 import EntryStream from "./EntryStream";
+import GrowingText from "./GrowingText";
 import Proposal from "./Proposal";
 import TimeboxRing from "./TimeboxRing";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H2, HINT, INPUT, agendaOrder, leads, useDraft, type StageProps } from "./roomUi";
+import {
+  BTN_PRIMARY,
+  BTN_QUIET,
+  BTN_SECONDARY,
+  EYEBROW,
+  HERO_CONTENT,
+  HERO_INNER,
+  HERO_SHELL,
+  HINT,
+  ITEM_STREAMS,
+  ITEM_TITLE,
+  LABEL_CAPS,
+  UNDER_BOX,
+  agendaOrder,
+  leads,
+  mayEditItemTitle,
+  useDraft,
+  type StageProps,
+} from "./roomUi";
 
 /**
- * A short form for one line or a few: the proposal, the seed. What is typed is
- * a draft under `draftKey`, so it survives the room moving on under it.
+ * A box to add one thing to the item: the proposal, a line on what we
+ * learned. What is typed is a draft under `draftKey`, so it survives the room
+ * moving on under it. Enter adds it.
  */
-function OneLine({
+function AddBox({
   draftKey,
   label,
   button,
-  multiline,
+  singleLine = false,
+  minRows,
+  describedBy,
   onSend,
 }: {
   draftKey: string;
   label: string;
   button: string;
-  multiline?: boolean;
+  singleLine?: boolean;
+  minRows: number;
+  describedBy?: string;
   onSend: (text: string) => Promise<boolean>;
 }) {
   const draft = useDraft(draftKey);
   const text = draft.text;
   const [busy, setBusy] = useState(false);
   const send = async () => {
-    const clean = multiline ? cleanText(text, SESSION_LIMITS.text) : cleanLine(text, SESSION_LIMITS.text);
+    const clean = singleLine ? cleanLine(text, SESSION_LIMITS.text) : cleanText(text, SESSION_LIMITS.text);
     if (!clean || busy) return;
     setBusy(true);
     try {
@@ -57,23 +100,28 @@ function OneLine({
   };
   return (
     <form
-      className="flex flex-col gap-2 sm:flex-row sm:items-start"
+      className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
         void send();
       }}
     >
-      <label className="min-w-0 flex-1">
-        <span className="sr-only">{label}</span>
-        {multiline ? (
-          <textarea className={`${INPUT} min-h-20`} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => draft.set(e.target.value)} />
-        ) : (
-          <input className={INPUT} value={text} maxLength={SESSION_LIMITS.text} placeholder={label} onChange={(e) => draft.set(e.target.value)} />
-        )}
-      </label>
-      <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>
-        {button}
-      </button>
+      <GrowingText
+        value={text}
+        onValue={draft.set}
+        onSubmit={() => void send()}
+        label={label}
+        max={SESSION_LIMITS.text}
+        minRows={minRows}
+        singleLine={singleLine}
+        describedBy={describedBy}
+        mic
+      />
+      <div className={UNDER_BOX}>
+        <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>
+          {button}
+        </button>
+      </div>
     </form>
   );
 }
@@ -86,10 +134,11 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
     : timebox(null, item.minutes, 0, now);
   const entries = view.entries.filter((e) => e.itemId === item.id);
   const proposals = entries.filter((e) => e.kind === "decision");
-  const seeds = entries.filter((e) => e.kind === "seed");
+  const learned = entries.filter((e) => e.kind === "seed");
   const itemActions = entries.filter((e) => e.kind === "action");
   const canAdd = view.me.joined && view.status === "open";
   const nextItem = agendaOrder(view.items).find((i) => i.status === "waiting" && i.id !== item.id) ?? null;
+  const ids = { title: `item-${item.id}-title`, proposal: `item-${item.id}-proposal`, seed: `item-${item.id}-seed`, actions: `item-${item.id}-actions` };
 
   const choose = async (choice: "extend" | "park" | "wrap") => {
     setBusy(true);
@@ -105,104 +154,139 @@ export default function ItemPage({ view, now, actions, item }: StageProps & { it
     }
   };
 
-  return (
-    <article className={`${CARD} space-y-6`} aria-labelledby={`item-${item.id}-title`}>
-      <header className="flex flex-wrap items-center gap-5">
-        <TimeboxRing phase={box.phase} secondsLeft={box.secondsLeft} totalSeconds={box.totalSeconds} />
-        <div className="min-w-[14rem] flex-1">
-          <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span className={CHIP}>{AIM_DEFS[item.aim].label}</span>
-            <span>
-              {item.minutes + (live ? view.state.itemExtraMin : 0)} {ROOM_COPY.minutesShort}
-            </span>
-            <span>· {ROOM_COPY.itemStatus[item.status]}</span>
-          </p>
-          <h3 id={`item-${item.id}-title`} className={`${H2} mt-1`}>
-            {item.title}
-          </h3>
-          <p className={`${HINT} mt-1`}>{AIM_DEFS[item.aim].hint}</p>
-        </div>
-        {live && box.phase !== "over" && leads(view) && (
-          <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void choose("wrap")}>
-            {nextItem ? ROOM_COPY.wrapNext : ROOM_COPY.wrapUp}
-          </button>
-        )}
-      </header>
+  const saveTitle = async (next: string) => {
+    const title = cleanLine(next, SESSION_LIMITS.agendaTitle);
+    if (!title) return { ok: false, error: SESSION_REFUSALS.itemTitleNeeded };
+    const r = await actions.patchItem(item.id, { title }, { quiet: true });
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  };
 
-      {live && box.phase === "over" && (
-        <div role="status" className="rounded-xl border border-coral/40 bg-coral/5 px-4 py-3">
-          <p className="text-sm font-medium text-foreground">{SESSION_COPY.overChoices}</p>
-          {leads(view) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void choose("extend")}>
-                {ROOM_COPY.extendFive}
-              </button>
-              <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void choose("park")}>
-                {SESSION_COPY.park}
-              </button>
-              <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void choose("wrap")}>
+  return (
+    <article className={HERO_SHELL} aria-labelledby={ids.title}>
+      <div className={HERO_INNER}>
+        <div className={HERO_CONTENT}>
+          <header className="flex flex-wrap items-start gap-5">
+            <TimeboxRing phase={box.phase} secondsLeft={box.secondsLeft} totalSeconds={box.totalSeconds} />
+            <div className="min-w-[min(14rem,100%)] flex-1">
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className={EYEBROW}>{AIM_DEFS[item.aim].label}</span>
+                <span className="text-sm tabular-nums text-muted-foreground">
+                  {item.minutes + (live ? view.state.itemExtraMin : 0)} {ROOM_COPY.minutesShort} · {ROOM_COPY.itemStatus[item.status]}
+                </span>
+              </p>
+              <div className="mt-1">
+                <EditableText
+                  value={item.title}
+                  may={mayEditItemTitle(view, item)}
+                  label={ROOM_COPY.itemTitleLabel}
+                  max={SESSION_LIMITS.agendaTitle}
+                  singleLine
+                  draftKey={`${view.id}:edit:item:${item.id}:title`}
+                  onSave={saveTitle}
+                  render={(text) => (
+                    <h3 id={ids.title} className={ITEM_TITLE}>
+                      {text}
+                    </h3>
+                  )}
+                />
+              </div>
+              <p className={`${HINT} mt-1`}>{AIM_DEFS[item.aim].hint}</p>
+            </div>
+            {live && box.phase !== "over" && leads(view) && (
+              <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void choose("wrap")}>
                 {nextItem ? ROOM_COPY.wrapNext : ROOM_COPY.wrapUp}
               </button>
+            )}
+          </header>
+
+          {live && box.phase === "over" && (
+            <div role="status" className="rounded-xl border border-destructive/50 bg-muted px-4 py-3">
+              <p className="text-sm font-medium text-foreground">{SESSION_COPY.overChoices}</p>
+              {leads(view) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => void choose("extend")}>
+                    {ROOM_COPY.extendFive}
+                  </button>
+                  <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void choose("park")}>
+                    {SESSION_COPY.park}
+                  </button>
+                  <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void choose("wrap")}>
+                    {nextItem ? ROOM_COPY.wrapNext : ROOM_COPY.wrapUp}
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <EntryStream view={view} actions={actions} kind="note" itemId={item.id} title={ROOM_COPY.notes} addLabel={SESSION_COPY.addNote} />
-        <EntryStream view={view} actions={actions} kind="idea" itemId={item.id} title={ROOM_COPY.ideas} addLabel={SESSION_COPY.addIdea} />
-      </div>
+          <div className={ITEM_STREAMS}>
+            <EntryStream view={view} actions={actions} kind="note" itemId={item.id} title={ROOM_COPY.notes} addLabel={SESSION_COPY.addNote} />
+            <EntryStream view={view} actions={actions} kind="idea" itemId={item.id} title={ROOM_COPY.ideas} addLabel={SESSION_COPY.addIdea} />
+          </div>
 
-      <section className="space-y-3" aria-labelledby={`item-${item.id}-proposal`}>
-        <h4 id={`item-${item.id}-proposal`} className="text-sm font-semibold text-foreground">
-          {ROOM_COPY.proposal}
-        </h4>
-        {proposals.map((p) => (
-          <Proposal key={p.id} view={view} actions={actions} entry={p} />
-        ))}
-        {canAdd && (proposals.length === 0 || item.aim === "decide") && (
-          <OneLine
-            draftKey={`${view.id}:${item.id}:decision`}
-            label={SESSION_COPY.addDecision}
-            button={ROOM_COPY.add}
-            multiline
-            onSend={async (text) => (await actions.addEntry({ kind: "decision", text, itemId: item.id })).ok}
-          />
-        )}
-      </section>
-
-      <section className="space-y-2" aria-labelledby={`item-${item.id}-seed`}>
-        <h4 id={`item-${item.id}-seed`} className="text-sm font-semibold text-foreground">
-          {ROOM_COPY.seed}
-        </h4>
-        {seeds.map((s) => (
-          <p key={s.id} className="rounded-xl bg-sage-light/60 px-4 py-3 font-display text-lg text-foreground">
-            {s.text}
-          </p>
-        ))}
-        {canAdd && (
-          <OneLine
-            draftKey={`${view.id}:${item.id}:seed`}
-            label={SESSION_COPY.itemSeedPrompt}
-            button={ROOM_COPY.seedSave}
-            onSend={async (text) => (await actions.addEntry({ kind: "seed", text, itemId: item.id })).ok}
-          />
-        )}
-      </section>
-
-      <section className="space-y-3" aria-labelledby={`item-${item.id}-actions`}>
-        <h4 id={`item-${item.id}-actions`} className="text-sm font-semibold text-foreground">
-          {ROOM_COPY.actionsHere}
-        </h4>
-        {itemActions.length > 0 && (
-          <ul className="space-y-2">
-            {itemActions.map((e) => (
-              <ActionRow key={e.id} view={view} actions={actions} entry={e} />
+          <section className="space-y-3" aria-labelledby={ids.proposal}>
+            <h4 id={ids.proposal} className={LABEL_CAPS}>
+              {ROOM_COPY.proposal}
+            </h4>
+            {proposals.map((p) => (
+              <Proposal key={p.id} view={view} actions={actions} entry={p} />
             ))}
-          </ul>
-        )}
-        <AddAction view={view} actions={actions} itemId={item.id} />
-      </section>
+            {canAdd && (proposals.length === 0 || item.aim === "decide") && (
+              <AddBox
+                draftKey={`${view.id}:${item.id}:decision`}
+                label={SESSION_COPY.addDecision}
+                button={ROOM_COPY.add}
+                minRows={3}
+                onSend={async (text) => (await actions.addEntry({ kind: "decision", text, itemId: item.id })).ok}
+              />
+            )}
+          </section>
+
+          <section className="space-y-3" aria-labelledby={ids.seed}>
+            <div>
+              <h4 id={ids.seed} className={LABEL_CAPS}>
+                {ROOM_COPY.seed}
+              </h4>
+              <p id={`${ids.seed}-help`} className={`${HINT} mt-1`}>
+                {ROOM_COPY.seedHelp}
+              </p>
+            </div>
+            {learned.length > 0 && (
+              <ul className="space-y-2">
+                {learned.map((s) => (
+                  <li key={s.id}>
+                    <EntryCard view={view} actions={actions} entry={s} quote singleLine />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canAdd && (
+              <AddBox
+                draftKey={`${view.id}:${item.id}:seed`}
+                label={SESSION_COPY.itemSeedPrompt}
+                button={ROOM_COPY.seedSave}
+                singleLine
+                minRows={2}
+                describedBy={`${ids.seed}-help`}
+                onSend={async (text) => (await actions.addEntry({ kind: "seed", text, itemId: item.id })).ok}
+              />
+            )}
+          </section>
+
+          <section className="space-y-3" aria-labelledby={ids.actions}>
+            <h4 id={ids.actions} className={LABEL_CAPS}>
+              {ROOM_COPY.actionsHere}
+            </h4>
+            {itemActions.length > 0 && (
+              <ul className="space-y-2">
+                {itemActions.map((e) => (
+                  <ActionRow key={e.id} view={view} actions={actions} entry={e} />
+                ))}
+              </ul>
+            )}
+            <AddAction view={view} actions={actions} itemId={item.id} />
+          </section>
+        </div>
+      </div>
     </article>
   );
 }

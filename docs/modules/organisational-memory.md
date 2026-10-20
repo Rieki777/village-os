@@ -113,6 +113,34 @@ block's type and length, and whether that text parsed as JSON. The service's own
 a refusal are clipped to 400 characters and withheld whole when they carry an address. The
 panel repeats a detail only for a refused call and for the service saying no.
 
+## How a role becomes a seat
+
+`server/lib/saberraProposals.ts` turns roles into one `org.proposed`. A role's `Circle`
+is a **relation** in the service's store (page ids, or objects carrying an id and maybe a
+name), so it is read in any of those shapes by `server/lib/saberraRelations.ts` and its ids
+are resolved against the circle records of the same read. An id that resolves to nothing is
+counted and never shown as a name. The sync's answer carries `circles`: how many seats were
+placed, unresolved, absent or named several circles, and the field's **shape** (never its
+value), so the shape is measured on every sync. The aim comes from `Body` when it is text.
+The first live sync (2026-10-09) lost every seat's circle and aim because only a string was
+read.
+
+The service's `Status` is carried as the source wrote it and applied by the structure
+review (`shared/structurePlan.ts`):
+
+| Status | In the structure review |
+|---|---|
+| Active | proposed as usual |
+| Proposed | proposed, tagged "Proposed in" the service |
+| Vacant | proposed as an open seat; never sets `recruiting` |
+| Archived | never proposed as new; listed apart under "Archived in" the service, with its reason, and a seat in an archived circle goes with it. One that matches a live circle or seat here is a note, never a retirement |
+
+**Pressing Sync now again replaces what is still waiting.** A changed claim supersedes
+the waiting one; an unchanged one is moved into the new delivery (`rebatchWaiting`), so
+the newest batch is whole. Accepted, rejected and superseded proposals are left as they
+are. A proposal stored before this could read relations cannot be repaired from what is
+stored; the next sync replaces it.
+
 ## Configuration
 
 `module_settings.config`:
