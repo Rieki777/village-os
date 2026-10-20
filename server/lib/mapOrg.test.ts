@@ -19,6 +19,7 @@ function role(id: string, over: Partial<OrgRole> = {}): OrgRole {
     representsCircle: false, howChosen: null, howChosenGloss: null, archetypes: [],
     authority: null, firstYearOutcomes: null, first90DayOutcomes: null, locationExpectations: null,
     compensationReality: null, evidenceRequired: null,
+    termsOffer: null, termsOfferAt: null, termsOfferBy: null,
     ...over,
   };
 }

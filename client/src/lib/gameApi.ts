@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 // and missed here renders nothing, with no error anywhere.
 import type { StageRule } from "@shared/gameConfig";
 import type { Capability } from "@shared/capabilities";
+import type { PlanWindowPayload } from "@shared/seasonPlans";
 import { removeStored, storedText } from "./safeStorage";
 
 /**
@@ -133,6 +134,8 @@ export interface SeasonState {
   seasons?: SeasonEntry[];
   /** When a seat vote opened now would land. A voted seat's term is measured from it. */
   seatVoteLandsAt?: string | null;
+  /** The season members plan now and its window (season plans RC1), or null when none has opened. */
+  planWindow?: PlanWindowPayload | null;
 }
 
 // One shared, cached fetch of the public config so many components don't each hit it.

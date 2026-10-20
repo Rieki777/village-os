@@ -56,11 +56,13 @@
  * patterns tab, where the end-of-season governance that exists today lives:
  * the season review ("What the season taught",
  * `GET /api/admin/seasons/retrospective`) and the season roll. Both are
- * admin-only. Everyone else is pointed at the season calendar, because no
- * member-facing end-of-season screen exists yet.
+ * admin-only. Everyone else is pointed at their own season page,
+ * `/season-plans/mine` (season plans, 2026-10-09), where they say which seats
+ * they keep, hand back or apply for, and what they will do next season.
  */
 import crypto from "node:crypto";
 import type { PresenceTest } from "./memberPresence";
+import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
 
 export const SEASON_REMINDER_DAYS = [14, 7, 3, 1] as const;
 export type SeasonReminderMark = (typeof SEASON_REMINDER_DAYS)[number];
@@ -69,7 +71,7 @@ export const SEASON_REMINDER_TYPE = "season_ending";
 
 /** Where each audience is sent. See the header for why the two differ. */
 export const SEASON_REMINDER_LINKS = {
-  member: "/seasonal-festivals",
+  member: SEASON_PLAN_MINE,
   admin: "/admin?tab=seasons-patterns",
 } as const;
 
