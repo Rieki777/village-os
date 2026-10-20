@@ -157,6 +157,15 @@ export function admitted(pool: Pool, p: PathPerson): Promise<boolean> {
   );
 }
 
+/**
+ * Joining, answered yes: the request itself was accepted. Not `admitted`,
+ * because nobody has an account yet; the invitation that makes one is sent by
+ * a person, and "your request is still with us" is untrue from this moment.
+ */
+export function requestAccepted(pool: Pool, submissionId: string): Promise<boolean> {
+  return hit(pool, "SELECT EXISTS(SELECT 1 FROM submissions WHERE id = ? AND status = 'accepted') AS hit", [submissionId]); // module-review-ok: one submission by id
+}
+
 /** Joining, the other end: the request itself was declined. */
 export function requestDeclined(pool: Pool, submissionId: string): Promise<boolean> {
   return hit(pool, "SELECT EXISTS(SELECT 1 FROM submissions WHERE id = ? AND status = 'declined') AS hit", [submissionId]); // module-review-ok: one submission by id
