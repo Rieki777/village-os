@@ -63,6 +63,7 @@ import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, 
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
 import { register as registerBrandRoutes } from "./routes/brand";
+import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
 import { register as registerLandRoutes } from "./routes/land";
 import { register as registerMilestonesRoutes } from "./routes/milestones";
@@ -138,6 +139,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
+import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
@@ -164,7 +166,7 @@ import {
   readSetPasswordToken,
   setPasswordLinkRefusal,
 } from "./lib/memberTokens";
-import { buildThemeCss, sanitizeFontName } from "./lib/themeCss";
+import { sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, publicValueFields, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
 import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
@@ -7535,19 +7537,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     next();
   });
 
+  registerBrandThemeRoutes(app, { getBrand });
+
   // Health check — `build` identifies which deployment is live (bump on notable releases)
-  // The village's theme layer — see server/lib/themeCss.ts for what it is and
-  // why every character is sanitised. Render-blocking in index.html, so it
-  // must be fast and cacheable: ETag from the content, revalidate-always so a
-  // font change applies on the next load rather than in a year.
-  app.get("/api/brand/theme.css", async (_req, res) => {
-    const css = buildThemeCss((getBrand() as any).theme);
-    const etag = `"${crypto.createHash("sha1").update(css).digest("hex").slice(0, 16)}"`;
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("ETag", etag);
-    if (_req.headers["if-none-match"] === etag) return res.status(304).end();
-    res.type("text/css").send(css);
-  });
 
   app.get("/health", async (_req, res) => {
     /*
@@ -18534,7 +18526,8 @@ ${inner}
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
-  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo });
+  registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
    * Put a redemption to the village, with the setup every village-wide vote
@@ -26475,7 +26468,7 @@ ${inner}
   });
   app.use("/assets", express.static(ASSETS_DIR, { maxAge: "1y", immutable: true }));
   registerStockAvatarRoutes(app, { dir: path.resolve(__dirname, "..", STOCK_AVATAR_DIR) });
-  app.use(express.static(staticPath));
+  app.use(express.static(staticPath, { index: false }));
 
   /*
    * THE FALLBACK HAS TO KNOW WHAT IT IS NOT.
@@ -26562,8 +26555,9 @@ ${inner}
   })();
 
   app.get(["/quests", "/quests/:id"], async (req, res, next) => {
-    const shell = indexShell();
-    if (!shell) return next();
+    const bare = indexShell();
+    if (!bare) return next();
+    const shell = shellWithTheme(bare, getBrand);
     const village = mergedConfig().project.name;
     const proto = String(
       req.headers["x-forwarded-proto"] ?? req.protocol ?? "https",
@@ -26617,14 +26611,16 @@ ${inner}
     res.type("html").set("Cache-Control", "no-cache").send(html);
   });
 
+  // Every page, `/` included (express.static above serves no index), gets the
+  // shell with its stylesheet link versioned: server/routes/brandTheme.ts.
   app.get("/{*splat}", (_req, res) => {
-    const indexPath = path.join(staticPath, "index.html");
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error(`[sendFile error] ${indexPath}:`, err.message);
-        res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
-      }
-    });
+    const shell = indexShell();
+    if (!shell) {
+      const indexPath = path.join(staticPath, "index.html");
+      console.error(`[sendFile error] ${indexPath}: the shell is missing`);
+      return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
+    }
+    res.type("html").set("Cache-Control", "no-cache").send(shellWithTheme(shell, getBrand));
   });
 
   // Terminal error handler. Express 5 forwards a rejected handler promise

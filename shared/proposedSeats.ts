@@ -105,6 +105,16 @@ export const SEAT_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   circleId: ["circle_id"],
 };
 
+/**
+ * What the SOURCE said about a seat, carried beside it for the structure
+ * review to read (`shared/structurePlan.ts`) and never written to a seat:
+ * the source's status for the seat and for its circle, the further circles a
+ * relation named, and that a relation named a circle the read did not hold.
+ * Read by the caller, so never reported as a key nothing read, and never part
+ * of the canonical payload.
+ */
+export const SOURCE_SEAT_KEYS = ["sourceStatus", "sourceCircleStatus", "sourceOtherCircles", "sourceCircleUnresolved"] as const;
+
 /** Keys that give a circle by NAME, tried in this order. An id beats all of them. */
 export const CIRCLE_NAME_KEYS = ["circleName", "circle_name", "circle"] as const;
 
@@ -508,7 +518,7 @@ export function normaliseProposedSeat(
     out.circleId = null;
   }
 
-  const structural = new Set<string>(["id", ...(reading.readByCaller ?? [])]);
+  const structural = new Set<string>(["id", ...SOURCE_SEAT_KEYS, ...(reading.readByCaller ?? [])]);
   const unread = Object.keys(raw).filter((k) => !read.has(k) && !structural.has(k));
   for (const k of unread) if (givesACircle(k, raw[k])) circleUnread.push(k);
   circleUnread.push(...(reading.unreadCircleKeys ?? []));

@@ -1,0 +1,231 @@
+/**
+ * YOUR TASK BOARD: every task you took on in a live session, across all of
+ * them, and every task a seat you sit in holds.
+ *
+ * Rye asked for "a 'task board' section in profile that has all tasks that
+ * have been assigned to each player during the sessions". It reads as three
+ * groups, a grouped list and not a set of columns, because it is read on a
+ * phone and answered with one tap:
+ *
+ *   Holding          held by you, by date, undated last
+ *   Your seats hold  held by a seat you sit in now, so it follows the seat
+ *   Finished         done or let go in the last three moons
+ *   Earlier          finished before that, loaded only when opened
+ *
+ * The server groups and sorts (`TaskBoardPayload`); this draws what it sent
+ * and never re-sorts it. `today` comes in the same payload, in the village's
+ * zone, so a date gone by is measured where the circle lives.
+ *
+ * NO COUNTS. No group heading carries a number, and nothing here totals what
+ * one person did or did not do. The Earlier disclosure knows there is
+ * something to open and says only its name.
+ *
+ * AFTER AN ANSWER the card the server handed back takes its place at once,
+ * and the board re-reads quietly, so a task marked done moves to Finished and
+ * a task handed back leaves. If the card that had focus is gone, focus comes
+ * back to the board's heading rather than falling to the top of the page.
+ *
+ * An email or a notice links here as /profile#my-tasks. The board arrives
+ * after the page does, so it brings itself into view once it has drawn.
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { gameFetch } from "@/lib/gameApi";
+import { HINT, LABEL_CAPS, PANEL, BTN_SECONDARY, BTN_QUIET } from "@/components/sessions/roomUi";
+import TaskCard from "@/components/tasks/TaskCard";
+import { TASK_BOARD_ANCHOR, TASK_COPY, TASKS_MINE_URL, type TaskBoardPayload, type TaskCard as TaskCardData } from "@shared/sessionTasks";
+
+const isCards = (v: unknown): v is TaskCardData[] => Array.isArray(v);
+
+function readBoard(v: unknown): TaskBoardPayload | null {
+  if (!v || typeof v !== "object") return null;
+  const b = v as Partial<TaskBoardPayload>;
+  if (!isCards(b.holding) || !isCards(b.seatsHold) || !isCards(b.finished) || typeof b.today !== "string") return null;
+  return { holding: b.holding, seatsHold: b.seatsHold, finished: b.finished, earlierCount: Number(b.earlierCount) || 0, today: b.today };
+}
+
+const replaceIn = (list: TaskCardData[], t: TaskCardData): TaskCardData[] => list.map((c) => (c.entryId === t.entryId ? t : c));
+
+type GroupKey = "holding" | "seatsHold" | "finished";
+
+export default function TaskBoard() {
+  const [board, setBoard] = useState<TaskBoardPayload | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [earlier, setEarlier] = useState<TaskCardData[] | null>(null);
+  const [earlierFailed, setEarlierFailed] = useState(false);
+  const earlierAsked = useRef(false);
+  const heading = useRef<HTMLHeadingElement | null>(null);
+  const refocus = useRef(false);
+  const arrived = useRef(false);
+  const live = useRef(true);
+
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async (quiet = false, afterAnswer = false) => {
+    if (!quiet) setFailed(false);
+    try {
+      const res = await gameFetch(TASKS_MINE_URL, { cache: "no-store" });
+      const next = res.ok ? readBoard(await res.json().catch(() => null)) : null;
+      if (!live.current) return;
+      // A quiet re-read that fails leaves the board as it stands: what is in
+      // hand is still true, and the next answer re-reads again.
+      if (next) {
+        // The re-read is what moves an answered card to another group, so it
+        // is the render after this one that may have taken focus with it.
+        if (afterAnswer) refocus.current = true;
+        setBoard(next);
+      } else if (!quiet) setFailed(true);
+    } catch {
+      if (live.current && !quiet) setFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Landed here from an email or a notice: come into view once there is something to see.
+  useEffect(() => {
+    if (!board || arrived.current) return;
+    arrived.current = true;
+    if (typeof window !== "undefined" && window.location.hash === `#${TASK_BOARD_ANCHOR}`) {
+      document.getElementById(TASK_BOARD_ANCHOR)?.scrollIntoView?.({ block: "start" });
+    }
+  }, [board]);
+
+  // The card that held focus left the board: bring focus home.
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body) heading.current?.focus();
+  }, [board]);
+
+  const answered = (t: TaskCardData) => {
+    setBoard((b) => (b ? { ...b, holding: replaceIn(b.holding, t), seatsHold: replaceIn(b.seatsHold, t), finished: replaceIn(b.finished, t) } : b));
+    setEarlier((e) => (e ? replaceIn(e, t) : e));
+    void load(true, true);
+  };
+
+  const openEarlier = async () => {
+    if (earlierAsked.current) return;
+    earlierAsked.current = true;
+    setEarlierFailed(false);
+    try {
+      const res = await gameFetch(`${TASKS_MINE_URL}?earlier=1`, { cache: "no-store" });
+      const next = res.ok ? readBoard(await res.json().catch(() => null)) : null;
+      if (!live.current) return;
+      if (!next) {
+        earlierAsked.current = false;
+        setEarlierFailed(true);
+        return;
+      }
+      // The reply's Finished holds the older tasks too. Only the ones not
+      // already shown above belong here.
+      const shown = new Set((board?.finished ?? []).map((c) => c.entryId));
+      setEarlier(next.finished.filter((c) => !shown.has(c.entryId)));
+    } catch {
+      earlierAsked.current = false;
+      if (live.current) setEarlierFailed(true);
+    }
+  };
+
+  const group = (key: GroupKey, cards: TaskCardData[], today: string) => {
+    if (cards.length === 0) return null;
+    const id = `task-board-${key}`;
+    return (
+      <section aria-labelledby={id} className="space-y-3">
+        <h3 id={id} className={LABEL_CAPS}>
+          {TASK_COPY.groups[key]}
+        </h3>
+        <ul className="space-y-3">
+          {cards.map((c) => (
+            <li key={c.entryId}>
+              <TaskCard task={c} today={today} onAnswered={answered} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  };
+
+  const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0;
+  // A task opened again from Earlier moves up on the next read; it is shown once, where it now stands.
+  const onBoard = new Set(board ? [...board.holding, ...board.seatsHold, ...board.finished].map((c) => c.entryId) : []);
+  const earlierShown = (earlier ?? []).filter((c) => !onBoard.has(c.entryId));
+
+  return (
+    <section aria-labelledby="task-board-h" aria-busy={!board && !failed} className={`${PANEL} sm:p-8`}>
+      <h2 id="task-board-h" ref={heading} tabIndex={-1} className="font-display text-2xl font-bold text-card-foreground outline-none">
+        {TASK_COPY.heading}
+      </h2>
+      <p className={`${HINT} mt-1`}>{TASK_COPY.lede}</p>
+
+      {!board && !failed && (
+        <div className="mt-6 space-y-3" aria-hidden="true" data-loading>
+          <div className="h-28 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-28 animate-pulse rounded-2xl bg-muted" />
+        </div>
+      )}
+
+      {!board && failed && (
+        <div className="mt-6 flex flex-wrap items-center gap-3" role="alert">
+          <p className="text-sm text-foreground">{TASK_COPY.loadFailed}</p>
+          <button type="button" className={BTN_SECONDARY} onClick={() => void load()}>
+            {TASK_COPY.retry}
+          </button>
+        </div>
+      )}
+
+      {board && (
+        <div className="mt-6 space-y-8">
+          {nothingHeld && <p className="text-base text-muted-foreground">{TASK_COPY.empty}</p>}
+          {group("holding", board.holding, board.today)}
+          {group("seatsHold", board.seatsHold, board.today)}
+          {group("finished", board.finished, board.today)}
+
+          {board.earlierCount > 0 && (
+            <details
+              className="group"
+              onToggle={(e) => {
+                if ((e.currentTarget as HTMLDetailsElement).open) void openEarlier();
+              }}
+            >
+              <summary className={`${BTN_QUIET} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+                <span className={LABEL_CAPS}>{TASK_COPY.groups.earlier}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="mt-3" aria-live="polite">
+                {earlier === null && !earlierFailed && (
+                  <div className="h-20 animate-pulse rounded-2xl bg-muted" aria-hidden="true" />
+                )}
+                {earlierFailed && (
+                  <div className="flex flex-wrap items-center gap-3" role="alert">
+                    <p className="text-sm text-foreground">{TASK_COPY.loadFailed}</p>
+                    <button type="button" className={BTN_SECONDARY} onClick={() => void openEarlier()}>
+                      {TASK_COPY.retry}
+                    </button>
+                  </div>
+                )}
+                {earlierShown.length > 0 && (
+                  <ul className="space-y-3">
+                    {earlierShown.map((c) => (
+                      <li key={c.entryId}>
+                        <TaskCard task={c} today={board.today} onAnswered={answered} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}

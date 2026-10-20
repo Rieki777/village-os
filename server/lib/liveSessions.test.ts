@@ -30,7 +30,8 @@ import {
   isStaleRoom,
   mapSession,
   mayBeStale,
-  mayEditItemWords,
+  mayEditItemPlan,
+  mayEditItemTitle,
   maySee,
   parseId,
   placeLine,
@@ -82,13 +83,40 @@ describe("who may do what in a room", () => {
     expect(entryRights(held, 7, rolesIn(room, { no: 7, admin: false })).release).toBe(false);
   });
 
-  it("lets whoever added an item reword it while it waits, and the hosts at any time", () => {
-    const waiting = { addedBy: 5, status: "waiting" as const };
-    const active = { addedBy: 5, status: "active" as const };
-    expect(mayEditItemWords(waiting, 5, rolesIn(room, { no: 5, admin: false }))).toBe(true);
-    expect(mayEditItemWords(active, 5, rolesIn(room, { no: 5, admin: false }))).toBe(false);
-    expect(mayEditItemWords(waiting, 6, rolesIn(room, { no: 6, admin: false }))).toBe(false);
-    expect(mayEditItemWords(active, 7, rolesIn(room, { no: 7, admin: false }))).toBe(true);
+  const STATUSES = ["waiting", "active", "parked", "done"] as const;
+  const adder = rolesIn(room, { no: 5, admin: false });
+  const stranger = rolesIn(room, { no: 6, admin: false });
+
+  it("lets whoever added an item fix its title until it is done, and the hosts at any time", () => {
+    const titleFor = (status: (typeof STATUSES)[number]) => mayEditItemTitle({ addedBy: 5, status }, 5, adder);
+    expect(STATUSES.map(titleFor)).toEqual([true, true, true, false]);
+    for (const status of STATUSES) {
+      const item = { addedBy: 5, status };
+      expect(mayEditItemTitle(item, 6, stranger), status).toBe(false);
+      // The facilitator, the secretary and an admin take notes on any item.
+      expect(mayEditItemTitle(item, 3, rolesIn(room, { no: 3, admin: false })), status).toBe(true);
+      expect(mayEditItemTitle(item, 7, rolesIn(room, { no: 7, admin: false })), status).toBe(true);
+      expect(mayEditItemTitle(item, 9, rolesIn(room, { no: 9, admin: true })), status).toBe(true);
+    }
+  });
+
+  it("keeps an item's aim and minutes with the hosts once it starts, because its clock reads them", () => {
+    const planFor = (status: (typeof STATUSES)[number]) => mayEditItemPlan({ addedBy: 5, status }, 5, adder);
+    expect(STATUSES.map(planFor)).toEqual([true, false, false, false]);
+    for (const status of STATUSES) {
+      const item = { addedBy: 5, status };
+      expect(mayEditItemPlan(item, 6, stranger), status).toBe(false);
+      expect(mayEditItemPlan(item, 7, rolesIn(room, { no: 7, admin: false })), status).toBe(true);
+      expect(mayEditItemPlan(item, 9, rolesIn(room, { no: 9, admin: true })), status).toBe(true);
+    }
+  });
+
+  it("gives an admin in the room the words of every entry, and still not a holder", () => {
+    const admin = rolesIn(room, { no: 9, admin: true });
+    expect(entryRights({ authorNo: 5, ownerNo: null }, 9, admin)).toMatchObject({ text: true, seat: true, status: true, remove: true });
+    expect(entryRights({ authorNo: 5, ownerNo: 6 }, 9, admin)).toMatchObject({ text: true, release: true });
+    // The holder who did not write it sets the date and lets it go, and the words stay with its author.
+    expect(entryRights({ authorNo: 5, ownerNo: 6 }, 6, stranger)).toMatchObject({ text: false, remove: false, dueOn: true, release: true });
   });
 
   it("shows an open session to any member, and a closed one to its people and admins", () => {
@@ -443,16 +471,33 @@ describe("the dials and the notices this module registers", () => {
     expect(validateVariable(def, "90")).toBeNull();
   });
 
-  it("declares both notices, and sends each in the daily digest", () => {
-    const prefs = resolveNotifyPrefs({});
-    for (const type of ["session_record_ready", "session_action_held"]) {
+  it("declares every notice it sends, and none of them celebrates", () => {
+    for (const type of ["session_record_ready", "session_action_held", "session_action_due", "session_task_back", "session_task_unheld"]) {
       expect(NOTIFICATION_KINDS[type], type).toBeTruthy();
-      expect(NOTIFICATION_KINDS[type].celebrate).toBe(false);
-      expect(emailCadenceFor(type, prefs)).toBe("daily");
+      expect(NOTIFICATION_KINDS[type].celebrate, type).toBe(false);
+      expect(NOTIFICATION_KINDS[type].blurb, type).not.toMatch(DASHES);
     }
+    const prefs = resolveNotifyPrefs({});
+    // Mail for the admins and the facilitator: the digest, whatever the task preference.
+    for (const type of ["session_record_ready", "session_task_back", "session_task_unheld"]) expect(emailCadenceFor(type, prefs), type).toBe("daily");
     // A seat holder who was not in the room gets no link to the record, so the
     // notice's own description promises the action and its date, not the record.
     expect(NOTIFICATION_KINDS.session_action_held.blurb).not.toMatch(/record/i);
+  });
+
+  it("rides the task email preference: immediate by default, and the task layer's own email is the immediate one", () => {
+    expect(resolveNotifyPrefs({}).tasksEmail).toBe("immediate");
+    expect(resolveNotifyPrefs({ notify: { tasksEmail: "weekly" } }).tasksEmail).toBe("immediate");
+    // Immediate reads "off" here because server/lib/sessionTaskMail.ts posts the
+    // fuller email itself; a second, flattened copy from the spine would double it.
+    const expected = { immediate: "off", daily: "daily", off: "off" } as const;
+    for (const setting of ["immediate", "daily", "off"] as const) {
+      const prefs = resolveNotifyPrefs({ notify: { tasksEmail: setting } });
+      expect(prefs.tasksEmail).toBe(setting);
+      for (const type of ["session_action_held", "session_action_due"]) expect(emailCadenceFor(type, prefs), `${type} ${setting}`).toBe(expected[setting]);
+    }
+    // Every email off silences these too.
+    expect(emailCadenceFor("session_action_due", resolveNotifyPrefs({ notify: { emailsOff: true, tasksEmail: "daily" } }))).toBe("off");
   });
 
   it("writes its notices in the house voice", () => {

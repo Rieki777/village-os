@@ -9,6 +9,16 @@
  *
  * The facilitator can run it as a speaking round in the order of the people
  * here, two names at a time: who speaks now and who is ready next.
+ *
+ * THE ROOM AS A PARTY. The room's grid is this stage's one foil card: each
+ * person as a small portrait (their fronted character's stock art, or their
+ * initials), their number set as a figure in the body face, so a 1 reads as a
+ * one, and their words under it. The facilitator wears a star, the note taker
+ * a pen.
+ *
+ * A number and its words belong to the person who gave them, and they change
+ * them by giving them again (the server keeps one per person). The line under
+ * the button says so once they have.
  */
 import { useState } from "react";
 import {
@@ -23,7 +33,24 @@ import {
   cleanLine,
   roundSpeakers,
 } from "@shared/sessions";
-import { BTN_PRIMARY, BTN_SECONDARY, CARD, H3, HINT, INPUT, LABEL, nameOf, presentPeople, tile, type StageProps } from "./roomUi";
+import Figure from "@/components/sheet/Figure";
+import GrowingText from "./GrowingText";
+import PersonDisc from "./PersonDisc";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CARD,
+  H3,
+  HERO_CONTENT,
+  HERO_INNER,
+  HERO_SHELL,
+  HINT,
+  LABEL,
+  nameOf,
+  presentPeople,
+  tile,
+  type StageProps,
+} from "./roomUi";
 
 const NUMBERS = Array.from({ length: ARRIVAL_MAX - ARRIVAL_MIN + 1 }, (_, i) => ARRIVAL_MIN + i);
 
@@ -75,7 +102,7 @@ export default function StageArrival({ view, actions }: StageProps) {
   return (
     <div className="space-y-5">
       {arrivalIsLow(summary) && (
-        <p role="status" className="rounded-xl border border-amber/60 bg-amber-light px-4 py-3 text-sm font-medium text-foreground">
+        <p role="status" className="rounded-xl border border-notice/50 bg-muted px-4 py-3 text-sm font-medium text-foreground">
           {SESSION_COPY.arrivalLow}
         </p>
       )}
@@ -103,19 +130,24 @@ export default function StageArrival({ view, actions }: StageProps) {
                 </button>
               ))}
             </div>
-            <label className="block">
-              <span className={LABEL}>{SESSION_COPY.wishPrompt}</span>
-              <input
-                className={`${INPUT} mt-1`}
+            <div>
+              <label htmlFor="arrival-wish" className={`${LABEL} mb-1`}>
+                {SESSION_COPY.wishPrompt}
+              </label>
+              <GrowingText
+                id="arrival-wish"
                 value={wish}
-                maxLength={SESSION_LIMITS.wish}
-                placeholder={SESSION_COPY.wishPlaceholder}
-                onChange={(e) => {
-                  setWish(e.target.value);
+                onValue={(next) => {
+                  setWish(next);
                   setSaved(false);
                 }}
+                onSubmit={() => void give()}
+                label={SESSION_COPY.wishPlaceholder}
+                max={SESSION_LIMITS.wish}
+                minRows={1}
+                singleLine
               />
-            </label>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" className={BTN_PRIMARY} disabled={score == null || busy} onClick={() => void give()}>
                 {me?.arrival != null ? ROOM_COPY.changeNumber : ROOM_COPY.giveNumber}
@@ -126,91 +158,100 @@ export default function StageArrival({ view, actions }: StageProps) {
                 </p>
               )}
             </div>
+            {me?.arrival != null && <p className={`${HINT} text-xs`}>{ROOM_COPY.answerAgain}</p>}
           </div>
         ) : (
           <p className={`${HINT} mt-2`}>{ROOM_COPY.joinFirst}</p>
         )}
       </section>
 
-      <section className={CARD} aria-labelledby="arrival-room">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 id="arrival-room" className={H3}>
-            {ROOM_COPY.theRoom}
-          </h3>
-          {view.me.facilitates && (
-            <div className="flex flex-wrap gap-2">
-              {!roundOn ? (
-                <button type="button" className={BTN_SECONDARY} disabled={roundBusy} onClick={() => void roundAct("start")}>
-                  {ROOM_COPY.roundStart}
-                </button>
-              ) : (
-                <>
-                  <button type="button" className={BTN_SECONDARY} disabled={roundBusy || speakers.done} onClick={() => void roundAct("next")}>
-                    {ROOM_COPY.roundNext}
-                  </button>
-                  <button type="button" className={BTN_SECONDARY} disabled={roundBusy || view.state.round.at === 0} onClick={() => void roundAct("previous")}>
-                    {ROOM_COPY.roundBack}
-                  </button>
-                  <button type="button" className={BTN_SECONDARY} disabled={roundBusy} onClick={() => void roundAct("end")}>
-                    {ROOM_COPY.roundEnd}
-                  </button>
-                </>
+      <section className={HERO_SHELL} aria-labelledby="arrival-room">
+        <div className={HERO_INNER}>
+          <div className={HERO_CONTENT}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 id="arrival-room" className={H3}>
+                {ROOM_COPY.theRoom}
+              </h3>
+              {view.me.facilitates && (
+                <div className="flex flex-wrap gap-2">
+                  {!roundOn ? (
+                    <button type="button" className={BTN_SECONDARY} disabled={roundBusy} onClick={() => void roundAct("start")}>
+                      {ROOM_COPY.roundStart}
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" className={BTN_SECONDARY} disabled={roundBusy || speakers.done} onClick={() => void roundAct("next")}>
+                        {ROOM_COPY.roundNext}
+                      </button>
+                      <button type="button" className={BTN_SECONDARY} disabled={roundBusy || view.state.round.at === 0} onClick={() => void roundAct("previous")}>
+                        {ROOM_COPY.roundBack}
+                      </button>
+                      <button type="button" className={BTN_SECONDARY} disabled={roundBusy} onClick={() => void roundAct("end")}>
+                        {ROOM_COPY.roundEnd}
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
 
-        {!joined && <p className={`${HINT} mt-2`}>{ROOM_COPY.arrivalHeardInRoom}</p>}
+            {!joined && <p className={HINT}>{ROOM_COPY.arrivalHeardInRoom}</p>}
 
-        {roundOn && (
-          <div className="mt-3 flex flex-wrap gap-3" aria-live="polite">
-            {speakers.done ? (
-              <p className="text-sm font-semibold text-open">{ROOM_COPY.roundDone}</p>
-            ) : (
-              <>
-                <p className="rounded-xl bg-teal-deep/10 px-4 py-2 text-sm">
-                  <span className="text-muted-foreground">{ROOM_COPY.speakingNow}</span>{" "}
-                  <span className="font-semibold text-foreground">{nameOf(view, speakers.now) ?? ""}</span>
-                </p>
-                {speakers.next != null && (
-                  <p className="rounded-xl bg-muted/60 px-4 py-2 text-sm">
-                    <span className="text-muted-foreground">{ROOM_COPY.readyNext}</span>{" "}
-                    <span className="font-semibold text-foreground">{nameOf(view, speakers.next) ?? ""}</span>
-                  </p>
+            {roundOn && (
+              <div className="flex flex-wrap gap-3" aria-live="polite">
+                {speakers.done ? (
+                  <p className="text-sm font-semibold text-open">{ROOM_COPY.roundDone}</p>
+                ) : (
+                  <>
+                    <p className="rounded-xl border border-notice/60 bg-muted px-4 py-2 text-sm">
+                      <span className="text-muted-foreground">{ROOM_COPY.speakingNow}</span>{" "}
+                      <span className="font-semibold text-foreground">{nameOf(view, speakers.now) ?? ""}</span>
+                    </p>
+                    {speakers.next != null && (
+                      <p className="rounded-xl border border-border bg-muted px-4 py-2 text-sm">
+                        <span className="text-muted-foreground">{ROOM_COPY.readyNext}</span>{" "}
+                        <span className="font-semibold text-foreground">{nameOf(view, speakers.next) ?? ""}</span>
+                      </p>
+                    )}
+                  </>
                 )}
-              </>
+              </div>
             )}
-          </div>
-        )}
 
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {view.people.map((p) => {
-            const speaking = speakers.now === p.userId;
-            return (
-              <li
-                key={p.userId}
-                className={`flex gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                  speaking ? "border-teal-deep bg-teal-deep/5" : "border-border bg-card"
-                }`}
-              >
-                {joined && (
-                  <span
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-display text-lg font-bold tabular-nums ${
-                      p.arrival != null ? "bg-teal-deep/15 text-foreground" : "bg-muted text-muted-foreground"
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {view.people.map((p) => {
+                const speaking = speakers.now === p.userId;
+                const mark = p.userId === view.facilitatorUserId ? "facilitator" : p.userId === view.secretaryUserId ? "notes" : null;
+                return (
+                  <li
+                    key={p.userId}
+                    className={`flex items-start gap-3 rounded-xl border bg-muted px-3 py-3 transition-colors ${
+                      speaking ? "border-notice ring-1 ring-notice/40" : "border-border"
                     }`}
-                    aria-label={p.arrival != null ? String(p.arrival) : ROOM_COPY.notYet}
                   >
-                    {p.arrival ?? "·"}
-                  </span>
-                )}
-                <span className="min-w-0">
-                  <span className="block font-semibold text-foreground">{p.name}</span>
-                  {joined && <span className="block text-sm text-muted-foreground">{p.wish ?? (p.arrival == null ? ROOM_COPY.notYet : "")}</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                    <PersonDisc person={p} size="portrait" mark={mark} />
+                    <div className="min-w-0 flex-1">
+                      {joined ? (
+                        <dl className="flex">
+                          <Figure
+                            layout="seat"
+                            face="body"
+                            tone={p.arrival != null ? "gold" : null}
+                            value={p.arrival != null ? String(p.arrival) : "·"}
+                            label={p.name}
+                          />
+                        </dl>
+                      ) : (
+                        <p className="font-semibold text-foreground">{p.name}</p>
+                      )}
+                      {joined && <p className="mt-2 text-sm text-muted-foreground">{p.wish ?? (p.arrival == null ? ROOM_COPY.notYet : "")}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       </section>
     </div>
   );

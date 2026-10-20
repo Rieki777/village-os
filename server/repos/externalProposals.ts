@@ -306,3 +306,24 @@ export async function insertProposalCopy(
   );
   return true;
 }
+
+/**
+ * Move one record that is STILL WAITING into a newer delivery, and report
+ * whether it moved.
+ *
+ * For a sync a steward can press again. A re-read that finds the same claim
+ * about the same vendor record lands nothing new (the dedupe key holds it),
+ * which used to leave that record in the OLD delivery while everything that
+ * changed arrived in the new one, so neither delivery could be reviewed
+ * whole. The newer read owns what it re-read, so a waiting record follows it.
+ *
+ * `AND status = 'proposed'` is the guard: a record a steward has accepted,
+ * rejected, or that a newer claim superseded, is history and never moves.
+ */
+export async function rebatchWaiting(pool: Pool, id: string, batchId: string): Promise<boolean> {
+  const [res] = await pool.query<any>(
+    "UPDATE external_proposals SET batch_id = ? WHERE id = ? AND status = 'proposed' AND batch_id <> ?",
+    [batchId, id, batchId],
+  );
+  return Number(res?.affectedRows ?? 0) > 0;
+}
