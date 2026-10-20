@@ -199,7 +199,12 @@ async function openPower(frame?: "See" | "Learn" | "Say" | "Adopt") {
   draw();
   const card = await screen.findByTestId("canvas-block-power");
   fireEvent.click(within(card).getByRole("button", { name: "Open this block: Power" }));
-  const frames = await screen.findByTestId("canvas-frames-power");
+  // The frames are a lazy chunk (CanvasBlockCard imports them with `lazy()`), so the
+  // first open in a file waits for a cold import of the chunk and its dependencies.
+  // On the composed tree with main's 2026-10-20 dependency bumps that import ran past
+  // Testing Library's one-second default on a Windows box, failing whichever case
+  // opened a block first; the wait is for the chunk, not a behaviour, so it gets room.
+  const frames = await screen.findByTestId("canvas-frames-power", {}, { timeout: 10_000 });
   if (frame) fireEvent.click(within(frames).getByRole("button", { name: frame }));
   return within(frames);
 }
