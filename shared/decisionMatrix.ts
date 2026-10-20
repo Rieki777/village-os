@@ -104,6 +104,7 @@ import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
+import { ADOPTING_POWER, ROLE_APPLICATION } from "./seatApplications";
 
 // ── The shape ──────────────────────────────────────────────────────────────
 
@@ -289,6 +290,7 @@ export const MOVING_DECISIONS: Readonly<Record<string, string>> = {
   power_return: "Handing a power back to the admin panel",
   role_seat: "Seating somebody in a role",
   role_unseat: "Taking somebody out of a seat",
+  [ROLE_APPLICATION]: "Seating a member who applied for seats, on their terms",
 };
 
 /** The three power votes. Every ceremony among them refuses an opener whose only path is an admin account. */
@@ -385,6 +387,18 @@ export function seatDoor(subject: "role_seat" | "role_unseat", decideHeldByVilla
   return decideHeldByVillage
     ? `An administrator who also holds ${power} can take somebody out of any seat but the steward's, with no vote.`
     : "An administrator can also take somebody out of any seat but the steward's, with no vote.";
+}
+
+/**
+ * Who can adopt an application for seats with no vote, as
+ * shared/seatApplications.ts decides it (`adoptionPath`, `adoptRefusal`,
+ * `putToVillageRefusal`): a live holder of `org.seat` who is not the
+ * applicant, while a role holds that power.
+ */
+export function applicationDoor(): string {
+  const label = CAPABILITY_LABELS[ADOPTING_POWER as Capability];
+  const power = `the power to ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+  return `While a role holds ${power}, a live holder of it who is not the applicant can adopt an application with no vote. The village votes when it holds that power itself, when nobody holds it live, or when the applicant is its only live holder.`;
 }
 
 /**
@@ -569,6 +583,7 @@ function doorsBeside(subject: string, inp: DecisionMatrixInputs): string[] {
   if (subject === "role_seat" || subject === "role_unseat") {
     return [seatDoor(subject, inp.powers.some((p) => p.capability === DECIDE && p.villageHolds))];
   }
+  if (subject === ROLE_APPLICATION) return [applicationDoor()];
   return [];
 }
 

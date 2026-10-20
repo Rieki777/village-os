@@ -23,6 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applicationDoor,
   applySwitchNote,
   dialProposalLine,
   generateDecisionMatrix,
@@ -48,6 +49,7 @@ import { GOVERNANCE_MODE, MINT_RULE, SUBJECT_THRESHOLDS, thresholdSettingsFrom, 
 import { CAPABILITY_LABELS, HANDOVER_SET } from "./capabilities";
 import { dialsForMethod, evaluateBallot, TIER_FLOORS, type Criticality, type MethodDials } from "./governanceEngine";
 import { SEAT_SUBJECTS } from "./governanceKinds";
+import { ROLE_APPLICATION } from "./seatApplications";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CYCLE_SETTLEMENT, settlementModeFrom, settlementProposalDecision } from "./moonSettlement";
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
@@ -259,6 +261,13 @@ describe("honesty rule 2: the votes that move a power or a seat show no tier flo
 
   it("covers every seat subject the landing loop knows", () => {
     for (const s of Array.from(SEAT_SUBJECTS)) expect(Object.keys(MOVING_DECISIONS)).toContain(s);
+  });
+
+  it("an application for seats names the holder's door beside its vote, and the power by its label", () => {
+    const r = row(generateDecisionMatrix(inputs()), `move:${ROLE_APPLICATION}`);
+    expect(r.approval.text).toContain(applicationDoor());
+    expect(applicationDoor()).toContain(CAPABILITY_LABELS["org.seat"].toLowerCase());
+    expect(applicationDoor()).toContain("who is not the applicant");
   });
 });
 
