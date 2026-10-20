@@ -25,10 +25,13 @@
  *          A decided proposal is final: its words, its status and the row
  *          itself stay as they are, and a proposal whose words change while
  *          open starts its consent round again.
- *   notes  runs, or the secretary: edits any item's words, and any entry's
- *          text, status, seat and date.
+ *   notes  runs, or the secretary: renames the session, edits any item's
+ *          words, and any entry's text, status, seat and date. An admin is
+ *          here too, through runs, once they have joined.
  *   author the person who wrote an entry edits or deletes it; the person who
- *          added an item edits its words while it is still waiting.
+ *          added an item changes its title until it is done, and its aim,
+ *          minutes and presenter while it is still waiting, because the
+ *          item's clock reads its minutes once it starts.
  *   anyone in the room claims an action nobody holds; the holder or the
  *          facilitator lets it go.
  *
@@ -60,7 +63,10 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
-import { listOrgAssignments, listOrgRoles } from "./orgChart";
+import { exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
+import { avatarFor } from "./characters";
+import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
+import { circleTasksFor } from "./sessionTasks";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
@@ -466,8 +472,21 @@ export function entryRights(e: Pick<EntryRec, "authorNo" | "ownerNo">, actorNo: 
   };
 }
 
-/** May this person change an item's words: notes always, its adder while it waits. */
-export function mayEditItemWords(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
+/**
+ * May this person change an item's title: notes always, and the person who
+ * added it until it is done. A typo in a title is fixed while the item runs;
+ * a finished item's title is what the record says was talked about.
+ */
+export function mayEditItemTitle(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
+  return roles.notes || (item.addedBy === actorNo && item.status !== "done");
+}
+
+/**
+ * May this person change an item's plan (its aim, minutes and presenter):
+ * notes always, and the person who added it only while it waits. Once the
+ * item starts, its clock reads the minutes, so the hosts hold them.
+ */
+export function mayEditItemPlan(item: Pick<SessionItem, "addedBy" | "status">, actorNo: number, roles: Roles): boolean {
   return roles.notes || (item.addedBy === actorNo && item.status === "waiting");
 }
 
@@ -682,11 +701,17 @@ interface Room {
   conn: PoolConnection;
   s: SessionRec;
   roles: Roles;
+  /**
+   * Set by work that found nothing to change, so the version stays where it
+   * is and every open page keeps its 304. A yes that moved nothing.
+   */
+  still: boolean;
 }
 
 /**
  * Lock the session, check it is open and the writer is in it, run `work`,
- * and bump the version if the work succeeded. A refusal writes nothing.
+ * and bump the version if the work succeeded and moved something. A refusal
+ * writes nothing.
  */
 async function inRoom<T>(pool: Pool, sessionId: number, actor: Actor, work: (room: Room) => Promise<Outcome<T>>): Promise<Outcome<T>> {
   return repo.inTransaction(pool, async (conn) => {
@@ -695,8 +720,9 @@ async function inRoom<T>(pool: Pool, sessionId: number, actor: Actor, work: (roo
     const s = mapSession(rows[0]);
     if (s.status !== "open") return refuse(409, R.closed);
     if (!(await repo.personRow(conn, sessionId, actor.no)).length) return refuse(403, R.joinFirst);
-    const out = await work({ conn, s, roles: rolesIn(s, actor) });
-    if (out.ok) await repo.bumpVersion(conn, sessionId);
+    const room: Room = { conn, s, roles: rolesIn(s, actor), still: false };
+    const out = await work(room);
+    if (out.ok && !room.still) await repo.bumpVersion(conn, sessionId);
     return out;
   });
 }
@@ -754,6 +780,29 @@ export async function saveArrival(pool: Pool, sessionId: number, actor: Actor, r
   const wish = cleanLine(b.wish, SESSION_LIMITS.wish);
   return inRoom(pool, sessionId, actor, async ({ conn }) => {
     await repo.writeArrival(conn, sessionId, actor.no, score, wish, now);
+    return done(null);
+  });
+}
+
+// ── The session's own words ─────────────────────────────────────────────────
+
+/**
+ * Rename the session: the facilitator, the secretary, or an admin who has
+ * joined. The title is cleaned to one line and cut to its limit, the same way
+ * the start cleans it; any other key in the body is ignored. Sending the title
+ * it already has is a quiet yes that moves no version, so a save pressed twice
+ * costs every open page nothing.
+ */
+export async function patchSession(pool: Pool, sessionId: number, actor: Actor, raw: unknown): Promise<Outcome<null>> {
+  const title = cleanLine(bodyOf(raw).title, SESSION_LIMITS.title);
+  if (!title) return refuse(400, R.titleNeeded);
+  return inRoom(pool, sessionId, actor, async (room) => {
+    if (!room.roles.notes) return refuse(403, R.notesOnly);
+    if (title === room.s.title) {
+      room.still = true;
+      return done(null);
+    }
+    await repo.writeSessionTitle(room.conn, sessionId, title);
     return done(null);
   });
 }
@@ -841,12 +890,23 @@ export async function patchItem(
     const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
     const item = items.find((i) => i.id === itemId);
     if (!item) return refuse(404, R.itemUnknown);
-    const changesWords = Object.keys(words).length > 0;
-    if (changesWords && !mayEditItemWords(item, actor.no, roles)) return refuse(403, R.notesOnly);
+    // The title and the plan answer to different rules. A field sent with the
+    // value it already has changes nothing, so it asks for no right: a form
+    // that sends the whole item back with only the title retyped still works
+    // for the person who added it.
+    const titleMoves = words.title !== undefined && words.title !== item.title;
+    const planMoves =
+      (words.aim !== undefined && words.aim !== item.aim) ||
+      (words.minutes !== undefined && words.minutes !== item.minutes) ||
+      (words.presenter !== undefined && words.presenter !== item.presenterUserId);
+    if (titleMoves && !mayEditItemTitle(item, actor.no, roles)) return refuse(403, R.notesOnly);
+    if (planMoves && !mayEditItemPlan(item, actor.no, roles)) {
+      return refuse(403, item.addedBy === actor.no ? R.aimMinutesNotes : R.notesOnly);
+    }
     if ((position != null || status != null) && !roles.runs) return refuse(403, R.facilitatorOnly);
     if (words.presenter != null && !(await repo.personRow(conn, sessionId, words.presenter)).length) return refuse(400, R.hostsPerson);
 
-    if (changesWords) {
+    if (titleMoves || planMoves) {
       await repo.writeItemWords(conn, item.id, {
         title: words.title ?? item.title,
         aim: words.aim ?? item.aim,
@@ -1223,10 +1283,14 @@ export interface ClosedRecord {
   held: { entryId: number; text: string; dueOn: string | null; ownerNo: number | null; ownerSeatId: string | null }[];
 }
 
-/** What a close and the view need from the routes: names, and circles' names. */
+/**
+ * What a close and the view need from the routes: names, circles' names, and
+ * the season's reading of who still sits in a seat (the task cards' seats).
+ */
 export interface RoomContext {
   lookup: MemberLookup;
   circleName: (id: string | null) => string | null;
+  lapseContext?: () => LapseContext;
 }
 
 /**
@@ -1282,6 +1346,9 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
     minutesShareable: minutes.shareable,
     closedAt: now,
   });
+  // The task layer's state rows (0255), in this transaction: a task exists the
+  // moment the close does, whichever close it was. A second run adds nothing.
+  await seedStateForSession(conn, sessionId);
   return done({
     id: sessionId,
     title: s.title,
@@ -1381,6 +1448,14 @@ export async function closeStaleRooms(pool: Pool, ctx: RoomContext, deps: Notice
 export interface NoticeDeps {
   notify(input: { userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }): Promise<unknown>;
   notifyAdmins(type: string, title: string, dedupeKey: string, link?: string): Promise<void>;
+  /** The season's reading of who still sits in a seat. Absent: every live seating counts. */
+  lapseContext?: () => LapseContext;
+  /**
+   * Start the closed session's task emails (server/lib/sessionTaskMail.ts
+   * `queueCloseMail`). Started and never waited on: the caller's function
+   * returns at once and catches its own failure. Absent: no task emails.
+   */
+  closeMail?: (sessionId: number) => void;
 }
 
 /**
@@ -1391,7 +1466,13 @@ export interface NoticeDeps {
  * The record opens only to the people who were in the room (and admins), so a
  * member who sits in the seat and was not there hears what the action is and
  * by when, with no link to a page that would refuse them.
+ * A seat counts its members whose term has not lapsed: a lapsed holder is
+ * still in the chart, and a task is a new ask that waits for the next term.
  * A failure is a log line; the session is closed either way.
+ *
+ * THE ONE SITE THE TASK EMAILS START FROM. Both closes, the facilitator's and
+ * a quiet room's, come through here, so the last thing this does is start
+ * `deps.closeMail`, and it never waits for it.
  */
 export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: NoticeDeps): Promise<void> {
   const link = `/sessions/${closed.id}`;
@@ -1406,7 +1487,7 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
     const roomNos = (await repo.peopleRows(pool, closed.id)).map((r) => Number(r.member_no));
     const wasThere = new Set((await repo.memberUserIdRows(pool, roomNos)).map((r) => String(r.user_id)));
     const seated = closed.held.some((h) => h.ownerSeatId)
-      ? (await listOrgAssignments(pool)).filter((a) => a.holderKind === "member" && a.userId && !a.isExample)
+      ? (await listOrgAssignments(pool, deps.lapseContext?.())).filter((a) => a.holderKind === "member" && a.userId && !a.isExample && !a.lapsed)
       : [];
     for (const h of closed.held) {
       const to = new Set<string>();
@@ -1426,6 +1507,11 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
     }
   } catch (e) {
     console.error("[sessions] the people holding actions were not all told", e);
+  }
+  try {
+    deps.closeMail?.(closed.id);
+  } catch (e) {
+    console.error("[sessions] the task emails were not started", e);
   }
 }
 
@@ -1480,13 +1566,31 @@ export async function sessionForViewer(pool: Pool, sessionId: number, viewer: Vi
   return { s: mapSession(rows[0]), joined };
 }
 
+/**
+ * The face each person in the room fronts: the stock art of their primary
+ * character, keyed by their member id. One query for the whole room, never
+ * one per person. Only the village's own character art can come back from
+ * here (`avatarFor` answers from a fixed set of shipped files), so a portrait
+ * a member uploaded never reaches the room this way. A member who fronts no
+ * character, or whose character has no art, is simply absent.
+ */
+async function facesFor(pool: Pool, userIds: readonly (string | null)[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const wanted = Array.from(new Set(userIds.filter((u): u is string => !!u)));
+  for (const r of await repo.avatarRows(pool, wanted)) {
+    const face = r.archetype_key ? avatarFor(String(r.archetype_key), String(r.presentation), String(r.tone)) : null;
+    if (face) out.set(String(r.id), face);
+  }
+  return out;
+}
+
 /** Everything the room shows one viewer. The caller has already decided they may see it. */
 export async function buildView(
   pool: Pool,
   s: SessionRec,
   viewer: Viewer,
   joined: boolean,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null },
+  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext },
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
@@ -1530,12 +1634,14 @@ export async function buildView(
   if (s.secretaryNo) nos.add(s.secretaryNo);
   for (const e of [...entries, ...(carriedFrom?.entries ?? [])]) if (e.ownerNo != null) nos.add(e.ownerNo);
   const [names, seats] = await Promise.all([namesFor(pool, nos, ctx.lookup), seatBook(pool, s.circleId)]);
+  const faces = await facesFor(pool, people.map((p) => names.get(p.no)?.userId ?? null));
 
   const open = s.status === "open";
   const peopleOut: SessionPerson[] = people.map((p) => ({
     userId: p.no,
     name: nameIn(names, p.no) ?? SESSION_SOMEONE,
     handle: names.get(p.no)?.handle ?? null,
+    avatar: faces.get(names.get(p.no)?.userId ?? "") ?? null,
     present: open && isPresentAt(p, now),
     // The arrival round is heard by the people in the room, and only while it is open.
     arrival: open && joined ? p.arrival : null,
@@ -1561,6 +1667,9 @@ export async function buildView(
     }
   }
 
+  // Every open task of the circle's earlier sessions, as this viewer may see it.
+  const circle = await circleTasksFor(pool, s, viewer, ctx);
+
   return {
     id: s.id,
     title: s.title,
@@ -1585,6 +1694,8 @@ export async function buildView(
     seats: seats.options,
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
+    circleTasks: circle.cards,
+    circleLastMetAt: circle.lastMetAt,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },
   };
 }
@@ -1625,16 +1736,20 @@ export async function listSessions(
  * Everything this module holds about one member, for GET /api/profile/export:
  * the sessions they were in, the agenda items they added or present, the
  * entries they wrote or hold, and their own answers, feedback on the
- * facilitation included, because it is theirs.
+ * facilitation included, because it is theirs. From the task layer: the tasks
+ * they hold now, and every answer they gave a task, with its words. A note
+ * somebody else left on a task they hold is that person's, and stays out.
  */
 export async function exportMemberSessions(pool: Pool, userId: string): Promise<{
   sessions: Record<string, unknown>[];
   items: Record<string, unknown>[];
   entries: Record<string, unknown>[];
   responses: Record<string, unknown>[];
+  tasks: Record<string, unknown>[];
+  taskAnswers: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -1685,7 +1800,27 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     text: r.text == null ? null : String(r.text),
     at: toIso(r.updated_at),
   }));
-  return { sessions, items, entries, responses };
+  const taskRows = await exportTaskRowsFor(pool, no);
+  const tasks = taskRows.held.map((r) => ({
+    sessionId: Number(r.session_id),
+    entryId: Number(r.entry_id),
+    sessionTitle: String(r.title ?? ""),
+    text: String(r.text ?? ""),
+    status: String(r.status),
+    dueOn: r.due_on == null ? null : String(r.due_on),
+    latestKind: String(r.latest_kind),
+    latestNote: Number(r.changed_by_no) === no && r.latest_note != null ? String(r.latest_note) : null,
+    changedAt: toIso(r.changed_at),
+  }));
+  const taskAnswers = taskRows.answers.map((r) => ({
+    sessionId: Number(r.session_id),
+    entryId: Number(r.entry_id),
+    kind: String(r.kind),
+    dueOn: r.due_on == null ? null : String(r.due_on),
+    note: r.note == null ? null : String(r.note),
+    at: toIso(r.created_at),
+  }));
+  return { sessions, items, entries, responses, tasks, taskAnswers };
 }
 
 /**
@@ -1714,6 +1849,9 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
       decisionTargets.set(sid, [...(decisionTargets.get(sid) ?? []), `decision:${Number(e.id)}`]);
     }
     for (const [sid, targets] of Array.from(decisionTargets)) await repo.deleteResponsesForTargets(conn, sid, targets);
+    // The task layer first: the tasks of the entries about to go, and the
+    // leaver's number wherever else a task names it.
+    await forgetTaskRowsFor(conn, no, written.map((e) => Number(e.id)));
     await repo.forgetMemberRows(conn, no, written.map((e) => Number(e.id)));
 
     for (const sid of touched) {

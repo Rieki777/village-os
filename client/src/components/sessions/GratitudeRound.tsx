@@ -8,6 +8,10 @@
  * offers the form; one that does not points at the wall for that person.
  * The server's own sentence is shown when it refuses: the allowance is spent,
  * a message is required, and so on.
+ *
+ * Each row wears the person's face (PersonDisc), and the message is the
+ * room's growing box on a row of its own, with the amount and Send under it,
+ * so a long thank-you is read whole while it is written.
  */
 import { useState } from "react";
 import { Link } from "wouter";
@@ -15,7 +19,9 @@ import { Heart } from "lucide-react";
 import { ROOM_COPY, ROOM_GRATITUDE_AMOUNT, SESSION_COPY, SESSION_LIMITS, cleanText, type SessionPerson } from "@shared/sessions";
 import { gameFetch } from "@/lib/gameApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, H3, HINT, INPUT, LABEL, firstName, type StageProps } from "./roomUi";
+import GrowingText from "./GrowingText";
+import PersonDisc from "./PersonDisc";
+import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, H3, HINT, INPUT, LABEL, UNDER_BOX, firstName, type StageProps } from "./roomUi";
 import { refusalSentence } from "./useSessionRoom";
 
 function ThankRow({ person }: { person: SessionPerson }) {
@@ -53,9 +59,12 @@ function ThankRow({ person }: { person: SessionPerson }) {
   };
 
   return (
-    <li className="rounded-xl border border-border bg-card px-4 py-3">
+    <li className="rounded-xl border border-border bg-muted px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-foreground">{person.name}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          <PersonDisc person={person} />
+          <span className="min-w-0 truncate font-semibold text-foreground">{person.name}</span>
+        </span>
         {handle ? (
           !open && (
             <button type="button" className={BTN_SECONDARY} onClick={() => setOpen(true)}>
@@ -71,36 +80,36 @@ function ThankRow({ person }: { person: SessionPerson }) {
       </div>
       {open && handle && (
         <form
-          className="mt-3 grid gap-2 sm:grid-cols-[1fr_6rem_auto] sm:items-end"
+          className="mt-3 space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
           }}
         >
-          <label htmlFor={`${base}-msg`} className="block">
-            <span className="sr-only">{ROOM_COPY.thankPlaceholder}</span>
-            <input
-              id={`${base}-msg`}
-              className={INPUT}
-              value={message}
-              maxLength={SESSION_LIMITS.text}
-              placeholder={ROOM_COPY.thankPlaceholder}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          </label>
-          <label htmlFor={`${base}-amt`} className="block">
-            <span className={`${LABEL} text-xs`}>{ROOM_COPY.amountLabel}</span>
-            <input
-              id={`${base}-amt`}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              className={`${INPUT} mt-1`}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-            />
-          </label>
-          <div className="flex gap-2">
+          <GrowingText
+            id={`${base}-msg`}
+            value={message}
+            onValue={setMessage}
+            onSubmit={() => void send()}
+            onCancel={() => setOpen(false)}
+            label={ROOM_COPY.thankPlaceholder}
+            max={SESSION_LIMITS.text}
+            minRows={2}
+            singleLine
+          />
+          <div className={UNDER_BOX}>
+            <label htmlFor={`${base}-amt`} className="block w-24">
+              <span className={`${LABEL} text-xs`}>{ROOM_COPY.amountLabel}</span>
+              <input
+                id={`${base}-amt`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                className={`${INPUT} mt-1`}
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+              />
+            </label>
             <button type="submit" className={BTN_PRIMARY} disabled={busy}>
               {ROOM_COPY.send}
             </button>

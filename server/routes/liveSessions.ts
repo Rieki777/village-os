@@ -6,6 +6,7 @@
  *   GET    /api/sessions                          { open, recent, circles }
  *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
+ *   PATCH  /api/sessions/:id                      { title } -> { ok }
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok }
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -49,6 +50,12 @@
  * NOTHING HERE RECORDS AN EVENT. `recordEvent` writes to a public audience by
  * default. The close tells the admins and the people holding actions through
  * the notification spine, after its transaction commits.
+ *
+ * THE TASK EMAILS START FROM THE CLOSE, AND NOTHING WAITS FOR THEM. Both
+ * closes (the door below, and a quiet room closing itself inside a read) go
+ * through `noticesAfterClose`, which starts `queueCloseMail` and returns. What
+ * happens to a task after the call has its own doors in
+ * server/routes/sessionTasks.ts.
  */
 import type { Express, NextFunction, Request, Response } from "express";
 import { GAME_CONFIG } from "../../shared/gameConfig";
@@ -76,6 +83,7 @@ import {
   parseId,
   patchEntry,
   patchItem,
+  patchSession,
   readMinutes,
   removeEntry,
   respond,
@@ -90,6 +98,7 @@ import {
   type Viewer,
 } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
+import { queueCloseMail } from "../lib/sessionTaskMail";
 import {
   SESSION_COPY,
   SESSION_LIMITS,
@@ -115,10 +124,25 @@ export { exportMemberSessions } from "../lib/liveSessions";
  * person in a room. Nothing here writes a member. `circlesRepo` answers which
  * circles exist and what they are called. `notify` and `notifyAdmins` carry
  * the two notices a close sends. `overLimit` bounds the doors that write.
+ * `lapseContext` reads which seat holders' terms still run. The post office,
+ * the spine's member reader, the origin and the village's name are for the
+ * task emails a close starts (server/lib/sessionTaskMail.ts).
  */
 type Deps = Pick<
   AppDeps,
-  "authedUser" | "isAdmin" | "getPool" | "overLimit" | "members" | "notify" | "notifyAdmins" | "circlesRepo"
+  | "authedUser"
+  | "isAdmin"
+  | "getPool"
+  | "overLimit"
+  | "members"
+  | "notify"
+  | "notifyAdmins"
+  | "circlesRepo"
+  | "lapseContext"
+  | "notifyDeps"
+  | "commsPostOffice"
+  | "deploymentOrigin"
+  | "projectName"
 >;
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -189,8 +213,14 @@ export function register(app: Express, deps: Deps): void {
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
     return c ? String(c.name ?? id) : null;
   };
-  const ctx = { lookup, circleName };
-  const notices = { notify, notifyAdmins };
+  const ctx = { lookup, circleName, lapseContext: deps.lapseContext };
+  /** The close's task emails, started and left. Absent when the post office is not wired, as in a suite. */
+  const closeMail = deps.commsPostOffice
+    ? (sessionId: number) => {
+        void queueCloseMail(deps, sessionId).catch((e) => console.error(`[sessions] the task emails for session ${sessionId} did not go`, e));
+      }
+    : undefined;
+  const notices = { notify, notifyAdmins, lapseContext: deps.lapseContext, closeMail };
 
   /**
    * One room's row for a read or a join, after closing it if it has gone quiet
@@ -291,6 +321,17 @@ export function register(app: Express, deps: Deps): void {
     res.setHeader("Vary", "Authorization");
     if (etagMatches(req.headers?.["if-none-match"], tag)) return res.status(304).end();
     res.json(await buildView(pool, found.s, viewer, found.joined, ctx, now));
+  });
+
+  /**
+   * The session's title: the facilitator, the secretary, or an admin who has
+   * joined. Behind the same gates as an item's PATCH, and an unchanged title
+   * answers ok without moving the room's version.
+   */
+  app.patch("/api/sessions/:id", async (req, res) => {
+    const w = await writer(req, res);
+    if (!w) return;
+    answer(res, await patchSession(w.pool, w.id, w.actor, req.body), () => ({ ok: true }));
   });
 
   app.post("/api/sessions/:id/join", async (req, res) => {

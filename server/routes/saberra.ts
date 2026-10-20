@@ -257,10 +257,31 @@ export function register(app: Express, deps: Deps): void {
     const batchId = `sync-${sessionId}`.slice(0, ID_MAX);
     const sourceName = MODULES_BY_ID[MODULE_ID]?.name ?? "the connected service";
     const landed: { kind: string; ok: boolean; reason?: string }[] = [];
+    /*
+     * PRESSING SYNC AGAIN REPLACES WHAT IS STILL WAITING. A changed claim about
+     * the same thing supersedes the waiting one (`landProposal`'s identity
+     * key); an unchanged one is moved into this delivery (`rebatchWaiting`),
+     * so the newest read is one batch a steward can review whole. Anything a
+     * steward already decided is history and is left exactly as it is.
+     */
+    let superseded = 0;
+    let rebatched = 0;
+    const note = (r: Awaited<ReturnType<typeof landProposal>>) => {
+      if (!r.ok) return;
+      superseded += r.superseded;
+      if (r.rebatched) rebatched += 1;
+    };
 
+    // The circles go in WITH the roles: a role names its circle by page id,
+    // and the circle record is where that id becomes a name.
     const roleRecords = records.filter((r) => r.kind === "role");
+    let circleReading: ReturnType<typeof proposeStructure>["circles"] | null = null;
     if (roleRecords.length > 0) {
-      const structure = proposeStructure(roleRecords, { sourceName });
+      const structure = proposeStructure(
+        records.filter((r) => r.kind === "role" || r.kind === "circle"),
+        { sourceName },
+      );
+      circleReading = structure.circles;
       if (structure.payload.seats.length > 0) {
         const r = await landProposal(pool, {
           villageId,
@@ -269,7 +290,9 @@ export function register(app: Express, deps: Deps): void {
           kind: structure.kind,
           payload: structure.payload,
           trustTier: "extracted_unreviewed",
+          rebatchWaiting: true,
         });
+        note(r);
         landed.push(r.ok ? { kind: structure.kind, ok: true } : { kind: structure.kind, ok: false, reason: r.reason });
       }
     }
@@ -288,7 +311,9 @@ export function register(app: Express, deps: Deps): void {
           payload: { ...(fact?.fields ?? {}), vendorRecordId: rec.id },
           sourceRef: (rec.url ?? rec.id).slice(0, 400),
           trustTier: "extracted_unreviewed",
+          rebatchWaiting: true,
         });
+        note(r);
         landed.push(r.ok ? { kind: group.kind, ok: true } : { kind: group.kind, ok: false, reason: r.reason });
       }
     }
@@ -296,6 +321,13 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       landed: landed.filter((l) => l.ok).length,
       refused: landed.filter((l) => !l.ok),
+      batchId,
+      // Waiting proposals this read replaced, and unchanged ones it carried forward.
+      superseded,
+      rebatched,
+      // How each role's circle was read: placed, unresolved, absent, and the
+      // SHAPE the field arrived in (never its value), so the shape is measured.
+      circles: circleReading,
       facts: reading.facts.length,
       attached: reading.facts.filter((f) => f.vendorKind !== "circle" && seatIdFor(f.attachesTo)).length,
       held: reading.held,

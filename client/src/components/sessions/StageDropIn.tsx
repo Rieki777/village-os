@@ -5,6 +5,9 @@
  * Each thing is said once: the moon and the season sit in the room's header,
  * so this stage leaves them out, and the people are listed here in full while
  * the header leaves them out on this stage.
+ *
+ * The place line is set as the room's pull-quote, a gold rule at its edge and
+ * the display face large, the way the record sets what a circle learned.
  */
 import { ROOM_COPY, SESSION_COPY } from "@shared/sessions";
 import PeopleHere from "./PeopleHere";
@@ -16,8 +19,8 @@ export default function StageDropIn({ view, actions, offset }: StageProps & { of
   const placeLine = view.stamp.placeLine?.trim() || SESSION_COPY.placeLineFallback;
   return (
     <div className="space-y-5">
-      <figure className="rounded-2xl bg-gradient-to-b from-teal-deep/10 to-transparent px-6 py-8 text-center">
-        <blockquote className="mx-auto max-w-2xl font-display text-xl leading-relaxed text-foreground sm:text-2xl">
+      <figure className="px-1 py-4 sm:px-4">
+        <blockquote className="mx-auto max-w-3xl border-l-2 border-notice pl-4 font-display text-2xl leading-snug text-foreground sm:text-3xl">
           {placeLine}
         </blockquote>
       </figure>
