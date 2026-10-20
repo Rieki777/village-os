@@ -2,7 +2,7 @@
  * The structure change review: one arrival from an outside service, read as a
  * change to this village's chart, and accepted with a steward's decisions.
  *
- *   GET  /api/review/batches/:batchId/structure          the plan
+ *   GET  /api/review/batches/:batchId/structure          the plan, and the draft it went into
  *   POST /api/review/batches/:batchId/structure/accept   accept, or `dryRun` to preview
  *
  * Registered by server/routes/review.ts and behind the same key as the review
@@ -17,9 +17,12 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { draftChangeCap } from "../lib/orgDrafts";
-import { acceptStructure, readDecisions, readStructure, type RepoCircle } from "../lib/structureReview";
+import { acceptStructure, batchHeader, draftForBatch, readDecisions, readStructure, type RepoCircle } from "../lib/structureReview";
 
-type Deps = Pick<AppDeps, "authedUser" | "adminActor" | "guardCapability" | "mayStillSee" | "getPool" | "members" | "circlesRepo">;
+type Deps = Pick<
+  AppDeps,
+  "isAdmin" | "authedUser" | "adminActor" | "guardCapability" | "mayStillSee" | "getPool" | "members" | "circlesRepo"
+>;
 
 const idList = (v: unknown): string[] | null => {
   const raw = Array.isArray(v) ? v : typeof v === "string" && v !== "" ? v.split(",") : [];
@@ -28,18 +31,35 @@ const idList = (v: unknown): string[] | null => {
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo } = deps;
+  const { isAdmin, authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo } = deps;
 
+  /*
+   * AFTER THE ACCEPT THIS ANSWERS WITH THE DRAFT. A batch accepted whole has
+   * nothing waiting, and one whose leftovers are only what the source archived
+   * has nothing to decide; both used to read as an empty batch with no word
+   * about the draft just made. `draft` is the draft its proposals went into
+   * (through `created_ref`), with its preview; `plan` is null when nothing
+   * waits. `mayPublish` asks the question the publish route asks, `isAdmin`.
+   */
   app.get("/api/review/batches/:batchId/structure", async (req, res) => {
     if (!(await mayStillSee(req, "intake.moderate"))) return res.status(401).json({ error: "auth_required" });
-    const read = await readStructure(
-      getPool(),
-      circlesRepo.all() as RepoCircle[],
-      String(req.params.batchId),
-      idList(req.query.ids),
-    );
-    if (!read) return res.status(404).json({ error: "Nothing in that batch is waiting for a decision" });
-    res.json({ ...read.header, plan: read.plan, proposalChangeLimit: draftChangeCap() });
+    const pool = getPool();
+    const circles = circlesRepo.all() as RepoCircle[];
+    const batchId = String(req.params.batchId);
+    const [read, draft] = await Promise.all([
+      readStructure(pool, circles, batchId, idList(req.query.ids)),
+      draftForBatch(pool, circles, batchId),
+    ]);
+    const header = read?.header ?? (draft ? await batchHeader(pool, batchId) : null);
+    if (!header) return res.status(404).json({ error: "Nothing in that batch is waiting for a decision" });
+    res.json({
+      ...header,
+      plan: read?.plan ?? null,
+      waiting: read?.rows.length ?? 0,
+      proposalChangeLimit: draftChangeCap(),
+      draft,
+      mayPublish: draft?.status === "open" ? await isAdmin(req) : false,
+    });
   });
 
   app.post("/api/review/batches/:batchId/structure/accept", async (req, res) => {

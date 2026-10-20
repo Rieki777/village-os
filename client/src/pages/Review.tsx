@@ -113,6 +113,8 @@ interface Queue {
   drops: Drop[];
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
   stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
+  /** Every open draft this queue made, with the batch whose page shows it. Absent from an older server. */
+  openDrafts?: { draftId: string; title: string; changes: number; batchId: string | null }[];
   counts: { proposals: number; quests: number };
   /**
    * The halves this reader was given. An older server sends no `scope`, and it
@@ -786,6 +788,26 @@ export default function Review() {
             </button>
           </div>
         ))}
+
+        {/* An open draft from this queue, and where to finish it. An accepted
+            batch leaves the queue, so without this card the draft it made could
+            be found from no screen a steward uses. */}
+        {(queue?.openDrafts ?? [])
+          .filter((d) => d.batchId && !stuck[d.draftId])
+          .map((d) => (
+            <div key={d.draftId} className={card} data-testid={`open-draft-${d.draftId}`}>
+              <h2 className="text-sm font-semibold text-foreground">A draft from this queue is waiting to publish</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                {d.title}. {d.changes === 1 ? "1 change" : `${d.changes} changes`}. Nothing is live yet.
+              </p>
+              <Link
+                href={`/review/structure/${encodeURIComponent(String(d.batchId))}`}
+                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              >
+                Open the draft
+              </Link>
+            </div>
+          ))}
 
         {notRead.lines.length > 0 && (
           <div className={card}>
