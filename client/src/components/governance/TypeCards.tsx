@@ -39,7 +39,9 @@
  * without `proposal.open` wrote the whole agreement and was refused at the
  * last step. The village CAN open these, so the locked card says who carries
  * one instead of the plain locked sentence, and still says no member is not
- * allowed.
+ * allowed. An application for seats opens a vote too, but its route asks only
+ * the member rung (`terms.read`), so it carries `opensVoteForMembers` and its
+ * card stays live without `mayOpenBallot`.
  *
  * ACCESSIBILITY. The cards are toggle buttons in a named group, not a
  * radiogroup: a radiogroup promises roving focus, where Tab reaches the group
@@ -68,7 +70,7 @@ export default function TypeCards({
   advisory: string[];
   /** Whether THIS member may open one. */
   mayOpenAdvisory: boolean;
-  /** Whether THIS member may open a binding vote, which every `opensVote` type's route asks. */
+  /** Whether THIS member may open a binding vote, which every `opensVote` route asks unless `opensVoteForMembers`. */
   mayOpenBallot: boolean;
   onChoose: (id: WizardType) => void;
   onPractice: (id: WizardType) => void;
@@ -87,7 +89,7 @@ export default function TypeCards({
                 // A type whose route opens the vote itself asks the opener
                 // for proposal.open; without it the card is carried by
                 // somebody else, and says so.
-                const carried = conductable.includes(t.id) && !!t.opensVote && !mayOpenBallot;
+                const carried = conductable.includes(t.id) && !!t.opensVote && !t.opensVoteForMembers && !mayOpenBallot;
                 const available = conductable.includes(t.id) && !carried;
                 // A kind this member can put to the whole village as a
                 // practice vote. Both halves come from the server: the list

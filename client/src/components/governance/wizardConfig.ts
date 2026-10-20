@@ -203,6 +203,12 @@ export interface WizardTypeConfig {
    */
   opensVote?: boolean;
   /**
+   * For an `opensVote` type whose route asks less than `proposal.open` of the
+   * member publishing it, so its card stays live without `mayOpenBallot`
+   * (TypeCards). `role_application` asks `terms.read`, the member rung.
+   */
+  opensVoteForMembers?: boolean;
+  /**
    * The publish records the proposer's alignment with words (seat settings
    * PR5): the Review step shows them (AlignmentReview) and the button reads
    * `publishLabel`. The publish body gains `alignedWords`.

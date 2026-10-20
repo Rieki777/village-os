@@ -97,7 +97,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const [conductable, setConductable] = useState<string[]>([]);
   const [advisory, setAdvisory] = useState<string[]>([]);
   const [mayOpenAdvisory, setMayOpenAdvisory] = useState(false);
-  /** Whether this member may open a binding vote: every `opensVote` type's route asks it. */
+  /** Whether this member may open a binding vote: every `opensVote` route asks it unless `opensVoteForMembers`. */
   const [mayOpenBallot, setMayOpenBallot] = useState(false);
   /** The kind being put to a practice vote, when one is being written. */
   const [practiceType, setPracticeType] = useState<WizardType | null>(null);

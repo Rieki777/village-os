@@ -63,6 +63,9 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   consequence:
     "Publishing puts your application and its terms in front of whoever adopts seats: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the seats and never you or the money.",
   opensVote: true,
+  // Its route asks terms.read, the member rung, never proposal.open, so the
+  // card stays live for a member who may not open the other votes (TypeCards).
+  opensVoteForMembers: true,
   // The candidate aligns as they propose, with the words Review shows: they never click twice.
   aligns: true,
   publishLabel: ALIGN_WORDS.proposeAndAlign,
