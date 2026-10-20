@@ -314,8 +314,8 @@ describe.skipIf(!configured)("the structure change review", () => {
       WHOLE,
     );
     const archivedCircle = await land("circle.proposed", { "Circle Name": "Old Orchard", Status: "Archived" }, "rec-old-orchard", WHOLE);
-    await pool.query("UPDATE external_proposals SET received_at = '2026-10-09 17:24:00' WHERE id = ?", [structure]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
-    await pool.query("UPDATE external_proposals SET received_at = '2026-10-20 16:02:00' WHERE id = ?", [archivedCircle]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
+    await pool.query("UPDATE external_proposals SET received_at = '2026-10-20 16:02:00' WHERE id = ?", [structure]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
+    await pool.query("UPDATE external_proposals SET received_at = '2026-10-09 17:24:00' WHERE id = ?", [archivedCircle]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
 
     const accepted = await call("POST", `/api/review/batches/${WHOLE}/structure/accept`, {});
     expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
@@ -337,12 +337,13 @@ describe.skipIf(!configured)("the structure change review", () => {
     expect(r.json.plan.archived.map((a: any) => a.name)).toEqual(["Old Orchard"]);
     // The publish route asks isAdmin, and so does this answer.
     expect(r.json.mayPublish).toBe(false);
-    // The newest record dates the batch, never the first one.
+    // The newest record dates the batch: the structure re-read on the 20th, never the
+    // archived circle still waiting since the 9th, which is the first row the read holds.
     // Read through the same layer, so the database host's time zone cancels out.
     const rows = await proposalsInBatch(pool, WHOLE);
     const at = (id: string) => rows.find((x) => x.id === id)!.receivedAt;
-    expect(Date.parse(at(archivedCircle))).toBeGreaterThan(Date.parse(at(structure)));
-    expect(r.json.receivedAt).toBe(at(archivedCircle));
+    expect(Date.parse(at(structure))).toBeGreaterThan(Date.parse(at(archivedCircle)));
+    expect(r.json.receivedAt).toBe(at(structure));
 
     // With nothing at all left waiting, it still answers with the draft.
     await pool.query("UPDATE external_proposals SET status = 'rejected' WHERE id = ?", [archivedCircle]); // module-review-ok: deciding the leftover on the scratch schema this suite provisioned
