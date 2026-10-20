@@ -36,6 +36,7 @@ const role = (id: string, over: Partial<R> = {}): R => ({
   authority: null, firstYearOutcomes: null, first90DayOutcomes: null,
   locationExpectations: null, compensationReality: null, evidenceRequired: null,
   representsCircle: false, howChosen: null, howChosenGloss: null,
+  termsOffer: null, termsOfferAt: null, termsOfferBy: null,
   ...over,
 });
 

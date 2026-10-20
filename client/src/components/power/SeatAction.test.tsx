@@ -193,3 +193,33 @@ describe("outside a card", () => {
     expect(container.innerHTML).toBe("");
   });
 });
+
+/*
+ * ONE DOOR FOR A MEMBER WHO READS TERMS (seat settings PR4). The host passes
+ * `applyHref` only when the seat came with a `termsOffer` key, which the
+ * server sends only to a reader holding terms.read. That reader's raised hand
+ * opens "Apply for a seat" with this seat picked; nothing is posted to the
+ * inbox. Everybody else keeps the inbox hand, above.
+ */
+describe("a member who reads terms", () => {
+  it("is sent to the application wizard with the seat picked, and posts nothing", async () => {
+    const { applyHrefFor } = await import("./SeatTermsSlot");
+    const href = applyHrefFor({ ...OPEN, termsOffer: null });
+    expect(href).toBe("/propose?type=role_application&seat=seat-water");
+    render(<SeatTradingCard input={fromMapSeat(OPEN, DATA, { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" applyHref={href} />} />);
+    const door = screen.getByRole("link", { name: "Raise your hand for Water Keeper" });
+    expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water");
+    expect(screen.getByText("Opens your application for this seat and its terms. A seat holder or the village adopts it.")).toBeTruthy();
+    fireEvent.click(door);
+    expect(posted).toHaveLength(0);
+  });
+
+  it("CONTROL: a reader served no termsOffer key keeps the inbox hand", async () => {
+    const { applyHrefFor } = await import("./SeatTermsSlot");
+    expect(applyHrefFor(OPEN)).toBeNull();
+    expect(applyHrefFor({ ...OPEN, termsOffer: null, isExample: true })).toBeNull();
+    render(cardFor(OPEN));
+    expect(screen.getByRole("button", { name: "Raise your hand for Water Keeper" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Raise your hand for Water Keeper" })).toBeNull();
+  });
+});
