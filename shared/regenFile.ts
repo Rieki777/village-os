@@ -7,8 +7,7 @@
  * whole Village OS 1.0 file ("regen-civics/village@1", built from the
  * project's profile, with the card riding inside as `card`). Both are written
  * in Village OS's own words: the needs list is the exact body of the scope
- * write, `decidesBy` is a `DECIDES_BY` id, `seats.nextHolder` a `HOW_CHOSEN`
- * id. The contract lives on that side, in shared/villageOsCard.ts and
+ * write and `decidesBy` is a `DECIDES_BY` id. The contract lives on that side, in shared/villageOsCard.ts and
  * shared/villageFile.ts of the ReGen Civics repository.
  *
  * ── TWO SHAPES, AND EVERYTHING ELSE IS REFUSED ───────────────────────────
@@ -29,12 +28,13 @@
  * The 1.0 file sends null for every decision its stewards have not made. This
  * file keeps those nulls, and nothing downstream turns one into a value.
  *
- * NOTHING HERE IS MONEY. The 1.0 file may carry an issuance cap the project
- * typed; it is read so the founder can see it, and no part of the import
- * writes it (shared/regenImport.ts).
+ * NOTHING HERE IS MONEY. The 1.0 file may carry the stewards' answer to the
+ * issuance cap; it is read so the founders see it beside the launch
+ * decision it answers, and no part of the import writes it
+ * (shared/regenImport.ts).
  */
 import { isNeedDepth, needKeyProblem, NEED_WEIGHTS, type NeedDepth, type NeedWeight } from "./needs";
-import { DECIDES_BY, GLOSS_MAX, HOW_CHOSEN } from "./power";
+import { DECIDES_BY, GLOSS_MAX } from "./power";
 
 export const REGEN_CARD_SCHEMA = "regen-civics/village-card@1";
 export const REGEN_FILE_SCHEMA = "regen-civics/village@1";
@@ -61,6 +61,9 @@ export type RegenCircleKey = keyof typeof REGEN_CIRCLES;
 
 export const HELD_BY = ["team", "open", "being"] as const;
 export type HeldBy = (typeof HELD_BY)[number];
+
+/** The issuance cap answer that keeps Village OS's own number, as the founders' recorded choice. It uncaps nothing. */
+export const CAP_DECLINED = "declined";
 
 /** How a decision stands in the 1.0 file. "yours" is the stewards' own answer. */
 export const DECISION_STATUSES = ["yours", "suggested", "default", "open"] as const;
@@ -120,6 +123,20 @@ export interface ProfileCard {
   shape: { shape: string | null; line: string | null };
 }
 
+/**
+ * The 1.0 file's own sections, in the order the file puts them (ReGen Civics
+ * shared/villageFile.ts, its top-level keys pinned by a test there).
+ *
+ *   identity  settings: the Identity boxes take the name, tagline, location,
+ *             what a member is called and the currency; timezone and
+ *             hemisphere are set under Season
+ *   modules   the optional modules the stewards switch on
+ *   economy   the stewards' answer to the issuance cap: a number, or
+ *             "declined" (keep Village OS's own, as the founders' choice)
+ *   purpose, membership, quests, legal
+ *             words for Village OS's own editors, for the founders to save
+ *   notes     the stewards' words for what the founders set by hand
+ */
 export interface ProfileVillage {
   identity: {
     name: string | null;
@@ -127,20 +144,16 @@ export interface ProfileVillage {
     location: string | null;
     memberWord: string | null;
     timezone: string | null;
-    hemisphere: string | null;
+    hemisphere: "north" | "south" | null;
     currency: string | null;
   };
-  purpose: { statement: string | null };
-  membership: { covenant: string | null; entry: string | null; rite: string | null; greeterSeat: string | null; joining: string | null };
-  seats: { nextHolder: string | null };
-  decide: { voting: string | null; founders: string | null; stewards: string | null };
-  quests: { contribution: string | null; tokenName: string | null };
-  seasons: string | null;
   modules: { on: string[] | null };
-  economy: { issuanceCap: number | "none" | null; poolToken: string | null };
-  legal: { exitPolicy: string | null; structure: string | null; land: string | null; care: string | null };
-  network: { tools: string[] };
-  launch: { address: string | null };
+  economy: { issuanceCap: number | typeof CAP_DECLINED | null };
+  purpose: { statement: string | null };
+  membership: { covenant: string | null };
+  quests: { tokenName: string | null };
+  legal: { exitPolicy: string | null };
+  notes: { key: string; title: string; text: string }[];
   status: Record<string, { status: DecisionStatus; from: string | null }>;
 }
 
@@ -159,7 +172,6 @@ export interface RegenProfile {
 export type ReadResult = { ok: true; profile: RegenProfile } | { ok: false; error: string };
 
 const DECIDES_BY_IDS = new Set<string>(DECIDES_BY.map((d) => d.id));
-const HOW_CHOSEN_IDS = new Set<string>(HOW_CHOSEN.map((h) => h.id));
 const WEIGHTS = new Set<string>(NEED_WEIGHTS);
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -452,28 +464,44 @@ function readCard(raw: Record<string, unknown>, leftOut: string[]): ProfileCard 
   };
 }
 
+/** A timezone this runtime can format in, which is what Village OS's season settings refuse without. */
+function timezoneOf(v: unknown): string | null {
+  const tz = text(v, 64);
+  if (!tz) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
+
 function readVillage(raw: Record<string, unknown>, leftOut: string[]): ProfileVillage {
   const identity = obj(raw.identity);
-  const membership = obj(raw.membership);
-  const decide = obj(raw.decide);
-  const quests = obj(raw.quests);
-  const economy = obj(raw.economy);
-  const legal = obj(raw.legal);
-  let nextHolder = text(obj(raw.seats).nextHolder, 40);
-  if (nextHolder && !HOW_CHOSEN_IDS.has(nextHolder)) {
-    leftOut.push(`How the next holder of a seat is chosen was left out: "${nextHolder}" is not a way Village OS knows.`);
-    nextHolder = null;
-  }
-  const capRaw = economy.issuanceCap;
+  const hemisphere = identity.hemisphere === "north" || identity.hemisphere === "south" ? identity.hemisphere : null;
+  const timezone = timezoneOf(identity.timezone);
+  if (text(identity.timezone, 64) && !timezone) leftOut.push(`The timezone "${text(identity.timezone, 64)}" was left out: it is not one this browser knows.`);
+  const currency = text(identity.currency, 8)?.toUpperCase() ?? null;
+  if (currency && !/^[A-Z]{3}$/.test(currency)) leftOut.push(`The currency "${currency}" was left out: a currency is three letters, like USD or CRC.`);
+  const capRaw = obj(raw.economy).issuanceCap;
+  const cap = capRaw === CAP_DECLINED ? CAP_DECLINED : wholeNumber(capRaw, 1, 10_000_000);
+  if (capRaw !== undefined && capRaw !== null && cap === null) leftOut.push("The issuance cap was left out: it is a whole number of tokens from 1 to 10,000,000, or declined.");
   const status: ProfileVillage["status"] = {};
   for (const [key, v] of Object.entries(obj(raw.status))) {
     const k = text(key, 80);
     if (!k) continue;
     const said = String(obj(v).status ?? "");
     // "confirmed" is the word the importer was briefed with; the 1.0 file says "yours".
-    const s = said === "confirmed" ? "yours" : said;
-    if (!(DECISION_STATUSES as readonly string[]).includes(s)) continue;
-    status[k] = { status: s as DecisionStatus, from: text(obj(v).from, 120) };
+    const st = said === "confirmed" ? "yours" : said;
+    if (!(DECISION_STATUSES as readonly string[]).includes(st)) continue;
+    status[k] = { status: st as DecisionStatus, from: text(obj(v).from, 120) };
+  }
+  const notes: ProfileVillage["notes"] = [];
+  for (const [key, v] of Object.entries(obj(raw.notes))) {
+    const k = text(key, 80);
+    const words = text(obj(v).text, 4000);
+    if (!k || !words) continue;
+    notes.push({ key: k, title: text(obj(v).title, 200) ?? k, text: words });
   }
   const on = Array.isArray(obj(raw.modules).on) ? texts(obj(raw.modules).on, 40) : null;
   return {
@@ -482,35 +510,17 @@ function readVillage(raw: Record<string, unknown>, leftOut: string[]): ProfileVi
       tagline: text(identity.tagline, 160),
       location: text(identity.location, 200),
       memberWord: text(identity.memberWord, 40),
-      timezone: text(identity.timezone, 64),
-      hemisphere: text(identity.hemisphere, 20),
-      currency: text(identity.currency, 8)?.toUpperCase() ?? null,
+      timezone,
+      hemisphere,
+      currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null,
     },
-    purpose: { statement: text(obj(raw.purpose).statement, 20000) },
-    membership: {
-      covenant: text(membership.covenant, 4000),
-      entry: text(membership.entry, 1000),
-      rite: text(membership.rite, 1000),
-      greeterSeat: text(membership.greeterSeat, 120),
-      joining: text(membership.joining, 300),
-    },
-    seats: { nextHolder },
-    decide: { voting: text(decide.voting, 300), founders: text(decide.founders, 1000), stewards: text(decide.stewards, 1000) },
-    quests: { contribution: text(quests.contribution, 2000), tokenName: text(quests.tokenName, 40) },
-    seasons: text(raw.seasons, 1000),
     modules: { on },
-    economy: {
-      issuanceCap: capRaw === "none" ? "none" : wholeNumber(capRaw, 0, 1_000_000_000),
-      poolToken: text(economy.poolToken, 40),
-    },
-    legal: {
-      exitPolicy: text(legal.exitPolicy, 4000),
-      structure: text(legal.structure, 300),
-      land: text(legal.land, 300),
-      care: text(legal.care, 2000),
-    },
-    network: { tools: texts(obj(raw.network).tools, 120) },
-    launch: { address: text(obj(raw.launch).address, 63) },
+    economy: { issuanceCap: cap },
+    purpose: { statement: text(obj(raw.purpose).statement, 20000) },
+    membership: { covenant: text(obj(raw.membership).covenant, 4000) },
+    quests: { tokenName: text(obj(raw.quests).tokenName, 40) },
+    legal: { exitPolicy: text(obj(raw.legal).exitPolicy, 4000) },
+    notes,
     status,
   };
 }

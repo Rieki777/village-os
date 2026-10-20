@@ -5,7 +5,7 @@
  * what came back. The order is the one that header gives: the needs first,
  * because a seat can only be tagged with a need the village has taken on;
  * the org draft next, which writes nothing live until it is published; and
- * after the publish, the four kinds of call that need the seats and circles
+ * after the publish, the three kinds of call that need the seats and circles
  * to exist.
  *
  * A REFUSAL IS PRINTED AS RECEIVED. Every route here refuses in a whole
@@ -28,7 +28,7 @@ import {
 import { decidesByLabel, needName } from "@shared/regenImport";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 
-export type StepKind = "needs" | "whole" | "draft" | "publish" | "decides" | "links" | "howChosen" | "forming" | "revert" | "withdraw";
+export type StepKind = "needs" | "whole" | "draft" | "publish" | "decides" | "links" | "forming" | "revert" | "withdraw";
 
 export interface StepResult {
   kind: StepKind;
@@ -215,10 +215,6 @@ async function finish(password: string, plan: ImportPlan, choices: ImportChoices
     const r = await send(password, "/admin/needs/links", "POST", body);
     const need = needName(l.needKey, plan.needs.concat(plan.ownNeeds).find((n) => n.needKey === l.needKey)?.label);
     steps.push({ kind: "links", label: `${seatName} meets ${need}`, ok: r.ok, message: r.ok ? "Tagged." : refusal(r.json, "Not tagged.") });
-  }
-  for (const h of after.howChosen) {
-    const r = await send(password, `/admin/org/roles/${encodeURIComponent(h.seatId)}`, "PUT", { howChosen: h.howChosen });
-    steps.push({ kind: "howChosen", label: `${h.seatName}: how its next holder is chosen`, ok: r.ok && r.json?.success !== false, message: r.ok ? "Set." : refusal(r.json, "Not set.") });
   }
   for (const f of after.forming) {
     const r = await send(password, `/admin/circles/${encodeURIComponent(f.circleId)}`, "PUT", { status: "forming" });

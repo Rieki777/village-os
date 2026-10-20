@@ -386,12 +386,6 @@ function Preview({
         </Part>
       ) : null}
 
-      {plan.howChosen && plan.seats.some((s) => !s.existing && !s.leftOut) ? (
-        <Part id="rc-next" title="How the next holder of a seat is chosen" status={statusOf(p, "seats.nextHolder")} checked={choices.howChosen} onToggle={(on) => set({ howChosen: on })}>
-          <p>{plan.howChosen.label}, on every new seat, once the draft is published.</p>
-        </Part>
-      ) : null}
-
     </div>
   );
 }
@@ -412,14 +406,17 @@ function Handover({
   onIdentity?: (p: IdentityPrefill) => void;
 }) {
   const [handed, setHanded] = useState<Record<string, boolean>>({});
+  // The checklist's ticks: for the founder while they work, saved nowhere.
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const p = plan.profile;
+  const prefill = plan.prefill;
   const hand = (key: string, fn: () => void) => {
     fn();
     setHanded((h) => ({ ...h, [key]: true }));
   };
   return (
     <div>
-      {plan.prefill.identity || plan.prefill.purpose || plan.prefill.covenant || plan.prefill.quests.length ? (
+      {prefill.identity || prefill.purpose || prefill.covenant || prefill.tokenName || prefill.exitPolicy || prefill.quests.length ? (
         <Part id="rc-prefill" title="Words to put in their own editors">
           <p className="mb-2">Each button puts the words in the editor that saves them. Nothing is saved until you press Save there.</p>
           <div className="space-y-3">
@@ -466,6 +463,42 @@ function Handover({
                 </button>
               </div>
             ) : null}
+            {prefill.tokenName ? (
+              <div>
+                <p className="font-medium text-gray-900">Your recognition token's name <StatusChip status={statusOf(p, "quests.tokenName")} /></p>
+                <p>{prefill.tokenName}</p>
+                <button
+                  type="button"
+                  className={`${QUIET} mt-1`}
+                  onClick={() =>
+                    hand("tokenName", () => {
+                      offerPrefill("tokenName", prefill.tokenName!);
+                      onOpenTab("tokens");
+                    })
+                  }
+                >
+                  Open Tokens with it
+                </button>
+              </div>
+            ) : null}
+            {prefill.exitPolicy ? (
+              <div>
+                <p className="font-medium text-gray-900">What happens when someone leaves <StatusChip status={statusOf(p, "legal.exitPolicy")} /></p>
+                <p className="whitespace-pre-line">{prefill.exitPolicy}</p>
+                <button
+                  type="button"
+                  className={`${QUIET} mt-1`}
+                  onClick={() =>
+                    hand("exitPolicy", () => {
+                      offerPrefill("exitPolicy", prefill.exitPolicy!);
+                      onOpenTab("exits-admin");
+                    })
+                  }
+                >
+                  Open the exit policy with it
+                </button>
+              </div>
+            ) : null}
             {plan.prefill.quests.length ? (
               <div>
                 <p className="font-medium text-gray-900">Your first quests</p>
@@ -500,21 +533,42 @@ function Handover({
       {plan.modules ? (
         <Part id="rc-modules" title="What your village runs" status={statusOf(p, "modules.on")}>
           {plan.modules.on.length ? (
-            <p>Your stewards chose: {plan.modules.on.join(", ")}. Turn each one on yourself under Modules, in the order its dependencies need.</p>
+            <p>
+              Your stewards chose {plan.modules.on.map((m) => m.name).join(", ")}. Turn each one on yourself under
+              Modules, in this order.
+            </p>
           ) : (
             <p>Your stewards have not chosen any modules yet.</p>
           )}
-          <p className="mt-1">Exchange, redemption and commerce stay off. This file never turns on a module that moves money.</p>
+          <Lines lines={plan.modules.order} />
+          {plan.modules.unknown.length ? <p className={HINT}>Not a module Village OS has: {plan.modules.unknown.join(", ")}.</p> : null}
+          <p className="mt-1">
+            {plan.modules.moneyLeftOff.join(", ")} stay off. This file never turns on a module that moves or raises money.
+          </p>
         </Part>
       ) : null}
 
       {plan.notes.length ? (
-        <Part id="rc-notes" title="Kept for you to read, and set nowhere by this screen">
-          <ul className="space-y-1">
+        <Part id="rc-notes" title="For you to set by hand">
+          <p className="mb-2">
+            Your stewards' words for what Village OS asks you to set yourself. This screen sets none of them. Tick each
+            as you go; the ticks are for you and are saved nowhere.
+          </p>
+          <ul className="space-y-2">
             {plan.notes.map((n) => (
-              <li key={n.label}>
-                <span className="font-medium text-gray-900">{n.label}:</span> <span className="whitespace-pre-line">{n.text}</span>{" "}
-                <span className={HINT}>({n.where})</span>
+              <li key={n.key}>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-teal-deep"
+                    checked={!!ticked[n.key]}
+                    onChange={(e) => setTicked((t) => ({ ...t, [n.key]: e.target.checked }))}
+                  />
+                  <span>
+                    <span className="font-medium text-gray-900">{n.label}</span> <span className={HINT}>({n.where})</span>
+                    <span className="block whitespace-pre-line">{n.text}</span>
+                  </span>
+                </label>
               </li>
             ))}
           </ul>

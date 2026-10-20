@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { offerPrefill, takePrefill } from "@/lib/profilePrefill";
 import PurposeStatementPanel from "./PurposeStatementPanel";
 import ContentEditorTab from "./ContentEditorTab";
+import TokensTab from "./TokensTab";
 
 let writes: { url: string; body: unknown }[] = [];
 
@@ -24,6 +25,11 @@ beforeEach(() => {
       return { ok: true, status: 200, json: async () => ({ success: true }) };
     }
     if (url === "/api/admin/purpose") return { ok: true, status: 200, json: async () => ({ statement: "The words we saved.", founderHoldsPen: true }) };
+    if (url === "/api/admin/tokens") {
+      return { ok: true, status: 200, json: async () => ({ tokens: [{ slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform", isExample: false, decimals: 0, transferable: false, issued: 0 }], mintCapPerCycle: 10000 }) };
+    }
+    if (url === "/api/admin/players") return { ok: true, status: 200, json: async () => [] };
+    if (url === "/api/admin/mint-requests") return { ok: true, status: 200, json: async () => ({ requests: [], cosignOver: 0 }) };
     if (url === "/api/content/covenant") return { ok: true, status: 200, json: async () => ({ opening: "Old opening", governance: "How we decide" }) };
     return { ok: false, status: 404, json: async () => ({ error: "Section not found" }) };
   }));
@@ -32,6 +38,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   takePrefill("purpose");
   takePrefill("covenant");
+  takePrefill("tokenName");
 });
 
 describe("the hand-off", () => {
@@ -75,5 +82,15 @@ describe("the covenant editor", () => {
     await waitFor(() => expect(box()?.value ?? "").not.toBe(""));
     expect(box().value).not.toContain("Not for this one.");
     expect(takePrefill("covenant")).toBe("Not for this one.");
+  });
+});
+
+describe("the Tokens tab", () => {
+  it("opens the recognition token's rename box with the name, and saves nothing", async () => {
+    offerPrefill("tokenName", "Seeds");
+    render(<TokensTab password="pw" lifecycles={null} />);
+    expect(await screen.findByDisplayValue("Seeds")).toBeTruthy();
+    expect(screen.getByText(/The rename box on your recognition token now holds "Seeds"/)).toBeTruthy();
+    expect(writes).toEqual([]);
   });
 });

@@ -249,6 +249,13 @@ describe("a second seat of the same name", () => {
 
 describe("the 1.0 file's own sections", () => {
   const plan = planImport(profileOf("regen-village-riverbend.json"), FRESH, { tag: "t1" });
+  const reread = (edit: (raw: any) => void) => {
+    const raw = JSON.parse(fixture("regen-village-riverbend.json"));
+    edit(raw);
+    const r = readRegenFile(raw);
+    if (!r.ok) throw new Error(r.error);
+    return planImport(r.profile, FRESH, { tag: "t1" });
+  };
 
   it("prefills identity with what the stewards answered, and only that", () => {
     expect(plan.prefill.identity).toEqual({
@@ -260,45 +267,92 @@ describe("the 1.0 file's own sections", () => {
     });
   });
 
-  it("offers the first line as the start of a purpose statement when the file has none", () => {
-    expect(plan.prefill.purpose).toEqual({ text: "All this is for future generations", fromFirstLine: true });
+  it("puts nothing in the purpose box when the stewards wrote no statement", () => {
+    expect(plan.prefill.purpose).toBeNull();
+    expect(reread((raw) => (raw.purpose.statement = "This village exists for...")).prefill.purpose).toEqual({ text: "This village exists for...", fromFirstLine: false });
   });
 
-  it("prefills the covenant and each quest, and saves none of them", () => {
+  it("hands each editor field to its own editor, and saves none of them", () => {
     expect(plan.prefill.covenant).toBe("We tend the land, we keep our word, and we say what is true.");
+    expect(plan.prefill.tokenName).toBe("Seeds");
+    expect(plan.prefill.exitPolicy).toBe("Whoever leaves takes what they brought, and the village thanks them for what they built.");
     expect(plan.prefill.quests).toEqual([
       { quest: "Clear the spring", needLabel: "Vitality & Survival Needs" },
       { quest: "Cook for the work day", needLabel: "Love" },
     ]);
   });
 
-  it("sets how the next holder is chosen on each new seat, after publish", () => {
+  it("lists the stewards' notes as the founders' checklist, each with where it is set", () => {
+    const keys = plan.notes.map((n) => n.key);
+    expect(keys.slice(0, 8)).toEqual([
+      "seats.nextHolder",
+      "decide.founders",
+      "membership.entry",
+      "membership.greeter",
+      "economy.poolToken",
+      "legal.structure",
+      "network.tools",
+      "launch.address",
+    ]);
+    // The card's first step in is the same decision, so it is not listed twice.
+    expect(keys.filter((k) => k === "membership.entry")).toHaveLength(1);
+    expect(plan.notes.find((n) => n.key === "seats.nextHolder")).toEqual({
+      key: "seats.nextHolder",
+      label: "How the next holder of most seats is chosen",
+      text: "The circle chooses",
+      where: "Org Chart, on each seat",
+    });
+    expect(plan.notes.find((n) => n.key === "identity.timezone")?.text).toBe("America/Costa_Rica");
+    expect(plan.notes.find((n) => n.key === "identity.hemisphere")?.text).toBe("Northern hemisphere");
+  });
+
+  it("never sets how the next holder is chosen on any seat", () => {
     const after = afterPublishFor(plan, defaultChoices(plan), []);
-    expect(after.howChosen).toHaveLength(5);
-    expect(new Set(after.howChosen.map((h) => h.howChosen))).toEqual(new Set(["elected_by_circle"]));
+    expect(Object.keys(after).sort()).toEqual(["decides", "forming", "links"]);
+    for (const c of draftChangesFor(plan, defaultChoices(plan))) expect(c.payload).not.toHaveProperty("howChosen");
   });
 
-  it("names the modules to turn on, and says the money modules stay off", () => {
-    expect(plan.modules).toEqual({ on: ["map", "governance", "events"], moneyLeftOff: ["exchange", "redemption", "commerce"] });
+  it("names the modules by Village OS's registry, each after what it needs, and says the money modules stay off", () => {
+    expect(plan.modules?.on.map((m) => m.id)).toEqual(["forum", "feed", "events", "map"]);
+    expect(plan.modules?.order).toEqual([]);
+    expect(plan.modules?.moneyLeftOff).toHaveLength(5);
+    const alone = reread((raw) => (raw.modules.on = ["feed"]));
+    expect(alone.modules?.on.map((m) => m.id)).toEqual(["feed"]);
+    expect(alone.modules?.order[0]).toMatch(/needs .* on first.$/);
   });
 
-  it("drops a money module the file names, whatever the file says", () => {
-    const raw = JSON.parse(fixture("regen-village-riverbend.json"));
-    raw.modules.on = ["map", "exchange", "commerce"];
-    const r = readRegenFile(raw);
-    if (!r.ok) throw new Error(r.error);
-    expect(planImport(r.profile, FRESH, { tag: "t1" }).modules?.on).toEqual(["map"]);
+  it("drops a money module, a core module and a name Village OS does not have, whatever the file says", () => {
+    const m = reread((raw) => (raw.modules.on = ["map", "exchange", "stays", "crowdpool", "quests", "teleporter"])).modules;
+    expect(m?.on.map((x) => x.id)).toEqual(["map"]);
+    expect(m?.unknown).toEqual(["teleporter"]);
   });
 
-  it("shows the issuance cap as a note and sends it nowhere", () => {
-    const cap = plan.notes.find((n) => n.label === "Your issuance cap");
-    expect(cap?.text).toBe("At most 5000 new tokens each lunar cycle.");
+  it("shows the stewards' issuance cap beside the launch decision, and sends it nowhere", () => {
+    const cap = plan.notes.find((n) => n.key === "economy.issuanceCap");
+    expect(cap?.text).toBe("Your stewards chose at most 5000 new tokens each lunar cycle.");
+    expect(cap?.where).toContain("The Launch Plan");
     const everything = JSON.stringify([
       scopeBodyFor(plan, defaultChoices(plan)),
       draftChangesFor(plan, defaultChoices(plan)),
       afterPublishFor(plan, defaultChoices(plan), []),
     ]);
     expect(everything).not.toContain("5000");
+    const declined = reread((raw) => (raw.economy.issuanceCap = "declined")).notes.find((n) => n.key === "economy.issuanceCap");
+    expect(declined?.text).toContain("keep Village OS's own 10,000");
+    expect(declined?.text).toContain("it uncaps nothing");
+  });
+});
+
+describe("a Week 4 card's own words", () => {
+  const plan = planImport(profileOf("regen-card-riverbend.json"), FRESH, { tag: "t1" });
+
+  it("offers its first line as the start of a purpose statement", () => {
+    expect(plan.prefill.purpose).toEqual({ text: "All this is for future generations", fromFirstLine: true });
+  });
+
+  it("keeps what the village decides together as a note", () => {
+    expect(plan.notes.find((n) => n.key === "decide.together")?.text).toBe("Decided together: Who joins. First agreement: Circles decide what's theirs");
+    expect(plan.modules).toBeNull();
   });
 });
 

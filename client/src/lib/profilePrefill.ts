@@ -21,6 +21,10 @@ export interface Prefills {
   covenant: string;
   /** The Quests tab's "Post a quest" form. */
   quest: { title: string; needLabel: string | null };
+  /** The Tokens tab's rename box, on the recognition token. */
+  tokenName: string;
+  /** The exit policy's leaving words, "How contributed value is honored". */
+  exitPolicy: string;
 }
 
 type Key = keyof Prefills;

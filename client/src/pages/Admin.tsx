@@ -78,7 +78,7 @@ import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
 import ProfileImportDoor from "@/components/admin/ProfileImportDoor";
-import { usePrefill } from "@/lib/profilePrefill";
+import { takePrefill, usePrefill } from "@/lib/profilePrefill";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
@@ -6610,6 +6610,8 @@ function ExitsAdminTab({ password }: { password: string }) {
   const [selectedUser, setSelectedUser] = useState("");
   const [state, setState] = useState<any>(null);
   const [policyDraft, setPolicyDraft] = useState<any>(null);
+  // What happens when someone leaves, from a ReGen Civics file (ProfileImport.tsx): in the leaving words below, unpublished.
+  const [exitFromProfile, setExitFromProfile] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   // The platform's own words, sent down with the policy. Held rather than
   // copied into the bundle so the editor's "still the platform's" marker and
@@ -6634,7 +6636,9 @@ function ExitsAdminTab({ password }: { password: string }) {
       ]);
       const e = await eRes.json();
       setData(e);
-      setPolicyDraft(e.policy);
+      const handedExit = takePrefill("exitPolicy");
+      setPolicyDraft(handedExit && e.policy ? { ...e.policy, voluntary: { ...e.policy.voluntary, valuationMethod: handedExit } } : e.policy);
+      if (handedExit && e.policy) setExitFromProfile(true);
       setPolicyDefaults(e.defaults ?? null);
       setCircles(Array.isArray(e.circles) ? e.circles : []);
       const p = await pRes.json();
@@ -6801,6 +6805,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         return (
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
+          {exitFromProfile && <p className="mb-3 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">"How contributed value is honored" now holds your stewards' words for what happens when someone leaves, from your ReGen Civics profile. Move any part to the box it belongs in. Nothing is published until you press Publish.</p>}
           <p className="text-xs text-gray-500 mb-4">
             Every field here is printed at /exit-policy for anyone to read,
             signed in or not. This is the highest-stakes copy on the site: it
@@ -6933,7 +6938,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             )}
           </div>
 
-          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); load(); } }}
+          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
             className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep">Publish policy</button>
         </div>
         );

@@ -38,8 +38,27 @@ describe("which files it reads", () => {
     expect(p.schema).toBe(REGEN_FILE_SCHEMA);
     expect(p.from.applicationId).toBe(1231543);
     expect(p.card.seats.map((s) => s.name)).toEqual(["Water keeper", "River voice", "Cook", "Heart keeper", "Ceremony holder"]);
-    expect(p.village?.identity.name).toBe("Riverbend Farm");
-    expect(p.village?.seats.nextHolder).toBe("elected_by_circle");
+    expect(p.village?.identity).toEqual({
+      name: "Riverbend Farm",
+      tagline: "A farm that feeds the valley",
+      location: "Valle de la Luna, Costa Rica",
+      memberWord: "Neighbour",
+      timezone: "America/Costa_Rica",
+      hemisphere: "north",
+      currency: "CRC",
+    });
+    expect(p.village?.economy.issuanceCap).toBe(5000);
+    expect(p.village?.quests.tokenName).toBe("Seeds");
+    expect(p.village?.notes.map((n) => n.key)).toEqual([
+      "seats.nextHolder",
+      "decide.founders",
+      "membership.entry",
+      "membership.greeter",
+      "economy.poolToken",
+      "legal.structure",
+      "network.tools",
+      "launch.address",
+    ]);
     expect(p.village?.status["needs.scope"]).toEqual({ status: "yours", from: "Your stewards" });
     expect(p.leftOut).toEqual([]);
   });
@@ -109,12 +128,25 @@ describe("what one bad entry becomes", () => {
     expect(p.leftOut.join(" ")).toContain('"coin_toss" is not a way of deciding Village OS knows');
   });
 
-  it("an unknown way of choosing the next holder is left out, never guessed", () => {
+  it("a timezone nobody can place, a currency that is not three letters and a cap out of range are left out", () => {
     const raw = JSON.parse(fixture("regen-village-riverbend.json"));
-    raw.seats.nextHolder = "lottery";
+    raw.identity.timezone = "Atlantis/Lost_City";
+    raw.identity.currency = "COLONES";
+    raw.identity.hemisphere = "east";
+    raw.economy.issuanceCap = 99_000_000;
     const p = read(raw);
-    expect(p.village?.seats.nextHolder).toBeNull();
-    expect(p.leftOut.join(" ")).toContain('"lottery" is not a way Village OS knows');
+    expect(p.village?.identity).toMatchObject({ timezone: null, currency: null, hemisphere: null });
+    expect(p.village?.economy.issuanceCap).toBeNull();
+    const why = p.leftOut.join(" ");
+    expect(why).toContain('The timezone "Atlantis/Lost_City" was left out');
+    expect(why).toContain("a currency is three letters");
+    expect(why).toContain("from 1 to 10,000,000, or declined");
+  });
+
+  it("reads a declined cap as the founders' choice to keep Village OS's own, never as a number", () => {
+    const raw = JSON.parse(fixture("regen-village-riverbend.json"));
+    raw.economy.issuanceCap = "declined";
+    expect(read(raw).village?.economy.issuanceCap).toBe("declined");
   });
 
   it("'another way' with no line saying what the way is is left out", () => {
@@ -129,9 +161,15 @@ describe("what one bad entry becomes", () => {
   it("keeps a null as null, so Village OS's default stays", () => {
     const p = read(fixture("regen-village-riverbend.json"));
     expect(p.village?.purpose.statement).toBeNull();
-    expect(p.village?.seasons).toBeNull();
-    expect(p.village?.membership.rite).toBeNull();
-    expect(p.village?.economy.poolToken).toBeNull();
+    expect(p.card.firstLine).toBeNull();
+    expect(p.card.players).toEqual({ toStart: null, now: null });
+    const raw = JSON.parse(fixture("regen-village-riverbend.json"));
+    raw.economy.issuanceCap = null;
+    raw.modules.on = null;
+    const q = read(raw);
+    expect(q.village?.economy.issuanceCap).toBeNull();
+    expect(q.village?.modules.on).toBeNull();
+    expect(q.leftOut).toEqual([]);
   });
 
   it("reads 'confirmed' as the stewards' own answer, the word the brief used", () => {

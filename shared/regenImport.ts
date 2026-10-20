@@ -16,10 +16,12 @@
  *   the old circles founder reads line by line, then publishes or reverts
  *                   whole with the draft's own buttons
  *   after publish   PUT  /api/org/circles/:id/decides, POST /api/admin/needs/links,
- *                   PUT  /api/admin/org/roles/:id (how the next holder is chosen),
  *                   PUT  /api/admin/circles/:id (forming, when the founder picks it)
- *   prefilled       identity, the purpose statement, the covenant's opening and
- *                   each quest go into their own editors, unsaved
+ *   prefilled       identity, the purpose statement, the covenant's opening, the
+ *                   recognition token's name, the exit policy's leaving words
+ *                   and each quest go into their own editors, unsaved
+ *   a checklist     everything the stewards wrote for the founders to set by
+ *                   hand, and their answer to the issuance cap, never written
  *
  * Nothing in this file talks to the network. The screen does that, one route
  * per part, in the order above.
@@ -27,15 +29,20 @@
  * ── NO MONEY ─────────────────────────────────────────────────────────────
  *
  * No price, due, token amount or cap is ever in a body built here, and the
- * exchange, redemption and commerce modules are named only to say they stay
- * off. A cap the project typed is shown to the founder as a note.
+ * money modules are named only to say they stay off. The stewards' answer to
+ * the issuance cap is shown beside the launch decision it answers.
  */
 import { HUMAN_NEEDS_BY_ID, NEED_DEPTH_LABELS, type NeedWeight } from "./needs";
-import { DECIDES_BY, HOW_CHOSEN } from "./power";
-import type { DecisionStatus, ProfileCircle, ProfileSeat, RegenProfile } from "./regenFile";
+import { MODULES } from "./modules";
+import { DECIDES_BY } from "./power";
+import { CAP_DECLINED, type DecisionStatus, type ProfileCircle, type ProfileSeat, type RegenProfile } from "./regenFile";
 
-/** The modules a file never turns on (Rye, 2026-10-20). */
-export const MONEY_MODULES = ["exchange", "redemption", "commerce"] as const;
+/**
+ * The modules a file never turns on (Rye, 2026-10-20): the ones that move or
+ * raise money, which start off until a village's legal weeks are done. The
+ * same five ReGen Civics keeps as VILLAGE_OS_MONEY_MODULES.
+ */
+export const MONEY_MODULES = ["exchange", "redemption", "commerce", "stays", "crowdpool"] as const;
 
 /** The village as the import reads it, from `GET /api/needs/scope`, `GET /api/org` and `GET /api/season`. */
 export interface LiveVillage {
@@ -130,16 +137,20 @@ export interface ImportPlan {
   unseatedLinks: string[];
   /** Why the holders cannot ride the draft yet, or null when they can. */
   holdersWait: string | null;
-  howChosen: { id: string; label: string } | null;
   prefill: {
     identity: IdentityPrefill | null;
     purpose: { text: string; fromFirstLine: boolean } | null;
     covenant: string | null;
+    /** The recognition token's name, for the Tokens tab's rename box. */
+    tokenName: string | null;
+    /** What happens when someone leaves, for the exit policy's leaving words. */
+    exitPolicy: string | null;
     quests: { quest: string; needLabel: string | null }[];
   };
-  /** What the file says that this screen shows and never writes, each with where it is set. */
-  notes: { label: string; text: string; where: string }[];
-  modules: { on: string[]; moneyLeftOff: string[] } | null;
+  /** What the founders set by hand, in the stewards' words, each with where it is set. Shown as a checklist and never written. */
+  notes: { key: string; label: string; text: string; where: string }[];
+  /** The modules the stewards chose, in the order to turn them on, with the money modules named as staying off. */
+  modules: { on: { id: string; name: string }[]; order: string[]; unknown: string[]; moneyLeftOff: string[] } | null;
   leftOut: string[];
 }
 
@@ -157,7 +168,6 @@ export interface ImportChoices {
   decides: Record<string, { by: string; gloss: string | null } | null>;
   oldCircles: OldCirclesChoice;
   links: boolean;
-  howChosen: boolean;
 }
 
 export interface DraftChangeInput {
@@ -169,7 +179,6 @@ export interface DraftChangeInput {
 export interface AfterPublish {
   decides: { circleId: string; circleName: string; decidesBy: string; decidesByGloss: string | null }[];
   links: { needKey: string; subjectType: "role"; subjectRef: string; weight: NeedWeight; seatName: string }[];
-  howChosen: { seatId: string; seatName: string; howChosen: string }[];
   forming: { circleId: string; circleName: string }[];
 }
 
@@ -403,16 +412,14 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
     : "Naming who holds a seat waits for a running season with an end date, because every holding ends with its season. Set your seasons under Season, then load this file again for its holders.";
 
   // ── The 1.0 file's own sections ──────────────────────────────────────────
-  const nextHolder = village?.seats.nextHolder ?? null;
-  const howChosen = nextHolder ? { id: nextHolder, label: HOW_CHOSEN.find((h) => h.id === nextHolder)?.label ?? nextHolder } : null;
-
   const identity: IdentityPrefill = {};
   if (village?.identity.name) identity.name = village.identity.name;
   if (village?.identity.tagline) identity.tagline = village.identity.tagline;
   if (village?.identity.location) identity.location = village.identity.location;
   if (village?.identity.memberWord) identity.memberName = village.identity.memberWord;
-  if (village?.identity.currency && /^[A-Z]{3}$/.test(village.identity.currency)) identity.fiatCurrency = village.identity.currency;
+  if (village?.identity.currency) identity.fiatCurrency = village.identity.currency;
 
+  // A Week 4 card has a first line and no statement; the 1.0 file the other way round.
   const statement = village?.purpose.statement ?? null;
   const purpose = statement
     ? { text: statement, fromFirstLine: false }
@@ -421,48 +428,41 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
       : null;
 
   const notes: ImportPlan["notes"] = [];
-  const note = (label: string, text: string | null | undefined, where: string) => {
-    if (text && !notes.some((n) => n.label === label)) notes.push({ label, text, where });
+  const note = (key: string, label: string, text: string | null | undefined, where: string) => {
+    if (text && !notes.some((n) => n.key === key)) notes.push({ key, label, text, where });
   };
-  note("The first step someone takes to come in", village?.membership.entry ?? card.entry, "Your welcome and training pages");
-  if (card.decisions.together.length) note("What the whole village decides together", card.decisions.together.join(", "), "Governance");
-  note("How the village decides today", card.decisions.how, "Org Chart, how the village decides");
-  note("Your first agreement", card.decisions.agreement, "Governance");
+  // The stewards' own words for what the founders set by hand, first.
+  for (const n of village?.notes ?? []) note(n.key, n.title, n.text, NOTE_WHERE[n.key] ?? "Set by hand in Admin");
+  // Then the card's, where the 1.0 file says nothing of its own about them.
+  note("membership.entry", "The first step someone takes to come in", card.entry, NOTE_WHERE["membership.entry"]);
+  const together = [
+    card.decisions.together.length ? `Decided together: ${card.decisions.together.join(", ")}.` : null,
+    card.decisions.agreement ? `First agreement: ${card.decisions.agreement}` : null,
+  ].filter(Boolean).join(" ");
+  note("decide.together", "What the whole village decides together", together, NOTE_WHERE["decide.together"]);
+  note("card.how", "How the village decides today", card.decisions.how, "Org Chart, how the village decides");
   if (card.players.toStart || card.players.now) {
-    note("Players", [card.players.toStart && `To start: ${card.players.toStart}.`, card.players.now && `Now: ${card.players.now}.`].filter(Boolean).join(" "), "Your Game's notes");
+    note("card.players", "Players", [card.players.toStart && `To start: ${card.players.toStart}.`, card.players.now && `Now: ${card.players.now}.`].filter(Boolean).join(" "), "Your Game's notes");
   }
-  note("The shape of your Game", [card.shape.shape, card.shape.line].filter(Boolean).join(". "), "Your Game's notes");
-  note("The rite that brings someone deeper in", village?.membership.rite, "Training and quests");
-  note("How joining works", village?.membership.joining, "Membership settings");
-  note("The seat that greets newcomers", village?.membership.greeterSeat, "Arrival settings");
-  note("Voting", village?.decide.voting, "Governance settings");
-  note("Your founders", village?.decide.founders, "Members, who is a founder");
-  note("Your first season's stewards", village?.decide.stewards, "The steward slate");
-  note("What counts as contribution", village?.quests.contribution, "Gratitude and quests");
-  note("Your recognition token's name", village?.quests.tokenName, "Tokens");
-  note("Your seasons", village?.seasons, "Season");
-  note("Your timezone", village?.identity.timezone, "Season");
+  note("card.shape", "The shape of your Game", [card.shape.shape, card.shape.line].filter(Boolean).join(". "), "Your Game's notes");
+  // Two settings the Identity boxes do not hold.
+  note("identity.timezone", "Your timezone", village?.identity.timezone, "Season, the village's timezone");
   const hemisphere = village?.identity.hemisphere ?? null;
-  note("Your hemisphere", hemisphere === "north" ? "Northern hemisphere" : hemisphere === "south" ? "Southern hemisphere" : hemisphere, "Season");
+  note("identity.hemisphere", "Your hemisphere", hemisphere === "north" ? "Northern hemisphere" : hemisphere === "south" ? "Southern hemisphere" : null, "Season");
+  // A launch decision only the founders make, so the stewards' answer is shown beside it and set nowhere.
   const cap = village?.economy.issuanceCap ?? null;
   if (cap !== null) {
-    note("Your issuance cap", cap === "none" ? "No cap on new tokens each lunar cycle." : `At most ${cap} new tokens each lunar cycle.`, "Tokens. This screen writes no number");
+    note(
+      "economy.issuanceCap",
+      "Your issuance cap",
+      cap === CAP_DECLINED
+        ? "Your stewards chose to keep Village OS's own 10,000 new tokens each lunar cycle. Declining keeps that cap binding; it uncaps nothing."
+        : `Your stewards chose at most ${cap} new tokens each lunar cycle.`,
+      "The Launch Plan, Decide this village's issuance cap. This screen writes no number",
+    );
   }
-  note("The token your recognition pool pays out", village?.economy.poolToken, "Tokens");
-  note("What happens when someone leaves", village?.legal.exitPolicy, "Exits, the exit policy");
-  note("Your legal structure", village?.legal.structure, "The Launch Plan, legal");
-  note("Your access to the land", village?.legal.land, "The Launch Plan, land");
-  note("How tensions get raised and repaired", village?.legal.care, "The Launch Plan, care");
-  if (village?.network.tools.length) note("Tools you already use", village.network.tools.join(", "), "Your tools directory");
-  note("The web address you would like", village?.launch.address, "Go live");
 
-  const on = village?.modules.on ?? null;
-  const modules = village
-    ? {
-        on: (on ?? []).filter((m) => !(MONEY_MODULES as readonly string[]).includes(m)),
-        moneyLeftOff: [...MONEY_MODULES],
-      }
-    : null;
+  const modules = village ? modulesFor(village.modules.on ?? []) : null;
 
   return {
     profile,
@@ -474,16 +474,74 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
     oldCircles,
     unseatedLinks,
     holdersWait,
-    howChosen,
     prefill: {
       identity: Object.keys(identity).length ? identity : null,
       purpose,
       covenant: village?.membership.covenant ?? null,
+      tokenName: village?.quests.tokenName ?? null,
+      exitPolicy: village?.legal.exitPolicy ?? null,
       quests: card.quests.map((q) => ({ quest: q.quest, needLabel: q.need ? needName(q.need, card.needs.find((n) => n.needKey === q.need)?.label) : null })),
     },
     notes,
     modules,
     leftOut,
+  };
+}
+
+/**
+ * Where a founder sets each thing the stewards wrote a note about, keyed by
+ * the 1.0 file's decision key (ReGen Civics shared/villageDecisions.ts, the
+ * ones that land as a note). A key this does not know still shows, with a
+ * plain "set by hand".
+ */
+const NOTE_WHERE: Record<string, string> = {
+  "seats.nextHolder": "Org Chart, on each seat",
+  "decide.together": "Governance",
+  "decide.voting": "Game variables, governance",
+  "decide.founders": "Members, and the launch vote on the Launch Plan",
+  "decide.stewards": "The steward slate",
+  "membership.entry": "Training and the welcome pages",
+  "membership.rite": "Training and quests",
+  "membership.greeter": "Arrival settings",
+  "membership.joining": "Membership settings",
+  "quests.contribution": "Gratitude and quests",
+  "seasons.year": "Season",
+  "economy.poolToken": "Game variables, the gratitude pool",
+  "legal.structure": "The Launch Plan",
+  "legal.land": "The Launch Plan",
+  "legal.care": "The Launch Plan",
+  "network.tools": "Your tools directory",
+  "launch.address": "Go live",
+};
+
+/**
+ * The modules the stewards chose, by Village OS's own registry: named, each
+ * after what it requires, and never a money module. Village OS demotes a
+ * module turned on before its dependency straight back to off, so the order
+ * is part of the answer.
+ */
+function modulesFor(chosen: readonly string[]): NonNullable<ImportPlan["modules"]> {
+  const byId = new Map(MODULES.map((m) => [m.id, m]));
+  const money = new Set<string>(MONEY_MODULES);
+  const known = chosen.filter((id) => byId.has(id) && !money.has(id) && !byId.get(id)!.core);
+  const unknown = chosen.filter((id) => !byId.has(id));
+  const ordered: string[] = [];
+  const visit = (id: string, depth = 0) => {
+    if (ordered.includes(id) || depth > 10) return;
+    for (const dep of byId.get(id)?.requires ?? []) if (known.includes(dep)) visit(dep, depth + 1);
+    ordered.push(id);
+  };
+  for (const id of known) visit(id);
+  const order: string[] = [];
+  for (const id of ordered) {
+    const missing = (byId.get(id)?.requires ?? []).filter((dep) => !known.includes(dep));
+    for (const dep of missing) order.push(`${byId.get(id)!.name} needs ${byId.get(dep)?.name ?? dep} on first.`);
+  }
+  return {
+    on: ordered.map((id) => ({ id, name: byId.get(id)!.name })),
+    order,
+    unknown,
+    moneyLeftOff: MONEY_MODULES.map((id) => byId.get(id)?.name ?? id),
   };
 }
 
@@ -508,7 +566,6 @@ export function defaultChoices(plan: ImportPlan): ImportChoices {
     decides,
     oldCircles: "rest",
     links: plan.seats.some((s) => s.needLinks.length > 0),
-    howChosen: plan.howChosen !== null,
   };
 }
 
@@ -572,15 +629,11 @@ export function afterPublishFor(plan: ImportPlan, choices: ImportChoices, liveSc
       for (const l of s.needLinks) if (scope.has(l.needKey)) links.push({ needKey: l.needKey, subjectType: "role", subjectRef: s.id, weight: l.weight, seatName: s.name });
     }
   }
-  const howChosen: AfterPublish["howChosen"] =
-    choices.howChosen && plan.howChosen
-      ? seats.filter((s) => !s.existing).map((s) => ({ seatId: s.id, seatName: s.name, howChosen: plan.howChosen!.id }))
-      : [];
   const forming: AfterPublish["forming"] =
     choices.structure && choices.oldCircles === "forming" && plan.circles.some((c) => !c.reused)
       ? plan.oldCircles.filter((c) => c.status !== "forming").map((c) => ({ circleId: c.id, circleName: c.name }))
       : [];
-  return { decides, links, howChosen, forming };
+  return { decides, links, forming };
 }
 
 /** The draft's title and the line under it, in the founder's list of drafts. */
