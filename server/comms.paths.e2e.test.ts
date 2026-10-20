@@ -350,8 +350,11 @@ describe.skipIf(!DB_CONFIGURED)("Village Comms, the paths", () => {
 
     const reg = await call("POST", "/api/auth/register", { body: { name: "Ash Asker", email, password: "AskerPass123!", paths: [] }, token: null });
     expect(reg.status, JSON.stringify(reg.json)).toBe(200);
+    // A member's signing sends back the letter version its page drew (seat settings PR9), or it is refused with 409.
+    const drawn = await call("GET", "/api/membership-letter", { token: null });
+    expect(drawn.status, JSON.stringify(drawn.json)).toBe(200);
     const letter = await call("POST", "/api/forms/submit", {
-      body: { type: "membership-508", data: { name: "Ash Asker", email } },
+      body: { type: "membership-508", data: { name: "Ash Asker", email, letterVersion: String(drawn.json?.version ?? "") } },
       token: String(reg.json?.token ?? ""),
     });
     expect(letter.status, JSON.stringify(letter.json)).toBe(200);
