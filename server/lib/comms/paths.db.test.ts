@@ -177,6 +177,26 @@ describe.skipIf(!configured)("paths: the triggers", () => {
     expect(await enrollmentOf(email, "joining.request")).toMatchObject({ state: "stopped", stop_reason: "joining_declined" });
   });
 
+  it("a yes to a request to join stops its journey too; picking it up to read does not", async () => {
+    const email = "yes.asker@example.test";
+    await submission("sub-join-yes", "membership-request", email);
+    await handlePathTrigger(deps(), formSubmittedTrigger("membership-request", "sub-join-yes", { email, name: "Yara Yes", commsConsent: true }) as any);
+    await pool.query("UPDATE submissions SET status = 'reviewing' WHERE id = 'sub-join-yes'"); // module-review-ok: moving a row in the scratch schema
+    await handlePathTrigger(deps(), { type: "submission_status", submissionId: "sub-join-yes", formType: "membership-request", status: "reviewing" });
+    expect(await enrollmentOf(email, "joining.request")).toMatchObject({ state: "active" });
+    await pool.query("UPDATE submissions SET status = 'accepted' WHERE id = 'sub-join-yes'"); // module-review-ok: moving a row in the scratch schema
+    await handlePathTrigger(deps(), { type: "submission_status", submissionId: "sub-join-yes", formType: "membership-request", status: "accepted" });
+    expect(await enrollmentOf(email, "joining.request")).toMatchObject({ state: "stopped", stop_reason: "joining_accepted" });
+  });
+
+  it("an accept on another form leaves a joining journey alone", async () => {
+    const email = "two.forms@example.test";
+    await submission("sub-join-two", "membership-request", email);
+    await handlePathTrigger(deps(), formSubmittedTrigger("membership-request", "sub-join-two", { email, commsConsent: true }) as any);
+    await handlePathTrigger(deps(), { type: "submission_status", submissionId: "sub-join-two", formType: "visit-inquiry", status: "accepted" });
+    expect(await enrollmentOf(email, "joining.request")).toMatchObject({ state: "active" });
+  });
+
   it("an admission stops the joining journey of the address that asked", async () => {
     const m = await member("Ari Admitted");
     await submission("sub-join-2", "membership-request", m.email);
@@ -272,6 +292,18 @@ describe.skipIf(!configured)("paths: the rules the tick asks", () => {
     });
     expect((await answers(email, "path.investor", ["steward_first_step_done"])).steward_first_step_done).toBe(false);
     expect((await answers(email, "joining.request", ["joining_declined"], "form:sub-join-1")).joining_declined).toBe(true);
+  });
+
+  it("answers a yes to joining from the request itself, for an enrollment that started before the rule", async () => {
+    // The tick's half of the stop: a request accepted while nothing listened
+    // for the trigger still ends its journey on the next pass.
+    const email = "early.yes@example.test";
+    await submission("sub-join-early", "membership-request", email);
+    await handlePathTrigger(deps(), formSubmittedTrigger("membership-request", "sub-join-early", { email, commsConsent: true }) as any);
+    const ask = () => answers(email, "joining.request", ["joining_accepted", "joining_declined"], "form:sub-join-early");
+    expect(await ask()).toEqual({ joining_accepted: false, joining_declined: false });
+    await pool.query("UPDATE submissions SET status = 'accepted' WHERE id = 'sub-join-early'"); // module-review-ok: moving a row in the scratch schema
+    expect(await ask()).toEqual({ joining_accepted: true, joining_declined: false });
   });
 });
 

@@ -288,6 +288,7 @@ export const STOP_KEYS = [
   "steward_seated", // seated in a role
   "prosperity_venture_listed", // a venture listed, or until that has a writer, the proposal accepted
   "joining_admitted", // admitted as a member
+  "joining_accepted", // the request to join was accepted; no account exists yet, so not admitted
   "joining_declined", // the request to join was declined
   "member_took_part", // consented a quest, or came to a gathering
   // Every journey.

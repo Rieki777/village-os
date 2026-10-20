@@ -37,6 +37,7 @@ import {
   type StructureDecisions,
   type StructurePlan,
 } from "../../shared/structurePlan";
+import { countDraft, newestArrival, planFromDraft, type DraftCounts } from "../../shared/structureDraft";
 import { recordEvent } from "./events";
 import { markProposalDecided, proposalsInBatch, type ExternalProposalRow } from "./externalProposals";
 import { listOrgAssignments, listOrgRoles } from "./orgChart";
@@ -45,12 +46,14 @@ import {
   blockedLinesOf,
   createDraft,
   draftChangeCap,
+  getDraft,
   loadPreviewContext,
   openDraftCap,
   previewDraft,
   previewLoadedDraft,
   type BlockedLine,
   type Draft,
+  type DraftStatus,
   type PreviewLine,
 } from "./orgDrafts";
 import { insertProposalCopy } from "../repos/externalProposals";
@@ -122,9 +125,8 @@ export async function readStructure(
   ids?: readonly string[] | null,
 ): Promise<StructureRead | null> {
   const wanted = ids && ids.length ? new Set(ids) : null;
-  const rows = (await proposalsInBatch(pool, batchId)).filter(
-    (p) => p.status === "proposed" && (!wanted || wanted.has(p.id)),
-  );
+  const all = await proposalsInBatch(pool, batchId);
+  const rows = all.filter((p) => p.status === "proposed" && (!wanted || wanted.has(p.id)));
   if (!rows.length) return null;
   const live = await liveChart(pool, circles);
   const plan = planStructure(
@@ -137,8 +139,77 @@ export async function readStructure(
   return {
     plan,
     rows,
-    header: { batchId, moduleId: rows[0]?.moduleId ?? null, receivedAt: rows[0]?.receivedAt || null, title },
+    // The newest record, never the first: a re-synced batch keeps each unchanged record's first arrival.
+    header: { batchId, moduleId: rows[0]?.moduleId ?? null, receivedAt: newestArrival(all.map((r) => r.receivedAt)), title },
   };
+}
+
+/** The draft a batch was accepted into, as the review page reads it after the accept. */
+export interface BatchDraft {
+  id: string;
+  title: string;
+  status: DraftStatus;
+  publishedAt: string | null;
+  counts: DraftCounts;
+  /** The draft as a plan, with the decisions that reproduce it, for the map and the list. */
+  plan: StructurePlan;
+  decisions: StructureDecisions;
+  /** The preview publish would run, for an open draft. Null once it is published. */
+  preview: { lines: number; blocked: number; blockedLines: BlockedLine[] } | null;
+}
+
+/**
+ * The draft this batch's proposals were accepted into, found through each
+ * accepted proposal's `created_ref`. An open draft first; otherwise the one
+ * published last. A withdrawn draft has already sent its proposals back, and a
+ * reverted one is history, so neither is offered.
+ */
+export async function draftForBatch(
+  pool: Pool,
+  circles: readonly RepoCircle[],
+  batchId: string,
+): Promise<BatchDraft | null> {
+  const all = await proposalsInBatch(pool, batchId);
+  const refs = Array.from(new Set(all.filter((r) => r.status === "accepted" && r.createdRef).map((r) => String(r.createdRef))));
+  if (!refs.length) return null;
+  const drafts = (await Promise.all(refs.map((id) => getDraft(pool, id)))).filter((d): d is Draft => !!d);
+  const open = drafts.find((d) => d.status === "open");
+  const published = drafts
+    .filter((d) => d.status === "published")
+    .sort((a, b) => String(b.publishedAt ?? "").localeCompare(String(a.publishedAt ?? "")))[0];
+  const draft = open ?? published;
+  if (!draft) return null;
+  const changes = draft.changes.map((c) => ({ op: c.op, orgRoleId: c.orgRoleId, payload: c.payload }));
+  const live = await liveChart(pool, circles);
+  const { plan, decisions } = planFromDraft(draft.id, changes, live.circles, live.seats);
+  let preview: BatchDraft["preview"] = null;
+  if (draft.status === "open") {
+    // The same cap publish passes, so "none blocked" here means publish will not refuse on it.
+    const p = await previewDraft(pool, draft.id, draftChangeCap());
+    preview = { lines: p.lines.length, blocked: p.blocked, blockedLines: blockedLinesOf(p.lines) };
+  }
+  return {
+    id: draft.id,
+    title: draft.title,
+    status: draft.status,
+    publishedAt: draft.publishedAt,
+    counts: countDraft(changes),
+    plan,
+    decisions,
+    preview,
+  };
+}
+
+/**
+ * The arrival's header when nothing in it waits any longer, read from every
+ * record in it. Null when the batch holds no records at all.
+ */
+export async function batchHeader(pool: Pool, batchId: string): Promise<StructureRead["header"] | null> {
+  const all = await proposalsInBatch(pool, batchId);
+  if (!all.length) return null;
+  const structure = all.find((r) => r.kind === "org.proposed");
+  const title = structure && typeof structure.payload.title === "string" ? structure.payload.title.slice(0, 200) : null;
+  return { batchId, moduleId: all[0]?.moduleId ?? null, receivedAt: newestArrival(all.map((r) => r.receivedAt)), title };
 }
 
 /** The decisions as a request body carries them, read without trusting a single key. */

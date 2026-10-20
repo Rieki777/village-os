@@ -23,6 +23,7 @@
  *   steward_seated              seated in a role now
  *   prosperity_venture_listed   a venture listed, else the proposal accepted
  *   joining_admitted            the account at their address was admitted
+ *   joining_accepted            the request was accepted
  *   joining_declined            the request was declined
  *   member_took_part            a quest consented, or came to a gathering
  *
@@ -232,6 +233,12 @@ export function registerPathConditions(deps: PathPartsDeps): void {
   personRule("joining_admitted", facts.admitted);
   personRule("member_took_part", (pool, p) => facts.tookPart(pool, p.userId as string), true);
 
+  // Both answers to a request read the request itself, so an enrollment that
+  // was running before either rule existed still stops on its next tick.
+  registerCondition("joining_accepted", async (ctx) => {
+    const m = ctx.enrollment.subjectRef.match(/^form:(.+)$/);
+    return m ? facts.requestAccepted(ctx.getPool(), m[1]) : null;
+  });
   registerCondition("joining_declined", async (ctx) => {
     const m = ctx.enrollment.subjectRef.match(/^form:(.+)$/);
     return m ? facts.requestDeclined(ctx.getPool(), m[1]) : null;

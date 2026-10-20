@@ -649,6 +649,22 @@ describe("what the review page says after an accept", () => {
     expect(screen.getByText("Withdraw that draft")).toBeTruthy();
   });
 
+  it("links each open draft the queue made to the page that publishes or withdraws it", async () => {
+    answerWith(200, {
+      ...EMPTY,
+      openDrafts: [
+        { draftId: "draft-mvh", title: "Structure suggested by the connected service", changes: 36, batchId: "sync-abc" },
+        { draftId: "draft-lost", title: "No batch", changes: 2, batchId: null },
+      ],
+    });
+    renderReview();
+    const card = await screen.findByTestId("open-draft-draft-mvh");
+    expect(card.textContent).toContain("36 changes. Nothing is live yet.");
+    expect(within(card).getByRole("link", { name: "Open the draft" }).getAttribute("href")).toBe("/review/structure/sync-abc");
+    // A draft whose batch cannot be found has no page to send anybody to.
+    expect(screen.queryByTestId("open-draft-draft-lost")).toBeNull();
+  });
+
   it("says what to do about fields left out, and offers the withdraw when nothing blocked", async () => {
     routes({
       "POST /api/review/proposals/p1/accept": {
