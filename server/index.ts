@@ -2,6 +2,7 @@ import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
 import { joiningOf, pickNextAction } from "./lib/nextAction";
+import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -7623,7 +7624,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
     // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
-    await landPublicSubmission(submissionsRepo, getPool(), entry);
+    const { proposal } = await landPublicSubmission(submissionsRepo, getPool(), entry);
     commsSink.fire(formSubmittedTrigger(type, entry.id, data));
 
     /*
@@ -7660,7 +7661,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       }
     })();
 
-    res.json({ success: true, id: entry.id });
+    res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
   });
 
   // Admin: List Submissions

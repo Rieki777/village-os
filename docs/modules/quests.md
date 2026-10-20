@@ -138,7 +138,7 @@ READ beside them asks a different key. See Capabilities and Endpoints below.
 
 **The public Propose a Quest form writes `quest_proposals`** (Rye, 2026-09-14: people should be
 able to propose quests). `client/src/pages/ProposeQuest.tsx`, and the guided chat beside it, call
-`submitProposal("quest-proposal", ...)` in `client/src/lib/proposals.ts`, which POSTs
+`sendProposal("quest-proposal", ...)` in `client/src/lib/proposals.ts`, which POSTs
 `/api/forms/submit`. That handler in `server/index.ts` stores the submission in the generic
 submissions pipeline under `intake.moderate`, as it always did, and then `landPublicSubmission` in
 `server/lib/publicForms.ts` derives a proposal from it through `proposeQuest`:
@@ -162,8 +162,12 @@ submissions pipeline under `intake.moderate`, as it always did, and then `landPu
   count against. The count and the insert run under one named lock (`withIdeaLock`), so ideas sent
   together cannot pass an allowance. Each idea held back is counted in `external_proposal_drops`
   under `propose-quest` (`contained_an_email`, `empty_payload`, `over_allowance`), which `/review`
-  reads out beside the queue. A database error keeps an idea out too. In every case the submission
-  and the form's answer are unchanged, and the steward inbox still receives it.
+  reads out beside the queue, saying that each one is kept in the admin inbox. A database error
+  keeps an idea out too. In every case the submission stands and the steward inbox still receives
+  it, and the form's answer says where the idea went: `idea` is `{ queued: true }`, or
+  `{ queued: false, held, member, allowance }` naming the hold-back (`IdeaReceipt` in
+  `shared/questIdeas.ts`, built by `server/lib/questIdeaReceipt.ts`). The page tells its sender
+  the idea was held and why, where it used to say "Your Quest idea is in." for every one.
 
 Vendor intake still writes nothing here: external `quest.proposed` records land in
 `external_proposals`, and the form is `proposeQuest`'s only caller. `quest_proposals` has no
