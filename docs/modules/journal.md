@@ -111,7 +111,7 @@ never discusses other members. With no key configured both guide doors answer 50
 
 ## The bridge to organisational memory
 
-Part 1 of the bridge to the `saberra` module (`drizzle/0252_a_journal_crosses_under_a_code_name.sql`).
+Part 1 of the bridge to the `saberra` module (`drizzle/0261_a_journal_crosses_under_a_code_name.sql`).
 It records what would cross and **sends nothing**: the service has not named a write path.
 
 - **Code-names** (`server/lib/codeNames.ts`, table `member_code_names`). Each member gets a stable

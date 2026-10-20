@@ -1,4 +1,4 @@
--- 0252: a member is known outside the village by a code-name, and an outbox
+-- 0261: a member is known outside the village by a code-name, and an outbox
 -- records what would cross to the organisational memory service.
 --
 -- Two new tables and nothing else, so this file is expand-only: no ALTER, no

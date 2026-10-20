@@ -596,7 +596,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * The bridge to organisational memory (0252): every outbox row filed
+       * The bridge to organisational memory (0261): every outbox row filed
        * under the member's code-name loses its words, and the code-name is
        * marked pending a vendor delete. The map entry is NOT dropped: the
        * founder promised the vendor that the village scrubs its own records,

@@ -1,5 +1,5 @@
 /**
- * `saberra_outbox` (0252): every statement that touches what would cross to
+ * `saberra_outbox` (0261): every statement that touches what would cross to
  * the organisational memory service.
  *
  * ── ONE READER OF ANOTHER TABLE, NAMED SO IT STAYS FINDABLE ──────────────
