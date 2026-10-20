@@ -41,6 +41,7 @@ import type express from "express";
 import type { Pool } from "mysql2/promise";
 import type { Capability, CapabilityCtx } from "../../shared/capabilities";
 import type { SubjectCloser } from "./applyDue";
+import type { PostOfficeDeps } from "./comms/postOffice";
 import type { CrewsRepo } from "./crews";
 import type { WeightModeSnapshot } from "./governanceWeights";
 import type { NotifyDeps, NotifyInput, NotifyResult } from "./notify";
@@ -427,17 +428,29 @@ export interface AppDeps {
    * Returns `sent: false` with a reason when the deployment has no API key,
    * no sender, or no recipients, which are ordinary states on a fresh fork
    * and must not read as an outage.
+   *
+   * Every recipient's copy is a row in the post office ledger
+   * (server/lib/comms/mailer.ts). There is no `from`: every email leaves
+   * under the one sender the village configured.
    */
   sendResendEmail(opts: {
     to: string[];
     subject: string;
     html: string;
-    from?: string;
     replyTo?: string;
+    /** What made this email, for the ledger: `housing.request`, say. */
+    origin?: string;
   }): Promise<{ sent: boolean; reason?: string }>;
 
   /** Escape a string for HTML. Every value interpolated into an email body. */
   escapeHtml(s: string): string;
+
+  /**
+   * The post office every email passes through (server/lib/comms/postOffice.ts),
+   * built once by the mailer at boot so a route that runs the drain and the
+   * mailer that writes the ledger are reading the same provider and sender.
+   */
+  commsPostOffice: PostOfficeDeps;
 
   /** The configured inboxes for one pathway, falling back to all of them. */
   recipientsForType(type: string): string[];

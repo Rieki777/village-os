@@ -8,7 +8,11 @@ Provenance: platform
 > `server/routes/liveSessions.ts`; the rules in `server/lib/liveSessions.ts`; every statement
 > against the tables in `server/repos/liveSessions.ts`; the schema in
 > `drizzle/0238_a_circle_holds_a_live_session.sql`. The list is `client/src/pages/Sessions.tsx`
-> and the room is `client/src/pages/SessionRoom.tsx`.
+> and the room is `client/src/pages/SessionRoom.tsx`. What happens to an action after the call
+> (below, "After the call: tasks") has its own contract in `shared/sessionTasks.ts`, its doors in
+> `server/routes/sessionTasks.ts`, its rules in `server/lib/sessionTasks.ts`, its emails in
+> `server/lib/sessionTaskMail.ts`, its statements in `server/repos/sessionTasks.ts` and its schema
+> in `drizzle/0255_a_task_keeps_going_after_the_call.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -43,7 +47,7 @@ screen and is shown where the room is, with one tap back to it.
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
 | **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, or object, and a concern or an objection is said in one sentence. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
-| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a seed line (what we now know) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with a seed. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
+| **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
 | **Actions** | Every action is claimed by a person or a seat, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
@@ -67,12 +71,42 @@ new round: the answers given to the old words are cleared.
 **The close refuses while any action has nobody.** An open action with no person and no seat on it
 stops the close with a sentence and the list of those actions. Claim it, name a seat, or park it.
 
+**Editing in the room.** Every box in the room can be put right while the session is open, by the
+people it belongs to:
+
+- **An entry's words** (a note, an idea, what we learned, a proposal, an action, a tension) are
+  changed by the person who wrote it, the facilitator, the secretary, or an admin who has joined
+  the room.
+- **An item's title** is changed by the person who added it until the item is done, and by the
+  facilitator, the secretary or a joined admin at any time. **Its aim and minutes** stay with the
+  person who added it only while it waits: once it starts, the item's clock reads its minutes, so
+  they are the hosts' to change. A form that sends the whole item back with only the title retyped
+  still goes through, because a field sent unchanged asks for no right.
+- **The session's title** has its own door, `PATCH /api/sessions/:id { title }`, open to the
+  facilitator, the secretary and a joined admin. It is cleaned to one line and cut to 120
+  characters, any other key is ignored, and sending the title it already has moves nothing.
+
+Some things stay final on purpose, and the room says why where each one shows:
+
+- A proposal decided by consent keeps its words and cannot be removed.
+- The person holding an action they did not write sets its date and lets it go; its words stay
+  with its author and the hosts.
+- A consent answer, an arrival number and wish, and a closing word belong to the person who gave
+  them, who changes them by answering again.
+- Feedback on the facilitation stays unsigned and never comes back to the room; sending again
+  replaces what was sent before.
+- An idea for the tool is sent one way, to the village's feedback inbox.
+- A closed session takes no writes, and its record reads as it closed.
+
+An admin still joins before writing anything, and the room shows a joined admin the editing
+controls. Who changed a card is not shown yet: entries keep no editor or edit time.
+
 ## Roles
 
 - **Facilitator.** Whoever opened the room, until they or an admin hand it to somebody in the room.
   Moves the stage, starts the clock, the breath and the rounds, names the secretary, marks a consented
   proposal decided, and closes. The cues for each stage are shown to the facilitator only.
-- **Secretary.** Optional, named by the facilitator. Can change notes and entries alongside the
+- **Secretary.** Optional, named by the facilitator. Can rename the session and change items and entries alongside the
   facilitator.
 - **Members in the room.** Join, give a number, add items and entries, claim and let go of actions,
   answer consent rounds, leave a word and feedback.
@@ -113,7 +147,7 @@ every half minute while its tab is visible.
   facilitator and admins receive it, and only once the session has closed, as one batch sorted by
   answer. While the room is open nobody reads it, because an answer showing up on the next poll
   would say who had just pressed send.
-- **The record of a closed session** (agenda, outcomes, decisions, seeds, actions and backlog) is
+- **The record of a closed session** (agenda, outcomes, decisions, what we learned on each item, actions and backlog) is
   read by the people who were in it and by the village's admins, and by nobody else.
 - **Nothing is written to `health_events`.** `recordEvent` defaults to a public audience, and the
   Village Pulse reads public events.
@@ -121,22 +155,27 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Six tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other five holds that number.
+Nine tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other eight holds that number. The
+last three (0255) are the task layer, described under "After the call: tasks".
 
 | Table | Holds |
 |---|---|
 | `live_sessions` | Title, circle, status, facilitator, secretary, length, the room's state, its version, the stamp (moon, season, place line), and at close the summary (the arrival spread, every proposal's tally, a few counts) and the minutes in both audiences. |
 | `live_session_people` | Who joined, when they were last seen, and their arrival number and words while the session is open. |
 | `live_session_items` | The agenda: title, aim, minutes, position, status, the seconds it was active, and which earlier session it came over from. |
-| `live_session_entries` | Notes, ideas, seeds, proposals, actions and tensions, each with its author, and for an action its person or seat and a due date. |
+| `live_session_entries` | Notes, ideas, what we learned (stored as the kind `seed`), proposals, actions and tensions, each with its author, and for an action its person or seat and a due date. |
 | `live_session_responses` | One answer per person per target: consent to the agenda, consent on a proposal, the closing word, and feedback on the facilitation. |
+| `live_session_task_state` | One row per action open or done at close: its status (`open`, `done`, `let_go`), its person or seat now, its date, the kind and the one line of its latest answer, who gave it, and a version that goes up on every answer. |
+| `live_session_task_events` | Every answer to a task, in order, with the state it left. Append-only. |
+| `live_session_task_sends` | Each time a session's task emails went out: the send's number (1 is the close), who pressed, and the counts by outcome. Numbers only, never an address. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
 action, or sits in a seat that holds one, gets a notice that it is in their hands. The notice says
 what the action is and by when. It links to the record only for somebody who was in the room, since
-the record opens to nobody else.
+the record opens to nobody else. Each of them also gets one email listing every task they hold
+from that call (below).
 
 **A room nobody closes closes itself.** The arrival round is erased only by a close, so a room left
 open would keep it for anybody who joined later. An open room that nobody has been seen in for its
@@ -149,6 +188,78 @@ indexed read, and reading or joining a room closes that one first when its row i
 room is locked and checked again before it closes, so two readers close it once, and a room somebody
 came back to stays open (`closeStaleRooms` in `server/lib/liveSessions.ts`).
 
+## After the call: tasks
+
+When a session closes, every action somebody holds becomes a **task** that keeps going after the
+call. The words said in the room never change: `live_session_entries` and the frozen minutes stay
+as they were at close, and the room still refuses every write to a closed session. What happens to
+a task afterwards lives in the three task tables.
+
+**The state layer.** The close writes one `live_session_task_state` row per held action, inside its
+own transaction, so a task exists the moment the close does. The facilitator's close and a quiet
+room closing itself both come through `closeLocked`, so both write them. The migration wrote the
+same rows for the sessions closed before it, and running its backfill again adds nothing. A task is
+`open`, `done` or `let_go`; an open task with no person and no seat is **back with the circle**.
+Each answer moves the state row, appends one `live_session_task_events` row, and bumps the version
+of any open room in the same circle, so that room's next poll shows it. The answers are **It's
+done**, **Not yet** (a new date after today), **Let go** (one sentence), **Hand it back**, **I'll
+take it** (a task back with the circle) and **Open it again**. A version the page did not see is
+refused with the card as it stands now.
+
+**Who may answer.** One pure function, `taskRights` in `shared/sessionTasks.ts`, decides every door:
+the person holding the task; a member who sits in the holding seat now, with a term that has not
+lapsed; the facilitator or secretary of the session it came from, or of an open session in the same
+circle, since facilitation rotates; and admins. Anybody with rights may open a done task again (a
+mistaken tap). Only the hosts and admins may open a let go task again. Anybody who may see a task
+back with the circle may take it.
+
+**Who may see a task.** `canSeeTask`: the people who were in the session it came from, whoever
+holds it now (person or seat), the facilitator or secretary of an open session in the same circle,
+and admins. A seat holder who was not in the room sees the text, the session's title, the circle,
+the date and the status, with no link to the record. A task somebody may not see answers 404, the
+same as a task that is not there. No card carries a user id, an email or a count about a person.
+
+**Where tasks show.** **Your task board** on the profile lists what a member holds, what their seats
+hold, and what they finished in the last three moons, with older ones a tap away. An action still in
+an open session shows there read-only, answered in the room. The next session of the same circle
+shows the circle's tasks in "From last time", grouped for the action check: done since last time,
+back with the circle, new dates, let go, and still holding. A closed record shows each action's
+status beside it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/tasks/mine` (`?earlier=1` adds the older finished tasks) | a signed-in member | none |
+| `PATCH /api/sessions/tasks/:entryId` | `taskRights` | 120 answers an hour |
+| `GET /api/sessions/:id/task-record` | whoever may read the session | none |
+| `POST /api/sessions/:id/task-emails` | the closed session's facilitator, and admins | 3 presses an hour |
+
+The doors register right after the room's, so the module gate and the members-only gate in front
+of `/api/sessions` stand in front of them too.
+
+**The task emails.** When a call closes, each person holding an open task from it gets one email
+listing every task they hold, and every task their seats hold, with its date. It goes out as a
+`notices` email (members only, sent with the Village Comms module off too, with suppression and the
+one-click unsubscribe). The holders are read again when the email is sent: the person, and every
+member who sits in the seat now. A seat holder who was not in the room gets the seat's opening and
+no record link. A seat nobody sits in tells the admins and the session's facilitator in-app.
+`noticesAfterClose` is the one place the close starts these emails, and nothing waits for them: the
+close answers first. The closed record's facilitator and admins can press **Send the task emails** to
+send the open tasks again; each press takes the next send number. Each email is keyed
+`session-tasks:<session>:<user>:<send>`, so the same send posted twice is one email per person, and
+a new press really sends again. The counts are kept on the send's row as numbers by outcome.
+
+**The gentle notes.** The hourly `session-task-notes` job (registered in
+`server/routes/sessionTasks.ts`) writes one note two days before a task's date and one the morning
+after it, to whoever holds it then. It does nothing while the module is off or outside the
+village's daytime window (`comms.quiet_start_hour` to `comms.quiet_end_hour`). A task with no date,
+a finished task, and a task back with the circle get no note. Each note is keyed
+`session-due:<entry>:<user>:<date>:<before|after>`, so a task gets at most two notes per date, and a
+new date is a new pair.
+
+**The preference.** `tasksEmail` (`immediate`, `daily` or `off`, default `immediate`) in
+Notifications. `immediate` sends the close email and the notes. `daily` keeps each to one line in the
+daily digest. `off` keeps them in the bell only.
+
 ## The shareable minutes, and an organisational-memory service
 
 `GET /api/sessions/:id/minutes.md?for=shareable` gives the record as markdown that names no person.
@@ -159,7 +270,7 @@ came back to stays open (`closeStaleRooms` in `server/lib/liveSessions.ts`).
 - Nothing from the arrival round or the check-out crosses except the numbers: how many took part,
   and the arrival median and range.
 - Notes and ideas stay in the record for the people who were there. The shareable version carries
-  the agenda, decisions with their tallies, seeds, actions by seat, and the backlog.
+  the agenda, decisions with their tallies, what we learned (stored as the kind `seed`), actions by seat, and the backlog.
 
 The room shows these minutes under "Shareable minutes", with a line asking the reader to read them
 through before copying them anywhere, and a copy button. **An admin who keeps the village's
@@ -179,12 +290,16 @@ and the admins.
 - **Gratitude.** The close opens a gratitude round. A thank-you goes through the gratitude door like
   any other, from the sender's own allowance, and lands in the current moon's cycle. That is why the
   module recommends `gratitude`, which is core and always on.
-- **The moon and the season.** Every session is stamped when it starts with the moon's phase, the
-  village's own moon count when it keeps one, the season by the village's hemisphere, and the place
-  line. The stamp is on the record and at the top of the minutes.
+- **The moon and the season.** Every session is stamped when it starts with the moon's phase (drawn,
+  lit on the side the village's hemisphere sees), the village's own moon count when it keeps one, the
+  season, and the place line. The season is the village's own when it has named its seasons in
+  `calendar.seasons`; none when its land sits between the tropics and it has named none, since the
+  four temperate seasons do not describe a year that turns on rain; and otherwise the four by the
+  village's hemisphere. The stamp is on the record and at the top of the minutes.
 - **The backlog seeds the next session.** When a circle meets again, the room shows "From last
-  time": the open actions from its last closed session, for an action check, and its backlog
-  (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
+  time": every open task from all of the circle's earlier sessions, and every one answered since it
+  last met, each with its latest answer, for an action check; and the backlog of its last closed
+  session (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
   brought over is offered no more, and a second copy of it from the same session is refused.
 - **The feedback inbox.** An idea for the tool, given at close, lands in the village's feedback
   inbox as an idea and stays in the village. The close form promises the inbox only, so the idea is
@@ -199,6 +314,7 @@ and the admins.
 |---|---|
 | `sessions.place_line` | The village's own sentence, read at drop in. Empty means the room reads the platform's neutral line, "Take a moment to feel where you are." |
 | `sessions.default_minutes` | How long a new session runs unless the person opening it says otherwise. |
+| `calendar.seasons` | The village's own seasons, each with the day it starts, as `Name: MM-DD` separated by commas (for example `Dry: 12-01, Green: 05-01`). Blank uses the platform's seasons, or none in the tropics. Read by the stamp; shared with the calendar. |
 
 ## The module boundary
 
@@ -207,7 +323,7 @@ and the admins.
 | API prefixes | `/api/sessions` |
 | Data class | `member-pii`: every row names a person |
 | Capabilities | none: each door is a member's own, and facilitation belongs to the session |
-| Variables | `sessions.place_line`, `sessions.default_minutes` |
+| Variables | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
 | Recommends | `gratitude` |
 | Open state | none: a session holds no value anybody is owed |
 
@@ -229,6 +345,16 @@ and the admins.
 and the entries they wrote, clears them off the actions they held, writes 0 where they facilitated,
 took notes or opened a session, rebuilds the stored minutes of every closed session that named
 them, and then deletes their number. A name the village no longer holds reads as "A member".
+
+The task layer goes in the same transaction (`forgetTaskRowsFor` in
+`server/repos/sessionTasks.ts`). The tasks of the entries they wrote are deleted with their state
+and every answer to them. A task they held goes back to the circle. Where they gave the latest
+answer, the answer keeps its kind and loses their number and their words, and every answer they
+gave reads as a member's with its note removed. A send they pressed reads as sent by nobody.
+`sessionIdsNaming` reads the three task tables too, so every record that named them is rebuilt.
+
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
-and their own answers.
+and their own answers. From the task layer it carries `tasks`, the tasks they hold now, and
+`taskAnswers`, every answer they gave a task with its date and words. A note somebody else left on
+a task they hold is that person's, and stays out.

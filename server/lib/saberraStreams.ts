@@ -37,6 +37,7 @@
  */
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
 import type { VendorRecord } from "./saberraProposals";
+import { normaliseId, plainText, resolveRelation } from "./saberraRelations";
 
 /**
  * Which half a record belongs to.
@@ -148,6 +149,15 @@ export function splitStreams(records: readonly VendorRecord[]): StreamReading {
   const unmapped = new Set<string>();
   const addressesSeen: { id: string; fields: string[] }[] = [];
 
+  // Every circle and role of this read by page id, so a relation resolves.
+  const namesById = new Map<string, string>();
+  for (const rec of records) {
+    const key = rec.kind === "circle" ? "Circle Name" : rec.kind === "role" ? "Role Name" : null;
+    if (!key) continue;
+    const name = plainText(readVendorRecord(rec.kind, rec.fields).fields[key]);
+    if (name) namesById.set(normaliseId(rec.id), name);
+  }
+
   for (const rec of records) {
     const read = readVendorRecord(rec.kind, rec.fields);
     if (read.droppedForAnAddress.length > 0) {
@@ -164,8 +174,12 @@ export function splitStreams(records: readonly VendorRecord[]): StreamReading {
       continue;
     }
 
+    // A key naming ANOTHER record (an assignment's `Role`, a risk's `Owner
+    // Role`) is a relation in the vendor's store, a list of page ids rather
+    // than a name. Read as a string only, every one of them attached to
+    // nothing. Resolved against the records of this same read instead.
     const attach = (ATTACH_KEYS[rec.kind] ?? [])
-      .map((k) => text(read.fields[k]))
+      .map((k) => text(read.fields[k]) ?? resolveRelation(read.fields[k], namesById).names[0] ?? null)
       .find((v) => v !== null) ?? null;
 
     facts.push({

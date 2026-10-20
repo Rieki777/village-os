@@ -41,6 +41,8 @@ export interface RecoveryDeps {
     to: string[];
     subject: string;
     html: string;
+    /** What made it, for Sent mail: `auth.reset` or `auth.first_password`. */
+    origin?: string;
   }): Promise<{ sent: boolean; reason?: string }>;
   escapeHtml(s: string): string;
   /** Where this village lives, for the absolute link in the letter. */
@@ -82,6 +84,7 @@ export function register(app: Express, deps: RecoveryDeps): void {
       const letter =
         verdict.kind === "reset"
           ? {
+              origin: "auth.reset",
               subject: "Set a new password",
               html: `<p>Someone asked to set a new password for your account on ${village}.</p>
 <p><a href="${safeUrl}">Set a new password</a> (link expires in 60 minutes, and works once).</p>
@@ -89,6 +92,7 @@ export function register(app: Express, deps: RecoveryDeps): void {
 <p>If this wasn't you, nothing has changed. You can ignore this message.</p>`,
             }
           : {
+              origin: "auth.first_password",
               subject: "Set your password",
               html: `<p>Your account on ${village} does not have a password yet, so there is nothing to reset. This link sets your first one.</p>
 <p><a href="${safeUrl}">Set your password</a> (link expires in 60 minutes, and works once).</p>
@@ -96,7 +100,7 @@ export function register(app: Express, deps: RecoveryDeps): void {
 <p>If this wasn't you, nothing has changed. You can ignore this message.</p>`,
             };
       try {
-        const mail = await deps.sendEmail({ to: [user.email], subject: letter.subject, html: letter.html });
+        const mail = await deps.sendEmail({ to: [user.email], subject: letter.subject, html: letter.html, origin: letter.origin });
         if (!mail.sent) {
           // The member has a 200 in their browser and no letter on the way.
           // Somebody has to be able to find that, and the reason names the

@@ -12,6 +12,7 @@
  * gathering there is, so `daysUntil` has to give the same answer on the
  * server, in the client, and in a test.
  */
+import type { TimePollSummary } from "./comms/timePoll";
 
 /** Stored states. `draft` is ours; the rest are schema.org eventStatus. */
 export const EVENT_STATUSES = ["draft", "scheduled", "cancelled", "postponed"] as const;
@@ -164,6 +165,12 @@ export interface CalendarItem extends Gathering {
   external: { sourceId: string; uid: string } | null;
   /** True once the source no longer has this fact. Admin surfaces only. */
   removed?: boolean;
+  /**
+   * Village Comms 5.10: the gathering's live time vote, when it has one. The
+   * page marks an evening whose `stillVoting` is true as "time still being
+   * voted". Absent when the gathering has no vote.
+   */
+  timePoll?: TimePollSummary;
 }
 
 /** The lunar position `/api/events` prints beside its window. */

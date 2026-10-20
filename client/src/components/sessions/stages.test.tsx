@@ -78,6 +78,7 @@ function doors(): RoomActions {
   };
   return {
     join: (...a) => ok("join", ...a),
+    patchSession: (...a) => ok("patchSession", ...a),
     arrival: (...a) => ok("arrival", ...a),
     addItem: (...a) => ok("addItem", ...a),
     patchItem: (...a) => ok("patchItem", ...a),
@@ -206,8 +207,9 @@ describe("the agenda", () => {
     expect(screen.getAllByRole("button", { name: ROOM_COPY.edit })).toHaveLength(1);
     unmount();
 
+    // The hosts can fix any item's words, a done one too, so the record reads right.
     render(<AgendaList view={makeView({ items, me: FACILITATOR })} actions={doors()} />);
-    expect(screen.getAllByRole("button", { name: ROOM_COPY.edit })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: ROOM_COPY.edit })).toHaveLength(3);
     fireEvent.click(screen.getAllByRole("button", { name: ROOM_COPY.takeOff })[0]!);
     expect(log[0]).toEqual({ door: "patchItem", args: [5, { status: "parked" }] });
   });
@@ -278,7 +280,7 @@ describe("an item's page", () => {
     const view = makeView({ items: [item({ status: "active" })] });
     render(<ItemPage view={view} now={T0} actions={doors()} item={item({ status: "active" })} />);
     fireEvent.change(screen.getByLabelText(SESSION_COPY.addAction), { target: { value: "Call the roofer" } });
-    fireEvent.change(screen.getAllByLabelText(ROOM_COPY.seatLabel)[0]!, { target: { value: "seat1" } });
+    fireEvent.change(screen.getAllByLabelText(ROOM_COPY.actionHolderLabel)[0]!, { target: { value: "seat1" } });
     fireEvent.change(screen.getAllByLabelText(ROOM_COPY.dueLabel)[0]!, { target: { value: "2026-10-20" } });
     fireEvent.submit(screen.getByLabelText(SESSION_COPY.addAction).closest("form")!);
     await waitFor(() => expect(log).toHaveLength(1));
@@ -445,13 +447,13 @@ describe("words being typed outlive the room moving", () => {
     const view = makeView({ items: [item()] });
     const first = render(<StageActions view={view} now={T0} actions={doors()} />);
     fireEvent.change(screen.getByLabelText(SESSION_COPY.addAction), { target: { value: "Order seed potatoes" } });
-    fireEvent.change(screen.getByLabelText(ROOM_COPY.seatLabel), { target: { value: "seat1" } });
+    fireEvent.change(screen.getByLabelText(ROOM_COPY.actionHolderLabel), { target: { value: "seat1" } });
     fireEvent.change(screen.getByLabelText(ROOM_COPY.dueLabel), { target: { value: "2026-10-20" } });
     first.unmount();
 
     render(<StageActions view={view} now={T0} actions={doors()} />);
     expect(screen.getByLabelText(SESSION_COPY.addAction)).toHaveValue("Order seed potatoes");
-    expect(screen.getByLabelText(ROOM_COPY.seatLabel)).toHaveValue("seat1");
+    expect(screen.getByLabelText(ROOM_COPY.actionHolderLabel)).toHaveValue("seat1");
     expect(screen.getByLabelText(ROOM_COPY.dueLabel)).toHaveValue("2026-10-20");
   });
 
@@ -660,7 +662,8 @@ describe("somebody who has not joined the room", () => {
   it("a member in the room still sees each number, and who has not given one", () => {
     render(<StageArrival view={makeView()} now={T0} actions={doors()} />);
     expect(screen.queryByText(ROOM_COPY.arrivalHeardInRoom)).not.toBeInTheDocument();
-    expect(screen.getByText("More sleep")).toBeInTheDocument();
+    // The member's own wish is also in their box, so the room's line is read as the paragraph.
+    expect(screen.getByText("More sleep", { selector: "p" })).toBeInTheDocument();
     expect(screen.getAllByText(ROOM_COPY.notYet)).toHaveLength(2);
   });
 

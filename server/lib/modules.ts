@@ -29,6 +29,7 @@ import {
   type SetupTarget,
 } from "../../shared/modules";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
+import { commsReadiness } from "./comms/setup";
 import { recordEvent } from "./events";
 import { hasRealContent } from "./examples";
 import { markModuleUse, usageMarkPending } from "./moduleUsage";
@@ -510,6 +511,7 @@ const READINESS_HINTS: Record<string, string> = {
   hypha: "Set your DHO address, then confirm one token contract first",
   redemption: "Write how redemption works here first",
   events: "Say which hemisphere this village is in first",
+  comms: "Finish the checklist in Comms Settings first",
 };
 
 /**
@@ -545,6 +547,7 @@ const READINESS_TARGETS: Record<string, SetupTarget> = {
   // Hypha's address moves as its two halves are answered, so its reader picks
   // between these rather than reading one fixed entry.
   hypha: settingTarget("hypha.org_url"),
+  comms: { kind: "tab", tab: "comms-settings", label: "Comms Settings" },
 };
 
 /**
@@ -718,6 +721,30 @@ export function attachModuleReadiness(getPool: () => Pool): void {
         hint,
         target,
       });
+      continue;
+    }
+    if (def.id === "comms") {
+      /*
+       * READY WHEN THE SIX REQUIRED ITEMS OF THE SETUP CHECKLIST ARE DONE
+       * (the comms build spec 5.15 and 5.16): the provider key, a verified
+       * sending domain, a sender on it, delivery reports, a postal address,
+       * and a test email the provider reported delivered. The checklist is
+       * server/lib/comms/setup.ts, and the Settings screen, the Overview's
+       * banner and the launch journey's email rows read the same items, so
+       * this answer and theirs cannot disagree.
+       *
+       * The hint names what is still open. A read that fails answers not
+       * ready, which is the honest direction: the other one would tell a
+       * founder their village can send email when nothing checked that it can.
+       */
+      def.readiness = async () => {
+        try {
+          const r = await commsReadiness({ getPool });
+          return { ready: r.ready, hint: r.ready ? hint : r.hint, target };
+        } catch {
+          return { ready: false, hint, target };
+        }
+      };
       continue;
     }
     def.readiness = async () => {

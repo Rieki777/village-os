@@ -24,6 +24,11 @@
  * else, its `Notes` is never shown as a purpose, and holder names never come
  * from it: the page shows how many people hold a live seat, from this village.
  *
+ * What the source has ARCHIVED never enters the change. It is listed apart,
+ * folded away under "Archived in <source>", each with its reason, and one that
+ * answers to a live circle or seat here says so as a note: the source archiving
+ * something never retires anything in this village.
+ *
  * ── HONEST ABOUT WHERE IT STOPS ──────────────────────────────────────────
  *
  * The primary action is "Accept into a draft", and it says so. Proposing the
@@ -295,6 +300,25 @@ export default function StructureReview() {
   }
   if (unplaced.length) groups.push({ key: "unplaced", circleKey: null, name: "Not placed in a circle", meta: "", purpose: null, seats: unplaced, problem: null });
 
+  // What the source said about a seat, in words, beside its aim.
+  const sourceNotes = (s: PlanSeat): string[] => {
+    const out: string[] = [];
+    if (s.sourceStatus === "proposed") out.push(`Proposed in ${source}`);
+    else if (s.sourceStatus === "vacant") out.push(`Open seat: nobody holds it in ${source}`);
+    else if (s.sourceStatus === "other" && s.sourceStatusLabel) out.push(`${source} marks it ${s.sourceStatusLabel}`);
+    if (s.otherCircles.length) out.push(`${source} also lists it under ${s.otherCircles.join(", ")}`);
+    if (s.circleUnresolvedAtSource) out.push(`${source} names a circle for it that this read did not include`);
+    return out;
+  };
+  const archivedWhy = (a: StructurePlan["archived"][number]): string => {
+    const base =
+      a.reason === "archived"
+        ? `Archived in ${source}.`
+        : `Its circle${a.circleName ? `, ${a.circleName},` : ""} is archived in ${source}.`;
+    if (!a.liveMatch) return `${base} Not proposed.`;
+    return `${base} This village still has ${a.kind === "circle" ? "a circle" : "a seat"} called ${a.liveMatch}, and it stays as it is.`;
+  };
+
   const pill = (s: PlanSeat) => {
     if (exclude.has(s.key)) return <span className={`${pillBase} text-muted-foreground border-border`}>Left out</span>;
     if (!s.match) return <span className={`${pillBase} text-open border-current`}>New seat</span>;
@@ -524,6 +548,9 @@ export default function StructureReview() {
                               {[g.meta, plural(g.seats.length, "seat", "seats")].filter(Boolean).join(" · ")}
                             </p>
                             {g.purpose && <p className="text-xs text-muted-foreground mt-0.5">{g.purpose}</p>}
+                            {c?.sourceStatus === "proposed" && (
+                              <p className="text-xs text-notice mt-0.5">Proposed in {source}</p>
+                            )}
                             {g.problem && <p className="text-xs text-destructive mt-0.5">{g.problem}. Leave it out to go ahead.</p>}
                             {c && (
                               <details className="text-xs text-muted-foreground mt-1">
@@ -563,6 +590,9 @@ export default function StructureReview() {
                                   : s.name || "A seat with no name"}
                               </p>
                               {s.aim && <p className="text-[13px] text-muted-foreground">{s.aim}</p>}
+                              {sourceNotes(s).map((n) => (
+                                <p key={n} className="text-xs text-notice">{n}</p>
+                              ))}
                               {s.circleProblem && <p className="text-[13px] text-destructive">{s.circleProblem}</p>}
                               {s.problem && <p className="text-[13px] text-destructive">{s.problem}</p>}
                               {s.match && !settledOrOut(s) && (
@@ -586,6 +616,26 @@ export default function StructureReview() {
                   <p className="text-sm text-muted-foreground">This arrival carries circles and no seats.</p>
                 )}
               </section>
+
+              {(plan.archived ?? []).length > 0 && (
+                <section className="grid gap-2" aria-labelledby="h-arch" data-testid="archived-at-source">
+                  <details className={`${card} px-4 py-3`}>
+                    <summary className="cursor-pointer min-h-[24px] text-sm text-muted-foreground">
+                      <span id="h-arch">Archived in {source}</span> ·{" "}
+                      {plural(plan.archived.filter((a) => a.kind === "circle").length, "circle", "circles")},{" "}
+                      {plural(plan.archived.filter((a) => a.kind === "seat").length, "seat", "seats")}. Left out of this change.
+                    </summary>
+                    <ul className="grid gap-2 mt-2">
+                      {plan.archived.map((a) => (
+                        <li key={a.key} className="text-[13px]">
+                          <span className="font-semibold">{a.name || (a.kind === "circle" ? "A circle with no name" : "A seat with no name")}</span>
+                          <span className="text-muted-foreground"> · {a.kind === "circle" ? "Circle" : "Seat"} · {archivedWhy(a)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </section>
+              )}
 
               <section className="grid gap-2.5" aria-labelledby="h-lands">
                 <h2 id="h-lands" className="font-display text-[22px]">How it lands</h2>

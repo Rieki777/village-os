@@ -221,8 +221,9 @@ export const GO_LIVE_PREREQS: readonly GoLivePrereq[] = [
     certainty: "verified",
     note:
       "docs/PROVISIONING.md step 4 and .env.example. The trap they record: Resend answers " +
-      "HTTP 200 for a sender domain you have not verified and delivers nothing. No error, " +
-      "no bounce, no warning anywhere in this platform.",
+      "HTTP 200 for a sender domain you have not verified and delivers nothing, with no " +
+      "error and no bounce. Comms Settings checks the domain with Resend and refuses a " +
+      "sender address that is not on it.",
   },
   {
     id: "stripe",
@@ -410,9 +411,10 @@ export const GO_LIVE_STEPS: readonly GoLiveStep[] = [
       "working, that link is the thing you lose.",
     humanOnly: true,
     points: [
-      "Verify your sending domain at resend.com/domains. Resend gives you the exact SPF and DKIM records to add wherever your DNS lives.",
-      "Resend accepts mail through an unverified domain and answers HTTP 200 as if it worked. Nothing arrives. Verify the domain before you trust that any email is being delivered.",
-      "Then set RESEND_API_KEY and EMAIL_FROM. RESEND_API_KEY can also be set from Admin, Integrations after you log in, which needs VILLAGE_SECRETS_KEY set. EMAIL_FROM is a Railway variable only.",
+      "Everything email needs is set up in one place once you are signed in: Admin, Comms, Settings (/admin?tab=comms-settings). Its checklist takes your Resend key, adds your sending domain and shows the DNS records to copy, checks verification with Resend, sets the sender name and address, connects delivery reports with one button, takes the postal address for the footer, and sends you a test email that counts once Resend reports it delivered.",
+      "You can claim your founder account in the next step before any of this. If email is not working yet, the claim page shows you the link and the reason nothing was sent.",
+      "Resend accepts mail through an unverified domain and answers HTTP 200 as if it worked. Nothing arrives. Comms Settings marks the domain verified only when Resend says so, and refuses a sender address that is not on it.",
+      "RESEND_API_KEY and EMAIL_FROM still work as Railway variables, and whatever is saved in Comms Settings takes over from them. Saving the key there needs VILLAGE_SECRETS_KEY set.",
     ],
   },
   {
@@ -568,15 +570,17 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
   {
     name: "EMAIL_FROM",
     need: "recommended",
-    breaks: "Mail goes out under the platform's fallback sender address instead of yours.",
-    where: "Railway only",
+    // There is no fallback sender any more: with none set, nothing is sent
+    // (resolvedEmailSender in server/lib/comms/mailer.ts).
+    breaks: "Nothing is sent. Every email is recorded as not sent until a sender is set here or in Comms Settings.",
+    where: "Railway, or Admin, Comms Settings",
   },
   {
     name: "RESEND_API_KEY",
     need: "recommended",
     breaks:
-      "Every email is skipped, logged and never sent, and the platform never says so out loud.",
-    where: "Railway, or Admin, Integrations",
+      "Every email is recorded as not sent, and nothing leaves the village. Comms Settings shows it as the first open step.",
+    where: "Railway, or Admin, Comms Settings",
   },
   {
     name: "TRUSTED_PROXY_HOPS",

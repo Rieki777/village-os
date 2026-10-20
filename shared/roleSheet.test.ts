@@ -805,7 +805,9 @@ describe("the portrait and the chips", () => {
     for (let i = 0; i < 60; i++) {
       const p = portraitFor({ id: `seat-${i}`, name: "Seat" }, ["building"]);
       if (p.kind !== "class") throw new Error("expected class art");
-      expect(fs.existsSync(path.join(ROOT, "client/public", p.src)), p.src).toBe(true);
+      // Served at /images/avatars/ from server/assets/avatars (server/routes/stockAvatars.ts).
+      expect(p.src.startsWith("/images/avatars/"), p.src).toBe(true);
+      expect(fs.existsSync(path.join(ROOT, "server/assets/avatars", path.basename(p.src))), p.src).toBe(true);
       seen.add(p.src);
     }
     expect(seen.size).toBe(6);
@@ -821,7 +823,7 @@ describe("the portrait and the chips", () => {
    * taken off.
    */
   it("zooms exactly the drawings painted on a paper margin", async () => {
-    const dir = path.join(ROOT, "client/public/images/avatars");
+    const dir = path.join(ROOT, "server/assets/avatars");
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".webp"));
     expect(files).toHaveLength(30);
     const measured: Record<string, number> = {};

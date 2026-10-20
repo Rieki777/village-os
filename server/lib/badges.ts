@@ -36,7 +36,7 @@ import {
   isDeniable,
   type Capability,
 } from "../../shared/capabilities";
-import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 // The sentence that names where the seat is actually filled, borrowed rather
 // than re-spelled: the roles routes and the badge panel are two doors onto
 // one rule, and a second wording of it is a twin that drifts.
@@ -241,7 +241,7 @@ export function badgeChangeSentence(
   undenied: readonly string[],
 ): string {
   const say = (list: readonly string[]) =>
-    list.map((c) => CAPABILITY_CONSEQUENCE[c as Capability] ?? c).join("; ");
+    list.map((c) => liveConsequence(c)).join("; ");
   const parts: string[] = [];
   if (gained.length) parts.push(`You can now ${say(gained)}.`);
   if (lost.length) parts.push(`This badge no longer lets you ${say(lost)}.`);

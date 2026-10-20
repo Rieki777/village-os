@@ -53,32 +53,40 @@ jobs:
       # The harness provisions its own scratch schema and applies every
       # migration through the same engine production uses.
       mysql:
-        image: mysql:8
-        # AUTHENTICATED PULL, AND WHY A LOGIN STEP CANNOT DO THIS JOB.
-        #
-        # On 2026-10-09 at about 20:55Z Docker Hub began refusing anonymous
-        # pulls from this runner pool's addresses, and EVERY tree in the
-        # repository went red inside one step with nobody's commit involved:
-        # main's own post-merge run, batch 25, and the repository-move branch.
-        # The step tally is the fingerprint, `failure:2 skipped:49 success:3`:
-        # "Initialize containers" fails, 49 steps are skipped because setup
-        # never ran, and `Build` then cascades with "pnpm: command not found",
-        # which is an echo of the first failure and not a second defect.
-        #
-        # The credentials belong HERE rather than in a `docker/login-action`
-        # step, because the runner pulls service containers BEFORE the first
-        # step runs - which is why the failure is step 2. A login step is too
-        # late by construction, however early in the job it is placed.
-        #
-        # IT DEGRADES SAFELY. Absent secrets evaluate to empty strings and the
-        # pull falls back to anonymous, which is exactly today's behaviour, so
-        # this cannot break a fork or a clone that sets no secret. The same
-        # property means FORK pull requests keep pulling anonymously, because
-        # GitHub withholds secrets from them, and can still meet the limit.
-        # A READ-ONLY access token is sufficient; this needs no write scope.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        image: mirror.gcr.io/library/mysql:8
+          # WHY A MIRROR AND NOT AUTHENTICATED PULLS. On 2026-10-09 Docker Hub
+          # began refusing anonymous pulls from this runner pool and every tree
+          # in the repository went red at step 2, main included. The first fix
+          # put `credentials:` on this service, reading two repository secrets.
+          #
+          # THAT FIX WAS WRONG, and the comment it shipped with said the
+          # opposite: it claimed absent secrets "evaluate to empty strings and
+          # the pull falls back to anonymous, so this cannot break a tree that
+          # has no secret set". Measured 2026-10-12, that is false. An empty
+          # credentials value is a TEMPLATE VALIDATION ERROR, not a fallback:
+          #
+          #   Secret source: Dependabot
+          #   ##[error]The template is not valid. ci.yml (Line: 80, Col: 21):
+          #   Unexpected value ''
+          #
+          # The job never starts. Dependabot has its own secret store and forks
+          # get no secrets at all, so five dependency PRs and every outside
+          # contribution were dead at step 1. There is no conditional form: a
+          # service cannot omit `credentials` per-event, and a non-empty dummy
+          # only turns the template error into a registry 401.
+          #
+          # mirror.gcr.io is Google's pull-through cache of Docker Hub. It needs
+          # no credentials, so nothing here depends on a secret store that some
+          # events do not have. Verified before landing, not assumed:
+          #
+          #   hub    sha256:24989179f58856db763f418010c1169fecc944e3ec1ea7e921572d83eb070f70
+          #   mirror sha256:24989179f58856db763f418010c1169fecc944e3ec1ea7e921572d83eb070f70
+          #   identical, 2605-byte manifest, anonymous GET -> 200, linux/amd64 present
+          #   control: a bogus tag returns 404, so the mirror refuses rather than
+          #            serving something else
+          #
+          # It resolves the tag to upstream's own digest, so this is the same
+          # MySQL the tests have always run against, not a separate build.
         env:
           MYSQL_ROOT_PASSWORD: ci-test
         ports:
@@ -431,6 +439,22 @@ jobs:
         # does anything write into the uploads volume without coming through
         # server/lib/uploads.ts? It reads the handlers, so it follows the code.
         run: node scripts/check-upload-strip.mjs
+
+      - name: One mail door guard
+        # Every email is written to comms_messages before it is sent, and that
+        # row is where permission, suppression and "did they get it" live. A
+        # send that reaches the provider any other way has none of them and
+        # shows up nowhere. server/lib/email.ts was exactly that: a second
+        # client, one import from going live around the ledger, for a month.
+        #
+        # So nothing but server/lib/comms/transport.ts may SEND: write out a
+        # provider's send endpoint or an SMTP relay, import a mail SDK, fetch
+        # the send path, or speak SMTP. Talking to the provider about anything
+        # else (the sending domain, the delivery-report webhook) is not a send
+        # and passes. It prints what it scanned and what it saw inside the
+        # door, and a door it cannot see into fails, so a pass shows its
+        # denominator. Its fixture suite runs with the other self-tests.
+        run: node scripts/check-one-mail-door.mjs
 
       - name: Living map artifact budget
         # The bundle budget below measures dist/public. The living map is served

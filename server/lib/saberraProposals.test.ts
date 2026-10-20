@@ -12,6 +12,11 @@ const role = (id: string, fields: Record<string, unknown>): VendorRecord => ({ i
 const circle = (id: string, fields: Record<string, unknown>): VendorRecord => ({ id, kind: "circle", fields });
 
 describe("suggesting a structure", () => {
+  // THIS FIXTURE SENDS `Circle` AS A STRING, and that is the shape the live
+  // service does NOT send: a role's circle there is a relation (see the last
+  // describe). A string fixture is what hid the 2026-10-09 defect, where all
+  // 56 seats lost their circle. It stays because a plain name must still be
+  // read, and it is no longer the only shape under test.
   it("turns a role into a seat a steward can read, aim and all", () => {
     const r = proposeStructure(
       [
@@ -53,14 +58,15 @@ describe("suggesting a structure", () => {
     expect(r.unmapped).toContain("Active Holders");
   });
 
-  it("GUESSES NO ENUMERATION: a status we have never been sent is reported, not mapped", () => {
-    // Mapping Status onto `recruiting` would silently advertise every seat in a
-    // village, or silently fail to, depending on a guess about their values.
+  it("CARRIES THE STATUS AS THE SOURCE WROTE IT, and never turns it into recruiting", () => {
+    // The values are known now (Active, Proposed, Vacant, Archived) and their
+    // meaning is applied by the structure plan. Whether a village advertises a
+    // seat is still the village's call, so `recruiting` is never set here.
     const r = proposeStructure(
       [
         role("r-1", {
           "Role Name": "Water Steward",
-          Status: "Filled",
+          Status: "Vacant",
           "Role Type": "Steward",
           "Assignment Method": "Appointed",
           "Next Audit Date": "2027-01-15",
@@ -68,13 +74,13 @@ describe("suggesting a structure", () => {
       ],
       { sourceName: SOURCE },
     );
-    expect(r.payload.seats[0]).toEqual({ name: "Water Steward", id: "r-1" });
+    expect(r.payload.seats[0]).toEqual({ name: "Water Steward", sourceStatus: "Vacant", id: "r-1" });
     expect(r.payload.seats[0]).not.toHaveProperty("recruiting");
-    expect(r.unmapped).toEqual(["Assignment Method", "Next Audit Date", "Role Type", "Status"]);
+    expect(r.unmapped).toEqual(["Assignment Method", "Next Audit Date", "Role Type"]);
   });
 
   it("skips a seat with no name rather than proposing a blank one", () => {
-    const r = proposeStructure([role("r-1", { Status: "Open", Body: "Someone should do this." })], {
+    const r = proposeStructure([role("r-1", { Status: "Active", Body: "Someone should do this." })], {
       sourceName: SOURCE,
     });
     expect(r.payload.seats).toEqual([]);
@@ -124,5 +130,106 @@ describe("suggesting a structure", () => {
       sourceName: SOURCE,
     });
     expect(r.skipped).toEqual([{ id: "t-1", reason: "not-a-role" }]);
+  });
+});
+
+/**
+ * THE SHAPES THE SERVICE ACTUALLY SENDS. Its store is Notion-backed: a role's
+ * `Circle` is a relation (a list of page ids, or of objects carrying an id and
+ * sometimes a name), `Status` may be a select, and `Body` may be rich text or
+ * absent from a list read. Ids are page-id shaped, as in the live payload.
+ */
+describe("the shape the service actually sends", () => {
+  const LAND = "3ed0a88e-f36a-8104-80fa-cd2bfe15c001";
+  const OLD = "3ed0a88e-f36a-8104-80fa-cd2bfe15c002";
+  const MONEY = "3ed0a88e-f36a-8104-80fa-cd2bfe15c003";
+  const circles = [
+    circle(LAND, { "Circle Name": "Land & Ecology", Status: "Active" }),
+    circle(OLD, { "Circle Name": "Old Hearth", Status: "Archived", Notes: "Archived 2026-09-22, superseded." }),
+    circle(MONEY, { "Circle Name": "Economics & Finance", Status: { name: "Proposed" } }),
+  ];
+
+  it("PLACES A ROLE WHOSE CIRCLE IS A LIST OF PAGE IDS, which is what the live sync lost", () => {
+    const r = proposeStructure(
+      [role("r-1", { "Role Name": "Water Steward", Circle: [LAND], Status: "Active" }), ...circles],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats).toEqual([
+      { name: "Water Steward", circleName: "Land & Ecology", sourceCircleStatus: "Active", sourceStatus: "Active", id: "r-1" },
+    ]);
+    expect(r.circles).toMatchObject({ placed: 1, unresolved: 0, absent: 0, shapes: ["list of 1 id"] });
+  });
+
+  it("places a role whose circle is a list of objects, with or without a name", () => {
+    const r = proposeStructure(
+      [
+        ...circles,
+        role("r-1", { "Role Name": "Water Steward", Circle: [{ id: LAND }] }),
+        role("r-2", { "Role Name": "Treasurer", Circle: [{ id: MONEY, name: "Economics & Finance" }] }),
+        role("r-3", { "Role Name": "Hearth Keeper", Circle: { id: "not-in-this-read", name: "Hearth" } }),
+      ],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats.map((s) => s.circleName)).toEqual(["Land & Ecology", "Economics & Finance", "Hearth"]);
+  });
+
+  it("KEEPS THE NAME OF AN ARCHIVED CIRCLE AND FLAGS IT, so the page can say so", () => {
+    const r = proposeStructure([...circles, role("r-1", { "Role Name": "Cook", Circle: [OLD] })], { sourceName: SOURCE });
+    expect(r.payload.seats[0]).toMatchObject({ circleName: "Old Hearth", sourceCircleStatus: "Archived" });
+    expect(r.circles.inArchived).toBe(1);
+  });
+
+  it("takes the first of several circles and reports the rest", () => {
+    const r = proposeStructure([...circles, role("r-1", { "Role Name": "Bridge", Circle: [LAND, MONEY] })], {
+      sourceName: SOURCE,
+    });
+    expect(r.payload.seats[0]).toMatchObject({ circleName: "Land & Ecology", sourceOtherCircles: ["Economics & Finance"] });
+    expect(r.circles.several).toBe(1);
+  });
+
+  it("NEVER INVENTS A CIRCLE from an id the read does not hold, and says it pointed somewhere", () => {
+    const r = proposeStructure(
+      [...circles, role("r-1", { "Role Name": "Water Steward", Circle: ["3ed0a88e-f36a-8104-80fa-cd2bfe15c999"] })],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats[0]).not.toHaveProperty("circleName");
+    expect(r.payload.seats[0].sourceCircleUnresolved).toBe(true);
+    expect(r.circles.unresolved).toBe(1);
+    expect(r.payload.rationale).toContain("One seat arrived with no circle this village could read.");
+  });
+
+  it("carries the aim from a rich-text Body, and leaves it out when Body is absent", () => {
+    const r = proposeStructure(
+      [
+        role("r-1", { "Role Name": "Water Steward", Body: [{ plain_text: "Holds the " }, { plain_text: "water." }] }),
+        role("r-2", { "Role Name": "Treasurer" }),
+      ],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats[0].aim).toBe("Holds the water.");
+    expect(r.payload.seats[1]).not.toHaveProperty("aim");
+  });
+
+  it("still refuses a Body carrying an address, and still drops the holders", () => {
+    const r = proposeStructure(
+      [role("r-1", { "Role Name": "Water Steward", Body: [{ plain_text: "Ask mika@example.test" }], "Active Holders": [{ id: "p-1" }] })],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats[0]).toEqual({ name: "Water Steward", id: "r-1" });
+    expect(r.addressesSeen).toEqual([{ id: "r-1", fields: ["Body"] }]);
+    expect(r.unmapped).toContain("Active Holders");
+  });
+
+  it("reads a select-shaped Status", () => {
+    const r = proposeStructure([role("r-1", { "Role Name": "Treasurer", Status: { name: "Proposed" } })], { sourceName: SOURCE });
+    expect(r.payload.seats[0].sourceStatus).toBe("Proposed");
+  });
+
+  it("does not report an archived circle as an empty one", () => {
+    const r = proposeStructure([...circles, role("r-1", { "Role Name": "Water Steward", Circle: [LAND] })], {
+      sourceName: SOURCE,
+    });
+    expect(r.payload.rationale).toContain("Economics & Finance");
+    expect(r.payload.rationale).not.toContain("Old Hearth");
   });
 });

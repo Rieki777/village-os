@@ -22,6 +22,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
+import { avatarFor } from "./lib/characters";
 import { exportMemberSessions, register } from "./routes/liveSessions";
 import { CLOSE_REFUSAL, SESSION_COPY, SESSION_REFUSALS, SESSION_SEASONS } from "../shared/sessions";
 
@@ -159,6 +160,11 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(v.body.facilitatorUserId).toBe(v.body.me.userId);
     expect(v.body.people).toEqual([expect.objectContaining({ name: "Ana Reyes", handle: "ana", present: true })]);
     expect(v.body.stamp.moonName).not.toBe("");
+    // The phase the room draws, kept beside the name. This village has named no
+    // seasons and said nothing about its land, so the temperate four stand.
+    expect(v.body.stamp.moonPhase).toBeGreaterThanOrEqual(0);
+    expect(v.body.stamp.moonPhase).toBeLessThanOrEqual(1);
+    expect(v.body.stamp.hemisphere).toBe("north");
     expect(SESSION_SEASONS).toContain(v.body.stamp.season);
     expect(v.body.state.stage).toBe("dropin");
     // The garden circle's own seat comes first, and neither a retired seat nor an example seat is offered.
@@ -184,8 +190,11 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect((await as("m-ben", "POST /api/sessions/:id/here", { params: room(sid) })).body).toEqual({ ok: true });
     const afterHere = await view("m-ben", sid);
     expect(afterHere.body.version).toBe(first.body.version);
-    // A write does.
-    await as("m-ana", "POST /api/sessions/:id/act", { params: room(sid), body: { action: { type: "go", stage: "arrival" } } });
+    // A write does. Nobody pressed "Begin" in this story, so this first move
+    // of the room is also what starts the session's clock.
+    expect(afterHere.body.state.startedAt).toBeNull();
+    const went = await as("m-ana", "POST /api/sessions/:id/act", { params: room(sid), body: { action: { type: "go", stage: "arrival" } } });
+    expect(went.body.state.startedAt).toEqual(expect.any(Number));
     const moved = await as("m-ben", "GET /api/sessions/:id", { params: room(sid), headers: { "if-none-match": tag } });
     expect(moved.status).toBe(200);
     expect(moved.body.version).toBeGreaterThan(first.body.version);
@@ -312,8 +321,15 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const [{ no: deeNo }] = await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-dee'");
     const [{ last_seen_at: deeSeen }] = await q("SELECT `last_seen_at` FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [sid, deeNo]);
     await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [new Date(Date.now() - 10 * 60_000), sid, deeNo]);
-    const here = (await view("m-ana", sid)).body.people.filter((p: any) => p.present).map((p: any) => p.name);
+    const seen = await view("m-ana", sid);
+    const here = seen.body.people.filter((p: any) => p.present).map((p: any) => p.name);
     expect(here.sort()).toEqual(["Ana Reyes", "Ben Ortiz"]);
+    // The room names who it is still waiting on: Ben, and never Dee, whose
+    // answer stands but who is not here.
+    expect(seen.body.waiting[`decision:${gate}`].map((p: any) => p.name)).toEqual(["Ben Ortiz"]);
+    expect(seen.body.waiting.agenda).toEqual([]);
+    // Somebody who has not joined sees no answers, so nobody is named to them.
+    expect((await view("m-cai", sid)).body.waiting).toEqual({});
     expect(await mark()).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     await q("UPDATE `live_session_people` SET `last_seen_at` = ? WHERE `session_id` = ? AND `member_no` = ?", [deeSeen, sid, deeNo]);
     await beat(sid, "m-dee");
@@ -535,8 +551,8 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       ].sort(),
     );
     expect(JSON.stringify(ben)).not.toContain("Ana Reyes");
-    // A member who never joined a room exports four empty lists.
-    expect(await exportMemberSessions(pool, "m-never")).toEqual({ sessions: [], items: [], entries: [], responses: [] });
+    // A member who never joined a room exports six empty lists, the task layer's two included.
+    expect(await exportMemberSessions(pool, "m-never")).toEqual({ sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [] });
   });
 
   it("carries what the circle left open into its next session, for the people who may read it", async () => {
@@ -658,5 +674,133 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     await age(gateRota, 7 * HOUR, 7 * HOUR);
     expect((await view("m-dee", gateRota)).body.status).toBe("closed");
     expect((await view("m-ana", talking)).body.status).toBe("open");
+  });
+
+  // ── Editing in the room ────────────────────────────────────────────────
+  //
+  // A second room, after a real call where a typo on a card could not be
+  // fixed. Ana facilitates, Ben takes notes, Dee and Eve are members, and the
+  // founder is an admin who joins partway through.
+
+  let kitchen = 0;
+  let pantry = 0;
+  const rename = (who: string, id: number, body: unknown) => as(who, "PATCH /api/sessions/:id", { params: room(id), body });
+  const versionNow = async (id: number) => Number((await q("SELECT `version` FROM `live_sessions` WHERE `id` = ?", [id]))[0].version);
+
+  it("lets the facilitator, the secretary and a joined admin rename the session, and nobody else", async () => {
+    kitchen = (await as("m-ana", "POST /api/sessions", { body: { title: "Kitchen circle, week 1", circleId: "c-kitchen" } })).body.id;
+    for (const who of ["m-ben", "m-dee", "m-eve"]) expect((await as(who, "POST /api/sessions/:id/join", { params: room(kitchen) })).status).toBe(200);
+    const benNo = (await view("m-ben", kitchen)).body.me.userId;
+    expect((await as("m-ana", "POST /api/sessions/:id/hosts", { params: room(kitchen), body: { secretaryUserId: benNo } })).status).toBe(200);
+
+    // The facilitator: the version moves and every view reads the new title.
+    const before = await versionNow(kitchen);
+    expect(await rename("m-ana", kitchen, { title: "Kitchen circle, first week" })).toMatchObject({ status: 200, body: { ok: true } });
+    const seen = await view("m-dee", kitchen);
+    expect(seen.body.title).toBe("Kitchen circle, first week");
+    expect(seen.body.version).toBeGreaterThan(before);
+    // The same title again is a quiet yes that moves nothing.
+    const settled = await versionNow(kitchen);
+    expect((await rename("m-ana", kitchen, { title: "Kitchen circle, first week" })).status).toBe(200);
+    expect(await versionNow(kitchen)).toBe(settled);
+
+    // The secretary.
+    expect((await rename("m-ben", kitchen, { title: "Kitchen circle, week one" })).status).toBe(200);
+    // An admin who has not joined is asked to join first, and then may.
+    expect(await rename("m-founder", kitchen, { title: "Kitchen circle" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.joinFirst } });
+    expect((await as("m-founder", "POST /api/sessions/:id/join", { params: room(kitchen) })).status).toBe(200);
+    expect((await rename("m-founder", kitchen, { title: "Kitchen circle" })).status).toBe(200);
+    // A member in the room may not.
+    expect(await rename("m-dee", kitchen, { title: "Dee's kitchen" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notesOnly } });
+
+    // A title is needed, as a string, and is cut to its limit.
+    for (const body of [{ title: "   " }, { title: 42 }, {}, null]) {
+      expect(await rename("m-ana", kitchen, body), JSON.stringify(body)).toMatchObject({ status: 400, body: { error: SESSION_REFUSALS.titleNeeded } });
+    }
+    expect((await rename("m-ana", kitchen, { title: "A".repeat(200) })).status).toBe(200);
+    expect((await view("m-ana", kitchen)).body.title).toBe("A".repeat(120));
+    // Other keys are ignored: the door changes the title and nothing else.
+    expect((await rename("m-ana", kitchen, { title: "Kitchen circle", status: "closed", circleId: "c-garden", durationMin: 5 })).status).toBe(200);
+    expect((await view("m-ana", kitchen)).body).toMatchObject({ title: "Kitchen circle", status: "open", circleId: "c-kitchen", durationMin: 60 });
+
+    // A closed session keeps the title it closed with.
+    expect(await rename("m-ana", sid, { title: "Renamed after the fact" })).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.closed } });
+    expect((await q("SELECT `title` FROM `live_sessions` WHERE `id` = ?", [sid]))[0].title).toBe("Garden circle, week 2");
+  });
+
+  it("lets whoever added an item fix its title while it runs, and keeps its aim and minutes with the hosts", async () => {
+    const patch = (who: string, body: Record<string, unknown>) =>
+      as(who, "PATCH /api/sessions/:id/items/:itemId", { params: room(kitchen, { itemId: String(pantry) }), body });
+    pantry = (await as("m-dee", "POST /api/sessions/:id/items", { params: room(kitchen), body: { title: "Pantry restok", aim: "report", minutes: 10 } })).body.id;
+    await as("m-ana", "POST /api/sessions/:id/act", { params: room(kitchen), body: { action: { type: "go", stage: "items" } } });
+    await as("m-ana", "POST /api/sessions/:id/act", { params: room(kitchen), body: { action: { type: "item", itemId: pantry } } });
+
+    // Dee fixes her typo while the item is on.
+    expect((await patch("m-dee", { title: "Pantry restock" })).status).toBe(200);
+    expect((await view("m-ana", kitchen)).body.items).toEqual([expect.objectContaining({ id: pantry, title: "Pantry restock", status: "active" })]);
+    // The clock reads the minutes, so once it runs they are the hosts' to change.
+    expect(await patch("m-dee", { minutes: 15 })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.aimMinutesNotes } });
+    expect(await patch("m-dee", { aim: "explore" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.aimMinutesNotes } });
+    // The whole item sent back with only the title retyped still goes through.
+    expect((await patch("m-dee", { title: "Pantry restock plan", aim: "report", minutes: 10 })).status).toBe(200);
+    // Somebody who did not add it may change neither.
+    expect(await patch("m-eve", { title: "Eve's pantry" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notesOnly } });
+    expect(await patch("m-eve", { minutes: 5 })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notesOnly } });
+    // The secretary and a joined admin may.
+    expect((await patch("m-ben", { minutes: 15 })).status).toBe(200);
+    expect((await patch("m-founder", { aim: "explore" })).status).toBe(200);
+    expect((await view("m-ana", kitchen)).body.items[0]).toMatchObject({ title: "Pantry restock plan", aim: "explore", minutes: 15 });
+
+    // A finished item's title is what the record says was talked about.
+    expect((await patch("m-ana", { status: "done" })).status).toBe(200);
+    expect(await patch("m-dee", { title: "Pantry, done" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notesOnly } });
+    expect((await patch("m-ben", { title: "Pantry restock, done" })).status).toBe(200);
+  });
+
+  it("lets the secretary and a joined admin fix the words of any entry, and keeps them from a holder", async () => {
+    const add = (who: string, body: Record<string, unknown>) => as(who, "POST /api/sessions/:id/entries", { params: room(kitchen), body });
+    const patch = (who: string, id: number, body: Record<string, unknown>) =>
+      as(who, "PATCH /api/sessions/:id/entries/:entryId", { params: room(kitchen, { entryId: String(id) }), body });
+    const note = (await add("m-dee", { kind: "note", text: "Status of D1 ~3 monts from now", itemId: pantry })).body.id;
+    const learned = (await add("m-dee", { kind: "seed", text: "We buy flour in bulk", itemId: pantry })).body.id;
+    const setup = (await add("m-ana", { kind: "action", text: "Setup Claude to connetct with Google Docs", itemId: pantry })).body.id;
+
+    // The secretary fixes a note, then a line on what we learned.
+    expect((await patch("m-ben", note, { text: "Status of D1 ~3 months from now" })).status).toBe(200);
+    expect((await patch("m-ben", learned, { text: "We buy flour in bulk, once a moon" })).status).toBe(200);
+    // A joined admin fixes the typo in an action.
+    expect((await patch("m-founder", setup, { text: "Set up Claude to connect with Google Docs" })).status).toBe(200);
+    // Dee holds it now: she sets its date, and its words stay with its author and the hosts.
+    expect((await patch("m-dee", setup, { claim: true })).status).toBe(200);
+    expect((await patch("m-dee", setup, { dueOn: "2026-10-19" })).status).toBe(200);
+    expect(await patch("m-dee", setup, { text: "Set up Claude" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notYours } });
+    // A member who wrote none of it may change none of it.
+    expect(await patch("m-eve", note, { text: "Eve's words" })).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.notYours } });
+
+    const byId = new Map((await view("m-eve", kitchen)).body.entries.map((e: any) => [e.id, e]));
+    expect(byId.get(note)).toMatchObject({ kind: "note", text: "Status of D1 ~3 months from now" });
+    expect(byId.get(learned)).toMatchObject({ kind: "seed", text: "We buy flour in bulk, once a moon" });
+    expect(byId.get(setup)).toMatchObject({ kind: "action", text: "Set up Claude to connect with Google Docs", dueOn: "2026-10-19", ownerName: "Dee Lund" });
+  });
+
+  it("shows each person's stock character face, and never a portrait they uploaded", async () => {
+    // Ana fronts a character with stock art; Dee has an uploaded portrait and
+    // fronts no character; Ben has no account row in this fixture at all.
+    await q(
+      "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `avatar`) VALUES (?,?,?,'x',?), (?,?,?,'x',?)",
+      ["m-ana", "Ana Reyes", "m-ana@examples.invalid", "/api/uploads/portrait-ana.webp", "m-dee", "Dee Lund", "m-dee@examples.invalid", "/api/uploads/portrait-dee.webp"],
+    );
+    await q(
+      "INSERT INTO `player_characters` (`id`, `village_id`, `user_id`, `archetype_key`, `presentation`, `tone`) VALUES ('pc-ana', 'local', 'm-ana', 'building', 'f', 'olive')",
+    );
+    await q("UPDATE `users` SET `primary_character_id` = 'pc-ana' WHERE `id` = 'm-ana'");
+
+    const v = await view("m-eve", kitchen);
+    const faceOf = Object.fromEntries(v.body.people.map((p: any) => [p.name, p.avatar]));
+    expect(faceOf["Ana Reyes"]).toBe(avatarFor("building", "f", "olive"));
+    expect(faceOf["Ana Reyes"]).toMatch(/^\/images\/avatars\//);
+    expect(faceOf["Dee Lund"]).toBeNull();
+    expect(faceOf["Ben Ortiz"]).toBeNull();
+    expect(JSON.stringify(v.body)).not.toContain("/api/uploads/");
   });
 });

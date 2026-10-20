@@ -50,6 +50,9 @@ import { erasureRecord, noteStepDone, unfinishedErasures } from "../repos/member
 import { saveMemberNeed } from "./needs";
 import { queueFeedback, saveEntry, savePrefs } from "./journal";
 import { addEntry, closeSession, ensureMemberNo, joinSession, patchEntry, respond, saveArrival, startSession } from "./liveSessions";
+import { answerTask } from "./sessionTasks";
+import { reserveSend } from "./sessionTaskMail";
+import { sessionIdsNaming } from "../repos/liveSessions";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 import { landPublicSubmission } from "./publicForms";
@@ -391,10 +394,13 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
 
     const out = await resumeErasure(pool, id, deps());
     expect(out.finished).toBe(true);
-    // The needs and journal deletions sit after the tombstone, so a break AT
-    // the tombstone leaves them undone and the resume runs them.
+    // The comms rows, the needs deletion and the journal deletion sit after the
+    // tombstone, so a break AT the tombstone leaves them undone and the resume
+    // runs them. The ORDER here is the order erasure.ts declares its steps in;
+    // the merge of wt/comms with main checks it against the source below.
     expect(out.ran).toEqual([
       "tombstone",
+      "comms",
       "needs-after-tombstone",
       "journal-after-tombstone",
       "seat-application-words-after-tombstone",
@@ -575,9 +581,22 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(proposal.ok && action.ok && note.ok, "the fixture must write all three").toBe(true);
     if (!proposal.ok || !action.ok || !note.ok) return;
     expect((await patchEntry(pool, closedId, leaver, action.value.id, { claim: true })).ok).toBe(true);
+    // An action the leaver wrote, which the neighbour holds.
+    const theirs = await addEntry(pool, closedId, leaver, { kind: "action", text: "Mend the gate" });
+    expect(theirs.ok, "the fixture must write it").toBe(true);
+    if (!theirs.ok) return;
+    expect((await patchEntry(pool, closedId, stays, theirs.value.id, { claim: true })).ok).toBe(true);
     await respond(pool, closedId, stays, { target: `decision:${proposal.value.id}`, value: "consent" });
     await respond(pool, closedId, leaver, { target: "word", value: "rooted" });
     expect((await closeSession(pool, closedId, leaver, { lookup, circleName: () => null })).ok).toBe(true);
+    // After the call: the leaver moves the date on the task they hold, with a
+    // line of their own; the neighbour answers the one the leaver wrote; the
+    // leaver presses Send the task emails.
+    const tasks = { lookup, circleName: () => null };
+    const moved = await answerTask(pool, { userId: id, admin: false }, action.value.id, { op: "not_yet", version: 1, dueOn: "2099-01-01", note: "After the rain" }, tasks);
+    const finished = await answerTask(pool, { userId: neighbour, admin: false }, theirs.value.id, { op: "done", version: 1 }, tasks);
+    expect(moved.ok && finished.ok, "the fixture must answer both").toBe(true);
+    await reserveSend(pool, closedId, leaverNo);
     // And an open one they are still sitting in.
     const openId = await startSession(pool, neighbourNo, { title: "Orchard circle, again", circleId: null, durationMin: 30 });
     expect((await joinSession(pool, openId, leaverNo)).ok).toBe(true);
@@ -590,15 +609,32 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
           "(SELECT COUNT(*) FROM `live_session_responses` WHERE `member_no` = ?) + " +
           "(SELECT COUNT(*) FROM `live_session_entries` WHERE `author_no` = ? OR `owner_no` = ?) + " +
           "(SELECT COUNT(*) FROM `live_sessions` WHERE `facilitator_no` = ? OR `created_by_no` = ? OR `secretary_no` = ?) + " +
-          "(SELECT COUNT(*) FROM `live_session_members` WHERE `user_id` = ?) AS n",
-        [leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, id],
+          "(SELECT COUNT(*) FROM `live_session_members` WHERE `user_id` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_task_state` WHERE `owner_no` = ? OR `changed_by_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_task_events` WHERE `by_no` = ? OR `owner_no` = ?) + " +
+          "(SELECT COUNT(*) FROM `live_session_task_sends` WHERE `sent_by_no` = ?) AS n",
+        [leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo, id, leaverNo, leaverNo, leaverNo, leaverNo, leaverNo],
       ))[0].n);
     expect(await named()).toBeGreaterThan(0);
+    // The erasure finds every session the task layer names them in.
+    expect(await sessionIdsNaming(pool, leaverNo)).toContain(closedId);
 
     await anonymizeMember(pool, target, null, deps());
 
     expect(await named()).toBe(0);
     expect((await erasureRecord(pool, id))!.stepsDone).toContain("sessions-after-tombstone");
+    // The task layer. The task they wrote went with its entry, state and answers both.
+    expect(await q("SELECT `entry_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [theirs.value.id])).toEqual([]);
+    expect(await q("SELECT `id` FROM `live_session_task_events` WHERE `entry_id` = ?", [theirs.value.id])).toEqual([]);
+    // The task they held is back with the circle, and their answer keeps its kind and loses their name and their words.
+    expect(await q("SELECT `status`, `owner_no`, `owner_seat_id`, `changed_by_no`, `latest_note` FROM `live_session_task_state` WHERE `entry_id` = ?", [action.value.id])).toEqual([
+      { status: "open", owner_no: null, owner_seat_id: null, changed_by_no: 0, latest_note: null },
+    ]);
+    expect(await q("SELECT `kind`, `by_no`, `note` FROM `live_session_task_events` WHERE `entry_id` = ?", [action.value.id])).toEqual([
+      { kind: "not_yet", by_no: 0, note: null },
+    ]);
+    // The send they pressed reads as nobody's.
+    expect(await q("SELECT `send_no`, `sent_by_no` FROM `live_session_task_sends` WHERE `session_id` = ?", [closedId])).toEqual([{ send_no: 1, sent_by_no: 0 }]);
     // The answers to the proposal they wrote went with it.
     expect(await q("SELECT `id` FROM `live_session_responses` WHERE `target` = ?", [`decision:${proposal.value.id}`])).toEqual([]);
     // The record is written again from what is left.

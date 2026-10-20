@@ -36,7 +36,7 @@ export default function LookPanel({ password }: { password: string }) {
       const res = await fetch("/api/admin/brand", {
         method: "PUT",
         headers: { Authorization: `Bearer ${password}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: { seed: theme.seed ?? "", character: theme.character ?? "", place: theme.place ?? "" } }),
+        body: JSON.stringify({ theme: { seed: theme.seed ?? "", character: theme.character ?? "", place: theme.place ?? "", accent: theme.accent ?? "" } }),
       });
       if (!res.ok) throw new Error();
       toast.success("Look saved. The whole site re-themes on next load");
@@ -45,7 +45,7 @@ export default function LookPanel({ password }: { password: string }) {
   };
 
   if (!theme) return null;
-  const derived = deriveTheme(theme.seed, theme.character);
+  const derived = deriveTheme(theme.seed, theme.character, theme.accent);
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-6 mt-6">
@@ -55,6 +55,13 @@ export default function LookPanel({ password }: { password: string }) {
         neutral look. Every derived pairing is contrast-checked, so your colour keeps its hue,
         legibility is non-negotiable.
       </p>
+      {/* THE ACCENT, the one optional fourth answer. The character turns the
+          seed's hue a fixed step to find an accent, which suits most villages
+          and cannot reach a brand whose accent is a different family from its
+          seed: a deep green seed turns to blue, never to gold. A village whose
+          guide names its accent writes it here; its hue and depth are kept and
+          its lightness is still measured against the ink and the band, the
+          same as the derived one. Blank keeps the character's own. */}
 
       <div className="flex flex-wrap items-start gap-6 mb-5">
         <div>
@@ -75,9 +82,35 @@ export default function LookPanel({ password }: { password: string }) {
             />
             {theme.seed && (
               <button type="button" onClick={() => setTheme({ ...theme, seed: "" })}
+                className="text-xs text-muted-foreground underline underline-offset-2">clear</button>
+            )}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1.5" htmlFor="look-accent">Accent colour, if your guide names one</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={/^#[0-9a-f]{6}$/i.test(theme.accent ?? "") ? theme.accent : "#6e7376" /* theme-ok: neutral colour-input default before a founder has picked an accent, never rendered as chrome */}
+              onChange={(e) => setTheme({ ...theme, accent: e.target.value })}
+              aria-label="Accent colour"
+              className="h-9 w-12 rounded border border-gray-200 cursor-pointer"
+            />
+            <input
+              id="look-accent"
+              value={theme.accent ?? ""}
+              onChange={(e) => setTheme({ ...theme, accent: e.target.value })}
+              placeholder="optional"
+              className="text-sm border border-gray-200 rounded-lg px-2.5 py-2 w-28 font-mono"
+            />
+            {theme.accent && (
+              <button type="button" onClick={() => setTheme({ ...theme, accent: "" })}
                 className="text-xs text-gray-400 underline underline-offset-2">clear</button>
             )}
           </div>
+          <p className="text-xs text-muted-foreground mt-1 max-w-[16rem]">
+            Blank lets your character choose one from the seed.
+          </p>
         </div>
         <div className="flex-1 min-w-[220px]">
           <label className="block text-sm font-medium text-gray-900 mb-1.5">Your place, in one sentence</label>
@@ -99,7 +132,7 @@ export default function LookPanel({ password }: { password: string }) {
           const active = theme.character === c.id;
           // Each card previews ITSELF: its radius, its palette applied to the
           // current seed, its display face. Deciding blind is the failure mode.
-          const p = deriveTheme(theme.seed || "#6e7376" /* theme-ok: same neutral default as the colour input above, feeds derivation rather than bypassing it */, c.id);
+          const p = deriveTheme(theme.seed || "#6e7376" /* theme-ok: same neutral default as the colour input above, feeds derivation rather than bypassing it */, c.id, theme.accent);
           return (
             <button
               key={c.id}

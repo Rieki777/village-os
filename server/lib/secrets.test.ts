@@ -14,6 +14,8 @@ import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { keyFromEnv, openWith, sealWith } from "./sealedBox";
 import {
   ACCEPT_LEGACY_PLAINTEXT,
+  SECRET_KEYS,
+  envNameFor,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   VILLAGE_SECRETS_ENV,
   allSecretStatuses,
@@ -59,6 +61,22 @@ describe("sealedBox", () => {
     expect(keyFromEnv(VILLAGE_SECRETS_ENV, { [VILLAGE_SECRETS_ENV]: "abc" })).toBeNull();
     expect(keyFromEnv(VILLAGE_SECRETS_ENV, { [VILLAGE_SECRETS_ENV]: "z".repeat(64) })).toBeNull();
     expect(keyFromEnv(VILLAGE_SECRETS_ENV, { [VILLAGE_SECRETS_ENV]: ` ${KEY_A} ` })).not.toBeNull();
+  });
+});
+
+describe("the setup game's master roots", () => {
+  // One root cellar (2026-10-13): the Railway and DNS roots are ordinary slots
+  // in this store, with no environment fallback at all.
+  it("are slots in the store", () => {
+    expect(SECRET_KEYS).toContain("railway_project_token");
+    expect(SECRET_KEYS).toContain("dns_zone_token");
+  });
+
+  it("have no environment fallback, while every other platform slot keeps its own", () => {
+    expect(envNameFor("railway_project_token")).toBeNull();
+    expect(envNameFor("dns_zone_token")).toBeNull();
+    expect(envNameFor("resend_api_key")).toBe("RESEND_API_KEY");
+    expect(envNameFor("sera_api_secret")).toBe("SERA_API_SECRET");
   });
 });
 
@@ -271,6 +289,17 @@ describe.skipIf(!configured)("the store against a real schema", () => {
     // The correct key still opens it, so the row was never damaged.
     await loadSecrets(pool, withA);
     expect(secretValue("basescan_api_key", withA)).toBe("bs_key_wxyz");
+  });
+
+  it("reads a master root only from the store, never from the environment", async () => {
+    await loadSecrets(pool, withA);
+    const env = { ...withA, RAILWAY_PROJECT_TOKEN: "rw_env_value", DNS_ZONE_TOKEN: "dns_env_value" } as NodeJS.ProcessEnv;
+    expect(secretValue("railway_project_token", env)).toBe("");
+    expect(secretStatus("dns_zone_token", env)).toMatchObject({ configured: false, source: "none", last4: null });
+    await putSecret(pool, "railway_project_token", "rw_typed_token_9z9z", "founder", withA);
+    expect(secretValue("railway_project_token", env)).toBe("rw_typed_token_9z9z");
+    expect(secretStatus("railway_project_token", env)).toMatchObject({ configured: true, source: "admin", last4: "9z9z" });
+    expect(JSON.stringify(allSecretStatuses(env))).not.toContain("rw_typed_token");
   });
 
   it("names a malformed key in the boot warning, never calling it unset", async () => {
