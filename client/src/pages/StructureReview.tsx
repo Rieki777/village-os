@@ -32,14 +32,25 @@
  * ── HONEST ABOUT WHERE IT STOPS ──────────────────────────────────────────
  *
  * The primary action is "Accept into a draft", and it says so. Proposing the
- * change for adoption (by whoever holds the power to change the chart, or by a
- * village vote) is the next phase, and nothing on this page claims it.
+ * change for adoption by a village vote is the next phase (built separately);
+ * the stepper holds a sentence for it and never a button.
+ *
+ * ── AND WHAT HAPPENS AFTER ───────────────────────────────────────────────
+ *
+ * Once accepted, the page becomes "Your draft" (components/review/
+ * StructureDraft.tsx): the draft the accept made, its preview, and the next
+ * step as buttons. The read finds that draft through the accepted proposals,
+ * so coming back to this address later shows it too, and never an empty
+ * batch, which is what the founder saw on 2026-10-20 with a draft open and no
+ * word about it anywhere.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import Layout from "@/components/Layout";
 import { authToken } from "@/lib/gameApi";
 import StructureMap, { StructureMapList } from "@/components/review/StructureMap";
+import StructureDraft, { type DraftAnswer } from "@/components/review/StructureDraft";
+import StructureSteps from "@/components/review/StructureSteps";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import {
   decideStructure,
@@ -55,7 +66,14 @@ interface PlanAnswer {
   moduleId: string | null;
   receivedAt: string | null;
   title: string | null;
-  plan: StructurePlan;
+  /** What still waits, as a plan. Null when nothing in the batch waits. */
+  plan: StructurePlan | null;
+  /** How many proposals still wait. Absent from an older server. */
+  waiting?: number;
+  /** The draft this batch was accepted into, or null. Absent from an older server. */
+  draft?: DraftAnswer | null;
+  /** Whether this viewer may publish that draft, as the publish route decides. */
+  mayPublish?: boolean;
 }
 
 interface DraftLine {
@@ -103,14 +121,18 @@ export default function StructureReview() {
   const [preview, setPreview] = useState<{ lines: DraftLine[]; blocked: number } | null>(null);
   const [done, setDone] = useState<{ draftId: string; blockedLines: DraftLine[]; leftInQueue: number } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  // Which of the two this page shows when the batch has a draft: chosen by what
+  // is left to decide unless the steward picks.
+  const [mode, setMode] = useState<"auto" | "review" | "draft">("auto");
+  const [notice, setNotice] = useState<string | null>(null);
 
   const headers = useCallback((): Record<string, string> => {
     const t = authToken();
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
 
-  const read = useCallback(async () => {
-    setLoad({ state: "loading" });
+  const read = useCallback(async (quiet = false) => {
+    if (!quiet) setLoad({ state: "loading" });
     try {
       const r = await fetch(`/api/review/batches/${encodeURIComponent(batchId)}/structure`, { headers: headers() });
       if (r.status === 401 || r.status === 403) return setLoad({ state: "refused" });
@@ -128,6 +150,10 @@ export default function StructureReview() {
 
   const data = load.state === "ready" ? load.data : null;
   const plan = data?.plan ?? null;
+  const draft = data?.draft ?? null;
+  // Something in the batch still to decide. What the source archived and the notes are not.
+  const decidable = !!plan && plan.circles.length + plan.seats.length > 0;
+  const showDraft = !!draft && (mode === "draft" || (mode === "auto" && !decidable));
   const decisions: StructureDecisions = useMemo(
     () => ({ exclude: Array.from(exclude), conflicts, retireOldChart: retire }),
     [exclude, conflicts, retire],
@@ -141,6 +167,38 @@ export default function StructureReview() {
   // Any change to the decisions makes an earlier preview stale.
   useEffect(() => setPreview(null), [decisions]);
 
+  const source = (data?.moduleId && MODULES_BY_ID[data.moduleId]?.name) || "The connected service";
+
+  if (data && draft && showDraft) {
+    return (
+      <Layout>
+        <div className="sheet-night min-h-screen bg-background text-foreground">
+          <div className="max-w-[1180px] mx-auto px-4 sm:px-5 pt-7 pb-16 grid gap-4">
+            <p className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground font-semibold">
+              Review · From {source} · Arrived {when(data.receivedAt)}
+            </p>
+            {notice && <p className={`${card} px-4 py-3 text-sm`} role="status" data-testid="notice">{notice}</p>}
+            <StructureDraft
+              draft={draft}
+              plan={plan}
+              waiting={data.waiting ?? 0}
+              source={source}
+              mayPublish={data.mayPublish === true}
+              headers={headers}
+              onChanged={(said) => {
+                setNotice(said);
+                setDone(null);
+                setMode("auto");
+                void read(true);
+              }}
+              onReviewRest={decidable ? () => setMode("review") : undefined}
+            />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   if (load.state !== "ready" || !plan || !decided || !model || !data) {
     return (
       <Layout>
@@ -151,7 +209,7 @@ export default function StructureReview() {
               {load.state === "refused" && (
                 <p>Reviewing structure changes is for whoever keeps the review queue. Ask a steward to open it for you.</p>
               )}
-              {load.state === "empty" && (
+              {(load.state === "empty" || (load.state === "ready" && !plan)) && (
                 <p>
                   Nothing in this arrival is waiting for a decision. <Link href="/review" className="underline">Back to the review queue</Link>
                 </p>
@@ -171,7 +229,6 @@ export default function StructureReview() {
     );
   }
 
-  const source = (data.moduleId && MODULES_BY_ID[data.moduleId]?.name) || "The connected service";
   const liveCircleName = new Map(plan.live.circles.map((c) => [c.id, c.name]));
   const newCircleName = new Map(plan.circles.map((c) => [c.id, c.name]));
   const circleName = (id: string | null) => (id ? newCircleName.get(id) ?? liveCircleName.get(id) ?? id : "the village");
@@ -252,7 +309,13 @@ export default function StructureReview() {
         return;
       }
       if (dryRun) setPreview({ lines: body.lines ?? [], blocked: Number(body.blocked ?? 0) });
-      else setDone({ draftId: String(body.draftId), blockedLines: body.blockedLines ?? [], leftInQueue: (body.leftInQueue ?? []).length });
+      else {
+        setDone({ draftId: String(body.draftId), blockedLines: body.blockedLines ?? [], leftInQueue: (body.leftInQueue ?? []).length });
+        // The page becomes "Your draft": read again, and the answer carries the draft just made.
+        setNotice("Accepted into a draft. Nothing is live yet.");
+        setMode("draft");
+        void read(true);
+      }
     } catch {
       setFailure("The server could not be reached. Nothing was accepted.");
     } finally {
@@ -338,6 +401,15 @@ export default function StructureReview() {
             </p>
             <h1 className="font-display text-[clamp(28px,4vw,40px)] leading-tight">{data.title ?? "A new shape for the village"}</h1>
             <p className="text-muted-foreground max-w-[68ch]">{summary}</p>
+            {notice && <p className={`${card} px-4 py-3 text-sm text-foreground`} role="status" data-testid="notice">{notice}</p>}
+            {draft && (
+              <p className={`${card} px-4 py-3 text-sm flex flex-wrap gap-3 items-center justify-between`} data-testid="draft-banner">
+                <span>Part of this arrival is already in a draft, {draft.status === "published" ? "and it is live" : "waiting to publish"}.</span>
+                <button type="button" onClick={() => setMode("draft")} className={choiceClass(false)}>
+                  Open your draft
+                </button>
+              </p>
+            )}
             {plan.notes.length > 0 && (
               <p className="text-sm text-muted-foreground">
                 {plural(plan.notes.length, "note", "notes")} in this arrival change no structure and stay in the{" "}
@@ -464,28 +536,48 @@ export default function StructureReview() {
                             </small>
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2" role="group" aria-label={`What happens to ${s.name} in ${circleName(s.circleId)}`}>
-                          <button
-                            type="button"
-                            aria-pressed={choice?.choice === "update"}
-                            disabled={otherTakes && choice?.choice !== "update"}
-                            title={otherTakes ? "The other seat with this name already moves the live seat" : undefined}
-                            onClick={() => choose(s, { choice: "update" })}
-                            className={choiceClass(choice?.choice === "update")}
-                          >
-                            Move the live seat here
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={choice?.choice === "rename"}
-                            onClick={() => choose(s, { choice: "rename", name: choice?.choice === "rename" ? choice.name : "" })}
-                            className={choiceClass(choice?.choice === "rename")}
-                          >
-                            Add as a second seat
-                          </button>
-                          <button type="button" aria-pressed={false} onClick={() => choose(s, "out")} className={choiceClass(false)}>
-                            Leave it out
-                          </button>
+                        <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label={`What happens to ${s.name} in ${circleName(s.circleId)}`}>
+                          {[
+                            {
+                              label: "Use our existing seat here",
+                              says: `${live.name} moves into ${circleName(s.circleId)}. ${live.holders ? "Whoever holds it keeps it." : "Nobody holds it yet."}`,
+                              on: choice?.choice === "update",
+                              disabled: otherTakes && choice?.choice !== "update",
+                              title: otherTakes ? "The other seat with this name already uses the existing seat" : undefined,
+                              pick: () => choose(s, { choice: "update" }),
+                            },
+                            {
+                              label: "Keep both seats",
+                              says: `A second seat beside ${live.name}, under a name you type.`,
+                              on: choice?.choice === "rename",
+                              disabled: false,
+                              title: undefined,
+                              pick: () => choose(s, { choice: "rename", name: choice?.choice === "rename" ? choice.name : "" }),
+                            },
+                            {
+                              label: "Skip this one",
+                              says: `${live.name} stays as it is. This seat waits in the queue.`,
+                              on: false,
+                              disabled: false,
+                              title: undefined,
+                              pick: () => choose(s, "out"),
+                            },
+                          ].map((o, i) => (
+                            <button
+                              key={o.label}
+                              type="button"
+                              aria-pressed={o.on}
+                              aria-label={o.label}
+                              aria-describedby={`opt-${s.key}-${i}`}
+                              disabled={o.disabled}
+                              title={o.title}
+                              onClick={o.pick}
+                              className={`${choiceClass(o.on)} rounded-xl text-left grid gap-0.5 py-2.5`}
+                            >
+                              <span className="font-semibold">{o.label}</span>
+                              <span id={`opt-${s.key}-${i}`} className="text-xs text-muted-foreground font-normal">{o.says}</span>
+                            </button>
+                          ))}
                         </div>
                         {choice?.choice === "rename" && (
                           <label className="grid gap-1 text-sm">
@@ -637,21 +729,27 @@ export default function StructureReview() {
                 </section>
               )}
 
-              <section className="grid gap-2.5" aria-labelledby="h-lands">
-                <h2 id="h-lands" className="font-display text-[22px]">How it lands</h2>
-                <ol className={`${card} grid sm:grid-cols-3`}>
-                  {[
-                    ["1. You accept it into a draft", `One draft holds every change you kept. ${source} can suggest; only people decide.`],
-                    ["2. It is published", "Nothing is live until the draft is published. Until then you can withdraw it from the review queue."],
-                    ["3. It goes live at once", "Circles and seats publish together. People keep their seats, and a seat somebody holds is never retired."],
-                  ].map(([h, t], i) => (
-                    <li key={h} className={`px-4 py-3.5 grid gap-1 ${i ? "border-t sm:border-t-0 sm:border-l border-border" : ""}`}>
-                      <b className="font-display font-normal text-[17px]">{h}</b>
-                      <span className="text-[13px] text-muted-foreground">{t}</span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
+              <StructureSteps
+                stage="review"
+                source={source}
+                action={
+                  <div className="flex flex-wrap gap-2.5 items-center">
+                    <button
+                      type="button"
+                      disabled={!canAccept}
+                      onClick={() => void post(false)}
+                      className="rounded-full border border-notice bg-notice text-background px-4 py-2.5 min-h-[44px] font-semibold text-sm disabled:opacity-45 disabled:cursor-not-allowed"
+                    >
+                      {busy === "accept" ? "Accepting" : "Accept into a draft"}
+                    </button>
+                    {!canAccept && !done && (
+                      <span className="text-[13px] text-muted-foreground">
+                        {counts.unsettled ? "Settle each seat that already exists first." : decided.problems[0] ?? ""}
+                      </span>
+                    )}
+                  </div>
+                }
+              />
 
               {preview && (
                 <section className={`${card} p-4 grid gap-2`} aria-labelledby="h-preview" data-testid="draft-preview">
@@ -699,7 +797,7 @@ export default function StructureReview() {
         {/* Above the phone tab bar (--tabbar-h is 0 from md up), and it asks the
             shortcuts button to step out: this bar owns the bottom-right corner
             and its primary action sits there. */}
-        <div data-hides-fab className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 border-t border-border bg-background/95 backdrop-blur px-4 sm:px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
+        <div data-hides-fab data-testid="action-bar" className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 border-t border-border bg-background/95 backdrop-blur px-4 sm:px-5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
           <div className="max-w-[1180px] mx-auto flex flex-wrap gap-3 items-center justify-between">
             <p className="text-sm" role="status" data-testid="bar-status">
               {done ? (
