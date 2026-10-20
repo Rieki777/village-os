@@ -27,7 +27,9 @@ import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingPayload } from "@sh
 
 const ROW =
   "group block rounded-2xl border border-border bg-muted px-4 py-3.5 text-foreground hover:border-notice/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-const ROW_ACTION = "mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-foreground underline decoration-notice/60 underline-offset-4";
+/** Block text with the arrow inline, so on a phone the arrow wraps with the last word and never floats away. */
+const ROW_ACTION = "mt-2 block text-sm font-semibold text-foreground underline decoration-notice/60 underline-offset-4";
+const ROW_ARROW = "ml-1.5 inline-block h-4 w-4 align-[-3px] transition-transform group-hover:translate-x-0.5";
 
 /** Closed to this reader: not a failure, and nothing to draw. */
 const CLOSED = new Set([401, 403, 404]);
@@ -98,7 +100,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
                 <p className={`${HINT} mt-0.5`}>{where}</p>
                 <span className={ROW_ACTION}>
                   {WAITING_COPY.applicationAction}
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ArrowRight className={ROW_ARROW} aria-hidden="true" />
                 </span>
               </Link>
             </li>
@@ -111,7 +113,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
               <p className={`${HINT} mt-0.5`}>{WAITING_COPY.draftAdds(d.circles, d.seats)}</p>
               <span className={ROW_ACTION}>
                 {WAITING_COPY.draftAction}
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                <ArrowRight className={ROW_ARROW} aria-hidden="true" />
               </span>
             </Link>
           </li>
