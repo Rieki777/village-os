@@ -45,7 +45,7 @@ import type {
 } from "../../shared/saberraSyncLog";
 import type { HeldKind } from "./saberraKinds";
 import type { VendorRecord } from "./saberraProposals";
-import { carriesAnAddress, readVendorRecord } from "./saberraRecords";
+import { readVendorRecord } from "./saberraRecords";
 
 /**
  * The run log names kinds by this village's ids, and the browser cannot
@@ -98,11 +98,17 @@ export function backoffFactor(failures: number): number {
   return Math.min(2 ** (failures - 1), MAX_BACKOFF);
 }
 
-/** Consecutive failed runs at the head of the log (newest first). A run that never called the service is passed over. */
+/**
+ * Consecutive failed runs at the head of the log (newest first). A run that
+ * never called the service is passed over, and so is a press that landed only
+ * part of a read: it did not fail, and it did not read the service whole,
+ * which is the only thing that resets the backoff.
+ */
 export function failureStreak(runs: readonly SyncRun[]): number {
   let n = 0;
   for (const r of runs) {
     if (r.outcome === "not-run") continue;
+    if (r.outcome === "landed" && r.reason === "partial") continue;
     if (r.outcome !== "failed") break;
     n += 1;
   }
@@ -164,10 +170,33 @@ export function fingerprintRead(records: readonly VendorRecord[]): string {
   return createHash("sha256").update(JSON.stringify(rows)).digest("hex");
 }
 
-/** The shapes line, kept: clipped, at most eight, and dropped whole when one reads as an address. */
+/**
+ * The words `shapeOf` (`server/lib/saberraRelations.ts`) builds a shape from.
+ * Its one number is a list's length, and it only ever follows "of". Anything
+ * else in a shape was written by the service.
+ */
+const SHAPE_WORDS: ReadonlySet<string> = new Set(["absent", "id", "text", "empty", "list", "of", "object", "number", "boolean", "|"]);
+
+/**
+ * One shape as the log keeps it, or null. `shapeOf` names an object by its
+ * keys ("object (id, name)"), and those keys are the service's field names, so
+ * they come out ("object"). What is left has to be `shapeOf`'s own words, or
+ * the shape is dropped whole: a key with a bracket in it, or a stored row
+ * edited by hand, never reaches the panel as text.
+ */
+function keyless(shape: string): string | null {
+  const bare = shape.replace(/object \([^()]*\)/g, "object");
+  const words = bare.split(" ");
+  const ours = words.every((w, i) => SHAPE_WORDS.has(w) || (/^\d{1,6}$/.test(w) && words[i - 1] === "of"));
+  return ours ? bare : null;
+}
+
+/** The shapes line, kept: `shapeOf`'s words only, object keys taken out, clipped, at most eight. */
 export function keptShapes(shapes: readonly unknown[]): string[] {
   return shapes
-    .filter((s): s is string => typeof s === "string" && s !== "" && !carriesAnAddress(s))
+    .filter((s): s is string => typeof s === "string" && s !== "")
+    .map(keyless)
+    .filter((s): s is string => s !== null)
     .map((s) => (s.length > 80 ? s.slice(0, 80) : s))
     .slice(0, 8);
 }

@@ -20,6 +20,7 @@ import {
   readRun,
 } from "./saberraPolling";
 import type { VendorRecord } from "./saberraProposals";
+import { shapeOf } from "./saberraRelations";
 
 const HOUR = 60 * 60 * 1000;
 const T0 = Date.parse("2026-10-15T12:00:00.000Z");
@@ -96,6 +97,14 @@ describe("the gap", () => {
     expect(failureStreak([run(2, "landed", "by-hand"), run(1, "failed"), run(0, "failed")])).toBe(0);
     expect(failureStreak([run(2, "no-change"), run(1, "failed"), run(0, "failed")])).toBe(0);
   });
+
+  it("IS NOT RESET BY A PRESS THAT LANDED PART OF A READ, which is no whole read", () => {
+    const partial = blankRun(new Date(T0 + 3), "by-hand", "landed", "partial");
+    const log = [partial, run(2, "failed"), run(1, "failed"), run(0, "landed")];
+    expect(failureStreak(log)).toBe(2);
+    // The clock still counts from the press, which did call the service.
+    expect(pollDueAt("every-6-hours", log)).toBe(T0 + 3 + 12 * HOUR);
+  });
 });
 
 describe("the log", () => {
@@ -144,9 +153,24 @@ describe("the log", () => {
     expect(readLog({ runs: [], landedFingerprint: "a".repeat(64) }).landedFingerprint).toBe("a".repeat(64));
   });
 
-  it("keeps the shapes line short, and drops a shape that reads as an address", () => {
-    expect(keptShapes(["list of 2 ids", "x".repeat(200), "object (jane@example.org)", 7, ""])).toEqual(["list of 2 ids", "x".repeat(80)]);
-    expect(keptShapes(Array.from({ length: 12 }, (_, i) => `shape ${i}`))).toHaveLength(8);
+  it("TAKES AN OBJECT'S KEYS OUT OF A SHAPE, because they are the service's field names", () => {
+    const relation = shapeOf([{ id: "c-1", "Jane's Circle Notes": "x" }]);
+    // The control: the shape the sync measures does carry the vendor's keys.
+    expect(relation).toContain("Jane's Circle Notes");
+    expect(keptShapes([relation, "list of 1 id", "absent", "empty list", "list of 2 text | object (id, name)"])).toEqual([
+      "list of 1 object",
+      "list of 1 id",
+      "absent",
+      "empty list",
+      "list of 2 text | object",
+    ]);
+  });
+
+  it("DROPS A SHAPE WITH ANY OTHER TEXT IN IT WHOLE, and keeps at most eight", () => {
+    const foreign = ["x".repeat(200), "object (a (b) c)", "list of 1 call 555 0100", "555 0100", "text jane@example.org", "object (jane@example.org", 7, ""];
+    expect(keptShapes(foreign)).toEqual([]);
+    expect(keptShapes(["object (jane@example.org)"])).toEqual(["object"]);
+    expect(keptShapes(Array.from({ length: 12 }, (_, i) => `list of ${i + 1} id`))).toHaveLength(8);
   });
 
   it("gives every reason a sentence, and none of them a dash", () => {

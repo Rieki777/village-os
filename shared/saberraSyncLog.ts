@@ -13,8 +13,10 @@
  *
  * The circle `shapes` line is the one exception worth naming. It describes
  * what the service's `Circle` field LOOKED like ("list of 1 id"), by structure
- * and never by value (`shapeOf` in `server/lib/saberraRelations.ts`), and it
- * is clipped and screened for an address again before it is kept.
+ * and never by value (`shapeOf` in `server/lib/saberraRelations.ts`). Before
+ * it is kept, an object's keys are taken out, because they are the service's
+ * field names, and a shape holding any word `shapeOf` does not write is
+ * dropped whole (`keptShapes` in `server/lib/saberraPolling.ts`).
  *
  * Types only, so the browser can import it without pulling any server code.
  */

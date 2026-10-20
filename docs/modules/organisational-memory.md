@@ -183,14 +183,16 @@ the report).
   pushes the next scheduled run out by a whole gap. **Backoff:** one failure retries on the
   schedule; from the second failure in a row the gap doubles, up to four times the schedule
   (every six hours becomes twelve, then twenty-four; daily becomes two days, then four). It
-  never shrinks below the schedule. Any whole read resets it. The panel says when it is
-  backing off and by how much.
+  never shrinks below the schedule. Any whole read resets it. A press that landed only part
+  of a read neither resets it nor counts as a failure. The panel says when it is backing off
+  and by how much.
 - **The run log** is the last twenty runs, one `app_config` document (`saberra-sync-runs`),
   each with when it started, scheduled or by hand, its outcome, the counts (records read,
   suggestions landed, carried forward, replaced, refused, facts stored, records held back,
   records that carried an address), the kinds not offered, the kinds cut short, each failed
-  kind and how, how the kinds were chosen, how the roles' circles were read with the shapes
-  line, and one sentence from a fixed table when something went wrong. **Typed fields only:**
+  kind and how, how the roles' circles were read with the shapes line (an object's keys taken
+  out, and a shape holding any other text dropped), how the kinds were chosen, and one
+  sentence from a fixed table when something went wrong. **Typed fields only:**
   never the key, never a field name or value, never the service's own words, never a
   failure's detail. `readLog` rebuilds every run from its types on the way out too.
 - **The panel** shows the schedule beside Sync now, the next scheduled time in the village's
