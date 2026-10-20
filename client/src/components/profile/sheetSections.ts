@@ -86,6 +86,9 @@ export interface SheetSection {
  */
 export const SHEET_SECTIONS: SheetSection[] = [
   // ── NOW: nothing has to happen first ───────────────────────────────────
+  // Start here: the one next step from joining to proposing, and the other
+  // doors open to this member, for the owner alone (StartHereCard.tsx).
+  { id: "startHere", band: "now", quiet: "" },
   { id: "nextStep", band: "now", quiet: "" },
   // The task board: what you took on in a live session, and what your seats
   // hold. Answered today, with nothing earned first. Absent with the module off.
