@@ -1,5 +1,5 @@
 /**
- * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (0253), against the built server.
+ * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (0262), against the built server.
  *
  * server/routes/canvas.test.ts proves the routes against a real database with
  * a MODEL of `guardCapability`, because the real one lives inside
