@@ -25,6 +25,7 @@ import { seatPresetsDocProblems, villagePresetsFrom, type VillagePresetRow } fro
 import SeatSettingsFields from "@/components/governance/SeatSettingsFields";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { forgetVillagePresets } from "@/lib/seatPresetsRead";
+import { gameFetch } from "@/lib/gameApi";
 import { settingsWords } from "@shared/seatSettings";
 
 export const PRESET_EDITOR_WORDS = {
@@ -38,6 +39,7 @@ export const PRESET_EDITOR_WORDS = {
   retire: "Retire",
   retired: "retired",
   none: "No village presets yet.",
+  unread: "The village's presets could not be read just now. Nothing here was changed.",
 } as const;
 
 const slug = (s: string) =>
@@ -54,11 +56,20 @@ export default function VillagePresetsEditor({ password }: { password: string })
   const [blurb, setBlurb] = useState("");
   const [draft, setDraft] = useState<SeatSettings>({ v: 1 });
   const [busy, setBusy] = useState(false);
+  const [unread, setUnread] = useState(false);
 
+  // The house helper, like every sibling panel, and a read that fails says so
+  // rather than drawing "no presets yet": an unread list is not an empty one.
   const load = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/admin/seat-presets`, { headers: authHeaders(password) });
-    const body = await res.json().catch(() => ({}));
-    setRows(res.ok && Array.isArray(body?.presets) ? body.presets : []);
+    try {
+      const res = await gameFetch(`${API_BASE}/admin/seat-presets`, { headers: authHeaders(password) });
+      const body = await res.json().catch(() => ({}));
+      setUnread(!res.ok);
+      setRows(res.ok && Array.isArray(body?.presets) ? body.presets : []);
+    } catch {
+      setUnread(true);
+      setRows([]);
+    }
   }, [password]);
   useEffect(() => {
     void load();
@@ -72,7 +83,7 @@ export default function VillagePresetsEditor({ password }: { password: string })
     }
     setBusy(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/seat-presets`, {
+      const res = await gameFetch(`${API_BASE}/admin/seat-presets`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify({ presets }),
@@ -86,6 +97,9 @@ export default function VillagePresetsEditor({ password }: { password: string })
       forgetVillagePresets();
       setRows(Array.isArray(body?.presets) ? body.presets : presets);
       return true;
+    } catch {
+      toast.error("That did not save");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -116,7 +130,8 @@ export default function VillagePresetsEditor({ password }: { password: string })
       <p className="mt-1 text-xs text-gray-500">{PRESET_EDITOR_WORDS.sub}</p>
 
       <ul className="mt-3 space-y-2">
-        {(rows ?? []).length === 0 && <li className="text-xs text-gray-400">{PRESET_EDITOR_WORDS.none}</li>}
+        {unread && <li className="text-xs text-amber-800">{PRESET_EDITOR_WORDS.unread}</li>}
+        {!unread && rows !== null && rows.length === 0 && <li className="text-xs text-gray-400">{PRESET_EDITOR_WORDS.none}</li>}
         {(rows ?? []).map((r) => {
           const p = readable.get(r.id);
           const headline = p ? settingsWords({ v: 1, [p.group]: p.values } as SeatSettings).find((w) => w.group === p.group)?.headline : null;
