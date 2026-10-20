@@ -20,6 +20,7 @@ import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
+import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
@@ -8016,7 +8017,7 @@ function LedgerTab({ password }: { password: string }) {
 interface SeasonGoal { text: string; done: boolean }
 interface SeasonRow {
   id: string; name: string; theme: string; focus: string;
-  startsOn: string; endsOn: string; goals: SeasonGoal[];
+  startsOn: string; endsOn: string; goals: SeasonGoal[]; planWindow?: PlanWindowValue;
 }
 
 const CADENCES = [
@@ -8134,8 +8135,7 @@ export function SeasonTab({ password }: { password: string }) {
                     <input type="date" value={s.endsOn} onChange={(e) => update(i, { endsOn: e.target.value })} className="px-2 py-2 text-sm border border-gray-200 rounded-lg" />
                   </div>
                 </div>
-                <input type="text" value={s.focus} onChange={(e) => update(i, { focus: e.target.value })} placeholder="What this season is for (shown on the banner)" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-
+                <input type="text" value={s.focus} onChange={(e) => update(i, { focus: e.target.value })} placeholder="What this season is for (shown on the banner)" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" /><SeasonPlanWindowFields value={s.planWindow} onChange={(planWindow) => update(i, { planWindow })} />
                 <div>
                   <p className="text-xs font-semibold text-gray-500 mb-1.5">Main goals</p>
                   <div className="space-y-1.5">
