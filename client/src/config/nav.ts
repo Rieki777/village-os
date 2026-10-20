@@ -21,6 +21,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { TASK_BOARD_PATH, TASK_COPY } from "@shared/sessionTasks";
 
 export type NavLink = {
   href: string;
@@ -62,6 +63,12 @@ export type NavLink = {
    * entries on a village that runs no map, so neither page loses its door.
    */
   unlessModule?: string;
+  /**
+   * Draw a count beside the label. Only "tasks" exists: the member's own tasks
+   * waiting on them, read for them alone and hidden at zero
+   * (components/tasks/TaskCountBadge.tsx). Never anyone else's number.
+   */
+  count?: "tasks";
 };
 
 export type NavGroup = {
@@ -294,6 +301,10 @@ export const ACCOUNT_MENU: readonly NavLink[] = [
   // journal module is off for this viewer.
   { href: "/journal", label: "Journal", module: "journal" },
   { href: "/profile#wallet", label: "Wallet", module: "exchange" },
+  // The live-session task board on the profile, with the member's own count
+  // of what waits on them beside it. The shortcuts button carries the other
+  // door (config/mobileNav.ts).
+  { href: TASK_BOARD_PATH, label: TASK_COPY.menu.label, module: "sessions", count: "tasks" },
   { href: "/badges", label: "Badges", module: "badges" },
   { href: "/admin", label: "Village Settings", roles: ["admin", "founder"] },
 ];

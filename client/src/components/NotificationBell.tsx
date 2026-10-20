@@ -20,6 +20,15 @@
  *    different items, so sending one line to the newest of them would be a
  *    small lie told four times.
  *
+ *  - A TASK NOTICE CAN BE ANSWERED WHERE IT IS READ. A single row about one
+ *    task (session_action_held or session_action_due, linking that task's
+ *    card) carries "It's done" and "Open" under it (tasks/BellTaskActions).
+ *    The row itself still links. A batched line of them still only opens;
+ *    opened, each notice inside it is one notice about one task again, so it
+ *    shows its own words and carries its own buttons. A volunteer who took
+ *    four tasks in one session answers all four here. An older notice whose
+ *    link is not a task link reads as a plain row.
+ *
  *  - THE ROW RENDERS WITHOUT ITS OBJECT. Title, body and link are stored text.
  *    A ballot that was withdrawn still reads, and can still be cleared. This is
  *    GitHub's phantom notification, answered before it happens.
@@ -36,6 +45,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import { Bell, ChevronDown, Settings2 } from "lucide-react";
 import { Link } from "wouter";
 import { buildFeed, unreadIdsOf, type FeedRow } from "@/lib/notificationFeed";
+import BellTaskActions, { BELL_TASK_TYPES } from "@/components/tasks/BellTaskActions";
+import { forgetAllBellAnswers } from "@/components/tasks/bellAnswers";
+import { useModuleOn } from "@/modules/ModuleProvider";
+import { taskIdFromLink } from "@shared/sessionTasks";
 import {
   getNotifyState,
   markNotificationsRead,
@@ -53,6 +66,21 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/**
+ * The task a single row may be answered for, or null. Only the two task
+ * notices, only when their link opens one card, and never on a batched row.
+ */
+export function bellTaskOf(row: FeedRow): number | null {
+  if (row.batched || !BELL_TASK_TYPES.includes(row.type)) return null;
+  return taskIdFromLink(row.link);
+}
+
+/** The task one notice inside an opened batch may be answered for, or null. */
+export function bellItemTaskOf(item: { type: string; link?: string | null }): number | null {
+  if (!BELL_TASK_TYPES.includes(item.type)) return null;
+  return taskIdFromLink(item.link ?? null);
+}
+
 /** The unread mark: a dot, a word, and a weight. Never the colour alone. */
 function NewMark() {
   return (
@@ -63,7 +91,12 @@ function NewMark() {
   );
 }
 
-export default function NotificationBell() {
+export interface NotificationBellProps {
+  /** The signed-in member, so the bell remembers only their own answers. */
+  memberId?: string | null;
+}
+
+export default function NotificationBell({ memberId = null }: NotificationBellProps = {}) {
   const state = useSyncExternalStore(subscribeNotifications, getNotifyState, getNotifyState);
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -75,6 +108,13 @@ export default function NotificationBell() {
   // id would put two of the same id in the document. aria-controls pointing
   // at an ambiguous id is worse than no aria-controls at all.
   const uid = useId();
+  // A task notice is answered through the sessions doors, which are not there with the module off.
+  const sessionsOn = useModuleOn("sessions");
+
+  // Signed out: the bell forgets what it answered, so nothing reaches the next member.
+  useEffect(() => {
+    if (!memberId) forgetAllBellAnswers();
+  }, [memberId]);
 
   const groups = useMemo(() => buildFeed(state.items), [state.items]);
   const unread = state.unread;
@@ -238,26 +278,43 @@ export default function NotificationBell() {
                         </button>
                         {expanded.includes(row.key) && (
                           <ul className="bg-gray-50/70">
-                            {row.items.map((it) => (
-                              <li key={it.id}>
-                                <Link
-                                  href={it.link ?? "/profile"}
-                                  onClick={() => {
-                                    if (!it.isRead) void markNotificationsRead([it.id]);
-                                    setOpen(false);
-                                  }}
-                                  className="flex items-start gap-2 pl-7 pr-4 py-2.5 min-h-11 border-b border-gray-100 hover:bg-gray-100"
-                                >
-                                  <span className="min-w-0 flex-1">
-                                    <span className={`block text-xs leading-snug ${it.isRead ? "text-muted-foreground" : "font-semibold text-foreground"}`}>
-                                      {it.title}
+                            {row.items.map((it) => {
+                              const task = sessionsOn ? bellItemTaskOf(it) : null;
+                              return (
+                                <li key={it.id}>
+                                  <Link
+                                    href={it.link ?? "/profile"}
+                                    onClick={() => {
+                                      if (!it.isRead) void markNotificationsRead([it.id]);
+                                      setOpen(false);
+                                    }}
+                                    className={`flex items-start gap-2 pl-7 pr-4 py-2.5 min-h-11 hover:bg-gray-100 ${task != null ? "" : "border-b border-gray-100"}`}
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      <span className={`block text-xs leading-snug ${it.isRead ? "text-muted-foreground" : "font-semibold text-foreground"}`}>
+                                        {it.title}
+                                      </span>
+                                      {/* Four titles from one session read the same; the task's own words tell them apart. */}
+                                      {it.body && <span className="block text-xs text-muted-foreground mt-0.5 line-clamp-2">{String(it.body)}</span>}
+                                      <span className="block text-[10px] text-muted-foreground mt-0.5">{timeAgo(it.at)}</span>
                                     </span>
-                                    <span className="block text-[10px] text-muted-foreground mt-0.5">{timeAgo(it.at)}</span>
-                                  </span>
-                                  {!it.isRead && <NewMark />}
-                                </Link>
-                              </li>
-                            ))}
+                                    {!it.isRead && <NewMark />}
+                                  </Link>
+                                  {task != null && (
+                                    <BellTaskActions
+                                      entryId={task}
+                                      what={it.body ? String(it.body) : it.title}
+                                      onRead={() => {
+                                        if (!it.isRead) void markNotificationsRead([it.id]);
+                                      }}
+                                      onLeave={() => setOpen(false)}
+                                      who={memberId}
+                                      nested
+                                    />
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                       </li>
@@ -269,7 +326,7 @@ export default function NotificationBell() {
                             readRow(row);
                             setOpen(false);
                           }}
-                          className="flex items-start gap-2 px-4 py-3 min-h-11 border-b border-gray-50 hover:bg-gray-50"
+                          className={`flex items-start gap-2 px-4 py-3 min-h-11 hover:bg-gray-50 ${sessionsOn && bellTaskOf(row) != null ? "" : "border-b border-gray-50"}`}
                         >
                           <span className="min-w-0 flex-1">
                             <span className={`block text-sm leading-snug text-foreground ${row.unread ? "font-semibold" : ""}`}>
@@ -280,6 +337,15 @@ export default function NotificationBell() {
                           </span>
                           {row.unread > 0 && <NewMark />}
                         </Link>
+                        {sessionsOn && bellTaskOf(row) != null && (
+                          <BellTaskActions
+                            entryId={bellTaskOf(row) as number}
+                            what={row.items[0]?.body ? String(row.items[0].body) : row.title}
+                            onRead={() => readRow(row)}
+                            onLeave={() => setOpen(false)}
+                            who={memberId}
+                          />
+                        )}
                       </li>
                     ),
                   )}

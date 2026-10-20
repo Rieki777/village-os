@@ -41,7 +41,10 @@ import { cleanDueOn, cleanLine } from "./sessions";
  * sentence> }` with a 4xx status.
  *
  *   GET   /api/sessions/tasks/mine            TaskBoardPayload (?earlier=1 adds older finished tasks)
+ *   GET   /api/sessions/tasks/count           TaskCountPayload, for the signed-in member only
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task: TaskCard }, or 409 { error, task }
+ *   POST  /api/sessions/tasks/:entryId/done   {} -> { task: TaskCard }; already done answers 200 and changes
+ *                                             nothing; 403 { error } without the right; 409 { error, task } once let go
  *   GET   /api/sessions/:id/task-record       TaskRecordPayload
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while the session is open
  */
@@ -65,9 +68,43 @@ export function taskEmailsUrl(sessionId: number): string {
   return `/api/sessions/${sessionId}/task-emails`;
 }
 
+/** How many tasks wait on the signed-in member, and the nearest date among them. */
+export const TASKS_COUNT_URL = `${TASKS_API}/count`;
+
+/** One task marked done from a notice: the server reads the version itself. */
+export function taskDoneUrl(entryId: number): string {
+  return `${TASKS_API}/${entryId}/done`;
+}
+
 /** The board's anchor on the profile, so an email and a notice can land on it. */
 export const TASK_BOARD_ANCHOR = "my-tasks";
 export const TASK_BOARD_PATH = `/profile#${TASK_BOARD_ANCHOR}`;
+
+/** One card's anchor on the board is `task-<entryId>`. */
+export const TASK_CARD_ANCHOR_PREFIX = "task-";
+
+/** The id one card carries on the board, so a link can land on it. */
+export function taskCardAnchor(entryId: number): string {
+  return `${TASK_CARD_ANCHOR_PREFIX}${entryId}`;
+}
+
+/** The link that opens one task on the board: every task notice carries it. */
+export function taskBoardLink(entryId: number): string {
+  return `/profile#${taskCardAnchor(entryId)}`;
+}
+
+/** The task a location hash names ("#task-12" or "task-12"), or null. */
+export function taskIdFromHash(hash: string | null | undefined): number | null {
+  const m = /^#?task-([1-9]\d{0,15})$/.exec(typeof hash === "string" ? hash.trim() : "");
+  const id = m ? Number(m[1]) : Number.NaN;
+  return Number.isSafeInteger(id) ? id : null;
+}
+
+/** The task a notice's link opens, when it is a `taskBoardLink`, or null. */
+export function taskIdFromLink(link: string | null | undefined): number | null {
+  const m = /^\/profile(#.*)$/.exec(typeof link === "string" ? link.trim() : "");
+  return m ? taskIdFromHash(m[1]) : null;
+}
 
 // ── Statuses, answers and limits ─────────────────────────────────────────────
 
@@ -159,6 +196,18 @@ export interface TaskBoardPayload {
   earlierCount: number;
   /** Village-local YYYY-MM-DD, so the client never guesses the zone. */
   today: string;
+}
+
+/**
+ * What waits on one member: the open tasks they hold in person or through a
+ * seat they sit in now, the same set the board's Holding and seat groups show.
+ * Their own count, for their own menu and profile. Never shown to anyone else
+ * and never compared with anybody's.
+ */
+export interface TaskCountPayload {
+  waiting: number;
+  /** YYYY-MM-DD, the nearest date among them, or null when none has a date. */
+  nextDue: string | null;
 }
 
 export interface TaskAnswer {
@@ -920,6 +969,36 @@ export const TASK_COPY = {
     lastTried: (when: string, name: string): string => `Tried ${when} by ${name}. No email went out.`,
     triedAtClose: "Tried when the session closed. No email went out.",
   },
+  /** The avatar menu and the mobile menu: the board's entry, with the member's own count beside it. */
+  menu: {
+    label: "My tasks",
+    /** The count's name for a screen reader. The count is hidden when nothing waits. */
+    waiting: (n: number): string => (n === 1 ? "1 task waits on you" : `${n} tasks wait on you`),
+  },
+  /** The small card near the top of the member's own profile. Nothing shows when nothing waits. */
+  waitingCard: {
+    heading: "Waiting on you",
+    count: (n: number): string => (n === 1 ? "One task waits on you." : `${n} tasks wait on you.`),
+    nextDue: (date: string): string => `The nearest date is ${date}.`,
+    /** The nearest date is already behind today. Normal ink, never a red mark. */
+    nextDuePassed: (date: string): string => `The earliest date was ${date}.`,
+    noDate: "None of them has a date yet.",
+    button: "Open my task board",
+  },
+  /** Under a task notice in the bell. A batched row opens the board and carries no buttons. */
+  bell: {
+    done: "It's done",
+    open: "Open",
+    /** The buttons' names for a screen reader, with the task the notice is about. */
+    doneLabel: (what: string): string => `It's done: ${what}`,
+    openLabel: (what: string): string => `Open it on your task board: ${what}`,
+    working: "Saving",
+    marked: "Done. The circle sees it at the next action check.",
+    undo: "Open it again",
+    undoLabel: (what: string): string => `Open it again: ${what}`,
+    reopened: "Open again. It is back on your task board.",
+    failed: "That did not save. Try again.",
+  },
   pref: {
     label: "Task emails",
     options: {
@@ -942,6 +1021,8 @@ export const TASK_REFUSALS = {
   answerShape: "An answer is done, not yet, let go, hand it back, take it, or open it again, with the version you saw.",
   noteLong: `Keep it to ${TASK_NOTE_MAX} characters.`,
   alreadyDone: "This one is already marked done.",
+  /** "It's done" from a notice, on a task that was let go. */
+  letGoNotDone: "This one was let go. Open it on your task board to read why.",
   finished: "This one is finished. Open it again first.",
   alreadyOpen: "This one is already open.",
   notWithCircle: "Someone already holds this one.",

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationToasts from "@/components/NotificationToasts";
+import TaskCountBadge from "@/components/tasks/TaskCountBadge";
 import { altOr, useGameConfig } from "@/lib/gameApi";
 import { NAV, ACCOUNT_MENU, isGroup, type NavLink, type NavGroup } from "@/config/nav";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -213,7 +214,7 @@ export default function Layout({ children }: LayoutProps) {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <NotificationBell />
+                <NotificationBell memberId={user.id} />
                 {/* The profile link and sign out used to sit side by side with
                     twelve pixels between them, and sign out was a bare icon
                     with no background of its own: at a glance the arrow read
@@ -263,6 +264,7 @@ export default function Layout({ children }: LayoutProps) {
                             onClick={() => setAccountOpen(false)}
                           >
                             {item.label}
+                            {item.count === "tasks" && <TaskCountBadge who={user.id} />}
                           </Link>
                         ))}
                         <button
@@ -303,7 +305,7 @@ export default function Layout({ children }: LayoutProps) {
 
           {/* Mobile Menu Button (bell beside it when signed in) */}
           <div className="lg:hidden flex items-center gap-1 text-white">
-            {user && <NotificationBell />}
+            {user && <NotificationBell memberId={user.id} />}
             {/* Icon-only, so it needs a spoken name and a state a screen
                 reader can hear — otherwise it announces as bare "button". */}
             <button
@@ -403,6 +405,7 @@ export default function Layout({ children }: LayoutProps) {
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           {item.label === "My Profile" ? `My Profile (${user.name.split(" ")[0]})` : item.label}
+                          {item.count === "tasks" && <TaskCountBadge who={user.id} />}
                         </Link>
                       ))}
                       <button

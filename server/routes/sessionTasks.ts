@@ -6,7 +6,9 @@
  * server/lib/sessionTaskMail.ts (the emails and the gentle notes):
  *
  *   GET   /api/sessions/tasks/mine            TaskBoardPayload (?earlier=1 adds older finished tasks)
+ *   GET   /api/sessions/tasks/count           TaskCountPayload, the signed-in member's own
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task }, or 409 { error, task }
+ *   POST  /api/sessions/tasks/:entryId/done   {} -> { task }: "It's done" from a notice
  *   GET   /api/sessions/:id/task-record       TaskRecordPayload
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while open
  *
@@ -21,8 +23,9 @@
  * prefix, so the board's doors stay gated if the order ever changes.
  *
  * NO DOOR HERE IS SWALLOWED BY THE ROOM'S. `/api/sessions/:id` matches one
- * segment, so `/api/sessions/tasks/mine` (two) never reaches it, and the
- * room's doors with two segments are POSTs to fixed words. The route suite
+ * segment, so `/api/sessions/tasks/mine` and `/tasks/count` (two) never reach
+ * it, the room's doors with two segments are POSTs to fixed words or its one
+ * GET of `minutes.md`, and the room has no POST with three. The route suite
  * proves it on a real Express app.
  *
  * THE GENTLE NOTES' JOB REGISTERS HERE, beside the doors that answer what it
@@ -34,7 +37,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { memberNo, parseId, rolesIn, mapSession, type MemberLookup, type Outcome } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import { registerJob } from "../lib/scheduler";
-import { answerTask, taskBoard, taskRecord, type TaskDeps } from "../lib/sessionTasks";
+import { answerTask, markTaskDone, taskBoard, taskCount, taskRecord, type TaskDeps } from "../lib/sessionTasks";
 import { TASK_NOTES_EVERY_MS, TASK_NOTES_JOB, reserveSend, runTaskNotes, sendTaskEmails } from "../lib/sessionTaskMail";
 import { sessionRow } from "../repos/liveSessions";
 import { SESSION_REFUSALS as R } from "../../shared/sessions";
@@ -115,18 +118,48 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
+   * How many tasks wait on the signed-in member, and the nearest date, for
+   * the menu's count and the profile's card. Their own numbers, read fresh:
+   * nothing is cached, here or in a shared cache on the way.
+   */
+  app.get("/api/sessions/tasks/count", async (req, res) => {
+    const who = await signedIn(req, res);
+    if (!who) return;
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(await taskCount(getPool(), who, tasks));
+  });
+
+  /**
    * One answer. The version the page saw comes back with it; a task that moved
    * since answers 409 with the card as it stands now.
    */
   app.patch("/api/sessions/tasks/:entryId", async (req, res) => {
     const who = await signedIn(req, res);
     if (!who) return;
+    // One hour's bucket for every answer one member gives, the PATCH and "It's done" alike.
     if (await overLimit(`sessions-task-answer:${who.userId}`, TASK_LIMITS.answersPerHour, HOUR_MS)) {
       return res.status(429).json({ error: TASK_REFUSALS.tooMany });
     }
     const entryId = parseId(req.params?.entryId);
     if (entryId == null) return res.status(404).json({ error: TASK_REFUSALS.notFound });
     answer(res, await answerTask(getPool(), who, entryId, req.body, tasks), (v) => ({ task: v.task }));
+  });
+
+  /**
+   * "It's done" from a notice in the bell. No body: the server reads the
+   * task's version itself and gives the PATCH's own done answer. A task
+   * already done answers 200 with the card and changes nothing.
+   */
+  app.post("/api/sessions/tasks/:entryId/done", async (req, res) => {
+    const who = await signedIn(req, res);
+    if (!who) return;
+    // One hour's bucket for every answer one member gives, the PATCH and "It's done" alike.
+    if (await overLimit(`sessions-task-answer:${who.userId}`, TASK_LIMITS.answersPerHour, HOUR_MS)) {
+      return res.status(429).json({ error: TASK_REFUSALS.tooMany });
+    }
+    const entryId = parseId(req.params?.entryId);
+    if (entryId == null) return res.status(404).json({ error: TASK_REFUSALS.notFound });
+    answer(res, await markTaskDone(getPool(), who, entryId, tasks), (v) => ({ task: v.task }));
   });
 
   // ── One session's tasks ───────────────────────────────────────────────────

@@ -25,15 +25,40 @@
  * a task handed back leaves. If the card that had focus is gone, focus comes
  * back to the board's heading rather than falling to the top of the page.
  *
- * An email or a notice links here as /profile#my-tasks. The board arrives
- * after the page does, so it brings itself into view once it has drawn.
+ * An email or the menu links here as /profile#my-tasks. A task notice links
+ * one card as /profile#task-<entryId> (taskBoardLink). The board arrives after
+ * the page does, so it brings itself into view once it has drawn, and again
+ * whenever the hash names it while the member is already here (a notice
+ * opened from the bell on this page changes the hash with no remount). A card
+ * it lands on scrolls clear of the fixed header, wears a gold ring for a
+ * moment (no fade when the reader asks for reduced motion), and takes focus
+ * on its own words, so a screen reader starts at the task. A card that is not
+ * on the board as drawn (an Earlier one, or one that moved on) lands on the
+ * board itself.
+ *
+ * On a first visit the sections above the board are still drawing when it
+ * lands, and each one pushes it down. So a landing holds its target in place
+ * until the page settles (tasks/holdInView), letting go the moment the reader
+ * scrolls, touches or types, and puts focus on the card again once it is
+ * still, so the ring and the focus are never out of sight.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { gameFetch } from "@/lib/gameApi";
 import { HINT, LABEL_CAPS, PANEL, BTN_SECONDARY, BTN_QUIET } from "@/components/sessions/roomUi";
 import TaskCard from "@/components/tasks/TaskCard";
-import { TASK_BOARD_ANCHOR, TASK_COPY, TASKS_MINE_URL, type TaskBoardPayload, type TaskCard as TaskCardData } from "@shared/sessionTasks";
+import { TASKS_CHANGED_EVENT, tasksChanged, tasksChangedFrom } from "@/components/tasks/useTaskCount";
+import { dropBellAnswer } from "@/components/tasks/bellAnswers";
+import { holdInView } from "@/components/tasks/holdInView";
+import {
+  TASK_BOARD_ANCHOR,
+  TASK_COPY,
+  TASKS_MINE_URL,
+  taskCardAnchor,
+  taskIdFromHash,
+  type TaskBoardPayload,
+  type TaskCard as TaskCardData,
+} from "@shared/sessionTasks";
 
 const isCards = (v: unknown): v is TaskCardData[] => Array.isArray(v);
 
@@ -48,6 +73,32 @@ const replaceIn = (list: TaskCardData[], t: TaskCardData): TaskCardData[] => lis
 
 type GroupKey = "holding" | "seatsHold" | "finished";
 
+/** How long a card landed on keeps its gold ring. */
+export const LANDED_RING_MS = 2400;
+
+const reducedMotion = (): boolean => {
+  try {
+    return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+};
+
+/** The card's own words, which label its article: where focus lands. */
+function focusCard(wrap: HTMLElement): void {
+  const article = wrap.querySelector<HTMLElement>("article[aria-labelledby]");
+  const words = article ? document.getElementById(article.getAttribute("aria-labelledby") ?? "") : null;
+  const target = words ?? wrap;
+  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+}
+
+/** The li a card sits in: its anchor, and room above it for the fixed header. */
+const cardShell = (entryId: number, ringed: number | null): string =>
+  `scroll-mt-28 rounded-2xl motion-safe:transition-shadow motion-safe:duration-500 ${
+    ringed === entryId ? "ring-2 ring-gold ring-offset-2 ring-offset-card" : ""
+  }`;
+
 export default function TaskBoard() {
   const [board, setBoard] = useState<TaskBoardPayload | null>(null);
   const [failed, setFailed] = useState(false);
@@ -58,11 +109,17 @@ export default function TaskBoard() {
   const refocus = useRef(false);
   const arrived = useRef(false);
   const live = useRef(true);
+  const drawn = useRef(false);
+  // The landing being held in view, let go by the next landing or on leaving.
+  const holding = useRef<(() => void) | null>(null);
+  const [ringed, setRinged] = useState<number | null>(null);
 
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
+      holding.current?.();
+      holding.current = null;
     };
   }, []);
 
@@ -89,14 +146,67 @@ export default function TaskBoard() {
     void load();
   }, [load]);
 
-  // Landed here from an email or a notice: come into view once there is something to see.
+  /**
+   * Land where the hash points: one card, or the board as a whole. Answers
+   * whether the hash named this board at all.
+   */
+  const land = useCallback((): boolean => {
+    if (typeof window === "undefined") return false;
+    const hash = window.location.hash;
+    const id = taskIdFromHash(hash);
+    if (id == null && hash !== `#${TASK_BOARD_ANCHOR}`) return false;
+    const behavior: ScrollBehavior = reducedMotion() ? "auto" : "smooth";
+    const card = id != null ? document.getElementById(taskCardAnchor(id)) : null;
+    const target = card ?? document.getElementById(TASK_BOARD_ANCHOR);
+    holding.current?.();
+    holding.current = null;
+    if (!target) return true;
+    target.scrollIntoView?.({ block: "start", behavior });
+    if (card) {
+      setRinged(id);
+      focusCard(card);
+    }
+    // Hold it there while the page above it finishes drawing.
+    holding.current = holdInView(target, {
+      onSettle: () => {
+        holding.current = null;
+        // Focus on the card again once it is still, unless the reader has moved it on.
+        const active = document.activeElement;
+        if (card && card.isConnected && (!active || active === document.body || card.contains(active))) focusCard(card);
+      },
+    });
+    return true;
+  }, []);
+
+  // Landed here from an email, a notice or the menu: come into view once there is something to see.
   useEffect(() => {
     if (!board || arrived.current) return;
     arrived.current = true;
-    if (typeof window !== "undefined" && window.location.hash === `#${TASK_BOARD_ANCHOR}`) {
-      document.getElementById(TASK_BOARD_ANCHOR)?.scrollIntoView?.({ block: "start" });
-    }
-  }, [board]);
+    drawn.current = true;
+    land();
+  }, [board, land]);
+
+  // Already on the profile when a notice or the menu points here: the hash
+  // changes with no remount. The router moves by pushState, which sends no
+  // hashchange, so its own event is heard too.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const again = () => {
+      if (drawn.current) land();
+    };
+    const events = ["hashchange", "popstate", "pushState"];
+    for (const e of events) window.addEventListener(e, again);
+    return () => {
+      for (const e of events) window.removeEventListener(e, again);
+    };
+  }, [land]);
+
+  // The ring is a moment, not a mark.
+  useEffect(() => {
+    if (ringed == null) return;
+    const t = window.setTimeout(() => setRinged(null), LANDED_RING_MS);
+    return () => window.clearTimeout(t);
+  }, [ringed]);
 
   // The card that held focus left the board: bring focus home.
   useEffect(() => {
@@ -107,10 +217,23 @@ export default function TaskBoard() {
   }, [board]);
 
   const answered = (t: TaskCardData) => {
+    // The bell's own memory of "It's done" speaks for it no longer.
+    dropBellAnswer(t.entryId);
     setBoard((b) => (b ? { ...b, holding: replaceIn(b.holding, t), seatsHold: replaceIn(b.seatsHold, t), finished: replaceIn(b.finished, t) } : b));
     setEarlier((e) => (e ? replaceIn(e, t) : e));
     void load(true, true);
+    // The menu's count and the profile's waiting card read again.
+    tasksChanged("board");
   };
+
+  // A task answered from the bell while the board is open: read again quietly.
+  useEffect(() => {
+    const fromBell = (e: Event) => {
+      if (tasksChangedFrom(e) === "bell") void load(true);
+    };
+    window.addEventListener(TASKS_CHANGED_EVENT, fromBell);
+    return () => window.removeEventListener(TASKS_CHANGED_EVENT, fromBell);
+  }, [load]);
 
   const openEarlier = async () => {
     if (earlierAsked.current) return;
@@ -145,7 +268,7 @@ export default function TaskBoard() {
         </h3>
         <ul className="space-y-3">
           {cards.map((c) => (
-            <li key={c.entryId}>
+            <li key={c.entryId} id={taskCardAnchor(c.entryId)} className={cardShell(c.entryId, ringed)}>
               <TaskCard task={c} today={today} onAnswered={answered} />
             </li>
           ))}
@@ -215,7 +338,7 @@ export default function TaskBoard() {
                 {earlierShown.length > 0 && (
                   <ul className="space-y-3">
                     {earlierShown.map((c) => (
-                      <li key={c.entryId}>
+                      <li key={c.entryId} id={taskCardAnchor(c.entryId)} className={cardShell(c.entryId, ringed)}>
                         <TaskCard task={c} today={board.today} onAnswered={answered} />
                       </li>
                     ))}
