@@ -22,7 +22,7 @@ import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
-import { landProposal, reopenProposalsFor } from "../lib/externalProposals";
+import { landProposal, proposalsInBatch, reopenProposalsFor } from "../lib/externalProposals";
 import { seatHolder } from "../lib/orgChart";
 import { draftChangeCap, previewDraft, publishDraft, withdrawDraft } from "../lib/orgDrafts";
 import { register } from "./structureReview";
@@ -136,6 +136,7 @@ describe.skipIf(!configured)("the structure change review", () => {
     const app = express();
     app.use(express.json());
     register(app, {
+      isAdmin: (async () => false) as any,
       authedUser: (async () => ({ id: "steward-1" })) as any,
       adminActor: (() => null) as any,
       guardCapability: (async () => true) as any,
@@ -295,5 +296,71 @@ describe.skipIf(!configured)("the structure change review", () => {
     expect(await reopenProposalsFor(pool, r.json.draftId)).toBe(1);
     const back = await waiting(SPLIT);
     expect(back.flatMap((p) => p.payload.seats.map((s: any) => s.name)).sort()).toEqual(["Bell Ringer", "Gate Keeper"]);
+  });
+
+  /*
+   * THE PAGE RYE MET ON 2026-10-20: the structure accepted, only what the source
+   * archived still waiting. The read used to answer that as a batch of nothing.
+   * It answers with the draft, found through the proposals' created_ref, and
+   * with the date of the batch's NEWEST record, since a re-synced batch keeps
+   * each unchanged record's first arrival.
+   */
+  it("answers a fully accepted batch with the draft it went into, and the newest arrival", async () => {
+    const WHOLE = "sync-whole";
+    const structure = await land(
+      "org.proposed",
+      { title: "Two keepers", seats: [{ name: "Archive Keeper", circleName: "General Coordinating Circle", id: "rec-archive-keeper" }, { name: "Bell Tender", circleName: "General Coordinating Circle", id: "rec-bell-tender" }] },
+      undefined,
+      WHOLE,
+    );
+    const archivedCircle = await land("circle.proposed", { "Circle Name": "Old Orchard", Status: "Archived" }, "rec-old-orchard", WHOLE);
+    await pool.query("UPDATE external_proposals SET received_at = '2026-10-09 17:24:00' WHERE id = ?", [structure]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
+    await pool.query("UPDATE external_proposals SET received_at = '2026-10-20 16:02:00' WHERE id = ?", [archivedCircle]); // module-review-ok: dating the fixture rows on the scratch schema this suite provisioned
+
+    const accepted = await call("POST", `/api/review/batches/${WHOLE}/structure/accept`, {});
+    expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
+    expect((await waiting(WHOLE)).map((p) => p.id)).toEqual([archivedCircle]);
+
+    const r = await call("GET", `/api/review/batches/${WHOLE}/structure`);
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.draft).toMatchObject({
+      id: accepted.json.draftId,
+      status: "open",
+      title: "Two keepers",
+      counts: { circles: 0, seats: 2, moves: 0, retiring: 0, changes: 2 },
+      preview: { lines: 2, blocked: 0, blockedLines: [] },
+    });
+    expect(r.json.draft.plan.seats.map((s: any) => s.name).sort()).toEqual(["Archive Keeper", "Bell Tender"]);
+    // What still waits is named, and it is only what the source archived.
+    expect(r.json.waiting).toBe(1);
+    expect(r.json.plan.seats).toEqual([]);
+    expect(r.json.plan.archived.map((a: any) => a.name)).toEqual(["Old Orchard"]);
+    // The publish route asks isAdmin, and so does this answer.
+    expect(r.json.mayPublish).toBe(false);
+    // The newest record dates the batch, never the first one.
+    // Read through the same layer, so the database host's time zone cancels out.
+    const rows = await proposalsInBatch(pool, WHOLE);
+    const at = (id: string) => rows.find((x) => x.id === id)!.receivedAt;
+    expect(Date.parse(at(archivedCircle))).toBeGreaterThan(Date.parse(at(structure)));
+    expect(r.json.receivedAt).toBe(at(archivedCircle));
+
+    // With nothing at all left waiting, it still answers with the draft.
+    await pool.query("UPDATE external_proposals SET status = 'rejected' WHERE id = ?", [archivedCircle]); // module-review-ok: deciding the leftover on the scratch schema this suite provisioned
+    const bare = await call("GET", `/api/review/batches/${WHOLE}/structure`);
+    expect(bare.status).toBe(200);
+    expect(bare.json.plan).toBeNull();
+    expect(bare.json.waiting).toBe(0);
+    expect(bare.json.draft.id).toBe(accepted.json.draftId);
+    expect(bare.json.title).toBe("Two keepers");
+
+    // Once published, the read still finds it, and nobody is offered a second publish.
+    const published = await publishDraft(pool, accepted.json.draftId, "steward-1", draftChangeCap());
+    expect(published.ok, !published.ok ? published.error : "").toBe(true);
+    const live = await call("GET", `/api/review/batches/${WHOLE}/structure`);
+    expect(live.json.draft).toMatchObject({ id: accepted.json.draftId, status: "published", preview: null });
+    expect(live.json.mayPublish).toBe(false);
+
+    // A batch that never held anything is still a 404.
+    expect((await call("GET", "/api/review/batches/sync-nothing/structure")).status).toBe(404);
   });
 });
