@@ -48,6 +48,7 @@ import WeightRecord from "@/components/governance/WeightRecord";
 import { subjectNoun } from "@/components/governance/wizardConfig";
 import { CYCLE_SETTLEMENT } from "@shared/moonSettlement";
 import { VILLAGE_LAUNCH } from "@shared/ballotSubjects";
+import { ROLE_APPLICATION } from "@shared/seatApplications";
 import { useCatalyst } from "@/lib/gameApi";
 import { weightText } from "@/components/governance/voteBars";
 import {
@@ -683,6 +684,16 @@ export default function Decision() {
                 <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-lg bg-stone-50 p-4 font-sans text-sm leading-relaxed text-stone-800">
                   {ballot.docMarkdown}
                 </pre>
+              )}
+              {/* A seat application's ballot names seats only; members read
+                  the application itself, terms and all, on its own page. */}
+              {ballot.subjectType === ROLE_APPLICATION && (
+                <Link
+                  href={`/seat-applications/${encodeURIComponent(ballot.subjectRef)}`}
+                  className="mt-3 flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                >
+                  Read the application
+                </Link>
               )}
             </section>
           </div>

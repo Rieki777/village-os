@@ -90,7 +90,7 @@ afterEach(() => {
 });
 
 const count = (label: string) => screen.getByTestId(`count-${label}`).textContent;
-const accept = () => screen.getByRole("button", { name: "Accept into a draft" });
+const accept = () => within(screen.getByTestId("action-bar")).getByRole("button", { name: "Accept into a draft" });
 
 async function ready() {
   render(<StructureReview />);
@@ -106,12 +106,12 @@ describe("the structure review page", () => {
     expect(screen.getByTestId("bar-status").textContent).toContain("2 seats need your call");
 
     const [first, second] = [screen.getByTestId("conflict-xp-structure#0"), screen.getByTestId("conflict-xp-structure#1")];
-    fireEvent.click(within(first).getByRole("button", { name: "Move the live seat here" }));
+    fireEvent.click(within(first).getByRole("button", { name: "Use our existing seat here" }));
     expect(accept()).toBeDisabled();
     // The live seat can move once: the second match may not take it too.
-    expect(within(second).getByRole("button", { name: "Move the live seat here" })).toBeDisabled();
+    expect(within(second).getByRole("button", { name: "Use our existing seat here" })).toBeDisabled();
 
-    fireEvent.click(within(second).getByRole("button", { name: "Add as a second seat" }));
+    fireEvent.click(within(second).getByRole("button", { name: "Keep both seats" }));
     // A second seat needs a name of its own before anything goes ahead.
     expect(accept()).toBeDisabled();
     fireEvent.change(within(second).getByRole("textbox"), { target: { value: "Ventures Operations Steward" } });
@@ -153,8 +153,8 @@ describe("the structure review page", () => {
 
   it("previews, then accepts, sending exactly the decisions on screen", async () => {
     await ready();
-    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Move the live seat here" }));
-    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#1")).getByRole("button", { name: "Leave it out" }));
+    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Use our existing seat here" }));
+    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#1")).getByRole("button", { name: "Skip this one" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Retire the old chart/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "Preview as a draft" }));

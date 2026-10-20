@@ -143,6 +143,35 @@ export interface CycleClock {
   cycleNumberAt(at: Date): number;
 }
 
+/**
+ * THE TERM WARNING OPENS ONE CYCLE BEFORE THE TERM ENDS.
+ *
+ * Rye, 2026-09-14: warn a holder one lunar cycle before their term ends. It
+ * used to be a flat 14 days, which is half a moon, and a village that re-seats
+ * by vote needs a whole cycle to open a ballot, let it run, and close it.
+ *
+ * MEASURED WITH THE VILLAGE'S OWN CLOCK, never with a day count. Terms are
+ * stamped on a cycle boundary (`termEndsAtFromCycles`), so the warning for a
+ * term ending at the boundary that opens cycle N opens at the boundary that
+ * opened cycle N-1: the new moon before, on the lunar clock, or the first of
+ * the month before, on the calendar clock. A lunation runs anywhere from
+ * about 29.3 to 29.8 days, so "30 days" would be wrong in both directions.
+ *
+ * A term that does not sit on a boundary (a date somebody typed on an
+ * org-chart seating) keeps its offset into its cycle and moves back one cycle.
+ * When the cycle before is shorter than that offset (the 31st of March has no
+ * 31st of February), the warning opens at the start of the term's own cycle,
+ * which is still at least one whole cycle before the term ends.
+ *
+ * PURE. The clock is an argument so a test can hold both clocks.
+ */
+export function termWarningOpensAt(termEndsAt: Date, clock: CycleClock): Date {
+  const n = clock.cycleNumberAt(termEndsAt);
+  const ownStart = clock.startOf(n).getTime();
+  const offset = Math.max(0, termEndsAt.getTime() - ownStart);
+  return new Date(Math.min(clock.startOf(n - 1).getTime() + offset, ownStart));
+}
+
 // ── The lunar clock ─────────────────────────────────────────────────────────
 
 /**

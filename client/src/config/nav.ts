@@ -180,6 +180,9 @@ export const NAV: readonly NavEntry[] = [
       // how the village decides and is always there; /decisions shows what it
       // is deciding and exists only where the engine is switched on.
       { href: "/decisions", label: "Decisions", module: "governance" },
+      // Season plans (RC1): everyone's plan for the season, by name. Members
+      // read it (terms.read), so it is listed for the signed-in roles only.
+      { href: "/season-plans", label: "Season Plans", module: "governance", roles: ["member", "admin", "founder"] },
       // Signed out, the page itself asks the visitor to sign in to write one.
       { href: "/propose", label: "Make a Proposal", module: "governance" },
       /**
