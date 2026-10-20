@@ -1020,8 +1020,11 @@ export async function seatHolder(
 /**
  * End a seating. Never a DELETE: a seat's history is the point, and the
  * generated active-holder key frees the person to hold it again later.
+ *
+ * A pool, or a transaction's connection: carrying a person across to a new
+ * chart (server/lib/carryAcross.ts) seats them and ends this in one commit.
  */
-export async function endSeating(pool: Pool, assignmentId: string, reason?: string): Promise<boolean> {
+export async function endSeating(pool: Pool | PoolConnection, assignmentId: string, reason?: string): Promise<boolean> {
   const [r]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE id = ? AND ended_at IS NULL",
     [reason ?? null, assignmentId],

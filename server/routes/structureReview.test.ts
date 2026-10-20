@@ -144,6 +144,12 @@ describe.skipIf(!configured)("the structure change review", () => {
       getPool: () => pool as any,
       members: { all: async () => [] } as any,
       circlesRepo: { all: () => circlesCache } as any,
+      // The carry step's deps (server/routes/carryAcross.ts); its own suite exercises them.
+      mayAct: (async () => ({ ok: true })) as any,
+      seasonState: () => ({ current: null, seasons: [], timezone: "UTC" }),
+      notify: (async () => ({ inserted: false })) as any,
+      firstName: (n: string) => n.split(" ")[0] ?? "",
+      liveHoldersOf: async () => [],
     });
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

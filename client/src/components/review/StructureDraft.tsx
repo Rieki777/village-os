@@ -18,12 +18,14 @@
  *                               proposals back to the queue.
  *
  * A viewer who may not publish is told who can. Once published it says so,
- * with the way to the living map and the seats.
+ * with the way to the living map and the seats, and moves on to step four:
+ * carrying the people on the old chart across (CarryAcross.tsx).
  */
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import StructureMap, { StructureMapList } from "@/components/review/StructureMap";
 import StructureSteps from "@/components/review/StructureSteps";
+import CarryAcross, { carryDone, carrySummary, type CarryAnswer } from "@/components/review/CarryAcross";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import { decideStructure, type PlanSeat, type StructureDecisions, type StructurePlan } from "@shared/structurePlan";
 import { stayedBehind, type DraftCounts } from "@shared/structureDraft";
@@ -75,8 +77,13 @@ export default function StructureDraft({
   headers,
   onChanged,
   onReviewRest,
+  carry = null,
+  batchId = "",
 }: {
   draft: DraftAnswer;
+  /** Who still sits on the old chart, once the draft is live. Null from an older server. */
+  carry?: CarryAnswer | null;
+  batchId?: string;
   /** What still waits in the batch, read as a plan, or null when nothing does. */
   plan: StructurePlan | null;
   /** How many proposals still wait in the batch. */
@@ -155,10 +162,22 @@ export default function StructureDraft({
   };
 
   const action = live ? (
-    <div className="flex flex-wrap gap-2.5">
-      <Link href="/map" className={primary + " inline-flex items-center"}>See the living map</Link>
-      <Link href="/roles" className={secondary + " inline-flex items-center"}>See every seat</Link>
-    </div>
+    <>
+      {carry && (
+        <p className="text-sm" data-testid="carry-step-summary">
+          {carrySummary(carry)}{" "}
+          {!carryDone(carry) && (
+            <a href="#carry" className="underline">
+              Go to the list
+            </a>
+          )}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2.5">
+        <Link href="/map" className={primary + " inline-flex items-center"}>See the living map</Link>
+        <Link href="/roles" className={secondary + " inline-flex items-center"}>See every seat</Link>
+      </div>
+    </>
   ) : confirming ? (
     <div className={`${card} p-3.5 grid gap-2.5 border-notice/60`} role="group" aria-labelledby="h-confirm" data-testid="publish-confirm">
       <p id="h-confirm" className="font-semibold">Publish this draft to the live chart?</p>
@@ -273,8 +292,15 @@ export default function StructureDraft({
         ))}
       </div>
 
-      <StructureSteps stage={live ? "live" : "draft"} source={source} action={action} />
+      <StructureSteps
+        stage={live ? (carry ? "carry" : "live") : "draft"}
+        complete={!!carry && carryDone(carry)}
+        source={source}
+        action={action}
+      />
       {failure && <p className="text-sm text-destructive" role="alert">{failure}</p>}
+
+      {live && carry && <CarryAcross carry={carry} batchId={batchId} headers={headers} onChanged={onChanged} />}
 
       {!live && draft.preview && draft.preview.blockedLines.length > 0 && (
         <section className={`${card} p-4 grid gap-2`} aria-labelledby="h-blocked">
