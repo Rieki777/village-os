@@ -1,5 +1,5 @@
 /**
- * HOW ALIGNED TERMS END (seat settings PR8, migration 0251).
+ * HOW ALIGNED TERMS END (seat settings PR8, migration 0260).
  *
  * A text in the alignment store comes into force when every required party
  * has aligned with it (server/lib/alignmentSubjects.ts). This file writes the

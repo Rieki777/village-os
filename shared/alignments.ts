@@ -149,7 +149,7 @@ export type AlignmentState = "pending" | "in-force" | "ended";
 
 // ── Endings (PR8) ────────────────────────────────────────────────────────────
 
-/** How a text stops being in force (0251). Insert only: a withdrawal is its own row. */
+/** How a text stops being in force (0260). Insert only: a withdrawal is its own row. */
 export const ENDING_KINDS = ["notice", "notice_withdrawn", "superseded", "mutual", "term_end", "party_left"] as const;
 export type EndingKind = (typeof ENDING_KINDS)[number];
 

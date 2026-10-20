@@ -3,7 +3,7 @@
  *
  * The member door (server/routes/seatApplications.ts) and the alignment
  * routes (server/routes/alignments.ts) on one app, against the S5 scratch
- * schema with migration 0251 applied. What is pinned:
+ * schema with migration 0260 applied. What is pinned:
  *
  *   - NOTICE keeps the terms in force until its `effective_at`, which is now
  *     plus the terms' own notice days, and ends them after; it never unseats

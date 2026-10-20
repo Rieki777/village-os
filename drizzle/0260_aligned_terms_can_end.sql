@@ -1,4 +1,4 @@
--- 0251: aligned terms can end. Notice, by agreement, superseded, at the term's end, or when a party leaves.
+-- 0260: aligned terms can end. Notice, by agreement, superseded, at the term's end, or when a party leaves.
 --
 -- WHAT THIS IS FOR.
 -- Seat settings PR8. A text in the alignment store (0259) comes into force

@@ -1,7 +1,7 @@
 /**
  * The alignment store (0259): `alignment_texts`, `alignment_parties`,
  * `alignments` and `alignment_seals`, and since PR8 `alignment_endings`
- * (0251). INSERT ONLY.
+ * (0260). INSERT ONLY.
  *
  * Every statement this store runs lives here, and none of them is an UPDATE or
  * a DELETE. A text's words, a party list, an act of aligning and a seal are
@@ -204,7 +204,7 @@ export async function insertAlignment(db: Db, a: NewAlignment): Promise<boolean>
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
-// ── Endings (0251, PR8) ──────────────────────────────────────────────────────
+// ── Endings (0260, PR8) ──────────────────────────────────────────────────────
 
 export interface StoredEnding {
   id: string;

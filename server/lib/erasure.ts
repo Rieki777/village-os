@@ -318,7 +318,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Aligned terms (0251, seat settings PR8): every text the member is a
+       * Aligned terms (0260, seat settings PR8): every text the member is a
        * party to that has not ended gets a `party_left` ending, so the record
        * says how it ended. Leaving never waits on terms; this only writes.
        * BEFORE the holdings and the org seatings are released, because a released seating ends
