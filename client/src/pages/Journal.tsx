@@ -112,6 +112,20 @@ export default function Journal() {
   const [savedCount, setSavedCount] = useState(0);
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ today: null, history: null, pulse: null, feedback: null });
 
+  // A link may name its tab, `/journal#pulse` or `/journal#feedback`, the way
+  // the profile's own sections are reached (`/profile#wallet`). The profile's
+  // journal card and the member guide use it. Read on arrival and on a hash
+  // change; a name that is not a tab is ignored and the remembered tab stays.
+  useEffect(() => {
+    const fromHash = () => {
+      const h = window.location.hash.replace(/^#/, "");
+      if ((TABS as readonly string[]).includes(h)) setTab(h as Tab);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, [setTab]);
+
   const sync = useCallback(
     async (byHand: boolean) => {
       if (!owner) return;
