@@ -133,6 +133,32 @@ describe("a page the journal turned down", () => {
   });
 });
 
+// The profile card and the member guide link to `/journal#pulse` and
+// `/journal#feedback`; the hash picks the tab, and a name that is not a tab
+// leaves the remembered one alone.
+describe("a link that names its tab", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens the pulse tab from /journal#pulse and the feedback tab from #feedback", async () => {
+    window.history.replaceState(null, "", "/journal#pulse");
+    const first = render(<Journal />);
+    expect(await screen.findByRole("tab", { name: "Pulse", selected: true })).toBeInTheDocument();
+    first.unmount();
+
+    window.history.replaceState(null, "", "/journal#feedback");
+    render(<Journal />);
+    expect(await screen.findByRole("tab", { name: "Feedback", selected: true })).toBeInTheDocument();
+  });
+
+  it("ignores a hash that is not a tab", async () => {
+    window.history.replaceState(null, "", "/journal#nonsense");
+    render(<Journal />);
+    expect(await screen.findByRole("tab", { name: "Today", selected: true })).toBeInTheDocument();
+  });
+});
+
 describe("another member's pages on the same device", () => {
   it("are never listed for whoever signs in next", async () => {
     // The last member signed out with a page refused and one still waiting.
