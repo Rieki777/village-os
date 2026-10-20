@@ -201,6 +201,38 @@ export const SETUP_STEPS: readonly SetupStep[] = [
   { key: "technical", label: "Go live", fields: [] },
 ];
 
+/*
+ * THE CONTENT STEP'S EDITORS, in the order the wizard lists them. Moved here
+ * from `SetupWizard` in client/src/pages/Admin.tsx, beside the steps it belongs
+ * to, so that file stays under the monolith ratchet while it gains a door.
+ *
+ * The "Journey page copy" row came out with the four tabs it pointed at.
+ * It sent a founder to an editor whose saves the journey pages never read,
+ * and a wizard that hands somebody a door to a room that was demolished is
+ * worse than one that stays quiet about it.
+ */
+export const SETUP_CONTENT_EDITORS: readonly { tab: string; label: string; hint: string }[] = [
+  /*
+   * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
+   * surfaces a fresh village publishes people on. A founder walked the whole
+   * wizard and was never shown the screen where the seats and the team cards
+   * are edited, so whatever was already on /team and /roles stayed there and
+   * read as the village's own. That is how a fork published four strangers.
+   *
+   * First in the list on purpose: people are the thing a visitor looks for
+   * first and the thing a village is most answerable for.
+   */
+  { tab: "org-chart", label: "Org Chart", hint: "Your circles, your seats, and who holds them. This is what /roles and /team show." },
+  { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
+  { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
+  { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },
+  { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
+  { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy." },
+  { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page." },
+  { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
+  { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
+];
+
 /** The brand document as `GET /api/admin/brand` returns it, loosely typed
  *  because the wizard holds it as `any` and every field is optional. */
 export interface BrandLike {

@@ -418,6 +418,19 @@ export default function NeedsPanel({
             Choosing few is the honest move. Every need you take on is work somebody has to do, so a
             village that names all ten and staffs two has told its members something untrue.
           </p>
+          {/* The other door onto the same import, which lives on Make This Site Yours beside the
+              Identity boxes it fills (ProfileImportDoor.tsx). */}
+          {onOpenTab ? (
+            <div className={`${CARD} p-3 mb-4 flex flex-wrap items-center justify-between gap-3`}>
+              <p className="text-sm text-card-foreground">
+                Designed your needs in a ReGen Civics session? Start from your profile, and read every part before
+                anything is set.
+              </p>
+              <button type="button" className={QUIET} onClick={() => onOpenTab("setup")}>
+                Start from my profile
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap gap-2 mb-4">
             <button
