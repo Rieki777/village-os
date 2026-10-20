@@ -874,6 +874,11 @@ export function previewLoadedDraft(
   // Seats this draft creates count as existing for the changes after them, so
   // a draft can create a seat and then put somebody in it.
   const willExist = new Set(draft.changes.filter((c) => c.op === "create_seat").map((c) => c.orgRoleId));
+  // And their names, so a line seating somebody in a seat this draft makes
+  // reads "Put Ana in Water keeper" instead of naming the seat by its id.
+  const madeNames = new Map<string, string | null>(
+    draft.changes.filter((c) => c.op === "create_seat").map((c) => [c.orgRoleId, primitiveText(c.payload?.name)]),
+  );
 
   /*
    * CIRCLES THIS DRAFT CREATES, for the same reason seats are tracked above and
@@ -899,7 +904,7 @@ export function previewLoadedDraft(
   let index = 0;
   for (const c of draft.changes) {
     const existing = byId.get(c.orgRoleId);
-    const name = existing?.name ?? primitiveText(c.payload?.name) ?? c.orgRoleId;
+    const name = existing?.name ?? madeNames.get(c.orgRoleId) ?? primitiveText(c.payload?.name) ?? c.orgRoleId;
     let blocked: string | null = null;
     let reads = "";
     index += 1;
