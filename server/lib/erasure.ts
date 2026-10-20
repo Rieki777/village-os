@@ -122,6 +122,9 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
+import { forgetCommsPerson } from "../repos/commsPeople";
+import { emailKeyOf } from "../../shared/comms/address";
+import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
   erasureRecord,
@@ -557,6 +560,28 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0244 to 0246): their
+       * contacts and answers, journeys and paths, guest rows, votes,
+       * attendance and feedback, the delivery reports that name them, and no
+       * suppression kept, because a suppression is the address under another
+       * name. Their emails stay on the ledger with the address, subject and
+       * words blanked, so the village's counts still add up. The rows and
+       * their reasons are in server/repos/commsPeople.ts.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step below gives: the
+       * member's sessions die there, so nothing they do afterwards can write a
+       * fresh comms row behind this step. `target` is the record read before
+       * the sweep began, so its address is still the real one here; a resume
+       * reads the tombstone and finds the rest by user id alone.
+       */
+      name: "comms",
+      run: async () => {
+        const email = String(target.email ?? "");
+        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
+      },
+    },
+    {
+      /*
        * member_needs (0205) tells its member "Only you can read this", so it
        * leaves with them. A named step, so a resumed erasure knows whether it
        * already ran.
@@ -599,7 +624,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Seat applications (0248): the member's own words, what they would have
+       * Seat applications (0257): the member's own words, what they would have
        * done and why them, go. The application stays: its seats, its terms and
        * the village's decision are the record of what the village agreed to,
        * and the tombstoned user row de-attributes it without remapping ids.
@@ -614,7 +639,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * The alignment store (0250): their name and handle come out of the
+       * The alignment store (0259): their name and handle come out of the
        * words of every alignment text, the seats' terms on offer and the
        * village presets; the words otherwise stay, de-attributed (decision 2).
        * Hash, parties and seal are untouched, so receipts still verify.
@@ -628,7 +653,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Season plans (0249): the member's own words, their aim, the goal they
+       * Season plans (0258): the member's own words, their aim, the goal they
        * served and what they committed to, go. The seats they handed back stay
        * on the row, as the village's record of who held what, de-attributed by
        * the tombstone. After the tombstone, for the reason the steps above give.

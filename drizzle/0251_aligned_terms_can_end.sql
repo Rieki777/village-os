@@ -1,7 +1,7 @@
 -- 0251: aligned terms can end. Notice, by agreement, superseded, at the term's end, or when a party leaves.
 --
 -- WHAT THIS IS FOR.
--- Seat settings PR8. A text in the alignment store (0250) comes into force
+-- Seat settings PR8. A text in the alignment store (0259) comes into force
 -- when every required party has aligned with it. This table records how it
 -- stops being in force. One row per act or fact, never one row per text:
 --
@@ -22,7 +22,7 @@
 -- notice ends nothing. Notice never unseats anybody: a seating ends through
 -- the existing doors, and an ended seating ends the terms by the derivation.
 --
--- INSERT ONLY, like the four tables of 0250. Nothing updates or deletes a row
+-- INSERT ONLY, like the four tables of 0259. Nothing updates or deletes a row
 -- here, the erasure step included: the rows carry no words, only kinds, ids
 -- and instants. The grep test in server/lib/alignments.store.test.ts holds
 -- every file to it.

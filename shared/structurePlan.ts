@@ -37,10 +37,39 @@
  *   reads who holds a seat from the vendor. Holder counts are this village's.
  * - Geography is never invented. A circle sits inside another only when its
  *   payload names a parent this village can place.
+ * - The SOURCE'S STATUS is applied here and nowhere else (agreed with the
+ *   source's founder, 2026-10-09): Active and Proposed may be proposed, and
+ *   Proposed says so; Vacant is a seat with nobody in it, fine to create;
+ *   Archived is NEVER proposed as new. An archived circle, an archived seat,
+ *   and a seat whose circle is archived are listed apart, out of the change,
+ *   each with its reason. One that answers to a live circle or seat here is a
+ *   note for a steward and never a retirement: retiring is the steward's own
+ *   switch, and the source archiving something is not that switch.
  *
  * Pure: no pool, no clock.
  */
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
+
+/** What the source's own status says, in the four words it uses, or `other`. */
+export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
+
+/** The status label as the source wrote it: a string, or a select's `{ name }`. */
+export function sourceStatusLabel(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() === "" ? null : v.trim();
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const name = (v as Record<string, unknown>).name;
+    if (typeof name === "string" && name.trim() !== "") return name.trim();
+  }
+  return null;
+}
+
+/** A source status read into its meaning. Null when none was sent. */
+export function sourceStatusOf(v: unknown): SourceStatus | null {
+  const label = sourceStatusLabel(v);
+  if (label === null) return null;
+  const k = label.toLowerCase();
+  return k === "active" || k === "proposed" || k === "vacant" || k === "archived" ? k : "other";
+}
 
 /** The proposal kinds that change the chart. Everything else in a batch is a note. */
 export const STRUCTURE_KINDS = ["org.proposed", "role.proposed", "circle.proposed"] as const;
@@ -131,6 +160,10 @@ export interface PlanCircle {
   purpose: string | null;
   /** Why this circle cannot be accepted as sent, or null. */
   problem: string | null;
+  /** The source's status for this circle, read; never `archived` here. */
+  sourceStatus: SourceStatus | null;
+  /** The same, as the source wrote it. */
+  sourceStatusLabel: string | null;
   /** The payload exactly as it arrived, for "What was sent". */
   sent: Record<string, unknown>;
 }
@@ -160,6 +193,34 @@ export interface PlanSeat {
   match: PlanSeatMatch | null;
   /** Why this seat cannot be accepted as sent, besides a match, or null. */
   problem: string | null;
+  /** The source's status for this seat, read; never `archived` here. */
+  sourceStatus: SourceStatus | null;
+  sourceStatusLabel: string | null;
+  /** Further circles the source's relation named. The first is the one used. */
+  otherCircles: string[];
+  /** The source pointed at a circle its own read did not hold. */
+  circleUnresolvedAtSource: boolean;
+  sent: Record<string, unknown>;
+}
+
+/**
+ * Something the source has archived, kept OUT of the change and listed apart.
+ * Never proposed as new, never a retirement.
+ */
+export interface PlanArchived {
+  /** A circle's proposal id, or a seat's `<proposal id>#<index>`. */
+  key: string;
+  proposalId: string;
+  kind: "circle" | "seat";
+  /** The seat's index in its proposal, or null for a circle. */
+  index: number | null;
+  name: string;
+  /** `archived`: the source archived it. `circle-archived`: its circle is. */
+  reason: "archived" | "circle-archived";
+  /** The circle a seat named, when there is one. */
+  circleName: string | null;
+  /** A live circle or seat here answering to the same name. A note, never a retirement. */
+  liveMatch: string | null;
   sent: Record<string, unknown>;
 }
 
@@ -170,6 +231,8 @@ export interface StructurePlan {
   live: { circles: PlanLiveCircle[]; seats: PlanLiveSeat[] };
   /** Proposals in the batch that change no structure (risks, tensions...). */
   notes: Array<{ proposalId: string; kind: string }>;
+  /** What the source has archived: out of the change, listed apart, with a reason. */
+  archived: PlanArchived[];
 }
 
 function circleProblemWords(p: CircleProblem): string {
@@ -202,6 +265,8 @@ export function planStructure(
 
   const notes: StructurePlan["notes"] = [];
   const circles: PlanCircle[] = [];
+  const archived: PlanArchived[] = [];
+  const archivedCircleNames = new Set<string>();
   const takenIds = new Set<string>();
   const newNames = new Set<string>();
 
@@ -214,10 +279,21 @@ export function planStructure(
     const name = proposedCircleName(p.payload);
     const purpose = text(p.payload.purpose);
     const answers = name ? circlesNamed(name, asLive) : [];
+    const statusLabel = sourceStatusLabel(p.payload.Status ?? p.payload.status);
+    const sourceStatus = sourceStatusOf(statusLabel);
+    if (sourceStatus === "archived") {
+      if (name) archivedCircleNames.add(name.toLowerCase());
+      const live = answers.length === 1 ? liveCircles.find((c) => c.id === answers[0]) : undefined;
+      archived.push({
+        key: p.id, proposalId: p.id, kind: "circle", index: null, name, reason: "archived",
+        circleName: null, liveMatch: live ? live.name : null, sent: p.payload,
+      });
+      continue;
+    }
     if (answers.length === 1) {
       circles.push({
         key: p.id, proposalId: p.id, name, id: answers[0], status: "live",
-        parentId: null, purpose, problem: null, sent: p.payload,
+        parentId: null, purpose, problem: null, sourceStatus, sourceStatusLabel: statusLabel, sent: p.payload,
       });
       continue;
     }
@@ -231,7 +307,10 @@ export function planStructure(
       takenIds.add(id);
       newNames.add(name.toLowerCase());
     }
-    circles.push({ key: p.id, proposalId: p.id, name, id, status: "new", parentId: null, purpose, problem, sent: p.payload });
+    circles.push({
+      key: p.id, proposalId: p.id, name, id, status: "new", parentId: null, purpose, problem,
+      sourceStatus, sourceStatusLabel: statusLabel, sent: p.payload,
+    });
   }
 
   // The circles a seat may be placed in: every live one, and each new one
@@ -271,6 +350,21 @@ export function planStructure(
     read.seats.forEach((seat, index) => {
       const name = typeof seat.payload.name === "string" ? seat.payload.name : "";
       const live = name ? liveByName.get(seatNameKey(name)) : undefined;
+      const sent = rawList[index] ?? {};
+      const statusLabel = sourceStatusLabel(sent.sourceStatus);
+      const sourceStatus = sourceStatusOf(statusLabel);
+      const sentCircle = text(sent.circleName) ?? text(sent.circle_name) ?? text(sent.circle);
+      const circleArchived =
+        sourceStatusOf(sent.sourceCircleStatus) === "archived" ||
+        (sentCircle !== null && archivedCircleNames.has(sentCircle.toLowerCase()));
+      if (sourceStatus === "archived" || circleArchived) {
+        archived.push({
+          key: `${p.id}#${index}`, proposalId: p.id, kind: "seat", index, name,
+          reason: sourceStatus === "archived" ? "archived" : "circle-archived",
+          circleName: sentCircle, liveMatch: live ? live.name : null, sent,
+        });
+        return;
+      }
       const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
       const circleId = typeof seat.payload.circleId === "string" && seat.payload.circleId ? seat.payload.circleId : null;
       let problem: string | null = null;
@@ -288,12 +382,18 @@ export function planStructure(
         payload: seat.payload,
         match: live ? { seatId: live.id, name: live.name, circleId: live.circleId, holders: live.holders } : null,
         problem,
-        sent: rawList[index] ?? {},
+        sourceStatus,
+        sourceStatusLabel: statusLabel,
+        otherCircles: Array.isArray(sent.sourceOtherCircles)
+          ? (sent.sourceOtherCircles as unknown[]).filter((x): x is string => typeof x === "string")
+          : [],
+        circleUnresolvedAtSource: sent.sourceCircleUnresolved === true,
+        sent,
       });
     });
   }
 
-  return { circles, seats, live: { circles: circlesLive, seats: seatsLive }, notes };
+  return { circles, seats, live: { circles: circlesLive, seats: seatsLive }, notes, archived };
 }
 
 // ── The steward's decisions ─────────────────────────────────────────────
@@ -508,11 +608,19 @@ export function decideStructure(
   const untouched: string[] = [];
   const keptKeys = new Set(keptSeats.map((k) => k.key));
   for (const c of plan.circles) (inChange(c.key) ? accepted : untouched).push(c.proposalId);
-  const seatProposals = Array.from(new Set(plan.seats.map((s) => s.proposalId)));
+  // What the source archived is never in a change: an archived circle stays
+  // waiting, and an archived seat stays in its structure's remainder.
+  const archivedList = plan.archived ?? [];
+  for (const a of archivedList) if (a.kind === "circle") untouched.push(a.proposalId);
+  const archivedSeats = archivedList.filter((a) => a.kind === "seat");
+  const seatProposals = Array.from(new Set([...plan.seats.map((s) => s.proposalId), ...archivedSeats.map((a) => a.proposalId)]));
   for (const pid of seatProposals) {
     const mine = plan.seats.filter((s) => s.proposalId === pid);
     const kept = mine.filter((s) => keptKeys.has(s.key)).map((s) => s.index);
-    const left = mine.filter((s) => !keptKeys.has(s.key)).map((s) => s.index);
+    const left = [
+      ...mine.filter((s) => !keptKeys.has(s.key)).map((s) => s.index),
+      ...archivedSeats.filter((a) => a.proposalId === pid).map((a) => a.index ?? 0),
+    ].sort((a, b) => a - b);
     if (kept.length === 0) untouched.push(pid);
     else if (left.length === 0) accepted.push(pid);
     else split.push({ proposalId: pid, kept, left });

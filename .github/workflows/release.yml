@@ -244,14 +244,13 @@ jobs:
       # almost all DDL and a scratch database has nothing to survive a crash
       # for.
       mysql:
-        image: mysql:8
-        # Authenticated pull, for the reason spelled out in ci.yml's own
-        # service block: anonymous pulls from a shared runner address can be
-        # refused outright, and a service container is pulled before step one,
-        # so no login step can reach it. Absent secrets fall back to anonymous.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        image: mirror.gcr.io/library/mysql:8
+        # Anonymous mirror rather than authenticated pulls, for the reason
+        # ci.yml's own service block sets out at length: empty `credentials`
+        # is a template validation error on events that have no secret store
+        # (Dependabot, forks), and a service container cannot omit the key
+        # per-event. mirror.gcr.io needs no credentials and resolves the tag
+        # to upstream's own digest - verified identical before landing.
         env:
           MYSQL_ROOT_PASSWORD: ci-rollback
         ports:
@@ -361,7 +360,10 @@ jobs:
       # boot is almost all DDL and a smoke database has nothing to survive a
       # crash for.
       mysql:
-        image: mysql:8
+        # Mirrored for the same reason as every other service container here:
+        # anonymous Docker Hub pulls can be refused outright, and this job had
+        # no credentials to fall back on either. Same digest, no auth needed.
+        image: mirror.gcr.io/library/mysql:8
         env:
           MYSQL_ROOT_PASSWORD: ci-smoke
           MYSQL_DATABASE: village
@@ -473,9 +475,10 @@ jobs:
         #   /                           dist/public, the SPA shell
         #   /grounds/manifest.json      docs/prototypes/grounds-v0.html
         #   /api/agent/v1/openapi.json  docs/skills/references
+        #   /images/avatars/...webp     server/assets/avatars
         run: |
           set -euo pipefail
-          for path in / /grounds/manifest.json /api/agent/v1/openapi.json; do
+          for path in / /grounds/manifest.json /api/agent/v1/openapi.json /images/avatars/building-f-deep.webp; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000${path}")
             echo "${code}  ${path}"
             if [ "$code" != "200" ]; then

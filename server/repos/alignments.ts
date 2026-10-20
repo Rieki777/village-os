@@ -1,5 +1,5 @@
 /**
- * The alignment store (0250): `alignment_texts`, `alignment_parties`,
+ * The alignment store (0259): `alignment_texts`, `alignment_parties`,
  * `alignments` and `alignment_seals`, and since PR8 `alignment_endings`
  * (0251). INSERT ONLY.
  *

@@ -137,6 +137,16 @@ export default defineConfig({
          * real bytes INTO the main chunk, which is the one budget measured in
          * real bytes. Reach for it only after this.
          *
+         * It was on, at 8192, for a few days (2026-10-09 to 2026-10-13): Village
+         * Comms and the sessions module landing together took the total to
+         * 6656 KB of 6600, and 8192 brought it to 6548 at 24 KB more main JS.
+         * It came off once the avatars (1.6 MB) moved from client/public to the
+         * uploads volume (#464), which was the lasting fix. Measured on that
+         * tree: off is 5096 KB block-charged with main JS 516 KB; 8192 is 4980
+         * and 539. Off spends 116 KB more of a ceiling that now has 1.5 MB
+         * free, and saves every visitor 23 KB on first load and the risk of a
+         * changed chunk order, so it is off.
+         *
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */

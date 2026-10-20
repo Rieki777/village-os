@@ -1,14 +1,20 @@
 /**
  * A stream of what people add while an item runs: its notes, or its ideas.
- * Newest last, the way a conversation reads. Whoever wrote an entry, the
- * facilitator or the note taker can take it out again, once: a second tap
- * while the first is out sends nothing. What is being typed is a draft, so it
- * is still there when the room comes back to this item.
+ * Newest last, the way a conversation reads. Each one is an EntryCard, so
+ * whoever wrote it, the facilitator, the note taker or an admin in the room
+ * can fix its words in place or take it out again, once: a second tap while
+ * the first is out sends nothing.
+ *
+ * The add box is the room's growing box, full width with the voice button
+ * beside it, so a long note is read whole while it is typed. What is being
+ * typed is a draft, so it is still there when the room comes back to this
+ * item. Enter adds it; Shift and Enter starts a new line.
  */
 import { useState } from "react";
-import { X } from "lucide-react";
 import { ROOM_COPY, SESSION_LIMITS, cleanText, type EntryKind } from "@shared/sessions";
-import { BTN_ICON, BTN_SECONDARY, HINT, INPUT, entryRightsFor, nameOf, useDraft, type StageProps } from "./roomUi";
+import EntryCard from "./EntryCard";
+import GrowingText from "./GrowingText";
+import { BTN_SECONDARY, HINT, LABEL_CAPS, UNDER_BOX, useDraft, type StageProps } from "./roomUi";
 
 export interface EntryStreamProps extends Omit<StageProps, "now"> {
   kind: Extract<EntryKind, "note" | "idea">;
@@ -21,7 +27,6 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
   const draft = useDraft(`${view.id}:${itemId ?? "loose"}:${kind}`);
   const text = draft.text;
   const [busy, setBusy] = useState(false);
-  const [removing, setRemoving] = useState<number | null>(null);
   const list = view.entries.filter((e) => e.kind === kind && e.itemId === itemId);
   const canAdd = view.me.joined && view.status === "open";
   const headingId = `stream-${kind}-${itemId ?? "loose"}`;
@@ -38,34 +43,16 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
     }
   };
 
-  const remove = async (id: number) => {
-    if (removing != null) return;
-    setRemoving(id);
-    try {
-      await actions.deleteEntry(id);
-    } finally {
-      setRemoving(null);
-    }
-  };
-
   return (
-    <section aria-labelledby={headingId} className="space-y-2">
-      <h4 id={headingId} className="text-sm font-semibold text-foreground">
+    <section aria-labelledby={headingId} className="space-y-3">
+      <h4 id={headingId} className={LABEL_CAPS}>
         {title}
       </h4>
       {list.length ? (
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {list.map((e) => (
-            <li key={e.id} className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2">
-              <p className="min-w-0 flex-1 whitespace-pre-line text-sm text-foreground">
-                {e.text}
-                <span className="block text-xs text-muted-foreground">{nameOf(view, e.authorUserId) ?? ""}</span>
-              </p>
-              {entryRightsFor(view, e).remove && (
-                <button type="button" className={BTN_ICON} aria-label={ROOM_COPY.remove} disabled={removing != null} onClick={() => void remove(e.id)}>
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
-              )}
+            <li key={e.id}>
+              <EntryCard view={view} actions={actions} entry={e} />
             </li>
           ))}
         </ul>
@@ -74,25 +61,18 @@ export default function EntryStream({ view, actions, kind, itemId, title, addLab
       )}
       {canAdd && (
         <form
-          className="flex gap-2"
+          className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
             void add();
           }}
         >
-          <label className="min-w-0 flex-1">
-            <span className="sr-only">{addLabel}</span>
-            <input
-              className={INPUT}
-              value={text}
-              maxLength={SESSION_LIMITS.text}
-              placeholder={addLabel}
-              onChange={(e) => draft.set(e.target.value)}
-            />
-          </label>
-          <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>
-            {ROOM_COPY.add}
-          </button>
+          <GrowingText value={text} onValue={draft.set} onSubmit={() => void add()} label={addLabel} max={SESSION_LIMITS.text} minRows={2} mic />
+          <div className={UNDER_BOX}>
+            <button type="submit" className={BTN_SECONDARY} disabled={busy || !text.trim()}>
+              {ROOM_COPY.add}
+            </button>
+          </div>
         </form>
       )}
     </section>

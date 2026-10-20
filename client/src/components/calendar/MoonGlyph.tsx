@@ -25,9 +25,13 @@ export default function MoonGlyph({
   const k = Math.cos(p * 2 * Math.PI); // 1 at new, -1 at full
   const litRight = hemisphere === "north" ? waxing : !waxing;
   // Dark side dark enough to read at 12px on a pale cell; lit side cream.
-  const dark = "var(--tone-brand-band, #105e5d)";
-  const light = "var(--tone-cream, #efe8d7)";
-  const stroke = "var(--foreground, #1a3a39)";
+  // The fallbacks are the platform neutrals index.css gives the same tokens
+  // (--color-teal-band, --color-cream, --foreground), because the --tone-*
+  // pair is only emitted for a village with a seed: an untouched fork draws
+  // a grey moon, never somebody else's teal.
+  const dark = "var(--tone-brand-band, #262626)";
+  const light = "var(--tone-cream, #f2f2f2)";
+  const stroke = "var(--foreground, #171717)";
   // Two half discs and an ellipse: the lit half, plus an ellipse of the
   // dark or lit colour that carves the terminator.
   const half = litRight

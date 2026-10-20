@@ -9,6 +9,13 @@
  * the admins and everyone holding an action. A session with an action nobody
  * holds does not close: the refusal is shown here, and the room moves to the
  * actions stage with those actions marked.
+ *
+ * WHAT CAN BE CHANGED HERE, AND HOW. One word belongs to the person who gave
+ * it, and they change it by giving it again. Feedback on the facilitation is
+ * unsigned and never comes back to the room, so there is nothing on screen to
+ * edit: a second send replaces the first, and the line under the box says so.
+ * An idea for the tool goes one way, to the feedback inbox. The one word is
+ * this stage's foil card, the room's last round together.
  */
 import { useState } from "react";
 import {
@@ -24,7 +31,25 @@ import {
 } from "@shared/sessions";
 import GratitudeRound from "./GratitudeRound";
 import { OpenProposals } from "./Proposal";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, CARD, H3, HINT, INPUT, LABEL, myResponse, nameOf, tile, type StageProps } from "./roomUi";
+import GrowingText from "./GrowingText";
+import {
+  BTN_PRIMARY,
+  BTN_QUIET,
+  BTN_SECONDARY,
+  CARD,
+  H3,
+  HERO_CONTENT,
+  HERO_INNER,
+  HERO_SHELL,
+  HINT,
+  INPUT,
+  LABEL,
+  UNDER_BOX,
+  myResponse,
+  nameOf,
+  tile,
+  type StageProps,
+} from "./roomUi";
 
 function WordRound({ view, actions }: Omit<StageProps, "now">) {
   const mine = myResponse(view, "word");
@@ -45,46 +70,51 @@ function WordRound({ view, actions }: Omit<StageProps, "now">) {
   };
 
   return (
-    <section className={CARD} aria-labelledby="close-word">
-      <h3 id="close-word" className={H3}>
-        {SESSION_COPY.wordPrompt}
-      </h3>
-      {canSay && (
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void say();
-          }}
-        >
-          <label className="min-w-0 flex-1">
-            <span className="sr-only">{ROOM_COPY.wordPlaceholder}</span>
-            <input
-              className={INPUT}
-              value={word}
-              maxLength={SESSION_LIMITS.word}
-              placeholder={ROOM_COPY.wordPlaceholder}
-              onChange={(e) => setWord(e.target.value)}
-            />
-          </label>
-          <button type="submit" className={BTN_SECONDARY} disabled={busy || !word.trim()}>
-            {ROOM_COPY.wordSave}
-          </button>
-        </form>
-      )}
-      {words.length > 0 && (
-        <div className="mt-4">
-          <h4 className="sr-only">{ROOM_COPY.roomWords}</h4>
-          <ul className="flex flex-wrap gap-2" aria-label={ROOM_COPY.roomWords}>
-            {words.map((w) => (
-              <li key={w.userId} className="rounded-2xl bg-teal-deep/10 px-4 py-2 text-center">
-                <span className="block font-display text-lg font-semibold text-foreground">{w.value}</span>
-                <span className="block text-xs text-muted-foreground">{nameOf(view, w.userId) ?? ""}</span>
-              </li>
-            ))}
-          </ul>
+    <section className={HERO_SHELL} aria-labelledby="close-word">
+      <div className={HERO_INNER}>
+        <div className={HERO_CONTENT}>
+          <h3 id="close-word" className={H3}>
+            {SESSION_COPY.wordPrompt}
+          </h3>
+          {canSay && (
+            <form
+              className="flex flex-wrap gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void say();
+              }}
+            >
+              <label className="min-w-[12rem] flex-1">
+                <span className="sr-only">{ROOM_COPY.wordPlaceholder}</span>
+                <input
+                  className={INPUT}
+                  value={word}
+                  maxLength={SESSION_LIMITS.word}
+                  placeholder={ROOM_COPY.wordPlaceholder}
+                  onChange={(e) => setWord(e.target.value)}
+                />
+              </label>
+              <button type="submit" className={BTN_SECONDARY} disabled={busy || !word.trim()}>
+                {ROOM_COPY.wordSave}
+              </button>
+            </form>
+          )}
+          {canSay && mine && <p className={`${HINT} text-xs`}>{ROOM_COPY.answerAgain}</p>}
+          {words.length > 0 && (
+            <div>
+              <h4 className="sr-only">{ROOM_COPY.roomWords}</h4>
+              <ul className="flex flex-wrap gap-2" aria-label={ROOM_COPY.roomWords}>
+                {words.map((w) => (
+                  <li key={w.userId} className="rounded-2xl border border-notice/40 bg-muted px-4 py-2 text-center">
+                    <span className="block font-display text-2xl text-foreground">{w.value}</span>
+                    <span className="block text-xs text-muted-foreground">{nameOf(view, w.userId) ?? ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -130,19 +160,26 @@ function FacilitationFeedback({ view, actions }: Omit<StageProps, "now">) {
           </button>
         ))}
       </div>
-      <label className="mt-3 block">
-        <span className={LABEL}>{SESSION_COPY.facilitationMore}</span>
-        <textarea
-          className={`${INPUT} mt-1 min-h-20`}
+      <div className="mt-3">
+        <label htmlFor="close-facilitation-words" className={`${LABEL} mb-1`}>
+          {SESSION_COPY.facilitationMore}
+        </label>
+        <GrowingText
+          id="close-facilitation-words"
           value={words}
-          maxLength={SESSION_LIMITS.text}
-          onChange={(e) => {
-            setWords(e.target.value);
+          onValue={(next) => {
+            setWords(next);
             setSent(false);
           }}
+          onSubmit={() => void send()}
+          label={SESSION_COPY.facilitationMore}
+          max={SESSION_LIMITS.text}
+          minRows={3}
+          mic
         />
-      </label>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <p className={`${HINT} mt-1 text-xs`}>{ROOM_COPY.facilitationReplace}</p>
+      </div>
+      <div className={`${UNDER_BOX} mt-3 items-center`}>
         <button type="button" className={BTN_SECONDARY} disabled={!choice || busy} onClick={() => void send()}>
           {ROOM_COPY.facilitationSend}
         </button>
@@ -176,8 +213,8 @@ export function FacilitationReading({ view }: Pick<StageProps, "view">) {
         <>
           <ul className="mt-3 flex flex-wrap gap-2">
             {counts.map(({ v, n }) => (
-              <li key={v} className="rounded-xl bg-muted/60 px-3 py-2 text-sm">
-                <span className="font-display text-lg font-bold tabular-nums text-foreground">{n}</span>{" "}
+              <li key={v} className="rounded-xl border border-border bg-muted px-3 py-2 text-sm">
+                <span className="font-body text-lg font-semibold tabular-nums text-foreground">{n}</span>{" "}
                 <span className="text-muted-foreground">{FACILITATION_LABELS[v]}</span>
               </li>
             ))}
@@ -225,20 +262,25 @@ function ToolIdea({ view, actions }: Omit<StageProps, "now">) {
       <h3 id="close-tool" className={H3}>
         {SESSION_COPY.toolPrompt}
       </h3>
-      <label className="mt-3 block">
-        <span className="sr-only">{SESSION_COPY.toolPrompt}</span>
-        <textarea
-          className={`${INPUT} min-h-20`}
+      <div className="mt-3">
+        <label htmlFor="close-tool-words" className="sr-only">
+          {SESSION_COPY.toolPrompt}
+        </label>
+        <GrowingText
+          id="close-tool-words"
           value={text}
-          maxLength={SESSION_LIMITS.text}
-          placeholder={SESSION_COPY.toolPlaceholder}
-          onChange={(e) => {
-            setText(e.target.value);
+          onValue={(next) => {
+            setText(next);
             setSent(false);
           }}
+          onSubmit={() => void send()}
+          label={SESSION_COPY.toolPlaceholder}
+          max={SESSION_LIMITS.text}
+          minRows={3}
+          mic
         />
-      </label>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      </div>
+      <div className={`${UNDER_BOX} mt-3 items-center`}>
         <button type="button" className={BTN_SECONDARY} disabled={busy || !text.trim()} onClick={() => void send()}>
           {ROOM_COPY.toolSend}
         </button>
@@ -277,7 +319,7 @@ function CloseButton({ actions, onRefused }: Pick<StageProps, "actions"> & { onR
   };
 
   return (
-    <section className={`${CARD} border-teal-deep/40`}>
+    <section className="rounded-2xl border border-notice/40 bg-card p-5 text-card-foreground shadow-sm">
       {asking ? (
         <div role="group" aria-label={SESSION_COPY.closeButton}>
           <p className="font-medium text-foreground">{ROOM_COPY.closeConfirm}</p>

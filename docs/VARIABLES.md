@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 179 open and 41 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 191 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 194 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 210 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-220 dials in 34 categories. 129 carry a minimum and a maximum. By type: 92 integer, 20 decimal, 18 percentage, 24 boolean, 30 choice, 35 text, 1 longtext.
+236 dials in 35 categories. 140 carry a minimum and a maximum. By type: 103 integer, 20 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ Each dial also says WHEN a change lands. 194 of them as soon as it is saved, and
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
 | Accounts & sessions | 2 | 0 | 2 |
+| Email and reminders | 15 | 11 | 4 |
 | Abuse guards | 5 | 0 | 5 |
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
@@ -68,7 +69,7 @@ Each dial also says WHEN a change lands. 194 of them as soon as it is saved, and
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
 | Platform | 1 | 0 | 1 |
-| Calendar | 3 | 3 | 0 |
+| Calendar | 4 | 4 | 0 |
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
@@ -212,6 +213,21 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Days between automatic link checks | `tools.link_check_days` | Tools | integer | `0` | the whole village |
 | Signed-in session length | `auth.session_days` | Accounts & sessions | integer | `30` | the founder or an admin |
 | Most emails one member receives per day | `notify.daily_email_cap` | Accounts & sessions | integer | `20` | the founder or an admin |
+| Earliest hour a path email is sent | `comms.quiet_start_hour` | Email and reminders | integer | `8` | the whole village |
+| Latest hour a path email is sent | `comms.quiet_end_hour` | Email and reminders | integer | `20` | the whole village |
+| Most automated emails one person receives per day | `comms.daily_cap` | Email and reminders | integer | `2` | the whole village |
+| When gathering reminders go out | `comms.event_reminder_minutes` | Email and reminders | text | `1440,120` | the whole village |
+| When a host is asked for the recap | `comms.host_nudge_minutes` | Email and reminders | integer | `60` | the whole village |
+| How long a recap can still be sent | `comms.recap_window_days` | Email and reminders | integer | `3` | the whole village |
+| Guests may say they are coming | `comms.guests_default` | Email and reminders | boolean | `true` | the whole village |
+| When a voted time stops moving | `comms.time_poll_freeze_hours` | Email and reminders | integer | `48` | the whole village |
+| How long a time must lead before the gathering moves | `comms.time_poll_settle_minutes` | Email and reminders | integer | `0` | the whole village |
+| Most letters the village sends in a day | `comms.letters_per_day` | Email and reminders | integer | `3` | the whole village |
+| How long the record of each email is kept | `comms.retention_months` | Email and reminders | integer | `18` | the founder or an admin |
+| Emails sent per second | `comms.send_rate_per_second` | Email and reminders | integer | `2` | the founder or an admin |
+| How long a notification email may wait | `comms.notice_expiry_minutes` | Email and reminders | integer | `120` | the whole village |
+| Count when emails are opened | `comms.open_tracking` | Email and reminders | boolean | `false` | the founder or an admin |
+| Count which links are clicked | `comms.click_tracking` | Email and reminders | boolean | `false` | the founder or an admin |
 | Registrations per IP per hour | `abuse.register_per_ip_hourly` | Abuse guards | integer | `30` | the founder or an admin |
 | Failed logins per IP per 15 minutes | `abuse.login_ip_per_quarter_hour` | Abuse guards | integer | `30` | the founder or an admin |
 | Failed logins per account per 15 minutes | `abuse.login_account_per_quarter_hour` | Abuse guards | integer | `10` | the founder or an admin |
@@ -279,6 +295,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
+| Your village's own seasons | `calendar.seasons` | Calendar | text | blank | the whole village |
 | Introductions one person receives per day | `introductions.recipient_daily_cap` | Introductions | integer | `3` | the whole village |
 | Match score floor | `introductions.match_floor` | Introductions | integer | `3` | the whole village |
 | Days an introduction stays open | `introductions.opportunity_days` | Introductions | integer | `10` | the whole village |
@@ -2518,6 +2535,232 @@ Over this many notification emails in a rolling 24 hours, further ones stay in-a
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+## Email and reminders
+
+15 dials. 11 for the whole village, 4 for the founder or an admin.
+
+### Earliest hour a path email is sent
+
+Path, welcome and joining emails wait for this hour in the reader's own time zone, or the village's when theirs is unknown. Gathering reminders follow the gathering's own clock and are not held.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.quiet_start_hour` |
+| Type | integer, a whole number |
+| Default | `8` |
+| Range | 0 to 23 |
+| Counted in | o'clock |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Latest hour a path email is sent
+
+From this hour in the reader's own time zone, a path, welcome or joining email waits for the next morning. Keep it later than the earliest hour.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.quiet_end_hour` |
+| Type | integer, a whole number |
+| Default | `20` |
+| Range | 1 to 24 |
+| Counted in | o'clock |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Most automated emails one person receives per day
+
+Counts path emails and letters to one person in a rolling 24 hours. Over it, the next one waits for the following window and is never dropped. Gathering reminders, notices and the emails a person asked for do not count.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.daily_cap` |
+| Type | integer, a whole number |
+| Default | `2` |
+| Range | 1 to 20 |
+| Counted in | per day |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### When gathering reminders go out
+
+Minutes before a gathering starts, separated by commas. The default sends one a day before and one two hours before. Leave it empty to send none, unless a gathering sets its own.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.event_reminder_minutes` |
+| Type | text, free text, one line |
+| Default | `1440,120` |
+| Range | no bounds are set |
+| Counted in | minutes before |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### When a host is asked for the recap
+
+Minutes after a gathering ends before its host is asked to write the recap. Nobody is asked when nobody said yes, or when the recap has already gone.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.host_nudge_minutes` |
+| Type | integer, a whole number |
+| Default | `60` |
+| Range | 0 to 1440 |
+| Counted in | minutes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long a recap can still be sent
+
+Days after a gathering in which its host can still send the recap to the people who said yes.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.recap_window_days` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 30 |
+| Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Guests may say they are coming
+
+When on, somebody with no account can say yes to a free public gathering and confirm by email. Each gathering can turn this on or off for itself. Guests need the comms module open to everyone.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.guests_default` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### When a voted time stops moving
+
+Hours before a gathering in which its time no longer follows the vote. A one-off vote closes this long before its earliest time, and a weekly series never moves an evening this close.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.time_poll_freeze_hours` |
+| Type | integer, a whole number |
+| Default | `48` |
+| Range | 0 to 336 |
+| Counted in | hours |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long a time must lead before the gathering moves
+
+Minutes a time must lead the vote before the gathering moves to it. Zero follows the vote live, so the time that is winning is the time on the calendar.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.time_poll_settle_minutes` |
+| Type | integer, a whole number |
+| Default | `0` |
+| Range | 0 to 1440 |
+| Counted in | minutes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Most letters the village sends in a day
+
+How many letters can go out in one day. A letter also waits ten minutes after the one before it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.letters_per_day` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 20 |
+| Counted in | per day |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long the record of each email is kept
+
+Months the record of a sent email, its words included, is kept before it is deleted. Whoever runs the village's email reads those words. The words of essential mail are never kept, and the provider's delivery reports are cleared after 30 days whatever this says.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.retention_months` |
+| Type | integer, a whole number |
+| Default | `18` |
+| Range | 1 to 120 |
+| Counted in | months |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Emails sent per second
+
+How fast queued emails go out. Keep it at or under what your email provider allows on your plan, or sends are refused and retried later.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.send_rate_per_second` |
+| Type | integer, a whole number |
+| Default | `2` |
+| Range | 1 to 50 |
+| Counted in | per second |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### How long a notification email may wait
+
+A notification email still unsent this many minutes after it was written is dropped, because a late notice surprises more than a missed one. The notification itself stays in the app.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.notice_expiry_minutes` |
+| Type | integer, a whole number |
+| Default | `120` |
+| Range | 5 to 2880 |
+| Counted in | minutes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Count when emails are opened
+
+Off by default. Some mail apps open every email by themselves, so an open count misleads, and counting needs a hidden image in every email.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.open_tracking` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Count which links are clicked
+
+Off by default. When on, links in automated emails pass through the email provider first so a journey can see what people did next. Links in the emails a person asked for are never rewritten.
+
+| Fact | Value |
+| --- | --- |
+| Key | `comms.click_tracking` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ## Abuse guards
 
 5 dials. 5 for the founder or an admin.
@@ -3533,7 +3776,7 @@ A copy of each bug report and idea submitted here reaches the platform team who 
 
 ## Calendar
 
-3 dials. 3 for the whole village.
+4 dials. 4 for the whole village.
 
 ### The solar event that opens the village year
 
@@ -3586,6 +3829,21 @@ Also put the four midpoints between the solstices and equinoxes on the calendar.
 | Type | boolean, on or off |
 | Default | `false` |
 | Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Your village's own seasons
+
+The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.
+
+| Fact | Value |
+| --- | --- |
+| Key | `calendar.seasons` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Counted in | list |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -3974,6 +4232,7 @@ The generator reads these and fails loudly if any of them moves:
 - `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`
+- `shared/villageSeasons.ts`
 
 The registry is transpiled and IMPORTED to read it, which is what makes the generated dials visible. The multiplier, quest-threshold and unlock dials under Progression are built at module load from the village's own stage ladder, so a reader of the array literal alone would print a document that looked complete and was missing a fifth of the registry.
 

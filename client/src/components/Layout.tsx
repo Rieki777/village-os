@@ -52,7 +52,10 @@ export default function Layout({ children }: LayoutProps) {
   // footer links; while the config loads they stay out rather than flash in.
   const brochureOn = cfg?.brochurePages === true;
   const visible = (item: NavLink) =>
-    moduleOn(item.module) && (!item.brochure || brochureOn) && (!item.roles || (!!role && item.roles.includes(role)));
+    moduleOn(item.module) &&
+    (!item.unlessModule || !moduleOn(item.unlessModule)) &&
+    (!item.brochure || brochureOn) &&
+    (!item.roles || (!!role && item.roles.includes(role)));
 
   // An entry named after a token carries the village's word for it, and its
   // href stays put. Substituted HERE, once, because both the desktop dropdown
@@ -186,7 +189,7 @@ export default function Layout({ children }: LayoutProps) {
               half the width. This breakpoint and the mobile button's below are
               a matched pair and must always move together, or some viewport
               gets no navigation at all. */}
-          <div className="hidden lg:flex items-center gap-4 xl:gap-6">
+          <div className="hidden lg:flex items-center gap-2 xl:gap-6">
             {navEntries.map((entry) =>
               isGroup(entry) ? (
                 <NavDropdown
@@ -229,10 +232,17 @@ export default function Layout({ children }: LayoutProps) {
                     aria-expanded={accountOpen}
                     aria-haspopup="true"
                     aria-controls="account-menu"
+                    // Named for a screen reader at every width, because the
+                    // visible name below hides between lg and xl.
+                    aria-label={`Your account, ${user.name.split(" ")[0]}`}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
                   >
                     <User className="w-4 h-4" />
-                    <span>{user.name.split(" ")[0]}</span>
+                    {/* Icon only from lg to xl. Between 1024px and 1280px the
+                        bar is at its fullest, and a member's first name was
+                        what pushed the village name out of the header (it read
+                        "A..." at 1024px with the bell beside it). */}
+                    <span className="lg:hidden xl:inline">{user.name.split(" ")[0]}</span>
                     <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${accountOpen ? "rotate-180" : ""}`} />
                   </button>
                   <AnimatePresence>
@@ -284,7 +294,7 @@ export default function Layout({ children }: LayoutProps) {
                 href={siteUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-sm whitespace-nowrap"
+                className="px-3 xl:px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-sm whitespace-nowrap"
               >
                 Main Site
               </a>

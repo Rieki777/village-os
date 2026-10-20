@@ -20,6 +20,11 @@
  *
  * Shapes, limits and words all come from shared/sessions.ts, the contract the
  * server reads too.
+ *
+ * The page stays on the light linen, a document beside the room's night: the
+ * title in the village's display face set large and light, each session its
+ * own panel (SessionList), and the title box the room's own growing box, so a
+ * long title is seen whole while it is typed.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "wouter";
@@ -35,7 +40,9 @@ import {
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
+import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
+import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
 import { useModules } from "@/modules/ModuleProvider";
@@ -117,6 +124,7 @@ export default function Sessions() {
 
   // A poll that answers after the page has gone must not set state on it.
   const alive = useRef(true);
+  const startForm = useRef<HTMLFormElement>(null);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -265,10 +273,10 @@ export default function Sessions() {
 
   return (
     <Layout>
-      <section className="bg-gradient-to-b from-teal-deep/5 to-background py-8 md:py-12">
+      <section className="py-8 md:py-12">
         <div className="container max-w-5xl">
-          <h1 className="font-display text-4xl font-bold text-foreground">{SESSION_COPY.listTitle}</h1>
-          <p className="mt-2 max-w-2xl text-muted-foreground">{SESSION_COPY.listLede}</p>
+          <h1 className={STAGE_TITLE}>{SESSION_COPY.listTitle}</h1>
+          <p className={STAGE_LEDE}>{SESSION_COPY.listLede}</p>
         </div>
       </section>
 
@@ -312,20 +320,23 @@ export default function Sessions() {
             <h2 id="sessions-start-heading" className={LIST_UI.heading}>
               {SESSION_COPY.startTitle}
             </h2>
-            <form className="mt-4 space-y-4" onSubmit={(e) => void onStart(e)} noValidate>
+            <form ref={startForm} className="mt-4 space-y-4" onSubmit={(e) => void onStart(e)} noValidate>
               <div>
                 <label htmlFor="sessions-start-title" className={LIST_UI.label}>
                   {SESSION_LIST_COPY.titleLabel}
                 </label>
-                <input
-                  id="sessions-start-title"
-                  className={LIST_UI.input}
-                  value={title}
-                  maxLength={SESSION_LIMITS.title}
-                  placeholder={SESSION_COPY.titlePlaceholder}
-                  onChange={(e) => setTitle(e.target.value)}
-                  autoComplete="off"
-                />
+                <div className="mt-1">
+                  <GrowingText
+                    id="sessions-start-title"
+                    value={title}
+                    onValue={setTitle}
+                    onSubmit={() => startForm.current?.requestSubmit()}
+                    label={SESSION_COPY.titlePlaceholder}
+                    max={SESSION_LIMITS.title}
+                    minRows={1}
+                    singleLine
+                  />
+                </div>
               </div>
               <div>
                 <label htmlFor="sessions-start-circle" className={LIST_UI.label}>
