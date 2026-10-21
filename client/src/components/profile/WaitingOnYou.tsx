@@ -69,9 +69,12 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
   }, [load]);
 
   const has = !!data && (data.applications.length > 0 || data.drafts.length > 0);
+  // Told only once the read has answered, so the board never draws "nothing in
+  // your hands" in the one render before a waiting row arrives.
+  const settled = data !== null || failed;
   useEffect(() => {
-    told.current?.(has || failed);
-  }, [has, failed]);
+    if (settled) told.current?.(has || failed);
+  }, [settled, has, failed]);
 
   if (failed) {
     return (
