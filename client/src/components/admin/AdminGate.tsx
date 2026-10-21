@@ -60,7 +60,7 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
   const [checking, setChecking] = useState(false);
 
   const isAdmin = !!user && (user.role === "admin" || user.role === "founder");
-  // Where this admin was headed, deep link included (`?tab=modules&module=…`),
+  // Where this admin was headed, deep link included (`?tab=email-settings&…`),
   // so the Google round trip comes back to the same screen. The server's
   // normalizeNext checks it before it is signed into the state.
   const here = `${window.location.pathname}${window.location.search}`;

@@ -1,34 +1,43 @@
 /**
- * One module's page in the library (L1): hero art, the promise, what it does,
- * who it is for, what you will set up, what data it holds, who answers, and
- * for admins the one button that starts the flow: Turn on (off to preview),
- * then the Go-live card the moment setup is done.
+ * One module's page in the library (L1), and since 2026-10-09 the ONLY page
+ * for that module: the admin Module Library tab is retired into it (Rye: the
+ * public library and the admin tab become one page).
  *
- * Anonymous readers see no buttons at all. Admin state rides
- * `/api/admin/modules` with the same bearer token AdminGate uses, so what an
- * admin sees here and in the Admin panel can never disagree.
+ * Everyone reads the same top half: hero art, the promise, what it does, who
+ * it is for, what you will set up, what data it holds, who answers, and, in
+ * plain words, why a module is no longer offered or is resting.
  *
- * A SIGNED-IN MEMBER now gets one thing: a way to ask the village for a module
- * it does not run (`ModuleAskDoor`). It opens an advisory vote and it cannot
- * turn a module on, which the card says in as many words. Read
- * `components/modules/askDoor.ts` before touching that copy.
+ * Below that, what the reader can DO depends on the catalog's `viewer`, which
+ * the server decides (server/routes/moduleLibrary.ts); this page never reads
+ * `user.role`:
+ *
+ *   visitor   nothing to press
+ *   member    its history here, its settings with "Suggest a change", and,
+ *             after launch, "Propose to turn on" (a binding village vote), or
+ *             the proposal already running for it
+ *   steward   all of that, plus `ModuleStewardPanel`: the four-way switch,
+ *             setup, Go live, every dial, examples, vendor and health, the
+ *             card image; and before launch "Add to my plan"
+ *
+ * Old admin deep links (`/admin?tab=modules&module=X&setting=Y`) arrive here as
+ * `/modules/X#setting-Y`, and the panel opens that dial.
  */
 import Layout from "@/components/Layout";
 import NotFound from "@/pages/NotFound";
-import { GoLiveCard } from "@/components/modules/GoLiveCard";
 import ModuleArt from "@/components/modules/ModuleArt";
-import ModuleAskDoor from "@/components/modules/ModuleAskDoor";
-import { type CatalogModule } from "@/components/modules/ModuleCard";
-import { useAuth } from "@/contexts/AuthContext";
-import { authToken, useCatalyst } from "@/lib/gameApi";
-import { prepareImageForUpload } from "@/lib/imagePrep";
+import ModuleHistoryStrip from "@/components/modules/ModuleHistoryStrip";
+import SuggestDial from "@/components/modules/SuggestDial";
+import TurnOnAction from "@/components/modules/TurnOnAction";
+import ModuleStewardPanel from "@/components/admin/ModuleStewardPanel";
+import { useAdminModules, useCatalog, useModuleHistory, viewerOf } from "@/components/modules/catalog";
+import { runningLine, switchDoor } from "@/components/modules/switchDoor";
+import { proposalHref } from "@/components/modules/switchModules";
+import { toggleInBasket, useBasket } from "@/components/modules/planBasket";
+import { useCatalyst } from "@/lib/gameApi";
 import { POOL_REASON_COPY } from "@shared/moduleCatalog";
-import type { ModuleDataClass, ModuleReadiness } from "@shared/modules";
-import SetupNeeded from "@/components/modules/SetupNeeded";
-import { ArrowLeft } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import type { ModuleDataClass } from "@shared/modules";
+import { ArrowLeft, Vote } from "lucide-react";
 import { Link, useRoute } from "wouter";
-import { toast } from "sonner";
 
 // Keyed by the union the registry declares, so a new data class cannot ship
 // without the plain-words line this page prints under it.
@@ -38,268 +47,18 @@ const DATA_CLASS_PLAIN: Record<ModuleDataClass, string> = {
   "member-pii": "Personal member data, protected",
 };
 
-/* A function of the village's word for whoever runs it, because the preview
-   line names those people. Everything else here is unchanged. */
-const lifecycleLine = (catalyst: string): Record<string, string> => ({
-  preview: `In preview: only ${catalyst} can see it.`,
-  members: "Live for signed-in members.",
-  public: "Live for everyone.",
-});
-
-/** The admin's slice of /api/admin/modules this page acts on. */
-interface AdminModule {
-  id: string;
-  name: string;
-  core: boolean;
-  lifecycle: string;
-  /**
-   * What is actually being SERVED, which differs from `lifecycle` when a
-   * module is demoted for a missing dependency. The catalog withholds a
-   * village's own card image on this value, so anything explaining that
-   * has to read it and not the configured one.
-   */
-  served: string;
-  legalReview: boolean;
-  dataClass: ModuleDataClass;
-  setup: "none" | "optional" | "required";
-  ready: ModuleReadiness | null;
-  maxLifecycle: string;
-  requires: string[];
-  showingExamples: boolean;
-  examplesAvailable: boolean;
-  config: any;
-}
-
-function AdminPanel({ id }: { id: string }) {
-  const catalyst = useCatalyst();
-  const token = authToken() ?? "";
-  const [all, setAll] = useState<AdminModule[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [withExamples, setWithExamples] = useState(true);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/modules", { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return;
-      const d = await res.json();
-      setAll(Array.isArray(d?.modules) ? d.modules : []);
-    } catch {
-      /* the panel simply stays quiet on a failed read */
-    }
-  }, [token]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const m = all?.find((x) => x.id === id) ?? null;
-  if (!m || m.core) return null;
-
-  const turnOn = async () => {
-    if (m.legalReview && m.lifecycle === "off") {
-      const sure = window.confirm(
-        `${m.name} touches funds. Before enabling: credits are non-withdrawable and non-refundable to fiat; ` +
-          "tested backups, per-admin identities, and legal review are preconditions. Continue?",
-      );
-      if (!sure) return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/admin/modules/${m.id}/lifecycle`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lifecycle: "preview",
-          ...(m.examplesAvailable && !withExamples ? { examples: false } : {}),
-        }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) toast.error(String(d?.message || d?.error || "That change was refused"));
-      else {
-        toast.success(`${m.name} is on, in preview`);
-        window.dispatchEvent(new Event("modules:changed"));
-      }
-      load();
-    } catch {
-      toast.error("That change did not go through");
-    }
-    setBusy(false);
-  };
-
-  const putImage = async (imageUrl: string | null) => {
-    const res = await fetch(`/api/admin/modules/${m.id}/image`, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ imageUrl }),
-    });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(String(d?.message || d?.error || "The image was refused"));
-  };
-
-  const chooseImage = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const prepared = await prepareImageForUpload(file, { maxEdge: 2000, quality: 82 });
-      const form = new FormData();
-      form.append("file", prepared.file);
-      const up = await fetch("/api/admin/brand/image", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      const d = await up.json().catch(() => ({}));
-      if (!up.ok || !d?.url) throw new Error(String(d?.error || "Upload failed"));
-      await putImage(String(d.url));
-      toast.success("Card image set");
-      load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "The image did not upload");
-    }
-    setBusy(false);
-  };
-
-  const clearImage = async () => {
-    setBusy(true);
-    try {
-      await putImage(null);
-      toast.success("Back to the platform art");
-      load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "That change did not go through");
-    }
-    setBusy(false);
-  };
-
-  const lookup = Object.fromEntries((all ?? []).map((x) => [x.id, { name: x.name, lifecycle: x.lifecycle }]));
-  const hasVillageImage = typeof m.config?.imageUrl === "string" && m.config.imageUrl.length > 0;
-
-  return (
-    <div className="mt-8 rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h2 className="font-semibold text-foreground mb-1">For this village's founders</h2>
-      {m.lifecycle === "off" ? (
-        <>
-          <p className="text-sm text-muted-foreground">
-            Off right now. Turning it on opens a preview only {catalyst.plural} can see; you go live from
-            there when it is ready.
-          </p>
-          {/* An off module is exactly where setup begins, and this page used to
-              say nothing about it until the module reached preview. A dial or
-              a config editor is reachable right now; content is not, and the
-              link says so rather than sending somebody to a screen that
-              opens with the module. */}
-          <SetupNeeded
-            moduleId={m.id}
-            setup={m.setup}
-            ready={m.ready}
-            lifecycle={m.served ?? m.lifecycle}
-            className="mt-3"
-          />
-          {m.examplesAvailable && (
-            <label className="flex items-center gap-2 mt-3 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={withExamples}
-                onChange={(e) => setWithExamples(e.target.checked)}
-                className="w-4 h-4 accent-teal-deep"
-              />
-              Start with example content
-            </label>
-          )}
-          <button
-            disabled={busy}
-            onClick={turnOn}
-            className="mt-3 min-h-[44px] px-5 rounded-lg bg-teal-deep text-white font-semibold text-sm disabled:opacity-40"
-          >
-            Turn on
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="text-sm text-muted-foreground">{lifecycleLine(catalyst.plural)[m.lifecycle] ?? m.lifecycle}</p>
-          {/* At every lifecycle now, not only in preview: a village whose
-              calendar has been live for a year is exactly the one that was
-              never told its seasons turn the wrong way round. */}
-          <SetupNeeded
-            moduleId={m.id}
-            setup={m.setup}
-            ready={m.ready}
-            lifecycle={m.served ?? m.lifecycle}
-            className="mt-2"
-          />
-          {m.lifecycle === "preview" && m.setup !== "none" && m.ready && !m.ready.ready && (
-            <p className="text-sm text-muted-foreground mt-2">Then the go-live choice appears here.</p>
-          )}
-          <div className="mt-4">
-            <GoLiveCard module={m as any} lookup={lookup} token={token} onChanged={load} />
-          </div>
-        </>
-      )}
-
-      <div className="mt-4 pt-4 border-t border-border">
-        <p className="text-sm font-medium text-foreground mb-1">Card image</p>
-        <p className="text-xs text-muted-foreground mb-2">
-          Your own picture for this module's card, or the platform art when unset.
-        </p>
-        {/*
-          * The catalog withholds a village's own art below the `members` rung
-          * (server/index.ts, GET /api/modules/catalog): custom art on a staged
-          * module would whisper what a village is trying out, which is the
-          * quiet that preview exists to keep. An admin passes that check, so
-          * the hero above shows the upload back to the one person it is
-          * hidden from, and the rule lived only in a server comment and an
-          * e2e assertion. Say it on the surface that sets the picture.
-          */}
-        {hasVillageImage && !m.core && (m.served === "off" || m.served === "preview") && (
-          <p className="text-xs text-muted-foreground mb-2">
-            You are the only one seeing it. While this module is {m.served === "off" ? "off" : "in preview"},
-            members and visitors get the platform art, so your own picture never hints at what the village is
-            trying out. Yours appears for everyone once the module is live for members.
-            {m.served !== m.lifecycle && " That is what is being served right now, whatever this is configured as, because the module is missing something it requires."}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="inline-flex items-center min-h-[44px] px-4 rounded-lg border border-border text-sm font-medium cursor-pointer bg-background hover:bg-muted">
-            {busy ? "Working…" : "Upload a picture"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => chooseImage(e.target.files?.[0])}
-            />
-          </label>
-          {hasVillageImage && (
-            <button
-              disabled={busy}
-              onClick={clearImage}
-              className="min-h-[44px] px-3 text-sm font-medium text-muted-foreground underline"
-            >
-              Use the platform art
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+const CARD = "mt-8 rounded-xl border border-teal-deep/30 bg-teal-deep/5 p-4 sm:p-5";
 
 export default function ModuleDetail() {
   const [, params] = useRoute("/modules/:id");
   const id = params?.id ?? "";
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "founder";
-
-  const [modules, setModules] = useState<CatalogModule[] | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    const tk = authToken();
-    fetch("/api/modules/catalog", { headers: tk ? { Authorization: `Bearer ${tk}` } : {} })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => setModules(Array.isArray(d?.modules) ? d.modules : []))
-      .catch(() => setFailed(true));
-  }, []);
+  const catalyst = useCatalyst();
+  const { data, failed } = useCatalog();
+  const viewer = data ? viewerOf(data) : null;
+  const steward = viewer?.mode === "steward";
+  const { all: adminRows, extra, reload: reloadAdmin } = useAdminModules(!!steward);
+  const { history } = useModuleHistory(id, !!viewer && viewer.mode !== "visitor");
+  const basket = useBasket();
 
   if (failed) {
     return (
@@ -310,7 +69,7 @@ export default function ModuleDetail() {
       </Layout>
     );
   }
-  if (!modules) {
+  if (!data || !viewer) {
     return (
       <Layout>
         <p className="container py-16 text-sm text-muted-foreground text-center">Loading…</p>
@@ -318,10 +77,19 @@ export default function ModuleDetail() {
     );
   }
 
+  const modules = data.modules;
   const m = modules.find((x) => x.id === id);
   if (!m) return <NotFound />;
   const names = Object.fromEntries(modules.map((x) => [x.id, x.name]));
   const poolLine = m.pool ? POOL_REASON_COPY[m.pool.reason] : null;
+  const adminRow = adminRows?.find((x: any) => x.id === m.id) ?? null;
+  const door = switchDoor({
+    module: m,
+    viewer,
+    openProposal: history === null ? null : history.openProposal ?? undefined,
+  });
+  const inPlan = basket.includes(m.id);
+  const planning = viewer.canSwitch && !viewer.launched && !m.core && !m.on && (m.lifecycle ?? "off") === "off";
 
   return (
     <Layout>
@@ -361,14 +129,27 @@ export default function ModuleDetail() {
               Preview
             </span>
           )}
+          {steward && !m.core && (m.lifecycle ?? "off") === "off" && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+              Not on yet
+            </span>
+          )}
         </div>
         {m.card && <p className="text-lg text-muted-foreground mt-2 leading-relaxed">{m.card.promise}</p>}
 
+        {/* Withdrawn and resting modules explain themselves to everyone who
+            can see the state, in plain words, not only in an admin banner. */}
         {m.withdrawn && (
           <p className="mt-4 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
             No longer offered since {m.withdrawn.since}.
             {m.withdrawn.replacedBy ? ` ${names[m.withdrawn.replacedBy] ?? m.withdrawn.replacedBy} replaces it.` : ""}
             {" "}A village already running it keeps running it.
+          </p>
+        )}
+        {m.demotedBecause && m.demotedBecause.length > 0 && (
+          <p className="mt-4 text-sm text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+            Resting for now. It needs {m.demotedBecause.join(" and ")}, which {m.demotedBecause.length === 1 ? "is" : "are"} off
+            here, and it comes back the moment {m.demotedBecause.length === 1 ? "that is" : "those are"} on again.
           </p>
         )}
 
@@ -415,6 +196,43 @@ export default function ModuleDetail() {
           </div>
         </section>
 
+        {/* Its guild: the keys and accounts that have to be in place before
+            it runs, in the seed catalog's own words. Every reader sees it,
+            because a founder choosing modules and a member proposing one both
+            need to know what comes with it. */}
+        {m.needs && m.needs.length > 0 && (
+          <section className="mt-6" aria-labelledby="module-needs">
+            <h2 id="module-needs" className="font-semibold text-foreground mb-2">What it needs</h2>
+            <ul className="space-y-3">
+              {m.needs.map((n) => (
+                <li key={n.id} className="rounded-xl border border-border p-4 text-sm">
+                  <p className="font-medium text-foreground">
+                    {n.title}
+                    <span className="font-normal text-muted-foreground"> · {n.provider}</span>
+                    {n.keystone && (
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber/20 text-foreground align-middle">
+                        Keystone: a second founder agrees
+                      </span>
+                    )}
+                    {!n.required && <span className="ml-2 text-xs text-muted-foreground">Optional</span>}
+                  </p>
+                  <p className="text-muted-foreground mt-1 leading-relaxed">{n.consequence}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {n.cost} {n.rotation}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">To undo: {n.undo}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {m.requires.length > 0 && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Needs {m.requires.map((dep) => names[dep] ?? dep).join(" and ")} to run.
+          </p>
+        )}
+
         {m.recommends.length > 0 && (
           <section className="mt-6">
             <h2 className="font-semibold text-foreground mb-2">Works well with</h2>
@@ -433,12 +251,60 @@ export default function ModuleDetail() {
         )}
 
         {/* The door sits after everything that describes the module, because a
-            member should have read what the thing does before they ask the
-            whole village for it. It draws nothing at all when there is nothing
-            to ask for. */}
-        <ModuleAskDoor module={m} />
+            reader should know what the thing does before asking the village
+            for it. It draws nothing when there is nothing to offer. */}
+        {door.kind === "founders-choose" && (
+          <p className="mt-8 text-sm text-muted-foreground">
+            Before launch, {catalyst.plural} choose which modules this village starts with.
+          </p>
+        )}
+        {door.kind === "running" && (
+          <section id="propose" className={CARD}>
+            <h2 className="flex items-center gap-2 font-semibold text-foreground">
+              <Vote className="w-5 h-5 text-teal-deep" aria-hidden="true" />
+              {runningLine(door.proposal)}
+            </h2>
+            <Link
+              href={door.proposal.ballotId ? `/decisions/${door.proposal.ballotId}` : proposalHref(door.proposal.id)}
+              className="mt-3 inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white"
+            >
+              {door.proposal.ballotId ? "Go to the vote" : "Go to the proposal"}
+            </Link>
+          </section>
+        )}
+        {door.kind === "turn-on" && (
+          <section id="propose" className={CARD}>
+            <h2 className="font-semibold text-foreground mb-2">
+              {viewer.canSwitch ? `Turn on ${m.name}` : `Want ${m.name} here?`}
+            </h2>
+            <TurnOnAction
+              ids={[m.id]}
+              all={modules}
+              viewer={viewer}
+              examplesAvailable={!!adminRow?.examplesAvailable}
+            />
+            {planning && (
+              <button
+                type="button"
+                onClick={() => toggleInBasket(m.id)}
+                aria-pressed={inPlan}
+                className="mt-3 min-h-[44px] px-4 rounded-lg border border-border bg-background text-sm font-medium"
+              >
+                {inPlan ? "In your plan. Take it out" : "Add to my plan"}
+              </button>
+            )}
+          </section>
+        )}
 
-        {isAdmin && <AdminPanel id={m.id} />}
+        {history && <ModuleHistoryStrip events={history.events} />}
+
+        {/* Only once the module is on for members: a preview stays unsaid below
+            steward, and its settings would say it is there. */}
+        {viewer.mode !== "visitor" && !steward && m.on === true && (m.dialKeys ?? []).length > 0 && <SuggestDial dialKeys={m.dialKeys ?? []} />}
+
+        {steward && adminRow && (
+          <ModuleStewardPanel m={adminRow} all={adminRows ?? []} extra={extra} viewer={viewer} onChanged={reloadAdmin} />
+        )}
       </div>
     </Layout>
   );

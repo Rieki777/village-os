@@ -30,12 +30,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { countWords, PURPOSE_MIN_WORDS } from "@shared/governingPurpose";
+import { usePrefill } from "@/lib/profilePrefill";
 
 export default function PurposeStatementPanel({ password }: { password: string }) {
   const [statement, setStatement] = useState("");
   const [founderHoldsPen, setFounderHoldsPen] = useState(true);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
+  /*
+   * A STATEMENT HANDED OVER FROM A REGEN CIVICS FILE (ProfileImport.tsx) goes
+   * into this box unsaved, and the statement the village saved is kept here so
+   * one button puts it back. The founder presses Save, or does not.
+   */
+  const [handed, setHanded] = useState<{ fromFirstLine: boolean; saved: string } | null>(null);
 
   const load = useCallback(() => {
     fetch(`${API_BASE}/admin/purpose`, { headers: authHeaders(password) })
@@ -48,6 +55,12 @@ export default function PurposeStatementPanel({ password }: { password: string }
       .catch(() => {});
   }, [password]);
   useEffect(() => { load(); }, [load]);
+  usePrefill("purpose", (p) => {
+    if (!founderHoldsPen) return;
+    setHanded({ fromFirstLine: p.fromFirstLine, saved: statement });
+    setStatement(p.text);
+    setNote("");
+  });
 
   const save = async () => {
     setSaving(true);
@@ -61,6 +74,7 @@ export default function PurposeStatementPanel({ password }: { password: string }
       const d = await res.json().catch(() => null);
       if (!res.ok) throw new Error(refusal(d, "The statement was not saved"));
       setNote("Saved. Every later change is judged against this.");
+      setHanded(null);
       load();
     } catch (e: any) {
       setNote(e?.message || "The statement was not saved");
@@ -83,6 +97,26 @@ export default function PurposeStatementPanel({ password }: { password: string }
           means, and what becomes true if it works. One statement, written the way you would say
           it out loud.
         </p>
+        {handed && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 mb-3 text-sm text-gray-900">
+            <p>
+              {handed.fromFirstLine
+                ? "This box now holds your first line from ReGen Civics. A purpose statement says more: who it serves, what they are up against, the move, the means, and what becomes true."
+                : "This box now holds the purpose statement from your ReGen Civics profile."}{" "}
+              Nothing is saved until you press Save.
+            </p>
+            <button
+              type="button"
+              className="mt-1 text-xs font-medium text-teal-deep underline"
+              onClick={() => {
+                setStatement(handed.saved);
+                setHanded(null);
+              }}
+            >
+              Put back what was saved
+            </button>
+          </div>
+        )}
         <textarea
           value={statement}
           onChange={(e) => setStatement(e.target.value)}
