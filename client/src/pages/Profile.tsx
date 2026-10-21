@@ -89,6 +89,7 @@ export default function Profile() {
   const { user, logout, loading, updateProfile } = useAuth();
   const redemptionModule = useModule("redemption");
   const sessionsOn = useModuleOn("sessions");
+  const governanceOn = useModuleOn("governance");
   const [editingBio, setEditingBio] = useState(false);
   const [bioText, setBioText] = useState(user?.bio || "");
   const [savingBio, setSavingBio] = useState(false);
@@ -456,13 +457,14 @@ export default function Profile() {
                 />
               ) : null}
 
-              {/* Every task taken on in a live session, and what this member's
-                  seats hold. Emails and notices land on #my-tasks, and
-                  `scroll-mt-28` keeps the board's heading clear of the fixed
-                  site header (about 96px) when they do. */}
-              {sessionsOn && (
+              {/* Every task taken on in a live session, what this member's
+                  seats hold, and what waits on a power they hold, which is
+                  governance and so stands with sessions off. Emails and
+                  notices land on #my-tasks, and `scroll-mt-28` keeps the
+                  board's heading clear of the fixed site header (about 96px). */}
+              {(sessionsOn || governanceOn) && (
                 <div id={TASK_BOARD_ANCHOR} className="scroll-mt-28">
-                  <TaskBoard />
+                  <TaskBoard sessions={sessionsOn} />
                 </div>
               )}
 

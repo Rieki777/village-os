@@ -30,6 +30,7 @@ vi.mock("wouter", async (importOriginal) => {
 import TaskBoard, { LANDED_RING_MS } from "@/components/profile/TaskBoard";
 import { HOLD_IN_VIEW_MS } from "@/components/tasks/holdInView";
 import { tasksChanged } from "@/components/tasks/useTaskCount";
+import { WAITING_URL } from "@shared/waitingOnYou";
 
 const fetchMock = vi.fn();
 let scrolls: Array<{ id: string; opts: ScrollIntoViewOptions | undefined }> = [];
@@ -37,7 +38,12 @@ let reduce = false;
 
 beforeEach(() => {
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  // The board also asks what waits on a power the member holds (governance).
+  // That read answers 404 here, as in taskBoard.test.tsx, so fetchMock still
+  // sees the task board's reads alone.
+  vi.stubGlobal("fetch", (url: unknown, init?: unknown) =>
+    String(url) === WAITING_URL ? Promise.resolve(new Response(JSON.stringify({ error: "not_found" }), { status: 404 })) : fetchMock(url, init),
+  );
   scrolls = [];
   reduce = false;
   Element.prototype.scrollIntoView = function (this: Element, opts?: boolean | ScrollIntoViewOptions) {

@@ -86,6 +86,12 @@ export interface ApplicationInput {
    * so the application's term sits in that season.
    */
   seasonId: string | null;
+  /**
+   * The application whose terms this one amends (seat settings PR8). Adopted
+   * by the same power, it writes the next version of the terms; the earlier
+   * version stays in force until this one is, then reads as superseded.
+   */
+  supersedesId: string | null;
 }
 
 export type ParsedApplication = { ok: true; input: ApplicationInput } | { ok: false; error: string; field: string };
@@ -133,7 +139,9 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   }
   const seasonId = words(b.seasonId);
   if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId } };
+  const supersedesId = words(b.supersedesId);
+  if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
+  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────

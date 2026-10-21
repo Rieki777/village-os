@@ -7,6 +7,7 @@
  *   POST /api/governance/role-applications/:id/adopt          a live org.seat holder adopts it for the village
  *   POST /api/governance/role-applications/:id/put-to-village a live org.seat holder sends it to a vote
  *   POST /api/governance/role-applications/:id/withdraw       the candidate takes it back
+ *   GET  /api/governance/waiting-on-me                        what waits on the reader's decision (task board)
  *
  * ── ONE FORMAL PROPOSAL, WHOEVER HOLDS THE POWER ───────────────────────────
  *
@@ -94,7 +95,7 @@ import type { WeightModeSnapshot } from "../lib/governanceWeights";
 import type { LapseContext } from "../lib/orgChart";
 import { seatVoteLandsAt } from "../lib/seatTermLanding";
 import { adoptApplication, seatApplicationCloser, settleDepsOf, tellOutcome } from "../lib/seatApplicationCloser";
-import { carriesMoney, intentSentence, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
+import { carriesMoney, intentSentence, noticeDaysOf, RECONFIRM_FRESH_MS, userParty, ALIGN_WORDS } from "../../shared/alignments";
 import {
   prepareSeatTermsText,
   presentView,
@@ -126,6 +127,8 @@ import {
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
 import { registerJob } from "../lib/scheduler";
+import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
+import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
@@ -143,6 +146,9 @@ const ASK_WINDOW_MS = 10 * 60 * 1000;
 /** At most three applications a day that open a village vote, per member (red team S6). */
 const BALLOTS_PER_DAY = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The reminder job's name and beat: hourly, so a reminder lands within an hour of the 48th. */
+export const REMIND_JOB = "seat-application-reminders";
+const REMIND_EVERY_MS = 60 * 60 * 1000;
 
 type Deps = Pick<
   AppDeps,
@@ -170,6 +176,8 @@ type Deps = Pick<
 };
 
 const MEMBERS_ONLY = { error: "auth_required", message: "Members read seat applications." };
+/** A text not written yet has nothing to end (PR8). */
+const NO_ACTS = { mayGiveNotice: false, notice: null, mayEndByAgreement: false, ask: null };
 const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these seats. Withdraw it first, or wait for it.";
 
 /** A seat's term as a civil date, from the terms' own length when no date is written. */
@@ -196,9 +204,12 @@ export function register(app: Express, deps: Deps): void {
   registerJob(SEASON_TURN_JOB, SEASON_TURN_EVERY_MS, turn);
   whenSeasonsSaved(turn);
 
+  // One gentle reminder to a holder an application still waits on after 48 hours (server/lib/seatApplicationWaiting.ts).
+  registerJob(REMIND_JOB, REMIND_EVERY_MS, async () => `${await remindWaitingHolders({ pool: getPool(), notify, liveHoldersOf })} reminder(s) asked`);
+
   /** Who adopts seats today, and why: the raised-hand door's one rule over `org.seat`. */
-  async function adoptionRule(viewer: any) {
-    const ctx = await capabilityCtx(viewer);
+  async function adoptionRule(viewer: any, known?: Awaited<ReturnType<typeof capabilityCtx>>) {
+    const ctx = known ?? (await capabilityCtx(viewer));
     return whoMayPutHandToVillage(isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), await liveHoldersOf(ADOPTING_POWER));
   }
 
@@ -236,11 +247,12 @@ export function register(app: Express, deps: Deps): void {
    * before PR5 has no text yet: its words render from the stored terms, and
    * the candidate's Align writes the text (POST /api/profile/alignments).
    */
-  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[], known?: TextView | null) {
+  async function alignmentOf(a: StoredApplication, viewerId: string | null, seatNames: string[], known?: TextView | null, actsForVillage = false) {
     if (a.textId) {
       const v = known !== undefined ? known : await viewText(getPool(), a.textId, today(), seatCalendar().timezone || "UTC");
       // The hash is for a party (red team S5): the candidate reads it, other members do not.
-      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId);
+      // A live holder of org.seat who is not the candidate may end the terms for the village (PR8).
+      if (v) return await presentView(v, viewerId, async (id) => nameOf(id), viewerId === a.candidateUserId, { actsForVillage });
     }
     const words = seatTermsWords(seatNames, a.settings);
     const closed = a.status === "withdrawn" || a.status === "not-adopted";
@@ -260,9 +272,12 @@ export function register(app: Express, deps: Deps): void {
         { partyKey: userParty(a.candidateUserId), label: (await nameOf(a.candidateUserId)) || "A former member", capacity: "individually", required: true, aligned: false, at: null, method: null },
         { partyKey: "village", label: "The village", capacity: "for the village", required: true, aligned: false, at: null, method: null },
       ],
-      you: isCandidate ? { partyKey: userParty(a.candidateUserId), aligned: false, alignedAt: null, mayAlign: !closed } : null,
+      you: isCandidate ? { partyKey: userParty(a.candidateUserId), aligned: false, alignedAt: null, mayAlign: !closed, acts: NO_ACTS } : null,
+      village: null,
       contentHash: null,
       createdAt: null,
+      endingLine: null,
+      noticeDays: noticeDaysOf(a.settings),
       retrofit: true,
     };
   }
@@ -326,7 +341,15 @@ export function register(app: Express, deps: Deps): void {
       decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, tz) : null,
       decidedAt: a.decidedAt ? a.decidedAt.toISOString() : null,
       createdAt: a.createdAt ? a.createdAt.toISOString() : null,
-      alignment: await alignmentOf(a, viewerId, seatNames, known ? known.view : undefined),
+      // The application this one amends, and the version its text is (PR8).
+      supersedesId: a.supersedesId,
+      alignment: await alignmentOf(
+        a,
+        viewerId,
+        seatNames,
+        known ? known.view : undefined,
+        !!viewerId && !!rule && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
+      ),
       ...(viewerId && rule
         ? {
             you: {
@@ -436,6 +459,30 @@ export function register(app: Express, deps: Deps): void {
     }
     const later = !!startsAt && startsAt.getTime() > now.getTime();
 
+    /*
+     * AN AMENDMENT (PR8). `supersedesId` names the application whose terms
+     * this one replaces: the member's own, adopted, its terms in force, for
+     * the same seats. It takes the same road as any application, so the same
+     * power adopts it; adopted, its text is version n+1, and version n stays in
+     * force until n+1 is, then reads as superseded. Renewing on the same terms
+     * is an amendment too.
+     */
+    let supersedes: { id: string; version: number } | null = null;
+    if (input.supersedesId) {
+      const old = await readApplication(pool, input.supersedesId);
+      if (!old) return res.status(404).json({ error: "There is no application by that id to amend.", field: "supersedesId" });
+      if (old.candidateUserId !== userId) return res.status(403).json({ error: "Only the member who holds these terms can propose to amend them.", field: "supersedesId" });
+      const sameSeats = old.seatIds.length === input.seatIds.length && old.seatIds.every((s) => input.seatIds.includes(s));
+      if (!sameSeats) {
+        return res.status(409).json({ error: "An amendment names the same seats as the terms it replaces. Apply for other seats in an application of their own.", field: "seatIds" });
+      }
+      const oldView = old.textId ? await viewText(pool, old.textId, today(), tz) : null;
+      if (old.status !== "adopted" || !oldView || oldView.derived.state !== "in-force") {
+        return res.status(409).json({ error: "Only terms in force can be amended. These are not in force now.", field: "supersedesId" });
+      }
+      supersedes = { id: oldView.text.id, version: oldView.text.version };
+    }
+
     // The seats: real, the village's own, live, and each with a place for this member.
     const seats = await seatsForUpdate(pool, input.seatIds);
     const live = await liveSeatingsOf(pool, input.seatIds);
@@ -491,6 +538,7 @@ export function register(app: Express, deps: Deps): void {
       termSeasonId: term.seasonId,
       termFollowsSeason: term.followsSeason,
       startsAt,
+      supersedesId: input.supersedesId,
     };
     const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? sid);
 
@@ -500,7 +548,7 @@ export function register(app: Express, deps: Deps): void {
      * longer match, because a seat was renamed or the terms moved, are refused
      * before anything is written. Money asks the re-confirm first.
      */
-    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz);
+    const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz, supersedes);
     if (req.body?.alignedWords !== undefined && String(req.body.alignedWords) !== prepared.text.body) {
       return res.status(409).json({ error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
     }
@@ -554,7 +602,8 @@ export function register(app: Express, deps: Deps): void {
           userId: holder,
           type: "governance",
           title: applicationNoticeTitle("waiting", seatNames),
-          body: null,
+          // The link opens the application; the body says where it waits after the bell is cleared.
+          body: WAITING_COPY.holderNoticeBody,
           link: applicationHref(id),
           actorUserId: userId,
           dedupeKey: `sa:${id}:waiting:${holder}`,
@@ -618,6 +667,34 @@ export function register(app: Express, deps: Deps): void {
         ),
       ),
     });
+  });
+
+  /*
+   * ── WAITING ON YOU, for the profile's task board ───────────────────────
+   *
+   * The reader's own rows and nobody else's: applications they may adopt, and
+   * open drafts a proposal made when they may publish them. Members only, by
+   * the same `terms.read` door as every read here.
+   *
+   * Publishing a draft is an admin's today: `POST /api/admin/org/drafts/:id/publish`
+   * asks `isAdmin`, which is the account role `capabilityCtx` reads as `isAdmin`.
+   * TODO(org.decide): ask the gate for `org.decide` once wt/org-decide adds it.
+   */
+  app.get(WAITING_URL, async (req, res) => {
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    const viewerId = String(viewer.id);
+    const ctx = await capabilityCtx(viewer);
+    const pool = getPool();
+    const payload: WaitingPayload = {
+      applications: await applicationsWaitingOn(
+        { pool, allMembers: () => members.all(), firstName, timezone: seatCalendar().timezone || "UTC" },
+        await adoptionRule(viewer, ctx),
+        viewerId,
+      ),
+      drafts: ctx.isAdmin === true ? await draftsWaiting(pool) : [],
+    };
+    res.set("Cache-Control", "no-store").json(payload);
   });
 
   app.get("/api/governance/role-applications/:id", async (req, res) => {

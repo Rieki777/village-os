@@ -977,7 +977,7 @@ export const TASK_COPY = {
   },
   /** The small card near the top of the member's own profile. Nothing shows when nothing waits. */
   waitingCard: {
-    heading: "Waiting on you",
+    heading: "Your tasks",
     count: (n: number): string => (n === 1 ? "One task waits on you." : `${n} tasks wait on you.`),
     nextDue: (date: string): string => `The nearest date is ${date}.`,
     /** The nearest date is already behind today. Normal ink, never a red mark. */

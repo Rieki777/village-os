@@ -7,6 +7,7 @@
  * groups, a grouped list and not a set of columns, because it is read on a
  * phone and answered with one tap:
  *
+ *   Waiting on you   decisions a power you hold is asked for (WaitingOnYou.tsx)
  *   Holding          held by you, by date, undated last
  *   Your seats hold  held by a seat you sit in now, so it follows the seat
  *   Finished         done or let go in the last three moons
@@ -24,6 +25,9 @@
  * and the board re-reads quietly, so a task marked done moves to Finished and
  * a task handed back leaves. If the card that had focus is gone, focus comes
  * back to the board's heading rather than falling to the top of the page.
+ *
+ * WITH LIVE SESSIONS OFF (`sessions={false}`) the board reads no tasks and
+ * shows only Waiting on you, and nothing at all while that group is empty.
  *
  * An email or the menu links here as /profile#my-tasks. A task notice links
  * one card as /profile#task-<entryId> (taskBoardLink). The board arrives after
@@ -59,6 +63,8 @@ import {
   type TaskBoardPayload,
   type TaskCard as TaskCardData,
 } from "@shared/sessionTasks";
+import WaitingOnYou from "@/components/profile/WaitingOnYou";
+import { WAITING_COPY } from "@shared/waitingOnYou";
 
 const isCards = (v: unknown): v is TaskCardData[] => Array.isArray(v);
 
@@ -99,8 +105,9 @@ const cardShell = (entryId: number, ringed: number | null): string =>
     ringed === entryId ? "ring-2 ring-gold ring-offset-2 ring-offset-card" : ""
   }`;
 
-export default function TaskBoard() {
+export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
   const [board, setBoard] = useState<TaskBoardPayload | null>(null);
+  const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
   const [earlier, setEarlier] = useState<TaskCardData[] | null>(null);
   const [earlierFailed, setEarlierFailed] = useState(false);
@@ -143,8 +150,8 @@ export default function TaskBoard() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (sessions) void load();
+  }, [load, sessions]);
 
   /**
    * Land where the hash points: one card, or the board as a whole. Answers
@@ -180,11 +187,11 @@ export default function TaskBoard() {
 
   // Landed here from an email, a notice or the menu: come into view once there is something to see.
   useEffect(() => {
-    if (!board || arrived.current) return;
+    if ((!board && !waiting) || arrived.current) return;
     arrived.current = true;
     drawn.current = true;
     land();
-  }, [board, land]);
+  }, [board, waiting, land]);
 
   // Already on the profile when a notice or the menu points here: the hash
   // changes with no remount. The router moves by pushState, which sends no
@@ -277,26 +284,30 @@ export default function TaskBoard() {
     );
   };
 
-  const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0;
+  const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0 && !waiting;
   // A task opened again from Earlier moves up on the next read; it is shown once, where it now stands.
   const onBoard = new Set(board ? [...board.holding, ...board.seatsHold, ...board.finished].map((c) => c.entryId) : []);
   const earlierShown = (earlier ?? []).filter((c) => !onBoard.has(c.entryId));
 
   return (
-    <section aria-labelledby="task-board-h" aria-busy={!board && !failed} className={`${PANEL} sm:p-8`}>
+    <section aria-labelledby="task-board-h" aria-busy={sessions && !board && !failed} hidden={!sessions && !waiting} className={`${PANEL} sm:p-8`}>
       <h2 id="task-board-h" ref={heading} tabIndex={-1} className="font-display text-2xl font-bold text-card-foreground outline-none">
         {TASK_COPY.heading}
       </h2>
-      <p className={`${HINT} mt-1`}>{TASK_COPY.lede}</p>
+      <p className={`${HINT} mt-1`}>{sessions ? TASK_COPY.lede : WAITING_COPY.ledeAlone}</p>
 
-      {!board && !failed && (
+      <div className="mt-6 empty:hidden">
+        <WaitingOnYou onShown={setWaiting} />
+      </div>
+
+      {sessions && !board && !failed && (
         <div className="mt-6 space-y-3" aria-hidden="true" data-loading>
           <div className="h-28 animate-pulse rounded-2xl bg-muted" />
           <div className="h-28 animate-pulse rounded-2xl bg-muted" />
         </div>
       )}
 
-      {!board && failed && (
+      {sessions && !board && failed && (
         <div className="mt-6 flex flex-wrap items-center gap-3" role="alert">
           <p className="text-sm text-foreground">{TASK_COPY.loadFailed}</p>
           <button type="button" className={BTN_SECONDARY} onClick={() => void load()}>

@@ -367,12 +367,17 @@ export function fileRefusal(plan: Pick<PlanInput, "aim"> | null): string | null 
  * The member door, opened for this season. `seat` picks a seat; `renew`
  * picks a seat the member already holds. PR4's wizard reads all three
  * (`roleApplicationStart`), and the season decides the first day.
+ *
+ * `supersedes` (seat settings PR8) names the application the member holds the
+ * seat through: the renewal is then an amendment of those terms, prefilled
+ * with them and their seats, and adopted it supersedes them.
  */
-export function applyHref(opts: { seasonId: string; seat?: string | null; renew?: string | null }): string {
+export function applyHref(opts: { seasonId: string; seat?: string | null; renew?: string | null; supersedes?: string | null }): string {
   const q = new URLSearchParams({ type: "role_application" });
   if (opts.renew) {
     q.set("seat", opts.renew);
     q.set("renew", opts.renew);
+    if (opts.supersedes) q.set("supersedes", opts.supersedes);
   } else if (opts.seat) {
     q.set("seat", opts.seat);
   }

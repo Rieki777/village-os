@@ -45,6 +45,23 @@
  * `alignment:<textId>:<partyKey>:in-force`, with the seat names and a link
  * only. No `recordEvent` and no `addActivity`: both reach the village's public
  * record, and the alignment row is the record.
+ *
+ * ── THE SECOND SUBJECT: THE MEMBERSHIP LETTER (PR9) ────────────────────────
+ *
+ * `membership` texts are written by the Love Letter signing
+ * (server/lib/membershipLetter.ts), one per signing, in the signing's own
+ * transaction. They share every rule above with three differences, kept in
+ * SUBJECT_RULES so no reader has to guess them:
+ *
+ *   - nobody is TOLD the letter is in force: it is in force at the member's
+ *     own click, and the village's desk already hears of the signing;
+ *   - it ends only when the member LEAVES (`party_left`) or aligns with the
+ *     letter again (`superseded`): notice and ending by agreement are for
+ *     terms two parties hold, and the village's side of the letter is the
+ *     letter itself;
+ *   - the member reading their own letter is told what the village did with
+ *     the signing it came from (waiting, welcomed, left), as the journey
+ *     section told them before PR9.
  */
 import crypto from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
@@ -52,8 +69,12 @@ import { canonicalJson } from "../../shared/canonicalJson";
 import {
   CAPACITY,
   carriesMoney,
+  alignedOnWords,
   deriveAlignmentState,
+  ENDING_WORDS,
+  ENDINGS_WORDS,
   intentSentence,
+  noticeDaysOf,
   renderSeatTermsText,
   SEAT_TERMS,
   userParty,
@@ -62,11 +83,17 @@ import {
   type DerivedState,
 } from "../../shared/alignments";
 import { applicationHref, seatList, STATUS_WORDS } from "../../shared/seatApplications";
+import { letterIntent, MEMBERSHIP, readMembershipRef } from "../../shared/membershipLetter";
+import { signingAnswer, type SigningAnswer } from "../../shared/membershipSigning";
 import type { SeatSettings } from "../../shared/seatSettings";
+import { signingStatuses } from "../repos/membershipSignings";
 import { civilDateKey } from "../../shared/lunar";
+import { civilDateInstant } from "../../shared/seatTerms";
 import {
   alignmentsOf,
+  endingsOf,
   insertAlignment,
+  insertEnding,
   insertParty,
   insertSeal,
   insertText,
@@ -74,7 +101,10 @@ import {
   readText,
   sealsOf,
   seatingFacts,
+  termEndCandidates,
   textsToSettle,
+  readTexts,
+  type StoredEnding,
   type StoredAlignment,
   type StoredParty,
   type StoredText,
@@ -85,6 +115,21 @@ import { canSign, signDocument, signingKey } from "./villageExport";
 type Db = Pool | PoolConnection;
 
 export { SEAT_TERMS };
+
+/**
+ * What each subject does beyond the common store. A subject missing here
+ * reads as seat terms do: told, and ended by a party's act.
+ */
+const SUBJECT_RULES: Record<string, { tellsInForce: boolean; endsByAct: boolean }> = {
+  [SEAT_TERMS]: { tellsInForce: true, endsByAct: true },
+  [MEMBERSHIP]: { tellsInForce: false, endsByAct: false },
+};
+
+/** Whether a party may end a text of this subject by notice or by agreement. A membership letter ends when its member leaves. */
+export const endsByAct = (subjectType: string): boolean => SUBJECT_RULES[subjectType]?.endsByAct ?? true;
+
+/** Whether the parties of a text of this subject are told when it comes into force. */
+const tellsInForce = (subjectType: string): boolean => SUBJECT_RULES[subjectType]?.tellsInForce ?? true;
 
 const newId = (prefix: string) => `${prefix}-${crypto.randomBytes(8).toString("hex")}`;
 
@@ -148,14 +193,24 @@ function windowOf(app: Pick<StoredApplication, "startsAt" | "termEndsAt">, timez
   };
 }
 
-/** Version 1 of an application's text, ready to insert. Pure apart from the salt. */
+/**
+ * An application's text, ready to insert. Pure apart from the salt.
+ *
+ * VERSION 1, or AN AMENDMENT (PR8). An application that supersedes another
+ * (`supersedesId`) writes the next version of the terms: `supersedes` names
+ * the text it replaces, and its version is that text's plus one. It is its
+ * own text with its own parties and hash, under its own application; version
+ * n stays in force until this one is, and then gets a `superseded` ending.
+ */
 export function prepareSeatTermsText(
   app: Pick<StoredApplication, "id" | "candidateUserId" | "settings" | "startsAt" | "termEndsAt">,
   seatNames: readonly string[],
   createdBy: string,
   timezone: string,
+  supersedes: Pick<StoredText, "id" | "version"> | null = null,
 ): PreparedText {
   const { title, body } = renderSeatTermsText(seatNames, app.settings);
+  const version = supersedes ? supersedes.version + 1 : 1;
   const id = newId("at");
   const parties: StoredParty[] = [
     { textId: id, partyKey: userParty(app.candidateUserId), userId: app.candidateUserId, capacity: CAPACITY.individually, required: true },
@@ -167,7 +222,7 @@ export function prepareSeatTermsText(
     salt,
     subjectType: SEAT_TERMS,
     subjectRef: app.id,
-    version: 1,
+    version,
     title,
     body,
     settings: app.settings,
@@ -178,13 +233,13 @@ export function prepareSeatTermsText(
       id,
       subjectType: SEAT_TERMS,
       subjectRef: app.id,
-      version: 1,
+      version,
       title,
       body,
       settings: app.settings,
       salt,
       contentHash,
-      supersedesId: null,
+      supersedesId: supersedes?.id ?? null,
       effectiveFrom: w.from,
       effectiveTo: w.to,
       createdBy,
@@ -284,6 +339,14 @@ export interface TextView {
   application: StoredApplication | null;
   seatNames: string[];
   derived: DerivedState;
+  /** Every ending row of the text (PR8), oldest first. */
+  endings: StoredEnding[];
+  /** The village's zone, for the days the served words print. */
+  timezone: string;
+  /** The window's last day as the derivation read it: a season-following term moves with its seating. */
+  effectiveTo: string | null;
+  /** For a membership letter (PR9), the Love Letter signing it came from and that signing's status; null otherwise or once the signing is gone. */
+  signing: { id: string; status: string } | null;
 }
 
 /** Statuses that close an application before its terms could hold. */
@@ -302,16 +365,22 @@ const CLOSED: Partial<Record<string, string>> = {
  * when the admin moves the season's end, the seating's term moves, so for such
  * an application the window ends with the open seating's term instead.
  */
-export async function viewTexts(db: Db, texts: readonly StoredText[], today: string, timezone = "UTC"): Promise<TextView[]> {
+export async function viewTexts(db: Db, texts: readonly StoredText[], today: string, timezone = "UTC", now: Date = new Date()): Promise<TextView[]> {
   const ids = texts.map((t) => t.id);
   const appIds = Array.from(new Set(texts.filter((t) => t.subjectType === SEAT_TERMS).map((t) => t.subjectRef)));
-  const [parties, alignments, seals, apps, facts] = await Promise.all([
+  // A membership letter's signing (PR9), named by the second half of its ref.
+  const signingOfText = (t: StoredText) => (t.subjectType === MEMBERSHIP ? (readMembershipRef(t.subjectRef)?.signingId ?? null) : null);
+  const signingIds = Array.from(new Set(texts.map(signingOfText).filter((s): s is string => !!s)));
+  const [parties, alignments, seals, apps, facts, endings, signings] = await Promise.all([
     partiesOf(db, ids),
     alignmentsOf(db, ids),
     sealsOf(db, ids),
     readApplications(db, appIds),
     seatingFacts(db, appIds),
+    endingsOf(db, ids),
+    signingStatuses(db, signingIds),
   ]);
+  const tz = timezone || "UTC";
   const seatIds = Array.from(new Set(apps.flatMap((a) => a.seatIds)));
   const seats = await seatsForUpdate(db, seatIds);
   const nameOfSeat = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
@@ -325,6 +394,8 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
     const mine = parties.filter((p) => p.textId === text.id);
     const aligned = alignments.filter((a) => a.textId === text.id);
     const seal = seals.find((s) => s.textId === text.id) ?? null;
+    const ends = endings.filter((e) => e.textId === text.id);
+    const signingId = signingOfText(text);
     out.push({
       text,
       parties: mine,
@@ -333,6 +404,10 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
       receipt: seal?.receipt ?? null,
       application: app,
       seatNames: app ? app.seatIds.map(nameOfSeat) : [],
+      endings: ends,
+      timezone: tz,
+      effectiveTo,
+      signing: signingId && signings.has(signingId) ? { id: signingId, status: signings.get(signingId) as string } : null,
       derived: deriveAlignmentState({
         contentHash: text.contentHash,
         parties: mine,
@@ -342,15 +417,27 @@ export async function viewTexts(db: Db, texts: readonly StoredText[], today: str
         today,
         seatings: text.subjectType === SEAT_TERMS ? (seatings ?? { open: 0, total: 0 }) : null,
         closed: app ? (CLOSED[app.status] ?? null) : null,
+        // The endings (PR8), against this instant, with the term's own end so the two can be put in order.
+        endings: ends.map((e) => ({ id: e.id, kind: e.kind, refersTo: e.refersTo, partyKey: e.partyKey, effectiveAt: e.effectiveAt.toISOString() })),
+        now: now.toISOString(),
+        termEndAt: termEndInstant(effectiveTo, tz),
       }),
     });
   }
   return out;
 }
 
-export async function viewText(db: Db, textId: string, today: string, timezone = "UTC"): Promise<TextView | null> {
+export async function viewText(db: Db, textId: string, today: string, timezone = "UTC", now: Date = new Date()): Promise<TextView | null> {
   const t = await readText(db, textId);
-  return t ? ((await viewTexts(db, [t], today, timezone))[0] ?? null) : null;
+  return t ? ((await viewTexts(db, [t], today, timezone, now))[0] ?? null) : null;
+}
+
+/** The instant a window's last day ends, in the village's zone: the first moment of the day after. ISO, or null. */
+export function termEndInstant(effectiveTo: string | null, timezone: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(effectiveTo ?? "");
+  if (!m) return null;
+  const next = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1)).toISOString().slice(0, 10);
+  return civilDateInstant(next, timezone || "UTC")?.toISOString() ?? null;
 }
 
 // ── Seal and tell ────────────────────────────────────────────────────────────
@@ -358,9 +445,46 @@ export async function viewText(db: Db, textId: string, today: string, timezone =
 export interface SettleDeps {
   getPool: () => Pool;
   notify: (input: { userId: string; type: string; title: string; body?: string | null; link?: string | null; actorUserId?: string | null; dedupeKey: string }) => Promise<unknown>;
-  notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string) => Promise<unknown>;
+  /** `except` names members already told, so an admin who is also a party hears once (red team U11). */
+  notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[]) => Promise<unknown>;
   /** Today in the village's calendar, YYYY-MM-DD. */
   today: () => string;
+  /** Now. Tests hand in a fixed instant; endings take effect against it. */
+  now?: () => Date;
+  /** The village's zone, for the term's end. UTC when absent. */
+  timezone?: () => string;
+}
+
+/** The id of a fact the sweep or a door records, fixed by the text, so a repeat writes nothing twice. */
+export function endingIdFor(kind: "superseded" | "term_end" | "party_left", textId: string): string {
+  return `ae-${crypto.createHash("sha256").update(`${kind}:${textId}`, "utf8").digest("hex").slice(0, 16)}`;
+}
+
+/** A fresh id for a member's own act: a notice, an ask, or taking one back. */
+export const newEndingId = () => newId("ae");
+
+/**
+ * Tell every party of a text one thing, once each: a member by their own
+ * notice, the village through the holder who aligned for it, or, for a vote,
+ * its admins. `except` is the member whose act this is: they already know.
+ * Seat names and a link only.
+ */
+export async function tellParties(deps: SettleDeps, v: TextView, title: string, keySuffix: string, except: string | null = null): Promise<void> {
+  const link = v.application ? applicationHref(v.application.id) : null;
+  const partyUsers = v.parties.map((p) => p.userId).filter((id): id is string => !!id);
+  const skip = except ? [...partyUsers, except] : partyUsers;
+  for (const p of v.parties) {
+    const key = `alignment:${v.text.id}:${p.partyKey}:${keySuffix}`.slice(0, 191);
+    if (p.userId) {
+      if (p.userId !== except) await deps.notify({ userId: p.userId, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
+    } else if (p.partyKey === VILLAGE_PARTY) {
+      // The village is told through the holder who aligned for it, or, for a vote, its admins.
+      const holder = v.alignments.find((a) => a.partyKey === VILLAGE_PARTY && a.method === "holder" && a.userId)?.userId ?? null;
+      if (holder) {
+        if (!skip.includes(holder)) await deps.notify({ userId: holder, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
+      } else await deps.notifyAdmins("governance", title, key, link ?? undefined, skip);
+    }
+  }
 }
 
 /** The receipt's document: the hash and who aligned, never the words. */
@@ -400,38 +524,71 @@ export async function sealIfReady(db: Db, v: TextView): Promise<boolean> {
  */
 export async function settleText(deps: SettleDeps, textId: string): Promise<TextView | null> {
   const pool = deps.getPool();
-  const v = await viewText(pool, textId, deps.today());
+  const now = () => deps.now?.() ?? new Date();
+  const tz = deps.timezone?.() || "UTC";
+  const v = await viewText(pool, textId, deps.today(), tz, now());
   if (!v) return null;
   if (v.derived.state === "in-force") {
-    const seats = seatList(v.seatNames);
-    const title = `Aligned and in force: the terms for ${seats}`;
-    const link = v.application ? applicationHref(v.application.id) : null;
-    for (const p of v.parties) {
-      const key = `alignment:${v.text.id}:${p.partyKey}:in-force`.slice(0, 191);
-      if (p.userId) {
-        await deps.notify({ userId: p.userId, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
-      } else if (p.partyKey === VILLAGE_PARTY) {
-        // The village is told through the holder who aligned for it, or, for a vote, its admins.
-        const holder = v.alignments.find((a) => a.partyKey === VILLAGE_PARTY && a.method === "holder" && a.userId)?.userId ?? null;
-        if (holder) await deps.notify({ userId: holder, type: "governance", title, body: null, link, actorUserId: null, dedupeKey: key });
-        else await deps.notifyAdmins("governance", title, key, link ?? undefined);
-      }
+    // A member who is a party hears as a party, and never again as the village's holder or admin.
+    if (tellsInForce(v.text.subjectType)) await tellParties(deps, v, `Aligned and in force: the terms for ${seatList(v.seatNames)}`, "in-force");
+    /*
+     * VERSION n ENDS WHEN VERSION n+1 IS IN FORCE (PR8). An amendment's text
+     * names the text it supersedes; the moment it is in force, the earlier
+     * one gets its `superseded` ending, keyed on the earlier text so a second
+     * settle writes nothing. Until then version n stays exactly as it was.
+     */
+    if (v.text.supersedesId) {
+      await insertEnding(pool, {
+        id: endingIdFor("superseded", v.text.supersedesId),
+        textId: v.text.supersedesId,
+        kind: "superseded",
+        refersTo: v.text.id,
+        partyKey: null,
+        effectiveAt: now(),
+        recordedBy: null,
+      });
     }
   }
-  if (await sealIfReady(pool, v)) return viewText(pool, textId, deps.today());
+  if (await sealIfReady(pool, v)) return viewText(pool, textId, deps.today(), tz, now());
   return v;
 }
 
-/** The hourly sweep: seal what can now be sealed, and tell parties of terms that came into force by any door. */
+/**
+ * THE TERM'S END, FOR THE RECORD (PR8). The derivation already reads a text
+ * as ended the day after its window closes; this writes the `term_end` row on
+ * that day, so the record says so too. Only for a text every required party
+ * aligned with, and only when the term is what ended it: a text that ended by
+ * notice, agreement or a party leaving keeps that as its ending. Keyed on the
+ * text, so the hourly sweep writes it once.
+ */
+export async function recordTermEnds(deps: SettleDeps): Promise<number> {
+  const pool = deps.getPool();
+  const now = deps.now?.() ?? new Date();
+  const tz = deps.timezone?.() || "UTC";
+  const ids = await termEndCandidates(pool, deps.today());
+  if (ids.length === 0) return 0;
+  let written = 0;
+  for (const v of await viewTexts(pool, await readTexts(pool, ids), deps.today(), tz, now)) {
+    if (v.derived.endedBy !== "term" || !v.derived.allAligned) continue;
+    const at = v.derived.ending?.at ? new Date(v.derived.ending.at) : null;
+    if (!at || Number.isNaN(at.getTime())) continue;
+    if (await insertEnding(pool, { id: endingIdFor("term_end", v.text.id), textId: v.text.id, kind: "term_end", refersTo: null, partyKey: null, effectiveAt: at, recordedBy: null })) written += 1;
+  }
+  return written;
+}
+
+/** The hourly sweep: seal what can now be sealed, tell parties of terms that came into force by any door, and record the terms whose term ended. */
 export async function settleAll(deps: SettleDeps): Promise<string> {
   const ids = await textsToSettle(deps.getPool());
+  const tz = deps.timezone?.() || "UTC";
   let sealed = 0;
   for (const id of ids) {
-    const before = await viewText(deps.getPool(), id, deps.today());
+    const before = await viewText(deps.getPool(), id, deps.today(), tz, deps.now?.() ?? new Date());
     const after = await settleText(deps, id);
     if (before && !before.sealed && after?.sealed) sealed += 1;
   }
-  return `${ids.length} text(s) read, ${sealed} sealed`;
+  const ended = await recordTermEnds(deps);
+  return `${ids.length} text(s) read, ${sealed} sealed, ${ended} term end(s) recorded`;
 }
 
 // ── What a reader is served ──────────────────────────────────────────────────
@@ -448,8 +605,30 @@ export interface PartyChip {
   method: AlignMethod | null;
 }
 
+/** What a party may do about the terms ending (PR8), for the reader acting as that party. */
+export interface PartyActs {
+  /** Give notice: the terms are aligned and not ended, and this party has no notice running. */
+  mayGiveNotice: boolean;
+  /** This party's notice still running: it may be taken back until it takes effect. */
+  notice: { id: string; endsOn: string } | null;
+  /** Ask to end by agreement: aligned, not ended, and this party has not asked. */
+  mayEndByAgreement: boolean;
+  /** This party's open ask to end by agreement: it may be taken back. */
+  ask: { id: string } | null;
+}
+
 export interface ServedAlignment {
   textId: string | null;
+  /** The subject: `seat_terms`, or `membership` for the letter (PR9). */
+  kind: string;
+  /** The sentence beside the Align button for this text. */
+  intent: string;
+  /**
+   * For a member reading their OWN membership letter (PR9): what the village
+   * did with the signing it came from. Null for everything else, and never
+   * served to another reader.
+   */
+  answer: SigningAnswer | null;
   title: string;
   body: string;
   version: number;
@@ -461,17 +640,69 @@ export interface ServedAlignment {
   /** True when the terms record money, so aligning may ask the re-confirm. */
   money: boolean;
   parties: PartyChip[];
-  /** The reader's own place, when they are a party. */
-  you: { partyKey: string; aligned: boolean; alignedAt: string | null; mayAlign: boolean } | null;
+  /** The reader's own place, when they are a party, with what they may do about the terms ending. */
+  you: { partyKey: string; aligned: boolean; alignedAt: string | null; mayAlign: boolean; acts: PartyActs } | null;
+  /** What the reader may do for the village, when they may act for it (a live holder of org.seat who is not the candidate). */
+  village: PartyActs | null;
   /** On member pages and receipts only. Never on a public surface. */
   contentHash: string | null;
   createdAt: string | null;
+  /**
+   * How the terms are ending or ended (PR8), in one line every surface
+   * prints: "Notice given, ends 9 Nov 2026", "Ended by agreement on ...",
+   * "Superseded by version 2". Null when nothing is ending them.
+   */
+  endingLine: string | null;
+  /** The notice these terms ask for, in days, and which group named it (the default when neither did). */
+  noticeDays: { days: number; from: "ending" | "term" | "default" };
 }
 
 type NameOf = (userId: string) => Promise<string | null>;
 
-/** A view as a member reads it. `withHash` for a party or a member page; never for anything public. */
-export async function presentView(v: TextView, viewerId: string | null, nameOf: NameOf, withHash: boolean): Promise<ServedAlignment> {
+/** The day of an instant in the village's zone, in words. */
+const dayOf = (iso: string, tz: string) => alignedOnWords(iso, tz);
+
+/** The one line about how a text is ending or ended, or null. */
+export function endingLineOf(v: Pick<TextView, "derived" | "text" | "timezone">, labelOf: (partyKey: string) => string): string | null {
+  const d = v.derived;
+  if (d.ending && (d.endedBy === "ending" || d.endedBy === "term")) {
+    // A term reads as the last day it ran; every other ending as the day it took effect.
+    const at = d.ending.kind === "term_end" && d.ending.at ? new Date(new Date(d.ending.at).getTime() - 1).toISOString() : d.ending.at;
+    if (d.ending.kind === "term_end" && !d.ending.at) return null;
+    return ENDING_WORDS[d.ending.kind](dayOf(at, v.timezone), v.text.version + 1);
+  }
+  const notice = [...d.notices].sort((a, b) => (a.at < b.at ? -1 : 1))[0];
+  if (notice) return ENDINGS_WORDS.noticeRunning(dayOf(notice.at, v.timezone));
+  if (d.asks.length > 0) return d.asks.map((a) => ENDINGS_WORDS.asked(labelOf(a.partyKey))).join(". ");
+  return null;
+}
+
+/** What one party may do about the terms ending, from the derivation. A subject that ends only when a party leaves offers nothing. */
+export function actsOf(v: Pick<TextView, "derived" | "timezone"> & { text?: Pick<StoredText, "subjectType"> }, partyKey: string): PartyActs {
+  const open = v.derived.state !== "ended" && v.derived.allAligned && (!v.text || endsByAct(v.text.subjectType));
+  const notice = v.derived.notices.find((n) => n.partyKey === partyKey) ?? null;
+  const ask = v.derived.asks.find((a) => a.partyKey === partyKey) ?? null;
+  return {
+    mayGiveNotice: open && !notice,
+    notice: notice ? { id: notice.id, endsOn: dayOf(notice.at, v.timezone) } : null,
+    mayEndByAgreement: open && !ask,
+    ask: ask ? { id: ask.id } : null,
+  };
+}
+
+/**
+ * A view as a member reads it. `withHash` for a party or a member page; never
+ * for anything public. `actsForVillage` when the reader may act for the
+ * village on these terms: the route decides that through the one adoption
+ * rule, never this function.
+ */
+export async function presentView(
+  v: TextView,
+  viewerId: string | null,
+  nameOf: NameOf,
+  withHash: boolean,
+  opts: { actsForVillage?: boolean } = {},
+): Promise<ServedAlignment> {
   const parties: PartyChip[] = [];
   for (const p of v.parties) {
     const a = v.alignments.find((x) => x.partyKey === p.partyKey && x.contentHash === v.text.contentHash) ?? null;
@@ -486,20 +717,33 @@ export async function presentView(v: TextView, viewerId: string | null, nameOf: 
     });
   }
   const mine = viewerId ? parties.find((p) => p.partyKey === userParty(viewerId)) ?? null : null;
+  const labelOf = (key: string) => parties.find((p) => p.partyKey === key)?.label ?? "A party";
+  const endingLine = endingLineOf(v, labelOf);
+  const letter = v.text.subjectType === MEMBERSHIP;
   return {
     textId: v.text.id,
+    kind: v.text.subjectType,
+    intent: letter ? letterIntent(v.text.title) : intentSentence(v.seatNames),
+    // The village's answer to the signing is the member's own business: only they read it.
+    answer: letter && mine && v.signing ? signingAnswer(v.signing.status) : null,
     title: v.text.title,
     body: v.text.body,
     version: v.text.version,
     seatNames: v.seatNames,
     href: v.application ? applicationHref(v.application.id) : null,
     state: v.derived.state,
-    why: v.derived.why,
+    // An ending says itself; every other reason keeps its own words.
+    why: v.derived.endedBy === "ending" ? endingLine : v.derived.why,
     sealed: v.sealed,
     money: carriesMoney(v.text.settings),
     parties,
-    you: mine ? { partyKey: mine.partyKey, aligned: mine.aligned, alignedAt: mine.at, mayAlign: !mine.aligned && v.derived.state !== "ended" } : null,
+    you: mine
+      ? { partyKey: mine.partyKey, aligned: mine.aligned, alignedAt: mine.at, mayAlign: !mine.aligned && v.derived.state !== "ended", acts: actsOf(v, mine.partyKey) }
+      : null,
+    village: opts.actsForVillage && v.parties.some((p) => p.partyKey === VILLAGE_PARTY) ? actsOf(v, VILLAGE_PARTY) : null,
     contentHash: withHash ? v.text.contentHash : null,
     createdAt: v.text.createdAt ? v.text.createdAt.toISOString() : null,
+    endingLine,
+    noticeDays: noticeDaysOf(v.text.settings),
   };
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Waiting on you: the small card near the top of the member's own profile.
+ * Your tasks: the small card near the top of the member's own profile.
  *
  * It reads the count door only, never the board's full read; draws nothing
  * when nothing waits, while it loads, when the read fails, or with the module

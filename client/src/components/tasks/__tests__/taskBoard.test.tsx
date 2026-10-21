@@ -2,12 +2,19 @@
 /**
  * The profile's task board: its groups, its empty state, the Earlier
  * disclosure that loads only when opened, a load that fails and is tried
- * again, and no number in any heading.
+ * again, and no number in any heading. Then the Waiting on you group
+ * (WaitingOnYou.tsx): its rows, its place first, and the board with Live
+ * Sessions off.
+ *
+ * The board now makes two reads. The Waiting on you read goes to its own
+ * mock, `waitingMock`, so `fetchMock` still sees the board's reads alone and
+ * in order. It answers 404 (closed, nothing drawn) unless a case says more.
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TASK_COPY, TASKS_MINE_URL } from "@shared/sessionTasks";
+import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "@shared/waitingOnYou";
 import { makeBoard, makeTask, reply } from "./taskFixture";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), message: vi.fn(), error: vi.fn() } }));
@@ -20,9 +27,12 @@ vi.mock("wouter", async (importOriginal) => {
 import TaskBoard from "@/components/profile/TaskBoard";
 
 const fetchMock = vi.fn();
+const waitingMock = vi.fn();
 beforeEach(() => {
   fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
+  waitingMock.mockReset();
+  waitingMock.mockImplementation(async () => reply(404, { error: "not_found" }));
+  vi.stubGlobal("fetch", (url: unknown, init?: unknown) => (String(url) === WAITING_URL ? waitingMock(url, init) : fetchMock(url, init)));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -117,5 +127,72 @@ describe("the task board", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     // The card that had focus moved groups, so focus comes home to the board's heading.
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2, name: TASK_COPY.heading })));
+  });
+});
+
+const WAITING: WaitingPayload = {
+  applications: [
+    { id: "sa-0000000000000001", href: "/seat-applications/sa-0000000000000001", seats: ["Water steward", "Seed keeper"], circles: ["Garden circle"], applicant: "Ada", appliedOn: "2026-10-18" },
+  ],
+  drafts: [{ id: "draft-1", title: "The water circle", circles: 1, seats: 2, href: "/review/structure/batch-1" }],
+};
+
+describe("waiting on you", () => {
+  it("comes first, names the seats, the circle, the applicant and the day, and opens the application", async () => {
+    waitingMock.mockImplementation(async () => reply(200, WAITING));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard({ holding: [makeTask({ entryId: 1, text: "Fix the gate latch" })] })));
+    render(<TaskBoard />);
+    const group = await screen.findByRole("region", { name: WAITING_COPY.heading });
+    expect(await screen.findByText("Fix the gate latch")).toBeInTheDocument();
+    const row = within(group).getByText("Ada applied for Water steward and Seed keeper").closest("a");
+    expect(row?.getAttribute("href")).toBe("/seat-applications/sa-0000000000000001");
+    expect(within(group).getByText("In Garden circle · Applied 18 October 2026")).toBeInTheDocument();
+    const draft = within(group).getByText("A draft to publish: The water circle").closest("a");
+    expect(draft?.getAttribute("href")).toBe("/review/structure/batch-1");
+    expect(within(group).getByText("It adds 1 circle and 2 seats")).toBeInTheDocument();
+    // First of the groups, and no number in its heading.
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings[0]).toBe(WAITING_COPY.heading);
+    expect(headings[0]).not.toMatch(/\d/);
+  });
+
+  it("draws nothing when the read is closed, and the empty board still says so", async () => {
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    expect(await screen.findByText(TASK_COPY.empty)).toBeInTheDocument();
+    await waitFor(() => expect(waitingMock).toHaveBeenCalled());
+    expect(screen.queryByRole("region", { name: WAITING_COPY.heading })).toBeNull();
+  });
+
+  it("is not called empty while a decision waits", async () => {
+    waitingMock.mockImplementation(async () => reply(200, { applications: WAITING.applications, drafts: [] }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    await screen.findByRole("region", { name: WAITING_COPY.heading });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.queryByText(TASK_COPY.empty)).toBeNull();
+  });
+
+  it("says when it did not load, and tries again", async () => {
+    waitingMock.mockResolvedValueOnce(reply(500, {})).mockResolvedValueOnce(reply(200, WAITING));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    fireEvent.click(await screen.findByRole("button", { name: WAITING_COPY.retry }));
+    expect(await screen.findByRole("region", { name: WAITING_COPY.heading })).toBeInTheDocument();
+  });
+
+  it("with Live Sessions off reads no tasks, and shows the board only while something waits", async () => {
+    const { container, unmount } = render(<TaskBoard sessions={false} />);
+    await waitFor(() => expect(waitingMock).toHaveBeenCalled());
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.querySelector("section")?.hidden).toBe(true);
+    unmount();
+
+    waitingMock.mockImplementation(async () => reply(200, WAITING));
+    render(<TaskBoard sessions={false} />);
+    expect(await screen.findByRole("region", { name: WAITING_COPY.heading })).toBeInTheDocument();
+    expect(screen.getByText(WAITING_COPY.ledeAlone)).toBeInTheDocument();
+    expect(screen.queryByText(TASK_COPY.empty)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
