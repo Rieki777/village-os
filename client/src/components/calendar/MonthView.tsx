@@ -114,15 +114,22 @@ export default function MonthView(p: MonthViewProps) {
         aria-label={`${day.key}, ${info ? moonDayLine(info, p.moonOneCycle) : ""}${list.length ? `, ${list.length} item${list.length === 1 ? "" : "s"}` : ""}`}
         className={`flex flex-col justify-start text-left min-h-[56px] sm:min-h-[76px] p-1 sm:p-1.5 border-t border-l border-border transition-colors ${
           selected ? "bg-teal-deep/10 ring-2 ring-inset ring-teal-deep" : "hover:bg-muted/60"
-        } ${dim ? "opacity-45" : ""}`}
+        }`}
       >
+        {/* A day from the next or last month is quieter by INK, not by
+            opacity. opacity-45 faded the whole cell, ground and words alike,
+            and measured 2.32:1 on the date and 1.92:1 on the moon line, on
+            buttons a visitor can still press. shared/brandTokens.ts derives the
+            muted ink to clear 4.5:1 on --muted, and this ground is lighter. */}
         <div className="flex items-start justify-between gap-1">
-          <span className={`text-sm font-semibold leading-none ${isToday ? "rounded-full bg-teal-deep text-white px-1.5 py-0.5" : "text-foreground"}`}>
+          <span className={`text-sm font-semibold leading-none ${isToday ? "rounded-full bg-teal-deep text-white px-1.5 py-0.5" : dim ? "text-muted-foreground" : "text-foreground"}`}>
             {primary}
           </span>
           {info && <MoonGlyph phase={info.phase} size={12} hemisphere={p.hemisphere} />}
         </div>
-        <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+        {/* On the selected day's tint the muted ink measured 4.48:1, so that
+            one cell reads in full ink. */}
+        <div className={`text-[10px] leading-tight mt-0.5 ${selected ? "text-foreground" : "text-muted-foreground"}`}>
           {secondary}
           {info?.newMoon && <span className="ml-1 font-medium text-foreground">new moon</span>}
         </div>
