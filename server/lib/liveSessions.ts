@@ -71,7 +71,24 @@ import { deleteTaskRowsForSession, exportTaskRowsFor, forgetTaskRowsFor, seedSta
 import { avatarFor } from "./characters";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { circleTasksFor, villageDate } from "./sessionTasks";
+import {
+  broughtByItem,
+  exportLibraryFor,
+  forgetLibraryFor,
+  libraryItemIdsFor,
+  libraryViewer,
+  lockForTaking,
+  noteAuthor,
+  noticesAfterSettle,
+  releaseForDiscard,
+  settleForClose,
+  takenBySession,
+  writeTakes,
+  type SettledRecord,
+  type TakenRecord,
+} from "./sessionLibrary";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
+import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
@@ -740,21 +757,108 @@ async function inRoom<T>(pool: Pool, sessionId: number, actor: Actor, work: (roo
 
 // ── Starting, joining, presence, arrival ────────────────────────────────────
 
+/** The session row and its opener's seat in it, inside the caller's transaction. */
+async function insertOpenSession(conn: PoolConnection, openerNo: number, input: StartInput, stamp: SessionStamp, now: Date): Promise<number> {
+  const id = await repo.insertSessionRow(conn, {
+    title: input.title,
+    circleId: input.circleId,
+    facilitatorNo: openerNo,
+    durationMin: input.durationMin,
+    state: JSON.stringify(defaultSessionState()),
+    stamp: JSON.stringify(stamp),
+    now,
+  });
+  await repo.insertPerson(conn, id, openerNo, now);
+  return id;
+}
+
 /** Open a session. The opener facilitates and is in the room. */
 export async function startSession(pool: Pool, openerNo: number, input: StartInput, now = new Date()): Promise<number> {
   const stamp = await sessionStamp(pool, now);
+  return repo.inTransaction(pool, (conn) => insertOpenSession(conn, openerNo, input, stamp, now));
+}
+
+/**
+ * Open a session with items from the agenda library on its agenda, in the
+ * order the opener ticked them (`libraryIds`, shared/sessionLibrary.ts). No
+ * list, or an empty one, opens the room the way `startSession` does.
+ *
+ * All or none, and nothing written on a refusal: every item is locked and
+ * checked (it waits, the opener may see it, it is for this circle or for none)
+ * before the session row exists, because this transaction commits whatever it
+ * wrote before a refusal returns. One that went elsewhere a moment ago refuses
+ * the open with one sentence that names no item, and the page reads the list
+ * again. The session row is new, so nobody else can wait on it, and the
+ * library rows are the only locks this takes before it.
+ */
+export async function openSession(
+  pool: Pool,
+  opener: { no: number; userId: string; admin: boolean },
+  input: StartInput,
+  libraryIds: unknown,
+  deps: { lapseContext?: () => LapseContext },
+  now = new Date(),
+): Promise<Outcome<{ id: number; taken: TakenRecord[] }>> {
+  const ids = libraryIds == null ? [] : cleanIds(libraryIds);
+  if (ids == null) return refuse(400, LIBRARY_REFUSALS.idsNeeded);
+  if (!ids.length) return done({ id: await startSession(pool, opener.no, input, now), taken: [] });
+  const viewer = await libraryViewer(pool, { userId: opener.userId, no: opener.no, admin: opener.admin }, deps);
+  const stamp = await sessionStamp(pool, now);
   return repo.inTransaction(pool, async (conn) => {
-    const id = await repo.insertSessionRow(conn, {
-      title: input.title,
-      circleId: input.circleId,
-      facilitatorNo: openerNo,
-      durationMin: input.durationMin,
-      state: JSON.stringify(defaultSessionState()),
-      stamp: JSON.stringify(stamp),
-      now,
-    });
-    await repo.insertPerson(conn, id, openerNo, now);
-    return id;
+    const plan = await lockForTaking(conn, ids, viewer, input.circleId);
+    if (!plan.ok) return refuse(409, LIBRARY_REFUSALS.moved);
+    const id = await insertOpenSession(conn, opener.no, input, stamp, now);
+    const taken = await writeTakes(conn, { sessionId: id, take: plan.take, position: 1, takerNo: opener.no, inRoom: new Set([opener.no]), now });
+    return done({ id, taken });
+  });
+}
+
+/**
+ * Bring items from the agenda library onto an open room's agenda: anyone in
+ * the room, for the items they may see that fit its circle, the way anyone in
+ * the room brings an item over from last time. The room's consent to the
+ * agenda is the circle's check.
+ *
+ * All or none, and every refusal before the first write: the items are locked
+ * after the session row and checked, the agenda's room (`maxAgenda`) and the
+ * entries' room (each note is an entry, counted for the session and for
+ * whoever wrote it) are measured, and only then is anything written. An item
+ * already on this agenda is a quiet yes, so a second tap moves nothing.
+ */
+export async function bringFromLibrary(
+  pool: Pool,
+  sessionId: number,
+  actor: Actor & { userId: string },
+  raw: unknown,
+  deps: { lapseContext?: () => LapseContext },
+  now = new Date(),
+): Promise<Outcome<{ ids: number[]; taken: TakenRecord[]; title: string }>> {
+  const ids = cleanIds(bodyOf(raw).ids);
+  if (ids == null || !ids.length) return refuse(400, LIBRARY_REFUSALS.idsNeeded);
+  const viewer = await libraryViewer(pool, { userId: actor.userId, no: actor.no, admin: actor.admin }, deps);
+  return inRoom(pool, sessionId, actor, async (room) => {
+    const { conn, s } = room;
+    const plan = await lockForTaking(conn, ids, viewer, s.circleId, await takenBySession(conn, sessionId));
+    if (!plan.ok) return refuse(409, LIBRARY_REFUSALS.moved);
+    if (!plan.take.length) {
+      room.still = true;
+      return done({ ids: [], taken: [], title: s.title });
+    }
+    const items = (await repo.itemRows(conn, sessionId)).map(mapItem);
+    if (items.length + plan.take.length > SESSION_LIMITS.maxAgenda) return refuse(409, R.agendaFull);
+    const noted = plan.take.filter((r) => r.note);
+    if (noted.length) {
+      const all = (await repo.entryCounts(conn, sessionId, 0)).all;
+      if (all + noted.length > SESSION_LIMITS.maxEntries) return refuse(409, R.entriesFull);
+      for (const by of Array.from(new Set(noted.map(noteAuthor)))) {
+        const theirs = noted.filter((r) => noteAuthor(r) === by).length;
+        if ((await repo.entryCounts(conn, sessionId, by)).mine + theirs > SESSION_LIMITS.maxEntriesPerPerson) return refuse(409, R.entriesFull);
+      }
+    }
+    const people = new Set((await repo.peopleRows(conn, sessionId)).map((r) => Number(r.member_no)));
+    const position = items.reduce((m, i) => Math.max(m, i.position), 0) + 1;
+    const taken = await writeTakes(conn, { sessionId, take: plan.take, position, takerNo: actor.no, inRoom: people, now });
+    return done({ ids: taken.map((t) => t.libraryId), taken, title: s.title });
   });
 }
 
@@ -1292,6 +1396,10 @@ export interface ClosedRecord {
   title: string;
   /** The actions that left with a person or a seat on them. */
   held: { entryId: number; text: string; dueOn: string | null; ownerNo: number | null; ownerSeatId: string | null }[];
+  /** The items the session took from the agenda library, and how each left it. */
+  brought?: SettledRecord[];
+  /** Everybody who was in the room, so a notice skips whoever saw it happen. */
+  peopleNos?: number[];
 }
 
 /**
@@ -1360,12 +1468,18 @@ async function closeLocked(conn: PoolConnection, s: SessionRec, ctx: RoomContext
   // The task layer's state rows (0255), in this transaction: a task exists the
   // moment the close does, whichever close it was. A second run adds nothing.
   await seedStateForSession(conn, sessionId);
+  // The agenda library (0264), in this transaction too, read from the items as
+  // the record now has them: what the session finished is taken up, and what
+  // it did not reach waits for next time.
+  const brought = await settleForClose(conn, sessionId, items, now);
   return done({
     id: sessionId,
     title: s.title,
     held: entries
       .filter((e) => e.kind === "action" && e.status === "open" && (e.ownerNo != null || e.ownerSeatId))
       .map((e) => ({ entryId: e.id, text: e.text, dueOn: e.dueOn, ownerNo: e.ownerNo, ownerSeatId: e.ownerSeatId })),
+    brought,
+    peopleNos: people.map((p) => p.no),
   });
 }
 
@@ -1408,6 +1522,8 @@ export async function discardSession(pool: Pool, sessionId: number, viewer: View
     const s = mapSession(rows[0]);
     const may = mayDiscard(s, viewer);
     if (!may.ok) return may;
+    // The agenda library (0264): an open session's items wait again; a deleted record's keep their status and lose the link.
+    await releaseForDiscard(conn, sessionId, s.status);
     await deleteTaskRowsForSession(conn, sessionId, await repo.sessionEntryIds(conn, sessionId));
     if (!(await repo.deleteSessionRows(conn, sessionId))) return refuse(404, R.notFound);
     return done({ status: s.status });
@@ -1558,6 +1674,8 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
   } catch (e) {
     console.error("[sessions] the people holding actions were not all told", e);
   }
+  // Whoever brought an item the session took, and was not in the room, hears how it left.
+  await noticesAfterSettle(pool, deps, { settled: closed.brought ?? [], inRoom: new Set(closed.peopleNos ?? []) });
   try {
     deps.closeMail?.(closed.id);
   } catch (e) {
@@ -1586,11 +1704,14 @@ export async function readMinutes(pool: Pool, sessionId: number, viewer: Viewer,
  * item or a backlog entry already brought into this session from there is not
  * offered again. An entry is matched by the title the room gives it when it is
  * brought over, which is its text cleaned and cut to an agenda title's length.
+ * An item that session took from the agenda library (`fromLibrary`, its item
+ * ids) went back there at its close, so it is offered there and not twice.
  */
 export function selectCarried(
   prev: { items: readonly SessionItem[]; entries: readonly SessionEntry[] },
   current: readonly SessionItem[],
   prevId: number,
+  fromLibrary: ReadonlySet<number> = new Set(),
 ): { actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } {
   const broughtOver = new Set(current.filter((i) => i.fromSessionId === prevId).map((i) => i.title.toLowerCase()));
   const asTitle = (text: string) => (cleanLine(text, SESSION_LIMITS.agendaTitle) ?? "").toLowerCase();
@@ -1601,7 +1722,7 @@ export function selectCarried(
     ),
     parkedItems: [...prev.items]
       .sort((a, b) => a.position - b.position)
-      .filter((i) => (i.status === "parked" || i.status === "waiting") && !broughtOver.has(i.title.toLowerCase()))
+      .filter((i) => (i.status === "parked" || i.status === "waiting") && !broughtOver.has(i.title.toLowerCase()) && !fromLibrary.has(i.id))
       .map((i) => ({ title: i.title, aim: i.aim, minutes: i.minutes })),
   };
 }
@@ -1664,7 +1785,7 @@ export async function buildView(
       : null;
 
   // What carries over, for a viewer who may read the earlier record.
-  let carriedFrom: { prev: SessionRec; items: ItemRec[]; entries: EntryRec[] } | null = null;
+  let carriedFrom: { prev: SessionRec; items: ItemRec[]; entries: EntryRec[]; fromLibrary: Set<number> } | null = null;
   if (s.status === "open" && s.circleId) {
     const prevRows = await repo.lastClosedInCircle(pool, s.circleId, s.id);
     if (prevRows.length) {
@@ -1675,10 +1796,13 @@ export async function buildView(
           prev,
           items: (await repo.itemRows(pool, prev.id)).map(mapItem),
           entries: (await repo.entryRows(pool, prev.id)).map(mapEntry),
+          fromLibrary: await libraryItemIdsFor(pool, prev.id),
         };
       }
     }
   }
+  // Who brought each item this session took from the agenda library.
+  const brought = await broughtByItem(pool, s.id, ctx.lookup);
 
   const nos = new Set<number>([s.facilitatorNo, ...people.map((p) => p.no)]);
   if (s.secretaryNo) nos.add(s.secretaryNo);
@@ -1711,6 +1835,7 @@ export async function buildView(
       { items: carriedFrom.items.map(itemOut), entries: carriedFrom.entries.map((e) => entryOut(e, names, seats)) },
       items,
       carriedFrom.prev.id,
+      carriedFrom.fromLibrary,
     );
     if (picked.actions.length || picked.backlog.length || picked.parkedItems.length) {
       carried = { sessionId: carriedFrom.prev.id, title: carriedFrom.prev.title, ...picked };
@@ -1736,7 +1861,10 @@ export async function buildView(
     createdAt: s.createdAt,
     closedAt: s.closedAt,
     people: peopleOut,
-    items: items.map(itemOut),
+    items: items.map((i) => {
+      const from = brought.get(i.id);
+      return { ...itemOut(i), libraryId: from?.libraryId ?? null, broughtBy: from?.broughtBy ?? null };
+    }),
     entries: entries.map((e) => entryOut(e, names, seats)),
     responses: responsesOut,
     facilitation,
@@ -1789,6 +1917,8 @@ export async function listSessions(
  * facilitation included, because it is theirs. From the task layer: the tasks
  * they hold now, and every answer they gave a task, with its words. A note
  * somebody else left on a task they hold is that person's, and stays out.
+ * From the agenda library: the items they brought, and the times they put an
+ * item on an agenda (server/lib/sessionLibrary.ts `exportLibraryFor`).
  */
 export async function exportMemberSessions(pool: Pool, userId: string): Promise<{
   sessions: Record<string, unknown>[];
@@ -1797,9 +1927,12 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   responses: Record<string, unknown>[];
   tasks: Record<string, unknown>[];
   taskAnswers: Record<string, unknown>[];
+  library: Record<string, unknown>[];
+  libraryTakes: Record<string, unknown>[];
+  libraryNotes: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -1870,7 +2003,9 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     note: r.note == null ? null : String(r.note),
     at: toIso(r.created_at),
   }));
-  return { sessions, items, entries, responses, tasks, taskAnswers };
+  // The agenda library (0264): what they brought, in their own words, and the times they put an item on an agenda.
+  const { library, libraryTakes, libraryNotes } = await exportLibraryFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes };
 }
 
 /**
@@ -1935,6 +2070,12 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
       );
       await repo.writeMinutes(conn, sid, minutes.people, minutes.shareable);
     }
+    // The agenda library (0264) last, after every session row above is held,
+    // the order every other writer takes them in: the items they brought go
+    // with every take of them, and their number leaves the takes and the
+    // changes they made. A note they brought into a room is an entry they
+    // wrote, so it already went with the rest.
+    await forgetLibraryFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

@@ -285,6 +285,14 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     case "session_task_back":
     case "session_task_unheld":
       return "daily";
+    // The agenda library: an item a member brought went onto an agenda, and
+    // how it left that session. In the bell only, ON PURPOSE and said here so
+    // it is not mistaken for a kind nobody registered: no email preference a
+    // member has set covers an agenda item (`tasksEmail` is about tasks), and
+    // a member who wants these by email can be offered that later.
+    case "session_item_taken":
+    case "session_item_settled":
+      return "off";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been
     // waiting weeks for, and it only ever fires on a real transition.

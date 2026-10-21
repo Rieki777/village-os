@@ -314,6 +314,12 @@ describe("what carries over from the last session of a circle", () => {
     // A copy brought over from some other session leaves this one's entry on offer.
     expect(selectCarried(prev, [item(9, asItem, "waiting", 12)], 40).backlog.map((e) => e.id)).toEqual([4, 6]);
   });
+
+  it("leaves an item taken from the agenda library to the library, which took it back at the close", () => {
+    const prev = { entries: [], items: [item(2, "Fence", "parked"), item(3, "Shed roof", "parked"), item(4, "Picnic", "waiting")] };
+    expect(selectCarried(prev, [], 40).parkedItems.map((p) => p.title)).toEqual(["Fence", "Shed roof", "Picnic"]);
+    expect(selectCarried(prev, [], 40, new Set([3, 4])).parkedItems.map((p) => p.title)).toEqual(["Fence"]);
+  });
 });
 
 describe("the room's ETag", () => {
@@ -498,6 +504,19 @@ describe("the dials and the notices this module registers", () => {
     }
     // Every email off silences these too.
     expect(emailCadenceFor("session_action_due", resolveNotifyPrefs({ notify: { emailsOff: true, tasksEmail: "daily" } }))).toBe("off");
+  });
+
+  it("keeps the agenda library's two notices in the bell, whatever the member's email settings", () => {
+    for (const type of ["session_item_taken", "session_item_settled"]) {
+      expect(NOTIFICATION_KINDS[type], type).toBeTruthy();
+      expect(NOTIFICATION_KINDS[type].celebrate, type).toBe(false);
+      expect(NOTIFICATION_KINDS[type].blurb, type).not.toMatch(DASHES);
+      expect(NOTIFICATION_KINDS[type].many, type).toContain("{n}");
+      // No preference a member has set covers an agenda item, the task one included.
+      for (const tasksEmail of ["immediate", "daily", "off"] as const) {
+        expect(emailCadenceFor(type, resolveNotifyPrefs({ notify: { tasksEmail } })), `${type} ${tasksEmail}`).toBe("off");
+      }
+    }
   });
 
   it("writes its notices in the house voice", () => {

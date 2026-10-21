@@ -325,15 +325,31 @@ export async function itemRows(q: Queryable, sessionId: number): Promise<RowData
   return rowsOf(q, `SELECT ${ITEM_COLUMNS} FROM \`live_session_items\` WHERE \`session_id\` = ? ORDER BY \`position\`, \`id\``, [sessionId]);
 }
 
+/**
+ * One agenda item. Whoever added it presents it, unless `presenterNo` says
+ * otherwise: an item brought from the library (0264) is presented by whoever
+ * brought it when they are in the room, and by nobody yet when they are not.
+ */
 export async function insertItem(
   q: Queryable,
-  row: { sessionId: number; title: string; aim: string; minutes: number; position: number; addedByNo: number; fromSessionId: number | null; now: Date },
+  row: {
+    sessionId: number;
+    title: string;
+    aim: string;
+    minutes: number;
+    position: number;
+    addedByNo: number;
+    presenterNo?: number | null;
+    fromSessionId: number | null;
+    now: Date;
+  },
 ): Promise<number> {
+  const presenterNo = row.presenterNo === undefined ? row.addedByNo : row.presenterNo;
   return insertIdOf(
     q,
     "INSERT INTO `live_session_items` (`session_id`, `title`, `aim`, `minutes`, `position`, `status`, `added_by_no`, " +
       "`presenter_no`, `used_seconds`, `from_session_id`, `created_at`) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, 0, ?, ?)",
-    [row.sessionId, row.title, row.aim, row.minutes, row.position, row.addedByNo, row.addedByNo, row.fromSessionId, row.now],
+    [row.sessionId, row.title, row.aim, row.minutes, row.position, row.addedByNo, presenterNo, row.fromSessionId, row.now],
   );
 }
 
