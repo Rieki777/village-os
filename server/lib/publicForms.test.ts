@@ -24,6 +24,7 @@ import {
   titleFrom,
 } from "./publicForms";
 import { questProposalQueue } from "./questProposals";
+import { ideaReceipt } from "./questIdeaReceipt";
 
 const configured = testDbConfigured();
 
@@ -264,5 +265,32 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
     const [row] = await proposalsFor(e.id);
     expect(row).toMatchObject({ proposed_by: null, title: "Build a seed library shelf" });
     expect(await ideasProposedBy(pool, "u-leaving")).toHaveLength(0);
+  });
+
+  // ── WHAT THE PAGE IS TOLD ────────────────────────────────────────────────
+  //
+  // The route spreads `ideaReceipt` into its answer. An idea held in the inbox
+  // used to answer the same `success` as one that reached /review, so the page
+  // said "Your Quest idea is in." for both.
+
+  it("tells the page an idea reached the queue, and a member's idea past the allowance did not, with the allowance", async () => {
+    const answers = [];
+    for (let i = 0; i <= OPEN_IDEAS_PER_MEMBER; i += 1) {
+      const e = entry({ userId: "u-told", data: { ...IDEA, title: `Told ${i}` } });
+      answers.push(ideaReceipt((await landPublicSubmission(submissionsRepo, pool, e)).proposal, true));
+    }
+    expect(answers.slice(0, OPEN_IDEAS_PER_MEMBER)).toEqual(Array(OPEN_IDEAS_PER_MEMBER).fill({ idea: { queued: true } }));
+    expect(answers[OPEN_IDEAS_PER_MEMBER]).toEqual({
+      idea: { queued: false, held: "over_allowance", member: true, allowance: OPEN_IDEAS_PER_MEMBER },
+    });
+  });
+
+  it("tells the page why an idea carrying an email address was held, and says nothing for any other form", async () => {
+    const held = entry({ data: { ...IDEA, compensation: "Write to ada@example.test" } });
+    expect(ideaReceipt((await landPublicSubmission(submissionsRepo, pool, held)).proposal, false)).toEqual({
+      idea: { queued: false, held: "contained_an_email", member: false, allowance: null },
+    });
+    const other = entry({ type: "work-with-us" });
+    expect(ideaReceipt((await landPublicSubmission(submissionsRepo, pool, other)).proposal, false)).toEqual({});
   });
 });

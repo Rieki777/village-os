@@ -30,7 +30,7 @@ import { MIGRATIONS_DIR, splitStatements } from "./db/migrate";
 import { closeStaleRooms } from "./lib/liveSessions";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerTasks } from "./routes/sessionTasks";
-import { TASK_REFUSALS, type TaskCard } from "../shared/sessionTasks";
+import { TASK_REFUSALS, type TaskCard, type TaskCountPayload } from "../shared/sessionTasks";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 
@@ -131,6 +131,10 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
   const answer = async (who: string, entryId: number, body: Record<string, unknown>) =>
     as(who, "PATCH /api/sessions/tasks/:entryId", { params: { entryId: String(entryId) }, body });
   const record = async (who: string, id: number) => as(who, "GET /api/sessions/:id/task-record", { params: { id: String(id) } });
+  const count = async (who: string | null) => as(who, "GET /api/sessions/tasks/count");
+  const markDone = async (who: string, entryId: number) => as(who, "POST /api/sessions/tasks/:entryId/done", { params: { entryId: String(entryId) } });
+  const taskState = async (entryId: number) => (await q("SELECT `status`, `version` FROM `live_session_task_state` WHERE `entry_id` = ?", [entryId]))[0];
+  const eventCount = async (entryId: number) => Number((await q("SELECT COUNT(*) AS `n` FROM `live_session_task_events` WHERE `entry_id` = ?", [entryId]))[0].n);
   const ids = (cards: TaskCard[]) => cards.map((c) => c.entryId);
 
   /** A room opened, joined and filled through its own doors. */
@@ -456,5 +460,88 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     expect(ana.taskAnswers.map((a: any) => a.kind)).toEqual(["taken", "not_yet"]);
     // Nothing of Ben's words travels in Ana's export.
     expect(JSON.stringify(ana)).not.toContain("The catalogue is late");
+  });
+
+  // ── What waits on you, and It's done from the bell ───────────────────────
+
+  it("counts what waits on each member, the same tasks their own board holds", async () => {
+    for (const who of Object.keys(PEOPLE)) {
+      const b = (await board(who)).body;
+      const out = await count(who);
+      expect(out.status, who).toBe(200);
+      expect(out.headers["cache-control"], who).toBe("private, no-store");
+      const waiting: TaskCard[] = [...b.holding, ...b.seatsHold];
+      const dates = waiting.map((t) => t.dueOn).filter((d): d is string => !!d).sort();
+      const expected: TaskCountPayload = { waiting: waiting.length, nextDue: dates[0] ?? null };
+      expect(out.body, who).toEqual(expected);
+    }
+    // Ana holds the seed, the tools and the soup. Ben holds the hens, still in the room.
+    expect((await count("m-ana")).body).toEqual({ waiting: 3, nextDue: "2099-06-01" });
+    expect((await count("m-ben")).body).toEqual({ waiting: 1, nextDue: "2099-05-01" });
+    // The water seat's task is done, Dee's term ran out, and Eve holds nothing.
+    for (const who of ["m-cai", "m-dee", "m-eve"]) expect((await count(who)).body, who).toEqual({ waiting: 0, nextDue: null });
+    expect(await count(null)).toMatchObject({ status: 401, body: { error: "auth_required" } });
+  });
+
+  it("marks a task done from the bell with the version it reads itself, and a second press changes nothing", async () => {
+    const before = await taskState(tools);
+    const events = await eventCount(tools);
+    const out = await markDone("m-ana", tools);
+    expect(out.status, JSON.stringify(out.body)).toBe(200);
+    expect(out.body.task).toMatchObject({
+      entryId: tools,
+      status: "done",
+      version: Number(before.version) + 1,
+      canReopen: true,
+      latest: { kind: "done", note: null, byName: "Ana Reyes" },
+    });
+    expect(await eventCount(tools)).toBe(events + 1);
+    expect((await count("m-ana")).body.waiting).toBe(2);
+    // Pressed again, from another tab: the same card, no event, no new version.
+    const again = await markDone("m-ana", tools);
+    expect(again).toMatchObject({ status: 200, body: { task: out.body.task } });
+    expect(await eventCount(tools)).toBe(events + 1);
+    expect(await taskState(tools)).toEqual({ status: "done", version: Number(before.version) + 1 });
+    // Open it again: the PATCH's reopen, with the version the bell was handed.
+    const undo = await answer("m-ana", tools, { op: "reopened", version: out.body.task.version });
+    expect(undo.status, JSON.stringify(undo.body)).toBe(200);
+    expect(undo.body.task).toMatchObject({ status: "open", canAnswer: true });
+    expect((await count("m-ana")).body.waiting).toBe(3);
+  });
+
+  it("refuses It's done to somebody who may not see the task, and to somebody who may only read it", async () => {
+    const seedBefore = await taskState(seed);
+    // Eve never saw the seed, Dee's lapsed term reaches nothing, and the hens are answered in the room.
+    expect(await markDone("m-eve", seed)).toMatchObject({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    expect(await markDone("m-dee", bees)).toMatchObject({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    expect(await markDone("m-ben", hens)).toMatchObject({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    // Ben was in the room the seed came from, so he reads it, and he holds it no longer.
+    expect(await markDone("m-ben", seed)).toMatchObject({ status: 403, body: { error: TASK_REFUSALS.notYours } });
+    expect(await taskState(seed)).toEqual(seedBefore);
+  });
+
+  it("answers a task that was let go with its own sentence, and leaves it let go", async () => {
+    const { version } = await taskState(soup);
+    const letGo = await answer("m-ana", soup, { op: "let_go", version: Number(version), note: "The kitchen makes its own soup now" });
+    expect(letGo.status, JSON.stringify(letGo.body)).toBe(200);
+    const after = await taskState(soup);
+    const events = await eventCount(soup);
+    const out = await markDone("m-ana", soup);
+    expect(out).toMatchObject({ status: 409, body: { error: TASK_REFUSALS.letGoNotDone, task: { entryId: soup, status: "let_go" } } });
+    expect(await taskState(soup)).toEqual(after);
+    expect(await eventCount(soup)).toBe(events);
+  });
+
+  it("lets somebody who sits in the holding seat mark its task done from the bell", async () => {
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `term_ends_at`) VALUES " +
+        "('ora-eve', 'seat-bees', 'member', 'm-eve', 'm-eve', NULL)",
+    );
+    expect((await count("m-eve")).body).toEqual({ waiting: 1, nextDue: null });
+    const out = await markDone("m-eve", bees);
+    expect(out.status, JSON.stringify(out.body)).toBe(200);
+    expect(out.body.task).toMatchObject({ entryId: bees, status: "done", heldAs: "seat", latest: { kind: "done", byName: "Eve Strand" } });
+    expect((await count("m-eve")).body).toEqual({ waiting: 0, nextDue: null });
+    expect(privacyProblems(out.body)).toEqual([]);
   });
 });

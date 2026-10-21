@@ -764,10 +764,10 @@ export function SubmissionsTab({ password }: { password: string }) {
       else if (data.admitted) toast.success("Accepted. They hold membership now.");
       // A stranger signed with no account, so the accept stands and admits nobody.
       else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // Whether the person who sent this heard about the move. Members hear; a stranger's form
-      // has no account to reach, so a yes to joining names the next step, which is an invitation.
+      // A yes to joining admits nobody, even from an account (a signing or vouches do), and names the next step:
+      // for an account, the doors that do admit; for a stranger's form, with no account to reach, an invitation.
+      else if (type === "membership-request" && status === "accepted") toast.success(data.notified ? "Accepted, and they have been told. A yes to a request admits nobody. Their signed letter, once accepted, or enough vouches will make them a member." : "Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
       else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
-      else if (type === "membership-request" && status === "accepted") toast.success("Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
       else toast.success("Status updated");
       load();
     } catch { toast.error("Could not update status"); }

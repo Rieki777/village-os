@@ -18,6 +18,11 @@
  * only caller passes the id off the signed-in member's own token. There is no
  * read of `journal_entries` without a `user_id = ?` in it.
  *
+ * ONE READER IS NOT HERE, AND IS NAMED SO IT STAYS FINDABLE:
+ * `upsertJournalItemIfShared` in server/repos/saberraOutbox.ts reads this
+ * table inside its INSERT, as the gate that keeps a private entry out of the
+ * outbox in the same statement as the write. It carries `user_id = ?` too.
+ *
  * `pulseAggregateRows` names no `user_id` in its column list, so a caller who
  * wanted a person would have to write new SQL to get one.
  *
@@ -236,6 +241,20 @@ export async function allEntryRowsForUser(pool: Pool, userId: string, practice: 
     params,
   );
   return rows;
+}
+
+/**
+ * The ids of this member's entries that are not private, for the bridge's
+ * backfill (server/lib/saberraOutbox.ts). Ids only: the backfill reads an
+ * entry whole only when it has no outbox row yet, so a run with nothing to do
+ * reads no words at all.
+ */
+export async function sharedEntryIdsForUser(pool: Pool, userId: string): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT `id` FROM `journal_entries` WHERE `user_id` = ? AND `privacy` <> 'private' ORDER BY `written_at`, `id`",
+    [userId],
+  );
+  return rows.map((r) => String(r.id));
 }
 
 /**

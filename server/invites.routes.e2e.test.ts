@@ -305,6 +305,58 @@ describe.skipIf(!DB_CONFIGURED)("somebody with no invitation asks to join", () =
   });
 });
 
+/*
+ * A GUEST WHO IS SIGNED IN ASKS TO JOIN. The page now sends their token, so the
+ * row names their account, and the answer reaches them on the bell. Accepting
+ * it still admits nobody: membership is written by an accepted Love Letter
+ * signing, by vouches, or by a steward's super vouch, and whether a yes to a
+ * request should be a fourth door is a governance question left for a ruling.
+ * Wren arrived on the founder's link above, so she holds one vouch of three and
+ * is not yet a member, which is what makes "not admitted" mean something here.
+ */
+describe.skipIf(!DB_CONFIGURED)("a guest who is signed in asks to join", () => {
+  let asked = "";
+
+  it("names their account on the row, and the stranger beside it still names nobody", async () => {
+    const sent = await call("POST", "/api/forms/submit", {
+      token: wrenToken,
+      body: {
+        type: "membership-request",
+        hp: "",
+        data: { name: "Wren Ashby", email: `wren-${PORT}@example.test`, why: "I want to help with the seed library.", heardFrom: "" },
+      },
+    });
+    expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+    asked = String(sent.json?.id ?? "");
+    expect(asked, "the request is kept").toBeTruthy();
+
+    const [rows] = await pool.query<any[]>("SELECT id, user_id, user_name, status FROM submissions WHERE type = 'membership-request' ORDER BY submitted_at, id"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const wrens = rows.find((r) => String(r.id) === asked);
+    expect(String(wrens?.user_id), "a signed-in request names the account that sent it").toBe(wrenId);
+    expect(String(wrens?.user_name)).toBe("Wren Ashby");
+    expect(String(wrens?.status)).toBe("new");
+    // THE CONTROL, in the same table: the stranger's request above sent no token and names nobody.
+    expect(rows.filter((r) => String(r.id) !== asked).map((r) => r.user_id)).toEqual([null]);
+  });
+
+  it("is accepted, tells her by notice, and admits nobody", async () => {
+    const moved = await call("PUT", `/api/admin/submissions/${asked}/status`, { body: { status: "accepted" } });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    expect(moved.json?.notified, "the row names an account, so the bell reaches her").toBe(true);
+    expect(moved.json?.admitted, "a request is not a signing, so the admission question does not arise").toBeNull();
+
+    const bell = await call("GET", "/api/notifications", { token: wrenToken });
+    expect(bell.status).toBe(200);
+    expect((bell.json?.notifications ?? []).filter((n: any) => n.type === "submission_status").map((n: any) => n.title)).toEqual([
+      "Yes to your request to join",
+    ]);
+
+    const standing = await call("GET", `/api/members/${wrenId}/vouches`);
+    expect(standing.json?.isMember, "accepting a request is not an admission").toBe(false);
+    expect(standing.json?.state?.count, "and it is not a vouch either").toBe(1);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a village that turns the dial off", () => {
   it("lets anybody make an account, still counts a good link, and ignores a bad one", async () => {
     const off = await call("PUT", "/api/admin/variables/membership.invite_only", { body: { value: "false" } });

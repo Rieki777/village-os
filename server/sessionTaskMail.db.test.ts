@@ -373,6 +373,11 @@ describe.skipIf(!configured)("the task emails against a real schema", () => {
       expect((await noteMail()).map((r: any) => r.idempotency_key).sort()).toEqual(keys.filter((k) => !k.includes(":tm-eve:")));
       const [before] = (await dueNotes()).filter((r: any) => r.dedupe_key.startsWith(`session-due:${soon}:`));
       expect(before.title).toMatch(/^Coming up \w+: Book the trailer$/);
+      // Each notice and each note opens that one task on the board.
+      const links = await q("SELECT `dedupe_key`, `link` FROM `notifications` WHERE `type` = 'session_action_due'");
+      for (const r of links) expect(r.link, r.dedupe_key).toBe(`/profile#task-${String(r.dedupe_key).split(":")[1]}`);
+      const [benMail] = await q("SELECT `body_text` FROM `comms_messages` WHERE `idempotency_key` = ?", [`session-due:${soon}:tm-ben:${addCivilDays(today, 2)}:before`]);
+      expect(benMail.body_text).toContain(`${ORIGIN}/profile#task-${soon}`);
       // Immediate reads "off" for this notice, so the spine sent no second email.
       expect(immediate).toEqual([]);
     });

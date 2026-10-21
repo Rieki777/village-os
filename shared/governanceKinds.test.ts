@@ -207,16 +207,23 @@ describe("when a carried decision lands", () => {
     expect(seating.vetoable, "and no door, which is the protection").toBe(false);
   });
 
-  it("still lets the Birthing carry the moment it passes, and it is the only one left", () => {
+  it("still lets the Birthing carry the moment it passes, beside a carried reorganisation and nothing else", () => {
     // Rye, 2026-09-04: "Leave it exempt! It passes the moment everyone votes
     // yes!" Before the Birthing there is no seat, so a window would be 72 hours
     // nobody could use, and it already needs every seat to vote and every one
     // to say yes.
     expect(executesAtPassWithNoWindow("village_launch")).toBe(true);
-    expect(Array.from(NO_WINDOW_SUBJECTS)).toEqual(["village_launch"]);
+    // A reorganisation the village carried lands at the close the way a holder's
+    // live publish does (Rye, 2026-09-14; recommended, not yet ruled).
+    expect(Array.from(NO_WINDOW_SUBJECTS)).toEqual(["village_launch", "org_draft"]);
+    expect(executesAtPassWithNoWindow("org_draft")).toBe(true);
     const l = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "next_moon", vetoHours: 72, nextBoundaryAfter: farMoon, noWindow: true });
     expect(l.executesAtClose).toBe(true);
     expect(l.landsAt).toBeNull();
+    // Each says the sentence true of it: the Birthing's is about a seat.
+    expect(l.because).toContain("A seat is not something");
+    const reorg = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "next_moon", vetoHours: 72, nextBoundaryAfter: farMoon, noWindow: true, subjectType: "org_draft" });
+    expect(reorg.because).toContain("a holder of the power publishes");
   });
 });
 

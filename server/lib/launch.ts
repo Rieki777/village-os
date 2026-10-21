@@ -181,6 +181,16 @@ export async function launchedAtOf(pool: Pool): Promise<string | null> {
   return (await readState(pool)).launchedAt;
 }
 
+/**
+ * The ballot that launched this village, or null. Written only by
+ * `recordLaunchCarried`, from the launch vote's closer, so a village recorded as
+ * started some other way (migration 0112, the test fixture's `bal-fixture`
+ * game-start row) reads null here. Read by `launchedByVote` in ./orgDraftDecide.
+ */
+export async function launchedByBallotIdOf(pool: Pool): Promise<string | null> {
+  return (await readState(pool)).launchedByBallotId ?? null;
+}
+
 /** Resolve every applicable requirement into live status. */
 export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<LaunchStatus> {
   const state = await readState(pool);

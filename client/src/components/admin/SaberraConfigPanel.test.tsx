@@ -21,6 +21,8 @@
  *      every run is reported under it in full, in the village's own time,
  *      with the schedule's backoff said in words. While the module is off the
  *      schedule can still be set and the log is never asked for.
+ *   6. What the journal bridge would send is listed under all of that, behind
+ *      the same gate: asked for in preview, never while the module is off.
  *
  * `fetch` is stubbed. The routes behind it have their own server tests.
  */
@@ -105,6 +107,20 @@ function stub() {
       if (url === "/api/saberra/status") return reply(status);
       if (url === "/api/saberra/sync" && method === "POST") return reply(sync);
       if (url === "/api/saberra/runs") return reply(runs);
+      // The outbox listing has its own panel and its own tests (SaberraOutboxPanel.test.tsx).
+      if (url === "/api/saberra/outbox") {
+        return reply({
+          status: 200,
+          body: {
+            writePath: false,
+            journalOn: true,
+            counts: { queued: 0, sent: 0, failed: 0, held: 0 },
+            byKind: { journal_entry: 0, team_signal: 0 },
+            pendingVendorDelete: 0,
+            items: [],
+          },
+        });
+      }
       return reply({ status: 404, body: {} });
     }),
   );
@@ -234,6 +250,21 @@ describe("the connection", () => {
     renderPanel();
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeInTheDocument();
     expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0);
+    // The outbox listing sits behind the same gate and is asked for the same way.
+    expect(await screen.findByText("What Saberra would receive")).toBeInTheDocument();
+    await waitFor(() => expect(callsTo("/api/saberra/outbox").length).toBeGreaterThan(0));
+  });
+
+  it("PUTS SYNC NOW FIRST, then the schedule and its run log, then what Saberra would receive", async () => {
+    renderPanel();
+    const syncNow = await screen.findByRole("button", { name: "Sync now" });
+    const schedule = await screen.findByLabelText(/Sync by itself/);
+    const log = await screen.findByRole("heading", { name: "Recent syncs" });
+    const outbox = await screen.findByRole("heading", { name: "What Saberra would receive" });
+    const before = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(before(syncNow, schedule)).toBe(true);
+    expect(before(schedule, log)).toBe(true);
+    expect(before(log, outbox)).toBe(true);
   });
 
   it("SAYS PLAINLY WHEN THE MODULE IS OFF, and asks the server nothing about the connection", async () => {
@@ -244,6 +275,7 @@ describe("the connection", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
     expect(callsTo("/api/saberra/status")).toHaveLength(0);
+    expect(callsTo("/api/saberra/outbox")).toHaveLength(0);
     // The address can still be set while off: setup happens before going live.
     expect(await serviceField()).not.toBeDisabled();
   });
