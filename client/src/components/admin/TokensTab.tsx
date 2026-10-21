@@ -32,6 +32,7 @@ import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
 import { formatTokenAmount, smallestUnit } from "@/lib/tokenAmount";
+import { takePrefill } from "@/lib/profilePrefill";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -53,6 +54,12 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
   const [form, setForm] = useState({ slug: "", name: "", kind: "credit", transferable: false });
   const [mint, setMint] = useState({ slug: "", toUserId: "", amount: "", reason: "" });
   const [renaming, setRenaming] = useState<{ slug: string; name: string } | null>(null);
+  /**
+   * The recognition token's name from a ReGen Civics file (ProfileImport.tsx),
+   * put in its rename box unsaved. `found: false` says no recognition token
+   * here can take a new name, so the words are shown for a founder to place.
+   */
+  const [handed, setHanded] = useState<{ name: string; found: boolean } | null>(null);
   /** 0106: grants waiting for a second steward, and the ones already decided. */
   const [grants, setGrants] = useState<any[]>([]);
   const [cosignOver, setCosignOver] = useState<number>(0);
@@ -85,6 +92,14 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
       const p = await pRes.json();
       const g = await gRes.json();
       setTokens(Array.isArray(t.tokens) ? t.tokens : []);
+      const name = takePrefill("tokenName");
+      if (name) {
+        const recognition = (Array.isArray(t.tokens) ? t.tokens : []).find(
+          (x: any) => x?.kind === "recognition" && x?.governance === "platform" && !x?.isExample,
+        );
+        if (recognition) setRenaming({ slug: recognition.slug, name });
+        setHanded({ name, found: !!recognition });
+      }
       setMintCap(Number(t.mintCapPerCycle) || 0);
       setPlayers(Array.isArray(p) ? p : []);
       setGrants(Array.isArray(g.requests) ? g.requests : []);
@@ -124,6 +139,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
       if (!res.ok) throw new Error(refusal(data, "failed"));
       toast.success(`Renamed to "${data.token?.name}". Every page follows`);
       setRenaming(null);
+      setHanded(null);
       load();
     } catch (e: any) { toast.error(e?.message || "Rename failed"); }
   };
@@ -262,6 +278,13 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
 
   return (
     <div>
+      {handed && (
+        <p className="mb-4 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+          {handed.found
+            ? `The rename box on your recognition token now holds "${handed.name}", from your ReGen Civics profile. Nothing is saved until you press Save beside it.`
+            : `Your ReGen Civics profile names your recognition token "${handed.name}". No recognition token here can take a new name yet, so nothing was put in a box.`}
+        </p>
+      )}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Tokens</h2>
         <p className="text-sm text-gray-500 mt-1">

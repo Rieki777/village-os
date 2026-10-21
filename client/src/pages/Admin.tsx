@@ -63,7 +63,7 @@ import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
-import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
+import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
@@ -75,6 +75,8 @@ import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
+import ProfileImportDoor from "@/components/admin/ProfileImportDoor";
+import { takePrefill, usePrefill } from "@/lib/profilePrefill";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
@@ -2749,6 +2751,9 @@ function QuestsTab({ password }: { password: string }) {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [adding, setAdding] = useState({ title: "", description: "", gratitude: "", circle: "" });
+  // A quest handed over from a ReGen Civics file (ProfileImport.tsx): in the form, unposted, until Post is pressed.
+  const [fromProfile, setFromProfile] = useState<{ needLabel: string | null } | null>(null);
+  usePrefill("quest", (q) => { setAdding((a) => ({ ...a, title: q.title })); setFromProfile({ needLabel: q.needLabel }); });
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   // Suggestions come from the board itself, so an admin reuses the circle
   // names already in play instead of coining a near-miss the chips ignore.
@@ -2799,6 +2804,7 @@ function QuestsTab({ password }: { password: string }) {
 
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-6">
         <h3 className="font-semibold text-gray-900 mb-3">Post a quest</h3>
+        {fromProfile && <p className="text-xs text-gray-600 mb-3">From your ReGen Civics profile{fromProfile.needLabel ? `, a quest that grows ${fromProfile.needLabel}` : ""}. Nothing is posted until you press Post quest. Add what it asks for, and a reward if you want one.</p>}
         <div className="grid sm:grid-cols-5 gap-2 items-end">
           <label className="text-xs text-gray-500">Title
             <input value={adding.title} onChange={(e) => setAdding({ ...adding, title: e.target.value })} className={`${inputCls} w-full mt-1`} />
@@ -2828,6 +2834,7 @@ function QuestsTab({ password }: { password: string }) {
                 forgetExamplesCache("quests");
                 toast.success("Posted");
                 setAdding({ title: "", description: "", gratitude: "", circle: "" });
+                setFromProfile(null);
                 load();
               }
             }}
@@ -5871,6 +5878,8 @@ function ExitsAdminTab({ password }: { password: string }) {
   const [selectedUser, setSelectedUser] = useState("");
   const [state, setState] = useState<any>(null);
   const [policyDraft, setPolicyDraft] = useState<any>(null);
+  // What happens when someone leaves, from a ReGen Civics file (ProfileImport.tsx): in the leaving words below, unpublished.
+  const [exitFromProfile, setExitFromProfile] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   // The platform's own words, sent down with the policy. Held rather than
   // copied into the bundle so the editor's "still the platform's" marker and
@@ -5895,7 +5904,9 @@ function ExitsAdminTab({ password }: { password: string }) {
       ]);
       const e = await eRes.json();
       setData(e);
-      setPolicyDraft(e.policy);
+      const handedExit = takePrefill("exitPolicy");
+      setPolicyDraft(handedExit && e.policy ? { ...e.policy, voluntary: { ...e.policy.voluntary, valuationMethod: handedExit } } : e.policy);
+      if (handedExit && e.policy) setExitFromProfile(true);
       setPolicyDefaults(e.defaults ?? null);
       setCircles(Array.isArray(e.circles) ? e.circles : []);
       const p = await pRes.json();
@@ -6062,6 +6073,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         return (
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
+          {exitFromProfile && <p className="mb-3 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">"How contributed value is honored" now holds your stewards' words for what happens when someone leaves, from your ReGen Civics profile. Move any part to the box it belongs in. Nothing is published until you press Publish.</p>}
           <p className="text-xs text-gray-500 mb-4">
             Every field here is printed at /exit-policy for anyone to read,
             signed in or not. This is the highest-stakes copy on the site: it
@@ -6194,7 +6206,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             )}
           </div>
 
-          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); load(); } }}
+          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
             className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep">Publish policy</button>
         </div>
         );
@@ -7762,34 +7774,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
     />
   );
 
-  /*
-   * The "Journey page copy" row came out with the four tabs it pointed at.
-   * It sent a founder to an editor whose saves the journey pages never read,
-   * and a wizard that hands somebody a door to a room that was demolished is
-   * worse than one that stays quiet about it.
-   */
-  const contentEditors = [
-    /*
-     * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
-     * surfaces a fresh village publishes people on. A founder walked the whole
-     * wizard and was never shown the screen where the seats and the team cards
-     * are edited, so whatever was already on /team and /roles stayed there and
-     * read as the village's own. That is how a fork published four strangers.
-     *
-     * First in the list on purpose: people are the thing a visitor looks for
-     * first and the thing a village is most answerable for.
-     */
-    { tab: "org-chart", label: "Org Chart", hint: "Your circles, your seats, and who holds them. This is what /roles and /team show." },
-    { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
-    { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
-    { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },
-    { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
-    { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy." },
-    { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page." },
-    { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
-    { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
-  ];
-
   /* SetupSection is a module-scope import and MUST stay one. It was declared
      here, inside this body, which made a new component type on every render
      and remounted all six steps (and the focused input) on every keystroke.
@@ -7830,6 +7814,9 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </button>
         )}
       </div>
+
+      {/* A project from ReGen Civics brings its file here. Identity goes into the boxes below, unsaved (ProfileImportDoor.tsx). */}
+      <ProfileImportDoor password={password} onOpenTab={onOpenTab} onIdentity={(p) => setBrand((b: any) => ({ ...b, project: { ...b.project, ...p } }))} />
 
       <SetupSection {...step} id="identity" n={1} title="Identity" subtitle="What your project is called.">
         <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -7927,7 +7914,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
       <SetupSection {...step} id="content" n={5} title="Content" subtitle="Rewrite the words, questions, milestones, and quests for your project.">
         <div className="space-y-2">
-          {contentEditors.map((c) => (
+          {SETUP_CONTENT_EDITORS.map((c) => (
             <div key={c.tab} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-2.5">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-gray-900">{c.label}</div>
