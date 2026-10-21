@@ -74,7 +74,7 @@ describe("warmFirstScreenFonts", () => {
   }
 
   it("asks the browser for each face, before anything renders", () => {
-    const load = vi.fn(() => Promise.resolve([]));
+    const load = vi.fn((_query: string) => Promise.resolve([] as unknown[]));
     warmFirstScreenFonts(fakeDoc({ "--font-body": '"Jost"', "--font-display": '"Cormorant Garamond"' }, load));
     expect(load.mock.calls.map((c) => c[0])).toEqual([
       '400 1em "Jost"',
@@ -86,7 +86,7 @@ describe("warmFirstScreenFonts", () => {
   });
 
   it("swallows a failed load, because the fallback face is the page without it", async () => {
-    const load = vi.fn(() => Promise.reject(new Error("network")));
+    const load = vi.fn((_query: string) => Promise.reject(new Error("network")));
     expect(() => warmFirstScreenFonts(fakeDoc({ "--font-body": '"Jost"' }, load))).not.toThrow();
     await Promise.resolve();
     expect(load).toHaveBeenCalled();
