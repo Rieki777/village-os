@@ -290,7 +290,7 @@ export default function VotingWeightsPanel({
         </h3>
         <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{modeLine(data.mode, data.token)}</p>
         <a
-          href="/admin?tab=modules&module=governance"
+          href="/modules/governance"
           className="mt-2 inline-flex items-center min-h-[44px] text-sm font-semibold text-teal-deep hover:underline focus:outline-none focus:ring-2 focus:ring-teal-deep rounded-lg"
         >
           Change how weight is assigned

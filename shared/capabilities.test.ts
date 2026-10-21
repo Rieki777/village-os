@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty-one keys: the nineteen the ruling was given in, the comms power, and the decide power", () => {
+    it("is twenty-two keys: the nineteen the ruling was given in, the comms power, the decide power, and module.switch", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -399,10 +399,17 @@ describe("hasCapability truth table", () => {
        * to hold this power", and on 2026-10-20 he asked for it to be
        * transferable like the village's other powers. Holding it at launch is
        * how the stewards hold it by default, so it joins this set by design.
+       *
+       * TWENTY-TWO WITH `module.switch`, Rye's ruling of 2026-10-09: after launch
+       * a live holder of the modules power turns a module on directly, so
+       * `module.switch` is a power a village hands to a seat, and the founding
+       * stewards take it with the rest at launch. Flagged to him in the lane
+       * report. It is a new key born transferable, so the complement stays 16.
        */
-      expect(HANDOVER_SET).toHaveLength(21);
+      expect(HANDOVER_SET).toHaveLength(22);
       expect(HANDOVER_SET).toContain("comms.manage");
       expect(HANDOVER_SET).toContain("org.decide");
+      expect(HANDOVER_SET).toContain("module.switch");
     });
 
     it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {
