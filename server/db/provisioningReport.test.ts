@@ -14,7 +14,7 @@
  * database must run when there is no database.
  */
 import { describe, expect, it } from "vitest";
-import { hollowRunVerdict, type RunShape } from "./provisioningReport";
+import { hollowRunVerdict, runIsFiltered, type RunShape } from "./provisioningReport";
 
 /** A whole run, on a machine with a database, that provisioned nothing yet. */
 const base: RunShape = {
@@ -81,5 +81,33 @@ describe("hollowRunVerdict", () => {
     // The one shape that must never change behaviour. ci.yml sets both CI and
     // TEST_DATABASE_URL, and the mysql service container answers.
     expect(hollowRunVerdict({ ...base, required: true, provisions: 44 }).fail).toBe(false);
+  });
+});
+
+describe("runIsFiltered", () => {
+  // The argv pnpm hands vitest for each CI shard. If this ever read as a
+  // filtered run, every `test (i/N)` job would stop failing when it had no
+  // database, which is the hollow green the teardown exists to refuse.
+  it("reads a CI shard, reporters and all, as a whole run", () => {
+    expect(
+      runIsFiltered([
+        "run",
+        "--shard=2/4",
+        "--reporter=default",
+        "--reporter=github-actions",
+        "--reporter=json",
+        "--outputFile.json=test-results/shard-2-of-4.json",
+      ]),
+    ).toBe(false);
+  });
+
+  it("reads the plain and unit runs as whole runs", () => {
+    expect(runIsFiltered(["run"])).toBe(false);
+    expect(runIsFiltered(["run", "--exclude", "**/*.e2e.test.ts"])).toBe(false);
+  });
+
+  it("reads a named file as a filtered run", () => {
+    expect(runIsFiltered(["run", "server/ledger.test.ts"])).toBe(true);
+    expect(runIsFiltered(["run", "--silent", "server/ledger.test.ts"])).toBe(true);
   });
 });

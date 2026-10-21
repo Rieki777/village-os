@@ -122,7 +122,10 @@ node scripts/module-facts.mjs
 - **`pnpm test:unit`** excludes the e2e files. It is about a quarter of the wall clock and
   proves correspondingly less; it is an inner loop, not a gate.
 - **What it costs:** roughly 35 to 50 minutes locally depending on how many lanes share the
-  database, against about 7 in CI. The e2e files are two thirds of it.
+  database. In CI the single run had reached 31m40s by 2026-10-21 (b878eaf), and the e2e files
+  were NOT most of it: 4.8 minutes for the 74 e2e files against 18.3 for the 781 others, ten of
+  those in the living-map suites under `shared/mapArtifact*`. That is why CI now shards the whole
+  suite rather than splitting e2e from unit (see the next section).
 
 ### If you are one of several sessions: do NOT run the full suite
 
@@ -156,16 +159,31 @@ Two things that follow:
 
 **And the integrator should PUSH the composed tree and read the run, rather than running the
 full suite locally.** Same rule, one step further, and it only became true when the repository
-went public: `verify` is 8 to 10 minutes on a clean machine with the pinned Node 22 and MySQL 8,
-against 25 minutes locally on a quiet box and 46.6 measured under load, and it now costs nothing.
+went public: CI is free here, it runs the pinned Node 22 and MySQL 8, and since 2026-10-21 the
+suite runs in parallel shards, so a push is read in roughly a third of the time the single job
+took (31 minutes and climbing by then, against 25 locally on a quiet box and 46.6 under load).
 The composed tree is not an obstacle, because a composed tree can be pushed to a branch and CI
 will read it there. The one case with no ref to push is a pair-merge scratch, and even there run
 only the suites the two branches share.
 
-Two things that stop this producing a false green, both paid for on 2026-09-04. Read the STEP
-COUNT and WHICH step: a healthy `verify` is 45 steps, the billing outage produced runs that died
-in 2 to 3 seconds having started nothing, and an npm outage failed one dependency step on a run
-where everything else passed. And a cancelled run is not a red, since `ci.yml` cancels superseded
+**`ci.yml` is three jobs, and a green is all of them** (Rye, 2026-10-21: "split the tests"):
+
+- `verify`: install, both typechecks, every guard, the build and the two budgets. No tests.
+- `test (1/4)` to `test (4/4)`: one matrix job, `vitest run --shard=i/4`, each shard on its own
+  runner with its own MySQL service, its own `pnpm build`, its own provisioning receipt. A shard is
+  a WHOLE run to the hollow-run rule, so each one fails alone with no `TEST_DATABASE_URL` or with
+  zero schemas provisioned (`runIsFiltered` in `server/db/provisioningReport.ts`, pinned by its
+  test against the exact argv the workflow passes).
+- `tests-ran-once`: reads every shard's JSON report back against the file list vitest resolves for
+  the whole suite and fails on a file in no shard, in two, one that failed or skipped whole, or a
+  missing shard (`scripts/check-test-shards.mjs`). It runs even when a shard is red.
+
+Two things that stop this producing a false green, both paid for on 2026-09-04. Read WHICH JOBS
+RAN and WHICH step in each, never one number: the billing outage produced runs that died in 2 to 3
+seconds having started nothing, an npm outage failed one dependency step on a run where everything
+else passed, and this paragraph carried "a healthy `verify` is 45 steps" while the job had 57.
+Every job above must appear and succeed, on the push run AND the pull_request run. And a cancelled
+run is not a red, since `ci.yml` cancels superseded
 runs per ref. Full detail, with the traps, in the fleet ledger's section 27d (private, see the
 reading order above).
 
