@@ -1500,9 +1500,20 @@ export const MODULES: ModuleDef[] = [
      * rather than in a request, because a sync sends the village's sealed
      * credential to whatever address it is given.
      */
-    defaultConfig: { apiUrl: "", dashboardUrl: "" },
+    /*
+     * `pollSchedule` is how often the module syncs by itself, beside the Sync
+     * now button: off, daily, or every six hours. Off is the default and an
+     * absent key reads as off (`saberraPollSchedule`), because a village that
+     * saved its addresses before the schedule existed has no such key stored.
+     */
+    defaultConfig: { apiUrl: "", dashboardUrl: "", pollSchedule: "off" },
     validateConfig: (config: unknown): string | null => {
       const c = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+      // Absent is off. Anything present has to be one of the three, so a typo
+      // can never be read as a schedule nobody chose.
+      if (c.pollSchedule !== undefined && !(SABERRA_POLL_SCHEDULES as readonly unknown[]).includes(c.pollSchedule)) {
+        return "The sync schedule has to be off, daily, or every 6 hours.";
+      }
       const url = typeof c.dashboardUrl === "string" ? c.dashboardUrl.trim() : "";
       // Empty is fine: the village has not been given its dashboard yet, and a
       // module that refuses to save until every optional field is filled is a
@@ -1695,6 +1706,23 @@ export function supportRoute(def: ModuleDef): SupportRoute {
     };
   }
   return { party: "platform", vendorName: null, supportUrl: null, supportEmail: null };
+}
+
+/**
+ * HOW OFTEN ORGANISATIONAL MEMORY SYNCS BY ITSELF, as the module's config
+ * stores it. The saberra listing's `validateConfig` refuses anything else, the
+ * poll (`server/lib/saberraSync.ts`) reads it through `saberraPollSchedule`,
+ * and the admin panel offers exactly these. Declared here, beside the address
+ * rule, for the same reason: this file takes no runtime import.
+ */
+export const SABERRA_POLL_SCHEDULES = ["off", "daily", "every-6-hours"] as const;
+
+export type SaberraPollSchedule = (typeof SABERRA_POLL_SCHEDULES)[number];
+
+/** The schedule a stored config names. Absent, or anything unknown, is off. */
+export function saberraPollSchedule(config: unknown): SaberraPollSchedule {
+  const raw = config && typeof config === "object" ? (config as Record<string, unknown>).pollSchedule : undefined;
+  return (SABERRA_POLL_SCHEDULES as readonly unknown[]).includes(raw) ? (raw as SaberraPollSchedule) : "off";
 }
 
 const HTTPS = /^https:\/\/[^\s]+$/;
