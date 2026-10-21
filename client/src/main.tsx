@@ -83,6 +83,14 @@ import "@fontsource/jost/latin-700.css";
 import "@fontsource/caveat/latin-400.css";
 import "@fontsource/caveat/latin-700.css";
 import "@fontsource/pinyon-script/latin-400.css";
+import { warmFirstScreenFonts } from "./fontWarmup";
+
+/*
+ * Before the first render, not after it: React's first paint here waits on
+ * /api/game/config, and these downloads should already be under way while it
+ * does. fontWarmup.ts says which faces and why.
+ */
+warmFirstScreenFonts();
 
 createRoot(document.getElementById("root")!).render(<App />);
 
