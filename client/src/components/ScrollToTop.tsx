@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 /**
  * The element a URL hash names by id, or null when it names none.
@@ -51,7 +52,8 @@ export default function ScrollToTop() {
     if (hash && !hashIsAnAddress(location)) {
       const t = setTimeout(() => {
         const el = hashTarget(hash);
-        if (el) el.scrollIntoView({ behavior: "smooth" });
+        // Glides, unless the member asked for less motion (scrollBehavior).
+        if (el) el.scrollIntoView({ behavior: scrollBehavior() });
         else window.scrollTo({ top: 0, behavior: "instant" });
       }, 100);
       return () => clearTimeout(t);
