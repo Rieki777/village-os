@@ -90,6 +90,7 @@ function doors(): RoomActions {
     hosts: (...a) => ok("hosts", ...a),
     close: (...a) => ok("close", ...a),
     toolFeedback: (...a) => ok("toolFeedback", ...a),
+    discard: (...a) => ok("discard", ...a),
   };
 }
 

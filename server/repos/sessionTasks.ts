@@ -316,6 +316,32 @@ export async function dueRows(q: Queryable, fromDate: string, toDate: string): P
   );
 }
 
+// ── One session, gone ───────────────────────────────────────────────────────
+
+/**
+ * Every task row a discarded session or a deleted record left: the state and
+ * the answers of its entries, and every send of its task emails. Run inside
+ * the discard's own transaction, before the entries themselves are deleted
+ * (server/repos/liveSessions.ts `deleteSessionRows`), with the entry ids read
+ * in that transaction.
+ *
+ * Both by the entries and by the session, so a row whose copied `session_id`
+ * and entry disagree still goes. `live_session_task_events` has no index on
+ * `session_id`, so its ids are read first with a plain read, which takes no
+ * locks, and deleted by primary key; a DELETE that scanned the table would
+ * lock every task answer in the village until the commit.
+ */
+export async function deleteTaskRowsForSession(q: Queryable, sessionId: number, entryIds: readonly number[]): Promise<void> {
+  if (entryIds.length > 0) {
+    await q.query("DELETE FROM `live_session_task_state` WHERE `entry_id` IN (?)", [entryIds]);
+    await q.query("DELETE FROM `live_session_task_events` WHERE `entry_id` IN (?)", [entryIds]);
+  }
+  await q.query("DELETE FROM `live_session_task_state` WHERE `session_id` = ?", [sessionId]);
+  const events = (await rowsOf(q, "SELECT `id` FROM `live_session_task_events` WHERE `session_id` = ?", [sessionId])).map((r) => Number(r.id));
+  if (events.length > 0) await q.query("DELETE FROM `live_session_task_events` WHERE `id` IN (?)", [events]);
+  await q.query("DELETE FROM `live_session_task_sends` WHERE `session_id` = ?", [sessionId]);
+}
+
 // ── One member: the export and the erasure ─────────────────────────────────
 
 /** The tasks a member holds in person now, and every answer they gave, notes included: both are theirs. */

@@ -105,6 +105,48 @@ describe("the room's poll", () => {
     expect(out.result.current.status).toBe("signed-out");
   });
 
+  it("a room on screen that answers 404 is gone, and the poll stops", async () => {
+    let there = true;
+    answer = (c) => {
+      if (c.method !== "GET") return json({ ok: true });
+      return there ? json(makeView(), 200, { ETag: '"s7-3"' }) : json({ error: "There is no session with that number." }, 404);
+    };
+    const { result } = renderHook(() => useSessionRoom(7, { pollMs: POLL, hereMs: 60_000 }));
+    await settle();
+    expect(result.current.status).toBe("ready");
+    there = false;
+    await settle(POLL);
+    expect(result.current.status).toBe("gone");
+    // The room it held stays in hand, so the page can say what went.
+    expect(result.current.view?.title).toBe("Water circle");
+    const asked = gets().length;
+    await settle(POLL * 4);
+    expect(gets().length).toBe(asked);
+  });
+
+  it("discard sends DELETE to the session's own door, toasts nothing, and reads the room as gone after a yes", async () => {
+    let there = true;
+    answer = (c) => {
+      if (c.method === "DELETE") {
+        there = false;
+        return json({ ok: true });
+      }
+      if (c.method !== "GET") return json({ ok: true });
+      return there ? json(makeView(), 200, { ETag: '"s7-3"' }) : json({ error: "There is no session with that number." }, 404);
+    };
+    const { result } = renderHook(() => useSessionRoom(7, { pollMs: 60_000, hereMs: 60_000 }));
+    await settle();
+    let out: Awaited<ReturnType<typeof result.current.actions.discard>> | null = null;
+    await act(async () => {
+      out = await result.current.actions.discard();
+    });
+    expect(out!.ok).toBe(true);
+    expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual(["/api/sessions/7"]);
+    expect(calls.find((c) => c.method === "DELETE")!.body).toBeUndefined();
+    expect(result.current.status).toBe("gone");
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it("every ask goes past the browser's cache, so the room's clock is read fresh", async () => {
     answer = (c) => {
       if (c.method === "POST") return json({ ok: true });

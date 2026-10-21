@@ -483,6 +483,42 @@ export async function deleteResponsesForTargets(q: Queryable, sessionId: number,
   await q.query("DELETE FROM `live_session_responses` WHERE `session_id` = ? AND `target` IN (?)", [sessionId, targets]);
 }
 
+// ── One session, gone: the discard and the deleted record ──────────────────
+
+/**
+ * The ids of this session's entries, read before anything is deleted, so the
+ * task layer (server/repos/sessionTasks.ts `deleteTaskRowsForSession`) can
+ * delete by the entries as well as by the session.
+ */
+export async function sessionEntryIds(q: Queryable, sessionId: number): Promise<number[]> {
+  const rows = await rowsOf(q, "SELECT `id` FROM `live_session_entries` WHERE `session_id` = ?", [sessionId]);
+  return rows.map((r) => Number(r.id));
+}
+
+/**
+ * The session and every row 0238 keyed to it: its answers, its entries, its
+ * agenda, its people, and the session row itself, last. Run inside the
+ * discard's own transaction, after the session row was locked, so a write to
+ * the room that waited on that lock finds no room.
+ *
+ * An item in ANOTHER session that was brought over from this one keeps its
+ * words and loses the link (`from_session_id` to NULL). There is no index on
+ * that column, so the ids are read first with a plain read, which takes no
+ * locks, and written by primary key; an UPDATE that scanned the table would
+ * lock every agenda item in the village for the rest of the transaction.
+ * Hands back how many session rows went: 1, or 0 when it was already gone.
+ */
+export async function deleteSessionRows(q: Queryable, sessionId: number): Promise<number> {
+  await q.query("DELETE FROM `live_session_responses` WHERE `session_id` = ?", [sessionId]);
+  await q.query("DELETE FROM `live_session_entries` WHERE `session_id` = ?", [sessionId]);
+  await q.query("DELETE FROM `live_session_items` WHERE `session_id` = ?", [sessionId]);
+  await q.query("DELETE FROM `live_session_people` WHERE `session_id` = ?", [sessionId]);
+  const carried = (await rowsOf(q, "SELECT `id` FROM `live_session_items` WHERE `from_session_id` = ?", [sessionId])).map((r) => Number(r.id));
+  if (!none(carried)) await q.query("UPDATE `live_session_items` SET `from_session_id` = NULL WHERE `id` IN (?)", [carried]);
+  const [r] = await q.query<any>("DELETE FROM `live_sessions` WHERE `id` = ?", [sessionId]);
+  return Number(r.affectedRows ?? 0);
+}
+
 // ── One member, across every session: the export and the erasure ──────────
 
 /** The sessions this member was in, with when they joined. */
