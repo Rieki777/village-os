@@ -2,12 +2,13 @@ import Layout from "@/components/Layout";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Lightbulb, ArrowLeft, CheckCircle2, Sparkles, MessageCircle, ClipboardList } from "lucide-react";
+import { Lightbulb, ArrowLeft, CheckCircle2, Sparkles, MessageCircle, ClipboardList, Inbox } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchConfigCached } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import GuideChat from "@/components/GuideChat";
-import { submitProposal, assistantAvailable } from "@/lib/proposals";
+import { sendProposal, assistantAvailable } from "@/lib/proposals";
+import type { IdeaHold, IdeaReceipt } from "@shared/questIdeas";
 
 interface QuestProposal {
   title: string;
@@ -23,6 +24,32 @@ interface QuestProposal {
 const EMPTY: QuestProposal = {
   title: "", name: "", email: "", whatYouWantToDo: "",
   resourcesBringing: "", resourcesNeeded: "", compensation: "", timelineMilestones: "",
+};
+
+/** A receipt that says the idea was held in the inbox. */
+type Held = Extract<IdeaReceipt, { queued: false }>;
+
+/**
+ * WHY A HELD IDEA IS HELD, and what its sender can do about it.
+ *
+ * An idea past an allowance, or carrying an email address, is stored in the
+ * team's inbox and never reaches the review queue (server/lib/publicForms.ts).
+ * This page used to say "Your Quest idea is in." for those too, so a person
+ * waited on a queue their idea was never in. Keyed by the server's own union,
+ * so a hold-back added there without words here is a compile error.
+ */
+const HELD_WHY: Record<IdeaHold, (held: Held, team: string) => string> = {
+  over_allowance: (h, team) =>
+    h.member
+      ? `You already have ${h.allowance ?? "several"} Quest ideas waiting for a steward, which is as many as one person can have in the review queue at once. When a steward decides on one of yours, send this one again.`
+      : `${h.allowance ?? "Several"} ideas from visitors are already waiting for a steward, which is as many as the review queue holds from people who are not signed in. If you have an account with ${team}, sign in and send it again. Otherwise, try again in a few days.`,
+  contained_an_email: () =>
+    "Its words carry an email address. A Quest can end up on the public board, so an idea with an address in it stays out of the review queue. Take the address out of the title and your answers, and send it again. The Email field is fine: only the team reads it.",
+  empty_payload: () =>
+    "It arrived with nothing to title it by. Add a title, or a first line saying what you want to do, and send it again.",
+  identifier_too_long: (_h, team) =>
+    `It could not be filed for review. Send it again, and if the same thing happens, tell the ${team} team through the contact form.`,
+  not_filed: () => "The review queue could not take it just now. Send it again in a little while.",
 };
 
 export default function ProposeQuest() {
@@ -58,6 +85,8 @@ export default function ProposeQuest() {
   const [hp, setHp] = useState(""); // honeypot: real people never fill this
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // Where the idea went, as the server said. Null reads as queued: an older server says nothing.
+  const [idea, setIdea] = useState<IdeaReceipt | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -85,11 +114,58 @@ export default function ProposeQuest() {
       return;
     }
     setSubmitting(true);
-    const ok = await submitProposal("quest-proposal", form, hp);
+    const answer = await sendProposal("quest-proposal", form, hp);
     setSubmitting(false);
-    if (ok) setSubmitted(true);
-    else setError("That didn't send. Try again.");
+    if (answer.ok) {
+      setIdea(answer.idea);
+      setSubmitted(true);
+    } else setError("That didn't send. Try again.");
   };
+
+  if (submitted && idea && !idea.queued) {
+    return (
+      <Layout>
+        <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[60vh]">
+          <div className="container">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-xl mx-auto text-center bg-card border border-border rounded-2xl p-10 shadow-sm"
+            >
+              <div className="w-16 h-16 rounded-full bg-amber/15 flex items-center justify-center mx-auto mb-6">
+                <Inbox className="w-8 h-8 text-amber-600" aria-hidden="true" />
+              </div>
+              <h1 className="font-display text-3xl font-bold text-foreground mb-3">
+                Your Quest idea is saved, and held back from review.
+              </h1>
+              <p className="text-muted-foreground mb-3">
+                It is in the {projectName} team's inbox. It is not in the queue a steward reads to put
+                Quests on the board.
+              </p>
+              <p className="text-foreground mb-8">{HELD_WHY[idea.held](idea, projectName)}</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={() => {
+                    setIdea(null);
+                    setSubmitted(false);
+                    setMode("form");
+                  }}
+                  className="px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition"
+                >
+                  Change it and send again
+                </button>
+                <Link href="/quests">
+                  <a className="px-5 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors">
+                    Back to the Quest Board
+                  </a>
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      </Layout>
+    );
+  }
 
   if (submitted) {
     return (
@@ -208,7 +284,12 @@ export default function ProposeQuest() {
               projectName={projectName}
               assistantName={assistantName}
               empty={EMPTY}
-              onSubmitted={() => setSubmitted(true)}
+              onSubmitted={(receipt, sent) => {
+                // A held idea comes back into the form, so it can be changed and sent again.
+                if (receipt && !receipt.queued) setForm((f) => ({ ...EMPTY, ...f, ...sent }));
+                setIdea(receipt);
+                setSubmitted(true);
+              }}
               onFallback={() => { setAiAvailable(false); setMode("form"); }}
               onRefineInForm={(p) => { setForm({ ...EMPTY, ...form, ...p }); setMode("form"); }}
             />

@@ -32,6 +32,18 @@
  * other invariant that path carries are inherited. This is the rule the
  * assistant draft queue already follows, and it is what keeps both queues from
  * becoming a second write path into the domain.
+ *
+ * ── THE PERSON WHO PROPOSED IT HEARS THE ANSWER ──────────────────────────
+ *
+ * Accepting and rejecting both told nobody. A member who sent an idea through
+ * the Propose a Quest form learned it was on the board by finding it there, and
+ * a rejection was silence. Now each decision is a notice through the house
+ * spine (`notify`, which the route binds to server/lib/notify.ts), with one key
+ * per proposal and outcome so a retried decision is one notice. It carries a
+ * title and a link and no words from the proposal: the only free text it holds
+ * is the reason a steward typed when rejecting. A proposal with no account
+ * behind it, a visitor's or a machine's, has nobody to tell, and nothing here
+ * writes to an address somebody typed.
  */
 import { createHash, randomUUID } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
@@ -39,6 +51,7 @@ import { parseRewardRange } from "../../shared/questRewards";
 import type { QuestRecord, QuestsRepo } from "../repos/quests";
 import { recordEvent } from "./events";
 import { containsEmail } from "./externalProposals";
+import type { NotifyInput } from "./notify";
 
 export type QuestProposalStatus = "proposed" | "accepted" | "rejected" | "superseded";
 
@@ -425,6 +438,49 @@ export function rewardProblem(reward: HumanReward | null | undefined): string | 
 
 export type AcceptQuestResult = { ok: true; questId: string } | { ok: false; status: number; error: string };
 
+/** Hands a notice to the spine. The route binds `notify`, which never throws into the decision. */
+export type TellProposer = (notice: NotifyInput) => Promise<unknown>;
+
+/** What a steward decided about one proposal, as its notice needs it. */
+export type ProposalDecision = { outcome: "on_board"; questId: string } | { outcome: "declined"; reason?: string | null };
+
+/**
+ * Tell the person who proposed a quest what a steward decided. Nothing when
+ * there is nobody to tell, a visitor's idea or a machine's, or no `notify`.
+ *
+ * The title is this file's own sentence and never the proposal's words; the
+ * body is the steward's reason or nothing. Exported so a test holds the copy
+ * and the privacy line with a stub and no database. The calls are written out
+ * as `notify({ type: ... })` on purpose: shared/notificationKinds.test.ts
+ * finds every type the server sends by reading that shape.
+ */
+export async function tellProposer(
+  notify: TellProposer | undefined,
+  row: Pick<QuestProposalRow, "id" | "proposedBy" | "proposedByKind">,
+  decision: ProposalDecision,
+): Promise<void> {
+  const userId = str(row.proposedBy);
+  if (!notify || !userId || row.proposedByKind !== "human") return;
+  if (decision.outcome === "on_board") {
+    await notify({
+      userId,
+      type: "quest_idea_on_board",
+      title: "Your quest idea is on the board",
+      link: `/quests/${encodeURIComponent(decision.questId)}`,
+      dedupeKey: `quest-idea:${row.id}:on_board`,
+    });
+    return;
+  }
+  await notify({
+    userId,
+    type: "quest_idea_declined",
+    title: "A steward said no to your quest idea",
+    body: str(decision.reason)?.slice(0, 2000) ?? null,
+    link: "/propose-quest",
+    dedupeKey: `quest-idea:${row.id}:declined`,
+  });
+}
+
 /**
  * Turn a proposal into a quest, with a human's reward on it.
  *
@@ -448,6 +504,7 @@ export async function acceptQuestProposal(
     edits?: Partial<QuestProse> | null;
     note?: string | null;
   },
+  notify?: TellProposer,
 ): Promise<AcceptQuestResult> {
   const row = await questProposalById(pool, input.id);
   if (!row) return { ok: false, status: 404, error: "No such quest proposal" };
@@ -550,17 +607,23 @@ export async function acceptQuestProposal(
     audience: "admin",
   });
 
+  await tellProposer(notify, row, { outcome: "on_board", questId: quest.id });
   return { ok: true, questId: quest.id };
 }
 
 export async function rejectQuestProposal(
   pool: Pool,
   input: { id: string; decidedBy: string; note?: string | null },
+  notify?: TellProposer,
 ): Promise<boolean> {
   const [res]: any = await pool.query( // module-review-ok: quest_proposals has no repo cache above it, and this file is the table's one enumerable home (the ballots.ts pattern); the QUEST itself is written through questsRepo.add and never here
     "UPDATE quest_proposals SET status = 'rejected', decided_by = ?, decided_at = CURRENT_TIMESTAMP, " +
       "decided_note = ? WHERE id = ? AND status = 'proposed'",
     [input.decidedBy, str(input.note), input.id],
   );
-  return Number(res?.affectedRows ?? 0) > 0;
+  const decided = Number(res?.affectedRows ?? 0) > 0;
+  // Read back only after this call made the decision, so a second reject tells nobody twice.
+  const row = decided && notify ? await questProposalById(pool, input.id) : null;
+  if (row) await tellProposer(notify, row, { outcome: "declined", reason: input.note });
+  return decided;
 }

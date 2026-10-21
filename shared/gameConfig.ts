@@ -109,6 +109,8 @@ export interface NextActionRule {
   /** Condition evaluated server-side against the player's game state. */
   when:
     | "no-training"
+    /** Signed the letter, and the village has not answered yet (server/lib/nextAction.ts). */
+    | "membership-waiting"
     | "no-membership"
     | "no-quest-claimed"
     | "quest-in-progress"
@@ -591,6 +593,7 @@ export const GAME_CONFIG: GameConfig = {
 
   nextActions: [
     { id: "training", when: "no-training", label: "Finish your community training", href: "/training" },
+    { id: "membership-waiting", when: "membership-waiting", label: "Your {commitment} is with the village. Take a Quest while you wait", href: "/quests" },
     { id: "membership", when: "no-membership", label: "Sign the {commitment}", href: "/love-letter" },
     { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },

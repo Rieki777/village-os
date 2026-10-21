@@ -190,6 +190,11 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // Same preference, same reasoning: asking for help must not cost a week,
     // and a steward who turned quest emails off has said what they want.
     case "quest_help":
+    // A steward put somebody's quest idea on the board, or said no to it. The
+    // same conversation as a claim being consented, read from the proposer's
+    // side, so it rides the same preference (server/lib/questProposals.ts).
+    case "quest_idea_on_board":
+    case "quest_idea_declined":
       return p.questsEmail;
     case "role_appointed":
     // A mandate running out is the same conversation as being appointed to it,

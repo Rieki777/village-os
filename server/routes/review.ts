@@ -215,7 +215,7 @@ export function register(app: Express, deps: Deps): void {
   // The structure change review reads and accepts a batch whole, with a
   // steward's decisions. Same key as this queue, so it registers from here.
   registerStructureReview(app, deps);
-  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct } = deps;
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -764,7 +764,7 @@ export function register(app: Express, deps: Deps): void {
       reward,
       edits: req.body?.edits ?? null,
       note: req.body?.note ?? null,
-    });
+    }, notify); // the proposer hears it is on the board (lib/questProposals.ts)
     if (!r.ok) return res.status(r.status).json({ error: r.error });
     res.json({ success: true, questId: r.questId });
   });
@@ -777,7 +777,7 @@ export function register(app: Express, deps: Deps): void {
       id: String(req.params.id),
       decidedBy: actor,
       note: String(req.body?.note ?? "").slice(0, 2000),
-    });
+    }, notify); // and hears the no, with the steward's reason when one was typed
     if (!ok) return res.status(409).json({ error: "That proposal was already decided" });
     res.json({ success: true });
   });
