@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * The client's immutable assets, brotli'd ONCE, at the highest quality.
  *
