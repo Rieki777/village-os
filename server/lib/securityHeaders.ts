@@ -171,7 +171,9 @@ export function inlineScriptHashes(html: string): string[] {
   // its own text, and the browser hashes what the parser produced.
   const normalised = html.replace(/\r\n?/g, "\n");
   const out: string[] = [];
-  for (const m of normalised.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
+  const inline = /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script\s*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inline.exec(normalised)) !== null) {
     const digest = crypto.createHash("sha256").update(m[1], "utf8").digest("base64");
     const token = `'sha256-${digest}'`;
     if (!out.includes(token)) out.push(token);
