@@ -29,6 +29,7 @@ import { useState } from "react";
 import { Image } from "@/components/Image";
 import { useVillageLocation, useVillageName } from "@/hooks/useVillageName";
 import { useModule } from "@/modules/ModuleProvider";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 
 
@@ -585,7 +586,7 @@ export default function Home() {
                 e.preventDefault();
                 document
                   .getElementById("choose-path")
-                  ?.scrollIntoView({ behavior: "smooth" });
+                  ?.scrollIntoView({ behavior: scrollBehavior() });
               }}
             >
               Pick your path <ArrowRight className="w-4 h-4" />

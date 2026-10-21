@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { ArrowRight, Wallet as WalletIcon } from "lucide-react";
 import { decimalsOf, formatTokenAmount } from "@/lib/tokenAmount";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -76,7 +77,7 @@ export default function WalletCard() {
   useEffect(() => {
     const jump = () => {
       if (window.location.hash === "#wallet") {
-        section.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        section.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
       }
     };
     jump();
