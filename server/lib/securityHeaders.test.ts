@@ -3,13 +3,14 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import express from "express";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { shellWithTheme } from "../routes/brandTheme";
 import {
   ALWAYS_ENFORCED,
   ARTIFACT_PATH,
   CLOUDFLARE_BEACON_CONNECT,
   CLOUDFLARE_BEACON_SCRIPT,
+  UPLOADED_PDF_PATH,
   analyticsOriginOf,
   buildAppPolicy,
   buildArtifactPolicy,
@@ -152,6 +153,18 @@ describe("the artifact exemption", () => {
   });
 });
 
+describe("the uploaded-PDF exemption", () => {
+  it("covers a PDF the uploads route serves inline", () => {
+    for (const p of ["/api/uploads/1700000000-ab12.pdf", "/api/uploads/Deck.PDF"]) expect(UPLOADED_PDF_PATH.test(p), p).toBe(true);
+  });
+
+  it("covers no path the SPA shell answers, whatever it ends in", () => {
+    for (const p of ["/quests.pdf", "/uploads/a.pdf", "/x/api/uploads/a.pdf", "/api/uploads/a.pdf/x", "/api/uploads/a/b.pdf", "/api/uploads/a.pdf.html"]) {
+      expect(UPLOADED_PDF_PATH.test(p), p).toBe(false);
+    }
+  });
+});
+
 describe("operator levers", () => {
   it("enforces unless report-only is asked for by name", () => {
     expect(cspModeOf(undefined)).toBe("enforce");
@@ -178,6 +191,7 @@ describe("the middleware, on a real server", () => {
     app.use(securityHeaders({ shellPath: shell ?? path.join(dir, "absent.html"), env }));
     app.use("/assets", express.static(path.join(dir, "assets")));
     app.get("/api/thing", (_req, res) => res.json({ ok: true }));
+    app.get("/api/uploads/:filename", (_req, res) => res.type("application/pdf").send(Buffer.from("%PDF-1.4")));
     app.get("/api/boom", () => {
       throw new Error("boom");
     });
@@ -239,6 +253,21 @@ describe("the middleware, on a real server", () => {
     for (const h of sent) expect(allowed).toContain(h);
   });
 
+  it("keeps an uploaded PDF on the framing rule alone, in both modes, and the SPA on the full policy", async () => {
+    for (const mode of ["", "report-only"]) {
+      const base = await boot({ CSP_MODE: mode });
+      const pdf = await fetch(base + "/api/uploads/1700000000-ab12.pdf");
+      expect(pdf.headers.get("content-type"), mode).toContain("application/pdf");
+      expect(pdf.headers.get("content-security-policy"), mode).toBe(ALWAYS_ENFORCED);
+      expect(pdf.headers.get("content-security-policy-report-only"), mode).toBeNull();
+      expect(pdf.headers.get("x-frame-options"), mode).toBe("SAMEORIGIN");
+    }
+    const base = await boot({});
+    const spa = await fetch(base + "/quests.pdf");
+    expect(spa.headers.get("content-type")).toContain("text/html");
+    expect(directive(spa.headers.get("content-security-policy")!, "script-src")).not.toBeNull();
+  });
+
   it("gives the map artifact its own policy, and nothing else under /grounds/", async () => {
     const base = await boot({});
     const map = await fetch(base + "/grounds/index.html");
@@ -271,5 +300,19 @@ describe("the middleware, on a real server", () => {
     const r = await fetch(base + "/api/thing");
     expect(r.status).toBe(200);
     expect(directive(r.headers.get("content-security-policy")!, "script-src")).toEqual(["'self'", CLOUDFLARE_BEACON_SCRIPT]);
+  });
+
+  it("says once, in production, that the shell is missing, since every page then refuses its inline script", async () => {
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const base = await boot({ NODE_ENV: "production" }, path.join(dir, "absent.html"));
+      await fetch(base + "/");
+      await fetch(base + "/api/thing");
+      const lines = warned.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("[security-headers]"));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("absent.html");
+    } finally {
+      warned.mockRestore();
+    }
   });
 });

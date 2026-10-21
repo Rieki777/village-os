@@ -16,7 +16,9 @@
  * injected `<script>` or `onerror=` attribute inert: only files served from
  * this origin, plus the shell's own inline script by hash, may run.
  *
- * ── THE MAP ARTIFACT IS THE ONE EXCEPTION, AND IT IS EXACT ──────────────────
+ * ── TWO EXCEPTIONS, BOTH EXACT: THE MAP ARTIFACT AND AN UPLOADED PDF ────────
+ *
+ * The PDF case is short and lives beside UPLOADED_PDF_PATH below. The map:
  *
  * docs/prototypes/grounds-v0.html (~6 MB, served under /grounds/) is inline
  * scripts, inline handlers, a blob: Worker and a CDN import throughout, so any
@@ -93,11 +95,15 @@
  * made every mic fail silently with `not-allowed`. Widening a list here is a
  * deliberate act and never a default.
  *
- * NO Strict-Transport-Security. It is set once and believed for its whole
- * max-age, so it can only be sent when every hostname this app answers on
- * terminates TLS. The custom domain does, and the Railway-generated hostname
- * cannot be enumerated from here. An unverified HSTS is not a header that can
- * be taken back.
+ * NO Strict-Transport-Security from the platform. It is believed for its whole
+ * max-age, and this one image serves thirteen villages on hostnames nobody
+ * here has checked. Measured 2026-10-21 for the live deployment only: the
+ * Railway hostname sits under `.app`, a TLD that is HSTS-preloaded in every
+ * major browser, and the apex regencivics.earth already sends
+ * `max-age=31536000; includeSubDomains; preload`, which covers the custom
+ * domain for anyone who has visited the apex. So that village is TLS-only in
+ * practice; the per-hostname switch belongs at its edge (Cloudflare), where
+ * the hostnames are known, until every fork's are.
  *
  * ── TWO OPERATOR LEVERS (environment) ───────────────────────────────────────
  *
@@ -117,6 +123,18 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 /** The two URLs that serve the map artifact, and nothing else under /grounds/. */
 export const ARTIFACT_PATH = /^\/grounds\/(?:index|grounds-[A-Za-z0-9]+)\.html\/?$/i;
+
+/**
+ * An uploaded PDF, which the uploads route serves inline by its extension and
+ * which only that route answers (the file or a JSON 404, never the shell). A
+ * PDF runs no script in this origin's pages, so a page policy protects nothing
+ * there, and whether `object-src 'none'` on a top-level PDF blanks Safari's
+ * built-in viewer could not be measured (Chromium's was measured and is fine).
+ * It keeps the framing rule it always had. Anchored to the route on purpose:
+ * a bare `.pdf` suffix would hand `/quests.pdf`, which the SPA shell answers,
+ * no script policy at all.
+ */
+export const UPLOADED_PDF_PATH = /^\/api\/uploads\/[^/]+\.pdf$/i;
 
 /** Cloudflare Web Analytics, injected at the edge (see the header above). */
 export const CLOUDFLARE_BEACON_SCRIPT = "https://static.cloudflareinsights.com";
@@ -244,6 +262,7 @@ export function securityHeaders(opts: SecurityHeaderOptions): RequestHandler {
   let appPolicy: string | null = null;
   let fallback: string | null = null;
   let lookedAt = 0;
+  let warnedMissing = false;
 
   const policyForApp = (): string => {
     if (appPolicy) return appPolicy;
@@ -262,7 +281,16 @@ export function securityHeaders(opts: SecurityHeaderOptions): RequestHandler {
       reportUri,
     });
     if (html) appPolicy = built;
-    else fallback = built;
+    else {
+      fallback = built;
+      // In production a missing shell means the path here and `staticPath`
+      // in server/index.ts have come apart, and the shell's inline script is
+      // being refused on every page. Say so once, naming the file.
+      if (!warnedMissing && env.NODE_ENV === "production") {
+        warnedMissing = true;
+        console.warn(`[security-headers] no shell at ${opts.shellPath}; its inline scripts get no hash and will be refused.`);
+      }
+    }
     return built;
   };
 
@@ -274,12 +302,16 @@ export function securityHeaders(opts: SecurityHeaderOptions): RequestHandler {
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     res.setHeader("Origin-Agent-Cluster", "?1");
-    const policy = ARTIFACT_PATH.test(req.path) ? artifactPolicy : policyForApp();
+    const policy = ARTIFACT_PATH.test(req.path)
+      ? artifactPolicy
+      : UPLOADED_PDF_PATH.test(req.path)
+        ? ALWAYS_ENFORCED
+        : policyForApp();
     if (mode === "enforce") {
       res.setHeader("Content-Security-Policy", policy);
     } else {
       res.setHeader("Content-Security-Policy", ALWAYS_ENFORCED);
-      res.setHeader("Content-Security-Policy-Report-Only", policy);
+      if (policy !== ALWAYS_ENFORCED) res.setHeader("Content-Security-Policy-Report-Only", policy);
     }
     if (reportUri) res.setHeader("Reporting-Endpoints", `csp="${reportUri}"`);
     next();
