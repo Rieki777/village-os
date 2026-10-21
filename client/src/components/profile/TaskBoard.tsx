@@ -10,6 +10,9 @@
  *   Waiting on you   decisions a power you hold is asked for (WaitingOnYou.tsx)
  *   Holding          held by you, by date, undated last
  *   Your seats hold  held by a seat you sit in now, so it follows the seat
+ *   Back with your circles   nobody holds it, in a circle you have standing
+ *                    in, so you can take it before the circle meets again
+ *                    (the whole circle reads its task cards: Rye, 2026-10-21)
  *   Finished         done or let go in the last three moons
  *   Earlier          finished before that, loaded only when opened
  *
@@ -72,12 +75,14 @@ function readBoard(v: unknown): TaskBoardPayload | null {
   if (!v || typeof v !== "object") return null;
   const b = v as Partial<TaskBoardPayload>;
   if (!isCards(b.holding) || !isCards(b.seatsHold) || !isCards(b.finished) || typeof b.today !== "string") return null;
-  return { holding: b.holding, seatsHold: b.seatsHold, finished: b.finished, earlierCount: Number(b.earlierCount) || 0, today: b.today };
+  // A server from before the circles' group sends none: the board reads as it did.
+  const circleBack = isCards(b.circleBack) ? b.circleBack : [];
+  return { holding: b.holding, seatsHold: b.seatsHold, circleBack, finished: b.finished, earlierCount: Number(b.earlierCount) || 0, today: b.today };
 }
 
 const replaceIn = (list: TaskCardData[], t: TaskCardData): TaskCardData[] => list.map((c) => (c.entryId === t.entryId ? t : c));
 
-type GroupKey = "holding" | "seatsHold" | "finished";
+type GroupKey = "holding" | "seatsHold" | "circleBack" | "finished";
 
 /** How long a card landed on keeps its gold ring. */
 export const LANDED_RING_MS = 2400;
@@ -226,7 +231,17 @@ export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
   const answered = (t: TaskCardData) => {
     // The bell's own memory of "It's done" speaks for it no longer.
     dropBellAnswer(t.entryId);
-    setBoard((b) => (b ? { ...b, holding: replaceIn(b.holding, t), seatsHold: replaceIn(b.seatsHold, t), finished: replaceIn(b.finished, t) } : b));
+    setBoard((b) =>
+      b
+        ? {
+            ...b,
+            holding: replaceIn(b.holding, t),
+            seatsHold: replaceIn(b.seatsHold, t),
+            circleBack: replaceIn(b.circleBack, t),
+            finished: replaceIn(b.finished, t),
+          }
+        : b,
+    );
     setEarlier((e) => (e ? replaceIn(e, t) : e));
     void load(true, true);
     // The menu's count and the profile's waiting card read again.
@@ -273,6 +288,7 @@ export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
         <h3 id={id} className={LABEL_CAPS}>
           {TASK_COPY.groups[key]}
         </h3>
+        {key === "circleBack" && <p className={HINT}>{TASK_COPY.circleBackHint}</p>}
         <ul className="space-y-3">
           {cards.map((c) => (
             <li key={c.entryId} id={taskCardAnchor(c.entryId)} className={cardShell(c.entryId, ringed)}>
@@ -286,7 +302,7 @@ export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
 
   const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0 && !waiting;
   // A task opened again from Earlier moves up on the next read; it is shown once, where it now stands.
-  const onBoard = new Set(board ? [...board.holding, ...board.seatsHold, ...board.finished].map((c) => c.entryId) : []);
+  const onBoard = new Set(board ? [...board.holding, ...board.seatsHold, ...board.circleBack, ...board.finished].map((c) => c.entryId) : []);
   const earlierShown = (earlier ?? []).filter((c) => !onBoard.has(c.entryId));
 
   return (
@@ -321,6 +337,7 @@ export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
           {nothingHeld && <p className="text-base text-muted-foreground">{TASK_COPY.empty}</p>}
           {group("holding", board.holding, board.today)}
           {group("seatsHold", board.seatsHold, board.today)}
+          {group("circleBack", board.circleBack, board.today)}
           {group("finished", board.finished, board.today)}
 
           {board.earlierCount > 0 && (
