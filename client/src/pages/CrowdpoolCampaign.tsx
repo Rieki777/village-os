@@ -23,9 +23,9 @@ import { ExampleChip } from "@/components/ExamplesBanner";
 import { ArrowLeft, ExternalLink, HandHeart, Package, Sparkles, Users } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import {
-  CrowdpoolStyles, GoldRing, GrowthStrip, KIND_LABELS,
+  CrowdpoolStyles, GoldRing, GrowthStrip,
   SlotMeter, StarLantern,
-  capitalTint, isOverDelivered, kindGlyph, money, phaseLabel, pledgedFloorParagraph, pledgedIsFloor,
+  capitalTint, isOverDelivered, kindGlyph, loanWindow, money, needLabel, phaseLabel, pledgedFloorParagraph, pledgedIsFloor,
   pooledLine, ringTip, timeAgo,
 } from "@/components/crowdpool/PoolPieces";
 import BreathingLoader from "@/components/natural/BreathingLoader";
@@ -46,6 +46,17 @@ interface Need {
    * or the whole back catalogue changes unit the day the field arrives.
    */
   capacityUnit?: string;
+  /**
+   * Hub contract 4. A thing the project would BORROW arrives as `kind: "item"`
+   * with `acceptsLoan` 1, and new needs never use `kind: "loan"`, so the kind
+   * alone can no longer tell borrowing from keeping. Absent means the kind
+   * already says everything it said before contract 4.
+   */
+  acceptsGift?: number; acceptsLoan?: number;
+  /** The custody window for a lent thing, YYYY-MM-DD. Contract 4. */
+  neededFrom?: string | null; neededUntil?: string | null;
+  /** 'on_site' | 'remote' | 'either' | null. Contract 4, unread today. */
+  workMode?: string | null;
 }
 interface PoolEvent { id: string; type: string; who: string; item: string | null; at: string | null }
 /** Just enough of a sibling card to name it and link to it. */
@@ -53,6 +64,12 @@ interface SiblingCard { key: string; slug?: string; title?: string; reachable: b
 interface Partner {
   partner: string; label: string; url: string; raised: number;
   contributorCount: number; percent: number; cachedAt: string | null;
+  /**
+   * 'verified' or 'example', hub contract 4. An EXAMPLE row is not a live
+   * money route and must not be linked. Absent means an older hub that sent
+   * no status, and those are linked as they always were.
+   */
+  status?: string;
 }
 interface Campaign {
   id: number; slug: string; title: string; projectName: string | null; location: string | null;
@@ -338,7 +355,7 @@ export default function CrowdpoolCampaign() {
                         <div className="min-w-0 flex-1">
                           <h3 className="font-semibold text-sm leading-snug" style={{ color: "#241a10" }}>{n.name}</h3>
                           <p className="text-[11px] mt-0.5" style={{ color: tint }}>
-                            {KIND_LABELS[n.kind] ?? n.kind},{" "}
+                            {needLabel(n)},{" "}
                             <InfoTip tip="The village counts more kinds of wealth than money: material, living, social, intellectual and more. Every need names the capital it calls for.">{n.capitalType} capital</InfoTip>
                             {n.groupClaimable ? ", many hands welcome" : ""}
                           </p>
@@ -348,6 +365,18 @@ export default function CrowdpoolCampaign() {
                           <div className="mt-2.5">
                             <SlotMeter wanted={n.quantityWanted} claimed={n.quantityClaimed} delivered={n.quantityDelivered} tint={tint} unit={n.capacityUnit} />
                           </div>
+                          {/*
+                            * THE CUSTODY WINDOW, beside the deadline it is not.
+                            * "Needed by" is when a thing must arrive; this is
+                            * how long the project keeps it. A member deciding
+                            * whether to lend a generator needs the second
+                            * before they decide, not from a steward afterwards.
+                            */}
+                          {loanWindow(n) && (
+                            <p className="cp-note">
+                              {loanWindow(n)}
+                            </p>
+                          )}
                           {n.needDeadline && (
                             <p className="text-[11px] mt-1.5" style={{ color: "#8a6a33" }}>
                               Needed by {new Date(n.needDeadline).toLocaleDateString()}
@@ -422,6 +451,21 @@ export default function CrowdpoolCampaign() {
                           Their numbers, kept {timeAgo(p.cachedAt)}
                         </p>
                       )}
+                      {/*
+                        * AN EXAMPLE ROUTE IS NOT A ROUTE. Hub contract 4 marks
+                        * rows a ReGen Civics admin verified as `verified` and
+                        * demonstration rows as `example`. Before that field
+                        * existed this page linked every row it was given, so a
+                        * member on a demo campaign could click through to a
+                        * money route that does not take money. Absent status
+                        * means a hub older than contract 4, which only ever
+                        * sent live routes, so those are linked as before.
+                        */}
+                      {p.status === "example" ? (
+                        <p className="cp-note font-semibold">
+                          An example route, shown to explain how this works. It takes no money.
+                        </p>
+                      ) : (
                       <a
                         href={p.url}
                         target="_blank"
@@ -431,6 +475,7 @@ export default function CrowdpoolCampaign() {
                       >
                         Open {p.label} <ExternalLink className="w-3 h-3" />
                       </a>
+                      )}
                     </div>
                   ))}
                 </div>
