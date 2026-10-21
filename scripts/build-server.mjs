@@ -19,6 +19,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
+import { precompressAssets } from "./precompress-assets.mjs";
 
 function gitSha() {
   // Railway and most CI providers expose the commit; prefer that over git.
@@ -191,3 +192,19 @@ console.log(
   `  dist/index.js built${sha ? ` @ ${sha}` : " (no git context — marker will read 'dev')"}` +
     ` from ${Object.keys(manifest.server).length} server inputs`,
 );
+
+/*
+ * The client's immutable assets, brotli'd once at quality 11, into
+ * dist/precompressed (scripts/precompress-assets.mjs has the measurements and
+ * the reasons). Here because this is the last step of `pnpm build` and the one
+ * that builds what the server serves, and because running this script alone
+ * then keeps the set current too: it is incremental, so an unchanged client
+ * costs only the hashing. A failure is LOUD and not fatal. The server checks
+ * every copy before it serves one and otherwise encodes per request, as it
+ * always has, so a missing set costs bytes and never a deploy.
+ */
+try {
+  await precompressAssets({ root: ROOT });
+} catch (e) {
+  console.error(`  dist/precompressed NOT written, so /assets will be encoded per request: ${e?.stack ?? e}`);
+}

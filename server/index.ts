@@ -816,6 +816,7 @@ import { MOON_PROPOSER, runMoonProposal, settlementCloser, type MoonProposalDeps
 import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
+import { precompressedAssets } from "./lib/precompressedAssets";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -26571,6 +26572,8 @@ ${inner}
     req.url = rest.replace(/\.(png|jpe?g)$/i, ".webp") + req.url.slice(rest.length);
     next();
   });
+  // The same files at brotli 11, written once by the build: server/lib/precompressedAssets.ts.
+  app.use("/assets", precompressedAssets({ assetsDir: ASSETS_DIR, precompressedDir: path.resolve(staticPath, "..", "precompressed") }));
   app.use("/assets", express.static(ASSETS_DIR, { maxAge: "1y", immutable: true }));
   registerStockAvatarRoutes(app, { dir: path.resolve(__dirname, "..", STOCK_AVATAR_DIR) });
   app.use(express.static(staticPath, { index: false }));
@@ -26664,11 +26667,7 @@ ${inner}
     if (!bare) return next();
     const shell = shellWithTheme(bare, getBrand);
     const village = mergedConfig().project.name;
-    const proto = String(
-      req.headers["x-forwarded-proto"] ?? req.protocol ?? "https",
-    ).split(",")[0].trim();
-    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").trim();
-    const origin = host ? `${proto}://${host}` : "";
+    const origin = requestOrigin(req);
     const trim = (s: string, n = 200) =>
       s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s;
 
