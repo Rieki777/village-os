@@ -67,7 +67,7 @@ import { decisionLink } from "./ballotNotices";
 import { ballotsFor, openBallot, openBallotFor, withdrawBallot, type BallotRow } from "./ballots";
 import { applyCircleStatusChanges } from "./circleTreasury";
 import { recordEvent } from "./events";
-import { readGameStart } from "./gameStart";
+import { launchedByBallotIdOf } from "./launch";
 import type { WeightModeSnapshot } from "./governanceWeights";
 import {
   blockedLinesOf,
@@ -169,7 +169,11 @@ export async function holderMayPublish(req: any, res: any, gate: HolderGate): Pr
 /**
  * HAS THIS VILLAGE LAUNCHED, for the admin panel's direct publish.
  *
- * The launch BALLOT carrying, and not `founderPowerStands()`. That is Rye's
+ * The launch BALLOT carrying, read off `launch-state.launchedByBallotId`, which
+ * only the launch vote's closer writes (`recordLaunchCarried`), and never the
+ * `game-start` row or `founderPowerStands()`. The game-start row is not enough:
+ * the test harness provisions every village with one (`bal-fixture`), and that
+ * read turned the admin door off in every e2e village with no vote held. That is Rye's
  * ruling of 2026-10-14 for the module switch, and the reason carries over
  * whole: migration 0112 recorded villages that were issuing before the vote
  * existed as started with no ballot, and a village in that state has had no
@@ -177,8 +181,7 @@ export async function holderMayPublish(req: any, res: any, gate: HolderGate): Pr
  * admins keep the panel's door until a real launch vote.
  */
 export async function launchedByVote(pool: Pool): Promise<boolean> {
-  const start = await readGameStart(pool);
-  return start.started && start.ballotId !== null;
+  return (await launchedByBallotIdOf(pool)) !== null;
 }
 
 // ── The ballot a draft is put to ────────────────────────────────────────────

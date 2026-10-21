@@ -21,7 +21,8 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { capabilityDecision, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SubjectCloser } from "../lib/applyDue";
 import { ballotById, castVote } from "../lib/ballots";
-import { readGameStart, recordGameStart } from "../lib/gameStart";
+import { readGameStart } from "../lib/gameStart";
+import { recordLaunchCarried } from "../lib/launch";
 import { addChange, createDraft, getDraft, previewDraft, setDraftVision, withdrawDraft } from "../lib/orgDrafts";
 import {
   decideStanding,
@@ -121,8 +122,13 @@ async function makeDraft(opts: { blocked?: boolean } = {}): Promise<{ id: string
 
 describe.skipIf(!configured)("org.decide: who adopts a reorganisation", () => {
   beforeAll(async () => {
-    // Not started: the launch vote is recorded by the last block, by this file.
-    db = await provisionTestDb({ gameStarted: false });
+    /*
+     * The harness default on purpose: a `game-start` row reading `bal-fixture`,
+     * the same village every e2e suite boots. That row is not a launch vote,
+     * and reading it as one turned the admin door off everywhere (PR #495's
+     * first CI run). The launch vote is recorded by the last block.
+     */
+    db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
     const app = express();
     app.use(express.json());
@@ -422,7 +428,10 @@ describe.skipIf(!configured)("org.decide: who adopts a reorganisation", () => {
   });
 
   describe("the admin panel's door, before and after a launch vote", () => {
-    it("publishes for an admin before launch, as it always did", async () => {
+    it("publishes for an admin before launch, as it always did, in a village whose Game the fixture started", async () => {
+      // The control: this village reads as started, with a ballot id, on the game-start row.
+      const start = await readGameStart(pool);
+      expect([start.started, start.ballotId]).toEqual([true, "bal-fixture"]);
       const d = await makeDraft();
       const r = await call("POST", `/api/admin/org/drafts/${d.id}/publish`, "admin-1");
       expect(r.status).toBe(200);
@@ -430,8 +439,7 @@ describe.skipIf(!configured)("org.decide: who adopts a reorganisation", () => {
     });
 
     it("refuses an admin without org.decide once a launch vote has carried", async () => {
-      await recordGameStart(pool, { ballotId: "bal-launch-test", startedBy: "admin-1", note: "test launch" });
-      expect((await readGameStart(pool)).ballotId).toBe("bal-launch-test");
+      expect((await recordLaunchCarried(pool, { ballotId: "bal-launch-test", closedBy: "admin-1" })).alreadyRecorded).toBe(false);
       const d = await makeDraft();
       const r = await call("POST", `/api/admin/org/drafts/${d.id}/publish`, "admin-1");
       expect(r.status).toBe(403);
