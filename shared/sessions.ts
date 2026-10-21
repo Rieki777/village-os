@@ -828,6 +828,7 @@ export interface SessionListRow {
  *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }
+ *   DELETE /api/sessions/:id                      { ok } (discard an open session, or delete a closed record)
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok } (presence, every HERE_EVERY_MS)
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -1097,6 +1098,10 @@ export const SESSION_REFUSALS = {
   membersOnly: "Live sessions are for the village's members. Sign the commitment to join one.",
   alreadyOnAgenda: "That one is already on today's agenda.",
   decisionFinal: "That proposal was decided by consent, and its words stay as they were.",
+  /** DELETE on an open session, from somebody who neither facilitates it nor is an admin. */
+  discardNotYours: "Only the person facilitating or an admin can discard this session.",
+  /** DELETE on a closed session, from anybody who is not an admin, the facilitator included. */
+  recordAdminOnly: "Only an admin can delete the record of a closed session.",
 } as const;
 
 /** What a person is called when the village no longer holds their name. */
@@ -1369,4 +1374,36 @@ export const SESSION_LIST_COPY = {
   circle: (name: string) => `Circle: ${name}`,
   openedAt: (time: string) => `Opened ${time}`,
   closedOn: (date: string) => `Closed ${date}`,
+  /** An open room's card, for a member already in it: the way back in. */
+  enterRoom: "Enter the room",
+} as const;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DISCARDING A SESSION, AND DELETING A RECORD. One door, DELETE /api/sessions/:id.
+// While a session is open its facilitator or an admin may discard it; once it
+// has closed, only an admin may delete its record. Either way it is a real
+// delete: every row the session holds goes, and no record is kept.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const SESSION_DISCARD_COPY = {
+  /** The quiet control inside an open room. */
+  discardButton: "Discard this session",
+  discardTitle: "Discard this session?",
+  discardBody: "Everything in it is removed for everyone, and no record is kept. Use this for a session opened by mistake or as a test.",
+  keep: "Keep it",
+  discard: "Discard",
+  discarding: "Discarding...",
+  /** What the sessions list says to whoever was in the room when it went. */
+  discarded: "This session was discarded.",
+  /** The quiet control on a closed record, for admins. */
+  deleteButton: "Delete this record",
+  deleteTitle: "Delete this record?",
+  deleteBody: "Its minutes, decisions and the tasks it left are removed for everyone. This cannot be undone.",
+  keepRecord: "Keep it",
+  delete: "Delete",
+  deleting: "Deleting...",
+  /** What the sessions list says once a record is gone. */
+  deleted: "This record was deleted.",
+  /** A refusal with no sentence of its own, or a network that did not answer. */
+  failed: "That did not go through. Try again in a moment.",
 } as const;

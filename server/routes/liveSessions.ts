@@ -7,6 +7,7 @@
  *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      { title } -> { ok }
+ *   DELETE /api/sessions/:id                      { ok }: discard an open session, or delete a closed record
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok }
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -71,6 +72,7 @@ import {
   closeSession,
   closeStaleRooms,
   defaultDuration,
+  discardSession,
   ensureMemberNo,
   etagMatches,
   joinSession,
@@ -156,6 +158,8 @@ const HERES_PER_HOUR = 600;
 const ENTRIES_PER_HOUR = 400;
 /** Answers in an hour: consent rounds change their minds. */
 const RESPONSES_PER_HOUR = 300;
+/** Sessions one member may discard or records one admin may delete in an hour: a test or a mistake, not a sweep. */
+const DISCARDS_PER_HOUR = 30;
 /** Ideas for the tool in an hour. */
 const TOOL_IDEAS_PER_HOUR = 10;
 /** How long a person's name is remembered between polls. */
@@ -332,6 +336,25 @@ export function register(app: Express, deps: Deps): void {
     const w = await writer(req, res);
     if (!w) return;
     answer(res, await patchSession(w.pool, w.id, w.actor, req.body), () => ({ ok: true }));
+  });
+
+  /**
+   * Discard an open session, or delete a closed record: a real delete, and
+   * every row the session holds goes with it (`discardSession`). The open
+   * room's facilitator or an admin, joined or not; a closed record, an admin
+   * only. Asks no seat in the room, so it reads the viewer the way the room's
+   * GET does. Everybody else in an open room finds it gone on their next poll.
+   */
+  app.delete("/api/sessions/:id", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const uid = String(user.id);
+    if (await overLimit(`sessions-discard:${uid}`, DISCARDS_PER_HOUR, HOUR_MS)) return slow(res);
+    const id = parseId(req.params?.id);
+    if (id == null) return res.status(404).json({ error: R.notFound });
+    const pool = getPool();
+    const viewer = { no: await memberNo(pool, uid), admin: await isAdmin(req) };
+    answer(res, await discardSession(pool, id, viewer), () => ({ ok: true }));
   });
 
   app.post("/api/sessions/:id/join", async (req, res) => {

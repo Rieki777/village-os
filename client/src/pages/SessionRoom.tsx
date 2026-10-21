@@ -26,14 +26,20 @@
  * display face is read before the night swaps its own in. The closed record
  * is a document and stays on the light linen, with neither.
  *
+ * A ROOM CAN GO WHILE IT IS ON SCREEN. Its facilitator or an admin can
+ * discard an open session, and an admin can delete a closed record
+ * (DiscardSession). Whoever pressed it, and everybody else on their next poll
+ * (`gone`, useSessionRoom), lands on the list, which says the session was
+ * discarded (roomGone.ts carries that one sentence across).
+ *
  * Each stage settles in as it opens, a short fade and a small rise. A member
  * who asked for less motion gets the fade alone, and the motes hold still.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
-import { ROOM_COPY, SESSION_COPY, STAGE_DEFS, type SessionStage } from "@shared/sessions";
+import { ROOM_COPY, SESSION_COPY, SESSION_DISCARD_COPY, STAGE_DEFS, type SessionStage } from "@shared/sessions";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { useReducedMotion } from "@/components/natural/useReducedMotion";
@@ -42,6 +48,7 @@ import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import ClosedRecord from "@/components/sessions/ClosedRecord";
+import DiscardSession from "@/components/sessions/DiscardSession";
 import FacilitatorBar from "@/components/sessions/FacilitatorBar";
 import RoomHeader from "@/components/sessions/RoomHeader";
 import StageActions from "@/components/sessions/StageActions";
@@ -52,6 +59,7 @@ import StageDropIn from "@/components/sessions/StageDropIn";
 import StageItems from "@/components/sessions/StageItems";
 import StageRail from "@/components/sessions/StageRail";
 import TensionCatcher from "@/components/sessions/TensionCatcher";
+import { leaveRoomGone } from "@/components/sessions/roomGone";
 import { BTN_QUIET, H2, STAGE_LEDE } from "@/components/sessions/roomUi";
 import { useRoomNow, useSessionRoom } from "@/components/sessions/useSessionRoom";
 
@@ -96,6 +104,23 @@ export default function SessionRoom() {
   const lastStage = useRef<SessionStage | null>(null);
   const { actions } = room;
   const liveStage = room.view?.status === "open" ? room.view.state.stage : null;
+  const [, navigate] = useLocation();
+  const left = useRef(false);
+  // What the list says once this room is gone: a discarded session, or a deleted record.
+  const goneSentence = room.view?.status === "closed" ? SESSION_DISCARD_COPY.deleted : SESSION_DISCARD_COPY.discarded;
+
+  /** Leave a room that is gone for the list, once, with the sentence that says why. */
+  const leave = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
+    leaveRoomGone(goneSentence);
+    navigate("/sessions");
+  }, [goneSentence, navigate]);
+
+  // Somebody else discarded the room under this page: the poll found it gone.
+  useEffect(() => {
+    if (room.status === "gone") leave();
+  }, [room.status, leave]);
 
   useEffect(() => {
     // No open room on screen (loading another one, or closed): the next stage seen is a first sight, not a move.
@@ -128,6 +153,7 @@ export default function SessionRoom() {
   if (!on) return <ModuleGate moduleId="sessions" name={NAME} />;
   if (!user) return <SignInToSee moduleId="sessions" name={NAME} />;
   if (id == null || room.status === "missing") return <Notice>{ROOM_COPY.missing}</Notice>;
+  if (room.status === "gone") return <Notice>{goneSentence}</Notice>;
   if (room.status === "refused") return <Notice>{SESSION_COPY.closedNoAccess}</Notice>;
   if (room.status === "signed-out") return <Notice>{ROOM_COPY.signedOut}</Notice>;
   if (room.status === "failed" && !room.view) return <Notice>{ROOM_COPY.failed}</Notice>;
@@ -140,6 +166,12 @@ export default function SessionRoom() {
   const stageProps = { view, now, actions };
 
   const open = view.status === "open";
+  const discardAnswer = async () => {
+    const r = await actions.discard();
+    return r.ok ? ({ ok: true } as const) : ({ ok: false, error: r.error } as const);
+  };
+  // The facilitator and an admin, joined or not, may discard an open room; only an admin may delete a closed record.
+  const discard = open && (view.me.facilitates || view.me.admin) ? <DiscardSession kind="discard" onConfirm={discardAnswer} onGone={leave} /> : null;
   const rail = <StageRail roomStage={roomStage} shown={shown} onShow={(s) => setBrowsing(s === roomStage ? null : s)} />;
 
   return (
@@ -156,7 +188,10 @@ export default function SessionRoom() {
               {moved}
             </p>
             {view.status === "closed" ? (
-              <ClosedRecord view={view} />
+              <ClosedRecord
+                view={view}
+                deleteRecord={view.me.admin ? <DiscardSession kind="delete" onConfirm={discardAnswer} onGone={leave} /> : null}
+              />
             ) : (
               <>
                 {room.lagging && (
@@ -166,7 +201,7 @@ export default function SessionRoom() {
                 )}
 
                 {view.me.facilitates ? (
-                  <FacilitatorBar view={view} actions={actions} shown={shown} onMoved={() => setBrowsing(null)} rail={rail} />
+                  <FacilitatorBar view={view} actions={actions} shown={shown} onMoved={() => setBrowsing(null)} rail={rail} discard={discard} />
                 ) : (
                   rail
                 )}
@@ -174,15 +209,21 @@ export default function SessionRoom() {
                 {!view.me.facilitates && view.me.admin && view.me.joined && view.status === "open" && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted px-4 py-2 text-sm">
                     <span className="text-muted-foreground">{ROOM_COPY.takeOverHint}</span>
-                    <button
-                      type="button"
-                      className="min-h-11 rounded-xl border border-notice/55 bg-card px-3 font-medium text-foreground hover:border-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => void actions.hosts({ facilitatorUserId: view.me.userId })}
-                    >
-                      {ROOM_COPY.takeOver}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {discard}
+                      <button
+                        type="button"
+                        className="min-h-11 rounded-xl border border-notice/55 bg-card px-3 font-medium text-foreground hover:border-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => void actions.hosts({ facilitatorUserId: view.me.userId })}
+                      >
+                        {ROOM_COPY.takeOver}
+                      </button>
+                    </div>
                   </div>
                 )}
+
+                {/* An admin who has not joined holds no seat, and may still discard a room opened by mistake. */}
+                {!view.me.facilitates && view.me.admin && !view.me.joined && view.status === "open" && <div className="flex justify-end">{discard}</div>}
 
                 {shown !== roomStage && !view.me.facilitates && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted px-4 py-2 text-sm">
