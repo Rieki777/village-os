@@ -42,9 +42,9 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
-  RETURN_NEEDS_A_VOTE,
+  MOVE_NEEDS_A_VOTE, RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
-  villageHandoverState,
+  villageHandoverState, villageHoldsRefusal,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
 // 0219: the governing purpose statement, its one writer, and its subject.
@@ -13303,6 +13303,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const cap = String(req.params.capability);
     const roleId = String(req.body?.roleId ?? "").trim();
     if (!roleId) return res.status(400).json({ error: "Name the role that will hold it." });
+    // A power the village ALREADY holds moves sideways only by its vote or the glass: MOVE_NEEDS_A_VOTE, lib/capabilityHolding.ts.
+    const held = (await capabilityHoldings(getPool())).find((h) => h.capability === cap); // even the same role: the upsert nulls moved_by_ballot_id
+    const verdict = held ? await mayAct(req, cap as Capability) : null;
+    if (held && verdict && !verdict.reachedPast) return res.status(409).json(villageHoldsRefusal(held, MOVE_NEEDS_A_VOTE, verdict, "/api/governance/power-transfers"));
     const r = await moveCapabilityToVillage(getPool(), {
       capability: cap,
       holderRoleId: roleId,
@@ -13345,21 +13349,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       return res.status(404).json({ error: "The village was not holding that one." });
     }
     const verdict = await mayAct(req, cap as Capability);
-    if (!verdict.reachedPast) {
-      const who = holding.holderRoleName ?? holding.holderRoleId;
-      return res.status(409).json({
-        error:
-          `${who} looks after this one. ${RETURN_NEEDS_A_VOTE} ${BREAK_GLASS_WAY_THROUGH} ` +
-          "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
-        // The browser's half of the same answer (0103's shape): the panel
-        // sends people to the ballot, and offers the glass only to somebody
-        // the gate would actually let through.
-        requiresOverride: true,
-        overrideAvailable: verdict.overrideAvailable,
-        holderName: who,
-        ballotRoute: "/api/governance/power-returns",
-      });
-    }
+    if (!verdict.reachedPast) return res.status(409).json(villageHoldsRefusal(holding, RETURN_NEEDS_A_VOTE, verdict, "/api/governance/power-returns"));
     const existed = await returnCapabilityToScaffolding(getPool(), cap);
     if (!existed) return res.status(404).json({ error: "The village was not holding that one." });
     const what = CAPABILITY_CONSEQUENCE[cap as Capability] ?? cap;
