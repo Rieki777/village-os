@@ -133,10 +133,12 @@ async function call(who: string | null, method: string, path: string, body?: unk
   return { status: res.status, body: text ? JSON.parse(text) : null };
 }
 
-/** The four doors, each with a body it would accept. */
+/** The six doors, each with a body it would accept. */
 const DOORS: [string, string, unknown?][] = [
   ["GET", "/api/sessions/tasks/mine"],
+  ["GET", "/api/sessions/tasks/count"],
   ["PATCH", "/api/sessions/tasks/7", { op: "done", version: 1 }],
+  ["POST", "/api/sessions/tasks/7/done", {}],
   ["GET", "/api/sessions/12/task-record"],
   ["POST", "/api/sessions/12/task-emails", {}],
 ];
@@ -146,7 +148,7 @@ const lifecycle = async (value: string | null) =>
   loadModuleSettings({ query: async () => [value ? [{ module_id: "sessions", lifecycle: value, config: null, updated_at: null }] : [], []] } as any);
 
 describe("with the sessions module off", () => {
-  it("hides all four doors, the way the room's doors are hidden", async () => {
+  it("hides all six doors, the way the room's doors are hidden", async () => {
     await lifecycle(null);
     for (const [method, path, body] of DOORS) {
       expect(await call("m-ana", method, path, body), `${method} ${path}`).toEqual({ status: 404, body: { error: "module_disabled", module: "sessions" } });
@@ -190,6 +192,32 @@ describe("with the sessions module on", () => {
   it("bounds the answers each person gives in an hour", async () => {
     // This hour's answers are already spent.
     hits.set("sessions-task-answer:m-ana", TASK_LIMITS.answersPerHour);
+    expect(await call("m-ana", "PATCH", "/api/sessions/tasks/7", { op: "done", version: 1 })).toEqual({ status: 429, body: { error: TASK_REFUSALS.tooMany } });
+  });
+
+  it("serves the member's own count at /tasks/count, fresh, with nothing a cache may keep", async () => {
+    world.me = "m-ana";
+    const res = await fetch(`${base}/api/sessions/tasks/count`); // module-review-ok: a test calling its own local server, never an outside host
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ waiting: 0, nextDue: null });
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    // Somebody with no number and no seat reads the same nothing, from no query.
+    expect(await call("m-founder", "GET", "/api/sessions/tasks/count")).toEqual({ status: 200, body: { waiting: 0, nextDue: null } });
+  });
+
+  it("answers It's done on a task that is not there, or not a number, with the task's own 404", async () => {
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/seed/done", {})).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/done", {})).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    // No body at all is fine: the server reads the version itself.
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/done")).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+  });
+
+  it("counts It's done against the same hour's answers as the PATCH", async () => {
+    hits.set("sessions-task-answer:m-ana", TASK_LIMITS.answersPerHour);
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/done", {})).toEqual({ status: 429, body: { error: TASK_REFUSALS.tooMany } });
+    // One answer left: a press of It's done spends it, and the PATCH after it is refused.
+    hits.set("sessions-task-answer:m-ana", TASK_LIMITS.answersPerHour - 1);
+    expect((await call("m-ana", "POST", "/api/sessions/tasks/7/done", {})).status).toBe(404);
     expect(await call("m-ana", "PATCH", "/api/sessions/tasks/7", { op: "done", version: 1 })).toEqual({ status: 429, body: { error: TASK_REFUSALS.tooMany } });
   });
 

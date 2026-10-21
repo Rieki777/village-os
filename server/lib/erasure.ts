@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
 import { eraseFromAlignments } from "./alignmentErasure";
@@ -620,6 +621,25 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The bridge to organisational memory (0261): every outbox row filed
+       * under the member's code-name loses its words, and the code-name is
+       * marked pending a vendor delete. The map entry is NOT dropped: the
+       * founder promised the vendor that the village scrubs its own records,
+       * asks them to delete, and drops the entry only on their confirm. They
+       * have no delete endpoint yet, so the entry stays, marked, and the
+       * admin panel says so.
+       *
+       * AFTER THE TOMBSTONE AND THE JOURNAL, for the journal's own reason: a
+       * save through a still-live session queues an entry, so the scrub comes
+       * after the last moment one could be queued.
+       */
+      name: "saberra-bridge-after-tombstone",
+      run: async () => {
+        await forgetMemberInOutbox(pool, target.id);
       },
     },
     {

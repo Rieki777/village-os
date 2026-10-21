@@ -45,6 +45,8 @@ import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
 import { canonicalJson } from "../../shared/canonicalJson";
 import { OFFER_WORDS, readTermsOffer } from "../../shared/seatTermsOffer";
+import { ORG_DRAFT } from "../../shared/ballotSubjects";
+import { openBallotFor } from "./ballots";
 
 export type DraftOp =
   | "create_seat"
@@ -347,6 +349,7 @@ export async function setDraftVision(
   const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
   if (!d) return { ok: false, error: "No such draft" };
   if (d.status !== "open") return { ok: false, error: `This draft is ${d.status} and can no longer be edited` };
+  if (await openBallotFor(pool, ORG_DRAFT, draftId)) return { ok: false, error: UNDER_A_VOTE };
   await pool.query("UPDATE org_drafts SET vision = ? WHERE id = ?", [
     vision === null ? null : JSON.stringify(vision),
     draftId,
@@ -606,6 +609,10 @@ export async function createDraft(
   return { ok: true, id };
 }
 
+/** Why an open draft cannot be edited while the village is voting on it. */
+const UNDER_A_VOTE =
+  "The village is voting on this draft, so it cannot be changed until the vote closes. Withdraw the draft to stop the vote.";
+
 export async function addChange(
   pool: Pool,
   draftId: string,
@@ -616,6 +623,9 @@ export async function addChange(
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
   if (d.status !== "open") return { ok: false, error: `This draft is ${d.status} and can no longer be edited` };
+  // The village votes on the draft it read, so a draft under a vote is frozen
+  // (server/lib/orgDraftDecide.ts). Withdrawing it calls the vote off.
+  if (await openBallotFor(pool, ORG_DRAFT, draftId)) return { ok: false, error: UNDER_A_VOTE };
   const [[n]] = await pool.query<any[]>(
     "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM org_draft_changes WHERE draft_id = ?", [draftId],
   );

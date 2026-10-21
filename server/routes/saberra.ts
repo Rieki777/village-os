@@ -1,5 +1,7 @@
 /**
- * The outside governance service, as four routes and one scheduled job.
+ * The outside governance service, as five routes and one scheduled job: the
+ * status, the sync, its run log, a seat's facts, and what the journal bridge
+ * would send (nothing yet).
  *
  * ── WHY A PULL AND NOT AN INBOX ──────────────────────────────────────────
  *
@@ -66,6 +68,7 @@ import { secretStatus, villageSecretsConfigured, villageSecretsKeyProblem } from
 import { moduleConfig } from "../lib/modules";
 import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
+import { outboxView } from "../lib/saberraOutbox";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
@@ -96,6 +99,25 @@ export function register(app: Express, deps: Deps): void {
       res.json({ connection, held, addressSet: addressSet() });
     } catch {
       res.status(500).json({ error: "Could not read the connection." });
+    }
+  });
+
+  /**
+   * What the service WOULD receive from the journal, for the setup panel.
+   * Nothing is sent: the service has not named a write path.
+   *
+   * KIND, DATE, CODE-NAME, LENGTH AND STATUS, NEVER THE WORDS. Inside the
+   * village an entry is its author's alone and no admin reads it, so the
+   * payload never reaches this answer: the listing's SELECT does not name it
+   * (server/repos/saberraOutbox.ts). The same gate as the status read, since
+   * it is the same panel.
+   */
+  app.get("/api/saberra/outbox", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json(await outboxView(getPool()));
+    } catch {
+      res.status(500).json({ error: "Could not read what would be sent." });
     }
   });
 

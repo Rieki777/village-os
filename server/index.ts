@@ -1,6 +1,8 @@
 import { anonymizeMember } from "./lib/erasure";
 import { proposalsAboutMember } from "./lib/externalProposals";
 import { ideasProposedBy, landPublicSubmission } from "./lib/publicForms";
+import { joiningOf, pickNextAction } from "./lib/nextAction";
+import { ideaReceipt } from "./lib/questIdeaReceipt";
 // Local dev reads .env (PORT=3001 so the API doesn't collide with Vite's 3000);
 // on Railway the real environment always wins over the file.
 import "dotenv/config";
@@ -76,6 +78,7 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
+import { register as registerOrgDraftDecideRoutes } from "./routes/orgDraftDecide";
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -4585,20 +4588,11 @@ async function runRetentionSweep(): Promise<string> {
  */
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
-  const claims = await claimsRepo.forUser(user.id);
-  const trained = await completionsFor(getPool(), user.id);
-  const budget = await gratitudeBudget(user);
-  for (const rule of GAME_CONFIG.nextActions) {
-    switch (rule.when) {
-      case "no-training": if (!trainingDoneHere(trained)) return rule; break;
-      case "no-membership": if (brochurePagesOn() && !hasMembership(user)) return rule; break;
-      case "no-quest-claimed": if (claims.length === 0) return rule; break;
-      case "quest-in-progress": if (claims.some((c) => c.status === "claimed" || c.status === "submitted")) return rule; break;
-      case "gratitude-unspent": if (budget.remaining > 0 && budget.total > 0) return rule; break;
-      case "always": return rule;
-    }
-  }
-  return GAME_CONFIG.nextActions[GAME_CONFIG.nextActions.length - 1];
+  // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
+  const joining = brochurePagesOn() && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  return pickNextAction(GAME_CONFIG.nextActions, {
+    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user),
+  });
 }
 
 /**
@@ -7631,7 +7625,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
     // One INSERT, a quest idea queued for review, and a member's signing aligned with the letter they read or refused: server/lib/publicForms.ts.
-    const refused = (await landPublicSubmission(submissionsRepo, getPool(), entry, letterSourceFrom(mergedConfig(), contentRepo.get()))).refused; if (refused) return res.status(409).json(refused);
+    const { proposal, refused } = await landPublicSubmission(submissionsRepo, getPool(), entry, letterSourceFrom(mergedConfig(), contentRepo.get())); if (refused) return res.status(409).json(refused);
     commsSink.fire(formSubmittedTrigger(type, entry.id, data));
 
     /*
@@ -7668,7 +7662,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       }
     })();
 
-    res.json({ success: true, id: entry.id });
+    res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
   });
 
   // Admin: List Submissions
@@ -22927,6 +22921,7 @@ ${inner}
    */
   setVetoWindowCheck(vetoWindowOn);
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
+  registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
   /**
@@ -25844,7 +25839,7 @@ ${inner}
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
     capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins, circlesRepo,
-    submissionsRepo,
+    submissionsRepo, liveHoldersOf,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org

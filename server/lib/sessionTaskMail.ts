@@ -63,6 +63,7 @@ import {
   buildTaskEmail,
   civilDaysFrom,
   liveHoldersOf,
+  taskBoardLink,
   type TaskEmail,
   type TaskMailLine,
   type TaskMailResult,
@@ -339,7 +340,8 @@ export async function queueCloseMail(deps: TaskMailDeps, sessionId: number, now 
  *   3. Every open task due from yesterday to the day after tomorrow is read
  *      through the due index; each person holding it gets the in-app notice
  *      `session_action_due`, and, when their task emails are immediate, the
- *      note itself by email.
+ *      note itself by email. Both open that one task on the board
+ *      (`taskBoardLink`), so the answer is one tap away.
  *
  * IDEMPOTENT across hours and restarts. The notice and the email share one
  * key per (task, person, date, mark): `session-due:<entry>:<user>:<date>:<mark>`.
@@ -388,7 +390,7 @@ export async function runTaskNotes(deps: TaskNoteDeps, now = new Date()): Promis
           circleName: storedCircle(r.summary),
           saidOn: villageDate(r.closed_at, zone),
           today,
-          boardUrl: `${origin}${TASK_BOARD_PATH}`,
+          boardUrl: `${origin}${taskBoardLink(t.entryId)}`,
         };
         const email = mark === "before" ? buildDueNote(input) : buildAfterNote(input);
         const key = `session-due:${t.entryId}:${userId}:${t.dueOn}:${mark}`;
@@ -398,7 +400,7 @@ export async function runTaskNotes(deps: TaskNoteDeps, now = new Date()): Promis
           type: "session_action_due",
           title: email.subject,
           body: line && line.kind === "list" ? (line.items[0] ?? null) : null,
-          link: TASK_BOARD_PATH,
+          link: taskBoardLink(t.entryId),
           dedupeKey: key,
         });
         if ((fresh as { fresh?: boolean } | null)?.fresh) notes += 1;

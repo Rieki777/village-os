@@ -893,6 +893,12 @@ export const SUBJECT_NOUN: Record<string, string> = {
   role_seat: "Who sits in a role",
   role_unseat: "A seat handed back",
   /*
+   * ALSO NOT A WIZARD TYPE. An org chart draft put to the village
+   * (server/routes/orgDraftDecide.ts). The thing decided is the shape of the
+   * circles and seats, and it reads as a question while the vote is open.
+   */
+  org_draft: "A change to the structure",
+  /*
    * The vote mode became something the village decides on 2026-09-02 (Q8),
    * with its own subject type so it can carry the constitutional bar. The
    * noun is what is being decided, which is how every vote after it will be

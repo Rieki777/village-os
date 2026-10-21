@@ -14,9 +14,11 @@
  *   3. `fxRates.ts` (the other new automated writer this round) has no path
  *      to drafts at all: its file text never mentions publishDraft or
  *      orgDrafts, and its only writes hit fx_rates.
- *   4. `publishDraft` has EXACTLY ONE call site across the server's route
- *      files, inside the admin publish route, and the client vision layer
- *      never fetches a publish URL: it links a human to Admin.
+ *   4. `publishDraft` has EXACTLY ONE caller, `publishOrgDraft`, and that has
+ *      exactly the three doors the `org.decide` rulings name: the admin
+ *      publish route, a holder's publish, and the closer of a vote that
+ *      carried. A vision is none of them, and the client vision layer never
+ *      fetches a publish URL: it links a human to Admin.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -94,20 +96,41 @@ describe("fxRates cannot reach the drafts", () => {
   });
 });
 
-describe("publishDraft keeps exactly one door", () => {
-  it("is called once across the server's route files, in the admin publish route", () => {
+describe("publishDraft keeps exactly its doors", () => {
+  /*
+   * ONE DOOR BECAME THREE ON 2026-10-20, and each is a person or a vote.
+   * Rye's `org.decide` ruling (2026-09-14) is that a holder publishes live and
+   * a vote that carries publishes too, so `publishDraft` moved behind
+   * `publishOrgDraft` (server/lib/orgDraftDecide.ts), which owns the steps
+   * after the commit, and this pins the three callers by name. A fourth, from
+   * a job or a vision, fails here.
+   */
+  const callsOf = (name: string): { file: string; src: string; at: number }[] => {
     const sites: { file: string; src: string; at: number }[] = [];
-    for (const file of routeFiles()) {
+    for (const file of [...routeFiles(), "server/lib/orgDraftDecide.ts"]) {
       const src = read(file);
-      for (const m of src.matchAll(/publishDraft\(/g)) sites.push({ file, src, at: m.index });
+      for (const m of src.matchAll(new RegExp(`(?<!function )\\b${name}\\(`, "g"))) sites.push({ file, src, at: m.index });
     }
-    expect(
-      sites.map((s) => s.file),
-      "publishDraft call sites across server/index.ts and server/routes/**",
-    ).toHaveLength(1);
-    const { src, at } = sites[0];
-    const before = src.slice(Math.max(0, at - 400), at);
-    expect(before).toContain('"/api/admin/org/drafts/:id/publish"');
+    return sites;
+  };
+
+  it("is called once, by publishOrgDraft", () => {
+    const sites = callsOf("publishDraft");
+    expect(sites.map((s) => s.file)).toEqual(["server/lib/orgDraftDecide.ts"]);
+    expect(sites[0].src.slice(Math.max(0, sites[0].at - 600), sites[0].at)).toContain("export async function publishOrgDraft(");
+  });
+
+  it("publishOrgDraft has the admin route, the holder's route and the closer, and nothing else", () => {
+    const sites = callsOf("publishOrgDraft");
+    expect(sites.map((s) => s.file).sort()).toEqual([
+      "server/lib/orgDraftDecide.ts",
+      "server/routes/org.ts",
+      "server/routes/orgDraftDecide.ts",
+    ]);
+    const before = (s: { src: string; at: number }) => s.src.slice(Math.max(0, s.at - 900), s.at);
+    expect(before(sites.find((s) => s.file === "server/routes/org.ts")!)).toContain('"/api/admin/org/drafts/:id/publish"');
+    expect(before(sites.find((s) => s.file === "server/routes/orgDraftDecide.ts")!)).toContain('"/api/org/drafts/:id/publish-by-power"');
+    expect(before(sites.find((s) => s.file === "server/lib/orgDraftDecide.ts")!)).toContain("execute: async (b, actorId)");
   });
 
   it("the client vision layer links a human to Admin and fetches no publish URL", () => {

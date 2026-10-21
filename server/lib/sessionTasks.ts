@@ -10,8 +10,11 @@
  *
  *   taskBoard       one member's board: what they hold, what their seats
  *                   hold, and what they finished.
+ *   taskCount       how many tasks wait on one member, and the nearest date.
  *   answerTask      one answer, in one transaction: the state row moves, an
  *                   event is appended, the circle's open room reads it.
+ *   markTaskDone    "It's done" from a notice: the version read here, then
+ *                   answerTask's own path.
  *   circleTasksFor  the "From last time" cards of an open room.
  *   taskRecord      one session's tasks as its record shows them.
  *
@@ -69,6 +72,7 @@ import {
   validateAnswer,
   type TaskBoardPayload,
   type TaskCard,
+  type TaskCountPayload,
   type TaskRecordPayload,
   type TaskState,
   type TaskViewer,
@@ -379,6 +383,21 @@ export async function taskBoard(pool: Pool, who: Asker, deps: TaskDeps, opts: { 
   };
 }
 
+/**
+ * What waits on one member: how many tasks the board's Holding and seat groups
+ * show them, and the nearest date among those, from one count in the store.
+ * Their own numbers for their own menu and profile, read fresh each time and
+ * kept nowhere, so nothing one member reads can reach another.
+ */
+export async function taskCount(pool: Pool, who: Pick<Asker, "userId">, deps: Pick<TaskDeps, "lapseContext">): Promise<TaskCountPayload> {
+  const no = await memberNo(pool, who.userId);
+  const seats = liveSeatIdsFor(await seatingsNow(pool, deps), who.userId);
+  if (no == null && seats.length === 0) return { waiting: 0, nextDue: null };
+  const [r] = await store.waitingRows(pool, no, seats);
+  const nextDue = r?.next_due == null ? null : String(r.next_due);
+  return { waiting: Math.max(0, Number(r?.n ?? 0) || 0), nextDue: nextDue && /^\d{4}-\d{2}-\d{2}$/.test(nextDue) ? nextDue : null };
+}
+
 // ── An answer ───────────────────────────────────────────────────────────────
 
 type AnswerStep =
@@ -458,6 +477,42 @@ export async function answerTask(pool: Pool, who: Asker, entryId: number, raw: u
 
   const card = await cardFor(pool, entryId, { userId: who.userId, no: step.actorNo, admin: who.admin }, seatings, deps);
   return card ? done({ task: card }) : refuse(404, TASK_REFUSALS.notFound);
+}
+
+/**
+ * "It's done" from a notice in the bell: the done answer, with the version the
+ * server reads itself, so the page needs nothing but the task's id.
+ *
+ *   - a task this person may not see answers 404, the same as one not there
+ *   - a task they could not answer answers 403 with the refusal sentence
+ *   - a task let go answers 409 with its own sentence and the card
+ *   - a task already done answers the card as it is, and changes nothing
+ *   - an open task goes through `answerTask`, the PATCH's own path: the same
+ *     rights, the version lock, the event row and the notices
+ *
+ * Somebody else answering between the read and the lock is the version lock's
+ * 409. That is read once more, so a second "It's done" from another tab, or a
+ * facilitator marking it in the same moment, still answers with the card.
+ */
+export async function markTaskDone(pool: Pool, who: Asker, entryId: number, deps: TaskDeps, now = new Date()): Promise<Outcome<{ task: TaskCard }>> {
+  const no = await memberNo(pool, who.userId);
+  const seatings = await seatingsNow(pool, deps);
+  for (let attempt = 1; ; attempt++) {
+    const [row] = await store.taskRowsFor(pool, [entryId]);
+    if (!row) return refuse(404, TASK_REFUSALS.notFound);
+    const current = stateOf(row);
+    const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [current.sessionId], seatings);
+    const viewer = viewerFor(seen, row);
+    if (!canSeeTask(current, viewer)) return refuse(404, TASK_REFUSALS.notFound);
+    // The rights an answer would need, whatever the task's status is now.
+    if (!taskRights({ ...current, status: "open" }, viewer).answer) return refuse(403, TASK_REFUSALS.notYours);
+    if (current.status !== "open") {
+      const card = stateCard(row, seen, await bookFor(pool, [row], seatings, deps.lookup), deps);
+      return current.status === "done" ? done({ task: card }) : refuse(409, TASK_REFUSALS.letGoNotDone, { task: card });
+    }
+    const out = await answerTask(pool, who, entryId, { op: "done", version: current.version }, deps, now);
+    if (out.ok || out.status !== 409 || attempt >= 2) return out;
+  }
 }
 
 /** One task's card, as it stands now, for one asker. */

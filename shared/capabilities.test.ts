@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty keys: the nineteen the ruling was given in, and the comms power after it", () => {
+    it("is twenty-one keys: the nineteen the ruling was given in, the comms power, and the decide power", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -393,9 +393,16 @@ describe("hasCapability truth table", () => {
        * the nineteen, and the handover counts it. The comms foundation lane
        * moved this number and named it in its report for the integrator to
        * confirm, because the plan approved the power and never said the count.
+       *
+       * TWENTY-ONE SINCE 2026-10-20. `org.decide` is Rye's ruling of 2026-09-14,
+       * "by default Stewards, but an Operations or COO type role could be formed
+       * to hold this power", and on 2026-10-20 he asked for it to be
+       * transferable like the village's other powers. Holding it at launch is
+       * how the stewards hold it by default, so it joins this set by design.
        */
-      expect(HANDOVER_SET).toHaveLength(20);
+      expect(HANDOVER_SET).toHaveLength(21);
       expect(HANDOVER_SET).toContain("comms.manage");
+      expect(HANDOVER_SET).toContain("org.decide");
     });
 
     it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {

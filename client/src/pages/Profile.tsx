@@ -26,6 +26,7 @@ import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
 import TaskBoard from "@/components/profile/TaskBoard";
+import TasksWaitingCard from "@/components/profile/TasksWaitingCard";
 import ProfileJournalCard from "@/components/journal/ProfileJournalCard";
 import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
 import MoonDock from "@/components/profile/MoonDock";
@@ -401,6 +402,11 @@ export default function Profile() {
             {/* START HERE: the one next step from joining to proposing, owner only.
                 `undefined` signing means the progression read has not landed. */}
             <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
+
+            {/* YOUR TASKS. How many tasks wait on this member and the
+                nearest date, with one button down to the board. Nothing when
+                nothing waits. It reads the small count door, not the board. */}
+            <TasksWaitingCard enabled={sessionsOn} />
 
             {/* INVITE SOMEBODY, at the top of the page on Rye's ruling of
                 2026-09-09. It draws nothing until the village has answered. */}

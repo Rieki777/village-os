@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Heart, CheckCircle2, ArrowRight, Users, Home, TrendingUp, Sparkles, Send } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { authToken, useGameConfig, useVillageLinks } from "@/lib/gameApi";
+import { authToken, gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { LETTER_WORDS, letterSourceFrom, renderMembershipLetter, type ServedLetter } from "@shared/membershipLetter";
 import { useVillageContent } from "@/hooks/useVillageContent";
@@ -90,6 +90,38 @@ interface LegalContent {
  * signing is the village's words, kept as written.
  */
 
+/**
+ * WHAT HAPPENS NEXT, AS THE PRODUCT DOES IT.
+ *
+ * The thank-you used to say "You are now part of the community", promise a
+ * welcome email "within 48 hours" and a personal welcome call, and invite the
+ * signer to a first Community Circle. None of it was true. Membership waits on
+ * the people who look after joining accepting the letter (`intake.moderate`,
+ * `PUT /api/admin/submissions/:id/status`) or on enough vouches
+ * (server/routes/vouches.ts), and no code sends a welcome email, books a call
+ * or invites anybody to a circle. So the page says only what the product does:
+ *
+ *   - the letter waits with the people who look after joining;
+ *   - a signer with an account hears the answer as a notice, because the
+ *     status route notifies the account a row names (server/lib/submissionNotices.ts),
+ *     and their profile shows where it stands under What you have aligned with;
+ *   - members who know them can vouch on their public page. Said only while
+ *     the village counts vouches and the signer still needs some, read from
+ *     `GET /api/me/vouches`, which is the same rule VouchPanel uses to hide;
+ *   - a stranger has no account to notify, so somebody writes to the address
+ *     they gave, the promise the Ask to join page already makes.
+ *
+ * Unknown draws nothing: a vouch read that fails leaves its line out.
+ */
+function NextStep({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+      <p>{children}</p>
+    </div>
+  );
+}
+
 const pathOptions = [
   { id: "investor", label: "Investor / Capital Contributor", icon: TrendingUp, color: "border-amber text-amber" },
   { id: "steward", label: "Village Steward / Co-Creator", icon: Users, color: "border-sage text-sage" },
@@ -152,6 +184,24 @@ export default function LoveLetter() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  // The server's vouch sentence, once a signer with an account is in and the village still counts vouches for them.
+  const [vouchesLeft, setVouchesLeft] = useState("");
+  const signerId = user?.id ?? "";
+  useEffect(() => {
+    if (!submitted || !signerId) return;
+    let live = true;
+    gameFetch("/api/me/vouches")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (live && d?.state && !d.state.off && !d.state.met) setVouchesLeft(String(d.sentence ?? ""));
+      })
+      .catch(() => {
+        /* Unknown draws nothing. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [submitted, signerId]);
   // The covenant form's failure path used to name one village's inbox, so a
   // would-be member of any other village was told, on the worst screen of the
   // flow, to write to strangers. With no published address the sentence stops
@@ -250,6 +300,8 @@ export default function LoveLetter() {
   };
 
   if (submitted) {
+    const firstName = (user ? user.name : form.name).trim().split(/\s+/)[0] ?? "";
+    const handle = user?.handle?.trim() ?? "";
     return (
       <Layout>
         <section className="py-24 bg-background">
@@ -267,11 +319,8 @@ export default function LoveLetter() {
                 <Heart className="w-12 h-12 text-primary" fill="currentColor" />
               </motion.div>
               <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6">
-                Welcome to the {villageName} Family
+                Thank you{firstName ? `, ${firstName}` : ""}.
               </h1>
-              <p className="text-xl text-muted-foreground leading-relaxed mb-8">
-                Your membership form has been received. You are now part of the {entityName} community.
-              </p>
               {user && (
                 <p className="text-base text-foreground mb-8">
                   {LETTER_WORDS.done}{" "}
@@ -282,19 +331,25 @@ export default function LoveLetter() {
               )}
               <div className="bg-card border border-primary/20 rounded-2xl p-8 mb-8 text-left">
                 <h2 className="font-display text-2xl font-bold text-foreground mb-4">What happens next</h2>
-                <div className="space-y-4 text-muted-foreground">
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>You'll receive a welcome email from the {villageName} team within 48 hours with your membership details.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>We'll schedule a personal welcome call to learn more about your vision and which path calls to you most.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>You'll be invited to your first Community Circle and introduced to the founding community.</p>
-                  </div>
+                <div data-next-steps="" className="space-y-4 text-muted-foreground">
+                  <NextStep>Your letter is with the people who look after joining {villageName}.</NextStep>
+                  {user ? (
+                    <NextStep>You will get a notice when they answer, and your profile shows where it stands.</NextStep>
+                  ) : (
+                    <NextStep>
+                      Someone will write to you at{" "}
+                      <span className="font-medium text-foreground break-words">{form.email.trim()}</span>.
+                    </NextStep>
+                  )}
+                  {user && handle && vouchesLeft && (
+                    <NextStep>
+                      Members who know you can also vouch for you on{" "}
+                      <Link href={`/profile/${encodeURIComponent(handle)}`} className="font-semibold text-primary underline underline-offset-2">
+                        your page
+                      </Link>
+                      . {vouchesLeft}
+                    </NextStep>
+                  )}
                 </div>
               </div>
               <p className="text-lg font-accent text-primary italic mb-8">

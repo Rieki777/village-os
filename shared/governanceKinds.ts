@@ -220,7 +220,26 @@ export const NO_WINDOW_SUBJECTS: ReadonlySet<string> = new Set([
    * seat says yes), so the protection a window would add is already spent.
    */
   "village_launch",
+  /*
+   * A REORGANISATION THE VILLAGE CARRIED (`org_draft`). Rye, 2026-09-14: a
+   * holder of `org.decide` publishes live, "No when a holder publishes live it
+   * goes live!", with no window and no veto. A window on the vote that stands
+   * in for that holder would make the village's own door slower than one
+   * person's, so it lands at the close the same way. Recommended to him on
+   * that day and not yet ruled on; taking this line out gives it the ordinary
+   * Game-change window, and nothing else has to change.
+   */
+  "org_draft",
 ]);
+
+/**
+ * What a member reads about a no-window landing, where the Birthing's sentence
+ * (about a seat) would not be true. Absent means the Birthing's sentence.
+ */
+const NO_WINDOW_BECAUSE: Readonly<Record<string, string>> = {
+  org_draft:
+    "This one takes effect the moment it carries, the same as when a holder of the power publishes a change to the structure.",
+};
 
 /** Does this subject skip the window entirely and execute the moment it carries? */
 export function executesAtPassWithNoWindow(subjectType: string): boolean {
@@ -317,6 +336,8 @@ export interface LandingInput {
   nextBoundaryAfter: (after: Date) => Date;
   /** True for a subject that executes at pass with no window at all. */
   noWindow?: boolean;
+  /** The subject, so a no-window landing says the sentence that is true of it. */
+  subjectType?: string;
   /**
    * TRUE WHEN NOBODY MAY STOP THIS ONE, and the window stays anyway.
    *
@@ -468,7 +489,7 @@ export function landingFor(input: LandingInput): Landing {
       vetoClosesAt: null,
       executesAtClose: true,
       vetoable: false,
-      because: "This one takes effect the moment it carries. A seat is not something the seat can hold on to.",
+      because: NO_WINDOW_BECAUSE[String(input.subjectType ?? "").toLowerCase()] ?? "This one takes effect the moment it carries. A seat is not something the seat can hold on to.",
     };
   }
 
