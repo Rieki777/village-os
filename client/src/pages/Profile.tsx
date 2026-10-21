@@ -15,6 +15,8 @@ import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
 import InvitePanel from "@/components/profile/InvitePanel";
+import StartHereCard from "@/components/profile/StartHereCard";
+import type { MembershipSigning } from "@shared/membershipSigning";
 import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
@@ -111,6 +113,8 @@ export default function Profile() {
     /** Mandatory-module progress, absent on a server that predates the field. */
     training?: { done: number; required: number };
     capabilityCatalogue: ProgressionCapability[];
+    /** This member's signed letter and the village's answer (shared/membershipSigning.ts). */
+    signing?: MembershipSigning | null;
   } | null>(null);
   /*
    * ONE READ OF /api/game/me, AND IT IS WHAT MAKES THE BALANCE CORRECT.
@@ -395,7 +399,11 @@ export default function Profile() {
               </motion.button>
             </div>
 
-            {/* WAITING ON YOU. How many tasks wait on this member and the
+            {/* START HERE: the one next step from joining to proposing, owner only.
+                `undefined` signing means the progression read has not landed. */}
+            <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
+
+            {/* YOUR TASKS. How many tasks wait on this member and the
                 nearest date, with one button down to the board. Nothing when
                 nothing waits. It reads the small count door, not the board. */}
             <TasksWaitingCard enabled={sessionsOn} />

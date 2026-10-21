@@ -26,6 +26,12 @@
  * never the key, and even the last four characters that reading carries are
  * left off this screen: "set" is what a founder needs to know here.
  *
+ * ── THE SCHEDULE BESIDE THE BUTTON ───────────────────────────────────────
+ *
+ * Sync now has a schedule beside it (off, daily, every six hours), saved
+ * through the same config route as the addresses, and the report of every run
+ * under it. Both live in `SaberraSyncSchedule.tsx`, which says what they show.
+ *
  * Light-only, by the founder's ruling on the admin workspace: fixed light inks,
  * the same zone as every other panel in this directory
  * (scripts/check-tailwind-gray.mjs LIGHT_SURFACES).
@@ -34,8 +40,10 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { MODULES_BY_ID } from "@shared/modules";
+import type { SyncFailureWhy } from "@shared/saberraSyncLog";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useModuleConfig } from "./ModuleConfigPanels";
+import { ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
 
@@ -57,15 +65,8 @@ interface Status {
   addressSet: boolean;
 }
 
-/** How a call failed, as `server/lib/saberraClient.ts` names it. */
-type FailureWhy = "no-session" | "refused" | "unreadable" | "vendor-error";
-
-const WHY_WORDS: Record<FailureWhy, string> = {
-  "no-session": "no session was open",
-  refused: "the call did not go through",
-  unreadable: "the reply could not be read",
-  "vendor-error": "the service said no",
-};
+/** How a call failed, as `server/lib/saberraClient.ts` names it. The words are in `WHY_WORDS`. */
+type FailureWhy = SyncFailureWhy;
 
 /**
  * Whose detail is repeated on screen: a refusal's, which is a status or a
@@ -122,6 +123,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [syncProblem, setSyncProblem] = useState<string | null>(null);
+  /** Moves whenever a run or a schedule change should be read back into the log. */
+  const [runsVersion, setRunsVersion] = useState(0);
+  const rereadRuns = useCallback(() => setRunsVersion((v) => v + 1), []);
 
   const on = !loading && lifecycle !== "off";
 
@@ -229,6 +233,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
       setSyncProblem("The sync did not reach the server, so nothing ran.");
     } finally {
       setSyncing(false);
+      // A refusal is news for the log too: a press that found a scheduled
+      // sync running is answered with that, and the run appears below.
+      rereadRuns();
     }
   };
 
@@ -287,10 +294,18 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
         {loading ? (
           <p className="text-sm text-gray-500">Loading…</p>
         ) : !on ? (
-          <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4">
-            The module is off. The addresses you save now are kept. The connection can be checked
-            and a sync run once the module is on, and preview is enough for that.
-          </p>
+          <>
+            <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-4">
+              The module is off. The addresses you save now are kept. The connection can be checked
+              and a sync run once the module is on, and preview is enough for that.
+            </p>
+            <div className="mt-3">
+              <ScheduleControl config={config} save={save} onSaved={rereadRuns} />
+              <p className="text-[11px] text-gray-500 mt-1">
+                A schedule saved now starts once the module is on.
+              </p>
+            </div>
+          </>
         ) : (
           <>
             {statusProblem && (
@@ -336,13 +351,17 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
               </ul>
             )}
 
-            <button type="button" className={btnCls} disabled={syncing} onClick={onSync}>
-              <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
-              {syncing ? "Syncing…" : "Sync now"}
-            </button>
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+              <button type="button" className={btnCls} disabled={syncing} onClick={onSync}>
+                <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+                {syncing ? "Syncing…" : "Sync now"}
+              </button>
+              <ScheduleControl config={config} save={save} onSaved={rereadRuns} />
+            </div>
             <p className="text-[11px] text-gray-500 mt-1">
               Reads what the service holds and puts its suggestions in the review queue. Nothing
-              changes until somebody accepts one there.
+              changes until somebody accepts one there. On a schedule, a sync sends something to the
+              queue only when the service holds something new.
             </p>
 
             {syncProblem && (
@@ -351,6 +370,7 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
               </p>
             )}
             {result && <SyncAnswer result={result} />}
+            <SyncRunLog password={password} version={runsVersion} />
           </>
         )}
       </div>
