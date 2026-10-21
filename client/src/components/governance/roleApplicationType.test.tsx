@@ -127,12 +127,12 @@ describe("a wizard opened from a seat", () => {
       type: "role_application",
       answers: { seatIds: ["seat-host", "seat-kitchen", "seat-orchard"] },
     });
-    expect(roleApplicationStart("?type=role_application&seats=seat-a,seat-b,,seat-a&seat=seat-c")).toEqual({
+    expect(roleApplicationStart("?type=role_application&seats=seat-alder,seat-birch,,seat-alder&seat=seat-cedar")).toEqual({
       type: "role_application",
-      answers: { seatIds: ["seat-a", "seat-b", "seat-c"] },
+      answers: { seatIds: ["seat-alder", "seat-birch", "seat-cedar"] },
     });
     // A season rides along with the list, as it does with one seat.
-    expect(roleApplicationStart(searchOf(["seat-a", "seat-b"], { seasonId: "s-next" }))?.answers).toEqual({ seatIds: ["seat-a", "seat-b"], seasonId: "s-next" });
+    expect(roleApplicationStart(searchOf(["seat-alder", "seat-birch"], { seasonId: "s-next" }))?.answers).toEqual({ seatIds: ["seat-alder", "seat-birch"], seasonId: "s-next" });
   });
 
   it("hands six seats to the seats step as they came, and the step refuses the sixth in its own words", () => {

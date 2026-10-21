@@ -78,9 +78,9 @@ describe("Your roles, for a member", () => {
       data: {
         applications: [
           app("sa-0000000000000001"),
-          app("sa-0000000000000002", { status: "awaiting-holder", statusWords: "Waiting for a seat holder", seats: [{ id: "seat-a", name: "Seed keeper", aim: null }, { id: "seat-b", name: "Path warden", aim: null }], createdAt: "2027-02-05T00:00:00.000Z" }),
-          app("sa-0000000000000003", { status: "adopted", statusWords: "Adopted", seats: [{ id: "seat-x", name: "Adopted seat", aim: null }] }),
-          app("sa-0000000000000004", { you: { isCandidate: false }, seats: [{ id: "seat-y", name: "Someone else's seat", aim: null }] }),
+          app("sa-0000000000000002", { status: "awaiting-holder", statusWords: "Waiting for a seat holder", seats: [{ id: "seat-alder", name: "Seed keeper", aim: null }, { id: "seat-birch", name: "Path warden", aim: null }], createdAt: "2027-02-05T00:00:00.000Z" }),
+          app("sa-0000000000000003", { status: "adopted", statusWords: "Adopted", seats: [{ id: "seat-xylem", name: "Adopted seat", aim: null }] }),
+          app("sa-0000000000000004", { you: { isCandidate: false }, seats: [{ id: "seat-yarrow", name: "Someone else's seat", aim: null }] }),
         ],
       },
     });
