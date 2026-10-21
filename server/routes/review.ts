@@ -105,6 +105,7 @@ import {
   rejectQuestProposal,
   type HumanReward,
 } from "../lib/questProposals";
+import { withdrawDraftBallot } from "../lib/orgDraftDecide";
 import { register as registerStructureReview } from "./structureReview";
 import { circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
 
@@ -214,7 +215,7 @@ export function register(app: Express, deps: Deps): void {
   // The structure change review reads and accepts a batch whole, with a
   // steward's decisions. Same key as this queue, so it registers from here.
   registerStructureReview(app, deps);
-  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin } = deps;
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -684,6 +685,10 @@ export function register(app: Express, deps: Deps): void {
     const actor = await actorId(req);
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Withdrawing a draft needs a named person" });
     const draftId = String(req.params.id);
+    // A vote on the draft goes first, and refusing it leaves the draft as it
+    // was: cast votes are discarded only by an admin or a proposal.decide holder.
+    const vote = await withdrawDraftBallot(getPool(), draftId, actor, (await isAdmin(req)) || (await mayAct(req, "proposal.decide")).ok);
+    if (!vote.ok) return res.status(409).json({ error: vote.error, ballotId: vote.ballotId });
     const r = await withdrawDraft(getPool(), draftId);
     // `draftStatus` tells this refusal apart from the break-glass one, which is
     // also a 409 and changes nothing about the draft.
@@ -695,7 +700,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor,
       audience: "admin",
     });
-    res.json({ success: true, reopened });
+    res.json({ success: true, reopened, ballotWithdrawn: vote.ballotId });
   });
   app.post("/api/review/batches/:batchId/accept", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;

@@ -353,6 +353,7 @@ export function landingOf(deps: Pick<LandingDeps, "vetoHours" | "nextBoundaryAft
     vetoHours: vetoHoursFrom(deps.vetoHours()),
     nextBoundaryAfter: deps.nextBoundaryAfter,
     noWindow: executesAtPassWithNoWindow(b.subjectType),
+    subjectType: b.subjectType,
     // A seating waits its window and admits no veto (2026-09-04). It reaches
     // the same flag as the other two, because all three are one fact to the
     // route and the notice: no steward may stop this row.

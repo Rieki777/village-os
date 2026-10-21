@@ -115,6 +115,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/admin/org/roles/:id/holders"],
   },
   {
+    capability: "org.decide",
+    title: "The village's structure",
+    surface: "Publishing a reorganisation of the circles and seats, or putting it to the village",
+    routes: ["/api/org/drafts/:id/publish-by-power", "/api/admin/org/drafts/:id/publish"],
+  },
+  {
     capability: "org.declare",
     title: "The village's own shape",
     surface: "Declaring the circles, the seats, and how each one decides",

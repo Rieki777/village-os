@@ -76,6 +76,7 @@ import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
+import { register as registerOrgDraftDecideRoutes } from "./routes/orgDraftDecide";
 import { register as registerSeasonRoutes } from "./routes/seasons";
 import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
@@ -22927,6 +22928,7 @@ ${inner}
    */
   setVetoWindowCheck(vetoWindowOn);
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
+  registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
   /**
@@ -25844,7 +25846,7 @@ ${inner}
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
     capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins, circlesRepo,
-    submissionsRepo,
+    submissionsRepo, liveHoldersOf,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
