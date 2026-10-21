@@ -40,6 +40,8 @@ export const GATE_LINES: Record<string, string> = {
   badges: "The skills members declare here, and the badges their finished work has earned them.",
   commerce:
     "What this project charges for and what it accepts: application fees, donations, deposits and memberships.",
+  comms:
+    "The emails the village sends: reminders for gatherings you said yes to, the letters you asked for, and a way to stop any kind of email with one click.",
   crowdpool: "The funding ring, the shelf of what is still needed, and the ledger of who has arrived.",
   events: "Gatherings with a time, a place, and a seat you can take.",
   exchange: "Buying this village's own tokens.",
