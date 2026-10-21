@@ -38,7 +38,7 @@
  * do not act. Once opened, each notice inside it is a single notice again and
  * NotificationBell draws this under it.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { gameFetch } from "@/lib/gameApi";
 import { ROOM_COPY } from "@shared/sessions";
@@ -115,7 +115,11 @@ export default function BellTaskActions({ entryId, what, onRead, onLeave, who = 
     };
   }, []);
 
-  useEffect(() => {
+  // A layout effect, so focus moves in the same commit that swaps the button.
+  // A passive effect ran a frame later: Escape pressed inside that frame put
+  // focus back on the bell, then this effect pulled it into the closing panel
+  // and it fell to the page.
+  useLayoutEffect(() => {
     const next = focusNext.current;
     if (!next) return;
     focusNext.current = null;
