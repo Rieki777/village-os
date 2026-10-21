@@ -1,6 +1,7 @@
 /**
- * The outside governance service, as four routes: the status, the sync, a
- * seat's facts, and what the journal bridge would send (nothing yet).
+ * The outside governance service, as five routes and one scheduled job: the
+ * status, the sync, its run log, a seat's facts, and what the journal bridge
+ * would send (nothing yet).
  *
  * ── WHY A PULL AND NOT AN INBOX ──────────────────────────────────────────
  *
@@ -48,67 +49,46 @@
  * `saberraKinds.ts` turns that into which kinds to ask for, under which
  * argument. A kind this village holds and the service does not offer is a
  * named line in the answer (`notOffered`), never an absence.
+ *
+ * ── THE SYNC ITSELF LIVES IN `server/lib/saberraSync.ts` ─────────────────
+ *
+ * So the schedule beside Sync now runs exactly the code a press runs. This
+ * file keeps the gates. Every sync runs under one named lock, a press that
+ * finds one running is answered 409, and each run, pressed or scheduled, is
+ * written to a log of the last twenty that `GET /api/saberra/runs` answers.
+ * The job checks every scheduler tick and calls the service only when the
+ * module's `pollSchedule` says it is due; off, the default, never calls it.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { instanceIdentity } from "../lib/identity";
-import { landProposal } from "../lib/externalProposals";
-import { listOrgRoles } from "../lib/orgChart";
-import { moduleConfig } from "../lib/modules";
-import { MODULES_BY_ID, httpsAddress } from "@shared/modules";
+import { POLL_JOB, pollOnce, syncByHand, syncRunsAnswer } from "../lib/saberraSync";
 import { readConnection } from "../lib/saberraConnection";
-import { splitStreams } from "../lib/saberraStreams";
-import { proposeStructure } from "../lib/saberraProposals";
-import { callTool, listTools, openSession } from "../lib/saberraClient";
-import { KIND_LABEL, planKinds } from "../lib/saberraKinds";
-import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "../lib/secrets";
-import { factsForEntity, moduleFactCount, upsertFacts } from "../repos/moduleFacts";
+import { registerJob, TICK_MS } from "../lib/scheduler";
+import { secretStatus, villageSecretsConfigured, villageSecretsKeyProblem } from "../lib/secrets";
+import { moduleConfig } from "../lib/modules";
+import { httpsAddress } from "@shared/modules";
+import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
-import type { VendorRecord } from "../lib/saberraProposals";
-import type { SaberraRecordKind } from "../lib/saberraRecords";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
 const MODULE_ID = "saberra";
 const SECRET_KEY = "sera_api_secret";
-/** `landProposal` refuses an identifier over this, so it is clipped rather than refused. */
-const ID_MAX = 64;
-/** Their page ceiling. More than this many pages is a village, not a sync. */
-const MAX_PAGES = 20;
 
-/**
- * The service's address for THIS village, from the store.
- *
- * An https scheme is required and checked with a real parse, because the
- * village's key is about to be sent to whatever comes back from here. The rule
- * is `httpsAddress`, the same one the module's config validator refuses a save
- * with, so an address that saved is an address this will call.
- */
-function serviceUrl(): string | null {
+/** Whether the store holds an https address for the service. The rule is `httpsAddress`, as the sync's. */
+function addressSet(): boolean {
   const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
-  return httpsAddress(cfg.apiUrl);
-}
-
-/** Read one vendor record into the shape the boundary expects, believing nothing. */
-function asVendorRecord(kind: SaberraRecordKind, raw: unknown): VendorRecord | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const r = raw as Record<string, unknown>;
-  const id = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
-  if (id === "") return null;
-  const fields =
-    r.fields && typeof r.fields === "object" && !Array.isArray(r.fields)
-      ? (r.fields as Record<string, unknown>)
-      : r;
-  const url = typeof r.url === "string" ? r.url : undefined;
-  return { id, kind, fields, url };
-}
-
-function sameName(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+  return httpsAddress(cfg.apiUrl) !== null;
 }
 
 export function register(app: Express, deps: Deps): void {
   const { guardCapability, getPool, authedUser } = deps;
+
+  // The pool is read when the job RUNS, never when it is registered: this runs
+  // during boot, before the pool is guaranteed to be the one the village uses.
+  // Every tick, so a schedule saved in the panel is honoured within one; the
+  // job itself decides whether anything is due, and off calls nothing.
+  registerJob(POLL_JOB, TICK_MS, () => pollOnce(getPool()));
 
   /** What a steward needs before pressing anything. */
   app.get("/api/saberra/status", async (req, res) => {
@@ -116,7 +96,7 @@ export function register(app: Express, deps: Deps): void {
     try {
       const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
       const held = await moduleFactCount(getPool(), MODULE_ID);
-      res.json({ connection, held, addressSet: serviceUrl() !== null });
+      res.json({ connection, held, addressSet: addressSet() });
     } catch {
       res.status(500).json({ error: "Could not read the connection." });
     }
@@ -144,200 +124,30 @@ export function register(app: Express, deps: Deps): void {
   /**
    * Fetch what the service holds and land it as proposals.
    *
-   * Every refusal is NAMED. A sync that answers "nothing happened" is the
-   * report that costs an afternoon, so an unreadable reply, a refused call and
-   * a genuinely empty village are three different answers here.
+   * Every refusal is NAMED, and the read, the landing and the answer are in
+   * `server/lib/saberraSync.ts`. A sync already running is its own refusal.
    */
   app.post("/api/saberra/sync", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
-
-    const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
-    if (!connection.mayCall) {
-      res.status(409).json({ error: connection.sentence, state: connection.state });
-      return;
+    try {
+      const { status, body } = await syncByHand(getPool());
+      res.status(status).json(body);
+    } catch {
+      res.status(500).json({ error: "The sync stopped on an error in this village's server." });
     }
-    const token = secretValue(SECRET_KEY);
-    const baseUrl = serviceUrl();
-    if (!token || !baseUrl) {
-      res.status(409).json({
-        error: "This village has no https address for the service yet. Set it on the module before syncing.",
-        state: "not-connected",
-      });
-      return;
+  });
+
+  /**
+   * The schedule, when it next calls the service, and the last twenty runs.
+   * The same gate as the button, because it is the button's report.
+   */
+  app.get("/api/saberra/runs", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json(await syncRunsAnswer(getPool()));
+    } catch {
+      res.status(500).json({ error: "Could not read the sync log." });
     }
-
-    const client = { baseUrl, token, fetchImpl: fetch as never };
-    const sessionId = await openSession(client);
-    if (!sessionId) {
-      res.status(502).json({ error: "The service did not open a session. Its address or the key may be wrong." });
-      return;
-    }
-
-    // What to ask for, read off the service's own schema where it gives one.
-    // A failed read is not a failed sync: the plan falls back to the mail and
-    // its note says so.
-    const listing = await listTools(client, sessionId);
-    const plan = listing.ok ? planKinds(listing.tools) : planKinds(null, listing.detail);
-
-    const records: VendorRecord[] = [];
-    const failures: { kind: string; label: string; why: string; detail: string }[] = [];
-    const truncated: string[] = [];
-    for (const { kind, wire } of plan.ask) {
-      let cursor: string | null = null;
-      let pages = 0;
-      do {
-        const r = await callTool(client, sessionId, "list_records", {
-          [plan.argument]: wire,
-          limit: 100,
-          ...(cursor ? { cursor } : {}),
-        });
-        if (!r.ok) {
-          failures.push({ kind, label: KIND_LABEL[kind], why: r.why, detail: r.detail });
-          break;
-        }
-        for (const raw of r.records) {
-          const rec = asVendorRecord(kind, raw);
-          if (rec) records.push(rec);
-        }
-        cursor = r.cursor;
-        pages += 1;
-        // A cursor still in hand at the ceiling means we stopped early, and a
-        // steward is told rather than handed a smaller number as a success.
-        // Named the way the steward reads a kind, since the panel prints it.
-        if (cursor && pages >= MAX_PAGES) {
-          truncated.push(KIND_LABEL[kind]);
-          break;
-        }
-      } while (cursor);
-    }
-
-    const pool = getPool();
-    const reading = splitStreams(records);
-    const villageId = instanceIdentity().instanceId;
-
-    /*
-     * ATTACH EACH FACT TO A SEAT THIS VILLAGE ALREADY HAS, by the name the
-     * vendor used. Unresolved is a real state and stays null: a seat we have
-     * not created yet is exactly what a proposal is for.
-     */
-    const liveRoles = await listOrgRoles(pool);
-    const seatIdFor = (name: string | null): string | null => {
-      if (!name) return null;
-      const hit = liveRoles.find((r) => sameName(String(r.name ?? ""), name));
-      return hit ? String(hit.id) : null;
-    };
-
-    await upsertFacts(
-      pool,
-      villageId,
-      MODULE_ID,
-      reading.facts.map((f) => {
-        const isCircle = f.vendorKind === "circle";
-        return {
-          entityKind: isCircle ? "circle" : "org_role",
-          entityId: isCircle ? null : seatIdFor(f.attachesTo),
-          vendorKind: f.vendorKind,
-          vendorRecordId: f.vendorRecordId,
-          attachesTo: f.attachesTo,
-          fields: f.fields,
-          sourceUrl: f.url,
-        };
-      }),
-    );
-
-    /*
-     * ONE `org.proposed` FOR THE WHOLE STRUCTURE, built by the translator.
-     *
-     * An earlier version landed each role as its own proposal carrying the
-     * vendor's raw keys. `readProposedSeats` looks for `name`, `circleName` and
-     * the rest, so every one of those arrived with no name and an unreadable
-     * circle, and a steward could not have accepted any of them. The translator
-     * existed the whole time and nothing called it.
-     */
-    const batchId = `sync-${sessionId}`.slice(0, ID_MAX);
-    const sourceName = MODULES_BY_ID[MODULE_ID]?.name ?? "the connected service";
-    const landed: { kind: string; ok: boolean; reason?: string }[] = [];
-    /*
-     * PRESSING SYNC AGAIN REPLACES WHAT IS STILL WAITING. A changed claim about
-     * the same thing supersedes the waiting one (`landProposal`'s identity
-     * key); an unchanged one is moved into this delivery (`rebatchWaiting`),
-     * so the newest read is one batch a steward can review whole. Anything a
-     * steward already decided is history and is left exactly as it is.
-     */
-    let superseded = 0;
-    let rebatched = 0;
-    const note = (r: Awaited<ReturnType<typeof landProposal>>) => {
-      if (!r.ok) return;
-      superseded += r.superseded;
-      if (r.rebatched) rebatched += 1;
-    };
-
-    // The circles go in WITH the roles: a role names its circle by page id,
-    // and the circle record is where that id becomes a name.
-    const roleRecords = records.filter((r) => r.kind === "role");
-    let circleReading: ReturnType<typeof proposeStructure>["circles"] | null = null;
-    if (roleRecords.length > 0) {
-      const structure = proposeStructure(
-        records.filter((r) => r.kind === "role" || r.kind === "circle"),
-        { sourceName },
-      );
-      circleReading = structure.circles;
-      if (structure.payload.seats.length > 0) {
-        const r = await landProposal(pool, {
-          villageId,
-          moduleId: MODULE_ID,
-          batchId,
-          kind: structure.kind,
-          payload: structure.payload,
-          trustTier: "extracted_unreviewed",
-          rebatchWaiting: true,
-        });
-        note(r);
-        landed.push(r.ok ? { kind: structure.kind, ok: true } : { kind: structure.kind, ok: false, reason: r.reason });
-      }
-    }
-
-    // Tensions and risks land one apiece: each is a separate thing observed,
-    // and the queue shows them as notes rather than as chart changes.
-    for (const group of reading.structure) {
-      if (group.kind === "org.proposed") continue;
-      for (const rec of group.records) {
-        const fact = reading.facts.find((f) => f.vendorRecordId === rec.id);
-        const r = await landProposal(pool, {
-          villageId,
-          moduleId: MODULE_ID,
-          batchId,
-          kind: group.kind,
-          payload: { ...(fact?.fields ?? {}), vendorRecordId: rec.id },
-          sourceRef: (rec.url ?? rec.id).slice(0, 400),
-          trustTier: "extracted_unreviewed",
-          rebatchWaiting: true,
-        });
-        note(r);
-        landed.push(r.ok ? { kind: group.kind, ok: true } : { kind: group.kind, ok: false, reason: r.reason });
-      }
-    }
-
-    res.json({
-      landed: landed.filter((l) => l.ok).length,
-      refused: landed.filter((l) => !l.ok),
-      batchId,
-      // Waiting proposals this read replaced, and unchanged ones it carried forward.
-      superseded,
-      rebatched,
-      // How each role's circle was read: placed, unresolved, absent, and the
-      // SHAPE the field arrived in (never its value), so the shape is measured.
-      circles: circleReading,
-      facts: reading.facts.length,
-      attached: reading.facts.filter((f) => f.vendorKind !== "circle" && seatIdFor(f.attachesTo)).length,
-      held: reading.held,
-      unmapped: reading.unmapped,
-      addressesSeen: reading.addressesSeen,
-      truncated,
-      failures,
-      notOffered: plan.notOffered,
-      asked: { argument: plan.argument, kinds: plan.ask.map((a) => a.wire), source: plan.source, note: plan.note },
-    });
   });
 
   /**

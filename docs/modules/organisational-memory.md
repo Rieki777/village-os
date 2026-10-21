@@ -19,6 +19,9 @@ connection: its own address at the service and its own token.
   Memory, Settings). This village **pulls** from the service; the service never pushes
   to us. That is why the listing declares `on-demand` liveness: silence between calls is
   normal and is not a failure.
+- Beside the button, a founder can set the module to **sync by itself**, daily or every
+  six hours. Off is the default. Every run, pressed or scheduled, is reported in full under
+  the button. See "Syncing on a schedule" below.
 - What comes back is sorted into two halves and only one of them can move today.
 - Suggestions land in the **review queue** that already exists. A steward reads, edits,
   accepts or refuses them, and the change limit, the preview and the publish step apply
@@ -141,6 +144,65 @@ the newest batch is whole. Accepted, rejected and superseded proposals are left 
 are. A proposal stored before this could read relations cannot be repaired from what is
 stored; the next sync replaces it.
 
+## Syncing on a schedule
+
+The founder's commitment to the vendor (2026-10-13) was a polling schedule beside the Sync
+now button, live in the module's settings, with a full report of each run. The code is
+`server/lib/saberraSync.ts` (the sync and both ways it starts), `server/lib/saberraPolling.ts`
+(the arithmetic) and `client/src/components/admin/SaberraSyncSchedule.tsx` (the control and
+the report).
+
+- **The setting** is `pollSchedule` in the module's config: `off` (the default, and what an
+  absent key reads as), `daily` or `every-6-hours`, saved through the same `validateConfig`
+  the config route runs.
+- **Off never calls the service** and writes nothing. On, the scheduler's `saberra-poll` job
+  checks every tick (five minutes) and calls the service only while the module is not off,
+  a key and an https address are set, and the schedule's gap has passed.
+- **A missing key or address is said once.** The check writes one "Not run" entry and says
+  nothing more while the newest entry already says it. It is written again only after
+  something else has happened since.
+- **Only a real change makes a batch.** A press of Sync now replaces what is waiting (the
+  section above), which is right for the person about to review. A schedule presses nobody's
+  button, and every six hours it would keep moving a steward's open batch out from under
+  them. So a scheduled read is fingerprinted (a hash of each record's kind, id, link and the
+  fields the boundary lets cross, keys and records sorted). When it matches the last read
+  that **landed**, the run is logged as "No changes" and the review queue and the facts are
+  not touched. A press lands as it always has, and its read becomes the one the schedule
+  compares against. A change only in a field the boundary drops is no change, because nothing
+  this village would propose moved. The first scheduled run after this shipped has nothing to
+  compare with, and lands once.
+- **Half a read is not a change.** A scheduled read with any kind failing lands nothing and
+  counts as a failure. A press still lands what it could read, as before, and its report says
+  which kinds failed.
+- **Never two at once.** Every sync runs under one named database lock (`withNamedLock`,
+  `server/repos/namedLock.ts`, the lock the failed-actions job runs under). A press that finds
+  a sync running is answered 409 ("A sync is already running"), and a scheduled check that
+  finds one waits for its next tick. The lock belongs to one database session, so a process
+  that dies mid-sync releases it.
+- **The clock** is the last run that called the service, pressed or scheduled, so a press
+  pushes the next scheduled run out by a whole gap. **Backoff:** one failure retries on the
+  schedule; from the second failure in a row the gap doubles, up to four times the schedule
+  (every six hours becomes twelve, then twenty-four; daily becomes two days, then four). It
+  never shrinks below the schedule. Any whole read resets it. A press that landed only part
+  of a read neither resets it nor counts as a failure. The panel says when it is backing off
+  and by how much.
+- **The run log** is the last twenty runs, one `app_config` document (`saberra-sync-runs`),
+  each with when it started, scheduled or by hand, its outcome, the counts (records read,
+  suggestions landed, carried forward, replaced, refused, facts stored, records held back,
+  records that carried an address), the kinds not offered, the kinds cut short, each failed
+  kind and how, how the roles' circles were read with the shapes line (an object's keys taken
+  out, and a shape holding any other text dropped), how the kinds were chosen, and one
+  sentence from a fixed table when something went wrong. **Typed fields only:**
+  never the key, never a field name or value, never the service's own words, never a
+  failure's detail. `readLog` rebuilds every run from its types on the way out too.
+- **The panel** shows the schedule beside Sync now, the next scheduled time in the village's
+  own timezone (named), and the log under the button. The schedule can be set while the
+  module is off and starts when it goes on.
+- **No migration.** The setting is module config and the log is an `app_config` document.
+
+The other half of that commitment, a signed receiver for the service's event feed with its
+own inbound token, waits for the vendor to have an event feed. Nothing here receives.
+
 ## Configuration
 
 `module_settings.config`:
@@ -149,10 +211,13 @@ stored; the next sync replaces it.
 |---|---|
 | `apiUrl` | the service's address for THIS village. Must be https. The sync sends the village's sealed credential here. |
 | `dashboardUrl` | where the module's link out to the service opens. |
+| `pollSchedule` | how often the module syncs by itself: `off` (default; absent reads as off), `daily`, `every-6-hours`. |
 
 Both are set on the module's card in Admin (`client/src/components/admin/SaberraConfigPanel.tsx`),
 which is where the module's readiness link (`?setting=config`) lands. The same panel shows
 the connection (key set or not, address set or not, facts held) and holds **Sync now**.
+Under Sync now, its schedule and the run log, it lists what the journal bridge would send
+(`SaberraOutboxPanel.tsx`), without the words.
 The key itself is never entered there: the panel links to Admin, Integrations.
 
 The panel saves **only the fields somebody edited**, over a fresh read of the stored config.
@@ -175,11 +240,12 @@ and be sent the village's key.
 
 | Action | Gate |
 |---|---|
-| cause a sync, read connection status | `intake.moderate` |
+| cause a sync, read connection status, read the run log (`GET /api/saberra/runs`) | `intake.moderate` |
+| set the schedule | admin, through the module config route like the addresses |
 | read what the journal bridge would send (`GET /api/saberra/outbox`) | `intake.moderate`. Kind, date, code-name, length and status only, never the words. |
 | read what the service holds about a seat | signed in, module on. No capability. |
 
-The second is deliberate: the question that panel answers is whether to put your hand up
+The last is deliberate: the question that panel answers is whether to put your hand up
 for a seat, and that is not a steward's question.
 
 ## What it does not do yet
@@ -197,6 +263,8 @@ for a seat, and that is not a steward's question.
   writing is closer to `member-pii` than to `village-content`, and the registry comment on
   the listing names what that class needs before it goes live.
 - **Seatings are not proposed.** That is the people half.
+- **Nothing is received.** The service has no event feed yet, so there is no inbound
+  endpoint and no inbound token. The schedule pulls.
 
 ## Turning it off
 

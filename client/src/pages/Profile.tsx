@@ -15,6 +15,8 @@ import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import StandingRow from "@/components/profile/StandingRow";
 import InvitePanel from "@/components/profile/InvitePanel";
+import StartHereCard from "@/components/profile/StartHereCard";
+import type { MembershipSigning } from "@shared/membershipSigning";
 import PathFacts from "@/components/profile/PathFacts";
 import QuietSection from "@/components/profile/QuietSection";
 import { SHEET_SECTIONS } from "@/components/profile/sheetSections";
@@ -88,6 +90,7 @@ export default function Profile() {
   const { user, logout, loading, updateProfile } = useAuth();
   const redemptionModule = useModule("redemption");
   const sessionsOn = useModuleOn("sessions");
+  const governanceOn = useModuleOn("governance");
   const [editingBio, setEditingBio] = useState(false);
   const [bioText, setBioText] = useState(user?.bio || "");
   const [savingBio, setSavingBio] = useState(false);
@@ -109,6 +112,8 @@ export default function Profile() {
     /** Mandatory-module progress, absent on a server that predates the field. */
     training?: { done: number; required: number };
     capabilityCatalogue: ProgressionCapability[];
+    /** This member's signed letter and the village's answer (shared/membershipSigning.ts). */
+    signing?: MembershipSigning | null;
   } | null>(null);
   /*
    * ONE READ OF /api/game/me, AND IT IS WHAT MAKES THE BALANCE CORRECT.
@@ -393,6 +398,10 @@ export default function Profile() {
               </motion.button>
             </div>
 
+            {/* START HERE: the one next step from joining to proposing, owner only.
+                `undefined` signing means the progression read has not landed. */}
+            <StartHereCard ownerId={user.id} me={me} signing={prog ? (prog.signing ?? null) : undefined} config={config} catalogue={prog?.capabilityCatalogue} />
+
             {/* INVITE SOMEBODY, at the top of the page on Rye's ruling of
                 2026-09-09. It draws nothing until the village has answered. */}
             <InvitePanel />
@@ -450,13 +459,14 @@ export default function Profile() {
                 />
               ) : null}
 
-              {/* Every task taken on in a live session, and what this member's
-                  seats hold. Emails and notices land on #my-tasks, and
-                  `scroll-mt-28` keeps the board's heading clear of the fixed
-                  site header (about 96px) when they do. */}
-              {sessionsOn && (
+              {/* Every task taken on in a live session, what this member's
+                  seats hold, and what waits on a power they hold, which is
+                  governance and so stands with sessions off. Emails and
+                  notices land on #my-tasks, and `scroll-mt-28` keeps the
+                  board's heading clear of the fixed site header (about 96px). */}
+              {(sessionsOn || governanceOn) && (
                 <div id={TASK_BOARD_ANCHOR} className="scroll-mt-28">
-                  <TaskBoard />
+                  <TaskBoard sessions={sessionsOn} />
                 </div>
               )}
 

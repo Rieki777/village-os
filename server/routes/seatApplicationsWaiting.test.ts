@@ -1,0 +1,398 @@
+/**
+ * WAITING ON YOU, END TO END: the approve flow for seat applications over real
+ * HTTP and the S5 scratch schema (shared/waitingOnYou.ts).
+ *
+ * What is pinned:
+ *
+ *   - three holders A (the applicant), B and C: A applies, B and C each get
+ *     the holder notice and A does not; B and C each see the row on their
+ *     task board read, and A does not; B aligns for the village; A hears it
+ *     was adopted; the row leaves B's and C's groups;
+ *   - the row names the seats, their circle, the applicant's first name and
+ *     the day, and carries no money even when the terms do;
+ *   - put to the village, and withdrawn, each take the row off every board;
+ *   - the 48 hour reminder lands once for a holder who did nothing, never
+ *     twice however often the job runs, never on an application a holder
+ *     already decided, and never before 48 hours;
+ *   - the reminder is in the bell only: it has no email cadence;
+ *   - a candidate who is the only holder goes to the vote, and nobody is
+ *     offered an adopt row for their own application;
+ *   - the drafts half: an open draft a proposal made, for an admin only, with
+ *     what it adds and its batch's structure page.
+ *
+ * The notices go through the real spine (`insertNotification`) on the scratch
+ * schema, so "once" is the dedupe key's answer and not a fake's.
+ */
+import http from "node:http";
+import express from "express";
+import mysql from "mysql2/promise";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
+import type { SeatCalendar } from "../../shared/seatTerms";
+import { WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
+import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
+import { createOrgRole } from "../lib/orgChart";
+import { addChange, createDraft } from "../lib/orgDrafts";
+import { emailCadenceFor, insertNotification, resolveNotifyPrefs, type NotifyInput } from "../lib/notify";
+import { remindWaitingHolders } from "../lib/seatApplicationWaiting";
+import { register } from "./seatApplications";
+
+const LADDER = ["visitor", "guest", "member"];
+const DAY = 24 * 60 * 60 * 1000;
+const A = "u-ana";
+const B = "u-ben";
+const C = "u-cal";
+
+const PEOPLE: Record<string, { id: string; name: string }> = {
+  [A]: { id: A, name: "Ana Quillfeather" },
+  [B]: { id: B, name: "Ben Hollowell" },
+  [C]: { id: C, name: "Cal Brightwater" },
+  "u-guest": { id: "u-guest", name: "Gale Visitor" },
+};
+
+/** Money in the terms, so the row has something it must not carry. XTS is the ISO code reserved for testing. */
+const MONEY_TERMS = { v: 1, pay: { kind: "fixed", currency: "XTS", amountMinor: 4321000, per: "month" } };
+
+const CALENDAR: SeatCalendar = {
+  seasons: [{ id: "s-now", startsOn: "2026-01-01", endsOn: "2029-12-31" }],
+  currentSeasonId: "s-now",
+  timezone: "UTC",
+};
+
+const configured = testDbConfigured();
+if (!configured) console.warn("[seatApplicationsWaiting] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
+
+function harness() {
+  const state = {
+    viewer: null as { id: string; stage: string; admin?: boolean } | null,
+    holders: [] as string[],
+    pool: (): any => {
+      throw new Error("the database was read before the gate answered");
+    },
+  };
+  const notices: NotifyInput[] = [];
+  const closers: Record<string, SubjectCloser> = {};
+  let server: http.Server;
+  let base = "";
+
+  /** The real spine on the scratch schema: no member has an email, so nothing is mailed. */
+  const notify = async (input: NotifyInput) => {
+    notices.push(input);
+    return insertNotification(
+      {
+        pool: state.pool(),
+        memberById: async () => null,
+        sendEmail: async () => ({ ok: false }) as any,
+        origin: () => "http://127.0.0.1",
+        projectName: () => "Test village",
+        isPresent: () => true,
+      },
+      input,
+    );
+  };
+
+  const landing = {
+    vetoHours: () => 72,
+    autoApplyEnabled: () => true,
+    stewardCouncil: () => false,
+    stewardVetoTiers: () => "all",
+    consentNoticeHours: () => 0,
+    nextBoundaryAfter: (after: Date) => new Date(after.getTime() + 20 * DAY),
+    cycleNumberAt: () => 1,
+    landingExpiryCycles: () => 3,
+    closerFor: (t: string) => closers[t],
+    notify: async () => {},
+    endedUnclosedCycle: async () => false,
+    waitsForCycleClose: () => false,
+    snapsToBoundary: () => false,
+  };
+
+  const ctxOf = () =>
+    ({
+      stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"),
+      stageIndexOf: (id: string) => LADDER.indexOf(id),
+      roleCapabilities: [],
+      villageHeld: [],
+      isAdmin: state.viewer?.admin === true,
+    }) as unknown as CapabilityCtx;
+
+  const start = async () => {
+    const app = express();
+    app.use(express.json());
+    register(app, {
+      authedUser: async () =>
+        state.viewer ? { ...(PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" }), tokenVersion: 0, prefs: { identityConfirmedAt: { at: Date.now(), v: 0 } } } : null,
+      capabilityCtx: async () => ctxOf(),
+      guardCapability: async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
+        // The admin short-circuit stays out of the member door: an admin reads it as a member does.
+        if (state.viewer && hasCapability(cap, { ...ctxOf(), isAdmin: false })) return true;
+        res.status(refusal?.status ?? 401).json(refusal?.body ?? { error: "auth_required" });
+        return false;
+      },
+      getPool: () => state.pool(),
+      notify: notify as any,
+      notifyAdmins: async () => {},
+      overLimit: async () => false,
+      members: { byId: async (id: string) => PEOPLE[id] ?? null, all: async () => Object.values(PEOPLE) } as any,
+      firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
+      liveHoldersOf: async () => [...state.holders],
+      rolesCarrying: () => [{ id: "role-stewards", name: "Stewards" }],
+      loadRoleHolders: () => state.holders.map((userId) => ({ roleId: "role-stewards", userId })),
+      roleBallotSetup: async () => ({
+        method: "majority",
+        dials: { unityPct: 50, quorumPct: 0 },
+        snapshot: { mode: "equal", token: null },
+        tokenProblem: null,
+        electorate: [A, B, C].map((userId) => ({ userId, weight: 1 })),
+        durationDays: 7,
+      }),
+      seatCalendar: () => CALENDAR,
+      lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
+      landingDeps: () => ({ pool: state.pool(), ...landing }) as unknown as LandingDeps,
+      closers,
+    } as any);
+    server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("the test server did not report a port");
+    base = `http://127.0.0.1:${addr.port}`;
+  };
+  const stop = () => new Promise<void>((resolve) => server?.close(() => resolve()));
+  const call = async (method: string, url: string, body?: unknown) => {
+    const res = await fetch(`${base}${url}`, { // module-review-ok: this suite's own loopback server, not an outbound call
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, text: await res.clone().text(), body: (await res.json().catch(() => ({}))) as any };
+  };
+  return { state, notices, start, stop, call, notify };
+}
+
+describe("the waiting read refuses everyone below the member rung", () => {
+  const h = harness();
+  beforeAll(h.start);
+  afterAll(h.stop);
+
+  it("a visitor and a guest get 401, and the database is never read", async () => {
+    h.state.viewer = null;
+    expect((await h.call("GET", WAITING_URL)).status).toBe(401);
+    h.state.viewer = { id: "u-guest", stage: "guest" };
+    const r = await h.call("GET", WAITING_URL);
+    expect(r.status).toBe(401);
+    expect(r.body).not.toHaveProperty("applications");
+  });
+});
+
+describe("the reminder is in the bell only", () => {
+  it("has no email cadence, even for a member who asked for governance mail at once", () => {
+    const keen = resolveNotifyPrefs({ notify: { governanceEmail: "immediate", rolesEmail: "immediate", tasksEmail: "immediate" } });
+    expect(emailCadenceFor("seat_application_reminder", keen)).toBe("off");
+    // Control: the holder's first notice rides the governance preference.
+    expect(emailCadenceFor("governance", keen)).toBe("immediate");
+  });
+});
+
+describe.skipIf(!configured)("waiting on you, on a real schema", () => {
+  const h = harness();
+  let db: TestDb;
+  let pool: mysql.Pool;
+  let n = 0;
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = testPool(db, { connectionLimit: 4 });
+    h.state.pool = () => pool;
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO circles (id, name, aliases, is_example) VALUES ('wc-orchard', 'Orchard Circle', ?, 0)",
+      [JSON.stringify([])],
+    );
+    await h.start();
+  });
+
+  afterAll(async () => {
+    await h.stop();
+    await pool?.end();
+    await db?.drop();
+  });
+
+  beforeEach(() => {
+    h.state.viewer = { id: A, stage: "member" };
+    h.state.holders = [A, B, C];
+    h.notices.length = 0;
+  });
+
+  const as = (id: string, admin = false) => {
+    h.state.viewer = { id, stage: "member", admin };
+  };
+
+  /** A fresh seat in the Orchard Circle. */
+  const seat = async (name: string) => {
+    n += 1;
+    return createOrgRole(pool, { id: `wseat-${n}-${name.toLowerCase().replace(/[^a-z]+/g, "-")}`, name, seats: 1, circleId: "wc-orchard" });
+  };
+
+  const apply = async (seatId: string, terms: unknown = { v: 1 }) => {
+    as(A);
+    const r = await h.call("POST", "/api/governance/role-applications", {
+      seatIds: [seatId],
+      deliverables: "Two more people can keep the orchard ledger by the season's end.",
+      fitStatement: "I kept the orchard ledger all last season.",
+      seatSettings: terms,
+    });
+    expect(r.status, r.text).toBe(201);
+    return r.body as { id: string; status: string };
+  };
+
+  const waitingFor = async (id: string, admin = false): Promise<WaitingPayload & { raw: string }> => {
+    as(id, admin);
+    const r = await h.call("GET", WAITING_URL);
+    expect(r.status, r.text).toBe(200);
+    return { ...(r.body as WaitingPayload), raw: r.text };
+  };
+
+  const rowIds = async (id: string) => (await waitingFor(id)).applications.map((a) => a.id);
+
+  /** Written more than 48 hours ago, by MySQL's own clock. */
+  const age = (applicationId: string, hours: number) =>
+    pool.query("UPDATE seat_applications SET created_at = created_at - INTERVAL ? HOUR WHERE id = ?", [hours, applicationId]); // module-review-ok: ages a fixture row on the scratch schema
+
+  const reminders = async (applicationId: string) =>
+    (
+      await pool.query<any[]>( // module-review-ok: reads back the scratch schema's notifications
+        "SELECT user_id FROM notifications WHERE type = 'seat_application_reminder' AND link = ? ORDER BY user_id",
+        [`/seat-applications/${applicationId}`],
+      )
+    )[0].map((r: any) => String(r.user_id));
+
+  it("three holders: B and C hear and see the row, A does not; B aligns; A hears; the row leaves both boards", async () => {
+    const s = await seat("Ledger Keeper");
+    const app = await apply(s, MONEY_TERMS);
+    expect(app.status).toBe("awaiting-holder");
+
+    // The holder notice: B and C, never the applicant, linking the application and naming the tasks.
+    const waiting = h.notices.filter((x) => x.dedupeKey.startsWith(`sa:${app.id}:waiting:`));
+    expect(waiting.map((x) => x.userId).sort()).toEqual([B, C]);
+    for (const x of waiting) {
+      expect(x.link).toBe(`/seat-applications/${app.id}`);
+      expect(x.body).toContain("Tasks on your profile");
+    }
+
+    // B and C each see the row; A does not.
+    for (const holder of [B, C]) {
+      const w = await waitingFor(holder);
+      const row = w.applications.find((a) => a.id === app.id);
+      expect(row, holder).toBeTruthy();
+      expect(row!.seats).toEqual(["Ledger Keeper"]);
+      expect(row!.circles).toEqual(["Orchard Circle"]);
+      expect(row!.applicant).toBe("Ana");
+      expect(row!.href).toBe(`/seat-applications/${app.id}`);
+      expect(row!.appliedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      // No money on the row, though the terms carry it, and no surname.
+      expect(w.raw).not.toMatch(/XTS|4321000|amountMinor|Quillfeather/);
+      // A member who is not an admin is shown no drafts.
+      expect(w.drafts).toEqual([]);
+    }
+    expect(await rowIds(A)).not.toContain(app.id);
+
+    // B aligns for the village.
+    as(B);
+    const adopted = await h.call("POST", `/api/governance/role-applications/${app.id}/adopt`);
+    expect(adopted.status, adopted.text).toBe(200);
+    expect(adopted.body.status).toBe("adopted");
+    expect(h.notices.some((x) => x.userId === A && x.title.startsWith("Adopted:"))).toBe(true);
+
+    // It leaves every holder's group.
+    expect(await rowIds(B)).not.toContain(app.id);
+    expect(await rowIds(C)).not.toContain(app.id);
+  });
+
+  it("put to the village, or withdrawn, the row leaves every holder's group", async () => {
+    const voted = await apply(await seat("Seed Librarian"));
+    const taken = await apply(await seat("Path Warden"));
+    expect(await rowIds(C)).toEqual(expect.arrayContaining([voted.id, taken.id]));
+
+    as(C);
+    const put = await h.call("POST", `/api/governance/role-applications/${voted.id}/put-to-village`);
+    expect(put.status, put.text).toBe(200);
+    as(A);
+    const back = await h.call("POST", `/api/governance/role-applications/${taken.id}/withdraw`);
+    expect(back.status, back.text).toBe(200);
+
+    for (const holder of [B, C]) {
+      const ids = await rowIds(holder);
+      expect(ids, holder).not.toContain(voted.id);
+      expect(ids, holder).not.toContain(taken.id);
+    }
+  });
+
+  it("the 48 hour reminder lands once for a holder who did nothing, and never on one already decided", async () => {
+    const idle = await apply(await seat("Well Tender"));
+    const decided = await apply(await seat("Gate Keeper"));
+    const fresh = await apply(await seat("Bell Ringer"));
+    as(B);
+    expect((await h.call("POST", `/api/governance/role-applications/${decided.id}/adopt`)).status).toBe(200);
+    await age(idle.id, 49);
+    await age(decided.id, 49);
+    await age(fresh.id, 47);
+
+    const deps = { pool, notify: h.notify, liveHoldersOf: async () => [...h.state.holders] };
+    await remindWaitingHolders(deps);
+    await remindWaitingHolders(deps);
+    await remindWaitingHolders(deps);
+
+    // B and C each once on the idle one, never the applicant, never twice.
+    expect(await reminders(idle.id)).toEqual([B, C]);
+    // B acted: nobody is reminded of a decision already made.
+    expect(await reminders(decided.id)).toEqual([]);
+    // Not yet 48 hours.
+    expect(await reminders(fresh.id)).toEqual([]);
+    const sent = h.notices.filter((x) => x.type === "seat_application_reminder" && x.link === `/seat-applications/${idle.id}`);
+    expect(sent[0]?.title).toBe("Still waiting on a seat holder: Well Tender");
+  });
+
+  it("a candidate who is the only holder goes to the vote, and sees no adopt row for their own application", async () => {
+    h.state.holders = [A];
+    const own = await apply(await seat("Orchard Steward"));
+    expect(own.status).toBe("voting");
+    expect(await rowIds(A)).toEqual([]);
+
+    // With a second holder the road is the holder's, and still never the candidate's own row.
+    h.state.holders = [A, B];
+    const next = await apply(await seat("Compost Keeper"));
+    expect(next.status).toBe("awaiting-holder");
+    expect(await rowIds(A)).not.toContain(next.id);
+    expect(await rowIds(B)).toContain(next.id);
+  });
+
+  it("an open draft a proposal made waits on an admin, with what it adds and its batch's page", async () => {
+    await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+      "INSERT INTO external_proposals (id, village_id, module_id, batch_id, kind, payload, dedupe_key, identity_key) " +
+        "VALUES ('xp-wait-1', 'v-test', 'mod-test', 'batch-wait-1', 'role.proposed', ?, ?, ?)",
+      [JSON.stringify({ title: "A new water circle" }), "d".repeat(64), "i".repeat(64)],
+    );
+    const fromQueue = await createDraft(pool, { title: "The water circle", createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: "xp-wait-1" });
+    const orphan = await createDraft(pool, { title: "An older proposal", createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: "xp-gone" });
+    const byHand = await createDraft(pool, { title: "My own sketch", createdBy: B });
+    if (!fromQueue.ok || !orphan.ok || !byHand.ok) throw new Error("a draft fixture was refused");
+    for (const c of [
+      { op: "create_circle" as const, orgRoleId: "wc-water", payload: { name: "Water Circle" } },
+      { op: "create_seat" as const, orgRoleId: "wseat-spring", payload: { name: "Spring Keeper", circleId: "wc-water" } },
+      { op: "create_seat" as const, orgRoleId: "wseat-rain", payload: { name: "Rain Keeper", circleId: "wc-water" } },
+    ]) {
+      const added = await addChange(pool, fromQueue.id, c);
+      expect(added.ok, JSON.stringify(added)).toBe(true);
+    }
+
+    const admin = await waitingFor(C, true);
+    const row = admin.drafts.find((d) => d.id === fromQueue.id);
+    expect(row).toEqual({ id: fromQueue.id, title: "The water circle", circles: 1, seats: 2, href: "/review/structure/batch-wait-1" });
+    // A batch nobody can find falls back to the review queue.
+    expect(admin.drafts.find((d) => d.id === orphan.id)?.href).toBe("/review");
+    // A draft typed by hand waits on nobody.
+    expect(admin.drafts.map((d) => d.id)).not.toContain(byHand.id);
+    // A member who may not publish sees none.
+    expect((await waitingFor(B)).drafts).toEqual([]);
+  });
+});

@@ -1,6 +1,7 @@
 /**
  * The alignment store (0259): `alignment_texts`, `alignment_parties`,
- * `alignments` and `alignment_seals`. INSERT ONLY.
+ * `alignments` and `alignment_seals`, and since PR8 `alignment_endings`
+ * (0260). INSERT ONLY.
  *
  * Every statement this store runs lives here, and none of them is an UPDATE or
  * a DELETE. A text's words, a party list, an act of aligning and a seal are
@@ -18,6 +19,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { SeatSettings } from "../../shared/seatSettings";
+import { ENDING_KINDS, type EndingKind } from "../../shared/alignments";
 
 type Db = Pool | PoolConnection;
 
@@ -202,6 +204,80 @@ export async function insertAlignment(db: Db, a: NewAlignment): Promise<boolean>
   return Number(r?.affectedRows ?? 0) > 0;
 }
 
+// ── Endings (0260, PR8) ──────────────────────────────────────────────────────
+
+export interface StoredEnding {
+  id: string;
+  textId: string;
+  kind: EndingKind;
+  refersTo: string | null;
+  partyKey: string | null;
+  effectiveAt: Date;
+  recordedBy: string | null;
+  at: Date;
+}
+
+export type NewEnding = Omit<StoredEnding, "at">;
+
+/**
+ * True when this ending landed; false when a row with its id was already
+ * there. A fact the sweep writes (`superseded`, `term_end`, `party_left`) is
+ * keyed on the text, so a second sweep, a resumed erasure or a double click
+ * writes nothing twice. The time of writing is the server's.
+ */
+export async function insertEnding(db: Db, e: NewEnding): Promise<boolean> {
+  const [r]: any = await db.query(
+    "INSERT IGNORE INTO alignment_endings (id, text_id, kind, refers_to, party_key, effective_at, recorded_by, at) VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(3))",
+    [e.id, e.textId, e.kind, e.refersTo, e.partyKey, e.effectiveAt, e.recordedBy],
+  );
+  return Number(r?.affectedRows ?? 0) > 0;
+}
+
+const rowToEnding = (r: any): StoredEnding => ({
+  id: String(r.id),
+  textId: String(r.text_id),
+  kind: (ENDING_KINDS as readonly string[]).includes(String(r.kind)) ? (String(r.kind) as EndingKind) : "notice",
+  refersTo: r.refers_to ?? null,
+  partyKey: r.party_key ?? null,
+  effectiveAt: instant(r.effective_at) as Date,
+  recordedBy: r.recorded_by ?? null,
+  at: instant(r.at) as Date,
+});
+
+/** Every ending of these texts, oldest first. Pass a transaction's connection and `lock` to queue a second writer behind this one. */
+export async function endingsOf(db: Db, textIds: readonly string[], lock = false): Promise<StoredEnding[]> {
+  if (textIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT id, text_id, kind, refers_to, party_key, effective_at, recorded_by, at FROM alignment_endings " +
+      `WHERE text_id IN (${textIds.map(() => "?").join(",")}) ORDER BY at, id${lock ? " FOR UPDATE" : ""}`,
+    [...textIds],
+  );
+  return rows.map(rowToEnding);
+}
+
+/** Lock a text's row for the length of the caller's transaction, so two endings of one text are written one after the other. */
+export async function lockText(conn: PoolConnection, textId: string): Promise<boolean> {
+  const [rows] = await conn.query<RowDataPacket[]>("SELECT id FROM alignment_texts WHERE id = ? FOR UPDATE", [textId]);
+  return rows.length > 0;
+}
+
+/**
+ * Texts whose term may have ended without the record saying so: no
+ * `term_end` row yet, and either the written window closed before `today` or
+ * the term follows the season (its end moves with the season, so only the
+ * derivation can say). The sweep derives each one before writing anything.
+ */
+export async function termEndCandidates(db: Db, today: string): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT t.id FROM alignment_texts t LEFT JOIN seat_applications a ON t.subject_type = 'seat_terms' AND a.id = t.subject_ref " +
+      "WHERE NOT EXISTS (SELECT 1 FROM alignment_endings e WHERE e.text_id = t.id AND e.kind = 'term_end') " +
+      "AND (a.id IS NULL OR a.status NOT IN ('withdrawn','not-adopted')) " +
+      "AND ((t.effective_to IS NOT NULL AND t.effective_to < ?) OR a.term_follows_season = 1) ORDER BY t.created_at LIMIT 2000",
+    [today],
+  );
+  return rows.map((r: any) => String(r.id));
+}
+
 /** True when this seal landed; false when the text was already sealed. */
 export async function insertSeal(db: Db, textId: string, receipt: Record<string, any>): Promise<boolean> {
   const [r]: any = await db.query(
@@ -240,6 +316,26 @@ export async function textsForParty(db: Db, userId: string): Promise<StoredText[
     `SELECT ${TEXT_COLUMNS.split(", ").map((c) => `t.${c}`).join(", ")} FROM alignment_texts t ` +
       "JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? ORDER BY t.created_at DESC, t.id DESC LIMIT 500",
     [userId],
+  );
+  return rows.map(rowToText);
+}
+
+/**
+ * The register's read (PR6): every text of the given kinds, every version,
+ * newest first, one page at a time. The route asks only for the kinds the
+ * viewer holds the capability for. No kinds, no rows, and no query.
+ */
+export async function registerTexts(
+  db: Db,
+  opts: { subjectTypes: readonly string[]; limit: number; offset: number },
+): Promise<StoredText[]> {
+  if (opts.subjectTypes.length === 0 || opts.limit <= 0) return [];
+  const limit = Math.max(1, Math.min(1000, Math.floor(opts.limit)));
+  const offset = Math.max(0, Math.floor(opts.offset));
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${TEXT_COLUMNS} FROM alignment_texts WHERE subject_type IN (${opts.subjectTypes.map(() => "?").join(",")}) ` +
+      "ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+    [...opts.subjectTypes, limit, offset],
   );
   return rows.map(rowToText);
 }
@@ -298,11 +394,15 @@ export async function sealsOf(db: Db, textIds: readonly string[]): Promise<Store
  */
 export async function textsToSettle(db: Db, recentDays = 400): Promise<string[]> {
   // A text whose application was withdrawn or not adopted can never be sealed
-  // or come into force, so the sweep does not read it again (red team D9).
+  // or come into force, so the sweep does not read it again (red team D9). A
+  // sealed membership letter (PR9) has nothing left to settle either: it was in
+  // force at the member's click, nobody is told, and the next signing writes its
+  // supersession. A village holds a letter per member, so the sweep skips them.
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT t.id FROM alignment_texts t LEFT JOIN alignment_seals s ON s.text_id = t.id " +
       "LEFT JOIN seat_applications a ON t.subject_type = 'seat_terms' AND a.id = t.subject_ref " +
       "WHERE (a.id IS NULL OR a.status NOT IN ('withdrawn','not-adopted')) " +
+      "AND (t.subject_type <> 'membership' OR s.text_id IS NULL) " +
       "AND (s.text_id IS NULL OR t.created_at >= UTC_TIMESTAMP() - INTERVAL ? DAY) ORDER BY t.created_at LIMIT 2000",
     [recentDays],
   );

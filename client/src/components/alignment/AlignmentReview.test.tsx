@@ -58,7 +58,13 @@ describe("the words at Review", () => {
     const states: ReviewAlignment[] = [];
     render(<AlignmentReview body={{ seatIds: ["s-1"] }} onState={(s) => states.push(s)} />);
     expect(await screen.findByText("These terms carry money, so the village asks you to confirm it is you before you align.")).toBeTruthy();
-    expect(states.at(-1)?.ready).toBe(false);
+    // `.at(-1)` without a wait is a race, and it reddened a batch on 2026-10-20
+    // with `expected true to be false`. The words route and the confirm route
+    // resolve independently, so when the money line appears the component may
+    // not yet have pushed the not-ready state - the last state is still the
+    // earlier ready one. Waiting for the SETTLED state is what this test means,
+    // and it is the pattern the no-money case above already uses.
+    await waitFor(() => expect(states.at(-1)).toEqual({ words: WORDS, ready: false }));
     fireEvent.change(screen.getByPlaceholderText("Your password"), { target: { value: "right horse battery" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm it is you" }));
     await waitFor(() => expect(states.at(-1)).toEqual({ words: WORDS, ready: true }));

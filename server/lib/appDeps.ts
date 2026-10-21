@@ -402,7 +402,7 @@ export interface AppDeps {
    * The suffix on the dedupe key is what keeps "each admin hears it once" and
    * "the event fires once" separate concerns.
    */
-  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string): Promise<void>;
+  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[]): Promise<void>;
 
   /**
    * Tell whoever raised a report that a steward has read it and closed it.
