@@ -184,7 +184,7 @@ const JOINING_REQUEST: JourneyDefinition = {
     daytime("meet_us", 5, "joining.meet_us", ["going_to_next_gathering"]),
     daytime("check_in", 14, "joining.check_in"),
   ],
-  stops: ["joining_admitted", "joining_declined", ...ALWAYS_STOPS],
+  stops: ["joining_admitted", "joining_accepted", "joining_declined", ...ALWAYS_STOPS],
 };
 
 /**

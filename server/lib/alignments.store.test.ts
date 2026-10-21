@@ -20,7 +20,8 @@ import { describe, expect, it } from "vitest";
 import { carriesMoney, deriveAlignmentState, intentSentence, renderSeatTermsText, type StateInput } from "../../shared/alignments";
 
 const ROOT = path.resolve(__dirname, "..", "..");
-const TABLES = ["alignment_texts", "alignment_parties", "alignments", "alignment_seals"];
+// The four tables of 0259, and the endings of 0260 (PR8): insert only, every one.
+const TABLES = ["alignment_texts", "alignment_parties", "alignments", "alignment_seals", "alignment_endings"];
 const EXEMPT = "server/lib/alignmentErasure.ts";
 
 /** Every source file under the folders that could hold a statement. */
@@ -73,6 +74,11 @@ describe("insert only: the four tables are mutated in one file", () => {
     expect(mutationSites("UPD" + "ATE alignments SET method = ?")).toHaveLength(1);
     expect(mutationSites("DEL" + "ETE FROM `alignment_seals` WHERE 1")).toHaveLength(1);
     expect(mutationSites("INSERT INTO alignment_parties (a) VALUES (1) ON DUPLICATE KEY UPD" + "ATE a = 2")).toHaveLength(1);
+    // The endings table (PR8) is held to the same rule.
+    expect(mutationSites("UPD" + "ATE alignment_endings SET kind = ?")).toHaveLength(1);
+    expect(mutationSites("DEL" + "ETE FROM alignment_endings WHERE id = ?")).toHaveLength(1);
+    // A locking read is a read.
+    expect(mutationSites("SELECT id FROM alignment_endings WHERE text_id = ? ORDER BY at FOR UPD" + "ATE")).toEqual([]);
     // Reads and plain inserts are not mutations.
     expect(mutationSites("SELECT * FROM alignments; INSERT IGNORE INTO alignments (id) VALUES (?)")).toEqual([]);
   });
@@ -96,14 +102,14 @@ describe("the retention sweep never touches the alignment store", () => {
   });
 
   it("no production file outside the store names the four tables", () => {
-    const allowed = new Set(["server/repos/alignments.ts", EXEMPT, "drizzle/0259_a_member_aligns_with_seat_terms.sql"]);
+    const allowed = new Set(["server/repos/alignments.ts", EXEMPT, "drizzle/0259_a_member_aligns_with_seat_terms.sql", "drizzle/0260_aligned_terms_can_end.sql"]);
     const re = new RegExp(`\\b(?:${TABLES.join("|")})\\b(?=[\\s\\x60(,;]|$)`, "m");
     const named = sources()
       .filter((f) => !/\.test\.tsx?$/.test(f) && !allowed.has(f) && !f.startsWith("client/"))
       .filter((f) => {
         // Comments may talk about the tables; code may not reach them.
         const code = fs.readFileSync(path.join(ROOT, f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$|^\s*--.*$/gm, "");
-        return /(?:FROM|INTO|JOIN|UPDATE|TABLE)\s+`?(?:alignment_texts|alignment_parties|alignments|alignment_seals)\b/i.test(code) && re.test(code);
+        return /(?:FROM|INTO|JOIN|UPDATE|TABLE)\s+`?(?:alignment_texts|alignment_parties|alignments|alignment_seals|alignment_endings)\b/i.test(code) && re.test(code);
       });
     expect(named).toEqual([]);
   });
@@ -118,6 +124,18 @@ describe("no public event anywhere in the alignment store", () => {
     "server/routes/alignments.ts",
     "server/routes/seatApplications.ts",
     "server/lib/seatApplicationCloser.ts",
+    // The register (PR6).
+    "shared/alignedRegister.ts",
+    "server/lib/alignedRegister.ts",
+    // Endings (PR8).
+    "server/lib/alignmentEndings.ts",
+    "client/src/components/alignment/EndingActions.tsx",
+    "client/src/components/alignment/LeavingEnds.tsx",
+    // The membership letter (PR9).
+    "shared/membershipLetter.ts",
+    "server/lib/membershipLetter.ts",
+    "server/routes/membershipLetter.ts",
+    "server/repos/membershipSignings.ts",
   ];
   const code = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 

@@ -68,6 +68,12 @@
  * The row id rides to the provider as the Idempotency-Key every time, so a
  * second attempt at an email the provider already took is one delivery.
  *
+ * TWO DRAINS AT ONCE DO NOT DEADLOCK. Every write a drain makes is one row by
+ * its id, so two drains never take their locks in opposite orders
+ * (server/repos/commsMessages.ts says how), and a write that still loses a
+ * lock race to something else is tried again. A sweep that keeps losing waits
+ * for the next drain; it never stops this one sending.
+ *
  * A LEDGER FAULT NEVER LOCKS A PERSON OUT. If writing the row throws for an
  * essential email (a password link, a set-password claim), the fault is logged
  * loudly and the send is attempted anyway. Every other email is refused when it
@@ -86,6 +92,7 @@ import { addressOfSender, addressProblem, emailKeyOf } from "../../../shared/com
 import type { OutgoingEmail, PostResult } from "../../../shared/comms/contracts";
 import { SKIP_REASONS, type EmailKind, type MessageStatus, type SkipReason } from "../../../shared/comms/kinds";
 import type { ModuleLifecycle } from "../../../shared/modules";
+import { lostConcurrencyRace } from "../../db/concurrency";
 import { upsertContact } from "../../repos/commsContacts";
 import {
   cappedSendsInWindow,
@@ -95,6 +102,7 @@ import {
   expireDue,
   failStaleEssential,
   insertMessage,
+  LOCK_TRIES,
   markExpired,
   markFailed,
   markSent,
@@ -577,9 +585,9 @@ export async function drain(deps: PostOfficeDeps, opts: { limit?: number; budget
   const pool = deps.getPool();
   const summary: DrainSummary = { sent: 0, rehearsed: 0, failed: 0, skipped: 0, expired: 0, requeued: 0 };
 
-  summary.requeued += await recoverStaleSending(pool, STALE_SENDING_MINUTES);
-  summary.failed += await failStaleEssential(pool, STALE_SENDING_MINUTES, STALE_ESSENTIAL);
-  summary.expired += await expireDue(pool);
+  summary.requeued += await sweep("the stale claims", () => recoverStaleSending(pool, STALE_SENDING_MINUTES));
+  summary.failed += await sweep("the stale essential rows", () => failStaleEssential(pool, STALE_SENDING_MINUTES, STALE_ESSENTIAL));
+  summary.expired += await sweep("the expired rows", () => expireDue(pool));
   // Unconfigured: everything waits for the key or the sender (header, question 3).
   if (notConfigured(deps, deps.sender())) return summary;
 
@@ -632,6 +640,22 @@ export async function drain(deps: PostOfficeDeps, opts: { limit?: number; budget
     tally(summary, result.status);
   }
   return summary;
+}
+
+/**
+ * One of the drain's sweeps, which never costs the tick its sends. The repo
+ * already tried the sweep's writes again (`retryLostRace`); a race it still
+ * lost is logged and the sweep waits for the next drain, a minute later, while
+ * this one goes on sending. Any other fault is thrown as before.
+ */
+async function sweep(what: string, run: () => Promise<number>): Promise<number> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!lostConcurrencyRace(err)) throw err;
+    console.warn(`[comms] the sweep of ${what} lost a lock race ${LOCK_TRIES} times, so it waits for the next drain`, err);
+    return 0;
+  }
 }
 
 function tally(summary: DrainSummary, status: MessageStatus | "duplicate"): void {

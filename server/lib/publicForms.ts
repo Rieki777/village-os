@@ -49,12 +49,14 @@
  * `landPublicSubmission`, and the member export reads a member's ideas through
  * `ideasProposedBy`, re-exported here so that file imports one module for both.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool, PoolConnection } from "mysql2/promise";
+import type { LetterSource } from "../../shared/membershipLetter";
 import { PROPOSE_QUEST_MODULE, QUEST_IDEA_FORM } from "../../shared/questIdeas";
 import { MEMBER_BATCH_PREFIX, VISITOR_BATCH_PREFIX, openIdeas, withIdeaLock } from "../repos/questProposals";
 import { villageId } from "./economy";
 import { containsEmail, countDrop, type DropReason } from "./externalProposals";
 import { proposeQuest, type ProposeQuestResult } from "./questProposals";
+import { alignSigning, judgeSigning, sealLetter, type SigningAlignment, type SigningRefusal } from "./membershipLetter";
 
 export { ideasProposedBy } from "../repos/questProposals";
 
@@ -197,12 +199,32 @@ export async function proposeQuestFromSubmission(pool: Pool, entry: SubmissionEn
  * rewrite deleted the earlier member's row. It is awaited and may throw, so a
  * submission that could not be stored still answers 500. The proposal is
  * awaited and never throws.
+ *
+ * A MEMBER'S LOVE LETTER SIGNING ALIGNS THEM WITH THE LETTER (PR9), in the
+ * same transaction as the row: server/lib/membershipLetter.ts says why and
+ * how. `letter` is what the village's inputs are now; a member's signing that
+ * drew another version is `refused`, and nothing is written. Without `letter`
+ * a member's signing is refused too, because nothing could say what they read.
  */
 export async function landPublicSubmission(
-  submissionsRepo: { insert(entry: any): Promise<unknown> },
+  submissionsRepo: { insert(entry: any, alsoInTransaction?: (conn: PoolConnection) => Promise<void>): Promise<unknown> },
   pool: Pool,
   entry: SubmissionEntry,
-): Promise<{ proposal: IdeaOutcome | null }> {
+  letter?: LetterSource,
+): Promise<{ proposal: IdeaOutcome | null; refused?: SigningRefusal; aligned?: SigningAlignment }> {
+  const judged = judgeSigning(entry, letter ?? null);
+  if ("refused" in judged) return { proposal: null, refused: judged.refused };
+  if (judged.align) {
+    let aligned: SigningAlignment | undefined;
+    const { letter: shown } = judged;
+    await submissionsRepo.insert(entry, async (conn) => {
+      aligned = await alignSigning(conn, { letter: shown, signingId: String(entry.id), userId: String(entry.userId), now: new Date() });
+    });
+    // Sealed now when the village can sign; the hourly sweep seals it otherwise.
+    const textId = aligned?.textId;
+    if (textId) await sealLetter(pool, textId).catch((err) => console.error(`[forms] letter ${textId} is not sealed yet:`, err));
+    return { proposal: null, aligned };
+  }
   await submissionsRepo.insert(entry);
   if (entry.type !== QUEST_IDEA_FORM) return { proposal: null };
   try {

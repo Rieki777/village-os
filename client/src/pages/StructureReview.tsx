@@ -50,6 +50,7 @@ import Layout from "@/components/Layout";
 import { authToken } from "@/lib/gameApi";
 import StructureMap, { StructureMapList } from "@/components/review/StructureMap";
 import StructureDraft, { type DraftAnswer } from "@/components/review/StructureDraft";
+import type { CarryAnswer } from "@/components/review/CarryAcross";
 import StructureSteps from "@/components/review/StructureSteps";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import {
@@ -74,6 +75,8 @@ interface PlanAnswer {
   draft?: DraftAnswer | null;
   /** Whether this viewer may publish that draft, as the publish route decides. */
   mayPublish?: boolean;
+  /** Once the draft is live: who still sits on the old chart. Absent from an older server. */
+  carry?: CarryAnswer | null;
 }
 
 interface DraftLine {
@@ -184,6 +187,8 @@ export default function StructureReview() {
               waiting={data.waiting ?? 0}
               source={source}
               mayPublish={data.mayPublish === true}
+              carry={data.carry ?? null}
+              batchId={batchId}
               headers={headers}
               onChanged={(said) => {
                 setNotice(said);

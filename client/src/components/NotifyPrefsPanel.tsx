@@ -8,6 +8,7 @@ import { Bell, Download, ShieldOff } from "lucide-react";
 import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
+import LeavingEnds, { leftEndedWords, useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
 import EmailFromVillage from "@/components/EmailFromVillage";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
@@ -89,6 +90,8 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
    * where they left it and brings it into view.
    */
   const identity = useIdentityConfirm("delete-account");
+  // The aligned terms leaving ends (seat settings PR8): named before the member confirms, and again after.
+  const endingTerms = useTermsLeavingEnds(confirming);
   /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
   const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
@@ -180,7 +183,12 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
          * done. Where everything confirmed, nothing changes.
          */
         if (d?.external?.unconfirmed?.length) {
-          setFarewell(d.message || "Some connected services have not confirmed yet.");
+          setFarewell([d.message || "Some connected services have not confirmed yet.", leftEndedWords(endingTerms)].filter(Boolean).join(" "));
+          return;
+        }
+        // Terms that ended with the leaving are named once more before the page goes.
+        if (endingTerms && endingTerms.length > 0) {
+          setFarewell(leftEndedWords(endingTerms));
           return;
         }
         window.location.href = "/";
@@ -363,6 +371,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               scrubbed everywhere. The village's shared history (settlements, quest
               records) keeps its numbers, without your name on them. This cannot be undone.
             </p>
+            <LeavingEnds titles={endingTerms} />
             <div className="flex flex-wrap items-center gap-2">
               <IdentityConfirmField
                 state={identity}
