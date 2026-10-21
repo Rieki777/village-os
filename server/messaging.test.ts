@@ -512,7 +512,7 @@ describe.skipIf(!configured)("messaging repo (MySQL)", () => {
     // all - it is the value the row DISPLAYS. Leaving it untied would make this
     // fixture quietly disagree with the row it renders.
     const stamp = "2026-08-11 12:00:00.000";
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture forcing an exact tie on a scratch schema, not a product read path
       "UPDATE conversations SET last_message_at = ?, created_at = ?, last_message_seq = ? WHERE id IN (?, ?)",
       [stamp, stamp, 999999, a.id, b.id],
     );
