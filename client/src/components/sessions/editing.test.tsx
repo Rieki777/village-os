@@ -85,6 +85,8 @@ function doors(): RoomActions {
     close: (...a) => ok("close", ...a),
     toolFeedback: (...a) => ok("toolFeedback", ...a),
     discard: (...a) => ok("discard", ...a),
+    library: async () => [],
+    bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
   };
 }
 

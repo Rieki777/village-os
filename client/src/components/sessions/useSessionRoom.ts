@@ -61,6 +61,7 @@ import {
   type SessionState,
   type SessionView,
 } from "@shared/sessions";
+import type { LibraryCard } from "@shared/sessionLibrary";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -123,6 +124,14 @@ export interface RoomActions {
   toolFeedback(text: string, opts?: WriteOptions): Promise<WriteResult>;
   /** DELETE the session: discard an open room, or delete a closed record. Never toasts; the confirm says a refusal itself. */
   discard(): Promise<WriteResult>;
+  /**
+   * What this viewer may bring into this open room from the agenda library
+   * (shared/sessionLibrary.ts). A read, so it asks for nothing else after it;
+   * null when the village did not answer.
+   */
+  library(): Promise<LibraryCard[] | null>;
+  /** Bring items from the agenda library onto this room's agenda, all or none. */
+  bringFromLibrary(ids: number[], opts?: WriteOptions): Promise<WriteResult<{ ids?: number[] }>>;
 }
 
 export interface SessionRoom {
@@ -373,7 +382,19 @@ export function useSessionRoom(
     },
     toolFeedback: (text, opts) => write("POST", "/tool-feedback", { text }, opts),
     discard: () => write("DELETE", "", undefined, { quiet: true }),
-  }), [write]);
+    library: async () => {
+      if (!base) return null;
+      try {
+        const res = await gameFetch(`${base}/library`);
+        if (!res.ok) return null;
+        const body = (await res.json().catch(() => null)) as { items?: unknown } | null;
+        return Array.isArray(body?.items) ? (body!.items as LibraryCard[]).filter((c) => c && typeof c.id === "number" && typeof c.title === "string") : [];
+      } catch {
+        return null;
+      }
+    },
+    bringFromLibrary: (ids, opts) => write<{ ids?: number[] }>("POST", "/library", { ids }, opts),
+  }), [write, base]);
 
   return { view, status, lagging, offset, refresh, actions };
 }
