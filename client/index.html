@@ -16,19 +16,9 @@
       where the values are actually true.
     -->
     <!--
-      THE VILLAGE'S PUBLIC CONFIG STARTS DOWNLOADING WITH THE BUNDLE.
-
-      Nothing on a first visit paints before /api/game/config answers: the
-      home route waits for it to choose the brochure home or the welcome page,
-      every brochure page waits for it, and the shell reads its name and logo
-      from it. Without this line the request starts only after the main bundle
-      has downloaded AND run, so its round trip is added in series, and on a
-      slow phone link that round trip is the longest one on the page.
-
-      Neutral like the rest of this file: every deployment serves this URL and
-      it carries no village's name. `crossorigin` is not optional. fetch()
-      asks in cors mode, and a preload made without it does not match, so the
-      browser would download the config twice instead of once.
+      The first paint waits for /api/game/config; fetch it beside the bundle,
+      not after it runs. Every deployment serves it. Keep `crossorigin`:
+      without it fetch() cannot reuse this and downloads the config again.
     -->
     <link rel="preload" href="/api/game/config" as="fetch" crossorigin="anonymous" />
 
