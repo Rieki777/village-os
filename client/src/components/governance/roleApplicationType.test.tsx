@@ -18,11 +18,17 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { CONDUCTABLE_TYPES, WIZARD_TYPES as SERVER_WIZARD_TYPES } from "../../../../server/lib/proposalDrafts";
 import { parseApplicationInput } from "@shared/seatApplications";
+import { applySeatsHref } from "@shared/seatApplyLinks";
 import TypeCards from "./TypeCards";
 import { typeConfig } from "./wizardConfig";
 import { fieldsFor } from "./wizardWalk";
 import { offerPrefill, ROLE_APPLICATION_TYPE, roleApplicationStart, seatsProblem, settingsProblem } from "./roleApplicationType";
 
+/** The query part of a built address, which is what the page hands `roleApplicationStart`. */
+const searchOf = (...args: Parameters<typeof applySeatsHref>) => {
+  const href = applySeatsHref(...args);
+  return href.slice(href.indexOf("?"));
+};
 const cardFor = () => screen.getByRole("button", { name: /Apply for a seat/ });
 
 describe("role_application publishes", () => {
@@ -114,6 +120,27 @@ describe("a wizard opened from a seat", () => {
     });
     expect(roleApplicationStart("?module=events")).toBeNull();
     expect(roleApplicationStart("")).toBeNull();
+  });
+
+  it("opens with several seats from one address, repeated or listed, in order and without repeats", () => {
+    expect(roleApplicationStart(searchOf(["seat-host", "seat-kitchen", "seat-orchard"]))).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-host", "seat-kitchen", "seat-orchard"] },
+    });
+    expect(roleApplicationStart("?type=role_application&seats=seat-a,seat-b,,seat-a&seat=seat-c")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-a", "seat-b", "seat-c"] },
+    });
+    // A season rides along with the list, as it does with one seat.
+    expect(roleApplicationStart(searchOf(["seat-a", "seat-b"], { seasonId: "s-next" }))?.answers).toEqual({ seatIds: ["seat-a", "seat-b"], seasonId: "s-next" });
+  });
+
+  it("hands six seats to the seats step as they came, and the step refuses the sixth in its own words", () => {
+    const six = ["s1", "s2", "s3", "s4", "s5", "s6"];
+    const start = roleApplicationStart(searchOf(six));
+    expect(start?.answers.seatIds).toEqual(six);
+    expect(seatsProblem(start?.answers.seatIds)).toBe("One application holds at most 5 seats.");
+    expect(seatsProblem(roleApplicationStart(searchOf(six.slice(0, 5)))?.answers.seatIds)).toBeNull();
   });
 
   it("opens from a season plan: renew picks the held seat and the season rides to the route", () => {

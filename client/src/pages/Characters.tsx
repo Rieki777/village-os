@@ -41,6 +41,7 @@ import { announceProfileChange } from "@/lib/profileRefresh";
 import { radioArrows } from "@/lib/radioArrows";
 import { Star, X } from "lucide-react";
 import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
+import RolesThatFit from "@/components/characters/RolesThatFit";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -669,6 +670,12 @@ export default function Characters() {
               ) : null}
             </aside>
           </div>
+
+          {/* Roles that fit this character: the seats "Open paths" names, as cards to pick and propose.
+              A failed paths read draws nothing here: the class card already says so and offers Retry. */}
+          {active && pathsStatus !== "failed" ? (
+            <RolesThatFit archetypeName={active.name} fits={pathsStatus === "ready" ? (paths?.roles ?? []).map((r) => r.id) : null} />
+          ) : null}
 
           {/* Your own face for this class. Below the stage, because the class
               is what you came here to choose and the portrait is what you do

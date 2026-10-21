@@ -28,6 +28,7 @@
 import { UserPlus } from "lucide-react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { MAX_SEATS } from "@shared/seatApplications";
+import { seatsFromSearch } from "@shared/seatApplyLinks";
 import { ALIGN_WORDS } from "@shared/alignments";
 import type { WizardTypeConfig } from "./wizardConfig";
 import { atLeast } from "./wizardValidators";
@@ -160,16 +161,25 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
  * Season plans (RC1) add two: `renew=<id>` picks a seat the member already
  * holds ("Carry on"), and `season=<id>` names the season they plan, which the
  * publish sends so a season still to come sets the first day.
+ *
+ * SEVERAL SEATS FROM ONE ADDRESS (the character page's "Propose these"):
+ * `seat` repeated, or `seats=a,b,c`, read by `seatsFromSearch`. The list is
+ * handed over as it came. The seats step judges it: more than five is refused
+ * by `seatsProblem`, and a full seat is taken off by `SeatPicksField`, which
+ * names it.
  */
 export function roleApplicationStart(search: string): { type: "role_application"; answers: Record<string, unknown> } | null {
   const q = new URLSearchParams(search);
   if (q.get("type") !== "role_application") return null;
-  const seat = String(q.get("seat") ?? q.get("renew") ?? "").trim();
+  // Several seats at once (`seat` repeated, or `seats=a,b`) from the character page's "Propose these".
+  const listed = seatsFromSearch(q);
+  const renew = String(q.get("renew") ?? "").trim();
+  const seats = listed.length > 0 ? listed : renew ? [renew] : [];
   const season = String(q.get("season") ?? "").trim();
   const supersedes = String(q.get("supersedes") ?? "").trim();
   return {
     type: "role_application",
-    answers: { ...(seat ? { seatIds: [seat] } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
+    answers: { ...(seats.length ? { seatIds: seats } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
   };
 }
 
