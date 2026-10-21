@@ -102,7 +102,7 @@ import { register as registerGovernanceModeRoutes } from "./routes/governanceMod
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
@@ -20921,27 +20921,8 @@ ${inner}
         names.set(r.actor_user_id, u ? firstName(u.name) : "A departed member");
       }
     }
-    res.json(
-      rows.map((r) => {
-        const def = VARIABLES_BY_KEY[String(r.config_key)];
-        return {
-          id: String(r.id),
-          key: String(r.config_key),
-          label: def?.label ?? r.config_key,
-          // NULL stored = "the platform default at the time"; resolve to the
-          // CURRENT default for display, marked so the page can say so.
-          from: r.old_value ?? def?.default ?? null,
-          fromWasDefault: r.old_value == null,
-          to: r.new_value ?? def?.default ?? null,
-          toIsDefault: r.new_value == null,
-          by: r.actor_user_id ? names.get(String(r.actor_user_id)) : null,
-          source: String(r.source),
-          proposalRef: r.proposal_ref ?? null,
-          note: r.note ?? null,
-          at: r.at instanceof Date ? r.at.toISOString() : String(r.at),
-        };
-      }),
-    );
+    // Values a stranger may not read (a withheld dial, a credential-shaped value) leave both sides blank: lib/mechanicsHistory.ts.
+    res.json(rows.map((r) => publicAmendment(r, VARIABLES_BY_KEY[String(r.config_key)], r.actor_user_id ? names.get(String(r.actor_user_id)) ?? null : null)));
   });
 
   // ── Mechanics proposals: propose-on-the-page ──────────────────────────────

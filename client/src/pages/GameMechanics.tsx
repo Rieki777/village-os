@@ -131,6 +131,7 @@ interface Amendment {
   fromWasDefault: boolean;
   to: string | null;
   toIsDefault: boolean;
+  withheld?: boolean; // the server held both values back (a credential), see server/lib/mechanicsHistory.ts
   by: string | null;
   source: string;
   proposalRef: string | null;
@@ -1374,11 +1375,10 @@ export default function GameMechanics() {
                             </div>
                             <p className="text-sm text-stone-600 mt-0.5">
                               <span className="line-through text-stone-500">
-                                {amendmentValue(h.key, h.from)}
-                                {h.fromWasDefault ? " (default)" : ""}
+                                {h.withheld ? "kept private" : `${amendmentValue(h.key, h.from)}${h.fromWasDefault ? " (default)" : ""}`}
                               </span>{" "}
-                              → <span className="font-semibold text-teal-deep">{amendmentValue(h.key, h.to)}</span>
-                              {h.toIsDefault ? " (back to default)" : ""}
+                              → <span className="font-semibold text-teal-deep">{h.withheld ? "kept private" : amendmentValue(h.key, h.to)}</span>
+                              {!h.withheld && h.toIsDefault ? " (back to default)" : ""}
                               {h.by ? ` · by ${h.by}` : ""}
                               {h.source === "governance" ? " · by passed proposal" : ""}
                               {h.source === "platform" ? " · platform migration" : ""}
