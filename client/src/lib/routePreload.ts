@@ -48,10 +48,11 @@ export interface LazyRoute {
 export function lazyRoutesFromApp(appSource: string): LazyRoute[] {
   const loaders = new Map<string, string>();
   const decl = /const\s+(\w+)\s*=\s*(?:lazyPage|brochurePage|lazy)\(\s*\(\)\s*=>\s*import\(\s*["']\.\/([\w/.-]+?)(?:\.tsx?)?["']\s*\)/g;
-  for (const m of appSource.matchAll(decl)) loaders.set(m[1], m[2]);
+  // Array.from, not for...of over the iterator: tsconfig.json sets no target.
+  for (const m of Array.from(appSource.matchAll(decl))) loaders.set(m[1], m[2]);
   const routes: LazyRoute[] = [];
   const route = /<Route\s+path=["']([^"']+)["']\s+component=\{(\w+)\}\s*\/>/g;
-  for (const m of appSource.matchAll(route)) {
+  for (const m of Array.from(appSource.matchAll(route))) {
     const module = loaders.get(m[2]);
     if (module) routes.push({ path: m[1], module });
   }
@@ -109,7 +110,7 @@ export function routePreloadTable(routes: readonly LazyRoute[], chunks: readonly
       }
     };
     walk(start);
-    return [...seen.values()];
+    return Array.from(seen.values());
   };
   // What index.html already loads: the entry and everything it imports statically.
   const loaded = new Set<string>();
@@ -146,7 +147,7 @@ export function routePreloadTable(routes: readonly LazyRoute[], chunks: readonly
       if (!loaded.has(c.fileName)) want.push(c.fileName);
       for (const css of c.css) if (!loaded.has(css)) want.push(css);
     }
-    const ids = [...new Set(want)].map(at);
+    const ids = Array.from(new Set(want)).map(at);
     if (ids.length) out.push([pattern, ids]);
   }
   return { files, routes: out };

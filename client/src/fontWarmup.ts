@@ -64,7 +64,7 @@ export function firstScreenFontQueries(readToken: (token: string) => string): st
     const quoted = `"${family.replace(/["\\]/g, "")}"`;
     for (const w of weights) out.add(`${w} 1em ${quoted}`);
   }
-  return [...out];
+  return Array.from(out);
 }
 
 /**
