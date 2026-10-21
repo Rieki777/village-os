@@ -23,8 +23,22 @@ export default function SeasonalFestivals() {
    */
   const eventsModule = useModule("events");
 
+  /**
+   * Whether /api/season has answered (or failed). Before it has, the page
+   * knows nothing about the calendar and says nothing: it used to print "The
+   * season calendar hasn't been set yet" on every cold load, which is untrue
+   * on a village that has one, and then drop the "Now" card in above it and
+   * push the calendar 298px down the screen (measured cold at 390x844, a
+   * 0.16 to 0.23 layout shift). The two cards' places are held instead.
+   */
+  const [seasonRead, setSeasonRead] = useState(false);
+
   useEffect(() => {
-    fetch("/api/season").then((r) => (r.ok ? r.json() : null)).then(setSeason).catch(() => {});
+    fetch("/api/season")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSeason)
+      .catch(() => {})
+      .finally(() => setSeasonRead(true));
   }, []);
 
   const fmt = (d: string) =>
@@ -56,6 +70,11 @@ export default function SeasonalFestivals() {
 
       <section className="py-8 bg-background">
         <div className="container max-w-2xl space-y-4">
+          {/* The "Now" card's place while the season is read: an empty card
+              of its measured height (282px at 390, 262px from 768 up). */}
+          {!seasonRead && (
+            <div aria-hidden="true" className="bg-card border border-border rounded-xl min-h-[17.5rem] md:min-h-[16.5rem]" />
+          )}
           {season?.current && (
             <div className="bg-card border border-teal-deep/30 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-1">
@@ -96,7 +115,10 @@ export default function SeasonalFestivals() {
               * the village that had only ever declared one was told its calendar
               * "hasn't been set yet".
               */}
-            {(season?.seasons ?? []).filter((s: any) => s.startsOn).length === 0 ? (
+            {!seasonRead ? (
+              // One season's row, its measured height (100px at 390, 84px from 768 up).
+              <div aria-hidden="true" className="h-[6.25rem] md:h-[5.25rem]" />
+            ) : (season?.seasons ?? []).filter((s: any) => s.startsOn).length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 The season calendar hasn't been set yet. It lives with the stewards.
               </p>

@@ -29,6 +29,7 @@ import {
   installBreakGlass,
   type BreakGlassAsk,
 } from "@/lib/breakGlass";
+import { useModalFocus } from "@/lib/useModalFocus";
 
 interface Waiting {
   ask: BreakGlassAsk;
@@ -61,6 +62,12 @@ export default function BreakGlass() {
     );
   }, []);
 
+  // Declared BEFORE the effect below, so it notes who held focus before the
+  // confirm button takes it, and hands focus back there when the queue empties.
+  // Tab wraps inside the panel; Escape stays with the effect below.
+  const panel = useRef<HTMLDivElement | null>(null);
+  useModalFocus(current !== null, panel, { initial: confirmRef });
+
   useEffect(() => {
     if (!current) return;
     confirmRef.current?.focus();
@@ -86,6 +93,7 @@ export default function BreakGlass() {
       aria-modal="true"
       aria-labelledby="break-glass-title"
       data-testid="break-glass"
+      ref={panel}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-900/40 p-4"
     >
       <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">

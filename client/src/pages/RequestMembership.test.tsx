@@ -54,6 +54,17 @@ describe("RequestMembership", () => {
     expect(screen.getByRole("link", { name: /see calls and events/i })).toHaveAttribute("href", "/events");
   });
 
+  it("moves focus to the thanks, since the button that sent it is gone", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) }));
+    render(<RequestMembership />);
+
+    const user = await fillIn();
+    await user.click(screen.getByRole("button", { name: /send my request/i }));
+
+    const thanks = await screen.findByRole("heading", { name: /thank you, juno/i });
+    expect(document.activeElement).toBe(thanks);
+  });
+
   it("says a refusal out loud and keeps what was typed", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }));
     render(<RequestMembership />);

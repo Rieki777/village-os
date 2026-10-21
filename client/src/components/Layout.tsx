@@ -98,11 +98,44 @@ export default function Layout({ children }: LayoutProps) {
   // the drawer is already in view wherever the person is on the page. An earlier
   // version scrolled to the top first and the smooth scroll fought the drawer's
   // height animation, jumping the page a few hundred pixels down instead.
+  //
+  // More sits at the far end of the page and the drawer opens at the top, so a
+  // keyboard user who pressed it was left on More and the next Tab left the
+  // page (measured on all 69 routes with the bar). Opening from More now hands
+  // focus to the drawer's first item. Escape closes the drawer from anywhere
+  // and gives focus to the menu button, the control that owns it.
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const focusDrawer = useRef(false);
+  const focusDrawerIfAsked = () => {
+    if (!focusDrawer.current) return;
+    const first = document.getElementById("mobile-menu")?.querySelector<HTMLElement>("a[href], button");
+    if (!first) return;
+    focusDrawer.current = false;
+    first.focus();
+  };
   useEffect(() => {
-    const openMenu = () => setMobileMenuOpen(true);
+    const openMenu = () => {
+      focusDrawer.current = true;
+      setMobileMenuOpen(true);
+      // Covers More pressed while the drawer is already open, when the state
+      // does not change and the effect below does not run again.
+      requestAnimationFrame(focusDrawerIfAsked);
+    };
     window.addEventListener("open-mobile-menu", openMenu);
     return () => window.removeEventListener("open-mobile-menu", openMenu);
   }, []);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    focusDrawerIfAsked();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMobileMenuOpen(false);
+      setOpenMobileGroup(null);
+      menuButton.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -123,8 +156,13 @@ export default function Layout({ children }: LayoutProps) {
         Skip to content
       </a>
 
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-teal-deep text-white shadow-lg">
+      {/* Navigation, inside the page's banner landmark: there was no <header>
+          on any route, so a screen reader's landmark list had no banner. The
+          header carries the sticky positioning now (a sticky child of a
+          header only as tall as itself would scroll away with it). The
+          contents keep their indentation so this stays a four-line change. */}
+      <header className="sticky top-0 z-50">
+      <nav className="bg-teal-deep text-white shadow-lg">
         <div className="container py-4 flex items-center justify-between">
           {/* One anchor, not two. wouter's Link renders the <a> itself, so a
               nested <a> is invalid markup: the browser closes the outer one
@@ -309,6 +347,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Icon-only, so it needs a spoken name and a state a screen
                 reader can hear — otherwise it announces as bare "button". */}
             <button
+              ref={menuButton}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
@@ -441,11 +480,12 @@ export default function Layout({ children }: LayoutProps) {
           )}
         </AnimatePresence>
       </nav>
+      </header>
 
       {/* Main Content */}
       {/* R47: the Trail, a member's one next step, on every page. */}
       <NextStepTrail />
-      <main id="main" tabIndex={-1} className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1 min-h-svh">
         {children}
       </main>
 

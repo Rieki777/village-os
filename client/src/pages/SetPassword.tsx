@@ -110,7 +110,7 @@ export default function SetPassword() {
                     onChange={(e) => setPw(e.target.value)}
                     placeholder="New password (8+ characters)"
                     autoFocus
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                   <label htmlFor="set-password-repeat" className="sr-only">Repeat the new password</label>
                   <input
@@ -120,7 +120,7 @@ export default function SetPassword() {
                     value={pw2}
                     onChange={(e) => setPw2(e.target.value)}
                     placeholder="Repeat it"
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                   {/* role="alert": the only signal that a password did not
                       save. Setting a password is not optional and there is no

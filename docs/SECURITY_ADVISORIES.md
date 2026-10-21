@@ -141,41 +141,38 @@ The Dockerfile's `extra-deps` stage and the `COPY` that reads it are now
 redundant, as that stage's own comment predicted. Deleting them belongs to
 whoever owns the Dockerfile.
 
-## Dev-only advisories that remain, and why none is on the ignore list
+## Dev-only advisories: none remain (measured 2026-10-20)
 
-Six advisories survive in the full tree and **zero** reach production, so the
-blocking gate never sees them. They are recorded here because
-`pnpm audit` with no `--prod` still prints them, and because GitHub's
-Dependabot badge counts them, so somebody will ask.
+None of the six dev-only advisories this section listed on 2026-08-31 is
+reported any more: `vitest` is at 5.0.5 and `@vitejs/plugin-react` at 5.2.0.
+On 2026-10-20, at `a5905b4`, the full tree held
+two moderates, both dev-only and both with no fix on a line this repository
+can take:
 
-None of them is suppressed. There is nothing to suppress: the gate is
-`--prod`, and `--prod` is clean.
-
-| Severity | Package | Advisory | Arrives through | Closed by |
+| Severity | Package | Advisory | Arrived through | Latest upstream |
 |---|---|---|---|---|
-| critical | `vitest` | GHSA-5xrq-8626-4rwp | `vitest@2.1.9` | vitest >= 3.2.6 |
-| high | `vite` | GHSA-fx2h-pf6j-xcff | `vitest@2.1.9 > vite@5.4.21` | vitest >= 3.2.6 |
-| moderate | `vite` | GHSA-4w7w-66w2-5vf9 | `vitest@2.1.9 > vite@5.4.21` | vitest >= 3.2.6 |
-| moderate | `vite` | GHSA-v6wh-96g9-6wx3 | `vitest@2.1.9 > vite@5.4.21` | vitest >= 3.2.6 |
-| moderate | `esbuild` | GHSA-67mh-4wv8-2f99 | `drizzle-kit > @esbuild-kit/*` and vitest's vite 5 | drizzle-kit dropping `@esbuild-kit/*` |
-| low | `@babel/core` | GHSA-4x5r-pxfx-6jf8 | `@vitejs/plugin-react@5.0.4` | @babel/core >= 7.29.6 |
+| moderate | `esbuild@0.18.20` | GHSA-67mh-4wv8-2f99 | `drizzle-kit@0.31.11 > @esbuild-kit/esm-loader > @esbuild-kit/core-utils` | drizzle-kit 0.31.11 still depends on it; `@esbuild-kit/core-utils` is deprecated and pins `esbuild ~0.18.20` |
+| moderate | `postcss-selector-parser@6.0.10` | GHSA-rj75-hqrm-r3gf | `@tailwindcss/typography@0.5.20` | 0.5.20 is the latest and pins 6.0.10 exactly; the fix is 7.1.6, a major |
 
-Four of the six are one change: **vitest 2 to 3**. That is a major on the test
-runner, it touches all 234 test files at once, and it belongs to whoever is
-next in the test lane rather than to a dependency sweep.
+**Both packages were removed, because neither was used.** `drizzle-kit` had no
+config file, no script and no workflow step (migrations are hand-written SQL;
+`scripts/run-migration.ts` says why `drizzle-kit push` is not used).
+`@tailwindcss/typography` is a plugin Tailwind v4 loads only through an
+`@plugin` directive, no stylesheet had one, and the built CSS held zero
+`--tw-prose-*` properties. The build after removal was byte-identical to the
+build before it for every shipped file, which is the measurement that says
+they were dead.
 
-The critical one cannot fire in this tree today. GHSA-5xrq-8626-4rwp requires
-the Vitest UI server to be listening. `@vitest/ui` is not installed: it appears
-in `pnpm-lock.yaml` only as an optional peer declaration, there is no
-`@vitest+ui` directory under `node_modules/.pnpm`, no script passes `--ui`
-(`test` is `vitest run`, `test:watch` is `vitest`), and no workflow does
-either. The vite and esbuild entries are the same shape: all three describe a
-**dev server** that answers requests, and the vite 5.4.21 inside vitest is a
-transform pipeline that never listens on a port.
+After removal: `pnpm audit` reports 0 at every severity over 539 packages
+(was 602), and `pnpm audit --prod` is unchanged at 0 over 309.
 
-This is a reachability argument. It buys no exemption. If any of these gains a
-production path, it moves up this page and the gate catches it, because none of
-them is on the ignore list.
+Two more cases of the rule the next section ends on: **the cheapest security
+fix is a dependency you were not using.** Before accepting an advisory, or overriding a
+transitive across a major, check whether the package is load-bearing at all.
+
+The `--prod` gate cannot see a dev-only advisory by design, and a dev
+toolchain is still code that runs on every contributor's machine and in CI.
+Read the full-tree count too.
 
 ## Removed rather than accepted
 

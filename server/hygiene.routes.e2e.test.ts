@@ -45,7 +45,7 @@ const EXPECTED: Array<[string, string]> = [
   ["x-content-type-options", "nosniff"],
   ["referrer-policy", "strict-origin-when-cross-origin"],
   ["x-frame-options", "SAMEORIGIN"],
-  ["content-security-policy", "frame-ancestors 'self'"],
+  ["cross-origin-opener-policy", "same-origin"],
   // The microphone is this origin's own: speech input needs it (journal QA,
   // 2026-10-02, found every mic refused with `not-allowed` under `()`).
   ["permissions-policy", "camera=(), microphone=(self), geolocation=()"],
@@ -110,6 +110,15 @@ describe.skipIf(!DB_CONFIGURED)("security response headers", () => {
       for (const [name, value] of EXPECTED) {
         expect(res.headers.get(name), `${route} is missing ${name}`).toBe(value);
       }
+      // The page policy (server/lib/securityHeaders.ts) carries a per-build hash,
+      // so assert what must hold rather than the exact string: framing stays
+      // same-origin, and no script runs unless it came from this origin.
+      const csp = res.headers.get("content-security-policy") ?? "";
+      expect(csp, `${route} CSP`).toContain("frame-ancestors 'self'");
+      expect(csp, `${route} CSP`).toContain("object-src 'none'");
+      const scriptSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src ")) ?? "";
+      expect(scriptSrc, `${route} script-src`).toMatch(/^script-src 'self'/);
+      expect(scriptSrc, `${route} script-src`).not.toMatch(/'unsafe-inline'|'unsafe-eval'/);
     });
   }
 
@@ -132,7 +141,11 @@ describe.skipIf(!DB_CONFIGURED)("security response headers", () => {
     const res = await fetch(`${BASE}/grounds/index.html`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    // The artifact is inline scripts throughout, so it keeps framing and the
+    // three directives that break nothing, and no script-src at all.
+    expect(res.headers.get("content-security-policy")).toBe(
+      "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
+    );
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
   });
 });

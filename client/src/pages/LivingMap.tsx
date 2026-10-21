@@ -697,9 +697,9 @@ export default function LivingMap() {
   if (modules.loaded && !mapModule) return <ModuleGate moduleId="map" name="How Power Is Held" />;
   if (slate.state === "blank" && !board) {
     return (
-      <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+      <main className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
         <BlankSlate slate={slate} onLeave={exitApp} onOpenBoard={() => { setBoard(true); enterTheLand(); }} />
-      </div>
+      </main>
     );
   }
   /* Nothing mounts until the slate is known, so a visitor to a blank village never downloads the map. */
@@ -723,9 +723,12 @@ export default function LivingMap() {
    * the shell's own escape control, and all three run the same path (see
    * mapHistory.ts). The shell draws one because the artifact's are laid
    * out off-screen on a phone, which left app mode with no way out at all.
+   *
+   * <main>, not <div>: app mode renders no Layout, so this is the page's only
+   * landmark, and a screen reader's landmark list was empty here.
    */
   return (
-    <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+    <main className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
       {/*
        * THE DOOR OUT, drawn by the SHELL, and only where the artifact has none.
        *
@@ -877,6 +880,6 @@ export default function LivingMap() {
           allow="fullscreen"
         />
       )}
-    </div>
+    </main>
   );
 }
