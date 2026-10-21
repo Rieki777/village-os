@@ -102,7 +102,7 @@ import { register as registerGovernanceModeRoutes } from "./routes/governanceMod
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, publicChangeSet, publicProposal, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
@@ -21051,7 +21051,7 @@ ${inner}
     const proposals = rows.map(rowToProposal);
     const backers = await backerCounts(getPool(), proposals.map((p) => p.id));
     const lastBallot = await lastBallotStatuses(proposals);
-    res.json(await Promise.all(proposals.map((p) => serveProposal(p, backers, lastBallot))));
+    res.json(await Promise.all(proposals.map(async (p) => publicProposal(await serveProposal(p, backers, lastBallot))))); // anonymous: lib/mechanicsHistory.ts
   });
 
   /**
@@ -21221,7 +21221,7 @@ ${inner}
         id: p.id,
         title: p.title,
         rationale: p.rationale,
-        changeSet: p.changeSet,
+        changeSet: publicChangeSet(p.changeSet), // a credential never reaches a public document: lib/mechanicsHistory.ts
         villageName: mergedConfig().project.name,
         proposerName: proposer ? firstName(proposer.name) : "A departed member",
         supports: backers.get(p.id)?.supports ?? 0,
@@ -21646,7 +21646,7 @@ ${inner}
       id: p.id,
       title: p.title,
       rationale: p.rationale,
-      changeSet: p.changeSet,
+      changeSet: publicChangeSet(p.changeSet), // the same rule as /document
       villageName: mergedConfig().project.name,
       proposerName: proposer ? firstName(proposer.name) : "A departed member",
       supports: backers.get(p.id)?.supports ?? 0,
@@ -23368,7 +23368,7 @@ ${inner}
       id: p.id,
       title: p.title,
       rationale: p.rationale,
-      changeSet: p.changeSet,
+      changeSet: publicChangeSet(p.changeSet), // frozen into the ballot, so the same rule as /document
       villageName: mergedConfig().project.name,
       proposerName: proposer ? firstName(proposer.name) : "A departed member",
       supports,

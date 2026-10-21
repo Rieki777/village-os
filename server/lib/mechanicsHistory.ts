@@ -17,7 +17,46 @@
  * values. Both, because a row whose new value is a key often has the old key
  * as its previous value.
  */
-import { withheldFromPublic, type VariableDef } from "../../shared/gameVariables";
+import { VARIABLES_BY_KEY, withheldFromPublic, type VariableDef } from "../../shared/gameVariables";
+
+/** What a proposal's change shows where a value is held back. */
+export const KEPT_PRIVATE = "(kept private)";
+
+/**
+ * THE SAME RULE FOR A PROPOSAL'S CHANGES, the other anonymous mechanics door.
+ *
+ * `GET /api/game/mechanics/proposals` serves each change's `from`, `to`, their
+ * display forms and `currentValue`, the dial's LIVE value read at request
+ * time; `/proposals/:id/document` and `/handoff` print the stored `from` and
+ * `to` into markdown. None of the three asked this question. Today the one
+ * flagged dial cannot reach them, because `validateChangeSet` refuses every
+ * founder-held dial and `tokens.base_rpc_url` is one, so this is the second
+ * lock and not the first: it holds the day a dial is flagged without being
+ * founder-held, and for a credential-SHAPED value on an open dial, which is
+ * the case `looksLikeCredential` exists for.
+ */
+export function changeIsWithheld(key: string, ...values: unknown[]): boolean {
+  const def = VARIABLES_BY_KEY[key];
+  if (def?.withheld) return true;
+  return values.some((v) => v != null && withheldFromPublic({ withheld: undefined, value: String(v) }));
+}
+
+/** A change set safe to print into a public document: a withheld change keeps its key and loses both values. */
+export function publicChangeSet<T extends { key: string; from?: unknown; to?: unknown }>(changes: T[]): T[] {
+  return changes.map((c) => (changeIsWithheld(c.key, c.from, c.to) ? { ...c, from: KEPT_PRIVATE, to: KEPT_PRIVATE } : c));
+}
+
+/** A served proposal safe for the anonymous list: every value field of a withheld change goes, `currentValue` included. */
+export function publicProposal<T extends { changes: any[] }>(served: T): T {
+  return {
+    ...served,
+    changes: served.changes.map((c) =>
+      changeIsWithheld(String(c.key), c.from, c.to, c.currentValue)
+        ? { ...c, from: KEPT_PRIVATE, to: KEPT_PRIVATE, fromDisplay: KEPT_PRIVATE, toDisplay: KEPT_PRIVATE, currentValue: null, withheld: true }
+        : c,
+    ),
+  };
+}
 
 export interface AmendmentRow {
   id: unknown;

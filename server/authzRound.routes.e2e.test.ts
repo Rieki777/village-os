@@ -199,6 +199,42 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     expect(row.to).toBe("");
   });
 
+  it("a proposal's credential-shaped value reaches neither the list, the document nor the handoff", async () => {
+    const SECRET = "ProposalSecret987";
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "A new place line",
+      rationale: "Testing that a value shaped like a credential is not served to strangers.",
+      changes: [{ key: "sessions.place_line", to: `Meet by the river https://feed.example.test/x?token=${SECRET}` }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const id = String(made.json?.id ?? "");
+    expect(id).toBeTruthy();
+
+    const list = await call("GET", "/api/game/mechanics/proposals", undefined, "");
+    expect(list.status).toBe(200);
+    expect(list.text).not.toContain(SECRET);
+    const mine = (list.json as any[]).find((p) => p.id === id);
+    expect(mine?.changes?.[0]?.withheld).toBe(true);
+
+    const doc = await call("GET", `/api/game/mechanics/proposals/${id}/document`, undefined, "");
+    expect(doc.status).toBe(200);
+    expect(doc.text).not.toContain(SECRET);
+    expect(String(doc.json?.markdown)).toContain("kept private");
+
+    const handoff = await call("GET", `/api/game/mechanics/proposals/${id}/handoff`, undefined, "");
+    expect(handoff.status).toBe(200);
+    expect(handoff.text).not.toContain(SECRET);
+  });
+
+  it("the founder-held dial cannot be proposed at all, which is the first lock", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Move the RPC", rationale: "Should be refused.",
+      changes: [{ key: "tokens.base_rpc_url", to: "https://base-mainnet.g.alchemy.com/v2/AuthzRoundKeyTwo0123456789" }],
+    });
+    expect(made.status, made.text).toBe(400);
+    expect(made.text).toContain("founder-held");
+  });
+
   it("an ordinary change still reads in full", async () => {
     const set = await call("PUT", "/api/admin/variables/abuse.investor_docs_per_ip_hourly", { value: "51" });
     expect(set.status, set.text).toBe(200);

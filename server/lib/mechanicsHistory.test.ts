@@ -60,3 +60,39 @@ describe("publicAmendment", () => {
     expect(out).toMatchObject({ label: "retired.dial", from: "1", to: "2", withheld: false });
   });
 });
+
+describe("the proposal doors run the same rule", () => {
+  const SECRET = "https://api.example.test/feed?token=ProposalSecret987";
+
+  it("publicChangeSet blanks a credential-shaped change and leaves an ordinary one", async () => {
+    const { publicChangeSet, KEPT_PRIVATE } = await import("./mechanicsHistory");
+    const out = publicChangeSet([
+      { key: "sessions.place_line", from: "", to: SECRET },
+      { key: "governance.sensing_days", from: "7", to: "10" },
+    ]);
+    expect(JSON.stringify(out)).not.toContain("ProposalSecret987");
+    expect(out[0]).toMatchObject({ key: "sessions.place_line", from: KEPT_PRIVATE, to: KEPT_PRIVATE });
+    expect(out[1]).toEqual({ key: "governance.sensing_days", from: "7", to: "10" });
+  });
+
+  it("publicChangeSet blanks a flagged dial whatever its values look like", async () => {
+    const { publicChangeSet, KEPT_PRIVATE } = await import("./mechanicsHistory");
+    const [c] = publicChangeSet([{ key: "tokens.base_rpc_url", from: "https://mainnet.base.org", to: "https://other.example" }]);
+    expect(c.to).toBe(KEPT_PRIVATE);
+  });
+
+  it("publicProposal drops currentValue too, which is the dial's LIVE value", async () => {
+    const { publicProposal, KEPT_PRIVATE } = await import("./mechanicsHistory");
+    const served = {
+      id: "gmp-1",
+      changes: [
+        { key: "sessions.place_line", from: "", fromDisplay: "", to: "x", toDisplay: "x", currentValue: SECRET },
+        { key: "governance.sensing_days", from: "7", fromDisplay: "7", to: "10", toDisplay: "10", currentValue: "7" },
+      ],
+    };
+    const out = publicProposal(served);
+    expect(JSON.stringify(out)).not.toContain("ProposalSecret987");
+    expect(out.changes[0]).toMatchObject({ from: KEPT_PRIVATE, toDisplay: KEPT_PRIVATE, currentValue: null, withheld: true });
+    expect(out.changes[1]).toEqual(served.changes[1]);
+  });
+});
