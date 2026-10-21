@@ -252,7 +252,14 @@ export function phaseLabel(status: string, percentPledged: number): string {
   if (status === "draft" || status === "pending_review") return "Waiting to open";
   if (status === "funded") return "The pool is full";
   if (status === "completed") return "Built into the village";
-  if (status === "cancelled" || status === "rejected") return "Closed";
+  /*
+   * `closed` is hub contract 5: the close date passed and the campaign did not
+   * complete. It takes no offers. It MUST be listed here, because the last line
+   * below treats any status it does not recognise as live, so a closed
+   * campaign would otherwise read "Gathering the pool" and invite offers it
+   * will refuse.
+   */
+  if (status === "cancelled" || status === "rejected" || status === "closed") return "Closed";
   return percentPledged < 50 ? "Gathering the pool" : "Under construction";
 }
 

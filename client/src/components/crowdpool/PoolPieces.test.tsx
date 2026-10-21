@@ -44,6 +44,7 @@ import {
   pledgedIsFloor,
   loanWindow,
   needLabel,
+  phaseLabel,
   pooledLine,
   ringTip,
 } from "./PoolPieces";
@@ -349,5 +350,21 @@ describe("the custody window, which nothing showed before contract 4", () => {
     expect(loanWindow({})).toBeNull();
     expect(loanWindow({ neededFrom: null, neededUntil: null })).toBeNull();
     expect(loanWindow({ neededFrom: "  ", neededUntil: "" })).toBeNull();
+  });
+});
+
+/*
+ * HUB CONTRACT 5: `closed` is an ended campaign. phaseLabel falls through to a
+ * LIVE phrase for any status it does not know, so the new status has to be named
+ * or a closed campaign reads as still gathering.
+ */
+describe("a campaign the hub closed reads as ended", () => {
+  it("says Closed, never a live phase", () => {
+    expect(phaseLabel("closed", 10)).toBe("Closed");
+    expect(phaseLabel("closed", 90)).toBe("Closed");
+  });
+
+  it("and a status it has never heard of still falls through, which is why closed is named", () => {
+    expect(phaseLabel("something-new", 10)).toBe("Gathering the pool");
   });
 });
