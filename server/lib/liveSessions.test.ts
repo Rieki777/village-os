@@ -504,11 +504,11 @@ describe("the dials and the notices this module registers", () => {
     const lines = [
       SESSION_NOTICES.recordReady("Garden circle, week 2"),
       SESSION_NOTICES.actionHeld("Garden circle, week 2"),
-      SESSION_NOTICES.actionBody("Order the seed.", "2026-10-31"),
+      SESSION_NOTICES.actionBody("Order the seed.", "Saturday 31 October"),
       ...Object.values(SESSION_REFUSALS),
     ];
     for (const line of lines) expect(line).not.toMatch(DASHES);
     expect(SESSION_NOTICES.actionBody("Order the seed.", null)).toBe("Order the seed.");
-    expect(SESSION_NOTICES.actionBody("Order the seed.", "2026-10-31")).toBe("Order the seed, by 2026-10-31.");
+    expect(SESSION_NOTICES.actionBody("Order the seed.", "Saturday 31 October")).toBe("Order the seed, by Saturday 31 October.");
   });
 });

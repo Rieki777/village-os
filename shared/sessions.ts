@@ -1117,8 +1117,11 @@ export const SESSION_NOTICES = {
   recordReady: (title: string): string => `The record of "${title}" is ready to read`,
   /** To each person who holds an action, or who sits in a seat that holds one. */
   actionHeld: (title: string): string => `An action from "${title}" is in your hands`,
-  /** The line under it: the action itself, and its date when it has one. */
-  actionBody: (text: string, dueOn: string | null): string => (dueOn ? `${text.replace(/[.!?]+$/, "")}, by ${dueOn}.` : text),
+  /**
+   * The line under it: the action itself, and its date when it has one, in
+   * words ("Thursday 22 October", from taskDateWords), never machine digits.
+   */
+  actionBody: (text: string, dueWords: string | null): string => (dueWords ? `${text.replace(/[.!?]+$/, "")}, by ${dueWords}.` : text),
 } as const;
 
 // ═════════════════════════════════════════════════════════════════════════════

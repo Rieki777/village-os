@@ -675,3 +675,58 @@ describe("the copy", () => {
     expect(TASK_COPY.sheets.let_go.noteRequired).toBe(true);
   });
 });
+
+// ── One task's link, and the doors a notice uses ────────────────────────────
+
+describe("a link that opens one task", () => {
+  it("names one card on the board, beside the board's own path", () => {
+    expect(contract.taskBoardLink(42)).toBe("/profile#task-42");
+    expect(contract.taskCardAnchor(42)).toBe("task-42");
+    expect(contract.TASK_BOARD_PATH).toBe("/profile#my-tasks");
+    expect(contract.taskDoneUrl(42)).toBe("/api/sessions/tasks/42/done");
+    expect(contract.TASKS_COUNT_URL).toBe("/api/sessions/tasks/count");
+  });
+
+  it("reads the task back out of a hash, and nothing else", () => {
+    expect(contract.taskIdFromHash("#task-42")).toBe(42);
+    expect(contract.taskIdFromHash("task-7")).toBe(7);
+    for (const hash of ["", "#my-tasks", "#task-", "#task-0", "#task-07", "#task-1x", "#task--3", "#task-1.5", "#wallet", null, undefined, "#task-99999999999999999"]) {
+      expect(contract.taskIdFromHash(hash as string | null | undefined), String(hash)).toBeNull();
+    }
+  });
+
+  it("knows a task link from every other notice link", () => {
+    expect(contract.taskIdFromLink(contract.taskBoardLink(9))).toBe(9);
+    for (const link of [contract.TASK_BOARD_PATH, "/sessions/12", "/profile", "/profile#wallet", "/elsewhere#task-9", "https://village.example/profile#task-9", null, undefined]) {
+      expect(contract.taskIdFromLink(link), String(link)).toBeNull();
+    }
+  });
+});
+
+describe("the words for the menu, the profile card and the bell", () => {
+  it("counts what waits on you in plain words, one and many", () => {
+    expect(TASK_COPY.menu.label).toBe("My tasks");
+    expect(TASK_COPY.menu.waiting(1)).toBe("1 task waits on you");
+    expect(TASK_COPY.menu.waiting(3)).toBe("3 tasks wait on you");
+    expect(TASK_COPY.waitingCard.count(1)).toBe("One task waits on you.");
+    expect(TASK_COPY.waitingCard.count(4)).toBe("4 tasks wait on you.");
+    expect(TASK_COPY.waitingCard.nextDue("Friday 23 October")).toBe("The nearest date is Friday 23 October.");
+    expect(TASK_COPY.waitingCard.nextDuePassed("Monday 19 October")).toBe("The earliest date was Monday 19 October.");
+    expect(TASK_COPY.waitingCard.button).toBe("Open my task board");
+  });
+
+  it("names each bell button with the task it acts on", () => {
+    expect(TASK_COPY.bell.done).toBe("It's done");
+    expect(TASK_COPY.bell.open).toBe("Open");
+    expect(TASK_COPY.bell.marked).toBe("Done. The circle sees it at the next action check.");
+    expect(TASK_COPY.bell.undo).toBe("Open it again");
+    expect(TASK_COPY.bell.doneLabel("Fix the tank")).toBe("It's done: Fix the tank");
+    // Label in Name (WCAG 2.5.3): a voice user says the visible words, so each name starts with them.
+    expect(TASK_COPY.bell.doneLabel("x").startsWith(TASK_COPY.bell.done)).toBe(true);
+    expect(TASK_COPY.bell.openLabel("x").startsWith(TASK_COPY.bell.open)).toBe(true);
+    expect(TASK_COPY.bell.undoLabel("x").startsWith(TASK_COPY.bell.undo)).toBe(true);
+    expect(TASK_COPY.bell.openLabel("Fix the tank")).toBe("Open it on your task board: Fix the tank");
+    expect(TASK_COPY.bell.undoLabel("Fix the tank")).toBe("Open it again: Fix the tank");
+    expect(TASK_REFUSALS.letGoNotDone).toBe("This one was let go. Open it on your task board to read why.");
+  });
+});
