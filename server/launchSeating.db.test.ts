@@ -380,10 +380,12 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(log.audits.some((a) => a.includes("cat-3")), "and nothing is recorded about them").toBe(false);
   });
 
-  it("entrusts ALL NINETEEN powers to the seat, and the seat carries all nineteen", async () => {
+  it("entrusts EVERY handover power to the seat, and the seat carries all of them", async () => {
     /*
      * Rye, 2026-09-24: the founding stewards "hold all powers at launch", and
      * asked whether that named a subset, all nineteen entrustable powers.
+     * Since then the comms power (2026-10-02) and the module switch
+     * (2026-10-09) joined them; the count is read off HANDOVER_SET.
      *
      * TWO FACTS AND NOT ONE. The role has to CARRY each power, or nobody in it
      * could act; the village has to HOLD each power, or an administrator walks
@@ -467,8 +469,8 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
      * left alone is a different answer from one that did nothing.
      */
     const movedAfter = await entrusted(pool);
-    expect(movedAfter, "the same nineteen rows, held by the same seat").toEqual(movedBefore);
-    expect(again.report?.capabilitiesGranted, "the role already carried all nineteen").toEqual([]);
+    expect(movedAfter, "the same rows, held by the same seat").toEqual(movedBefore);
+    expect(again.report?.capabilitiesGranted, "the role already carried all of them").toEqual([]);
     expect(again.report?.holdingMoved, "and they are still the village's").toBe(true);
   });
 });
@@ -566,7 +568,7 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
     expect(Number(holders[0].n)).toBe(0);
   });
 
-  it("still leaves the role carrying all nineteen, ready for the first vote that fills it", async () => {
+  it("still leaves the role carrying every handover power, ready for the first vote that fills it", async () => {
     /*
      * The grant is harmless and it is what makes the way back cheap: a
      * `role_seat` ballot seats somebody, and the powers can cross the moment

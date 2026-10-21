@@ -60,6 +60,8 @@ import {
   parseMintRuleKey,
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
+import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
+import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
 
 /**
  * -- WHAT A CHANGE SET IS MADE OF, AFTER Q9 ----------------------------------
@@ -341,6 +343,21 @@ export interface ProposedChange {
   /** Effective value at proposal time: the baseline voters saw. */
   from: string;
   to: string;
+  /**
+   * Present on a module switch only. A stored change keeps its kind so the
+   * executor reads it back as a `module_lifecycle` item and never as a dial:
+   * `asChangeItem` takes any change carrying a `kind` exactly as written.
+   */
+  kind?: "module_lifecycle";
+  moduleId?: string;
+}
+
+/** The key a module switch is filed under on a proposal: `module:<id>`. */
+export const moduleChangeKey = (moduleId: string): string => `module:${moduleId}`;
+
+/** The module a `module:<id>` key names, or null for any other key. */
+export function moduleOfChangeKey(key: string): string | null {
+  return typeof key === "string" && key.startsWith("module:") ? key.slice("module:".length) : null;
 }
 
 export interface ChangeSetProblem {
@@ -443,6 +460,19 @@ export const CHANGE_SET_CAP = 12;
 export interface ValidateChangeSetOptions {
   /** Override what this build can execute. Defaults to `EXECUTABLE_ITEM_KINDS`. */
   executableKinds?: ReadonlySet<ChangeItemKind>;
+  /**
+   * What a module is being served as right now. A module switch is refused
+   * without it, because a proposal has to show voters where it starts from.
+   * Injected so this file stays testable without the module settings loaded.
+   */
+  moduleLifecycleOf?: (moduleId: string) => ModuleLifecycle;
+  /**
+   * The id of a proposal already asking to switch this module, or null. A
+   * second proposal about one switch would split the village's answer, so a
+   * module switch is refused while one is open (the old ask door's dedupe,
+   * kept now the vote is binding).
+   */
+  openModuleProposal?: (moduleId: string) => Promise<string | null>;
 }
 
 export async function validateChangeSet(
@@ -512,6 +542,12 @@ export async function validateChangeSet(
 
   const seen = new Set<string>();
   for (const item of items) {
+    if (item.kind === "module_lifecycle") {
+      const checked = await moduleSwitchProblem(item, seen, options);
+      if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });
+      else normalized.push(checked);
+      continue;
+    }
     const key = String((item as DialItem | MintRuleItem).key ?? "");
     const to = String((item as DialItem | MintRuleItem).to ?? "").trim();
 
@@ -609,6 +645,37 @@ export async function validateChangeSet(
 
   problems.push(...mintCeilingProblems(normalized, mintRules));
   return { problems, normalized, items };
+}
+
+/**
+ * A module switch, checked the way a voter needs it checked: the module exists,
+ * a vote may move it, it is not already there, and nobody has asked already.
+ * The executor runs `setModuleLifecycle`'s own guards (dependencies, funds,
+ * open state) when the vote lands; the dry run and the library page show the
+ * dependencies before anybody votes.
+ */
+async function moduleSwitchProblem(
+  item: ModuleLifecycleItem,
+  seen: Set<string>,
+  options: ValidateChangeSetOptions | undefined,
+): Promise<string | ProposedChange> {
+  const moduleId = String(item.moduleId ?? "").trim();
+  const to = String(item.to ?? "").trim();
+  const key = moduleChangeKey(moduleId);
+  const def = MODULES_BY_ID[moduleId];
+  if (!def) return "There is no module by that name";
+  if (def.core) return `${def.name} is always on`;
+  if (NEVER_BY_CHANGESET.has(moduleId)) return `${def.name} holds the vote itself, so a vote cannot switch it`;
+  if (!isLifecycle(to)) return "A module can be off, in preview, on for members, or on for everyone";
+  if (seen.has(key)) return "The same module appears twice in this proposal";
+  seen.add(key);
+  if (!options?.moduleLifecycleOf) return "This build cannot read where a module stands from here";
+  const from = options.moduleLifecycleOf(moduleId);
+  if (from === to) return `${def.name} is already at ${lifecycleWords(to).toLowerCase()}`;
+  if (def.withdrawn && from === "off") return `${def.name} is no longer offered, so it cannot be turned on`;
+  const open = options.openModuleProposal ? await options.openModuleProposal(moduleId) : null;
+  if (open) return `A proposal to switch ${def.name} is already open. Back that one instead`;
+  return { key, from, to, kind: "module_lifecycle", moduleId };
 }
 
 /** The one cooldown read, shared by both vocabularies so they cool alike. */
@@ -713,6 +780,7 @@ export function proposerStanding(
 
 /** A stored value shown the way a voter should read it. */
 export function displayChangeValue(key: string, raw: string): string {
+  if (moduleOfChangeKey(key) !== null) return lifecycleWords(raw);
   const parsed = parseMintRuleKey(key);
   if (parsed) return displayMintRuleValue(parsed.field, raw);
   const def = VARIABLES_BY_KEY[key];
@@ -732,12 +800,19 @@ export function displayChangeValue(key: string, raw: string): string {
  * checked.
  */
 function changeLabel(key: string, mintRules: Map<string, MintRuleValues>): string {
+  if (moduleOfChangeKey(key) !== null) return moduleChangeLabel(key);
   const parsed = parseMintRuleKey(key);
   if (parsed) {
     const rule = mintRules.get(parsed.ruleId);
     return rule ? mintRuleLabel(rule, parsed.field) : key;
   }
   return VARIABLES_BY_KEY[key]?.label ?? key;
+}
+
+/** A module switch's label on a card or a document: the module's own name. */
+export function moduleChangeLabel(key: string): string {
+  const moduleId = moduleOfChangeKey(key);
+  return moduleId === null ? key : MODULES_BY_ID[moduleId]?.name ?? key;
 }
 
 /**
@@ -763,6 +838,7 @@ export function proposalMarkdown(p: {
 }): string {
   const mintRules = p.mintRules ?? new Map<string, MintRuleValues>();
   const mints = p.changeSet.some((c) => isMintRuleKey(c.key));
+  const switches = p.changeSet.length > 0 && p.changeSet.every((c) => moduleOfChangeKey(c.key) !== null);
   const lines: string[] = [
     `# [gm:${p.id}] ${p.title}`,
     "",
@@ -777,7 +853,7 @@ export function proposalMarkdown(p: {
     "",
     "## The changes",
     "",
-    mints ? "| what it pays for | now | proposed |" : "| dial | now | proposed |",
+    mints ? "| what it pays for | now | proposed |" : switches ? "| module | now | proposed |" : "| dial | now | proposed |",
     "|---|---|---|",
   ];
   for (const c of p.changeSet) {
@@ -790,7 +866,9 @@ export function proposalMarkdown(p: {
   }
   lines.push(
     "",
-    mints
+    switches
+      ? "If this proposal passes, each module above is switched exactly as listed, dependencies first, and the switch is recorded on that module's own history with this proposal's reference."
+      : mints
       ? "If this proposal passes, every change above is queued on the rule it names and takes effect at the next moon, which is how every change to a minting rule lands. Nothing is paid at a new rate inside the cycle the village is already in. Each one is recorded on the village's public amendment ledger with this proposal's reference."
       : "Every value above sits inside the bounds the platform's constitution fixes for that dial; if this proposal passes, the changes are applied exactly as listed and recorded on the village's public amendment ledger with this proposal's reference.",
     "",

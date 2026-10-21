@@ -1232,6 +1232,18 @@ cannot be rolled back once it returns. A draft claiming atomicity across both
 planes would be lying about the half it cannot undo. Moving a seat BETWEEN
 circles is `org_roles.circle_id` and is fully covered.
 
+**Corrected since: circles are draftable now, through raw SQL inside the
+publish transaction.** `create_circle` (made for the structure review) and
+`rest_circle` (0243) write `circles` on the publish connection and bump the
+`circles` row of `collection_versions` in the same transaction, and the
+publish and revert routes reload `circlesRepo` after the commit, which is the
+answer to the dbCollection problem above. A revert leaves a circle the draft
+made DORMANT and puts a rested one back. The admin route
+`POST /api/admin/org/drafts/:id/changes` takes both ops, for
+"Start from your ReGen Civics profile" (`shared/regenImport.ts`), which loads a
+project's circles, seats and holders, and rests the councils a new village is
+born with, as one draft the founder reads and publishes whole.
+
 It follows the shape `applyMechanicsProposal` already set: revalidate against
 current reality rather than trusting the captured proposal, idempotent by
 status, and refuse the WHOLE thing rather than half-applying. `thread_id` is a

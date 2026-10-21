@@ -17,6 +17,7 @@ import {
   validateChangeSet,
   proposalMarkdown,
   displayChangeValue,
+  moduleChangeLabel,
   CHANGE_SET_CAP,
   EXECUTABLE_ITEM_KINDS,
   type ChangeItem,
@@ -740,5 +741,45 @@ describe("trials and the natural tier", () => {
   it("allows a trial of a dial that prices nothing", () => {
     expect(trialProblem([{ kind: "dial", key: "governance.vote_days", to: "9" }])).toBeNull();
     expect(trialProblem([])).toBeNull();
+  });
+});
+
+describe("a module switch inside a change set (Rye, 2026-10-09)", () => {
+  const lifecycleOf = (id: string) => (id === "forum" ? ("members" as const) : ("off" as const));
+  const opts = { moduleLifecycleOf: lifecycleOf, openModuleProposal: async () => null };
+  const sw = (moduleId: string, to: string) => ({ kind: "module_lifecycle", moduleId, to }) as ChangeItem;
+
+  it("keeps its kind on the stored change, so the executor reads a switch and not a dial", async () => {
+    const { problems, normalized } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0, undefined, opts);
+    expect(problems).toEqual([]);
+    expect(normalized).toEqual([{ key: "module:tools", from: "off", to: "members", kind: "module_lifecycle", moduleId: "tools" }]);
+    expect(asChangeItem(normalized[0] as any).kind).toBe("module_lifecycle");
+  });
+
+  it("refuses a core module, the vote's own module, an unknown one and a no-op", async () => {
+    const run = async (item: ChangeItem) =>
+      (await validateChangeSet(noPool, [item], () => "", 0, undefined, opts)).problems.map((p) => p.problem).join(" ");
+    expect(await run(sw("quests", "members"))).toContain("always on");
+    expect(await run(sw("governance", "off"))).toContain("cannot switch it");
+    expect(await run(sw("nothing-here", "members"))).toContain("no module by that name");
+    expect(await run(sw("forum", "members"))).toContain("already");
+  });
+
+  it("refuses a second proposal while one is still asking about the same module", async () => {
+    const { problems } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0, undefined, {
+      ...opts,
+      openModuleProposal: async () => "gmp-1",
+    });
+    expect(problems[0].problem).toContain("already open");
+  });
+
+  it("refuses without a reader for where the module stands, and never guesses", async () => {
+    const { problems } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0);
+    expect(problems[0].problem).toContain("cannot read where a module stands");
+  });
+
+  it("labels the switch by the module's name, in lifecycle words", () => {
+    expect(moduleChangeLabel("module:tools")).not.toBe("module:tools");
+    expect(displayChangeValue("module:tools", "members")).toBe("On for members");
   });
 });

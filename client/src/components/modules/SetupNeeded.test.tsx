@@ -31,7 +31,7 @@ describe("SetupNeeded", () => {
     render(<SetupNeeded moduleId="events" setup="required" ready={dial} lifecycle="public" />);
     expect(screen.getByText(/Say which hemisphere/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Set Hemisphere" }).getAttribute("href")).toBe(
-      "/admin?tab=modules&module=events&setting=calendar.hemisphere",
+      "/modules/events#setting-calendar.hemisphere",
     );
   });
 
@@ -58,10 +58,10 @@ describe("SetupNeeded", () => {
     expect(screen.queryByText(/Turn it on in preview first/)).toBeNull();
   });
 
-  it("sends content to the card while the module is off, and says why", () => {
+  it("sends content to the module page while the module is off, and says why", () => {
     render(<SetupNeeded moduleId="stays" setup="required" ready={content} lifecycle="off" />);
     expect(screen.getByRole("link", { name: "Open its settings" }).getAttribute("href")).toBe(
-      "/admin?tab=modules&module=stays",
+      "/modules/stays",
     );
     expect(screen.getByText(/Turn it on in preview first/)).toBeInTheDocument();
   });
