@@ -216,6 +216,8 @@ own inbound token, waits for the vendor to have an event feed. Nothing here rece
 Both are set on the module's card in Admin (`client/src/components/admin/SaberraConfigPanel.tsx`),
 which is where the module's readiness link (`?setting=config`) lands. The same panel shows
 the connection (key set or not, address set or not, facts held) and holds **Sync now**.
+Under Sync now, its schedule and the run log, it lists what the journal bridge would send
+(`SaberraOutboxPanel.tsx`), without the words.
 The key itself is never entered there: the panel links to Admin, Integrations.
 
 The panel saves **only the fields somebody edited**, over a fresh read of the stored config.
@@ -240,9 +242,10 @@ and be sent the village's key.
 |---|---|
 | cause a sync, read connection status, read the run log (`GET /api/saberra/runs`) | `intake.moderate` |
 | set the schedule | admin, through the module config route like the addresses |
+| read what the journal bridge would send (`GET /api/saberra/outbox`) | `intake.moderate`. Kind, date, code-name, length and status only, never the words. |
 | read what the service holds about a seat | signed in, module on. No capability. |
 
-The second is deliberate: the question that panel answers is whether to put your hand up
+The last is deliberate: the question that panel answers is whether to put your hand up
 for a seat, and that is not a steward's question.
 
 ## What it does not do yet
@@ -252,6 +255,13 @@ for a seat, and that is not a steward's question.
   lists them.
 - **Nothing is written back to the service.** The vendor's structure-write tools exist and
   no code here calls them.
+- **Journal entries are recorded and not sent.** The journal bridge (part 1, `drizzle/0261_a_journal_crosses_under_a_code_name.sql`)
+  queues every shared entry under a code-name with member names swapped out, plus a weekly
+  team signal, in `saberra_outbox`. The service has not named where journal entries land, so
+  no transport exists and nothing is sent; `docs/modules/journal.md` has the rules. When a
+  transport is wired, this listing's `dataClass` question comes back: pseudonymised member
+  writing is closer to `member-pii` than to `village-content`, and the registry comment on
+  the listing names what that class needs before it goes live.
 - **Seatings are not proposed.** That is the people half.
 - **Nothing is received.** The service has no event feed yet, so there is no inbound
   endpoint and no inbound token. The schedule pulls.
