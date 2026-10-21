@@ -128,6 +128,7 @@ import {
 import { readTexts } from "../repos/alignments";
 import { registerJob } from "../lib/scheduler";
 import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
+import { openDraftBallot, ORG_DECIDE, publishDoorFor } from "../lib/orgDraftDecide";
 import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
@@ -218,6 +219,12 @@ export function register(app: Express, deps: Deps): void {
    * Asked through the one gate, `guardCapability`, so a visitor and a guest
    * are told the same thing and the governance document reads the door.
    */
+  /** The drafts no vote has frozen: a draft the village is voting on cannot be published by anybody until it closes. */
+  async function unfrozen<T extends { id: string }>(pool: ReturnType<typeof getPool>, drafts: T[]): Promise<T[]> {
+    const open = await Promise.all(drafts.map((d) => openDraftBallot(pool, d.id)));
+    return drafts.filter((_, i) => !open[i]);
+  }
+
   async function reader(req: any, res: any): Promise<any | null> {
     if (!(await guardCapability(req, res, "terms.read", { status: 401, body: MEMBERS_ONLY }))) return null;
     const viewer = await authedUser(req);
@@ -676,9 +683,14 @@ export function register(app: Express, deps: Deps): void {
    * open drafts a proposal made when they may publish them. Members only, by
    * the same `terms.read` door as every read here.
    *
-   * Publishing a draft is an admin's today: `POST /api/admin/org/drafts/:id/publish`
-   * asks `isAdmin`, which is the account role `capabilityCtx` reads as `isAdmin`.
-   * TODO(org.decide): ask the gate for `org.decide` once wt/org-decide adds it.
+   * A draft row asks the question the publish routes ask (`publishDoorFor`,
+   * server/lib/orgDraftDecide.ts): a live holder of `org.decide` sees it, and
+   * so does an admin until a launch vote has carried, which is when the admin
+   * panel's door stops being the decider's. Rye, 2026-10-20: "Immediate, and
+   * yes this is a power under any org and founder roles." A draft the village
+   * is voting on is frozen, so nobody is asked to publish it and it is left
+   * off. Each row links its batch's structure page, which offers the same
+   * door (server/routes/structureReview.ts).
    */
   app.get(WAITING_URL, async (req, res) => {
     const viewer = await reader(req, res);
@@ -692,7 +704,9 @@ export function register(app: Express, deps: Deps): void {
         await adoptionRule(viewer, ctx),
         viewerId,
       ),
-      drafts: ctx.isAdmin === true ? await draftsWaiting(pool) : [],
+      drafts: (await publishDoorFor(pool, { userId: viewerId, isAdmin: ctx.isAdmin === true }, await liveHoldersOf(ORG_DECIDE)))
+        ? await unfrozen(pool, await draftsWaiting(pool))
+        : [],
     };
     res.set("Cache-Control", "no-store").json(payload);
   });

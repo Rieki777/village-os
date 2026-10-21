@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { landProposal, proposalsInBatch, reopenProposalsFor } from "../lib/externalProposals";
 import { seatHolder } from "../lib/orgChart";
+import { recordLaunchCarried } from "../lib/launch";
 import { draftChangeCap, previewDraft, publishDraft, withdrawDraft } from "../lib/orgDrafts";
 import { register } from "./structureReview";
 
@@ -76,6 +77,9 @@ async function land(kind: string, payload: Record<string, unknown>, sourceRef?: 
 }
 
 describe.skipIf(!configured)("the structure change review", () => {
+  /** Who is asking, changed by the cases that are about it and put back after. */
+  const who = { id: "steward-1", moderates: true, admin: false, deciders: [] as string[] };
+
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
@@ -136,11 +140,11 @@ describe.skipIf(!configured)("the structure change review", () => {
     const app = express();
     app.use(express.json());
     register(app, {
-      isAdmin: (async () => false) as any,
-      authedUser: (async () => ({ id: "steward-1" })) as any,
+      isAdmin: (async () => who.admin) as any,
+      authedUser: (async () => ({ id: who.id })) as any,
       adminActor: (() => null) as any,
       guardCapability: (async () => true) as any,
-      mayStillSee: (async () => true) as any,
+      mayStillSee: (async () => who.moderates) as any,
       getPool: () => pool as any,
       members: { all: async () => [] } as any,
       circlesRepo: { all: () => circlesCache } as any,
@@ -149,7 +153,7 @@ describe.skipIf(!configured)("the structure change review", () => {
       seasonState: () => ({ current: null, seasons: [], timezone: "UTC" }),
       notify: (async () => ({ inserted: false })) as any,
       firstName: (n: string) => n.split(" ")[0] ?? "",
-      liveHoldersOf: async () => [],
+      liveHoldersOf: async (cap: string) => (cap === "org.decide" ? [...who.deciders] : []),
     });
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -341,8 +345,10 @@ describe.skipIf(!configured)("the structure change review", () => {
     expect(r.json.waiting).toBe(1);
     expect(r.json.plan.seats).toEqual([]);
     expect(r.json.plan.archived.map((a: any) => a.name)).toEqual(["Old Orchard"]);
-    // The publish route asks isAdmin, and so does this answer.
+    // Nobody here holds org.decide and the reader is no admin, so neither publish route admits them.
     expect(r.json.mayPublish).toBe(false);
+    expect(r.json.publishDoor).toBeNull();
+    expect(r.json.mayModerate).toBe(true);
     // The newest record dates the batch: the structure re-read on the 20th, never the
     // archived circle still waiting since the 9th, which is the first row the read holds.
     // Read through the same layer, so the database host's time zone cancels out.
@@ -369,5 +375,66 @@ describe.skipIf(!configured)("the structure change review", () => {
 
     // A batch that never held anything is still a 404.
     expect((await call("GET", "/api/review/batches/sync-nothing/structure")).status).toBe(404);
+  });
+
+  /*
+   * WHICH DOOR, AND WHO MAY READ. The two publish routes decide who publishes
+   * (`publishDoorFor`): a live holder of `org.decide` through publish-by-power,
+   * an admin through the panel's door until a launch vote carries. This read
+   * offers exactly that, and a holder who does not keep the review queue may
+   * read the draft, since "Waiting on you" links them here, without the queue's
+   * leftovers.
+   */
+  it("offers the door the publish routes would open, and lets a holder of org.decide read the draft only", async () => {
+    const DOOR = "sync-door";
+    const st = await land("org.proposed", { title: "One keeper", seats: [{ name: "Gate Keeper", circleName: "General Coordinating Circle", id: "rec-gate-keeper" }] }, undefined, DOOR);
+    await land("circle.proposed", { "Circle Name": "Hedge Circle", Status: "Active" }, "rec-hedge-door", DOOR);
+    const accepted = await call("POST", `/api/review/batches/${DOOR}/structure/accept`, { ids: [st] });
+    expect(accepted.status, JSON.stringify(accepted.json)).toBe(200);
+    const read = () => call("GET", `/api/review/batches/${DOOR}/structure`);
+    try {
+      // A live holder of the power, keeping the queue too: the holder's door.
+      Object.assign(who, { id: "decider-1", moderates: true, admin: false, deciders: ["decider-1"] });
+      let r = await read();
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+      expect(r.json).toMatchObject({ mayPublish: true, publishDoor: "power", mayModerate: true, waiting: 1 });
+
+      // The same holder without the queue's key still reads the draft, and only the draft.
+      who.moderates = false;
+      r = await read();
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+      expect(r.json).toMatchObject({ mayPublish: true, publishDoor: "power", mayModerate: false, plan: null, waiting: 0 });
+      expect(r.json.draft.id).toBe(accepted.json.draftId);
+
+      // A member who neither holds the power nor keeps the queue is refused, before anything is read.
+      Object.assign(who, { id: "member-1", deciders: ["decider-1"] });
+      expect((await read()).status).toBe(401);
+
+      // An admin holding nothing, before a launch vote: the admin panel's door.
+      Object.assign(who, { id: "admin-1", moderates: true, admin: true, deciders: [] });
+      r = await read();
+      expect(r.json).toMatchObject({ mayPublish: true, publishDoor: "admin" });
+
+      // After a launch vote the same admin is offered nothing, and holding the power is the holder's door.
+      await recordLaunchCarried(pool, { ballotId: "bal-launch-door", closedBy: "admin-1" });
+      r = await read();
+      expect(r.json).toMatchObject({ mayPublish: false, publishDoor: null });
+      who.deciders = ["admin-1"];
+      r = await read();
+      expect(r.json).toMatchObject({ mayPublish: true, publishDoor: "power" });
+
+      // A draft the village is voting on is frozen, so nobody is offered the publish.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO ballots (id, subject_type, subject_ref, open_key, title, doc_markdown, method, " +
+          "weight_mode, unity_pct, quorum_pct, total_weight, electorate_count, opened_by, opens_at, closes_at, status) " +
+          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP() + INTERVAL 7 DAY,'open')",
+        ["bal-door-vote", "org_draft", accepted.json.draftId, `org_draft:${accepted.json.draftId}`, "Adopt the draft", "the draft", "majority", "equal", 50, 0, 3, 3, "admin-1"],
+      );
+      r = await read();
+      expect(r.json).toMatchObject({ mayPublish: false, publishDoor: null });
+    } finally {
+      Object.assign(who, { id: "steward-1", moderates: true, admin: false, deciders: [] });
+      await pool.query("DELETE FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: resets a fixture row on the scratch schema
+    }
   });
 });

@@ -184,6 +184,34 @@ export async function launchedByVote(pool: Pool): Promise<boolean> {
   return (await launchedByBallotIdOf(pool)) !== null;
 }
 
+/** The door a person publishes an open draft through: the holder's, or the admin panel's. */
+export type PublishDoor = "power" | "admin";
+
+/**
+ * WHICH DOOR THIS PERSON MAY PUBLISH A DRAFT THROUGH, or null for neither.
+ * The question both publish routes ask, read without answering a request, for
+ * the reads that offer the button (the structure review page, and the drafts
+ * on the task board's "Waiting on you").
+ *
+ *   power  a live holder of `org.decide`, which is `publish-by-power`'s door;
+ *   admin  an admin, until a launch vote has carried, which is the admin
+ *          panel's door as it stands before launch (`launchedByVote`).
+ *
+ * The break-glass where the village holds the power is left out on purpose.
+ * It is a door through the gate for an emergency, written into the public
+ * record, and nobody should find it offered as a chore. Whether the draft is
+ * frozen under a vote is the caller's to ask, per draft.
+ */
+export async function publishDoorFor(
+  pool: Pool,
+  viewer: { userId: string | null; isAdmin: boolean },
+  liveDeciders: readonly string[],
+): Promise<PublishDoor | null> {
+  if (viewer.userId && liveDeciders.includes(viewer.userId)) return "power";
+  if (viewer.isAdmin && !(await launchedByVote(pool))) return "admin";
+  return null;
+}
+
 // ── The ballot a draft is put to ────────────────────────────────────────────
 
 /** The open vote on this draft, if one is running. */
