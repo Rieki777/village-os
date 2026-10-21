@@ -112,6 +112,17 @@ export type Capability =
   // decided it means, and there is no vacancy to detect, only a key nobody was
   // given.
   | "redemption.confirm" // agree that a member was paid, and destroy their tokens
+  // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
+  //
+  // Before launch the founders turn modules on from the library. After launch
+  // turning one ON follows who holds the power: a live holder of this key
+  // turns it on directly, and with no holder a proposal goes to a binding
+  // village vote. Admins keep pause and off as a safety valve, logged and
+  // announced. The rule lives in `shared/moduleSwitch.ts`; the holder is
+  // counted by `liveHoldersOfCapability`, which leaves the admin
+  // short-circuit out on purpose, so an admin who was never given this key is
+  // exactly the "nobody holds it" case.
+  | "module.switch" // turn a module on for the village after launch
   /*
    * The steward's veto, and the reason it has to carry.
    *
@@ -178,6 +189,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "dial.set",
   "quest.approve",
   "redemption.confirm",
+  "module.switch",
   "steward.veto",
   "comms.manage",
 ];
@@ -236,6 +248,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
+  "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
 };
@@ -414,6 +427,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // village hands to a named circle. Its two routes ask `guardCapability`, so
   // the escape hatch and the public record this column promises are both there.
   "redemption.confirm": true,
+  // Turning a module on after launch. Its route counts live holders without
+  // the admin short-circuit, so the escape hatch this column describes is the
+  // village vote itself: with no holder, anybody may propose it.
+  "module.switch": true,
   "library.keep": true,
   "story.tell": true,
   "org.seat": true,
@@ -562,12 +579,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 21 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 22 keys
  * today. The other 16 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 21 in the founding seat and has
+ * Read this way, a launched village holds all 22 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -584,6 +601,20 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * words were read to cover. `capabilities.test.ts` now parses these sentences
  * and compares them with the derived set, so the next transferable power is an
  * edit somebody makes here on purpose, not a drift nobody sees.
+ * TWO POWERS HAVE COME THROUGH THAT DOOR SINCE, in landing order rather than
+ * ruling order: `org.decide` (ruled 2026-09-14, landed 2026-10-20) and then
+ * `module.switch` (ruled 2026-10-09, landed 2026-10-21), which together moved
+ * the pair to 22 and 16. A new key born transferable moves the first number
+ * and leaves the second; a key RECLASSIFIED from withheld to transferable would
+ * move both, in opposite directions.
+ *
+ * This sentence was itself wrong for one batch, and it is the reason the check
+ * below reads the WHOLE paragraph rather than three sentences. It claimed
+ * `module.switch` was first and gave the pair as twenty-one and sixteen - true of the tree it
+ * was written on, false the moment `org.decide` landed ahead of it. It carried
+ * numbers, it auto-merged with no conflict marker, and the three-sentence check
+ * did not look at it. A guard whose hazard list is shorter than the hazard is a
+ * guard that reports clean.
  *
  * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
  * capability added to the union with no line there is a type error and a
@@ -770,6 +801,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   // as a say in what the village decides, and nothing at all about their own
   // right to ask to redeem.
   "redemption.confirm": true,
+  // A job as well. Pausing it stops somebody switching modules on alone; the
+  // village can still propose one, and the vote decides.
+  "module.switch": true,
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
@@ -896,6 +930,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,
+  "module.switch": true,
 };
 
 /**

@@ -23,7 +23,7 @@ Code noun `seasonPlan` (NOT "roll": already means ballot electorate and `season_
 `isLapsed` (orgChart.ts:341-384) treats a seating with another season_id as lapsed, so next-season adoptions must not seat early. PR4 gets `seat_applications.starts_at datetime NULL` + `startsNoEarlierThan` input; closer records adopted and leaves seating to hourly job `season-plan-turn` (registered from route module, precedent routes/failedActions.ts:40,77): seats via PR4's exported `seatFromApplication`, renewals rewrite season_id/term_ends_at/application_id on the existing seating, re-checks free places (held-full + notice). Gap: up to 1h lapsed after the turn; Season tab save runs sweep.
 
 ## Seat that does not exist yet
-Not in the same proposal in v1 (creating = org.decide/PR7; holding = org.seat/PR4). Plan page offers "Propose a seat". Optional RC3 after PR7: `awaits_draft_id`, status `awaiting-seat`, `releaseAwaiting(draftId)` from the org_draft closer.
+Not in the same proposal in v1 (creating = org.decide/PR7; holding = org.seat/PR4). Status 2026-10-21: `org.decide` and the `org_draft` vote are live (#495, server only); the member "Propose a seat" door is not built yet, so the Plan page does not offer it. Plan page offers "Propose a seat" once that door exists. Optional RC3 after PR7: `awaits_draft_id`, status `awaiting-seat`, `releaseAwaiting(draftId)` from the org_draft closer.
 
 ## Data (migration E, number by four-way check)
 ```sql

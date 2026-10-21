@@ -32,11 +32,12 @@ import { playMoment } from "@/lib/sound";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGameConfig } from "@/lib/gameApi";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
-import { Link } from "wouter";
-import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
+import { Link, Redirect } from "wouter";
+import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
+import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
-import type { ModuleLifecycle, ModuleTier } from "@shared/modules";
+import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
 
@@ -50,9 +51,6 @@ import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
-import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
-import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
-import SetupNeeded from "@/components/modules/SetupNeeded";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
@@ -65,7 +63,7 @@ import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
-import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
+import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
@@ -77,10 +75,12 @@ import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
+import ProfileImportDoor from "@/components/admin/ProfileImportDoor";
+import { takePrefill, usePrefill } from "@/lib/profilePrefill";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
-import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
+import { ExampleChip, ExamplesBanner, forgetExamplesCache } from "@/components/ExamplesBanner";
 // visit-inquiry and membership-508 were missing, and they are the two highest-value
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
 // membership. Both were reachable only by scrolling "All types". The strings are
@@ -2751,6 +2751,9 @@ function QuestsTab({ password }: { password: string }) {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [adding, setAdding] = useState({ title: "", description: "", gratitude: "", circle: "" });
+  // A quest handed over from a ReGen Civics file (ProfileImport.tsx): in the form, unposted, until Post is pressed.
+  const [fromProfile, setFromProfile] = useState<{ needLabel: string | null } | null>(null);
+  usePrefill("quest", (q) => { setAdding((a) => ({ ...a, title: q.title })); setFromProfile({ needLabel: q.needLabel }); });
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   // Suggestions come from the board itself, so an admin reuses the circle
   // names already in play instead of coining a near-miss the chips ignore.
@@ -2801,6 +2804,7 @@ function QuestsTab({ password }: { password: string }) {
 
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-6">
         <h3 className="font-semibold text-gray-900 mb-3">Post a quest</h3>
+        {fromProfile && <p className="text-xs text-gray-600 mb-3">From your ReGen Civics profile{fromProfile.needLabel ? `, a quest that grows ${fromProfile.needLabel}` : ""}. Nothing is posted until you press Post quest. Add what it asks for, and a reward if you want one.</p>}
         <div className="grid sm:grid-cols-5 gap-2 items-end">
           <label className="text-xs text-gray-500">Title
             <input value={adding.title} onChange={(e) => setAdding({ ...adding, title: e.target.value })} className={`${inputCls} w-full mt-1`} />
@@ -2830,6 +2834,7 @@ function QuestsTab({ password }: { password: string }) {
                 forgetExamplesCache("quests");
                 toast.success("Posted");
                 setAdding({ title: "", description: "", gratitude: "", circle: "" });
+                setFromProfile(null);
                 load();
               }
             }}
@@ -3193,744 +3198,14 @@ function PlayersTab({ password }: { password: string }) {
   );
 }
 
-// ── Modules (S13): the catalog, lifecycles, and the Hypha integration card ───
+// ── Modules: retired into the library (Rye, 2026-10-09) ─────────────────────
 //
-// BUILDER_GUIDE_URL and POOL_REASON_COPY moved to shared/moduleCatalog.ts
-// (L1): the public library renders the same words, and shared/ is where
-// check-voice holds them.
-
-const LIFECYCLES = ["off", "preview", "members", "public"] as const;
-// Keyed by the union, not by `string`: the compiler now owns the promise that
-// every lifecycle has a sentence, so a fifth one is a build error rather than a
-// blank paragraph where the who-can-see-this line belongs.
-const LIFECYCLE_HINT: Record<ModuleLifecycle, string> = {
-  off: "Routes 404, no nav, no admin surface.",
-  preview: "Admins only. Invisible to everyone else.",
-  members: "Signed-in members only.",
-  public: "Everyone. Capability gates still apply.",
-};
-
-export function ModulesTab({ password }: { password: string }) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string>("");
-  // The catalog controls. Every filter defaults to "all", so a village that has
-  // never opened this page sees the same list it saw before.
-  const [query, setQuery] = useState("");
-  const [tierFilter, setTierFilter] = useState("all");
-  const [domainFilter, setDomainFilter] = useState("all");
-  const [dataFilter, setDataFilter] = useState("all");
-  const [priceFilter, setPriceFilter] = useState("all");
-  /** Which listing has its detail open. One at a time, so the page stays readable. */
-  const [openId, setOpenId] = useState<string | null>(null);
-  /**
-   * Which listing has its SETTINGS open, and the deep link that opens one.
-   *
-   * `/admin?tab=modules&module=<id>&setting=<key>` is the address Game
-   * Mechanics and every setup hint send a founder to, so the link lands on the
-   * settings, and on the one dial where it names one. The reading lives in
-   * `moduleDeepLink.ts`; this file is on a line ratchet that only turns down.
-   */
-  const { settingsId, setSettingsId, focusKey, setFocusKey, clearFocusKey } = useModuleDeepLink(!loading);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules`, { headers: authHeaders(password) });
-      setData(await res.json());
-    } catch { setData(null); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setLifecycle = async (mod: any, lifecycle: string) => {
-    if (mod.legalReview && mod.lifecycle === "off" && lifecycle !== "off") {
-      const sure = window.confirm(
-        `${mod.name} touches funds. Before enabling: credits are non-withdrawable and non-refundable to fiat; ` +
-          "tested backups, per-admin identities, and legal review are preconditions. Continue?",
-      );
-      if (!sure) return;
-    }
-    setBusy(mod.id);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules/${mod.id}/lifecycle`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ lifecycle }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        // A missing dependency is the one refusal the server cannot phrase
-        // alone, because the fix is a list of other modules. The trailing stop
-        // comes off before the sentence is extended, so a unified body that
-        // already ends in one does not print "..". Every other refusal,
-        // `dependents` included, now carries its own sentence and is printed
-        // as it stands.
-        if (d.missing?.length) toast.error(`${refusal(d, "Change refused").replace(/\.$/, "")}. Enable ${d.missing.join(", ")} first.`);
-        else toast.error(refusal(d, "Change refused"));
-      } else {
-        toast.success(`${mod.name} is now ${lifecycle}`);
-        // The nav rail and the Go-live card share one reader; tell it the
-        // world moved so a turned-on module's tab appears without a reload.
-        window.dispatchEvent(new Event("modules:changed"));
-      }
-      load();
-    } catch { toast.error("Change failed"); }
-    setBusy("");
-  };
-
-  /**
-   * Clear a module's standing examples without publishing a decoy first.
-   * One-way, so it asks — and it says what "for good" means, because the
-   * button cannot be undone by turning the module off and on again.
-   */
-  const clearExamples = async (mod: any) => {
-    // The route retires the PAIR, and the question named one module, so a
-    // founder clearing the forum was never told the feed empties with it.
-    // Only name a twin that is actually holding examples right now.
-    const twins = (RETIRES_WITH[mod.id] ?? [])
-      .map((id) => (data?.modules ?? []).find((m: any) => m.id === id))
-      .filter((m: any) => m?.showingExamples)
-      .map((m: any) => String(m.name));
-    const sure = window.confirm(
-      `Clear the standing examples from ${mod.name}?\n\n` +
-        (twins.length
-          ? `This clears ${twins.join(" and ")} too: they are lenses over the same rows, so one cannot keep its examples while the other loses them.\n\n`
-          : "") +
-        "They are removed permanently. Publishing your first real item would " +
-        "have done this anyway; this just does it now, leaving the module empty.",
-    );
-    if (!sure) return;
-    setBusy(mod.id);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules/${mod.id}/examples/clear`, {
-        method: "POST",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        toast.error(refusal(d, "Could not clear the examples"));
-      } else {
-        toast.success(`${mod.name}: ${d.removed} example row(s) cleared`);
-        // The member-facing banner reads its own endpoint and would otherwise
-        // keep labelling a module whose rows this button just deleted, until
-        // whoever is on that page happened to reload it. Only on success: a
-        // partial pass leaves the rows AND the tombstone, so the label has to
-        // stay. Paired, because the route retires the pair: the forum and the
-        // feed share a table and a category, so clearing one alone left the
-        // other's rows on the same page with the banner already gone.
-        // `confirmed` because this answer IS the server's, awaited: there is
-        // nothing left to reconcile with a poll.
-        forgetExamplesCache(mod.id, { confirmed: true });
-      }
-      load();
-    } catch { toast.error("Could not clear the examples"); }
-    setBusy("");
-  };
-
-  const demoted = (data?.modules ?? []).filter((m: any) => m.demotedBecause?.length);
-  const showingExamples = (data?.modules ?? []).filter((m: any) => m.showingExamples);
-
-  // ── The catalog ────────────────────────────────────────────────────────────
-  const all: any[] = data?.modules ?? [];
-  /** A village running something that is no longer offered needs telling once, at the top. */
-  const withdrawnAndOn = all.filter((m: any) => m.withdrawn && m.lifecycle !== "off");
-
-  /*
-   * A filter appears only once the catalog holds more than one answer for it.
-   *
-   * Eighteen modules that are all `included`, all free and all member-pii would
-   * otherwise render three dropdowns that can only ever return everything, plus
-   * a price filter whose "paid" option matches nothing. The toolbar grows as
-   * the library does, which is the honest version of a store front.
-   */
-  const distinct = (pick: (m: any) => string | null | undefined): string[] =>
-    Array.from(new Set(all.map(pick).filter((v): v is string => !!v))).sort();
-  const tiers = distinct((m) => m.tier);
-  const domains = distinct((m) => m.provides);
-  const dataClasses = distinct((m) => m.dataClass);
-  const prices = distinct((m) => (m.pricing && m.pricing.amount > 0 ? "paid" : "free"));
-
-  const needle = query.trim().toLowerCase();
-  const visible = all.filter((m: any) => {
-    if (needle) {
-      const hay = [m.name, m.description, m.id, m.builtBy, m.vendor?.legalName, m.provides]
-        .filter(Boolean).join(" ").toLowerCase();
-      if (!hay.includes(needle)) return false;
-    }
-    if (tierFilter !== "all" && m.tier !== tierFilter) return false;
-    if (domainFilter !== "all" && (m.provides ?? "") !== domainFilter) return false;
-    if (dataFilter !== "all" && m.dataClass !== dataFilter) return false;
-    if (priceFilter !== "all" && (m.pricing && m.pricing.amount > 0 ? "paid" : "free") !== priceFilter) return false;
-    return true;
-  });
-  const filtered = needle !== "" || tierFilter !== "all" || domainFilter !== "all" || dataFilter !== "all" || priceFilter !== "all";
-  const clearFilters = () => {
-    setQuery(""); setTierFilter("all"); setDomainFilter("all"); setDataFilter("all"); setPriceFilter("all");
-  };
-
-  /**
-   * A successor named by its NAME. `replacedBy` carries a module id because an
-   * id is what the registry can validate against; showing that id to a founder
-   * would print something like "village-map replaces it" where the product
-   * everywhere else says Village Map. The server's 409 resolves it the same
-   * way, so the two read alike.
-   */
-  const successorName = (id: string | null | undefined): string | null =>
-    id ? (all.find((x: any) => x.id === id)?.name ?? id) : null;
-
-  /**
-   * The five shelves (L1): the same grouping the public library renders,
-   * filters and search applying within them. A module whose group the
-   * shelves do not claim stays visible on the last shelf instead of
-   * vanishing; the catalog test upstream makes that a cannot-happen.
-   */
-  const shelves = MODULE_GROUPS.map((group, gi) => ({
-    group,
-    items: [
-      ...visible.filter((m: any) => m.group === group.id),
-      ...(gi === MODULE_GROUPS.length - 1
-        ? visible.filter((m: any) => !MODULE_GROUPS.some((g) => g.id === m.group))
-        : []),
-    ],
-  })).filter((s) => s.items.length > 0);
-
-  /*
-   * Mobile first, because most of this audience is on mobile Safari.
-   *
-   * Two iOS rules drive every number here. A form control under 16px makes
-   * Safari ZOOM the whole page on focus, which on a filter row means the
-   * catalog jumps sideways the moment somebody taps it, so the base size is
-   * `text-base` and desktop shrinks to the existing `text-xs` at `sm:`. And a
-   * touch target under 44px is a target people miss, so controls carry
-   * `min-h-[44px]` on a phone and drop it on a pointer device.
-   *
-   * The filters are half-width on a phone so two sit per row within thumb
-   * reach, and full auto width from `sm:` up.
-   */
-  const SELECT =
-    "text-base min-h-[44px] flex-1 min-w-[45%] sm:text-xs sm:min-h-0 sm:flex-none sm:min-w-0 " +
-    "border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-deep/40";
-  const PILL = "ml-2 text-[10px] px-1.5 py-0.5 rounded-full";
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Modules</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          What this village runs. Everything ships off; each step up widens who can
-          see it. Off modules contribute nothing: no routes, no nav, no settings.
-        </p>
-      </div>
-      {loading ? <div className="text-center py-12 text-gray-600">Loading...</div> : !data ? (
-        <p className="text-sm text-red-600">Could not load modules.</p>
-      ) : (
-        <div className="space-y-5">
-          {(demoted.length > 0 || (data.orphans ?? []).length > 0) && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {demoted.map((m: any) => (
-                <p key={m.id}>
-                  <strong>{m.name}</strong> is configured {m.lifecycle} but requires{" "}
-                  {m.demotedBecause.join(", ")}. It is being served as OFF until that is resolved.
-                </p>
-              ))}
-              {(data.orphans ?? []).length > 0 && (
-                <p>Stored settings reference unknown module id(s): {data.orphans.join(", ")} (ignored).</p>
-              )}
-            </div>
-          )}
-
-          {withdrawnAndOn.length > 0 && (
-            <div className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-              <p className="font-medium">
-                {withdrawnAndOn.length === 1 ? "One module you run is" : `${withdrawnAndOn.length} modules you run are`} no longer offered.
-              </p>
-              <p className="mt-1 text-xs leading-relaxed">
-                Withdrawn means withdrawn from the catalog. Yours keeps running exactly as it is, and
-                nothing about it changes today. What you cannot do is turn it back on once you switch
-                it off, so plan the move before you do.
-              </p>
-              <ul className="mt-2 text-xs space-y-1">
-                {withdrawnAndOn.map((m: any) => (
-                  <li key={m.id}>
-                    <strong>{m.name}</strong>, withdrawn {m.withdrawn.since}
-                    {m.withdrawn.replacedBy ? `. ${successorName(m.withdrawn.replacedBy)} replaces it` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {showingExamples.length > 0 && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-medium">Some modules are showing standing examples.</p>
-              <p className="mt-1 text-xs leading-relaxed">
-                Platform-authored content so a module is never empty when you first
-                open it. Nobody in this village made it, nothing anyone does to it
-                takes effect, and it clears itself the moment you publish something
-                real there. Clear it early if you want to start from nothing. Either
-                way it is gone for good.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {showingExamples.map((m: any) => (
-                  <button
-                    key={m.id}
-                    onClick={() => clearExamples(m)}
-                    disabled={busy === m.id}
-                    className="text-xs font-medium px-2.5 py-1 rounded-md border border-amber-400 bg-white/70 hover:bg-white disabled:opacity-50"
-                  >
-                    {busy === m.id ? "Clearing…" : `Clear ${m.name} examples`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border border-teal-deep/30 bg-teal-deep/5 rounded-xl p-5">
-            <h3 className="font-semibold text-gray-900 mb-1">Hypha integration</h3>
-            <p className="text-xs text-gray-600 mb-3">
-              All governance, voting, and equity live on your Hypha DHO; modules link
-              out and never rebuild it. Set the address on the Hypha Bridge card below,
-              under Settings (hypha.org_url). Blank hides every Hypha button.
-            </p>
-            {data.hypha?.configured ? (
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(data.hypha.links).map(([name, url]) => (
-                  <a key={name} href={String(url)} target="_blank" rel="noopener noreferrer"
-                    className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-teal-deep font-medium hover:bg-gray-50">
-                    {name} ↗
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-block">
-                Not connected yet. Every Hypha surface is hidden.
-              </p>
-            )}
-          </div>
-
-          {/* The front door for builders. It sits above the catalog because
-              somebody browsing what exists is the person most likely to notice
-              what does not. Mobile first, on the same numbers as the catalog
-              controls below: 16px text and a 44px target on a phone, dropping
-              to the compact sizes on a pointer device, and the link is
-              underlined at rest because a phone has no hover. */}
-          <div className="border border-teal-deep/30 bg-white rounded-xl p-5">
-            <h3 className="font-semibold text-gray-900 mb-1">Start building modules. Start here.</h3>
-            <p className="text-sm sm:text-xs text-gray-600 leading-relaxed">
-              Anyone can build a module for this platform. One guide covers all of it: what to read,
-              what to run, and how a finished module reaches other villages. Every free module earns a
-              share of the ReGen builders' pool, sized by how many members open it. A share is
-              recorded against the account named in the module's own entry, and the builder links
-              their Base address in their own profile there. Nothing has been paid out yet: the
-              counting runs, and the sending is still done by a person.
-            </p>
-            {/* The explainer sits here once, beside the link that acts on it,
-                instead of repeating per card. Every module card carries its own
-                one-line reason; this is the sentence that makes those reasons
-                mean something, and a founder needs it once. */}
-            <p className="text-sm sm:text-xs text-gray-600 leading-relaxed mt-2">
-              ReGen Civics shares a pool of $ReGen every lunar cycle across the free modules that
-              members are opening. A module that charges a price is paid by the villages using it.
-            </p>
-            <a
-              href={BUILDER_GUIDE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center mt-3 text-base sm:text-xs font-medium text-teal-deep underline min-h-[44px] sm:min-h-0 pr-3"
-            >
-              Open the builder guide ↗
-            </a>
-          </div>
-
-          {/* The catalog toolbar. Search always; each filter only once the
-              library holds more than one answer for it. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search the catalog"
-              /* A placeholder is not a name: it disappears the moment somebody
-                 types, and a screen reader announcing "edit text, blank" beside
-                 four labelled selects leaves the one control that does the most
-                 work unnamed. */
-              aria-label="Search the catalog"
-              className="w-full sm:flex-1 sm:w-auto sm:min-w-[200px] px-3 py-2 text-base min-h-[44px] sm:text-sm sm:min-h-0 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-            />
-            {tiers.length > 1 && (
-              <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className={SELECT} aria-label="Filter by tier">
-                <option value="all">Any tier</option>
-                {tiers.map((t) => <option key={t} value={t}>{TIER_PILL[t as ModuleTier] ?? t}</option>)}
-              </select>
-            )}
-            {domains.length > 1 && (
-              <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} className={SELECT} aria-label="Filter by domain">
-                <option value="all">Any domain</option>
-                {domains.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-            {dataClasses.length > 1 && (
-              <select value={dataFilter} onChange={(e) => setDataFilter(e.target.value)} className={SELECT} aria-label="Filter by data class">
-                <option value="all">Any data</option>
-                {dataClasses.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-            {prices.length > 1 && (
-              <select value={priceFilter} onChange={(e) => setPriceFilter(e.target.value)} className={SELECT} aria-label="Filter by price">
-                <option value="all">Any price</option>
-                <option value="free">No extra charge</option>
-                <option value="paid">Paid</option>
-              </select>
-            )}
-            {/* The count is the one number that says whether a filter is
-                hiding anything, so it reads at gray-600. At gray-400 it
-                measured 2.49:1 on the panel's own gray-50. */}
-            <span className="text-xs text-gray-600">
-              {visible.length} of {all.length}
-            </span>
-            {filtered && (
-              <button onClick={clearFilters} className="text-sm sm:text-xs font-medium text-teal-deep underline min-h-[44px] sm:min-h-0 px-2">
-                Clear
-              </button>
-            )}
-          </div>
-
-          {visible.length === 0 && (
-            <p className="text-sm text-gray-500 py-8 text-center">
-              Nothing in the catalog matches that. Clear the filters to see all {all.length}.
-            </p>
-          )}
-
-          {shelves.map(({ group, items }) => (
-          <section key={group.id}>
-            <h3 className="font-semibold text-gray-900">{group.label}</h3>
-            <p className="text-xs text-gray-500 mt-0.5 mb-3">{group.gloss}</p>
-          <div className="grid gap-4">
-            {items.map((m: any) => (
-              /*
-               * `min-w-0 break-words` is what keeps eighteen cards inside a
-               * phone.
-               *
-               * One column, so every card is the same width, and a grid item's
-               * automatic minimum is its min-content: one long word anywhere in
-               * any listing sets the floor for the whole catalog and the page
-               * scrolls sideways. The word that did it is a game variable in
-               * the lifecycle hint. `feed.max_hearts_per_recipient_per_cycle`
-               * is thirty-nine characters and a dot is not a break opportunity,
-               * so it measured 256px against the 232px a 360px screen leaves,
-               * and every card went to 298.5.
-               *
-               * `min-w-0` stops any child setting that floor and `break-words`
-               * gives the word somewhere to break, which is why they ship as a
-               * pair: alone, the first would let the word spill out of the card
-               * and the second would not shrink min-content at all. Applied to
-               * the card rather than to the one paragraph, because `builtBy`, a
-               * vendor name, a licence key and a module id can all be one long
-               * token too, and `overflow-wrap` inherits.
-               */
-              <div key={m.id} id={`module-card-${m.id}`} className="border border-gray-200 rounded-xl p-5 min-w-0 break-words">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="max-w-xl min-w-0">
-                    <h3 className="font-semibold text-gray-900">
-                      {m.name}
-                      {/* gray-600 on the gray-100 chip: gray-500 measured
-                          4.39:1 there, just under the line. */}
-                      {m.core && <span className="ml-2 text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Core</span>}
-                      {m.legalReview && <span className="ml-2 text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">legal review</span>}
-                      {/* The third pill. `included` deliberately shows nothing:
-                          it is the absence of a badge, exactly the way
-                          everything that is not core is silent here today. */}
-                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>{TIER_PILL.connected}</span>}
-                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>{TIER_PILL.managed}</span>}
-                      {/* Withdrawn sits beside the tier because it changes what
-                          a founder can do, which is the same kind of fact. */}
-                      {m.withdrawn && <span className={`${PILL} bg-orange-50 text-orange-700 border border-orange-200`}>withdrawn</span>}
-                      {m.pricing && m.pricing.amount > 0 && (
-                        <span className={`${PILL} bg-emerald-50 text-emerald-700 border border-emerald-200`}>{m.priceLine}</span>
-                      )}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-0.5">{m.description}</p>
-                    {/* Who wrote it. A credit line, never a tier, which is why it
-                        renders for included modules too and sits apart from the
-                        pills above. */}
-                    {m.builtBy && (
-                      <p className="text-xs text-gray-600 mt-1.5">Built by {m.builtBy}</p>
-                    )}
-                    {m.requires.length > 0 && (
-                      <p className="text-xs text-gray-600 mt-1.5">requires: {m.requires.join(", ")}</p>
-                    )}
-                    {/* The fourth line: who answers for this one. Only where
-                        somebody outside is involved, so eighteen platform
-                        modules gain no noise. */}
-                    {m.support?.party === "vendor" && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        built and supported by {m.support.vendorName}, and you hold the account.{" "}
-                        <a href={m.support.supportUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Support</a>
-                      </p>
-                    )}
-                    {m.tier === "managed" && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        supported by whoever runs this deployment. One bill, one number to call.
-                      </p>
-                    )}
-                    {m.listing && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        enabled as "{TIER_PILL[m.listing.tier as ModuleTier] ?? m.listing.tier}" under library contract {m.listing.contractVersion}
-                        {m.listing.acceptedAt ? ` on ${new Date(m.listing.acceptedAt).toLocaleDateString()}` : ""}
-                      </p>
-                    )}
-                    {/* A paid listing says where it stands on its licence, in
-                        both directions. `credentialPresent` is whether a key is
-                        SET, which is a different fact from a key that works, so
-                        this line never claims the second one. */}
-                    {m.pricing && m.pricing.amount > 0 && m.credentialPresent === false && (
-                      <p className="text-xs text-amber-700 mt-1.5">
-                        No licence key yet. This module answers 503 and says who to reach, and the
-                        rest of the village keeps working.
-                      </p>
-                    )}
-                    {m.pricing && m.pricing.amount > 0 && m.credentialPresent === true && (
-                      <p className="text-xs text-gray-600 mt-1.5">Licence key is set.</p>
-                    )}
-                    {m.withdrawn && (
-                      <p className="text-xs text-orange-700 mt-1.5">
-                        Withdrawn from the catalog on {m.withdrawn.since}.
-                        {m.withdrawn.replacedBy ? ` ${successorName(m.withdrawn.replacedBy)} replaces it.` : ""}
-                        {m.lifecycle === "off"
-                          ? " It cannot be turned on."
-                          : " Yours keeps running, and turning it off is one way."}
-                      </p>
-                    )}
-                    {/* Underlined at rest rather than on hover: a phone has no
-                        hover, so an affordance that only appears under a cursor
-                        is invisible to most of this audience. */}
-                    <button
-                      onClick={() => setOpenId(openId === m.id ? null : m.id)}
-                      aria-expanded={openId === m.id}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3"
-                    >
-                      {openId === m.id ? "Hide details" : "Details"}
-                    </button>
-                    {/* The public card for this module: art, promise, the
-                        whole pitch. Same page members browse (L1). */}
-                    <Link
-                      href={`/modules/${m.id}`}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3 inline-flex items-center"
-                    >
-                      Library page
-                    </Link>
-                    {/* Every setting this module reads, on the card, at any
-                        lifecycle (Rye, 2026-09-15). A button rather than a
-                        section that is always open: eighteen cards each
-                        unrolling their dials is a page nobody can scan. */}
-                    <button
-                      onClick={() => setSettingsId(settingsId === m.id ? null : m.id)}
-                      aria-expanded={settingsId === m.id}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3"
-                    >
-                      {settingsId === m.id ? "Hide settings" : "Settings"}
-                    </button>
-                  </div>
-                  {m.core ? (
-                    /* This pill is a core module's whole lifecycle answer, so
-                       it reads at the same weight as the buttons beside it.
-                       gray-400 measured 2.49:1 on the panel's gray-50. */
-                    <span className="text-xs text-gray-600 italic pt-1">always on</span>
-                  ) : (
-                    /*
-                     * Two columns on a phone, one row from `sm:` up.
-                     *
-                     * As one nowrap row the four labels set a min-content floor
-                     * of 264px, which a 360px screen cannot pay for: 56px rail +
-                     * 32px page padding + 40px card padding leaves 230, and the
-                     * whole catalog scrolled sideways because of it. A grid
-                     * wraps instead of pushing, so the card fits whatever is
-                     * left, and each cell lands well over the 44px a thumb
-                     * needs (the `off` button was 40.6 wide as a flex item).
-                     *
-                     * The hairlines come from the container's own background
-                     * showing through a 1px gap. `border-l` per button drew a
-                     * stray line down the left edge of the second row.
-                     */
-                    <div className="grid grid-cols-2 gap-px w-full sm:flex sm:w-auto sm:gap-0 rounded-lg border border-gray-200 bg-gray-200 sm:bg-transparent overflow-hidden">
-                      {LIFECYCLES.map((lc) => {
-                        /* A withdrawn listing that is already off can never come
-                           back, so the buttons that would try are dead rather
-                           than merely refused. The server refuses it anyway
-                           (409); this is so a founder is not invited to press
-                           something that cannot work. */
-                        const barred = !!m.withdrawn && m.lifecycle === "off" && lc !== "off";
-                        return (
-                          <button
-                            key={lc}
-                            disabled={busy === m.id || barred}
-                            onClick={() => setLifecycle(m, lc)}
-                            title={barred ? `Withdrawn on ${m.withdrawn.since}. It cannot be turned on.` : LIFECYCLE_HINT[lc]}
-                            className={`px-3 py-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 text-xs font-medium transition-colors ${
-                              m.lifecycle === lc
-                                ? "bg-teal-deep text-white"
-                                : "bg-white text-gray-600 hover:bg-gray-50"
-                            } ${barred ? "opacity-40 cursor-not-allowed" : ""} ${lc !== "off" ? "sm:border-l sm:border-gray-200" : ""}`}
-                          >
-                            {lc}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {/* What this module is still waiting for, at every lifecycle,
-                    with the link to the control. The Go-live card only speaks
-                    in preview and this card said nothing at all, so a village
-                    already live could never be told. */}
-                <SetupNeeded
-                  moduleId={m.id}
-                  setup={m.setup ?? "none"}
-                  ready={m.ready}
-                  lifecycle={String(m.served ?? m.lifecycle ?? "off")}
-                  className="mt-3"
-                  onOpen={({ moduleId, settingKey }) => { setSettingsId(moduleId); setFocusKey(settingKey); }}
-                />
-                {!m.core && m.lifecycle !== "off" && (
-                  <p className="text-xs text-gray-600 mt-3">
-                    {/* `m` is the untyped catalog row, so the cast is where the
-                        wire value meets the union. It asserts what the server
-                        already validates and nothing more: a value outside the
-                        union still renders blank, exactly as it does today. */}
-                    {LIFECYCLE_HINT[m.lifecycle as ModuleLifecycle]}
-                    {/* The sentence that used to follow sent a founder to Game
-                        Mechanics for this module's tunables. They are on this
-                        card now, under Settings, and they are there while the
-                        module is off as well. */}
-                  </p>
-                )}
-
-                {settingsId === m.id && (
-                  <ModuleSettingsSection
-                    moduleId={m.id}
-                    moduleName={m.name}
-                    lifecycle={String(m.served ?? m.lifecycle ?? "off")}
-                    moduleNames={Object.fromEntries(all.map((x: any) => [x.id, x.name]))}
-                    password={password}
-                    focusKey={focusKey}
-                    onFocused={clearFocusKey}
-                  />
-                )}
-
-                {/* The listing detail. Inline rather than a modal, so the list
-                    stays put and a founder never loses their place. */}
-                {openId === m.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 grid gap-3 text-xs">
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-500">
-                      <span>id: <code className="text-gray-700">{m.id}</code></span>
-                      <span>data it holds: <span className="text-gray-700">{m.dataClass}</span></span>
-                      {m.pool && POOL_REASON_COPY[m.pool.reason] && (
-                        <span>
-                          pool:{" "}
-                          {/* Keyed on disposition and no longer on `eligible`.
-                              R59 made every platform module eligible, so an
-                              eligible test now paints all twenty-three the same
-                              emerald and the colour says nothing. Green here
-                              means a builder outside the platform is paid. */}
-                          <span className={m.pool.disposition === "paid" ? "text-emerald-700" : "text-gray-700"}>
-                            {POOL_REASON_COPY[m.pool.reason]}
-                          </span>
-                        </span>
-                      )}
-                      {m.provides && <span>domain: <span className="text-gray-700">{m.provides}</span></span>}
-                      <span>
-                        contract doc:{" "}
-                        <span className={m.hasContractDoc ? "text-gray-700" : "text-amber-700"}>
-                          {m.hasContractDoc ? "on the shelf" : "none yet"}
-                        </span>
-                      </span>
-                    </div>
-
-                    {m.pricing && (
-                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                        <p className="font-medium text-emerald-900">{m.priceLine}</p>
-                        <p className="text-emerald-800 mt-1 leading-relaxed">
-                          {m.pricing.amount > 0
-                            ? "You buy this from the builder and they bill you directly. This platform takes no part in the payment."
-                            : "This listing adds no charge of its own."}
-                        </p>
-                        {m.pricing.billingUrl && (
-                          <a href={m.pricing.billingUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">
-                            Pricing and billing ↗
-                          </a>
-                        )}
-                        {m.pricing.licenceKey && (
-                          <p className="text-emerald-800 mt-1">
-                            The licence lives in your own secrets store, under{" "}
-                            <code>{m.pricing.licenceKey}</code>. You can see its last four characters
-                            and clear it from Integrations, without asking anybody.
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {m.vendor && (
-                      <div className="grid gap-1">
-                        <p className="font-medium text-gray-700">{m.vendor.legalName}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          <a href={m.vendor.url} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Product ↗</a>
-                          <a href={m.vendor.termsUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Terms ↗</a>
-                          <a href={m.vendor.statusUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Status ↗</a>
-                          <a href={m.vendor.supportUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Support ↗</a>
-                          <span className="text-gray-500">{m.vendor.supportEmail}</span>
-                        </div>
-                        <p className="text-gray-500">
-                          {m.vendor.liveness?.mode === "window"
-                            ? `A successful call is expected inside ${m.vendor.liveness.withinHours} hours. Longer silence reads as stale.`
-                            : "Called on demand, so silence here is normal and is declared as such."}
-                        </p>
-                      </div>
-                    )}
-
-                    {(m.vendor?.setupSteps ?? []).length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-700 mb-1">Setup you do inside their product</p>
-                        <ul className="list-disc pl-4 space-y-1 text-gray-500">
-                          {m.vendor.setupSteps.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-
-                    {(m.health ?? []).length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-700 mb-1">What its calls have actually done</p>
-                        {m.health.map((h: any) => (
-                          <p key={h.operation} className={h.reading?.verdict === "failing" || h.reading?.verdict === "stale" ? "text-red-600" : "text-gray-500"}>
-                            {h.operation}: {h.reading?.detail}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-500">
-                      {m.recommends.length > 0 && <span>works better with: {m.recommends.join(", ")}</span>}
-                      {m.capabilities.length > 0 && <span>adds permissions: {m.capabilities.join(", ")}</span>}
-                      {/* The count of tunables stood here. It read
-                          `variableKeys`, which is now only the keys a module
-                          owns OUTSIDE its own namespace, so the number would
-                          undercount every module that owns one. Settings has
-                          its own button above, and the section prints the
-                          whole list. */}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          </section>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// The Module Library tab lived here. It is one page with the public library
+// now: `/modules` (filters, state, starter sets, the founder's plan) and
+// `/modules/:id` (the switch, setup, dials, examples, vendor and health, in
+// client/src/components/admin/ModuleStewardPanel.tsx). The rail keeps one
+// entry, which is a link there, and `/admin?tab=modules&...` redirects
+// (`legacyModulesTabTarget` in shared/moduleSetupLink.ts).
 
 // ── Circles & Map admin (S19-S23) ────────────────────────────────────────────
 
@@ -6603,6 +5878,8 @@ function ExitsAdminTab({ password }: { password: string }) {
   const [selectedUser, setSelectedUser] = useState("");
   const [state, setState] = useState<any>(null);
   const [policyDraft, setPolicyDraft] = useState<any>(null);
+  // What happens when someone leaves, from a ReGen Civics file (ProfileImport.tsx): in the leaving words below, unpublished.
+  const [exitFromProfile, setExitFromProfile] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   // The platform's own words, sent down with the policy. Held rather than
   // copied into the bundle so the editor's "still the platform's" marker and
@@ -6627,7 +5904,9 @@ function ExitsAdminTab({ password }: { password: string }) {
       ]);
       const e = await eRes.json();
       setData(e);
-      setPolicyDraft(e.policy);
+      const handedExit = takePrefill("exitPolicy");
+      setPolicyDraft(handedExit && e.policy ? { ...e.policy, voluntary: { ...e.policy.voluntary, valuationMethod: handedExit } } : e.policy);
+      if (handedExit && e.policy) setExitFromProfile(true);
       setPolicyDefaults(e.defaults ?? null);
       setCircles(Array.isArray(e.circles) ? e.circles : []);
       const p = await pRes.json();
@@ -6794,6 +6073,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         return (
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
+          {exitFromProfile && <p className="mb-3 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">"How contributed value is honored" now holds your stewards' words for what happens when someone leaves, from your ReGen Civics profile. Move any part to the box it belongs in. Nothing is published until you press Publish.</p>}
           <p className="text-xs text-gray-500 mb-4">
             Every field here is printed at /exit-policy for anyone to read,
             signed in or not. This is the highest-stakes copy on the site: it
@@ -6926,7 +6206,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             )}
           </div>
 
-          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); load(); } }}
+          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
             className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep">Publish policy</button>
         </div>
         );
@@ -8494,34 +7774,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
     />
   );
 
-  /*
-   * The "Journey page copy" row came out with the four tabs it pointed at.
-   * It sent a founder to an editor whose saves the journey pages never read,
-   * and a wizard that hands somebody a door to a room that was demolished is
-   * worse than one that stays quiet about it.
-   */
-  const contentEditors = [
-    /*
-     * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
-     * surfaces a fresh village publishes people on. A founder walked the whole
-     * wizard and was never shown the screen where the seats and the team cards
-     * are edited, so whatever was already on /team and /roles stayed there and
-     * read as the village's own. That is how a fork published four strangers.
-     *
-     * First in the list on purpose: people are the thing a visitor looks for
-     * first and the thing a village is most answerable for.
-     */
-    { tab: "org-chart", label: "Org Chart", hint: "Your circles, your seats, and who holds them. This is what /roles and /team show." },
-    { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
-    { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
-    { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },
-    { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
-    { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy." },
-    { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page." },
-    { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
-    { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
-  ];
-
   /* SetupSection is a module-scope import and MUST stay one. It was declared
      here, inside this body, which made a new component type on every render
      and remounted all six steps (and the focused input) on every keystroke.
@@ -8562,6 +7814,9 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </button>
         )}
       </div>
+
+      {/* A project from ReGen Civics brings its file here. Identity goes into the boxes below, unsaved (ProfileImportDoor.tsx). */}
+      <ProfileImportDoor password={password} onOpenTab={onOpenTab} onIdentity={(p) => setBrand((b: any) => ({ ...b, project: { ...b.project, ...p } }))} />
 
       <SetupSection {...step} id="identity" n={1} title="Identity" subtitle="What your project is called.">
         <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -8659,7 +7914,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
       <SetupSection {...step} id="content" n={5} title="Content" subtitle="Rewrite the words, questions, milestones, and quests for your project.">
         <div className="space-y-2">
-          {contentEditors.map((c) => (
+          {SETUP_CONTENT_EDITORS.map((c) => (
             <div key={c.tab} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-2.5">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-gray-900">{c.label}</div>
@@ -9252,6 +8507,11 @@ export default function Admin() {
       .catch(() => { /* leave as incomplete; the wizard just stays pinned */ });
   }, [password, activeTab, needsSetup.observations]);
 
+  // The retired Module Library tab, and every old link to it, land on the
+  // library itself. Before the gate: the library is public.
+  if (activeTab === "modules") {
+    return <Redirect to={legacyModulesTabTarget(window.location.search) ?? "/modules"} replace />;
+  }
   if (!password) {
     return <AdminGate onAuth={setPassword} />;
   }
@@ -9329,7 +8589,6 @@ export default function Admin() {
           {activeTab === "game-roles" && <GameRolesTab password={password} />}
           {activeTab === "handover" && <HandoverTab password={password} />}
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
-          {activeTab === "modules" && <ModulesTab password={password} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}

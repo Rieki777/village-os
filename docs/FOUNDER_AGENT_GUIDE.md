@@ -291,6 +291,49 @@ founder will not notice it unless you tell them:
 A ticked box outlives whatever it was ticked about. If a founder shows you six
 of six and the site still looks wrong, four of those six are their own word.
 
+### Starting from a ReGen Civics profile
+
+**What it achieves:** a land project that designed its Game in ReGen Civics'
+Season 2 sessions brings that work in, instead of typing it again: its human
+needs, its circles and seats, who holds them, and, from the Village OS 1.0 file,
+its name, purpose and covenant.
+
+The card is at the top of Make This Site Yours, and the needs ceremony's first
+screen points to it. The founder pastes or chooses the file (the board's "Copy
+for Village OS" card, schema `regen-civics/village-card@1`, or the profile's 1.0
+file, `regen-civics/village@1`); any other file is refused in a sentence.
+Reading it writes nothing. The screen lists every part in plain words with its
+own tick, and only "Load what you kept" sends anything:
+
+- the needs go through the same scope write the needs ceremony uses, and the
+  whole-village figure through the variables route;
+- the circles, the seats, the holders the file names and the resting of the
+  councils a new village is born with become **one org draft**, which the
+  founder reads line by line on the same screen and then publishes or
+  withdraws. A published draft reverts whole;
+- after the publish, each circle's way of deciding is declared and each seat is
+  tagged with its own needs;
+- identity, the purpose statement, the covenant, the recognition token's name,
+  the exit policy's leaving words and each quest are put into their own
+  editors unsaved, and the founder presses Save there;
+- everything else the stewards wrote (how the next holder of a seat is chosen,
+  voting, founders, stewards, the first step in, seasons, the pool token, the
+  legal and land answers, tools, the web address) is a checklist of what to set
+  by hand, each line saying where. Nothing on it is set.
+
+Nothing it loads is money. The stewards' answer to the issuance cap is shown
+beside the launch decision it answers, which stays the founders' own, and
+exchange, redemption, commerce, stays and the crowdpool view stay off whatever
+the file says. Modules are listed in the order they can be turned on. A seat a
+being holds goes in as an open seat with the being named on its card. Holders
+need a running season with an end date, because every holding ends with its
+season; without one the screen says so and leaves them for a later load.
+
+The rules are in `shared/regenImport.ts`, the reader in `shared/regenFile.ts`,
+the screen in `client/src/components/admin/ProfileImport.tsx`. Walk the founder
+through the preview before they press Load: it is the one place they see the
+whole shape before it is true.
+
 ### Naming the place
 
 **What it achieves:** the village has its own name, its own tagline, its own

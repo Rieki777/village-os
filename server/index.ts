@@ -150,6 +150,8 @@ import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
+import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
+import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
@@ -279,7 +281,7 @@ import {
   proposalsOpenedSince,
   proposerStanding,
   currentMintRuleValue,
-  mintRuleLabel,
+  mintRuleLabel, moduleChangeLabel,
   rowToProposal,
   priceChangeSet, validateChangeSet, asChangeItem,
   type MintRuleValues,
@@ -8460,70 +8462,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     });
   });
 
-  /**
-   * The Module Library, public and read-only (L1; proposal §8 item 6). The
-   * platform's own "what a village can be" page: every module with its
-   * platform copy, rendered server-side from shared/moduleCatalog.ts the same
-   * way `priceLine` is, so the registry and the copy stay out of the client
-   * bundle and check-voice keeps holding every sentence.
-   *
-   * State rides the exact `/api/modules` viewer filter: signed-in members get
-   * `on` (true at members or public), admins also get `lifecycle`, and an
-   * anonymous reader gets no state key at all, so what a village is trying
-   * out never leaks. Express matches `app.get("/api/modules")` exactly, so
-   * this sub-path is safely its own route (proved in the S13 tests).
-   */
-  app.get("/api/modules/catalog", async (req, res) => {
-    const admin = await isAdmin(req);
-    const authed = admin || !!(await authedUser(req));
-    res.json({
-      platform: {
-        name: mergedConfig().project.name,
-        build: BUILD_MARKER,
-      },
-      groups: MODULE_GROUPS,
-      // The last card on the shelf: build one, get paid in $ReGen (R20).
-      builder: { guideUrl: BUILD_A_MODULE_URL, poolUrl: BUILDERS_POOL_URL },
-      modules: MODULES.map((m) => {
-        const lc = effectiveLifecycle(m.id);
-        const cfg = moduleConfig<any>(m.id);
-        // Validated on the way OUT as well as in: a hand-edited config row
-        // must not be able to point the public catalog at an offsite image.
-        // And a village's own art only shows once the module serves members
-        // or wider (admins always see it): custom art on an off module would
-        // whisper what a village is trying out, the exact thing preview's
-        // byte-identity exists to keep quiet.
-        const imageUrl =
-          typeof cfg?.imageUrl === "string" &&
-          cfg.imageUrl.startsWith("/api/uploads/") &&
-          (admin || !!m.core || LIFECYCLE_RANK[lc] >= LIFECYCLE_RANK.members)
-            ? cfg.imageUrl
-            : null;
-        return {
-          id: m.id,
-          name: m.name,
-          description: m.description,
-          core: !!m.core,
-          tier: m.tier,
-          dataClass: m.dataClass,
-          provides: m.provides ?? null,
-          support: supportRoute(m),
-          pool: poolStatus(m),
-          group: m.group ?? null,
-          setup: m.setup ?? "none",
-          requires: m.requires,
-          recommends: m.recommends,
-          legalReview: !!m.legalReview,
-          withdrawn: m.withdrawn ?? null,
-          priceLine: m.pricing ? priceLine(m.pricing) : null,
-          card: MODULE_CATALOG[m.id] ?? null,
-          imageUrl,
-          ...(authed ? { on: m.core || lc === "members" || lc === "public" } : {}),
-          ...(admin ? { lifecycle: m.core ? "public" : lc } : {}),
-        };
-      }),
-    });
-  });
+  registerModuleLibraryRoutes(app, { isAdmin, authedUser, firstName, projectName: () => mergedConfig().project.name, buildMarker: BUILD_MARKER, liveHoldersOf, sharedPasswordPosture: async () => (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET)).length === 0, seedExamplesOnEnable: async (id: string) => { try { const seed = loadExampleSeed(SEEDS_DIR); if (seed) await seedExamples(getPool(), id, seed, { baseCycle: currentCycle().cycleNumber }); } catch (e) { console.error(`[examples] seeding "${id}" on enable failed (continuing)`, e); } } });
 
   /*
    * Lane METER: the builders' pool, said out loud.
@@ -8800,48 +8739,6 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     }
   }
   // ── End Lane C zone ────────────────────────────────────────────────────────
-
-  app.put("/api/admin/modules/:id/lifecycle", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    // `examples: false` skips the seed-on-enable below for THIS request only
-    // (the library's Turn on offers "start with example content" as a choice).
-    // Absent keeps today's behaviour exactly.
-    const { lifecycle, examples } = req.body ?? {};
-    // Funds-bearing modules refuse to enable while no per-admin identity with
-    // a real credential exists (invariants #11-#12).
-    const adminsWithPasswords = (await members.all()).filter(
-      (u: any) => (u.role === "admin" || u.role === "founder") && isPresentMember(u, AUTH_TOKEN_SECRET),
-    );
-    const result = await setModuleLifecycle(
-      req.params.id,
-      String(lifecycle) as ModuleLifecycle,
-      adminActor(req)?.id ?? null,
-      { sharedPasswordPosture: () => adminsWithPasswords.length === 0 },
-    );
-    if (!result.ok) {
-      const { status, ...body } = result as any;
-      return res.status(status).json(body);
-    }
-    // Turning a module on for the first time reveals its standing examples, so
-    // the founder meets a worked module rather than "No items yet." A no-op if
-    // the module has ever been seeded, has ever been retired, or already holds
-    // real content — a village never gets examples layered over its own work.
-    if (result.lifecycle !== "off" && examples !== false) {
-      try {
-        const seed = loadExampleSeed(SEEDS_DIR);
-        if (seed) {
-          await seedExamples(getPool(), req.params.id, seed, {
-            baseCycle: currentCycle().cycleNumber,
-          });
-        }
-      } catch (e) {
-        // Seeding is a courtesy riding on a successful enable; it must never
-        // turn a working toggle into an error.
-        console.error(`[examples] seeding "${req.params.id}" on enable failed (continuing)`, e);
-      }
-    }
-    res.json({ success: true, lifecycle: result.lifecycle, served: effectiveLifecycle(req.params.id) });
-  });
 
   /**
    * The village's own art for a module's library card (L1; R19 N6). The image
@@ -20987,7 +20884,7 @@ ${inner}
         const rule = mint ? mintRules.get(mint.ruleId) : null;
         return {
           key: c.key,
-          label: mint ? (rule ? mintRuleLabel(rule, mint.field) : c.key) : def?.label ?? c.key,
+          label: mint ? (rule ? mintRuleLabel(rule, mint.field) : c.key) : def?.label ?? moduleChangeLabel(c.key),
           from: c.from,
           fromDisplay: displayChangeValue(c.key, c.from),
           to: c.to,
@@ -21100,7 +20997,7 @@ ${inner}
       Array.isArray(req.body?.changes) ? req.body.changes : [],
       rawValue,
       cooldown,
-      readMintRulesForChangeSet,
+      readMintRulesForChangeSet, moduleChangeReaders,
     );
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -21115,6 +21012,7 @@ ${inner}
       await addActivity("governance", `${firstName(user.name)} proposed a change to the game's rules: ${title}`, {
         actorUserId: user.id, entityType: "mechanics_proposal", entityRef: id,
       });
+      await tellSwitchHolders({ liveHoldersOf, notify }, { proposalId: id, proposerId: String(user.id), proposerFirstName: firstName(user.name), changes: normalized });
     }
     res.json({
       id,
