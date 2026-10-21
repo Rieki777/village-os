@@ -127,7 +127,7 @@ can ask to join at `/request-membership`, and the request lands in your Admin.
 ## Part B: a hosting provider (Railway)
 
 1. Create a project with three things: a MySQL service, a service that runs
-   the image `ghcr.io/regen-civics/village-os:1.2.1`, and a volume on that service
+   the image `ghcr.io/regen-civics/village-os:1.3.0`, and a volume on that service
    mounted at `/app/data`.
 2. On your own computer, get the files (step 2 above) and run
    `node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org --domain village.example.org`.

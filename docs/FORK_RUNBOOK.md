@@ -9,7 +9,7 @@ what, where, what breaks without it.
 
 - Two self-host paths, both running the same image
   (`ghcr.io/regen-civics/village-os:<version>`; a village pins a release such as
-  `1.2.0`, `:stable` is the newest release, `:edge` is `main` and never for a
+  `1.3.0`, `:stable` is the newest release, `:edge` is `main` and never for a
   village). **One machine:** `docker-compose.yml` (app + MySQL 8.4 + a volume
   at `/app/data`), `node scripts/fork-init.mjs --compose --village-name "..."
   --admin-email ...`, then `docker compose up -d` (`START_HERE.md`, part A).

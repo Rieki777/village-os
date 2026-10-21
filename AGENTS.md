@@ -47,7 +47,7 @@ Never, whatever you are asked:
   it. Nobody needs it to run a village. Changes to the platform are offered
   back by pull request from the founder's own fork.
 - run the `:edge` image for a village. It is the untested tip, for the
-  platform's own team. Pin a release, such as `1.2.0`.
+  platform's own team. Pin a release, such as `1.3.0`.
 - run `docker compose down -v`. The `-v` deletes the database and every
   uploaded photograph.
 
@@ -78,7 +78,7 @@ Never, whatever you are asked:
 |---|---|---|
 | Good for | trying it on a laptop, or a small VPS you rent | a village that should stay up without a computer of its own |
 | Needs | Docker, Node 22 for one setup script, about 2 GB of memory | an account with the provider, a MySQL service, a volume |
-| Starts with | `docker compose up -d` | the image `ghcr.io/regen-civics/village-os:1.2.1` |
+| Starts with | `docker compose up -d` | the image `ghcr.io/regen-civics/village-os:1.3.0` |
 | Guide | `START_HERE.md`, part A | `START_HERE.md`, part B, then `docs/PROVISIONING.md` |
 
 Either way the founder pays their own provider, if anybody. The software is

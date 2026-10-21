@@ -38,7 +38,7 @@ offers list, get, delete and restore only. It was a web page, and only the
 account holder could use it:
 
 > `https://github.com/orgs/ReGen-Civics/packages/container/village-os/settings`
-> then Danger Zone, Change visibility, Public. (Before 1.2.1 the package lived
+> then Danger Zone, Change visibility, Public. (Before 1.3.0 the package lived
 > under the personal account at `ghcr.io/rieki777/village-os`, where 1.2.0 and
 > older still are.)
 
@@ -57,7 +57,7 @@ had gone private again.
 
 | Tag | What it points at | Who should use it |
 |---|---|---|
-| `:1.2.0` and every other `:<version>` | One exact release, forever | Every village. Pin one |
+| `:1.3.0` and every other `:<version>` | One exact release, forever | Every village. Pin one |
 | `:stable` | The newest full release | Trying the current release without naming it. A village pins a version instead |
 | `:edge` | The newest commit on `main` that passed the full test suite | The platform team. Never a village. |
 
@@ -69,7 +69,7 @@ A prerelease (`:1.2.0-rc1`) publishes its own version tag and does not move
 You need Docker, and Node 22 for the one setup script. No account anywhere.
 
 **On one machine, the shortest path is `docker-compose.yml`**, which runs the
-app, MySQL 8.4 and a volume at `/app/data` together, pinned to `1.2.0`:
+app, MySQL 8.4 and a volume at `/app/data` together, pinned to `1.3.0`:
 
 ```
 node scripts/fork-init.mjs --compose --village-name "Your Village" --admin-email you@example.org
@@ -84,12 +84,12 @@ container:
 
 ```
 node scripts/fork-init.mjs --village-name "Your Village" --admin-email you@example.org
-docker pull ghcr.io/regen-civics/village-os:1.2.1
+docker pull ghcr.io/regen-civics/village-os:1.3.0
 
 docker run -d --name village -p 3000:3000 \
   --env-file .env \
   -v village-data:/app/data \
-  ghcr.io/regen-civics/village-os:1.2.1
+  ghcr.io/regen-civics/village-os:1.3.0
 ```
 
 `DATABASE_URL` is the only variable the server refuses to start without. It
@@ -154,7 +154,7 @@ keep that jump small. `ops/README.md` has the unpinning procedure.
 Name the version in your own deploy and leave it there:
 
 ```
-ghcr.io/regen-civics/village-os:1.2.1
+ghcr.io/regen-civics/village-os:1.3.0
 ```
 
 That is the whole pin, and every village should have one. Nothing moves it
