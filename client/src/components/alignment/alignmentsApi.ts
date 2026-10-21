@@ -8,6 +8,8 @@
  */
 import { authToken } from "@/lib/gameApi";
 import type { AlignmentState, AlignMethod } from "@shared/alignments";
+import type { SigningAnswer } from "@shared/membershipSigning";
+import type { RegisterPage } from "@shared/alignedRegister";
 
 export interface PartyChip {
   partyKey: string;
@@ -19,8 +21,22 @@ export interface PartyChip {
   method: AlignMethod | null;
 }
 
+/** What a party may do about the terms ending (PR8). */
+export interface PartyActs {
+  mayGiveNotice: boolean;
+  notice: { id: string; endsOn: string } | null;
+  mayEndByAgreement: boolean;
+  ask: { id: string } | null;
+}
+
 export interface ServedAlignment {
   textId: string | null;
+  /** The subject: `seat_terms`, or `membership` for the letter (PR9). Absent reads as seat terms. */
+  kind?: string;
+  /** The sentence beside the Align button for this text. */
+  intent?: string;
+  /** For your OWN membership letter: what the village did with the signing it came from (PR9). */
+  answer?: SigningAnswer | null;
   title: string;
   body: string;
   version: number;
@@ -31,9 +47,15 @@ export interface ServedAlignment {
   sealed: boolean;
   money: boolean;
   parties: PartyChip[];
-  you: { partyKey: string; aligned: boolean; alignedAt: string | null; mayAlign: boolean } | null;
+  you: { partyKey: string; aligned: boolean; alignedAt: string | null; mayAlign: boolean; acts?: PartyActs } | null;
+  /** What the reader may do for the village (PR8): a live holder of the seating power who is not the candidate. */
+  village?: PartyActs | null;
   contentHash: string | null;
   createdAt: string | null;
+  /** How the terms are ending or ended (PR8), in one line, or null. */
+  endingLine?: string | null;
+  /** The notice these terms ask for, in days (PR8). */
+  noticeDays?: { days: number; from: "ending" | "term" | "default" };
   /** An application from before PR5: aligning writes its text from the stored terms. */
   retrofit?: boolean;
 }
@@ -82,7 +104,25 @@ export const alignWithText = (textId: string, contentHash: string) =>
   call<{ alignment: ServedAlignment | null; already?: boolean }>("/api/profile/alignments", "POST", { textId, contentHash });
 export const alignWithApplication = (applicationId: string, words: string) =>
   call<{ alignment: ServedAlignment | null }>("/api/profile/alignments", "POST", { applicationId, words });
-export const fetchConfirmState = () => call<ConfirmState>("/api/profile/alignments/confirm");
+/** Ending terms (PR8). `asVillage` acts for the village, which the server allows only a live holder who is not the candidate. */
+type EndingAnswer = { endingId: string; effectiveAt: string; alignment: ServedAlignment | null };
+const asBody = (asVillage: boolean) => (asVillage ? { as: "village" } : {});
+export const giveNotice = (textId: string, asVillage = false) =>
+  call<EndingAnswer>(`/api/profile/alignments/${encodeURIComponent(textId)}/notice`, "POST", asBody(asVillage));
+export const endByAgreement = (textId: string, asVillage = false) =>
+  call<EndingAnswer>(`/api/profile/alignments/${encodeURIComponent(textId)}/end-by-agreement`, "POST", asBody(asVillage));
+export const takeBackEnding = (textId: string, endingId: string, asVillage = false) =>
+  call<EndingAnswer>(`/api/profile/alignments/${encodeURIComponent(textId)}/endings/${encodeURIComponent(endingId)}/take-back`, "POST", asBody(asVillage));
+/** The village's register (PR6): a page of the record, or a search over it. Members only; a 401 is the answer to anybody else. */
+export const fetchRegister = (opts: { q?: string; offset?: number; kind?: string } = {}) => {
+  const p = new URLSearchParams();
+  if (opts.q) p.set("q", opts.q);
+  if (opts.kind) p.set("kind", opts.kind);
+  if (opts.offset) p.set("offset", String(opts.offset));
+  const qs = p.toString();
+  return call<RegisterPage>(qs ? `/api/aligned?${qs}` : "/api/aligned");
+};
+export const fetchConfirmState =() => call<ConfirmState>("/api/profile/alignments/confirm");
 export const confirmIdentity = (password?: string) =>
   call<ConfirmState & { success: true }>("/api/profile/alignments/confirm", "POST", password ? { password } : {});
 export const receiptHref = (textId: string) => `/api/profile/alignments/${encodeURIComponent(textId)}/receipt`;

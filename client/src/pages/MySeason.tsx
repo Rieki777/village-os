@@ -281,7 +281,7 @@ export default function MySeason() {
                         ) : (
                           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={`What happens to ${seat.name}`}>
                             <Link
-                              href={applyHref({ seasonId: season.id, renew: seat.id })}
+                              href={applyHref({ seasonId: season.id, renew: seat.id, supersedes: seat.heldThrough })}
                               className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
                             >
                               {MY_SEASON_WORDS.carryOn}

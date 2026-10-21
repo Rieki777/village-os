@@ -216,7 +216,7 @@ export default function SeatTermsDrawer({
    * force, and a chip per party. Passed by a host showing an application's
    * terms to a member; a seat's offer has no parties and passes nothing.
    */
-  alignment?: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[] } | null;
+  alignment?: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[]; endingLine?: string | null } | null;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -285,7 +285,7 @@ export default function SeatTermsDrawer({
             )}
           </>
         )}
-        {alignment && <AlignmentMarks state={alignment.state} sealed={alignment.sealed} parties={alignment.parties} />}
+        {alignment && <AlignmentMarks state={alignment.state} sealed={alignment.sealed} parties={alignment.parties} endingLine={alignment.endingLine ?? null} />}
         {adopted && (
           <p className="border-t border-border/50 pt-2 text-xs text-muted-foreground">
             {adopted.href ? (

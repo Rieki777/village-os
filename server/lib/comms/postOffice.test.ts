@@ -103,6 +103,34 @@ async function clearQueue(): Promise<void> {
   );
 }
 
+/**
+ * The suite's pool, except that an UPDATE `loses` picks fails the way InnoDB
+ * fails a deadlock victim: nothing written, ER_LOCK_DEADLOCK (1213). Once per
+ * statement and its values, so the retry reaches the database, or on every try
+ * when `always` is set. `lost` records each failure, so a case can prove the
+ * stub really fired.
+ */
+function deadlockingPool(real: Pool, loses: (sql: string, params: unknown[]) => boolean, always = false) {
+  const lost: string[] = [];
+  const failedOnce = new Set<string>();
+  const stub = {
+    query: async (sql: string, params: unknown[] = []) => {
+      const key = `${sql} with ${JSON.stringify(params)}`;
+      if (/^\s*UPDATE comms_messages/.test(sql) && loses(sql, params) && (always || !failedOnce.has(key))) {
+        failedOnce.add(key);
+        lost.push(sql);
+        throw Object.assign(new Error("Deadlock found when trying to get lock; try restarting transaction"), {
+          code: "ER_LOCK_DEADLOCK",
+          errno: 1213,
+          sqlState: "40001",
+        });
+      }
+      return real.query(sql, params);
+    },
+  } as unknown as Pool;
+  return { pool: stub, lost };
+}
+
 /** Move a row's clocks, the way the spec's suites drive time. */
 async function dueNow(id: string): Promise<void> {
   await pool.query( // module-review-ok: moving an anchor in the scratch schema, the way the spec's suites drive time
@@ -411,6 +439,53 @@ describe.skipIf(!configured)("the post office against the fake provider: lane B1
     for (const id of ids) {
       expect(onTheWire(id).requests, id).toHaveLength(1);
       expect(await row(id)).toMatchObject({ status: "sent" });
+    }
+  });
+
+  it("a drain whose writes lose a lock race tries each again, and sends each row once", async () => {
+    await clearQueue();
+    const d = viaFake();
+    const queued = await post(d, email("notices", "victim@example.test", "acc:deadlock:queued"));
+    const stuck = await post(d, email("notices", "victim@example.test", "acc:deadlock:stuck"));
+    await pool.query( // module-review-ok: a drain that died eleven minutes ago, staged in the scratch schema
+      "UPDATE comms_messages SET status = 'sending', updated_at = CURRENT_TIMESTAMP - INTERVAL 11 MINUTE WHERE id = ?",
+      [stuck.messageId],
+    );
+    // Every UPDATE the drain makes loses its first try: the sweep's, both claims and both sends.
+    const losing = deadlockingPool(pool, () => true);
+    expect(await drain(viaFake({ getPool: () => losing.pool }))).toMatchObject({ requeued: 1, sent: 2 });
+    expect(losing.lost.length, "the stub really did fail the sweep, the claims and the sends").toBeGreaterThanOrEqual(5);
+    for (const id of [queued.messageId, stuck.messageId]) {
+      expect(onTheWire(id).requests, `${id} reached the provider once`).toHaveLength(1);
+      expect(await row(id!)).toMatchObject({ status: "sent" });
+    }
+  });
+
+  it("a claim or a sweep that keeps losing leaves its row for the next drain, and this drain still sends", async () => {
+    await clearQueue();
+    const d = viaFake();
+    const fine = await post(d, email("notices", "busy@example.test", "acc:busy:fine"));
+    const contended = await post(d, email("notices", "busy@example.test", "acc:busy:contended"));
+    const stuck = await post(d, email("notices", "busy@example.test", "acc:busy:stuck"));
+    await pool.query( // module-review-ok: a drain that died eleven minutes ago, staged in the scratch schema
+      "UPDATE comms_messages SET status = 'sending', updated_at = CURRENT_TIMESTAMP - INTERVAL 11 MINUTE WHERE id = ?",
+      [stuck.messageId],
+    );
+    // The claim on one row, and the stale-claim sweep, lose every try.
+    const losing = deadlockingPool(
+      pool,
+      (sql, params) => (sql.includes("SET status = 'sending'") && params.includes(contended.messageId)) || sql.includes("COALESCE(updated_at, created_at)"),
+      true,
+    );
+    expect(await drain(viaFake({ getPool: () => losing.pool }))).toMatchObject({ sent: 1, requeued: 0 });
+    expect(onTheWire(fine.messageId).requests).toHaveLength(1);
+    expect(await row(contended.messageId!), "a claim that kept losing stays queued, never lost").toMatchObject({ status: "queued", attempts: 0 });
+    expect(await row(stuck.messageId!), "a sweep that kept losing waits for the next drain").toMatchObject({ status: "sending" });
+    // The next drain, with nothing in its way, sends both once.
+    expect(await drain(d)).toMatchObject({ requeued: 1, sent: 2 });
+    for (const id of [fine.messageId, contended.messageId, stuck.messageId]) {
+      expect(onTheWire(id).requests, `${id} reached the provider once`).toHaveLength(1);
+      expect(await row(id!)).toMatchObject({ status: "sent" });
     }
   });
 

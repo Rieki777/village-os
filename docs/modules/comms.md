@@ -256,7 +256,7 @@ save versioned in `comms_journey_versions`, and an enrollment keeps the version 
 | `gathering.going` | someone says yes, or a guest confirms | confirm (at once, urgent, with an `.ics`); the day before (skipped if they said yes under 36 hours before); two hours before. Stops: withdrew, cancelled, removed. |
 | `gathering.host` | a gathering is published; enrolls the host | nudge an hour after the end, skipped if the recap went or nobody said yes. |
 | `member.welcome` | a member joins | day 0, 3, 7 and 14. |
-| `joining.request` | someone asks to join | day 0, 5 and 14. Stops: admitted, declined. |
+| `joining.request` | someone asks to join | day 0, 5 and 14. Stops: admitted, accepted, declined. |
 | `path.<id>` | someone starts a path | day 0, 2, 5, 10 and 21. |
 
 - **The dials shape the gathering journeys.** While a village runs them unedited, the reminder
@@ -365,8 +365,9 @@ proposal (prosperity-creator) or steward interest (steward) arrives. Leaving a p
   the path's inbox.
 - **Goals stop the journey:** resident, a housing reservation reserved; investor, an agreement
   signed or until that has a writer an investor call accepted; steward, seated in a role;
-  prosperity creator, a venture listed or until then the proposal accepted; joining, admitted or
-  declined; new members, took part in a Quest or came to a gathering.
+  prosperity creator, a venture listed or until then the proposal accepted; joining, admitted,
+  accepted or declined (a yes ends it before any account exists, because the invitation that
+  follows is a person's to send); new members, took part in a Quest or came to a gathering.
 - **The investor journey** sends only its welcome and its hand-off until
   `comms-settings.investorWordsReviewed` is set; the Journeys screen says why.
 - **Backfill:** members' current paths are recorded with source `backfill` and get no email

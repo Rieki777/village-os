@@ -23,6 +23,7 @@ vi.mock("@/hooks/useTokenNames", () => ({
 }));
 
 import PublicProfile from "./PublicProfile";
+import { TOKEN_KEY } from "@/lib/gameApi";
 
 const archetypes = [
   { key: "steward", name: "The Steward", subtitle: "Keeper of what is held in common" },
@@ -158,5 +159,30 @@ describe("PublicProfile: the page says which state it is in", () => {
     expect(container.querySelector("[aria-live='polite']")?.textContent).toContain(
       "Nobody here by that name",
     );
+  });
+});
+
+describe("PublicProfile: a signed-out reader is never asked for (red team U11)", () => {
+  const seen = () => (vi.mocked(fetch).mock.calls as unknown as Array<[string]>).map((c) => String(c[0]));
+  const answer = async (p: string) =>
+    p.includes("/api/archetypes") ? ok(archetypes) : p.startsWith("/api/profiles/") ? ok(sheet) : ok({ alignments: [], people: [] });
+
+  it("signed out: the profile fetches neither their season nor what they have aligned with", async () => {
+    routing(answer);
+    draw();
+    await screen.findByText("Rowan Fell");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(seen().filter((u) => u.startsWith("/api/alignments") || u.startsWith("/api/season-plans"))).toEqual([]);
+  });
+
+  it("CONTROL: signed in, the profile asks for both", async () => {
+    store.set(TOKEN_KEY, "a-session");
+    routing(answer);
+    draw();
+    await screen.findByText("Rowan Fell");
+    await waitFor(() => {
+      expect(seen()).toContain("/api/alignments?party=rowan");
+      expect(seen()).toContain("/api/season-plans?handle=rowan");
+    });
   });
 });

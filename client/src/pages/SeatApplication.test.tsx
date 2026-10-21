@@ -134,6 +134,26 @@ describe("a member reading one", () => {
     expect(screen.getByText("Until 31 December 2026.")).toBeTruthy();
   });
 
+  it("A PACKAGE OF SEATS DRAWS ONE DRAWER, and live seats read as they stand, never Proposed (red team U11)", async () => {
+    render(<SeatApplication />);
+    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" });
+    // Both live cards drawn (the village's seats have loaded), then the drawers counted.
+    await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(2));
+    expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
+    expect(document.querySelector("[data-package-terms]")).not.toBeNull();
+    expect(screen.getByText("One set of terms covers every seat above.")).toBeTruthy();
+    expect(screen.queryByText("Proposed")).toBeNull();
+  });
+
+  it("CONTROL: one seat keeps its drawer in the card's tray, with no package line", async () => {
+    answer = () => json({ application: { ...SERVED, seats: [SERVED.seats[0]] } });
+    render(<SeatApplication />);
+    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward" });
+    await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(1));
+    expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
+    expect(document.querySelector("[data-package-terms]")).toBeNull();
+  });
+
   it("gives a holder both doors, and adopting reads the application again", async () => {
     render(<SeatApplication />);
     const align = await screen.findByRole("button", { name: "Align for the village" });
@@ -274,9 +294,9 @@ describe("the words every party aligns with (PR5)", () => {
       });
     render(<SeatApplication />);
     await screen.findByText("You aligned on 9 Oct 2026");
-    // One stamp in each seat's drawer tray and one on the card.
-    expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(3);
-    expect(screen.getAllByText("Ana Quillfeather, aligned").length).toBe(3);
+    // One stamp in the package's one drawer tray and one on the card (red team U11: one drawer, not one per seat).
+    expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(2);
+    expect(screen.getAllByText("Ana Quillfeather, aligned").length).toBe(2);
     expect(screen.queryByRole("button", { name: "Align" })).toBeNull();
   });
 });

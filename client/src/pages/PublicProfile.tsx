@@ -90,6 +90,13 @@ export default function PublicProfile() {
   }, []);
 
   const nameOf = (key: string) => archetypes.find((a) => a.key === key)?.name ?? key;
+  /*
+   * A SIGNED-OUT READER IS NEVER ASKED FOR (red team U11). Their season and
+   * what they have aligned with are members-only reads that answer a stranger
+   * 401, so a page that already knows its reader holds no session mounts
+   * neither, and fires no request that can only be refused.
+   */
+  const signedIn = !!authToken();
 
   /**
    * THE ONE POLITE REGION FOR THIS PAGE.
@@ -217,14 +224,14 @@ export default function PublicProfile() {
         ) : null}
 
         {/* Their season (season plans RC1): drawn for a reader holding terms.read, nothing for anybody else. */}
-        {sheet.handle ? (
+        {sheet.handle && signedIn ? (
           <div className="mt-10">
             <SeasonPlanSection handle={sheet.handle} />
           </div>
         ) : null}
 
         {/* What they have aligned with (seat settings PR5): for a reader holding terms.read, nothing for anybody else. */}
-        {sheet.handle ? (
+        {sheet.handle && signedIn ? (
           <div className="mt-10">
             <AlignedSection handle={sheet.handle} />
           </div>
