@@ -16,9 +16,11 @@
  * take; a row on an agenda names its open session and item, and exactly one
  * take with no outcome names the same pair; a taken-up row keeps its link until
  * the record is deleted. `takeOnto`, `settleTake`, `releaseFromSession`,
- * `unlinkDeletedSession`, `bringAgain` and `deleteItems` each move one item
- * from one of those states to another, and every one of them writes the row and
- * its takes together, inside the caller's transaction.
+ * `unlinkDeletedSession` and `bringAgain` each move one item from one of those
+ * states to another, and every one of them writes the row and its takes
+ * together, inside the caller's transaction. `deleteItems` (withdraw, and the
+ * erasure) removes the row and leaves its takes: a take holds no words, and it
+ * is what keeps an agenda item from being offered again under "From last time".
  *
  * ── LOCKS ────────────────────────────────────────────────────────────────
  *
@@ -51,7 +53,7 @@ const affected = async (q: Queryable, sql: string, params: unknown[]): Promise<n
 const none = <T>(list: readonly T[]): boolean => list.length === 0;
 
 const LIBRARY_COLUMNS =
-  "`id`, `circle_id`, `title`, `aim`, `note`, `brought_by_no`, `status`, `session_id`, `session_item_id`, " +
+  "`id`, `circle_id`, `title`, `aim`, `note`, `note_by_no`, `brought_by_no`, `status`, `session_id`, `session_item_id`, " +
   "`edited_by_no`, `created_at`, `updated_at`, `settled_at`";
 
 // ── One item ────────────────────────────────────────────────────────────────
@@ -61,8 +63,8 @@ export async function insertItemRow(
   row: { circleId: string | null; title: string; aim: string | null; note: string | null; broughtByNo: number; now: Date },
 ): Promise<number> {
   const [r] = await q.query<any>(
-    "INSERT INTO `live_session_library` (`circle_id`, `title`, `aim`, `note`, `brought_by_no`, `status`, `session_id`, " +
-      "`session_item_id`, `edited_by_no`, `created_at`, `updated_at`, `settled_at`) VALUES (?, ?, ?, ?, ?, 'waiting', NULL, NULL, NULL, ?, ?, NULL)",
+    "INSERT INTO `live_session_library` (`circle_id`, `title`, `aim`, `note`, `note_by_no`, `brought_by_no`, `status`, `session_id`, " +
+      "`session_item_id`, `edited_by_no`, `created_at`, `updated_at`, `settled_at`) VALUES (?, ?, ?, ?, NULL, ?, 'waiting', NULL, NULL, NULL, ?, ?, NULL)",
     [row.circleId, row.title, row.aim, row.note, row.broughtByNo, row.now, row.now],
   );
   return Number(r.insertId);
@@ -86,26 +88,29 @@ export async function waitingCountBy(q: Queryable, no: number): Promise<number> 
 }
 
 /**
- * New words for a waiting item. The WHERE asks again that it waits, so a
- * change that loses a race with a take changes nothing. Hands back 1 or 0.
+ * New words for a waiting item, written whole from the row the caller holds
+ * locked and merged. The WHERE asks again that it waits. Hands back 1 or 0.
  */
 export async function writeWords(
   q: Queryable,
   id: number,
-  row: { title: string; aim: string | null; note: string | null; circleId: string | null; editedByNo: number | null; now: Date },
+  row: { title: string; aim: string | null; note: string | null; noteByNo: number | null; circleId: string | null; editedByNo: number | null; now: Date },
 ): Promise<number> {
   return affected(
     q,
-    "UPDATE `live_session_library` SET `title` = ?, `aim` = ?, `note` = ?, `circle_id` = ?, `edited_by_no` = ?, `updated_at` = ? " +
-      "WHERE `id` = ? AND `status` = 'waiting'",
-    [row.title, row.aim, row.note, row.circleId, row.editedByNo, row.now, id],
+    "UPDATE `live_session_library` SET `title` = ?, `aim` = ?, `note` = ?, `note_by_no` = ?, `circle_id` = ?, `edited_by_no` = ?, " +
+      "`updated_at` = ? WHERE `id` = ? AND `status` = 'waiting'",
+    [row.title, row.aim, row.note, row.noteByNo, row.circleId, row.editedByNo, row.now, id],
   );
 }
 
-/** Withdraw: the items and every take of them go. The agenda items they became stay as recorded. */
+/**
+ * Withdraw: the items go. Their takes stay: a take holds no words, and it is
+ * what keeps "From last time" from offering the agenda item it became a
+ * second time (`libraryItemIdsFor`). The agenda items stay as recorded.
+ */
 export async function deleteItems(q: Queryable, ids: readonly number[]): Promise<void> {
   if (none(ids)) return;
-  await q.query("DELETE FROM `live_session_library_takes` WHERE `library_id` IN (?)", [ids]);
   await q.query("DELETE FROM `live_session_library` WHERE `id` IN (?)", [ids]);
 }
 
@@ -164,13 +169,17 @@ export async function takenUpRows(q: Queryable, v: { admin: boolean; no: number 
   );
 }
 
-/** When each item last came back to wait, for the "back for next time" line. */
-export async function lastBackRows(q: Queryable, libraryIds: readonly number[]): Promise<RowDataPacket[]> {
+/**
+ * Every settled take of some items, newest first, for the "back for next
+ * time" line: the newest one says how the item last left a session, and only a
+ * `back` there means it came back on its own.
+ */
+export async function settledTakeRows(q: Queryable, libraryIds: readonly number[]): Promise<RowDataPacket[]> {
   if (none(libraryIds)) return [];
   return rowsOf(
     q,
-    "SELECT `library_id`, MAX(`settled_at`) AS `back_at` FROM `live_session_library_takes` " +
-      "WHERE `outcome` = 'back' AND `library_id` IN (?) GROUP BY `library_id`",
+    "SELECT `library_id`, `outcome`, `settled_at` FROM `live_session_library_takes` " +
+      "WHERE `library_id` IN (?) AND `settled_at` IS NOT NULL ORDER BY `settled_at` DESC, `id` DESC",
     [libraryIds],
   );
 }
@@ -184,17 +193,24 @@ export async function sessionTitleRows(q: Queryable, sessionIds: readonly number
 // ── Standing ────────────────────────────────────────────────────────────────
 
 /**
- * Every circle's last closed session, one row per circle: the same session
- * `lastClosedInCircle` in server/repos/liveSessions.ts picks for one circle
- * (the latest `closed_at`, the higher id on a tie), for all of them at once.
- * The circle index answers the inner read.
+ * Every circle's last closed session that at least `minPeople` were in, one
+ * row per circle, picked the way `lastClosedInCircle` in
+ * server/repos/liveSessions.ts picks one (the latest `closed_at`, the higher id
+ * on a tie), for all of them at once. With `minPeople` 2, a session somebody
+ * opened and closed alone neither gives them standing in the circle nor takes
+ * it from the people of the circle's last real meeting.
  */
-export async function lastClosedPerCircle(q: Queryable): Promise<RowDataPacket[]> {
+export async function lastClosedPerCircle(q: Queryable, minPeople = 2): Promise<RowDataPacket[]> {
+  const enough = (alias: string) =>
+    "(SELECT COUNT(*) FROM `live_session_people` `p_" + alias + "` WHERE `p_" + alias + "`.`session_id` = `" + alias + "`.`id`) >= ?";
   return rowsOf(
     q,
     "SELECT `s`.`circle_id`, `s`.`id` FROM `live_sessions` `s` WHERE `s`.`status` = 'closed' AND `s`.`circle_id` IS NOT NULL " +
+      "AND " + enough("s") + " " +
       "AND NOT EXISTS (SELECT 1 FROM `live_sessions` `t` WHERE `t`.`circle_id` = `s`.`circle_id` AND `t`.`status` = 'closed' " +
+      "AND " + enough("t") + " " +
       "AND (`t`.`closed_at` > `s`.`closed_at` OR (`t`.`closed_at` = `s`.`closed_at` AND `t`.`id` > `s`.`id`)))",
+    [minPeople, minPeople],
   );
 }
 
@@ -353,6 +369,11 @@ export async function memberRows(q: Queryable, no: number): Promise<RowDataPacke
   return rowsOf(q, `SELECT ${LIBRARY_COLUMNS} FROM \`live_session_library\` WHERE \`brought_by_no\` = ? ORDER BY \`id\``, [no]);
 }
 
+/** The notes this member wrote on items somebody else brought: their words, and nothing else of the item. */
+export async function memberNoteRows(q: Queryable, no: number): Promise<RowDataPacket[]> {
+  return rowsOf(q, "SELECT `id`, `note` FROM `live_session_library` WHERE `note_by_no` = ? AND `brought_by_no` <> ? ORDER BY `id`", [no, no]);
+}
+
 /** Every time this member put an item on an agenda. */
 export async function memberTakeRows(q: Queryable, no: number): Promise<RowDataPacket[]> {
   return rowsOf(
@@ -363,11 +384,13 @@ export async function memberTakeRows(q: Queryable, no: number): Promise<RowDataP
 }
 
 /**
- * The member leaves the library. Their items go with every take of them; where
- * they put somebody else's item on an agenda the take says 0; where they last
- * changed somebody else's words the row says nobody. The ids are read first
- * with a plain read and written by primary key, so nothing here scans and
- * locks the whole table for the rest of the erasure.
+ * The member leaves the library. Their items go (their takes stay, holding no
+ * words, `deleteItems`); where they put somebody else's item on an agenda the
+ * take says 0; where they last changed somebody else's words the row says
+ * nobody; and a note they wrote on somebody else's item goes, because those
+ * were their words. The ids are read first with a plain read and written by
+ * primary key, so nothing here scans and locks the whole table for the rest
+ * of the erasure.
  */
 export async function forgetMember(q: PoolConnection, no: number): Promise<void> {
   const own = (await rowsOf(q, "SELECT `id` FROM `live_session_library` WHERE `brought_by_no` = ?", [no])).map((r) => Number(r.id));
@@ -376,4 +399,6 @@ export async function forgetMember(q: PoolConnection, no: number): Promise<void>
   if (!none(took)) await q.query("UPDATE `live_session_library_takes` SET `taken_by_no` = 0 WHERE `id` IN (?)", [took]);
   const edited = (await rowsOf(q, "SELECT `id` FROM `live_session_library` WHERE `edited_by_no` = ?", [no])).map((r) => Number(r.id));
   if (!none(edited)) await q.query("UPDATE `live_session_library` SET `edited_by_no` = NULL WHERE `id` IN (?)", [edited]);
+  const noted = (await rowsOf(q, "SELECT `id` FROM `live_session_library` WHERE `note_by_no` = ?", [no])).map((r) => Number(r.id));
+  if (!none(noted)) await q.query("UPDATE `live_session_library` SET `note` = NULL, `note_by_no` = NULL WHERE `id` IN (?)", [noted]);
 }

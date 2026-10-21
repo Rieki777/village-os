@@ -37,8 +37,10 @@
 --
 -- NO FOREIGN KEYS, the same as every table in this schema. Erasure
 -- (`forgetMemberSessions` in server/lib/liveSessions.ts) deletes the rows a
--- leaver brought with every take of them, sets 0 where they took an item, and
--- NULL where they last changed one.
+-- leaver brought, sets 0 where they took an item, NULL where they last changed
+-- one, and clears a note they wrote on somebody else's. A take outlives its
+-- item: it holds no words, and it keeps "From last time" from offering an
+-- agenda item a second time after the library took it back.
 --
 -- EVERY DEDUPE COLUMN IS NOT NULL. A MySQL unique index exempts NULLs.
 
@@ -52,6 +54,9 @@ CREATE TABLE IF NOT EXISTS `live_session_library` (
   `aim` varchar(8) NULL,
   -- Anything the circle should know first, in the member's own words.
   `note` varchar(600) NULL,
+  -- Who wrote the note as it stands, when that was not whoever brought it. NULL otherwise.
+  -- The note becomes an entry in the room, and the entry is theirs.
+  `note_by_no` int NULL,
   -- Who brought it.
   `brought_by_no` int NOT NULL,
   -- waiting, on_agenda or taken_up.

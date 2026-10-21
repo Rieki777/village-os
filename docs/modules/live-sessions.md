@@ -235,11 +235,15 @@ when, and who last changed its words when that was somebody else. It rides on `G
 because `GET /api/sessions/library` would be read as the room numbered "library".
 
 **Who sees an item** (`canSeeBrought` in the contract): whoever brought it, admins, every member for an
-item for no circle in particular, and the people with **standing** in its circle, the task layer's rule:
-they were in the circle's last closed session, or sit in one of its seats now, live and not lapsed. A
-taken-up item's card shows to whoever brought it, admins and the people who were in the session that
-took it up, and a closed session's title reaches only them. An item somebody may not see answers 404,
-the same as one that is not there, so a refusal never says an item exists.
+item for no circle in particular, and the people with **standing** in its circle, the task layer's rule
+taken one step tighter: they were in the circle's last closed session **that at least two people were
+in**, or sit in one of its seats now, live and not lapsed. The floor is there because any member may open
+a room for any circle and close it alone, and under the plain rule that one close would hand them the
+circle's waiting items, with the words of the people who brought them, and take the list from everybody
+at the circle's last real meeting. The task layer keeps the plain rule for now. A taken-up item reaches
+whoever brought it, admins and the people who were in the session that took it up, through every door,
+and a closed session's title reaches only them. An item somebody may not see answers 404, the same as one
+that is not there, so a refusal never says an item exists.
 
 **Who changes an item** (`broughtRights`): whoever brought it and admins change its title, aim, note
 and circle, withdraw it at any time, and bring a taken-up item again. The facilitator or secretary of
@@ -247,7 +251,9 @@ an open session of its circle, who has standing there, may reword it (title, aim
 its circle, because the circle is the item's audience. Nobody but the bringer and admins rewords an
 item for no circle in particular: any member can open a session with no circle, so hosting one says
 nothing. The words and the circle change only while it waits; on an agenda, the room's own edit rights
-govern the agenda item.
+govern the agenda item. A change is made against the row as it is, locked, so a host's new title never
+puts back a circle the bringer had just moved, and a card says "Words changed by" whoever last changed
+somebody else's.
 
 **Taking it up.** The "Start a session" card lists what the chosen circle may take up: that circle's
 waiting items, then the ones for no circle in particular (a session for no circle is offered only
@@ -260,8 +266,9 @@ consent to the agenda is the circle's check.
 
 Each item becomes an ordinary agenda item added by whoever took it, presented by whoever brought it
 when they are in the room, with its aim (explore when they were not sure) and the minutes that aim
-usually gets (report 5, explore 10, decide 15); its note becomes the item's first note, in the words
-of whoever brought it, so the record keeps it as said. The agenda row reads "Brought by" with their
+usually gets (report 5, explore 10, decide 15); its note becomes the item's first note, written by
+whoever wrote the note as it stands (whoever brought it, unless a host or an admin reworded it), so the
+record keeps it as said and says whose words they are. The agenda row reads "Brought by" with their
 name, in the room or not. Opening and bringing are **all or none, and every refusal comes before the
 first write** (the room's transactions commit whatever was written before a refusal returns): the items
 are locked after the session row and checked, the agenda's 30 and the entries' room are measured, and
@@ -278,6 +285,10 @@ until the circle has taken it up, so dropping it is the bringer's act (withdraw)
 accident of where the clock ran out. The library follows the record: the item on screen when the room
 closed is done in the minutes, so it is taken up, and whoever brought it can bring it again. "From last
 time" leaves out an item the library took back, so it is offered once.
+
+**A withdrawn item** goes from the list at once, and from an open agenda it stays as the room recorded
+it. Its takes stay: they hold no words, and they keep "From last time" from offering the agenda item it
+became a second time.
 
 **A session removed.** A discarded open session's items wait again and its takes go, because the
 session is meant never to have been. A deleted closed record's taken-up items stay taken up and lose
@@ -467,14 +478,16 @@ gave reads as a member's with its note removed. A send they pressed reads as sen
 `sessionIdsNaming` reads the three task tables too, so every record that named them is rebuilt.
 
 The agenda library goes in the same transaction too, after every session row is held: the items they
-brought go with every take of them, a take they made reads as taken by nobody, and where they last
-changed somebody else's words the item says nobody. A note they brought into a room is an entry they
-wrote, so it goes with the rest.
+brought go (their takes stay, holding no words), a take they made reads as taken by nobody, where they
+last changed somebody else's words the item says nobody, and a note they wrote on somebody else's item
+goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
+it goes with the rest.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
 and their own answers. From the task layer it carries `tasks`, the tasks they hold now, and
 `taskAnswers`, every answer they gave a task with its date and words. A note somebody else left on
 a task they hold is that person's, and stays out. From the agenda library it carries `library`, the
-items they brought in their own words, and `libraryTakes`, the times they put an item on an agenda;
-a session's id travels only where they may read that session.
+items they brought in their own words, `libraryTakes`, the times they put an item on an agenda, and
+`libraryNotes`, the notes they wrote on items somebody else brought (the note and nothing else of the
+item); a session's id travels only where they may read that session.

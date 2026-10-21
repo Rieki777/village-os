@@ -12,6 +12,15 @@
  * past. When the circle is not this person's to change (a host rewording
  * somebody else's item), the select shows it and stays still.
  *
+ * A CIRCLE THAT WENT DORMANT is still named in the select, as a choice that
+ * cannot be made again, so the form never shows a different circle than the
+ * one the item is for.
+ *
+ * Each box is named by its visible label for a screen reader, the hints under
+ * the aim and the circle are read with them, and the line about who can read
+ * it once a session takes it up is read with the note and the circle, before
+ * anything is sent.
+ *
  * Enter in the title saves; Escape puts the form away. Words come from
  * shared/sessionLibrary.ts.
  */
@@ -38,6 +47,8 @@ export interface BroughtFormProps {
   myCircleIds: readonly string[];
   /** Absent: a new item. */
   initial?: BroughtValues;
+  /** The name of the circle `initial` is for, which may no longer be among the live ones. */
+  initialCircleName?: string | null;
   /** The circle is shown and cannot be changed by this person. */
   circleLocked?: boolean;
   busy: boolean;
@@ -46,7 +57,7 @@ export interface BroughtFormProps {
   onCancel(): void;
 }
 
-export default function BroughtForm({ idBase, circles, myCircleIds, initial, circleLocked, busy, error, onSubmit, onCancel }: BroughtFormProps) {
+export default function BroughtForm({ idBase, circles, myCircleIds, initial, initialCircleName, circleLocked, busy, error, onSubmit, onCancel }: BroughtFormProps) {
   const adding = !initial;
   const only = myCircleIds.filter((id) => circles.some((c) => c.id === id));
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -56,6 +67,9 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
   const [asked, setAsked] = useState(false);
 
   const clean = cleanLine(title, LIBRARY_LIMITS.title);
+  // The item's own circle, when it is no longer a live one: shown, never offered again.
+  const dormant = initial?.circleId && !circles.some((c) => c.id === initial.circleId) ? initial.circleId : null;
+  const seen = `${idBase}-seen`;
   const circleMissing = circle === "";
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
@@ -77,7 +91,8 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
             onValue={setTitle}
             onSubmit={() => submit()}
             onCancel={onCancel}
-            label={LIBRARY_COPY.titlePlaceholder}
+            label={LIBRARY_COPY.titleLabel}
+            placeholder={LIBRARY_COPY.titlePlaceholder}
             max={LIBRARY_LIMITS.title}
             minRows={1}
             singleLine
@@ -90,7 +105,13 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
         <label htmlFor={`${idBase}-aim`} className={LABEL}>
           {LIBRARY_COPY.aimLabel}
         </label>
-        <select id={`${idBase}-aim`} className={`mt-1 ${INPUT}`} value={aim} onChange={(e) => setAim(e.target.value as ItemAim | "")}>
+        <select
+          id={`${idBase}-aim`}
+          className={`mt-1 ${INPUT}`}
+          value={aim}
+          aria-describedby={`${idBase}-aim-hint`}
+          onChange={(e) => setAim(e.target.value as ItemAim | "")}
+        >
           <option value="">{LIBRARY_COPY.aimNotSure}</option>
           {LIBRARY_AIMS.map((a) => (
             <option key={a} value={a}>
@@ -98,7 +119,9 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
             </option>
           ))}
         </select>
-        <p className={`${HINT} mt-1`}>{aim ? AIM_DEFS[aim].hint : LIBRARY_COPY.aimNotSureHint}</p>
+        <p id={`${idBase}-aim-hint`} className={`${HINT} mt-1`}>
+          {aim ? AIM_DEFS[aim].hint : LIBRARY_COPY.aimNotSureHint}
+        </p>
       </div>
       <div>
         <label htmlFor={`${idBase}-note`} className={LABEL}>
@@ -110,9 +133,11 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
             value={note}
             onValue={setNote}
             onCancel={onCancel}
-            label={LIBRARY_COPY.notePlaceholder}
+            label={LIBRARY_COPY.noteLabel}
+            placeholder={LIBRARY_COPY.notePlaceholder}
             max={LIBRARY_LIMITS.note}
             minRows={2}
+            describedBy={seen}
             mic
           />
         </div>
@@ -127,11 +152,17 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
           value={circle}
           disabled={circleLocked}
           aria-invalid={asked && circleMissing ? true : undefined}
+          aria-describedby={seen}
           onChange={(e) => setCircle(e.target.value)}
         >
           <option value="" disabled>
             {LIBRARY_COPY.circleChoose}
           </option>
+          {dormant && (
+            <option value={dormant} disabled>
+              {initialCircleName ?? dormant}
+            </option>
+          )}
           {circles.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -139,7 +170,9 @@ export default function BroughtForm({ idBase, circles, myCircleIds, initial, cir
           ))}
           <option value={NO_CIRCLE}>{LIBRARY_COPY.noCircle}</option>
         </select>
-        <p className={`${HINT} mt-1`}>{LIBRARY_COPY.seenHint}</p>
+        <p id={seen} className={`${HINT} mt-1`}>
+          {LIBRARY_COPY.seenHint}
+        </p>
       </div>
       {(error || (asked && circleMissing)) && (
         <p role="alert" className="text-sm font-medium text-destructive">

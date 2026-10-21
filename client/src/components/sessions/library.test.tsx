@@ -247,7 +247,7 @@ describe("waiting for a circle, on /sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.addButton }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toEqual({ path: "/api/sessions/library", method: "POST", body: { title: "Pump house", aim: "decide", note: null, circleId: "water" } });
-    expect(await screen.findByRole("status")).toHaveTextContent(LIBRARY_COPY.saved("Water"));
+    expect(await screen.findByText(LIBRARY_COPY.saved("Water"))).toHaveAttribute("aria-live", "polite");
     expect(onChanged).toHaveBeenCalled();
   });
 
@@ -259,7 +259,7 @@ describe("waiting for a circle, on /sessions", () => {
     fireEvent.change(screen.getByLabelText(LIBRARY_COPY.titleLabel), { target: { value: "Sink" } });
     fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.addButton }));
     expect(await screen.findByRole("alert")).toHaveTextContent("You have 50 items waiting.");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText(LIBRARY_COPY.saved("Kitchen"))).toBeNull();
   });
 
   it("offers only the controls a card's rights allow, and asks once before it withdraws", async () => {
@@ -306,5 +306,80 @@ describe("waiting for a circle, on /sessions", () => {
     render(<WaitingForCircle library={payload([card({ id: 1, title: "One" }), card({ id: 2, title: "Two" })])} circles={circles} onChanged={() => undefined} />);
     await waitFor(() => expect(scrolled).toHaveBeenCalled());
     expect(document.getElementById("brought-2")!.className).toContain("ring-2");
+  });
+});
+
+describe("waiting for a circle, after the review", () => {
+  const circles = [
+    { id: "water", name: "Water" },
+    { id: "kitchen", name: "Kitchen" },
+  ];
+  const payload = (items: LibraryCard[], myCircleIds: string[] = ["water"]): LibraryPayload => ({ items, myCircleIds });
+
+  it("sends only what this person changed, measured against the card as it was when the form opened", async () => {
+    answers["PATCH /api/sessions/library/1"] = () => json({ item: card({ id: 1 }) });
+    const first = card({ id: 1, title: "Pump", note: "Old note", canEdit: true, canMoveCircle: true });
+    const { rerender } = render(<WaitingForCircle library={payload([first])} circles={circles} onChanged={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.edit }));
+    // Somebody else renames it while the form is open; the next poll brings that.
+    rerender(<WaitingForCircle library={payload([{ ...first, title: "Pump house" }])} circles={circles} onChanged={() => undefined} />);
+    fireEvent.change(screen.getByLabelText(LIBRARY_COPY.noteLabel), { target: { value: "New note" } });
+    fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.save }));
+    await waitFor(() => expect(calls).toEqual([{ path: "/api/sessions/library/1", method: "PATCH", body: { note: "New note" } }]));
+  });
+
+  it("names the boxes by their labels for a screen reader, and reads the privacy line with the note", () => {
+    render(<WaitingForCircle library={payload([])} circles={circles} onChanged={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.bringButton }));
+    const note = screen.getByRole("textbox", { name: LIBRARY_COPY.noteLabel });
+    expect(note).toHaveAttribute("placeholder", LIBRARY_COPY.notePlaceholder);
+    const seen = document.getElementById(note.getAttribute("aria-describedby")!);
+    expect(seen).toHaveTextContent(LIBRARY_COPY.seenHint);
+    expect(screen.getByRole("textbox", { name: LIBRARY_COPY.titleLabel })).toHaveAttribute("placeholder", LIBRARY_COPY.titlePlaceholder);
+  });
+
+  it("puts the focus back on Bring an item when the form goes away", async () => {
+    render(<WaitingForCircle library={payload([])} circles={circles} onChanged={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.bringButton }));
+    fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.cancel }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: LIBRARY_COPY.bringButton })));
+  });
+
+  it("opens the taken-up list before it lands on a card there, and gives the card the focus", async () => {
+    window.location.hash = "#brought-4";
+    Element.prototype.scrollIntoView = vi.fn();
+    const items = [card({ id: 3, title: "Waiting one" }), card({ id: 4, title: "Old roof", status: "taken_up", settledAt: "2026-10-03T00:00:00.000Z" })];
+    render(<WaitingForCircle library={payload(items)} circles={circles} onChanged={() => undefined} />);
+    const lately = screen.getByText(LIBRARY_COPY.takenUpLately).closest("details")!;
+    await waitFor(() => expect(lately.open).toBe(true));
+    await waitFor(() => expect(document.activeElement).toBe(document.getElementById("brought-4")));
+  });
+
+  it("lands a notice tapped while the page is already open", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<WaitingForCircle library={payload([card({ id: 7, title: "Seven" })])} circles={circles} onChanged={() => undefined} />);
+    expect(document.getElementById("brought-7")!.className).not.toContain("ring-2");
+    // The bell's link is a client-side move: the router pushes the entry and says so.
+    window.history.pushState(null, "", "/sessions#brought-7");
+    window.dispatchEvent(new Event("pushState"));
+    await waitFor(() => expect(document.getElementById("brought-7")!.className).toContain("ring-2"));
+  });
+
+  it("takes a withdrawn card away at once, and shows a circle gone dormant as it is", async () => {
+    const items = [
+      card({ id: 1, title: "Gone soon", mine: true, canWithdraw: true }),
+      card({ id: 2, title: "Old circle's", mine: true, circleId: "orchard", circleName: "Orchard", canEdit: true, canMoveCircle: true, canWithdraw: true }),
+    ];
+    render(<WaitingForCircle library={payload(items)} circles={circles} onChanged={() => new Promise(() => undefined)} />);
+    const gone = document.getElementById("brought-1")!;
+    fireEvent.click(within(gone).getByRole("button", { name: LIBRARY_COPY.withdraw }));
+    fireEvent.click(within(gone).getByRole("button", { name: LIBRARY_COPY.withdrawYes }));
+    // The list has not been read again yet (it never answers here), and the card is already gone.
+    await waitFor(() => expect(document.getElementById("brought-1")).toBeNull());
+
+    fireEvent.click(within(document.getElementById("brought-2")!).getByRole("button", { name: LIBRARY_COPY.edit }));
+    const select = screen.getByLabelText(LIBRARY_COPY.circleLabel) as HTMLSelectElement;
+    expect(select.value).toBe("orchard");
+    expect(select.selectedOptions[0]!.textContent).toBe("Orchard");
   });
 });

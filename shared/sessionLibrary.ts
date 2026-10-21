@@ -33,9 +33,12 @@
  * own circle, and an item for no circle fits any session.
  *
  * THE STANDING RULE is the task layer's (shared/sessionTasks.ts
- * `hostsOpenRoomInCircle`): a member has standing in a circle when they were in
- * its last closed session, or sit in one of its seats now. The server measures
- * it; the functions here read the set.
+ * `hostsOpenRoomInCircle`) one step tighter: a member has standing in a circle
+ * when they were in its last closed session that at least two people were in,
+ * or sit in one of its seats now. A session somebody opened and closed alone
+ * neither gives them a circle's waiting items nor takes them from the people
+ * of its last real meeting. The server measures it; the functions here read
+ * the set.
  *
  * THE PRIVACY LINE. A circle's waiting items are read by the people with
  * standing in it, by whoever brought each one, and by admins. An item for no

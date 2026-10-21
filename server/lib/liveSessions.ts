@@ -78,6 +78,7 @@ import {
   libraryItemIdsFor,
   libraryViewer,
   lockForTaking,
+  noteAuthor,
   noticesAfterSettle,
   releaseForDiscard,
   settleForClose,
@@ -843,8 +844,8 @@ export async function bringFromLibrary(
     if (noted.length) {
       const all = (await repo.entryCounts(conn, sessionId, 0)).all;
       if (all + noted.length > SESSION_LIMITS.maxEntries) return refuse(409, R.entriesFull);
-      for (const by of Array.from(new Set(noted.map((r) => r.broughtByNo)))) {
-        const theirs = noted.filter((r) => r.broughtByNo === by).length;
+      for (const by of Array.from(new Set(noted.map(noteAuthor)))) {
+        const theirs = noted.filter((r) => noteAuthor(r) === by).length;
         if ((await repo.entryCounts(conn, sessionId, by)).mine + theirs > SESSION_LIMITS.maxEntriesPerPerson) return refuse(409, R.entriesFull);
       }
     }
@@ -1922,9 +1923,10 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   taskAnswers: Record<string, unknown>[];
   library: Record<string, unknown>[];
   libraryTakes: Record<string, unknown>[];
+  libraryNotes: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -1996,8 +1998,8 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
     at: toIso(r.created_at),
   }));
   // The agenda library (0264): what they brought, in their own words, and the times they put an item on an agenda.
-  const { library, libraryTakes } = await exportLibraryFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes };
+  const { library, libraryTakes, libraryNotes } = await exportLibraryFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes };
 }
 
 /**

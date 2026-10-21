@@ -22,7 +22,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AIM_DEFS, ROOM_COPY } from "@shared/sessions";
 import { LIBRARY_COPY, LIBRARY_MINUTES, agendaAimFor, broughtFor, type LibraryCard } from "@shared/sessionLibrary";
-import { BTN_QUIET, BTN_SECONDARY, CARD, CHIP, H3, HINT, type StageProps } from "./roomUi";
+import ClampedNote from "./ClampedNote";
+import { BTN_SECONDARY, CARD, CHIP, H3, HINT, type StageProps } from "./roomUi";
 
 /** "14 October", in the reader's own locale. */
 function shortDay(iso: string): string {
@@ -43,7 +44,6 @@ function BroughtRow({
   onAdd: () => void;
   noCircleTag: boolean;
 }) {
-  const [whole, setWhole] = useState(false);
   const aim = agendaAimFor(card.aim);
   const when = shortDay(card.broughtAt);
   return (
@@ -65,16 +65,7 @@ function BroughtRow({
           </button>
         )}
       </div>
-      {card.note && (
-        <div className="mt-2">
-          <p className={`whitespace-pre-line break-words text-foreground ${whole ? "" : "line-clamp-3"}`}>{card.note}</p>
-          {card.note.length > 160 && (
-            <button type="button" className={BTN_QUIET} aria-expanded={whole} onClick={() => setWhole((w) => !w)}>
-              {whole ? LIBRARY_COPY.showLess : LIBRARY_COPY.showAll}
-            </button>
-          )}
-        </div>
-      )}
+      {card.note && <ClampedNote text={card.note} />}
     </li>
   );
 }
@@ -86,6 +77,7 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
   // The doors, held so a parent that builds them on every render never makes the read run again.
   const doors = useRef(actions);
   doors.current = actions;
+  const heading = useRef<HTMLHeadingElement>(null);
 
   // Read when the stage shows, and again whenever the room moved.
   useEffect(() => {
@@ -109,8 +101,11 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
     try {
       const r = await actions.bringFromLibrary([id]);
       // The room's version moved, so the effect reads the list again; until it does, this row leaves on the server's yes.
-      if (r.ok) setCards((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
-      else if (r.status === 409) setCards(await actions.library());
+      if (r.ok) {
+        setCards((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+        // The row it was tapped on leaves; the focus waits on this card's heading.
+        heading.current?.focus();
+      } else if (r.status === 409) setCards(await actions.library());
     } finally {
       setBusy(null);
     }
@@ -118,7 +113,7 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
 
   return (
     <section className={CARD} aria-labelledby="brought-title">
-      <h3 id="brought-title" className={H3}>
+      <h3 ref={heading} tabIndex={-1} id="brought-title" className={`${H3} outline-none`}>
         {broughtFor(view.circleName)}
       </h3>
       {!canAdd && <p className={`${HINT} mt-1`}>{ROOM_COPY.joinFirst}</p>}

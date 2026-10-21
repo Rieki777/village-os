@@ -58,7 +58,7 @@ export default function StartChecklist({
     <fieldset className="space-y-2">
       <legend className={LABEL}>{broughtFor(circleName)}</legend>
       <p className={HINT}>{LIBRARY_COPY.startHint}</p>
-      <ul className="max-h-[min(20rem,40vh)] space-y-1.5 overflow-y-auto pr-1">
+      <ul className="max-h-[min(16rem,30vh)] space-y-1.5 overflow-y-auto pr-1">
         {offered.map((c) => {
           const aim = agendaAimFor(c.aim);
           return (

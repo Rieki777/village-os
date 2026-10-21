@@ -370,7 +370,11 @@ export default function Sessions() {
             )}
           </div>
 
-          <section aria-labelledby="sessions-start-heading" className={`${LIST_UI.card} md:sticky md:top-24`}>
+          <section
+            aria-labelledby="sessions-start-heading"
+            /* Sticky, and never taller than the window, so "Open the room" is always one scroll inside the card away. */
+            className={`${LIST_UI.card} md:sticky md:top-24 md:max-h-[calc(100dvh-7rem)] md:overflow-y-auto`}
+          >
             <h2 id="sessions-start-heading" className={LIST_UI.heading}>
               {SESSION_COPY.startTitle}
             </h2>

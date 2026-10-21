@@ -293,6 +293,19 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     expect((await row(shed)).status).toBe("waiting");
   });
 
+  it("gives no standing for a session somebody opened and closed alone, and takes none from the circle", async () => {
+    const solo = await opened("m-eve", "Eve, alone in the garden", "c-garden");
+    await close("m-eve", solo);
+    // The room's own rule now reads Eve's session as the garden's last; the library reads the last real meeting.
+    expect(Number((await lastClosedInCircle(pool, "c-garden", 0))[0].id)).toBe(solo);
+    expect(await titles("m-eve")).toEqual(["Compost rota", "Village picnic"]);
+    expect((await change("m-eve", shed, { title: "Eve's roof" })).status).toBe(404);
+    expect(await titles("m-ben")).toEqual(["Seed order", "Shed roof, phase one", "Village picnic"]);
+    expect((await lastClosedPerCircle(pool)).map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
+    // Opening a second room after it changes nothing either: she still may not take the garden's items.
+    expect((await openRoom("m-eve", "Eve takes the garden", "c-garden", [shed])).status).toBe(409);
+  });
+
   it("opens a room with the ticked items on its agenda, in order, keeping who brought each", async () => {
     notices.length = 0;
     week2 = await opened("m-ana", "Garden, week 2", "c-garden", [seed, shed, picnic]);
@@ -308,11 +321,12 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     for (const i of v.items) expect(i.addedBy).toBe(ana);
     expect(v.items.map((i: any) => i.presenterUserId)).toEqual([ana, null, null]);
     expect(v.items.map((i: any) => i.libraryId)).toEqual([seed, shed, picnic]);
-    // The note lands as the item's first note, in the words of whoever brought it.
+    // The note lands as the item's first note, written by whoever wrote it: the admin rewrote Dee's.
     const shedItem = v.items[1].id;
     expect(v.entries.filter((e: any) => e.itemId === shedItem).map((e: any) => [e.kind, e.text, e.authorUserId])).toEqual([
-      ["note", "We need a builder before the rains.", dee],
+      ["note", "We need a builder before the rains.", await noOf("m-founder")],
     ]);
+    expect(dee).toBeGreaterThan(0);
     for (const id of [seed, shed, picnic]) expect(await row(id)).toMatchObject({ status: "on_agenda", session_id: week2 });
     expect((await card("m-ben", shed))?.session).toEqual({ id: week2, title: "Garden, week 2", open: true });
 
@@ -397,6 +411,11 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     expect((await card("m-ben", lock))?.session).toMatchObject({ id: week2, open: false });
     expect((await card("m-dee", lock))?.session).toBeNull();
     expect((await card("m-dee", shed))?.backAt).toBeTruthy();
+    // What a session took up reaches its people, its bringer and admins, through every door: Cai has
+    // standing in the garden through his seat and was not in week 2, so an empty change finds nothing.
+    expect((await change("m-cai", seed, {})).status).toBe(404);
+    expect((await change("m-ben", seed, {})).status).toBe(200);
+    expect((await card("m-cai", seed))).toBeUndefined();
 
     // From last time offers the plain parked item, and leaves the library's to the library.
     const week3 = await opened("m-ana", "Garden, week 3", "c-garden");
@@ -406,7 +425,7 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
 
   it("lets whoever brought a taken-up item bring it again, and nobody else", async () => {
     expect(await again("m-ben", seed)).toMatchObject({ status: 403, body: { error: LIBRARY_REFUSALS.againNotYours } });
-    expect((await again("m-ana", seed)).body.item).toMatchObject({ status: "waiting", session: null });
+    expect((await again("m-ana", seed)).body.item).toMatchObject({ status: "waiting", session: null, backAt: null });
     expect(await again("m-ana", seed)).toMatchObject({ status: 409, body: { error: LIBRARY_REFUSALS.notTakenUp } });
   });
 
@@ -414,10 +433,17 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     const room = await opened("m-ana", "Garden, week 4", "c-garden", [picnic]);
     expect((await withdraw("m-dee", picnic)).status).toBe(200);
     expect(await row(picnic)).toBeUndefined();
-    expect(await takes(picnic)).toEqual([]);
+    // Its takes stay: they hold no words, and they keep "From last time" from offering week 2's copy again.
+    expect((await takes(picnic)).map((t: any) => [t.session_id, t.outcome])).toEqual([
+      [week2, "back"],
+      [room, null],
+    ]);
     const v = await view("m-ana", room);
     expect(v.items.map((i: any) => [i.title, i.libraryId])).toEqual([["Village picnic", null]]);
     await discard("m-ana", room);
+    const week5 = await opened("m-ana", "Garden, after the picnic went", "c-garden");
+    expect((await view("m-ana", week5)).carried?.parkedItems.map((p: any) => p.title)).toEqual(["Fence"]);
+    await discard("m-ana", week5);
   });
 
   it("sends a discarded room's items back to wait, and keeps a deleted record's taken-up items without their link", async () => {
@@ -451,12 +477,15 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     expect(await takes(seed)).toEqual([]);
   });
 
-  it("reads each circle's last closed session the way the room does", async () => {
-    const per = await lastClosedPerCircle(pool);
+  it("reads each circle's last closed session the way the room does, when anybody but one was in it", async () => {
+    // With no floor it is the room's own reading, circle by circle.
+    const per = await lastClosedPerCircle(pool, 0);
     for (const circleId of ["c-garden", "c-kitchen"]) {
       const one = await lastClosedInCircle(pool, circleId, 0);
       expect(per.filter((r: any) => r.circle_id === circleId).map((r: any) => Number(r.id))).toEqual(one.map((r: any) => Number(r.id)));
     }
+    // With the library's floor of two, the solo and older-release closes above are passed over.
+    expect((await lastClosedPerCircle(pool)).map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
   });
 
   it("exports what a member brought, and takes it with them when they leave", async () => {
@@ -467,10 +496,21 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     const benTakes = (await exportMemberSessions(pool, "m-ben")).libraryTakes;
     expect(benTakes.map((t: any) => t.libraryId)).toEqual([]);
 
+    // A note a member wrote on somebody else's item is theirs to take with them.
+    expect((await change("m-founder", seed, { note: "Order before the frost." })).status).toBe(200);
+    expect((await exportMemberSessions(pool, "m-founder")).libraryNotes).toEqual([
+      { libraryId: shed, note: "We need a builder before the rains." },
+      { libraryId: seed, note: "Order before the frost." },
+    ]);
+
     const dee = await noOf("m-dee");
     await forgetMemberSessions(pool, "m-dee", async (id) => PEOPLE[id] ?? null);
     expect(await q("SELECT `id` FROM `live_session_library` WHERE `brought_by_no` = ?", [dee])).toEqual([]);
-    expect(await q("SELECT `id` FROM `live_session_library_takes` WHERE `library_id` IN (?)", [[shed, lock]])).toEqual([]);
+    // Their takes stay, and hold no words.
+    expect((await q("SELECT `outcome` FROM `live_session_library_takes` WHERE `library_id` = ?", [shed])).map((t: any) => t.outcome)).toEqual(["back"]);
     expect(await titles("m-founder")).toEqual(["Compost rota", "Seed order"]);
+    await forgetMemberSessions(pool, "m-founder", async (id) => PEOPLE[id] ?? null);
+    expect(await row(seed)).toMatchObject({ edited_by_no: null });
+    expect((await q("SELECT `note`, `note_by_no` FROM `live_session_library` WHERE `id` = ?", [seed]))[0]).toEqual({ note: null, note_by_no: null });
   });
 });

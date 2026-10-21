@@ -101,6 +101,8 @@ export interface LibraryRec extends LibrarySubject {
   title: string;
   aim: ItemAim | null;
   note: string | null;
+  /** Who wrote the note as it stands, when that was not whoever brought it. */
+  noteByNo: number | null;
   sessionId: number | null;
   sessionItemId: number | null;
   editedByNo: number | null;
@@ -115,6 +117,7 @@ export function mapLibrary(r: RowDataPacket | Record<string, unknown>): LibraryR
     title: String(r.title ?? ""),
     aim: isItemAim(r.aim) ? r.aim : null,
     note: r.note == null || r.note === "" ? null : String(r.note),
+    noteByNo: r.note_by_no == null ? null : Number(r.note_by_no),
     broughtByNo: Number(r.brought_by_no),
     status: isLibraryStatus(r.status) ? r.status : "waiting",
     sessionId: r.session_id == null ? null : Number(r.session_id),
@@ -131,6 +134,15 @@ export function mapLibrary(r: RowDataPacket | Record<string, unknown>): LibraryR
  * The asker as the contract's rights read them. Admins see everything, so
  * their standing is not measured. `hostsIn` is the circles of the open
  * sessions they facilitate or keep notes for, where they also have standing.
+ *
+ * ONE STEP TIGHTER THAN THE TASK LAYER, on purpose: the circle's last closed
+ * session counts only when at least two people were in it
+ * (`lastClosedPerCircle`). Any member may open a room for any circle and
+ * close it alone, and under the plain rule that one close would hand them
+ * every waiting item of the circle, with the words of the people who brought
+ * them, and take the list from everybody who was at the circle's last real
+ * meeting. The task layer reads only task cards through the same rule; whether
+ * it should take the same step is the founder's to say.
  */
 export async function libraryViewer(
   pool: Pool | PoolConnection,
@@ -177,7 +189,12 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
   const joined = new Set<number>(
     viewer.no != null && viewer.no > 0 && !viewer.admin ? (await room.joinedRows(pool, viewer.no, closedIds)).map((r) => Number(r.session_id)) : [],
   );
-  const backAt = new Map((await store.lastBackRows(pool, recs.filter((r) => r.status === "waiting").map((r) => r.id))).map((r) => [Number(r.library_id), toIso(r.back_at)]));
+  // How each waiting item last left a session: only a `back` there means it came back on its own.
+  const backAt = new Map<number, string | null>();
+  for (const t of await store.settledTakeRows(pool, recs.filter((r) => r.status === "waiting").map((r) => r.id))) {
+    const id = Number(t.library_id);
+    if (!backAt.has(id)) backAt.set(id, String(t.outcome) === "back" ? toIso(t.settled_at) : null);
+  }
   return recs.map((r) => {
     const s = r.sessionId != null ? sessions.get(r.sessionId) : undefined;
     // An open room is read by every member; a closed record by its people and admins.
@@ -224,12 +241,22 @@ export async function libraryFor(pool: Pool, who: LibraryAsker, deps: LibraryDep
 
 // ── One item's doors ────────────────────────────────────────────────────────
 
-/** The item, if the asker may see it. A hidden item reads the same as a missing one. */
-async function visible(pool: Pool | PoolConnection, id: number, viewer: LibraryViewer, lock = false): Promise<LibraryRec | null> {
-  const rows = await store.itemRow(pool, id, lock);
+/**
+ * The item, if the asker may see it. A hidden item reads the same as a missing
+ * one. The list's rule for what a session took up holds here too: a taken-up
+ * item reaches whoever brought it, admins, and the people who were in the
+ * session that took it up (`takenUpRows`), so no door hands its card to
+ * anybody else.
+ */
+async function visible(q: Pool | PoolConnection, id: number, viewer: LibraryViewer, lock = false): Promise<LibraryRec | null> {
+  const rows = await store.itemRow(q, id, lock);
   if (!rows.length) return null;
   const rec = mapLibrary(rows[0]);
-  return canSeeBrought(rec, viewer) ? rec : null;
+  if (!canSeeBrought(rec, viewer)) return null;
+  if (rec.status !== "taken_up" || viewer.admin) return rec;
+  if (viewer.no != null && viewer.no > 0 && rec.broughtByNo === viewer.no) return rec;
+  const was = viewer.no != null && viewer.no > 0 && rec.sessionId != null && (await room.personRow(q, rec.sessionId, viewer.no)).length > 0;
+  return was ? rec : null;
 }
 
 async function oneCard(pool: Pool, id: number, viewer: LibraryViewer, deps: LibraryDeps): Promise<LibraryCard | null> {
@@ -263,6 +290,11 @@ export async function bringItem(
  * (404), a change they have no right to (403), an item that no longer waits
  * (409). A field sent with the value it already has asks for no right, and a
  * change that moves nothing is a quiet yes.
+ *
+ * The row is locked and read inside the transaction that writes it, so the
+ * rights are measured against the item as it is and a field this change does
+ * not touch keeps whatever another change just wrote: a host's new title can
+ * never put back a circle the bringer had just moved it out of.
  */
 export async function changeItem(
   pool: Pool,
@@ -275,33 +307,41 @@ export async function changeItem(
 ): Promise<Outcome<{ item: LibraryCard }>> {
   const patch = cleanBroughtPatch(raw, circleIds);
   if (!patch.ok) return refuse(patch.status, patch.error);
-  const no = await memberNo(pool, who.userId);
-  const viewer = await libraryViewer(pool, { userId: who.userId, no, admin: who.admin }, deps);
-  const rec = await visible(pool, id, viewer);
-  if (!rec) return refuse(404, LIBRARY_REFUSALS.notFound);
-  const p = patch.value;
-  const words = {
-    title: p.title ?? rec.title,
-    aim: p.aim === undefined ? rec.aim : p.aim,
-    note: p.note === undefined ? rec.note : p.note,
-  };
-  const circleId = p.circleId === undefined ? rec.circleId : p.circleId;
-  const wordsMove = words.title !== rec.title || words.aim !== rec.aim || words.note !== rec.note;
-  const circleMoves = circleId !== rec.circleId;
-  const rights = broughtRights(rec, viewer);
-  if (wordsMove && !rights.words) return refuse(403, LIBRARY_REFUSALS.wordsNotYours);
-  if (circleMoves && !rights.circle) return refuse(403, LIBRARY_REFUSALS.circleNotYours);
-  if (!wordsMove && !circleMoves) {
-    const item = await oneCard(pool, id, viewer, deps);
-    return item ? done({ item }) : refuse(404, LIBRARY_REFUSALS.notFound);
-  }
-  if (rec.status !== "waiting") return refuse(409, LIBRARY_REFUSALS.notWaiting);
-  const own = no != null && no > 0 && rec.broughtByNo === no;
-  // Who last changed it, when that was somebody else; the bringer's own change keeps the mark that is there.
-  // An admin who never touched a session gets their number now, so the card can say who changed it.
-  const editedByNo = own ? rec.editedByNo : (no ?? (await ensureMemberNo(pool, who.userId, now)));
-  const moved = await store.writeWords(pool, id, { ...words, circleId, editedByNo, now });
-  if (!moved) return refuse(409, LIBRARY_REFUSALS.notWaiting);
+  const known = await memberNo(pool, who.userId);
+  const viewer = await libraryViewer(pool, { userId: who.userId, no: known, admin: who.admin }, deps);
+  const out = await room.inTransaction(pool, async (conn): Promise<Outcome<null>> => {
+    const rec = await visible(conn, id, viewer, true);
+    if (!rec) return refuse(404, LIBRARY_REFUSALS.notFound);
+    const p = patch.value;
+    const words = {
+      title: p.title ?? rec.title,
+      aim: p.aim === undefined ? rec.aim : p.aim,
+      note: p.note === undefined ? rec.note : p.note,
+    };
+    const circleId = p.circleId === undefined ? rec.circleId : p.circleId;
+    const noteMoves = words.note !== rec.note;
+    const wordsMove = words.title !== rec.title || words.aim !== rec.aim || noteMoves;
+    const circleMoves = circleId !== rec.circleId;
+    const rights = broughtRights(rec, viewer);
+    if (wordsMove && !rights.words) return refuse(403, LIBRARY_REFUSALS.wordsNotYours);
+    if (circleMoves && !rights.circle) return refuse(403, LIBRARY_REFUSALS.circleNotYours);
+    if (!wordsMove && !circleMoves) return done(null);
+    if (rec.status !== "waiting") return refuse(409, LIBRARY_REFUSALS.notWaiting);
+    const own = known != null && known > 0 && rec.broughtByNo === known;
+    // An admin who never touched a session gets their number now, so the card can say who changed it.
+    const editor = own ? known! : (known ?? (await ensureMemberNo(pool, who.userId, now)));
+    await store.writeWords(conn, id, {
+      ...words,
+      // The note becomes an entry in the room, and the entry is whoever wrote these words.
+      noteByNo: noteMoves ? (own || words.note == null ? null : editor) : rec.noteByNo,
+      circleId,
+      // Who last changed it, when that was somebody else; the bringer's own change keeps the mark that is there.
+      editedByNo: own ? rec.editedByNo : editor,
+      now,
+    });
+    return done(null);
+  });
+  if (!out.ok) return out;
   // Only whoever brought it or an admin moves its circle, and both still read it after.
   const item = await oneCard(pool, id, viewer, deps);
   return item ? done({ item }) : refuse(404, LIBRARY_REFUSALS.notFound);
@@ -417,7 +457,8 @@ export async function writeTakes(
         itemId,
         kind: "note",
         text: rec.note,
-        authorNo: rec.broughtByNo,
+        // Whoever wrote the note as it stands: the bringer, unless a host or an admin reworded it.
+        authorNo: noteAuthor(rec),
         ownerSeatId: null,
         dueOn: null,
         now: t.now,
@@ -427,6 +468,11 @@ export async function writeTakes(
     out.push({ takeId, libraryId: rec.id, broughtByNo: rec.broughtByNo, title: rec.title });
   }
   return out;
+}
+
+/** Whoever wrote an item's note as it stands, and so whose entry it becomes in the room. */
+export function noteAuthor(rec: Pick<LibraryRec, "noteByNo" | "broughtByNo">): number {
+  return rec.noteByNo ?? rec.broughtByNo;
 }
 
 /** The ids of the items this session has already taken, every outcome. */
@@ -624,8 +670,10 @@ export async function noticesAfterSettle(
 export async function exportLibraryFor(
   pool: Pool,
   no: number,
-): Promise<{ library: Record<string, unknown>[]; libraryTakes: Record<string, unknown>[] }> {
+): Promise<{ library: Record<string, unknown>[]; libraryTakes: Record<string, unknown>[]; libraryNotes: Record<string, unknown>[] }> {
   const recs = (await store.memberRows(pool, no)).map(mapLibrary);
+  // A note they wrote on an item somebody else brought: their words, and nothing else of the item.
+  const libraryNotes = (await store.memberNoteRows(pool, no)).map((r) => ({ libraryId: Number(r.id), note: r.note == null ? null : String(r.note) }));
   const takes = await store.memberTakeRows(pool, no);
   const ids = Array.from(new Set([...recs.map((r) => r.sessionId), ...takes.map((t) => Number(t.session_id))].filter((id): id is number => id != null)));
   const open = new Set((await store.sessionTitleRows(pool, ids)).filter((r) => String(r.status) === "open").map((r) => Number(r.id)));
@@ -650,6 +698,7 @@ export async function exportLibraryFor(
       outcome: t.outcome == null ? null : String(t.outcome),
       settledAt: toIso(t.settled_at),
     })),
+    libraryNotes,
   };
 }
 

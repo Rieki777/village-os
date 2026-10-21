@@ -9,25 +9,35 @@
  * first (`groupByCircle`). Every card says where it stands in one line: still
  * waiting (and back after a session, when it came back), or on the agenda of a
  * room open now, with a link into it. What sessions took up lately folds
- * under one closed disclosure.
+ * under one disclosure.
  *
  * BRINGING AN ITEM is one button that opens the form in place, the way the
  * room's tension catcher opens: Bring an item, type, Add it. Once the server
- * says yes, the page thanks them and says which circle it waits for.
+ * says yes, the page thanks them and says which circle it waits for, and the
+ * focus goes back to the button.
  *
  * A CARD'S CONTROLS are the ones the server's own rights allow, read off the
  * card (`canEdit`, `canMoveCircle`, `canWithdraw`, `canBringAgain`): whoever
  * brought it and admins change it, withdraw it and bring it again; the
  * facilitator or secretary of the circle's open session rewords it. Withdraw
- * asks once, inline. Every write reads `res.ok` before it says anything, and
- * then the page reads the list again, so the screen shows what the server holds.
+ * asks once, inline. Every write reads `res.ok` before it says anything, stays
+ * busy until the page has read the list again, and only then lets go, so a
+ * second tap never lands on a card that already moved.
+ *
+ * AN EDIT SENDS WHAT THIS PERSON CHANGED. The form opens on the card as it was
+ * at that moment, and saving compares against that moment, never against the
+ * card a later poll brought, so somebody else's change made meanwhile survives
+ * unless both touched the same field.
  *
  * A NOTICE LANDS ON ITS CARD. Every notice about an item links to
- * `/sessions#brought-<id>`; once the list arrives the card with that id is
- * scrolled into view and outlined for a moment.
+ * `/sessions#brought-<id>`. Whenever the hash names a card the list holds (on
+ * arrival, or a notice tapped while already here), the card's disclosure opens
+ * if it is folded, then the card is scrolled to, outlined for a moment and
+ * given the focus.
  */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
+import { ChevronDown } from "lucide-react";
 import { AIM_DEFS } from "@shared/sessions";
 import {
   LIBRARY_API,
@@ -43,6 +53,7 @@ import {
 } from "@shared/sessionLibrary";
 import { gameFetch } from "@/lib/gameApi";
 import BroughtForm, { type BroughtValues } from "./BroughtForm";
+import ClampedNote from "./ClampedNote";
 import { BTN_DANGER, BTN_QUIET, BTN_SECONDARY, CHIP, HINT, LABEL_CAPS, PANEL } from "./roomUi";
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -75,6 +86,25 @@ async function send(path: string, method: string, body?: unknown): Promise<strin
   }
 }
 
+/**
+ * The page's hash, kept current. A notice's link is a client-side move
+ * (wouter pushes the history entry), which fires no `hashchange`, so the
+ * router's own events are read too.
+ */
+function useHash(): string {
+  const read = () => (typeof window === "undefined" ? "" : window.location.hash);
+  const [hash, setHash] = useState(read);
+  useEffect(() => {
+    const update = () => setHash(read());
+    const events = ["hashchange", "popstate", "pushState", "replaceState"];
+    for (const e of events) window.addEventListener(e, update);
+    return () => {
+      for (const e of events) window.removeEventListener(e, update);
+    };
+  }, []);
+  return hash;
+}
+
 function StatusLine({ card }: { card: LibraryCard }) {
   const date = card.status === "taken_up" ? shortDay(card.settledAt) : card.status === "waiting" ? shortDay(card.backAt) : null;
   const line = LIBRARY_STATUS_LINE[card.status]({ title: card.session?.title ?? null, date: date || null });
@@ -92,103 +122,122 @@ function StatusLine({ card }: { card: LibraryCard }) {
   );
 }
 
-function Note({ text }: { text: string }) {
-  const [whole, setWhole] = useState(false);
-  return (
-    <div className="mt-2">
-      <p className={`whitespace-pre-line break-words text-foreground ${whole ? "" : "line-clamp-3"}`}>{text}</p>
-      {text.length > 160 && (
-        <button type="button" className={BTN_QUIET} aria-expanded={whole} onClick={() => setWhole((w) => !w)}>
-          {whole ? LIBRARY_COPY.showLess : LIBRARY_COPY.showAll}
-        </button>
-      )}
-    </div>
-  );
-}
-
 function BroughtCard({
   card,
   circles,
   myCircleIds,
   lit,
   onChanged,
+  onGone,
 }: {
   card: LibraryCard;
   circles: { id: string; name: string }[];
   myCircleIds: readonly string[];
   lit: boolean;
   onChanged: () => Promise<void> | void;
+  onGone: () => void;
 }) {
   const [mode, setMode] = useState<"read" | "edit" | "withdraw">("read");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
+  // The card as it was when the form opened: what this person's change is measured against.
+  const opened = useRef<BroughtValues | null>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
   const when = shortDay(card.broughtAt);
 
-  const run = async (write: () => Promise<string | null>, after: "read" | "keep" = "read") => {
+  // Back from the form or the confirm, the focus returns to the control that opened it.
+  useEffect(() => {
+    if (mode === "read" && refocus.current) {
+      refocus.current = false;
+      editButton.current?.focus();
+    }
+  }, [mode]);
+
+  if (gone) return null;
+
+  const backToRead = () => {
+    refocus.current = true;
+    setMode("read");
+    setError(null);
+  };
+
+  const run = async (write: () => Promise<string | null>, after: "read" | "gone") => {
     setBusy(true);
     setError(null);
     const said = await write();
-    setBusy(false);
     if (said) {
+      setBusy(false);
       setError(said);
       return;
     }
-    if (after === "read") setMode("read");
+    if (after === "gone") {
+      setGone(true);
+      onGone();
+    }
+    // Busy until the list holds what the server now holds, so a second tap never lands on a card that moved.
     await onChanged();
+    setBusy(false);
+    if (after === "read") backToRead();
+  };
+
+  const startEdit = () => {
+    opened.current = { title: card.title, aim: card.aim, note: card.note, circleId: card.circleId };
+    setMode("edit");
   };
 
   const save = (v: BroughtValues) => {
-    // Only what changed travels, so a change somebody else made meanwhile survives unless both touched it.
+    const was = opened.current ?? { title: card.title, aim: card.aim, note: card.note, circleId: card.circleId };
     const patch: Record<string, unknown> = {};
-    if (v.title !== card.title) patch.title = v.title;
-    if (v.aim !== card.aim) patch.aim = v.aim;
-    if ((v.note ?? null) !== (card.note ?? null)) patch.note = v.note ?? "";
-    if (card.canMoveCircle && v.circleId !== card.circleId) patch.circleId = v.circleId;
-    void run(() => send(libraryItemUrl(card.id), "PATCH", patch));
+    if (v.title !== was.title) patch.title = v.title;
+    if (v.aim !== was.aim) patch.aim = v.aim;
+    if ((v.note ?? null) !== (was.note ?? null)) patch.note = v.note ?? "";
+    if (card.canMoveCircle && v.circleId !== was.circleId) patch.circleId = v.circleId;
+    if (!Object.keys(patch).length) {
+      backToRead();
+      return;
+    }
+    void run(() => send(libraryItemUrl(card.id), "PATCH", patch), "read");
   };
 
   return (
     <li
       id={broughtAnchor(card.id)}
-      className={`scroll-mt-24 rounded-xl border bg-card px-4 py-3 ${lit ? "border-notice ring-2 ring-notice/60" : "border-border"}`}
+      tabIndex={-1}
+      className={`scroll-mt-24 rounded-xl border bg-card px-4 py-3 outline-none ${lit ? "border-notice ring-2 ring-notice/60" : "border-border"}`}
     >
       {mode === "edit" ? (
         <BroughtForm
           idBase={`brought-edit-${card.id}`}
           circles={circles}
           myCircleIds={myCircleIds}
-          initial={{ title: card.title, aim: card.aim, note: card.note, circleId: card.circleId }}
+          initial={opened.current ?? { title: card.title, aim: card.aim, note: card.note, circleId: card.circleId }}
+          initialCircleName={card.circleName}
           circleLocked={!card.canMoveCircle}
           busy={busy}
           error={error}
           onSubmit={save}
-          onCancel={() => {
-            setMode("read");
-            setError(null);
-          }}
+          onCancel={backToRead}
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-foreground">{card.title}</p>
-              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {card.aim && <span className={CHIP}>{AIM_DEFS[card.aim].label}</span>}
-                <span>{card.mine ? LIBRARY_COPY.broughtByYou(when) : LIBRARY_COPY.broughtBy(card.broughtBy, when)}</span>
-              </p>
-              <StatusLine card={card} />
-              {card.changedBy && <p className="mt-1 text-xs text-muted-foreground">{LIBRARY_COPY.changedBy(card.changedBy)}</p>}
-            </div>
-          </div>
-          {card.note && <Note text={card.note} />}
+          <p className="font-semibold text-foreground">{card.title}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            {card.aim && <span className={CHIP}>{AIM_DEFS[card.aim].label}</span>}
+            <span>{card.mine ? LIBRARY_COPY.broughtByYou(when) : LIBRARY_COPY.broughtBy(card.broughtBy, when)}</span>
+          </p>
+          <StatusLine card={card} />
+          {card.changedBy && <p className="mt-1 text-xs text-muted-foreground">{LIBRARY_COPY.changedBy(card.changedBy)}</p>}
+          {card.note && <ClampedNote text={card.note} />}
           {mode === "withdraw" ? (
             <div role="group" aria-label={LIBRARY_COPY.withdraw} className="mt-3 rounded-xl border border-border bg-muted px-3 py-3">
               <p className="text-sm text-foreground">{card.status === "on_agenda" ? LIBRARY_COPY.withdrawOnAgenda : LIBRARY_COPY.withdrawConfirm}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" className={BTN_DANGER} disabled={busy} onClick={() => void run(() => send(libraryItemUrl(card.id), "DELETE"), "keep")}>
+                <button type="button" className={BTN_DANGER} disabled={busy} onClick={() => void run(() => send(libraryItemUrl(card.id), "DELETE"), "gone")}>
                   {busy ? LIBRARY_COPY.withdrawing : LIBRARY_COPY.withdrawYes}
                 </button>
-                <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setMode("read")}>
+                <button type="button" className={BTN_QUIET} disabled={busy} onClick={backToRead}>
                   {LIBRARY_COPY.keep}
                 </button>
               </div>
@@ -197,17 +246,23 @@ function BroughtCard({
             (card.canEdit || card.canWithdraw || card.canBringAgain) && (
               <div className="mt-2 flex flex-wrap items-center gap-1">
                 {card.canEdit && (
-                  <button type="button" className={BTN_QUIET} onClick={() => setMode("edit")}>
+                  <button ref={editButton} type="button" className={BTN_QUIET} disabled={busy} onClick={startEdit}>
                     {LIBRARY_COPY.edit}
                   </button>
                 )}
                 {card.canBringAgain && (
-                  <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void run(() => send(libraryAgainUrl(card.id), "POST", {}))}>
+                  <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => void run(() => send(libraryAgainUrl(card.id), "POST", {}), "read")}>
                     {LIBRARY_COPY.bringAgain}
                   </button>
                 )}
                 {card.canWithdraw && (
-                  <button type="button" className={BTN_QUIET} onClick={() => setMode("withdraw")}>
+                  <button
+                    ref={card.canEdit ? undefined : editButton}
+                    type="button"
+                    className={BTN_QUIET}
+                    disabled={busy}
+                    onClick={() => setMode("withdraw")}
+                  >
                     {LIBRARY_COPY.withdraw}
                   </button>
                 )}
@@ -237,45 +292,87 @@ export default function WaitingForCircle({
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState("");
   const [lit, setLit] = useState<number | null>(null);
+  const [takenOpen, setTakenOpen] = useState(false);
   const landed = useRef<string | null>(null);
+  const bringButton = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const backToButton = useRef(false);
+  const hash = useHash();
 
-  // A notice's link lands on its card once the list holds it, once per hash.
-  useEffect(() => {
-    const hash = typeof window === "undefined" ? "" : window.location.hash;
-    const id = broughtIdFromHash(hash);
-    if (id == null || landed.current === hash || !library.items.some((c) => c.id === id)) return;
-    landed.current = hash;
-    const el = document.getElementById(broughtAnchor(id));
-    el?.scrollIntoView?.({ block: "center" });
-    setLit(id);
-    const timer = window.setTimeout(() => setLit(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [library.items]);
-
-  const circleName = (id: string | null) => (id ? (circles.find((c) => c.id === id)?.name ?? null) : null);
   const live = library.items.filter((c) => c.status !== "taken_up");
   const takenUp = library.items.filter((c) => c.status === "taken_up");
   const groups = groupByCircle(live, library.myCircleIds);
+
+  // A notice's link lands on its card once the list holds it, once per hash:
+  // the disclosure opens first, then the card is scrolled to and focused.
+  useEffect(() => {
+    const id = broughtIdFromHash(hash);
+    const target = id == null ? undefined : library.items.find((c) => c.id === id);
+    if (!target || landed.current === hash) return;
+    landed.current = hash;
+    if (target.status === "taken_up") setTakenOpen(true);
+    setLit(target.id);
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.getElementById(broughtAnchor(target.id));
+      el?.scrollIntoView?.({ block: "center" });
+      el?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hash, library.items]);
+
+  // The outline fades on its own clock, whatever the list does meanwhile.
+  useEffect(() => {
+    if (lit == null) return;
+    const timer = window.setTimeout(() => setLit(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [lit]);
+
+  // Back from the form, the focus returns to the button that opened it.
+  useEffect(() => {
+    if (!adding && backToButton.current) {
+      backToButton.current = false;
+      bringButton.current?.focus();
+    }
+  }, [adding]);
+
+  const circleName = (id: string | null) => (id ? (circles.find((c) => c.id === id)?.name ?? null) : null);
+
+  const closeForm = () => {
+    backToButton.current = true;
+    setAdding(false);
+    setError(null);
+  };
 
   const add = async (v: BroughtValues) => {
     setBusy(true);
     setError(null);
     const said = await send(LIBRARY_API, "POST", { title: v.title, aim: v.aim, note: v.note, circleId: v.circleId });
-    setBusy(false);
     if (said) {
+      setBusy(false);
       setError(said);
       return;
     }
-    setAdding(false);
-    setSaved(LIBRARY_COPY.saved(circleName(v.circleId)));
     await onChanged();
+    setBusy(false);
+    closeForm();
+    setSaved(LIBRARY_COPY.saved(circleName(v.circleId)));
   };
+
+  const cardProps = (c: LibraryCard) => ({
+    card: c,
+    circles,
+    myCircleIds: library.myCircleIds,
+    lit: lit === c.id,
+    onChanged,
+    // A withdrawn card leaves; the focus goes to the section's heading.
+    onGone: () => heading.current?.focus(),
+  });
 
   return (
     <section aria-labelledby="sessions-waiting-heading">
-      <h2 id="sessions-waiting-heading" className="font-display text-2xl text-foreground">
+      <h2 ref={heading} tabIndex={-1} id="sessions-waiting-heading" className="font-display text-2xl text-foreground outline-none">
         {LIBRARY_COPY.sectionTitle}
       </h2>
       <p className={`${HINT} mt-1 max-w-2xl`}>{LIBRARY_COPY.sectionLede}</p>
@@ -291,31 +388,26 @@ export default function WaitingForCircle({
               busy={busy}
               error={error}
               onSubmit={(v) => void add(v)}
-              onCancel={() => {
-                setAdding(false);
-                setError(null);
-              }}
+              onCancel={closeForm}
             />
           </>
         ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className={BTN_SECONDARY}
-              onClick={() => {
-                setAdding(true);
-                setSaved(null);
-              }}
-            >
-              {LIBRARY_COPY.bringButton}
-            </button>
-            {saved && (
-              <p role="status" className="text-sm text-open">
-                {saved}
-              </p>
-            )}
-          </div>
+          <button
+            ref={bringButton}
+            type="button"
+            className={BTN_SECONDARY}
+            onClick={() => {
+              setAdding(true);
+              setSaved("");
+            }}
+          >
+            {LIBRARY_COPY.bringButton}
+          </button>
         )}
+        {/* Mounted from the start, so the thanks is read out when its words arrive. */}
+        <p aria-live="polite" className={`text-sm text-open ${saved ? "mt-2" : "sr-only"}`}>
+          {saved}
+        </p>
 
         {groups.length === 0 ? (
           <p className={`mt-4 ${HINT}`}>{LIBRARY_COPY.empty}</p>
@@ -328,7 +420,7 @@ export default function WaitingForCircle({
                 </h3>
                 <ul className="mt-2 space-y-2">
                   {g.items.map((c) => (
-                    <BroughtCard key={c.id} card={c} circles={circles} myCircleIds={library.myCircleIds} lit={lit === c.id} onChanged={onChanged} />
+                    <BroughtCard key={c.id} {...cardProps(c)} />
                   ))}
                 </ul>
               </section>
@@ -337,13 +429,16 @@ export default function WaitingForCircle({
         )}
 
         {takenUp.length > 0 && (
-          <details className="mt-5 border-t border-border pt-4" open={takenUp.some((c) => c.id === lit) || undefined}>
-            <summary className={`flex min-h-11 cursor-pointer items-center font-semibold text-foreground ${FOCUS}`}>
+          <details className="group mt-5 border-t border-border pt-4" open={takenOpen} onToggle={(e) => setTakenOpen(e.currentTarget.open)}>
+            <summary
+              className={`flex min-h-11 cursor-pointer list-none items-center gap-2 font-semibold text-foreground underline decoration-notice/60 underline-offset-4 hover:decoration-notice [&::-webkit-details-marker]:hidden ${FOCUS}`}
+            >
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
               {LIBRARY_COPY.takenUpLately}
             </summary>
             <ul className="mt-2 space-y-2">
               {takenUp.map((c) => (
-                <BroughtCard key={c.id} card={c} circles={circles} myCircleIds={library.myCircleIds} lit={lit === c.id} onChanged={onChanged} />
+                <BroughtCard key={c.id} {...cardProps(c)} />
               ))}
             </ul>
           </details>
