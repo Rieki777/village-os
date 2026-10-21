@@ -1218,12 +1218,15 @@ the seeded roles whose descriptions already claimed the work
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
 | `org.declare` | Founders Circle |
+| `org.seat`, `org.decide` | Founders Circle (Rye, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
 
 Nothing to provision. `roles-seed.json` is applied ONLY when the `roles` table
 is empty, so a running village keeps every role it has and an admin adds these
 through the role editor. A fresh fork gets them at first boot. A role grants
-nothing until somebody holds it, exactly like a badge.
+nothing until somebody holds it, exactly like a badge. That is why seating
+people and publishing a change to the org chart reach a village that already
+runs only when an admin adds `org.seat` and `org.decide` to the role there.
 
 - Seeds: `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.
