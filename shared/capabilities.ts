@@ -559,12 +559,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 19 keys
- * today. The other 15 are not withheld from anybody: they are personal acts
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 21 keys
+ * today. The other 16 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 19 in the founding seat and has
+ * Read this way, a launched village holds all 21 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -573,6 +573,17 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * So this is ONE constant that the seating and the handover read, and
  * narrowing it is an edit to this one expression. Every caller and every test
  * follows it, and nothing else in the codebase has to be found.
+ *
+ * THE TWO NUMBERS IN THIS PARAGRAPH ARE ASSERTED, not maintained by hope.
+ * They read 19 and 15 until 2026-10-20, by which time `comms.manage` had
+ * become transferable and nobody had edited this paragraph - so the
+ * authoritative explanation of the founder's words understated what those
+ * words were read to cover. `capabilities.test.ts` now parses these sentences
+ * and compares them with the derived set, so the next transferable power is an
+ * edit somebody makes here on purpose, not a drift nobody sees.
+ * `module.switch` (Rye, 2026-10-09) was the first through that door, and it
+ * moved them to 21 and 16: a new key born transferable moves the first
+ * number and leaves the second.
  *
  * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
  * capability added to the union with no line there is a type error and a

@@ -5,6 +5,10 @@
  *   GET  /api/review/batches/:batchId/structure          the plan, and the draft it went into
  *   POST /api/review/batches/:batchId/structure/accept   accept, or `dryRun` to preview
  *
+ * Once the draft is published the read also carries `carry`, the list of
+ * people still seated on the old chart (server/routes/carryAcross.ts, which
+ * registers the two doors that act on it).
+ *
  * Registered by server/routes/review.ts and behind the same key as the review
  * queue, `intake.moderate`: the read asks `mayStillSee` (looking has no
  * break-glass), the accept asks `guardCapability`. What accepting produces is
@@ -18,11 +22,13 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { draftChangeCap } from "../lib/orgDrafts";
 import { acceptStructure, batchHeader, draftForBatch, readDecisions, readStructure, type RepoCircle } from "../lib/structureReview";
+import { carryAnswer, register as registerCarry, type CarryDeps } from "./carryAcross";
 
 type Deps = Pick<
   AppDeps,
   "isAdmin" | "authedUser" | "adminActor" | "guardCapability" | "mayStillSee" | "getPool" | "members" | "circlesRepo"
->;
+> &
+  CarryDeps;
 
 const idList = (v: unknown): string[] | null => {
   const raw = Array.isArray(v) ? v : typeof v === "string" && v !== "" ? v.split(",") : [];
@@ -59,6 +65,7 @@ export function register(app: Express, deps: Deps): void {
       proposalChangeLimit: draftChangeCap(),
       draft,
       mayPublish: draft?.status === "open" ? await isAdmin(req) : false,
+      carry: draft?.status === "published" ? await carryAnswer(req, deps, draft.id) : null,
     });
   });
 
@@ -104,4 +111,6 @@ export function register(app: Express, deps: Deps): void {
       remainders: r.remainders,
     });
   });
+
+  registerCarry(app, deps);
 }

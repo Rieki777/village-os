@@ -403,6 +403,42 @@ describe("hasCapability truth table", () => {
       expect(HANDOVER_SET).toContain("module.switch");
     });
 
+    it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {
+      /**
+       * PROSE IS NOT COMPILED, AND THIS PARAGRAPH IS NOT ORDINARY PROSE.
+       *
+       * The comment above `HANDOVER_SET` in shared/capabilities.ts records how the
+       * founder's words about giving over all steward powers were READ - and that
+       * reading is stated as two counts: how many powers are transferable, and how
+       * many are not. Those are claims about the set, so they can be wrong, and on
+       * 2026-10-20 they were: they still read 19 and 15 after `comms.manage` became
+       * transferable, understating what the ruling was read to cover. Nothing
+       * failed, because no gate reads a comment.
+       *
+       * So this test reads it. A new transferable power now has to be an edit
+       * somebody makes to that paragraph on purpose, which is the point: the
+       * paragraph is a decision, not a description.
+       */
+      const fs = await import("node:fs");
+      const url = await import("node:url");
+      const here = url.fileURLToPath(new URL(".", import.meta.url));
+      const src = fs.readFileSync(here + "capabilities.ts", "utf8");
+
+      const transferable = src.match(/ALL TRANSFERABLE POWERS, which is (\d+) keys/);
+      const other = src.match(/The other (\d+) are not withheld/);
+      const holdsAll = src.match(/a launched village holds all (\d+) in the founding seat/);
+      // If the sentences are ever reworded, this test must be reworded with them
+      // rather than passing quietly on three nulls.
+      expect(transferable, "the N-keys sentence").not.toBeNull();
+      expect(other, "the other-N sentence").not.toBeNull();
+      expect(holdsAll, "the holds-all-N sentence").not.toBeNull();
+
+      const notTransferable = ALL_CAPABILITIES.filter((c) => !TRANSFERABLE[c]).length;
+      expect(Number(transferable![1]), "transferable count in the comment").toBe(HANDOVER_SET.length);
+      expect(Number(holdsAll![1]), "holds-all count in the comment").toBe(HANDOVER_SET.length);
+      expect(Number(other![1]), "non-transferable count in the comment").toBe(notTransferable);
+    });
+
     it("carries the steward's veto, which is what opens the break-glass", () => {
       // The launch seating entrusts the whole set, so if this key were ever
       // classified out of it a launched village would have no break-glass at

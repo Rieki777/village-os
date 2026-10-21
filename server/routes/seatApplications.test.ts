@@ -41,6 +41,7 @@ import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
 import { readApplication, seatingsHolding } from "../repos/seatApplications";
 import { register, seatFromApplication } from "./seatApplications";
+import { WAITING_COPY } from "../../shared/waitingOnYou";
 
 const LADDER = ["visitor", "guest", "member"];
 const DAY = 24 * 60 * 60 * 1000;
@@ -320,7 +321,8 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect(told).toHaveLength(1);
     expect(told[0].title).toContain("Holder path");
     expect(told[0].link).toBe(`/seat-applications/${a.body.id}`);
-    expect(told[0].body ?? null).toBeNull();
+    // The body is one fixed sentence pointing at the task board: nothing the member wrote, no name, no money.
+    expect(told[0].body).toBe(WAITING_COPY.holderNoticeBody);
     expect(JSON.stringify(told[0])).not.toMatch(/Ana|XTS|43,?210|orchard/);
   });
 
