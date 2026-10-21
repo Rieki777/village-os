@@ -651,3 +651,72 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(seat?.circle_id).toBe("regenerative-development");
   });
 });
+
+/*
+ * THE PERSON WHO PROPOSED A QUEST, end to end through the built server.
+ *
+ * Two silences, both closed here. An idea past the allowance was stored and
+ * never reached this queue while the page said "Your Quest idea is in.", so
+ * `POST /api/forms/submit` now answers where a quest idea went. And putting an
+ * idea on the board or saying no to it told nobody, so the proposer now gets a
+ * notice either way, the no carrying the steward's reason. Otto holds nothing,
+ * which is the point: proposing a quest needs no stage and no key.
+ */
+describe.skipIf(!DB_CONFIGURED)("the person who proposed a quest", () => {
+  /** One idea through the Propose a Quest form, as the page sends it, from Otto's session. */
+  const sendIdea = (title: string) =>
+    call("POST", "/api/forms/submit", {
+      type: "quest-proposal",
+      data: { name: "Otto Brand", email: `otto-${PORT}@example.test`, title, whatYouWantToDo: `${title}, on a Saturday.` },
+    }, ottoToken);
+
+  /** The id /review gives an idea, read the way a steward reads it. */
+  const inQueue = async (title: string): Promise<string> => {
+    const q = await call("GET", "/api/review/queue");
+    expect(q.status, q.text).toBe(200);
+    const card = (q.json?.quests ?? []).find((c: any) => c.prose?.title === title);
+    expect(card, `${title} must be in the review queue`).toBeTruthy();
+    return String(card.id);
+  };
+
+  /** Otto's notices of one type, newest first. */
+  const noticesOf = async (type: string): Promise<any[]> => {
+    const bell = await call("GET", "/api/notifications", undefined, ottoToken);
+    expect(bell.status, bell.text).toBe(200);
+    return (bell.json?.notifications ?? []).filter((n: any) => n.type === type);
+  };
+
+  it("is told whether an idea reached the review queue, and why when it did not", async () => {
+    for (const title of ["Mend the orchard gate", "Sow the bean rows", "Paint the tool shed"]) {
+      const sent = await sendIdea(title);
+      expect(sent.status, sent.text).toBe(200);
+      expect(sent.json?.idea, title).toEqual({ queued: true });
+    }
+    const fourth = await sendIdea("Sweep the threshing floor");
+    expect(fourth.status, fourth.text).toBe(200);
+    // Still stored, so still a success; and now the page can say where it is.
+    expect(fourth.json?.success).toBe(true);
+    expect(fourth.json?.idea).toEqual({ queued: false, held: "over_allowance", member: true, allowance: 3 });
+  });
+
+  it("hears that the idea went on the board, with a link to the quest and no words from the idea", async () => {
+    const id = await inQueue("Mend the orchard gate");
+    const put = await call("POST", `/api/review/quests/${id}/accept`, { reward: { gratitude: "20" } });
+    expect(put.status, put.text).toBe(200);
+    const onBoard = await noticesOf("quest_idea_on_board");
+    expect(onBoard).toHaveLength(1);
+    expect(onBoard[0].link).toBe(`/quests/${put.json.questId}`);
+    expect(onBoard[0].body).toBeNull();
+    expect(onBoard[0].title).not.toContain("orchard");
+  });
+
+  it("hears the no, with the reason the steward typed", async () => {
+    const id = await inQueue("Sow the bean rows");
+    const no = await call("POST", `/api/review/quests/${id}/reject`, { note: "The beans went in last week." });
+    expect(no.status, no.text).toBe(200);
+    const declined = await noticesOf("quest_idea_declined");
+    expect(declined).toHaveLength(1);
+    expect(declined[0].body).toBe("The beans went in last week.");
+    expect(declined[0].link).toBe("/propose-quest");
+  });
+});

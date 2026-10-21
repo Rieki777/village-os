@@ -66,6 +66,7 @@ import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
+import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
@@ -597,10 +598,10 @@ export default function Review() {
     }
   };
 
-  const rejectQuest = async (q: QuestCard) => {
+  const rejectQuest = async (q: QuestCard, reason: string) => {
     setBusy(q.id);
     try {
-      if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
+      if (await post(`/api/review/quests/${q.id}/reject`, { note: reason })) {
         toast.success("Rejected");
         await load();
       }
@@ -750,8 +751,12 @@ export default function Review() {
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               {drops.map((d) => (
                 <li key={`${d.moduleId}:${d.reason}`}>
-                  {d.dropped} from {d.moduleId} {DROP_WORDS[d.reason] ?? `were refused as ${d.reason}`}.
-                  None of it was stored.
+                  {/* A quest idea held back is still a stored submission; an outside service's refused record is not. */}
+                  {d.dropped} from {d.moduleId === PROPOSE_QUEST_MODULE ? "the Propose a Quest form" : d.moduleId}{" "}
+                  {DROP_WORDS[d.reason] ?? `were refused as ${d.reason}`}.{" "}
+                  {d.moduleId === PROPOSE_QUEST_MODULE
+                    ? "Each one is kept as a submission in the admin inbox, under Form Submissions."
+                    : "None of it was stored."}
                 </li>
               ))}
             </ul>
@@ -970,7 +975,7 @@ export default function Review() {
             arrived={when(q.receivedAt)}
             busy={busy === q.id}
             onAccept={(typed) => void acceptQuest(q, typed)}
-            onReject={() => void rejectQuest(q)}
+            onReject={(reason) => void rejectQuest(q, reason)}
           />
         ))}
       </div>

@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `de898dd35729ec08`, which regenerating reproduces.
+It describes the sources at fingerprint `ea92eaa24ad94349`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -203,12 +203,14 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `governance_mode` | 97% | 97% | 0 | no | `custom` | yes |
 | `cycle_settlement` | 0% | 0% | 0 | no | the village's own | yes |
 | `gps_change` | 0% | 50% | 0 | no | the village's own | yes |
+| `org_draft` | 0% | 0% | 0 | no | the village's own | no, it conducts a decision and executes nothing |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
 - `mint_rule`: This one changes what the village mints, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `governance_mode`: This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour.
 - `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
 - `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
+- `org_draft`: A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
@@ -312,7 +314,7 @@ The veto lives on the BALLOT, and a proposal's display of it derives from that p
 <!-- written by a person: notVetoable -->
 **What no steward may stop.** Three things. EVERY seating and unseating, of any role and not only one that carries the veto (Rye, 2026-09-04). Any edit to the settings that say what a steward may stop. And any decision whose SIZE the village has not put in the seat's reach, which by default is everything below constitutional. All three keep their timing and their window like any Game change and lose only the door, so the village still reads them coming. A seat that could veto its own removal is a seat nobody can remove. A change set mixing one of those elements with any other kind is refused when it is validated, naming both elements, so the carve-out cannot carry anything else through beside it.
 
-Read from the code: `village_launch` execute the moment they carry, with no window at all. That list used to hold the two seat acts as well, and the gap between the ruling and the code was recorded here: 2026-09-03 asked that a seating keep its timing and its window and simply admit no veto, while the code took the window away too, which arrived at the same place by a shorter road. Rye closed the gap on 2026-09-04 in favour of the ruling, so a seating now waits its window, the village reads it coming, and no steward may stop it. The Birthing is on that list for a reason of its own: before it carries nobody holds a seat, so a window on it would be hours nobody could use, and it already asks every seat to vote and every seat to say yes.
+Read from the code: `village_launch`, `org_draft` execute the moment they carry, with no window at all. That list used to hold the two seat acts as well, and the gap between the ruling and the code was recorded here: 2026-09-03 asked that a seating keep its timing and its window and simply admit no veto, while the code took the window away too, which arrived at the same place by a shorter road. Rye closed the gap on 2026-09-04 in favour of the ruling, so a seating now waits its window, the village reads it coming, and no steward may stop it. The Birthing is on that list for a reason of its own: before it carries nobody holds a seat, so a window on it would be hours nobody could use, and it already asks every seat to vote and every seat to say yes.
 
 <!-- written by a person: override -->
 **The override.** A proposal that was stopped may be brought back. Passed again at the village's highest set tier, with the relation stated (`renews`, `overrides` or `replaces`) and the ballot actually PRICED at that tier, it lands whatever any steward says. The record links it to the decision that was stopped and the reason stays visible beside it. A renewal may not point at a decision that was stopped.
@@ -428,6 +430,7 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `member.superVouch` | Admit a member outright | never by rung; a role or a badge grants it | **no** |
 | `org.seat` | Seat and unseat the holders of the village's seats | never by rung; a role or a badge grants it | yes |
 | `org.seatAgent` | Seat and unseat the software agents that hold seats | never by rung; a role or a badge grants it | yes |
+| `org.decide` | Publish a change to the village's structure, or put it to the village | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
 
 ## The word steward means three things
@@ -822,7 +825,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 5 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 6 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -1050,7 +1053,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "de898dd35729ec08",
+  "commit": "ea92eaa24ad94349",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1177,6 +1180,19 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "minYesHeads": null,
       "executesAtClose": true,
       "why": "This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting."
+    },
+    {
+      "subjectType": "org_draft",
+      "minUnityPct": 0,
+      "minQuorumPct": 0,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": null,
+      "criticality": "routine",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": false,
+      "why": "A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar."
     }
   ],
   "executingSubjectTypes": [
@@ -1801,6 +1817,12 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "deniableByBadge": true
     },
     {
+      "key": "org.decide",
+      "label": "Publish a change to the village's structure, or put it to the village",
+      "unlocksAtStage": null,
+      "deniableByBadge": true
+    },
+    {
       "key": "dial.set",
       "label": "Turn the village's own dials",
       "unlocksAtStage": null,
@@ -2277,7 +2299,8 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     "absentMeans": "game_change",
     "executesAtPassWithNoWindow": [
-      "village_launch"
+      "village_launch",
+      "org_draft"
     ],
     "vetoHoursFloor": 72
   },
@@ -2818,7 +2841,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 178 migration files in `drizzle/`.
+Checked against the 179 migration files in `drizzle/`.
 
 ## What this file is made from
 

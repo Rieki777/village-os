@@ -466,17 +466,19 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     expect(await q("SELECT `status`, `used_seconds` FROM `live_session_items` WHERE `id` = ?", [seedItem])).toEqual([{ status: "done", used_seconds: seedUsed }]);
 
     // Every admin hears the record is ready; Ben holds an action and Cai sits in the seat that holds the other.
-    // Cai was not in the room, and the record opens only to the people who were, so his notice carries no link.
+    // Each notice opens that task on the holder's own board. Cai was not in the room, and his board is still his
+    // to read, so his opens the task too; the card carries the record link only for the people who were there.
     expect(adminNotices).toEqual([
       { type: "session_record_ready", title: 'The record of "Garden circle, week 2" is ready to read', dedupeKey: `session-record:${sid}`, link: `/sessions/${sid}` },
     ]);
     expect(notices.map((n) => [n.userId, n.type, n.dedupeKey, n.link]).sort()).toEqual(
       [
-        ["m-ben", "session_action_held", `session-action:${orderSeed}:m-ben`, `/sessions/${sid}`],
-        ["m-cai", "session_action_held", `session-action:${fixTank}:m-cai`, null],
+        ["m-ben", "session_action_held", `session-action:${orderSeed}:m-ben`, `/profile#task-${orderSeed}`],
+        ["m-cai", "session_action_held", `session-action:${fixTank}:m-cai`, `/profile#task-${fixTank}`],
       ].sort(),
     );
-    expect(notices.find((n) => n.userId === "m-cai").body).toBe("Fix the water tank before the rains, by 2026-10-31.");
+    // The date in words, as the board card says it; the year joins only once the clock has passed into another.
+    expect(notices.find((n) => n.userId === "m-cai").body).toMatch(/^Fix the water tank before the rains, by Saturday 31 October( 2026)?\.$/);
   });
 
   it("refuses every write to a closed session", async () => {

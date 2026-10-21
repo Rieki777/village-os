@@ -250,6 +250,16 @@ export const MINT_RULE = "mint_rule";
  */
 export const GOVERNANCE_MODE = "governance_mode";
 
+/**
+ * ── A REORGANISATION THE VILLAGE DECIDES (Rye, 2026-09-14) ─────────────────
+ *
+ * An org chart draft put to the village, because nobody holds `org.decide` or
+ * because a holder chose a vote. `subject_ref` is the draft id. The closer
+ * publishes the draft when it carries (server/lib/orgDraftDecide.ts), and
+ * `shared/governanceKinds.ts` lands it at the close.
+ */
+export const ORG_DRAFT = "org_draft";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -420,6 +430,22 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minQuorumPct: 50,
     minElectorate: 0,
     why: "This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.",
+  },
+  /*
+   * A REORGANISATION ASKS WHAT THE VILLAGE ASKS OF ANYTHING, for the reason
+   * the 2026-09-14 ruling gives: reorganisations come often early, and a
+   * holder of `org.decide` publishes one with no vote at all. A bar above the
+   * village's own would make the vote the harder door to a change one person
+   * may make alone. Zero floors and no method, the CYCLE_SETTLEMENT shape. A
+   * power change inside a draft is not this subject: the ruling sends those
+   * to a constitutional vote, and a draft carries no power op today.
+   */
+  [ORG_DRAFT]: {
+    minUnityPct: 0,
+    minQuorumPct: 0,
+    minElectorate: 0,
+    criticality: "routine",
+    why: "A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
   },
 };
 

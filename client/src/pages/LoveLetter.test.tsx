@@ -8,7 +8,8 @@
  *     form's own words say "align", never "sign";
  *   - the server refusing a changed letter (409) draws the new words and says
  *     so, and the next press sends the new version;
- *   - a visitor with no account fills in the form and signs it as before.
+ *   - a visitor with no account fills in the form and signs it as before;
+ *   - the thank-you says what happens next, and nothing the product does not do.
  *
  * Every name is made up.
  */
@@ -18,7 +19,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { letterParts, letterSourceFrom, renderMembershipLetter } from "@shared/membershipLetter";
 
-let signedIn: { id: string; name: string; email: string } | null = null;
+let signedIn: { id: string; name: string; email: string; handle?: string } | null = null;
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -27,6 +28,7 @@ vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Fernhollow" })
 vi.mock("@/hooks/useVillageContent", () => ({ useVillageContent: () => ({ content: null, loading: false, isPlaceholder: false }) }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => (signedIn ? "a-token" : null),
+  gameFetch: (path: string, init?: RequestInit) => fetch(path, init),
   useGameConfig: () => ({ project: { name: "Fernhollow", commitmentName: "Love Letter" }, currency: { name: "Seeds" } }),
   useVillageLinks: () => ({ contactEmail: "" }),
 }));
@@ -56,14 +58,22 @@ let fetchMock: ReturnType<typeof vi.fn>;
 let posts: Array<Record<string, any>> = [];
 let answers: Array<() => Response> = [];
 let letterNow = FIRST;
+/** What `GET /api/me/vouches` answers: one vouch of three, in a village that counts them. */
+const ONE_OF_THREE = {
+  state: { count: 1, needed: 3, met: false, bySuper: false, off: false, vouchers: ["u-inviter"] },
+  sentence: "1 of 3 vouches. 2 more people to go.",
+};
+let vouchesNow: unknown = ONE_OF_THREE;
 
 beforeEach(() => {
   signedIn = null;
   posts = [];
   answers = [];
   letterNow = FIRST;
+  vouchesNow = ONE_OF_THREE;
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/membership-letter") return json(letterNow);
+    if (url === "/api/me/vouches") return vouchesNow === null ? json({ error: "unavailable" }, 500) : json(vouchesNow);
     if (url === "/api/forms/submit") {
       posts.push(JSON.parse(String(init?.body ?? "{}")));
       return (answers.shift() ?? (() => json({ success: true, id: "1760000000000-abcde" })))();
@@ -153,7 +163,7 @@ describe("a visitor with no account", () => {
     await user.click(screen.getByRole("button", { name: /Sign the Love Letter/ }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].data).toMatchObject({ name: "Juno Reed", email: "juno@example.test" });
-    expect(await screen.findByRole("heading", { name: /Welcome to the Fernhollow Family/ })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Thank you, Juno." })).toBeTruthy();
     expect(screen.queryByText(/What you have aligned with/)).toBeNull();
   });
 
@@ -167,5 +177,88 @@ describe("a visitor with no account", () => {
     release(json(FIRST));
     expect(await screen.findByText(FIRST.parts.opening)).toBeTruthy();
     expect(within(document.body).queryByText(local.opening)).toBeNull();
+  });
+});
+
+/**
+ * THE THANK-YOU SAYS WHAT HAPPENS NEXT, AND ONLY THAT.
+ *
+ * It told every signer "You are now part of the community", promised a welcome
+ * email "within 48 hours" and a personal welcome call, and an invitation to a
+ * first Community Circle. Membership waits on the people who look after joining
+ * accepting the letter, or on enough vouches, and no code sends any of those.
+ * Every case here reads the old promises first, so each one fails on the old
+ * words for that reason and no other.
+ */
+describe("the thank-you says what happens next", () => {
+  const OLD_PROMISES = [/now part of/i, /48 hours/i, /welcome email/i, /welcome call/i, /Community Circle/i, /Welcome to the .* Family/i];
+  const promisesNothingFalse = () => {
+    const page = (document.body.textContent ?? "").replace(/\s+/g, " ");
+    for (const promise of OLD_PROMISES) expect(page, `the thank-you still says ${promise}`).not.toMatch(promise);
+  };
+  const steps = () =>
+    Array.from(document.querySelectorAll("[data-next-steps] p")).map((p) => (p.textContent ?? "").replace(/\s+/g, " ").trim());
+  const askedForVouches = () => fetchMock.mock.calls.some((c) => c[0] === "/api/me/vouches");
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+
+  async function alignAsMember() {
+    signedIn = { id: "u-tam", name: "Tamsin Reedwarbler", email: "tam@examples.invalid", handle: "tamsin" };
+    render(<LoveLetter />);
+    await screen.findByText(FIRST.parts.opening);
+    const user = await fillIn();
+    await user.click(screen.getByRole("button", { name: "Align and join the Fernhollow Family" }));
+    await screen.findByRole("heading", { name: "What happens next" });
+  }
+
+  it("a member: the letter waits with the people who look after joining, a notice brings the answer, and members who know them can vouch", async () => {
+    await alignAsMember();
+    promisesNothingFalse();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Thank you, Tamsin.");
+    await waitFor(() => expect(steps()).toHaveLength(3));
+    expect(steps()).toEqual([
+      "Your letter is with the people who look after joining Fernhollow.",
+      "You will get a notice when they answer, and your profile shows where it stands.",
+      "Members who know you can also vouch for you on your page. 1 of 3 vouches. 2 more people to go.",
+    ]);
+    expect(screen.getByRole("link", { name: "your page" }).getAttribute("href")).toBe("/profile/tamsin");
+    // The alignment's own words stay as wave 2 wrote them.
+    expect(screen.getByRole("link", { name: /kept under What you have aligned with/ }).getAttribute("href")).toBe("/profile");
+  });
+
+  it("a member in a village that has turned vouching off is not sent to gather vouches", async () => {
+    vouchesNow = { state: { ...ONE_OF_THREE.state, off: true, needed: 0 }, sentence: "This village does not admit by vouches." };
+    await alignAsMember();
+    promisesNothingFalse();
+    await waitFor(() => expect(askedForVouches()).toBe(true));
+    await settle();
+    expect(steps()).toEqual([
+      "Your letter is with the people who look after joining Fernhollow.",
+      "You will get a notice when they answer, and your profile shows where it stands.",
+    ]);
+    expect(screen.queryByRole("link", { name: "your page" })).toBeNull();
+  });
+
+  it("a member whose vouches cannot be read is told nothing about them", async () => {
+    vouchesNow = null;
+    await alignAsMember();
+    promisesNothingFalse();
+    await waitFor(() => expect(askedForVouches()).toBe(true));
+    await settle();
+    expect(steps()).toHaveLength(2);
+  });
+
+  it("a visitor: somebody writes to the address they gave, and nothing is said about a notice or a page they do not have", async () => {
+    render(<LoveLetter />);
+    await screen.findByText(FIRST.parts.opening);
+    const user = await fillIn(true);
+    await user.click(screen.getByRole("button", { name: /Sign the Love Letter/ }));
+    await screen.findByRole("heading", { name: "What happens next" });
+    promisesNothingFalse();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Thank you, Juno.");
+    expect(steps()).toEqual([
+      "Your letter is with the people who look after joining Fernhollow.",
+      "Someone will write to you at juno@example.test.",
+    ]);
+    expect(askedForVouches(), "a visitor has no vouches to read").toBe(false);
   });
 });

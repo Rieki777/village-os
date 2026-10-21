@@ -135,6 +135,27 @@ export async function boardEarlierCount(q: Queryable, ownerNo: number | null, se
 }
 
 /**
+ * What waits on one member, in one statement: how many open tasks they hold in
+ * person or through a seat they sit in now (`n`), and the nearest date among
+ * them (`next_due`, YYYY-MM-DD, NULL when none has one). The same two sets the
+ * board reads: the state rows still open, and the actions of a session that is
+ * still open, which have no state row yet. A close seeds the state rows, so no
+ * task is in both. One row, always.
+ */
+export async function waitingRows(q: Queryable, ownerNo: number | null, seatIds: readonly string[]): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    "SELECT COUNT(*) AS `n`, DATE_FORMAT(MIN(`w`.`due_on`), '%Y-%m-%d') AS `next_due` FROM (" +
+      "SELECT `t`.`due_on` FROM `live_session_task_state` `t` " +
+      "WHERE `t`.`status` = 'open' AND (`t`.`owner_no` = ? OR `t`.`owner_seat_id` IN (?)) " +
+      "UNION ALL SELECT `e`.`due_on` FROM `live_session_entries` `e` JOIN `live_sessions` `s` ON `s`.`id` = `e`.`session_id` " +
+      "WHERE `s`.`status` = 'open' AND `e`.`kind` = 'action' AND `e`.`status` = 'open' " +
+      "AND (`e`.`owner_no` = ? OR `e`.`owner_seat_id` IN (?))) `w`",
+    [ownerNo, listOrNone(seatIds), ownerNo, listOrNone(seatIds)],
+  );
+}
+
+/**
  * The actions one member holds in a session that is still open: they have no
  * state row yet, and the board shows them read-only, answered in the room.
  */

@@ -71,6 +71,13 @@ export type Capability =
   // for a route whose only holder could ever be the deployment operator.
   | "org.seat" // seat and unseat the people who hold the village's seats
   | "org.seatAgent" // seat and unseat the software agents that hold seats
+  // ── The decide key (Rye, 2026-09-14) ─────────────────────────────────────
+  //
+  // A reorganisation of the circles and seats is proposed freely and adopted
+  // by whoever holds this: a live holder publishes it straight onto the chart,
+  // with no window and no veto, or puts it to the village. Nobody holding it
+  // means a village ballot (server/routes/orgDraftDecide.ts).
+  | "org.decide" // publish a structure draft live, or put it to the village
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
@@ -164,6 +171,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "member.superVouch",
   "org.seat",
   "org.seatAgent",
+  "org.decide",
   "intake.moderate",
   "library.keep",
   "story.tell",
@@ -221,6 +229,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "member.superVouch": "Admit a member outright",
   "org.seat": "Seat and unseat the holders of the village's seats",
   "org.seatAgent": "Seat and unseat the software agents that hold seats",
+  "org.decide": "Publish a change to the village's structure, or put it to the village",
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
@@ -409,6 +418,17 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "story.tell": true,
   "org.seat": true,
   "org.seatAgent": true,
+  /*
+   * ADOPTING A REORGANISATION. Rye, 2026-09-14: "a person holding the power
+   * (in this case by default Stewards, but an Operations or COO type role
+   * could be formed to hold this power) can publish live OR send it to be a
+   * ballot". The default he named is reached by this `true` and nothing else:
+   * it puts the key in HANDOVER_SET, so the founding stewards take it at
+   * launch with the rest, and a village can then move it to an Operations
+   * circle the way it moves any power. Both doors that publish ask
+   * `mayAct`, so the escape hatch and the public record are there.
+   */
+  "org.decide": true,
   "dial.set": true,
   /*
    * The steward's seat is the one power the founder designed to CHANGE HANDS,
@@ -542,12 +562,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 20 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 21 keys
  * today. The other 16 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 20 in the founding seat and has
+ * Read this way, a launched village holds all 21 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -736,6 +756,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   "org.declare": true,
   "org.seat": true,
   "org.seatAgent": true,
+  // A job: pausing it stops somebody publishing the chart on their own say,
+  // and the village can still vote a reorganisation through without them.
+  "org.decide": true,
   "intake.moderate": true,
   // A job, and not a voice. Pausing it stops somebody putting paid work on
   // the board while a village works something out; it takes away nothing they
@@ -863,6 +886,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "member.superVouch": true,
   "org.seat": true,
   "org.seatAgent": true,
+  "org.decide": true,
   "intake.moderate": true,
   "library.keep": true,
   "story.tell": true,

@@ -46,6 +46,15 @@
  * village with the module off answers 404 on every door below, and the module
  * ships off like every non-core module.
  *
+ * THE BRIDGE TO ORGANISATIONAL MEMORY rides on three doors, and never in
+ * front of the member (server/lib/saberraOutbox.ts). A save or an edit
+ * answers the member FIRST and queues the entry afterwards; an edit to
+ * private and a delete withdraw the queued copy before answering, because
+ * clearing words should not wait. Every one of those calls goes through
+ * `quietly`, so a failure is logged and the entry the member saved stands.
+ * The `saberra-bridge` job registered here runs the backfill, the weekly team
+ * signal and the drain, which sends nothing until a transport exists.
+ *
  * THE GUIDE IS THE ONE ASSISTANT ENGINE (server/lib/assistant.ts), in its own
  * `journal` mode with its own day budget, so a long journalling evening cannot
  * spend the concierge's allowance, and each member has a day's share of that
@@ -99,6 +108,16 @@ import {
 } from "../lib/journal";
 import { resolveMemberKey } from "../lib/memberSecrets";
 import { requireModule } from "../lib/modules";
+import {
+  SABERRA_BRIDGE_EVERY_MS,
+  SABERRA_BRIDGE_JOB,
+  enqueueJournalEntry,
+  quietly,
+  rosterOf,
+  runBridgeJob,
+  withdrawJournalEntry,
+} from "../lib/saberraOutbox";
+import { registerJob } from "../lib/scheduler";
 import { briefForPublicPrompt } from "../lib/villageBrain";
 import { civilDateKey } from "../../shared/lunar";
 import {
@@ -131,6 +150,9 @@ export { exportMemberJournal } from "../lib/journal";
  * `members` and `isPresent` are wide, and are taken for ONE question: the name
  * of a person who said yes to feedback, so the author's picker and their own
  * sent list can show who a message is for. Nothing here writes a member.
+ * `members.all()` is read for one more question, and only by the bridge: every
+ * name the village holds, so the name swap can take each one out of an entry
+ * before it is queued.
  * `claimsRepo` is read for the signed-in member's own open quests, which the
  * guide may ask about. `overLimit` bounds the two doors that spend the
  * village's assistant budget.
@@ -397,6 +419,28 @@ export function register(app: Express, deps: Deps): void {
     return m?.name ? String(m.name) : "A member";
   };
 
+  /** Every name the village holds, read when the bridge needs it and not before. */
+  const roster = async () => rosterOf(await members.all());
+
+  /**
+   * Queue an entry for the bridge AFTER the member has their answer. Never
+   * throws, so nothing here can turn a saved entry into an error.
+   */
+  const queueLater = (uid: string, entryId: string) =>
+    quietly("queue a journal entry for the organisational memory service", () =>
+      enqueueJournalEntry(getPool(), { userId: uid, entryId, roster, timeZone: zone() }),
+    );
+
+  /** Clear an entry's queued copy BEFORE answering. Never throws either. */
+  const withdrawNow = (entryId: string) =>
+    quietly("withdraw a journal entry from the organisational memory outbox", () =>
+      withdrawJournalEntry(getPool(), entryId),
+    );
+
+  registerJob(SABERRA_BRIDGE_JOB, SABERRA_BRIDGE_EVERY_MS, () =>
+    runBridgeJob(getPool(), { roster, timeZone: zone() }),
+  );
+
   // ── The practices ─────────────────────────────────────────────────────────
 
   /** The questions, the pulse scales and the floor in force, from the contract. */
@@ -439,6 +483,7 @@ export function register(app: Express, deps: Deps): void {
     if (!input.ok) return res.status(400).json({ error: input.problem });
     const saved = await saveEntry(getPool(), String(me.id), input.value, zone());
     res.json(saved.entry);
+    await queueLater(String(me.id), saved.entry.id);
   });
 
   app.patch("/api/journal/entries/:id", async (req, res) => {
@@ -448,7 +493,10 @@ export function register(app: Express, deps: Deps): void {
     if (!patch.ok) return res.status(400).json({ error: patch.problem });
     const entry = await editEntry(getPool(), String(me.id), String(req.params.id), patch.value);
     if (!entry) return res.status(404).json({ error: "You have no entry with that id." });
+    // Made private: the queued copy goes before the member is told it is private.
+    if (entry.privacy === "private") await withdrawNow(entry.id);
     res.json(entry);
+    if (entry.privacy !== "private") await queueLater(String(me.id), entry.id);
   });
 
   app.delete("/api/journal/entries/:id", async (req, res) => {
@@ -457,6 +505,7 @@ export function register(app: Express, deps: Deps): void {
     // The zone names the week, so the week gets its older pulse answer back.
     const gone = await forgetEntry(getPool(), String(me.id), String(req.params.id), zone());
     if (!gone) return res.status(404).json({ error: "You have no entry with that id." });
+    await withdrawNow(String(req.params.id));
     res.json({ success: true });
   });
 

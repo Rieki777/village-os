@@ -75,11 +75,8 @@ import {
 import {
   addChange,
   createDraft,
-  draftChangeCap,
-  getDraft,
   listDrafts,
   previewDraft,
-  publishDraft,
   revertDraft,
   setDraftVision,
 } from "../lib/orgDrafts";
@@ -92,9 +89,8 @@ import {
   type NodeKind,
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
-import { applyCircleStatusChanges } from "../lib/circleTreasury";
-import { listBudgets } from "../lib/resources";
 import { submissionStatusNotice } from "../lib/submissionNotices";
+import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 
 type Deps = Pick<
@@ -113,7 +109,10 @@ type Deps = Pick<
   | "circlesRepo"
   | "notifyAdmins"
   | "submissionsRepo"
->;
+> & {
+  /** Who holds a power live, the gate's own count (`liveHoldersOf` in server/index.ts). */
+  liveHoldersOf(capability: string): Promise<string[]>;
+};
 
 export function register(app: Express, deps: Deps): void {
   const {
@@ -131,6 +130,7 @@ export function register(app: Express, deps: Deps): void {
     circlesRepo,
     notifyAdmins,
     submissionsRepo,
+    liveHoldersOf,
   } = deps;
 
   /*
@@ -312,93 +312,27 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /*
-   * THE ONE DOOR ONTO `publishDraft`, and `visionNeverApplies.test.ts` holds
-   * it to that. It reads the 400 characters BEFORE the call and asserts this
-   * route's path is in them, so a comment written between the two breaks a
-   * true test with a false failure. Reasoning goes here, above the handler,
-   * and the handler stays tight. `draftChangeCap` in orgDrafts.ts carries the
-   * argument for the cap: it applies only to a draft a machine proposed, and a
-   * founder typing in the admin panel is never capped by it.
+   * THE ADMIN PANEL'S DOOR ONTO `publishOrgDraft`, one of the three that
+   * `visionNeverApplies.test.ts` holds the publish to. It reads the 400
+   * characters BEFORE the call and asserts this route's path is in them, so a
+   * comment written between the two breaks a true test with a false failure.
+   * Reasoning goes here, above the handler, and the handler stays tight.
+   *
+   * TWO REFUSALS SINCE `org.decide` (server/lib/orgDraftDecide.ts). A draft the
+   * village is voting on is frozen. And once a launch vote has carried, an
+   * admin is not the village's decider by being an admin: this door asks the
+   * question the holder's door asks, so it needs a live holder of the power,
+   * or the break-glass where the village holds it, and anybody else is told to
+   * put the draft to the village. Before a launch vote it is the door it was.
    */
   app.post("/api/admin/org/drafts/:id/publish", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (await openDraftBallot(getPool(), req.params.id)) return res.status(409).json({ error: BALLOT_OPEN_REFUSAL });
+    if ((await launchedByVote(getPool())) && !(await holderMayPublish(req, res, { authedUser, guardCapability, capabilityCtx, liveHoldersOf }))) return;
     const actor = await authedUser(req);
-    const season = seasonState();
-    const r = await publishDraft(getPool(), req.params.id, actor?.id ?? null, draftChangeCap(), {
-      seasons: season.seasons,
-      currentSeasonId: season.current?.id ?? null,
-      timezone: season.timezone,
-    });
+    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    /*
-     * EVERYTHING BELOW RUNS AFTER THE COMMIT. The publish has happened, so
-     * nothing here may turn it into an answer a client reads as "nothing was
-     * published". A failure is logged and carried as a flag on the 200.
-     *
-     * A draft can move circles (0208), written by raw SQL inside the
-     * transaction, and `circlesRepo.all()` never re-reads the table, so without
-     * the reload the map would keep drawing the old shape until a restart.
-     */
-    const reloaded = await reloadCircles();
-    /*
-     * A CIRCLE THE DRAFT RETIRED (0243) went dormant inside the transaction,
-     * and a dormant circle holds no treasury. Same hook, same order as every
-     * other writer of a circle's status: after the commit, each circle on its
-     * own, a failure carried on the 200 by name and never as "not published".
-     */
-    let treasury: Awaited<ReturnType<typeof applyCircleStatusChanges>> = [];
-    try {
-      treasury = await applyCircleStatusChanges(getPool(), r.circleMoves, actor?.id ?? null, listBudgets);
-    } catch (e) {
-      console.error("[org] a published draft could not run the dormancy hook:", req.params.id, e);
-    }
-    /*
-     * TELL THE PEOPLE THE DRAFT SEATED.
-     *
-     * The direct seating route has notified since F5. Publishing a draft did
-     * not, and `publishDraft` did not import `notify` at all, so an
-     * arrangement seating twelve people told none of them and left each one to
-     * notice their own name on the map.
-     *
-     * AFTER the commit, never inside it: a rollback with a notification
-     * already sent would tell somebody they hold a seat no publish applied.
-     * Same type, same words and the same `org-seat:` dedupe key as the direct
-     * route, because it is the same act by another door, and a member seated
-     * twice by two paths should hear once.
-     */
-    for (const st of r.seated) {
-      try {
-        await notify({
-          userId: st.userId,
-          type: "role_appointed",
-          title: `You were seated as ${st.seatName}`,
-          body: st.seatAim ? st.seatAim.slice(0, 140) : null,
-          link: "/map/circles",
-          actorUserId: actor?.id ?? null,
-          dedupeKey: `org-seat:${st.assignmentId}`,
-        });
-      } catch (e) {
-        console.error("[org] a published draft could not tell a member about their seat:", req.params.id, st.userId, st.seatName, e);
-      }
-    }
-    // One journal line per seat the draft touched, so a reorganisation shows up
-    // in the history of every node it moved rather than only in a draft list
-    // nobody opens twice.
-    try {
-      const draft = await getDraft(getPool(), req.params.id);
-      for (const seatId of Array.from(new Set((draft?.changes ?? []).map((c) => c.orgRoleId)))) {
-        void recordEvent(getPool(), {
-          kind: "org", text: `reorganised: ${draft?.title ?? "a draft"}`,
-          actorUserId: actor?.id ?? null,
-          entityType: seatId.startsWith("circle:") ? "circle" : "org_role",
-          entityRef: seatId.startsWith("circle:") ? seatId.slice("circle:".length) : seatId,
-          audience: "admin",
-        });
-      }
-    } catch (e) {
-      console.error("[org] a published draft could not write its journal lines:", req.params.id, e);
-    }
-    res.json({ success: true, applied: r.applied, reloaded, treasury });
+    res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });
 
   /**

@@ -3,8 +3,9 @@
  * The member's page about the village's email (the comms build spec 5.13).
  * What is pinned: a member reads journeys, words and dials with nothing on the
  * page that changes them; each "Propose a change" door goes where its item
- * can be proposed (an open dial to Game Mechanics, everything else filed); and
- * a page the server refuses says why.
+ * can be proposed (an open dial to Game Mechanics, everything else filed); a
+ * page the server refuses says why; and with the comms module off the page asks
+ * nothing and says who can switch it on.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -14,6 +15,24 @@ import type { MemberCommsView } from "@shared/comms/memberView";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("@/lib/gameApi", () => ({ authToken: () => "member-token" }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null, loading: false }) }));
+
+/** The module list as the client holds it. Each case sets its own; comms on by default. */
+const COMMS_ON = { id: "comms", name: "Village Comms", description: "", core: false, lifecycle: "members", hyphaLinks: [] };
+const modules = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, useModules: () => modules.state };
+});
+const catalog = (over: Record<string, unknown> = {}) => ({
+  modules: [COMMS_ON],
+  hypha: { configured: false, orgUrl: "", links: {} },
+  signInToSee: [],
+  loaded: true,
+  failed: false,
+  refresh: () => {},
+  ...over,
+});
 
 import VillageEmail from "./VillageEmail";
 
@@ -51,6 +70,7 @@ const VIEW: MemberCommsView = {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  modules.state = catalog();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -113,5 +133,33 @@ describe("how the village emails", () => {
     fetchMock.mockReturnValueOnce(answer({ error: "module_disabled" }, 404));
     render(<VillageEmail />);
     expect(await screen.findByText("The village's email isn't running yet.")).toBeInTheDocument();
+  });
+
+  it("asks nothing while the comms module is off, and says who can switch it on", async () => {
+    // Production answered this page's read with 404 module_disabled on every
+    // visit, a console error at every width, for a fact the module list in
+    // hand already said.
+    modules.state = catalog({ modules: [] });
+    render(<VillageEmail />);
+    expect(await screen.findByText("Village email isn't switched on yet")).toBeInTheDocument();
+    expect(screen.getByText(/Only an admin can switch it on/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Village Comms in the Module Library" }).getAttribute("href")).toBe("/modules/comms");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Loading.")).toBeNull();
+  });
+
+  it("waits for the module list before asking anything", async () => {
+    modules.state = catalog({ modules: [], loaded: false });
+    render(<VillageEmail />);
+    expect(screen.getByText("Loading.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("offers a signed-out reader sign-in where the village opens it to members, and asks nothing", async () => {
+    modules.state = catalog({ modules: [], signInToSee: ["comms"] });
+    render(<VillageEmail />);
+    expect(await screen.findByText("This part of the village opens when you sign in.")).toBeInTheDocument();
+    expect(screen.queryByText("Village email isn't switched on yet")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

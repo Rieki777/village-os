@@ -43,6 +43,7 @@ import { MODULES_BY_ID } from "@shared/modules";
 import type { SyncFailureWhy } from "@shared/saberraSyncLog";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useModuleConfig } from "./ModuleConfigPanels";
+import SaberraOutboxPanel from "./SaberraOutboxPanel";
 import { ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
@@ -374,6 +375,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
           </>
         )}
       </div>
+
+      {/* Behind the module's own gate like the status read, so it is asked only while the module is on. */}
+      {on && <SaberraOutboxPanel password={password} />}
     </div>
   );
 }

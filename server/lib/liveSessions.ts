@@ -66,7 +66,8 @@ import * as repo from "../repos/liveSessions";
 import { exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
 import { avatarFor } from "./characters";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
-import { circleTasksFor } from "./sessionTasks";
+import { circleTasksFor, villageDate } from "./sessionTasks";
+import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { numberVar, stringVar } from "./variables";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { civilDate, moonPhase, moonPhaseGlyph, moonPhaseName, seasonInstants } from "../../shared/lunar";
@@ -1463,9 +1464,11 @@ export interface NoticeDeps {
  * and every member holding an action hears it is theirs, as does every member
  * sitting in a seat that holds one. Each (action, member) pair has one stable
  * dedupe key, so a person who holds an action and sits in its seat hears once.
- * The record opens only to the people who were in the room (and admins), so a
- * member who sits in the seat and was not there hears what the action is and
- * by when, with no link to a page that would refuse them.
+ * Every one of those notices opens that task on the holder's own board
+ * (`taskBoardLink`), the seat holders who were not in the room included: the
+ * board is theirs to read, and the card itself carries the record link only
+ * for the people the record opens to (the people who were in the room, and
+ * admins), so nobody is sent to a page that would refuse them.
  * A seat counts its members whose term has not lapsed: a lapsed holder is
  * still in the chart, and a task is a new ask that waits for the next term.
  * A failure is a log line; the session is closed either way.
@@ -1484,11 +1487,11 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
   try {
     const nos = closed.held.map((h) => h.ownerNo).filter((n): n is number => n != null);
     const userOf = new Map((await repo.memberUserIdRows(pool, nos)).map((r) => [Number(r.no), String(r.user_id)]));
-    const roomNos = (await repo.peopleRows(pool, closed.id)).map((r) => Number(r.member_no));
-    const wasThere = new Set((await repo.memberUserIdRows(pool, roomNos)).map((r) => String(r.user_id)));
     const seated = closed.held.some((h) => h.ownerSeatId)
       ? (await listOrgAssignments(pool, deps.lapseContext?.())).filter((a) => a.holderKind === "member" && a.userId && !a.isExample && !a.lapsed)
       : [];
+    // Dates in words, measured where the circle lives, with the year only when it is not this one.
+    const today = villageDate(new Date());
     for (const h of closed.held) {
       const to = new Set<string>();
       const own = h.ownerNo != null ? userOf.get(h.ownerNo) : undefined;
@@ -1499,8 +1502,8 @@ export async function noticesAfterClose(pool: Pool, closed: ClosedRecord, deps: 
           userId,
           type: "session_action_held",
           title: SESSION_NOTICES.actionHeld(closed.title),
-          body: SESSION_NOTICES.actionBody(h.text, h.dueOn),
-          link: wasThere.has(userId) ? link : null,
+          body: SESSION_NOTICES.actionBody(h.text, h.dueOn ? taskDateWords(h.dueOn, today) || null : null),
+          link: taskBoardLink(h.entryId),
           dedupeKey: `session-action:${h.entryId}:${userId}`,
         });
       }
