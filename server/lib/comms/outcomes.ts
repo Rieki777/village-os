@@ -12,7 +12,8 @@
  *   reached the goal            their journey ended on one of its goals within
  *                               7 days after it (the path goals of 5.11:
  *                               a home reserved, a commitment, a seat, a
- *                               venture listed, admitted, took part).
+ *                               venture listed, admitted or accepted,
+ *                               took part).
  *   took the next step          for a journey with a first step (the path and
  *                               welcome journeys), how many of the people this
  *                               email reached have taken it by now. Asked of
@@ -40,6 +41,10 @@ export const GOAL_STOPS: readonly StopKey[] = [
   "steward_seated",
   "prosperity_venture_listed",
   "joining_admitted",
+  // A yes now ends the joining journey before anybody is admitted, because
+  // the invitation and the vouches come after it. Leaving it out would read
+  // every accepted request as a journey that missed its goal.
+  "joining_accepted",
   "member_took_part",
 ];
 

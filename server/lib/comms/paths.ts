@@ -35,15 +35,15 @@
  * A goal stops the journey and marks the path row done. The tick finds every
  * goal through its stop rules (./pathConditions.ts); the triggers that report
  * one directly (a reservation reserved, a proposal or a call accepted, an
- * admission, a declined request) stop it at once as well, so nobody gets one
- * more email in the minutes between.
+ * admission, a request to join answered either way) stop it at once as well,
+ * so nobody gets one more email in the minutes between.
  *
  * No raw SQL: the statements are in server/repos/.
  */
 import crypto from "node:crypto";
 import type { Pool } from "mysql2/promise";
 import { emailKeyOf } from "../../../shared/comms/address";
-import { subjectRef, type CommsTrigger, type JourneyDefinition } from "../../../shared/comms/contracts";
+import { subjectRef, type CommsTrigger, type JourneyDefinition, type StopKey } from "../../../shared/comms/contracts";
 import { pathJourneyKey } from "../../../shared/comms/defaults/journeys";
 import { guestPersonKey } from "../../../shared/comms/kinds";
 import { contactByEmailKey } from "../../repos/commsContacts";
@@ -264,6 +264,9 @@ const GOAL_ON_ACCEPT: Readonly<Record<string, { pathId: string; reason: string }
   "work-with-us": { pathId: "prosperity-creator", reason: "prosperity_venture_listed" },
 };
 
+/** A request to join, answered: the status it moved to, and the stop that ends its journey. */
+const JOINING_ANSWERS: Readonly<Record<string, StopKey>> = { accepted: "joining_accepted", declined: "joining_declined" };
+
 /** A ticked public form: the yes, then the path or the joining journey. */
 async function formTicked(deps: PathDeps, input: { form: string; submissionId: string | null; email: string; name: string | null; pathId: string | null; joining: boolean }) {
   const person = await resolvePerson(deps, { email: input.email, name: input.name, source: input.form });
@@ -327,8 +330,12 @@ export async function handlePathTrigger(deps: PathDeps, t: PathTrigger): Promise
       return;
     }
     case "submission_status": {
-      if (t.formType === JOINING_FORM_TYPE && t.status === "declined") {
-        await stop(deps, { journeyKey: JOINING_REQUEST, subjectRef: subjectRef.form(t.submissionId) }, "joining_declined");
+      // A yes ends the joining emails as surely as a no: "your request is
+      // still with us" is untrue either way, and the invitation that follows
+      // a yes is a person's to send.
+      const answered = t.formType === JOINING_FORM_TYPE ? JOINING_ANSWERS[t.status] : undefined;
+      if (answered) {
+        await stop(deps, { journeyKey: JOINING_REQUEST, subjectRef: subjectRef.form(t.submissionId) }, answered);
         return;
       }
       const goal = GOAL_ON_ACCEPT[t.formType];

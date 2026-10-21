@@ -68,6 +68,7 @@ export const STOP_LABELS: Record<StopKey, string> = {
   steward_seated: "They took a seat",
   prosperity_venture_listed: "Their venture was listed",
   joining_admitted: "They were admitted",
+  joining_accepted: "Their request was accepted",
   joining_declined: "Their request was declined",
   member_took_part: "They took part",
   unsubscribed: "They said no to these emails",
