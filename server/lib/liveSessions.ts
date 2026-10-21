@@ -161,6 +161,12 @@ const done = <T>(value: T): Outcome<T> => ({ ok: true, value });
 export interface Viewer {
   no: number | null;
   admin: boolean;
+  /**
+   * Their own member id, when the door has it. The task layer reads their seats
+   * by it, so a member who sits in one of a circle's seats and has never joined
+   * a session still has standing there (server/lib/sessionTasks.ts `standingIn`).
+   */
+  userId?: string | null;
 }
 
 /** Who is writing. A writer always has a number, because writing needs a seat in the room. */

@@ -73,6 +73,7 @@ const viewer = (over: Partial<TaskViewer> = {}): TaskViewer => ({
   inSourceSession: false,
   hostsSource: false,
   hostsOpenRoomInCircle: false,
+  standsInCircle: false,
   ...over,
 });
 
@@ -94,15 +95,17 @@ const ROLES = {
   admin: viewer({ no: 40, admin: true }),
   wasThere: viewer({ no: 50, inSourceSession: true }),
   stranger: viewer({ no: 60 }),
+  /** Standing in the circle and nothing else: holds nothing, was not in the room, hosts nothing. */
+  circleMember: viewer({ no: 70, standsInCircle: true }),
 } as const;
 type Role = keyof typeof ROLES;
 
 const TASKS: Record<string, TaskSubject> = {
-  personOpen: { status: "open", ownerNo: HOLDER, ownerSeatId: null },
-  seatOpen: { status: "open", ownerNo: null, ownerSeatId: SEAT },
-  done: { status: "done", ownerNo: HOLDER, ownerSeatId: null },
-  letGo: { status: "let_go", ownerNo: HOLDER, ownerSeatId: null },
-  circle: { status: "open", ownerNo: null, ownerSeatId: null },
+  personOpen: { status: "open", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  seatOpen: { status: "open", ownerNo: null, ownerSeatId: SEAT, circleId: "c-garden" },
+  done: { status: "done", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  letGo: { status: "let_go", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  circle: { status: "open", ownerNo: null, ownerSeatId: null, circleId: "c-garden" },
 };
 
 // ── Seats ───────────────────────────────────────────────────────────────────
@@ -131,6 +134,7 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     seatOpen: {
       holder: [false, false, false],
@@ -141,6 +145,7 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     done: {
       holder: [false, true, false],
@@ -151,6 +156,7 @@ describe("taskRights: every role against every op", () => {
       admin: [false, true, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     letGo: {
       holder: [false, false, false],
@@ -161,6 +167,7 @@ describe("taskRights: every role against every op", () => {
       admin: [false, true, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     circle: {
       holder: [false, false, false],
@@ -171,6 +178,7 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, true],
       wasThere: [false, false, true],
       stranger: [false, false, false],
+      circleMember: [false, false, true],
     },
   };
 
@@ -193,8 +201,13 @@ describe("taskRights: every role against every op", () => {
     expect(taskRights(TASKS.letGo, ROLES.holder).reopen).toBe(false);
   });
 
-  it("gives nothing to somebody with no number, even when they can see the task", () => {
-    expect(taskRights(TASKS.circle, viewer({ no: null, inSourceSession: true })).take).toBe(false);
+  it("lets somebody with no number yet take what they can see, and gives them nothing else", () => {
+    // A seat in the circle and never a session joined: the server numbers them when they take it.
+    const seatedOnly = viewer({ no: null, liveSeatIds: ["seat-other"], standsInCircle: true });
+    expect(taskRights(TASKS.circle, seatedOnly)).toEqual({ answer: false, reopen: false, take: true });
+    expect(taskRights(TASKS.personOpen, seatedOnly)).toEqual({ answer: false, reopen: false, take: false });
+    // With no number and no way to see it, nothing.
+    expect(taskRights(TASKS.circle, viewer({ no: null }))).toEqual({ answer: false, reopen: false, take: false });
   });
 
   it("maps every op to the right it needs", () => {
@@ -223,6 +236,7 @@ describe("canSeeTask", () => {
     admin: true,
     wasThere: true,
     stranger: false,
+    circleMember: true,
   };
   for (const [role, sees] of Object.entries(SEES) as [Role, boolean][]) {
     it(`${role} ${sees ? "sees" : "does not see"} a task held in person`, () => {
@@ -238,7 +252,64 @@ describe("canSeeTask", () => {
   it("shows a task back with the circle only to the people the rule names", () => {
     expect(canSeeTask(TASKS.circle, ROLES.holder)).toBe(false);
     expect(canSeeTask(TASKS.circle, ROLES.wasThere)).toBe(true);
+    expect(canSeeTask(TASKS.circle, ROLES.circleMember)).toBe(true);
     expect(canSeeTask(TASKS.circle, ROLES.stranger)).toBe(false);
+  });
+});
+
+describe("the whole circle reads its task cards (Rye, 2026-10-21)", () => {
+  const member = ROLES.circleMember;
+  // Somebody with no standing in this circle: a seat elsewhere, a number, nothing here.
+  const outsider = viewer({ no: 80, liveSeatIds: ["seat-elsewhere"] });
+
+  it("shows a member with standing every card of the circle, whatever its status or holder", () => {
+    for (const [name, t] of Object.entries(TASKS)) expect(canSeeTask(t, member), name).toBe(true);
+  });
+
+  it("lets that member take a task back with the circle, and answer or reopen nothing", () => {
+    expect(taskRights(TASKS.circle, member)).toEqual({ answer: false, reopen: false, take: true });
+    for (const name of ["personOpen", "seatOpen", "done", "letGo"]) {
+      expect(taskRights(TASKS[name], member), name).toEqual({ answer: false, reopen: false, take: false });
+    }
+    // The ops their rights allow: the take, and nothing else.
+    const rights = taskRights(TASKS.circle, member);
+    expect(TASK_EVENT_KINDS.filter((op) => mayGive(op, rights))).toEqual(["taken"]);
+  });
+
+  it("shows a member of another circle nothing, and gives them nothing", () => {
+    for (const [name, t] of Object.entries(TASKS)) {
+      expect(canSeeTask(t, outsider), name).toBe(false);
+      expect(taskRights(t, outsider), name).toEqual({ answer: false, reopen: false, take: false });
+    }
+  });
+
+  it("changes nothing for a task with no circle, whatever the flag says", () => {
+    const noCircle = (t: TaskSubject): TaskSubject => ({ ...t, circleId: null });
+    for (const [name, t] of Object.entries(TASKS)) {
+      expect(canSeeTask(noCircle(t), member), name).toBe(false);
+      expect(taskRights(noCircle(t), member), name).toEqual({ answer: false, reopen: false, take: false });
+    }
+    // The narrower rule still holds there: the room it came from, and whoever holds it.
+    expect(canSeeTask(noCircle(TASKS.circle), ROLES.wasThere)).toBe(true);
+    expect(canSeeTask(noCircle(TASKS.personOpen), ROLES.holder)).toBe(true);
+    expect(canSeeTask(noCircle(TASKS.personOpen), ROLES.stranger)).toBe(false);
+  });
+
+  it("draws the member a card with the take and no record link, the way a seat holder who was not there gets none", () => {
+    const parts = {
+      text: "Fix the tank",
+      sessionTitle: "Garden, week 2",
+      circleName: "Garden circle",
+      saidOn: "2026-10-09",
+      holderName: null,
+      seat: null,
+      latestByName: "Ben Ortiz",
+      latestByFacilitator: false,
+    };
+    const back = taskCardFor({ ...parts, state: state({ ownerNo: null, latestKind: "handed_back" }) }, member);
+    expect(back).toMatchObject({ heldAs: "circle", canTake: true, canAnswer: false, canReopen: false, recordLink: false });
+    const held = taskCardFor({ ...parts, holderName: "Ana Reyes", state: state() }, member);
+    expect(held).toMatchObject({ heldAs: "person", canTake: false, canAnswer: false, canReopen: false, recordLink: false });
   });
 });
 

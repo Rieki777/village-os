@@ -252,6 +252,28 @@ export async function circleTaskRows(q: Queryable, circleId: string, lastMetAt: 
   );
 }
 
+/** An open task held by no person and no seat, from a session that had a circle. */
+const BACK_WITH_CIRCLE =
+  "`t`.`status` = 'open' AND (`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) " +
+  "AND (`t`.`owner_seat_id` IS NULL OR `t`.`owner_seat_id` = '') AND `t`.`circle_id` IS NOT NULL AND `t`.`circle_id` <> ''";
+
+/** The circles that have a task back with them now, so the board measures standing only where it matters. */
+export async function backWithCircleIds(q: Queryable): Promise<string[]> {
+  const rows = await rowsOf(q, `SELECT DISTINCT \`t\`.\`circle_id\` FROM \`live_session_task_state\` \`t\` WHERE ${BACK_WITH_CIRCLE}`);
+  return rows.map((r) => String(r.circle_id));
+}
+
+/** Every task back with one of these circles, through the circle index. By date, undated last. */
+export async function backWithCircleRows(q: Queryable, circleIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (!circleIds.length) return [];
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`circle_id\` IN (?) AND ${BACK_WITH_CIRCLE} ` +
+      "ORDER BY `t`.`due_on` IS NULL, `t`.`due_on`, `t`.`entry_id`",
+    [[...circleIds]],
+  );
+}
+
 /** One session's tasks, for its record and its task emails. `openOnly` reads the open ones. */
 export async function sessionTaskRows(q: Queryable, sessionId: number, opts: { openOnly?: boolean } = {}): Promise<RowDataPacket[]> {
   return rowsOf(

@@ -335,26 +335,54 @@ the person holding the task; a member who sits in the holding seat now, with a t
 lapsed; the facilitator or secretary of the session it came from, or of an open session in the same
 circle, since facilitation rotates; and admins. Anybody with rights may open a done task again (a
 mistaken tap). Only the hosts and admins may open a let go task again. Anybody who may see a task
-back with the circle may take it.
+back with the circle may take it, which since the ruling below is every member with standing in
+its circle; somebody who sits in one of its seats and has never joined a session gets their number
+when they take it.
 
 **Who may see a task.** `canSeeTask`: the people who were in the session it came from, whoever
-holds it now (person or seat), the facilitator or secretary of an open session in the same circle,
-and admins. A seat holder who was not in the room sees the text, the session's title, the circle,
-the date and the status, with no link to the record. A task somebody may not see answers 404, the
-same as a task that is not there. No card carries a user id, an email or a count about a person.
+holds it now (person or seat), **every member with standing in the task's circle**, the facilitator
+or secretary of an open session in the same circle, and admins. Standing is one measure
+(`standingIn` in `server/lib/sessionTasks.ts`): they were in the circle's last closed session, or
+they sit in one of its seats now, with a term that has not lapsed, in a seat the circle still keeps
+(active and not a standing example). A seat holder who has never joined a session has standing
+too: every door reads their seats by their own id. Rye ruled on 2026-10-21 that the
+whole circle reads its task cards: a sociocratic circle works in the open, and a task that comes
+back to the circle should be visible to everyone who might take it. Standing widens seeing and
+taking and nothing else: a circle member who holds nothing and hosts nothing cannot answer a task
+somebody else holds or open a finished one again. A task from a session with no circle keeps the
+narrower rule. A task somebody may not see answers 404, the same as a task that is not there. No
+card carries a user id, an email or a count about a person.
+
+**A card is not the record.** A seat holder or a circle member who was not in the room sees the
+text, the session's title, the circle, the date, the status and the latest answer, with no link to
+the record, because a closed record and its minutes open only to the people who were in it and
+admins.
+
+| Who | Reads the card | Takes it when it is back with the circle | Answers it | Opens it again | Record link |
+|---|---|---|---|---|---|
+| Holds it (in person, or sits in the holding seat now) | yes | | yes | done: yes; let go: no | only if they were in the room |
+| Was in the session it came from | yes | yes | | | yes |
+| Has standing in its circle (last closed session, or a live seat) | yes | yes | | | no, unless they were in the room |
+| Facilitates or keeps notes for the source session, or for an open room of the circle where they have standing | yes | yes | yes | yes | only if they were in the room |
+| Admin | yes | yes | yes | yes | yes |
+| Anybody else | no (404) | | | | |
 
 **Where tasks show.** **Your task board** on the profile lists what a member holds, what their seats
-hold, and what they finished in the last three moons, with older ones a tap away. An action still in
-an open session shows there read-only, answered in the room. The next session of the same circle
-shows the circle's tasks in "From last time", grouped for the action check: done since last time,
-back with the circle, new dates, let go, and still holding. A closed record shows each action's
-status beside it.
+hold, what is **back with their circles** (open tasks nobody holds, in a circle where they have
+standing, each with **I'll take it**), and what they finished in the last three moons, with older
+ones a tap away. An action still in an open session shows there read-only, answered in the room.
+The menu's count and the profile's **Your tasks** card stay the member's own: what they hold and
+what their seats hold, never the circle's. The next session of the same circle shows the circle's
+tasks in "From last time" to everyone with standing there, grouped for the action check: done since
+last time, back with the circle, new dates, let go, and still holding. A closed record shows each
+action's status beside it. No notice or email goes to the whole circle: the notices and the task
+emails still reach only whoever holds a task, and the facilitator when a task comes back.
 
 | Door | Who | Limit |
 |---|---|---|
 | `GET /api/sessions/tasks/mine` (`?earlier=1` adds the older finished tasks) | a signed-in member | none |
 | `PATCH /api/sessions/tasks/:entryId` | `taskRights` | 120 answers an hour |
-| `GET /api/sessions/:id/task-record` | whoever may read the session | none |
+| `GET /api/sessions/:id/task-record` | whoever may read the session gets every task and the mail line; anybody else gets the cards `canSeeTask` gives them and no mail line, or 403 when that is none | none |
 | `POST /api/sessions/:id/task-emails` | the closed session's facilitator, and admins | 3 presses an hour |
 
 The doors register right after the room's, so the module gate and the members-only gate in front
