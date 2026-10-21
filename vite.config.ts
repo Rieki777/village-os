@@ -3,6 +3,12 @@ import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
+import {
+  type ChunkFacts,
+  lazyRoutesFromApp,
+  routePreloadScript,
+  routePreloadTable,
+} from "./client/src/lib/routePreload";
 
 /**
  * Serve the Living Map artifact in DEV, from the same source the server uses.
@@ -89,8 +95,72 @@ function dropLegacyWoffFallback(): Plugin {
   };
 }
 
+/**
+ * Preload the visited route's own page chunk beside the main bundle.
+ *
+ * Every page but the eager three is `lazy()` (App.tsx), so on a first visit the
+ * page's chunk was requested only after the main bundle had downloaded and run:
+ * one more round trip in series. This emits `assets/route-preload-<hash>.js`, a
+ * few kilobytes that load `async` with the bundle, read `location`, and add
+ * `modulepreload` links for that page's chunk and its imports. The table comes
+ * from App.tsx's routes and this build's own chunk graph, so it cannot name a
+ * file that does not exist; client/src/lib/routePreload.ts has the rules and
+ * routePreload.test.ts holds them, including a check against the real App.tsx.
+ *
+ * An external file rather than an inline script, so a `script-src 'self'`
+ * policy covers it without a per-build hash. If App.tsx ever stops parsing,
+ * the table is empty, the build warns, and no file or tag is emitted: pages
+ * then load exactly as they did before this existed.
+ *
+ * Measured cost on the CI budgets: one asset of a few KB (one or two 4 KB
+ * blocks of MAX_TOTAL_DIST_KB) and nothing on the main chunk.
+ */
+function routeChunkPreload(): Plugin {
+  let base = "/";
+  let emitted: string | null = null;
+  return {
+    name: "route-chunk-preload",
+    apply: "build",
+    configResolved(config) {
+      base = config.base;
+    },
+    generateBundle(_options, bundle) {
+      emitted = null;
+      const app = fs.readFileSync(path.resolve(import.meta.dirname, "client", "src", "App.tsx"), "utf8");
+      const chunks: ChunkFacts[] = [];
+      for (const out of Object.values(bundle)) {
+        if (out.type !== "chunk") continue;
+        chunks.push({
+          fileName: out.fileName,
+          imports: out.imports,
+          isEntry: out.isEntry,
+          isDynamicEntry: out.isDynamicEntry,
+          facadeModuleId: out.facadeModuleId,
+          css: [...(out.viteMetadata?.importedCss ?? [])],
+        });
+      }
+      const table = routePreloadTable(lazyRoutesFromApp(app), chunks);
+      if (table.routes.length === 0) {
+        this.warn("route-chunk-preload: no route in client/src/App.tsx matched a page chunk, so nothing was emitted");
+        return;
+      }
+      const ref = this.emitFile({ type: "asset", name: "route-preload.js", source: routePreloadScript(table, base) });
+      emitted = this.getFileName(ref);
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler() {
+        if (!emitted) return;
+        // fetchpriority: Chrome gives an async script Low priority, which would
+        // queue this behind the fonts and images it exists to get ahead of.
+        return [{ tag: "script", attrs: { async: true, fetchpriority: "high", src: base + emitted }, injectTo: "head" }];
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback()],
+  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
