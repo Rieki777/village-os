@@ -355,8 +355,14 @@ export default function Circles() {
                 role="status" and not "alert": a list that did not load is
                 news, not an interruption of something the member was doing. */}
             <div role="status">
+              {/* The loading line holds 60vh. It was 150px tall, so the
+                  "How Circles Work Together" box below sat on screen until the
+                  list landed (5,000px of circles on this village) and then got
+                  pushed off it: a 0.16 layout shift at 1280 wide, cold. At 60vh
+                  the box starts below the fold, so the list arrives out of
+                  sight of anything a visitor is reading. */}
               {circles === null && !failed && (
-                <div className="text-center text-muted-foreground py-16">Loading circles…</div>
+                <div className="text-center text-muted-foreground py-16 min-h-[60vh]">Loading circles…</div>
               )}
               {failed && (
                 <div className="text-center text-muted-foreground py-16">

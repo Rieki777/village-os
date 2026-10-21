@@ -402,17 +402,23 @@ export default function ResidentRights() {
             Your journey begins with a Community Call. Come meet the team, ask your questions,
             and feel what's possible here.
           </p>
+          {/* Each door is ONE link. A <button> inside a <Link> is a control
+              inside a control: two tab stops for one action, read as "link,
+              button", and invalid HTML. self-center keeps the content width
+              the old inline button had in the phone's column. */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/resident">
-              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors">
-                Return to Resident Journey
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            <Link
+              href="/resident"
+              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
+            >
+              Return to Resident Journey
+              <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/good-neighbor">
-              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-teal-deep text-teal-deep font-medium hover:bg-teal-deep/5 transition-colors">
-                Read Good Neighbor Principles
-              </button>
+            <Link
+              href="/good-neighbor"
+              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-teal-deep text-teal-deep font-medium hover:bg-teal-deep/5 transition-colors"
+            >
+              Read Good Neighbor Principles
             </Link>
           </div>
         </div>

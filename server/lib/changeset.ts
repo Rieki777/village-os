@@ -842,6 +842,12 @@ export async function recordMechanicsChangeRow(
 }
 
 /**
+ * The ledger's one PUBLIC reader. It stores values raw because the trail is the
+ * record; what a stranger may read of a row is decided in mechanicsHistory.ts.
+ */
+export { publicAmendment, publicChangeSet, publicProposal } from "./mechanicsHistory";
+
+/**
  * A SET HOLDING ANY CYCLE-TIMED DIAL WAITS FOR THE BOUNDARY AS A WHOLE.
  *
  * Atomicity beats promptness: half a set landing now and half at the moon is a

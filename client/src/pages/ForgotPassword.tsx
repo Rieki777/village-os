@@ -97,7 +97,7 @@ export default function ForgotPassword() {
                   <button
                     type="submit"
                     disabled={busy}
-                    className="w-full bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50"
+                    className="w-full bg-teal-deep text-white font-semibold py-3 rounded-lg hover:bg-teal-deep-dark hover:shadow-lg transition-[background-color,box-shadow] disabled:opacity-50"
                   >
                     {busy ? "Sending…" : "Send the link"}
                   </button>

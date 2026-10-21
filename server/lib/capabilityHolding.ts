@@ -28,7 +28,7 @@
  * scan of a table that cannot grow past that.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { ALL_CAPABILITIES, HANDOVER_SET, TRANSFERABLE, type Capability } from "../../shared/capabilities";
+import { ALL_CAPABILITIES, BREAK_GLASS_WAY_THROUGH, HANDOVER_SET, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 import { WIRED_BUT_HELD_BACK } from "./capabilityRegistry";
 
 export interface CapabilityHoldingRow {
@@ -331,6 +331,46 @@ export const RETURN_NEEDS_A_VOTE =
   "Open a power_return ballot (POST /api/governance/power-returns) and let the whole roll vote on it; " +
   "if it carries, the power comes back here through the same landing every other decision uses, " +
   "inside the same veto window.";
+
+/**
+ * MOVING A HELD POWER TO ANOTHER ROLE IS THE SAME KIND OF ACT.
+ *
+ * `PUT /api/admin/capabilities/:capability/holding` exists to hand a power to
+ * the village the first time ("before there is a ballot type that can"). Its
+ * writer upserts, so on a power the village already held it re-pointed the
+ * holder to whatever role an admin named, and wrote `moved_by_ballot_id` back
+ * to NULL: a power the village had voted across moved again with no vote, and
+ * the record stopped saying the village ever decided. Handing it back already
+ * needed the village (above); moving it sideways now does too, with the same
+ * one exception, a founder seated as a steward with the veto who breaks the
+ * glass. The Handover panel never offered this, because it only shows "hand
+ * over" for a power nobody holds; the API did.
+ */
+export const MOVE_NEEDS_A_VOTE =
+  "Moving a power the village holds to a different role is the village's decision, not an administrator's. " +
+  "Open a power_transfer ballot (POST /api/governance/power-transfers) naming the role, and let the whole roll vote on it.";
+
+/** The 409 both admin holding doors answer when the village holds the power and nobody broke the glass. */
+export function villageHoldsRefusal(
+  holding: Pick<CapabilityHoldingRow, "holderRoleId" | "holderRoleName">,
+  needsAVote: string,
+  verdict: { overrideAvailable: boolean },
+  ballotRoute: string,
+) {
+  const who = holding.holderRoleName ?? holding.holderRoleId;
+  return {
+    error:
+      `${who} looks after this one. ${needsAVote} ${BREAK_GLASS_WAY_THROUGH} ` +
+      "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
+    // The browser's half of the same answer (0103's shape): the panel sends
+    // people to the ballot, and offers the glass only to somebody the gate
+    // would actually let through.
+    requiresOverride: true,
+    overrideAvailable: verdict.overrideAvailable,
+    holderName: who,
+    ballotRoute,
+  };
+}
 
 /**
  * Hand a power back to the scaffolding.

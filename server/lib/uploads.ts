@@ -47,6 +47,7 @@
  * that one generation is invisible, low enough that a phone photo does not
  * grow.
  */
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -294,9 +295,34 @@ export async function sanitiseForVolume(input: Buffer, originalName = ""): Promi
  * `${Date.now()}-${random}` is what makes the one-year immutable cache on
  * `/api/uploads/:filename` correct rather than merely convenient, so it is
  * minted here and not by each caller.
+ *
+ * ── THE TAIL IS THE PASSWORD, SO IT COMES FROM THE CSPRNG ────────────────
+ *
+ * `/api/uploads/:filename` has no gate, by design: the name IS the access.
+ * That is what stands between a stranger and an investor's cap table, a
+ * member's unpublished portrait, or the CV a person attached to a proposal.
+ * The tail used to be five characters of `Math.random()`, which is about 26
+ * bits from a generator that is predictable from its own outputs, and a
+ * stranger can collect those outputs at will: the public proposal upload
+ * answers with the name it minted. The timestamp beside it is no secret
+ * either. Eight characters drawn by `crypto.randomInt` is about 41 bits that
+ * nothing the server says can help anybody guess.
+ *
+ * Still `[a-z0-9]`, and still at most eight, because `uploadsSweep.ts` reads
+ * these names back with `[a-z0-9]{1,8}` and a wider tail would turn every
+ * new file into one the retention sweep and the orphan report cannot place.
  */
+const STAMP_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+export const STAMP_TAIL_LENGTH = 8;
+
+export function stampTail(): string {
+  let tail = "";
+  for (let i = 0; i < STAMP_TAIL_LENGTH; i++) tail += STAMP_ALPHABET[crypto.randomInt(STAMP_ALPHABET.length)];
+  return tail;
+}
+
 export function stampedName(prefix: string, ext: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`;
+  return `${prefix}-${Date.now()}-${stampTail()}${ext}`;
 }
 
 /**

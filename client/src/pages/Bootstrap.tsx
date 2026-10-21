@@ -184,7 +184,7 @@ export default function Bootstrap() {
                       autoComplete="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-3 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep/20"
+                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-3 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       placeholder="you@example.com"
                     />
                   </div>
@@ -207,7 +207,7 @@ export default function Bootstrap() {
                     autoComplete="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-lg border border-amber-ink/15 px-3 py-2.5 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep/20"
+                    className="w-full rounded-lg border border-amber-ink/15 px-3 py-2.5 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep"
                     placeholder="How the village should greet you"
                   />
                 </div>
@@ -231,7 +231,7 @@ export default function Bootstrap() {
                       autoComplete="off"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-3 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep/20"
+                      className="w-full rounded-lg border border-amber-ink/15 py-2.5 pl-9 pr-3 text-amber-ink focus:border-teal-deep focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       placeholder="From your hosting environment"
                     />
                   </div>

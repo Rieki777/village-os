@@ -74,7 +74,7 @@ export default function WhyCostaRica() {
     return (
       <section className="bg-sage/15 py-20">
         <div className="container max-w-3xl mx-auto px-4">
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-8 flex gap-4 items-start">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-8 flex gap-4 items-start">
             <div className="shrink-0 w-12 h-12 rounded-xl bg-teal-deep/10 text-teal-deep flex items-center justify-center">
               <FileQuestion className="w-6 h-6" />
             </div>
@@ -82,7 +82,7 @@ export default function WhyCostaRica() {
               <h2 className="font-display text-xl font-semibold text-teal-deep mb-1.5">
                 Legal, Tax and Residency Context
               </h2>
-              <p className="text-sm text-stone-600 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 This village has not yet published the legal, tax and residency details
                 for where it sits. Ask a steward, or check back once the community has
                 written its own.
@@ -115,7 +115,7 @@ export default function WhyCostaRica() {
             return (
               <div
                 key={p.title}
-                className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex gap-4"
+                className="bg-card rounded-2xl border border-border shadow-sm p-6 flex gap-4"
               >
                 <div className="shrink-0 w-12 h-12 rounded-xl bg-teal-deep/10 text-teal-deep flex items-center justify-center">
                   <Icon className="w-6 h-6" />
@@ -124,7 +124,7 @@ export default function WhyCostaRica() {
                   <h3 className="font-display text-lg font-semibold text-teal-deep mb-1.5">
                     {p.title}
                   </h3>
-                  <p className="text-sm text-stone-600 leading-relaxed">{p.body}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{p.body}</p>
                 </div>
               </div>
             );

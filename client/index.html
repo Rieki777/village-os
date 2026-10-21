@@ -15,6 +15,13 @@
       crawler-visible metadata (og:image, canonical) adds it in its own fork,
       where the values are actually true.
     -->
+    <!--
+      The first paint waits for /api/game/config; fetch it beside the bundle,
+      not after it runs. Every deployment serves it. Keep `crossorigin`:
+      without it fetch() cannot reuse this and downloads the config again.
+    -->
+    <link rel="preload" href="/api/game/config" as="fetch" crossorigin="anonymous" />
+
     <title>Village</title>
     <meta name="description" content="A coordination platform for a regenerative village: quests, recognition, circles, and shared stewardship." />
 
