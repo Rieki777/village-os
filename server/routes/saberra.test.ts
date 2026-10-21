@@ -15,7 +15,8 @@
  *
  * NO DATABASE, on purpose: what is under test is which refusals happen and
  * what each one says, so the collaborators become stubs and the real handler
- * runs behind a real Express app.
+ * runs behind a real Express app. The sync's lock and its run log are stubs
+ * too; `server/lib/saberraSync.test.ts` holds both against a real database.
  */
 import http from "node:http";
 import express from "express";
@@ -45,6 +46,14 @@ const state = vi.hoisted(() => ({
    * test is the client's own and never a stub's.
    */
   wire: {} as Record<string, string>,
+  /** Records per wire kind, for a read where circles and roles differ. Wins over `call`. */
+  byKind: {} as Record<string, unknown[]>,
+  /** True while "another" sync holds the lock. */
+  lockHeld: false,
+  /** The stored run log document, as the repo would hand it back. */
+  logDoc: null as Record<string, unknown> | null,
+  /** The module's stored `pollSchedule`. */
+  pollSchedule: undefined as string | undefined,
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -75,6 +84,8 @@ vi.mock("../lib/saberraClient", async (importOriginal) => {
       if (bytes !== undefined) {
         return real.callTool({ ...c, fetchImpl: async () => new Response(bytes, { status: 200 }) }, s, t, args);
       }
+      const recs = state.byKind[String(args.kind)];
+      if (recs !== undefined) return { ok: true, records: recs, cursor: null };
       return state.call;
     },
   };
@@ -83,7 +94,23 @@ vi.mock("../lib/saberraClient", async (importOriginal) => {
 vi.mock("../lib/identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1", bornAt: "" }) }));
 
 // The address comes from the STORE now, never from the caller.
-vi.mock("../lib/modules", () => ({ moduleConfig: () => ({ apiUrl: state.apiUrl }) }));
+vi.mock("../lib/modules", () => ({
+  moduleConfig: () => ({ apiUrl: state.apiUrl, ...(state.pollSchedule !== undefined ? { pollSchedule: state.pollSchedule } : {}) }),
+  effectiveLifecycle: () => "preview",
+}));
+
+// The one lock every sync runs under, held or free on demand.
+vi.mock("../repos/namedLock", () => ({
+  withNamedLock: async (_p: unknown, _name: string, fn: () => Promise<unknown>) =>
+    state.lockHeld ? { ran: false } : { ran: true, value: await fn() },
+}));
+
+vi.mock("../repos/saberraSyncLog", () => ({
+  readSyncLogDocument: async () => state.logDoc,
+  writeSyncLogDocument: async (_p: unknown, doc: Record<string, unknown>) => {
+    state.logDoc = JSON.parse(JSON.stringify(doc));
+  },
+}));
 
 // One live seat, so a fact can be attached to it by name.
 vi.mock("../lib/orgChart", () => ({
@@ -173,6 +200,10 @@ beforeEach(() => {
   state.asked = [];
   state.tools = { ok: true, tools: [] };
   state.wire = {};
+  state.byKind = {};
+  state.lockHeld = false;
+  state.logDoc = null;
+  state.pollSchedule = undefined;
 });
 
 describe("who may cause a sync", () => {
@@ -185,6 +216,14 @@ describe("who may cause a sync", () => {
   it("refuses the status read without the queue's key", async () => {
     may = false;
     expect((await get("/api/saberra/status")).status).toBe(403);
+  });
+
+  it("refuses the run log without the queue's key, because it is the button's report", async () => {
+    may = false;
+    expect((await get("/api/saberra/runs")).status).toBe(403);
+    // The control: the same read with the key answers.
+    may = true;
+    expect((await get("/api/saberra/runs")).status).toBe(200);
   });
 
   it("LETS A MEMBER READ THE DETAIL WITHOUT THAT KEY, which is the whole point of the panel", async () => {
@@ -373,6 +412,34 @@ describe("a sync that works", () => {
     expect(payload.title).toContain("suggested by");
   });
 
+  it("PLACES A SEAT WHOSE CIRCLE ARRIVES AS A RELATION, by handing the translator the circles too", async () => {
+    // The live sync of 2026-10-09: `Circle` on a role is a list of page ids,
+    // and the route used to hand the translator the roles alone, so even a
+    // translator that read relations had nothing to resolve them against.
+    const LAND = "3ed0a88e-f36a-8104-80fa-cd2bfe15c001";
+    state.byKind = {
+      circle: [{ id: LAND, fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
+      role: [{ id: "r-1", fields: { "Role Name": "Water Steward", Circle: [LAND], Body: "Holds the water.", Status: "Vacant" } }],
+      role_assignment: [],
+    };
+    const r = await post("/api/saberra/sync");
+    const org = state.landedPayloads.find((p) => p.kind === "org.proposed");
+    const seat = (org!.payload as { seats: Record<string, unknown>[] }).seats[0];
+    expect(seat).toMatchObject({ name: "Water Steward", circleName: "Land & Ecology", aim: "Holds the water.", sourceStatus: "Vacant" });
+    expect(r.body.circles).toMatchObject({ placed: 1, unresolved: 0, absent: 0, shapes: ["list of 1 id"] });
+  });
+
+  it("ASKS EVERY LANDING TO CARRY A WAITING DUPLICATE FORWARD, so Sync now is safe to press again", async () => {
+    state.byKind = {
+      circle: [{ id: "c-1", fields: { "Circle Name": "Land & Ecology", Status: "Active" } }],
+      role: [{ id: "r-1", fields: { "Role Name": "Water Steward" } }],
+      role_assignment: [],
+    };
+    await post("/api/saberra/sync");
+    expect(state.landedPayloads.length).toBeGreaterThan(1);
+    for (const p of state.landedPayloads) expect(p.rebatchWaiting).toBe(true);
+  });
+
   it("clips the batch id, because the spine refuses one over its limit", async () => {
     state.session = "s".repeat(200);
     state.call = { ok: true, cursor: null, records: [{ id: "r-1", fields: { "Role Name": "Water Steward" } }] };
@@ -501,5 +568,93 @@ describe("what a failed sync repeats", () => {
     expect((r.body.failures as { kind: string }[]).some((f) => f.kind === "roleAssignment")).toBe(true);
     expect(JSON.stringify(r.body)).not.toContain("example.org");
     expect(JSON.stringify(r.body)).not.toContain("Jane");
+  });
+});
+
+/**
+ * THE SCHEDULE'S HALF OF THE ROUTE: a press that finds a sync running, and the
+ * run log a press writes. The schedule's own decisions (off, no change,
+ * backoff, the lock against a crash) are held against a real database in
+ * `server/lib/saberraSync.test.ts`.
+ */
+describe("a press beside the schedule", () => {
+  it("REFUSES A PRESS WHILE A SYNC IS RUNNING, and calls nothing", async () => {
+    state.lockHeld = true;
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(409);
+    expect(r.body).toEqual({ error: "A sync is already running. Its report appears under Sync now when it finishes.", state: "busy" });
+    expect(state.asked).toEqual([]);
+    expect(state.landed).toBe(0);
+    expect(state.logDoc).toBeNull();
+    // The control: the lock free, the same press runs.
+    state.lockHeld = false;
+    expect((await post("/api/saberra/sync")).status).toBe(200);
+    expect(state.asked.length).toBeGreaterThan(0);
+  });
+
+  it("WRITES THE PRESS TO THE LOG IN TYPED FIELDS, never the key or the service's words", async () => {
+    state.value = "t0ken-SECRET-4242";
+    state.call = { ok: false, why: "vendor-error", detail: "scope does not permit Jane Example" };
+    state.byKind = {
+      circle: [{ id: "c-1", fields: { "Circle Name": "Land & Ecology", Status: "Active", Notes: "kept by Jane Example" } }],
+      role: [{ id: "r-1", fields: { "Role Name": "Water Steward", Circle: ["c-1"] } }],
+    };
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(200);
+    const run = (state.logDoc!.runs as Record<string, unknown>[])[0]!;
+    expect(run).toMatchObject({
+      trigger: "by-hand",
+      outcome: "landed",
+      reason: "partial",
+      error: "Some kinds could not be read. What could be read went to the review queue.",
+      records: 2,
+      skipped: ["tension", "risk"],
+      failed: [{ kind: "roleAssignment", why: "vendor-error" }],
+      plan: "mail",
+    });
+    expect(run.landed).toBeGreaterThan(0);
+    // The known positive: the answer on screen DID carry the vendor's words,
+    // so their absence from the log is the rule and not an empty read.
+    expect(JSON.stringify(r.body)).toContain("scope does not permit");
+    const whole = JSON.stringify(state.logDoc);
+    for (const never of ["t0ken", "SECRET", "scope", "Jane", "Water Steward", "Land & Ecology", "Circle Name"]) {
+      expect(whole).not.toContain(never);
+    }
+  });
+
+  it("logs a press whose session never opened as a failed run, and answers as before", async () => {
+    state.session = null;
+    const r = await post("/api/saberra/sync");
+    expect(r.status).toBe(502);
+    expect((state.logDoc!.runs as Record<string, unknown>[])[0]).toMatchObject({
+      trigger: "by-hand",
+      outcome: "failed",
+      reason: "no-session",
+    });
+  });
+
+  it("logs nothing for a press refused before it called out, which the screen already says", async () => {
+    state.apiUrl = "";
+    expect((await post("/api/saberra/sync")).status).toBe(409);
+    expect(state.logDoc).toBeNull();
+  });
+
+  it("ANSWERS THE SCHEDULE, WHEN IT NEXT RUNS, AND THE RUNS", async () => {
+    state.pollSchedule = "every-6-hours";
+    await post("/api/saberra/sync");
+    const r = await get("/api/saberra/runs");
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ schedule: "every-6-hours", blocked: null, backoff: { failures: 0, factor: 1 } });
+    expect(typeof r.body.timezone).toBe("string");
+    expect(r.body.runs).toHaveLength(1);
+    // Six hours after the press, which is the clock the schedule keeps.
+    const gap = Date.parse(r.body.nextAt) - Date.parse(r.body.runs[0].at);
+    expect(gap).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it("says the schedule is waiting for a key, and off when nothing is stored", async () => {
+    state.value = null;
+    const r = await get("/api/saberra/runs");
+    expect(r.body).toMatchObject({ schedule: "off", nextAt: null, blocked: "no-key", runs: [] });
   });
 });

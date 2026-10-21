@@ -106,6 +106,13 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberInOutbox } from "./saberraOutbox";
+import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
+import { deleteDraftsOf } from "./proposalDrafts";
+import { eraseFromAlignments } from "./alignmentErasure";
+import { recordPartyLeft } from "./alignmentEndings";
+import { eraseSeasonPlanWords } from "../repos/seasonPlans";
+import { forgetMemberSessions } from "./liveSessions";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -116,6 +123,9 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
+import { forgetCommsPerson } from "../repos/commsPeople";
+import { emailKeyOf } from "../../shared/comms/address";
+import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
   erasureRecord,
@@ -308,6 +318,20 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * Aligned terms (0260, seat settings PR8): every text the member is a
+       * party to that has not ended gets a `party_left` ending, so the record
+       * says how it ended. Leaving never waits on terms; this only writes.
+       * BEFORE the holdings and the org seatings are released, because a released seating ends
+       * seat terms by the derivation and the record would then never say why.
+       * Keyed on the text, so a resume writes nothing twice.
+       */
+      name: "alignment-party-left",
+      run: async () => {
+        await recordPartyLeft(pool, target.id, new Date());
+      },
+    },
+    {
       name: "role-holdings",
       run: async () => {
         await withRoleHolderLock(async () => {
@@ -343,6 +367,16 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "org-drafts",
       run: async () => {
         await forgetMemberInDrafts(pool, target.id, ANON);
+      },
+    },
+    {
+      // The wizard's unfinished proposals (red team S2). Private to their
+      // author and never a record of anything the village decided, so they
+      // go whole: a half-written seat application carries the member's words
+      // and their terms, and nothing else would ever remove them.
+      name: "proposal-drafts",
+      run: async () => {
+        await deleteDraftsOf(pool, target.id);
       },
     },
     /*
@@ -527,6 +561,28 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0244 to 0246): their
+       * contacts and answers, journeys and paths, guest rows, votes,
+       * attendance and feedback, the delivery reports that name them, and no
+       * suppression kept, because a suppression is the address under another
+       * name. Their emails stay on the ledger with the address, subject and
+       * words blanked, so the village's counts still add up. The rows and
+       * their reasons are in server/repos/commsPeople.ts.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step below gives: the
+       * member's sessions die there, so nothing they do afterwards can write a
+       * fresh comms row behind this step. `target` is the record read before
+       * the sweep began, so its address is still the real one here; a resume
+       * reads the tombstone and finds the rest by user id alone.
+       */
+      name: "comms",
+      run: async () => {
+        const email = String(target.email ?? "");
+        await forgetCommsPerson(pool, { userId: target.id, emailKeys: email && !isTombstone({ email }) ? [emailKeyOf(email)] : [] });
+      },
+    },
+    {
+      /*
        * member_needs (0205) tells its member "Only you can read this", so it
        * leaves with them. A named step, so a resumed erasure knows whether it
        * already ran.
@@ -565,6 +621,85 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The bridge to organisational memory (0261): every outbox row filed
+       * under the member's code-name loses its words, and the code-name is
+       * marked pending a vendor delete. The map entry is NOT dropped: the
+       * founder promised the vendor that the village scrubs its own records,
+       * asks them to delete, and drops the entry only on their confirm. They
+       * have no delete endpoint yet, so the entry stays, marked, and the
+       * admin panel says so.
+       *
+       * AFTER THE TOMBSTONE AND THE JOURNAL, for the journal's own reason: a
+       * save through a still-live session queues an entry, so the scrub comes
+       * after the last moment one could be queued.
+       */
+      name: "saberra-bridge-after-tombstone",
+      run: async () => {
+        await forgetMemberInOutbox(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Seat applications (0257): the member's own words, what they would have
+       * done and why them, go. The application stays: its seats, its terms and
+       * the village's decision are the record of what the village agreed to,
+       * and the tombstoned user row de-attributes it without remapping ids.
+       * After the tombstone, for the reason the steps above give.
+       */
+      name: "seat-application-words-after-tombstone",
+      run: async () => {
+        await eraseApplicationWords(pool, target.id);
+        // And nothing they applied for is seated after they have gone.
+        await withdrawUnseatedOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The alignment store (0259): their name and handle come out of the
+       * words of every alignment text, the seats' terms on offer and the
+       * village presets; the words otherwise stay, de-attributed (decision 2).
+       * Hash, parties and seal are untouched, so receipts still verify.
+       * `target` is the row as read before the tombstone, so it still holds
+       * the name. server/lib/alignmentErasure.ts says the rest.
+       */
+      name: "alignment-names-after-tombstone",
+      run: async () => {
+        await eraseFromAlignments(pool, { id: target.id, name: target.name, handle: target.handle });
+      },
+    },
+    {
+      /*
+       * Season plans (0258): the member's own words, their aim, the goal they
+       * served and what they committed to, go. The seats they handed back stay
+       * on the row, as the village's record of who held what, de-attributed by
+       * the tombstone. After the tombstone, for the reason the steps above give.
+       */
+      name: "season-plan-words-after-tombstone",
+      run: async () => {
+        await eraseSeasonPlanWords(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Live Sessions (0238): the member leaves every room. Their people rows,
+       * answers and written entries are deleted, the actions they held go back
+       * to nobody, the hosts and adders they were read 0, and every closed
+       * record that named them has its minutes written again from what is
+       * left, so the name is gone from the text too. De-attribution is not
+       * erasure, which is why the minutes are rebuilt and not only the rows.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: every door
+       * writes for anybody signed in, and the tombstone is where the member's
+       * sessions die. The names the rebuilt minutes print are read live, and by
+       * now nothing in those records points at the leaver.
+       */
+      name: "sessions-after-tombstone",
+      run: async () => {
+        await forgetMemberSessions(pool, target.id, (id) => members.byId(id));
       },
     },
     {

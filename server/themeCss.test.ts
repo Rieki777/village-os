@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildThemeCss, fontFormatOf, sanitizeFontName, sanitizeFontStack, sanitizeImportUrl } from "./lib/themeCss";
+import { FONT_CATALOG } from "../shared/fontCatalog";
+import {
+  THEME_HREF,
+  buildThemeCss,
+  fontFormatOf,
+  sanitizeFontName,
+  sanitizeFontStack,
+  sanitizeImportUrl,
+  themeCssVersion,
+  withThemeVersion,
+} from "./lib/themeCss";
+import { register } from "./routes/brandTheme";
 
 describe("theme.css emission", () => {
   it("emits nothing for an untouched fork", () => {
@@ -21,8 +32,28 @@ describe("theme.css emission", () => {
     expect(css).toContain(":root:root {");
   });
 
+  it("carries a pinned accent from the brand document into the stylesheet", () => {
+    // Admin, Look saves `theme.accent`. If emission ignored it, the founder
+    // would see a field that saves and changes nothing on the site.
+    const derived = buildThemeCss({ seed: "#14362b", character: "civic" });
+    const pinned = buildThemeCss({ seed: "#14362b", character: "civic", accent: "#b08d57" });
+    const sunOf = (css: string) => /--tone-sun: (#[0-9a-f]{6});/.exec(css)?.[1];
+    expect(sunOf(derived)).toBeTruthy();
+    expect(sunOf(pinned)).toBeTruthy();
+    expect(sunOf(pinned)).not.toBe(sunOf(derived));
+    // An accent alone, with no seed, is still the neutral fork.
+    expect(buildThemeCss({ accent: "#b08d57" })).toBe("");
+  });
+
   it("accepts a same-origin uploads path", () => {
     expect(sanitizeImportUrl("/api/uploads/brand-123-abcde.css")).toBe("/api/uploads/brand-123-abcde.css");
+  });
+
+  it("passes every catalogue stack through unchanged", () => {
+    // The picker saves the offering's stack verbatim. A stack the sanitiser
+    // refused would save fine and then emit nothing, so the admin would see
+    // their choice stored and the site still in the default face.
+    for (const f of FONT_CATALOG) expect(sanitizeFontStack(f.stack), f.id).toBe(f.stack);
   });
 
   describe("uploaded font packages", () => {
@@ -79,5 +110,57 @@ describe("theme.css emission", () => {
       expect(sanitizeImportUrl({} as unknown)).toBeNull();
       expect(buildThemeCss({ fontDisplay: 42 as unknown as string })).toBe("");
     });
+  });
+});
+
+describe("a stylesheet URL that moves when the brand moves", () => {
+  const SHELL = '<head>\n    <link rel="stylesheet" href="/api/brand/theme.css" />\n  </head>';
+
+  it("versions the shell's stylesheet link", () => {
+    expect(withThemeVersion(SHELL, "0123456789abcdef")).toContain('href="/api/brand/theme.css?v=0123456789abcdef"');
+    expect(withThemeVersion(SHELL, "0123456789abcdef")).not.toContain('href="/api/brand/theme.css"');
+    expect(THEME_HREF).toBe("/api/brand/theme.css");
+  });
+
+  it("leaves a shell without the link exactly as it was, and never throws", () => {
+    const other = '<head><link rel="stylesheet" href="/assets/index.css" /></head>';
+    expect(withThemeVersion(other, "0123456789abcdef")).toBe(other);
+    // A link written any other way is not the anchor, so it is not touched either.
+    const single = "<link rel='stylesheet' href='/api/brand/theme.css' />";
+    expect(withThemeVersion(single, "0123456789abcdef")).toBe(single);
+    expect(withThemeVersion("", "0123456789abcdef")).toBe("");
+  });
+
+  it("versions an untouched fork's empty stylesheet too", () => {
+    const empty = themeCssVersion(buildThemeCss(undefined));
+    expect(empty).toMatch(/^[0-9a-f]{16}$/);
+    expect(withThemeVersion(SHELL, empty)).toContain(`?v=${empty}"`);
+  });
+
+  it("moves the version when a font field moves", () => {
+    const a = themeCssVersion(buildThemeCss({ fontDisplay: '"Cormorant Garamond", serif' }));
+    const b = themeCssVersion(buildThemeCss({ fontDisplay: '"Cormorant Garamond", serif', fontBody: '"Jost", sans-serif' }));
+    const c = themeCssVersion(buildThemeCss({ fontDisplay: '"Marcellus", serif' }));
+    expect(new Set([a, b, c]).size).toBe(3);
+    // The same brand gives the same version, so a page load and its stylesheet agree.
+    expect(themeCssVersion(buildThemeCss({ fontDisplay: '"Cormorant Garamond", serif' }))).toBe(a);
+  });
+});
+
+describe("the route and the shell agree on one version", () => {
+  it("sends themeCssVersion as the stylesheet's ETag", async () => {
+    const theme = { fontDisplay: '"Cormorant Garamond", serif' };
+    let handler: ((req: any, res: any) => unknown) | null = null;
+    register({ get: (_path: string, h: any) => { handler = h; } } as any, { getBrand: () => ({ theme }) });
+    const headers: Record<string, string> = {};
+    const res: any = {
+      setHeader: (k: string, v: string) => { headers[k.toLowerCase()] = v; },
+      status: () => res,
+      end: () => res,
+      type: () => res,
+      send: () => res,
+    };
+    await handler!({ query: {}, headers: {} }, res);
+    expect(headers.etag).toBe(`"${themeCssVersion(buildThemeCss(theme))}"`);
   });
 });

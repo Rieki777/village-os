@@ -24,7 +24,10 @@ import {
   Shield,
   Compass,
   NotebookPen,
+  Orbit,
+  ListChecks,
 } from "lucide-react";
+import { TASK_BOARD_PATH, TASK_COPY } from "@shared/sessionTasks";
 
 /**
  * The FAB's closed-state glyph. Deliberately configurable: the brand PNGs in
@@ -109,8 +112,32 @@ export type FabAction = {
 export const FAB_ACTIONS: FabAction[] = [
   { key: "roles", label: "Roles", href: "/roles", Icon: Shield },
   { key: "profile", label: "Profile", href: "/profile", Icon: User, requiresAuth: true },
+  {
+    // The task board on the profile, beside the profile itself because it is
+    // the member's own page. No anchorPath: on the profile it still has a job,
+    // bringing the board into view. The count lives in the drawer's account
+    // block (ACCOUNT_MENU in config/nav.ts), so this row stays a plain door.
+    key: "tasks",
+    label: TASK_COPY.menu.label,
+    href: TASK_BOARD_PATH,
+    Icon: ListChecks,
+    requiresAuth: true,
+    module: "sessions",
+  },
   { key: "signin", label: "Sign in", href: "/login", Icon: UserPlus, requiresAuth: false },
   { key: "work-with-us", label: "Work with us", href: "/work-with-us", Icon: MessageCircle },
+  {
+    // A call is something a member reaches for mid-week, a step further from
+    // the thumb than the daily pair below it, and only while the module is on.
+    key: "sessions",
+    label: "Live sessions",
+    href: "/sessions",
+    Icon: Orbit,
+    requiresAuth: true,
+    module: "sessions",
+    // On the list or inside a room, the row would link to where they already are.
+    anchorPath: "/sessions",
+  },
   {
     key: "journal",
     label: "Journal",

@@ -25,7 +25,8 @@
 import { randomUUID } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { ALL_CAPABILITIES, type Capability } from "../../shared/capabilities";
-import { CAPABILITY_CONSEQUENCE, DRAFT_KINDS, validateDraftPayload, type DraftKind } from "../../shared/draftKinds";
+import { DRAFT_KINDS, validateDraftPayload, type DraftKind } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 
 export interface Escalation {
   capability: Capability;
@@ -68,7 +69,7 @@ export function computeEscalations(
   return requested
     .filter((c): c is Capability => ALL_CAPABILITIES.includes(c as Capability))
     .filter((c) => !held.has(c))
-    .map((capability) => ({ capability, consequence: CAPABILITY_CONSEQUENCE[capability] }));
+    .map((capability) => ({ capability, consequence: liveConsequence(capability) }));
 }
 
 /**

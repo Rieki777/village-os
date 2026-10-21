@@ -202,3 +202,20 @@ export async function issuanceRefusal(conn: Pool | PoolConnection): Promise<stri
 export async function founderPowerStands(conn: Pool | PoolConnection): Promise<boolean> {
   return !(await readGameStart(conn)).started;
 }
+
+/**
+ * BEFORE OR AFTER LAUNCH, FOR THE SETUP GAME'S PLANTING RULE.
+ *
+ * Ruling of 2026-10-13: "any founder should have full ability to do a task
+ * before they go live." A keystone seed (`shared/guilds.ts`, `keystoneRule`)
+ * always asks for a read-pause, and asks for a second person's co-sign only
+ * after launch. This is the one signal that decides which side of launch a
+ * planting is on, and it is `founderPowerStands` on purpose: it is already the
+ * rule for what one founder may do alone (R90), and it reads as started for a
+ * village that was live before the launch ballot existed, where
+ * `launch-state.launchedAt` would read as not launched. `shared/guilds.ts`
+ * says the same beside `PlantingPhase`.
+ */
+export async function plantingPhase(conn: Pool | PoolConnection): Promise<"before-launch" | "after-launch"> {
+  return (await founderPowerStands(conn)) ? "before-launch" : "after-launch";
+}

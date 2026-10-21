@@ -9,8 +9,10 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   JOURNAL_ANSWER_MAX,
   JOURNAL_PRACTICE_DEFS,
+  JOURNAL_DEFAULT_PRIVACY,
   JOURNAL_REFLECTION_MAX,
   PULSE_METRICS,
+  sharesWithMemory,
   type JournalAnswer,
   type JournalEntry,
   type JournalEntryInput,
@@ -51,6 +53,26 @@ export default function EntryCard({
   const reflection = synced ? synced.reflection : (e.reflection ?? null);
   const scores = e.scores ?? null;
   const bodyId = `entry-${e.clientId}`;
+  // A page still on the device carries what the member chose on the review
+  // step; one from before the choice existed is the shared default.
+  const privacy = e.privacy ?? JOURNAL_DEFAULT_PRIVACY;
+  const isPrivate = !sharesWithMemory(privacy);
+
+  /** Keep it in the village, or share it again. Ruling 2026-10-05. */
+  const setPrivate = async (keep: boolean) => {
+    if (!synced) return;
+    setBusy(true);
+    setProblem(null);
+    const next = keep ? "private" : JOURNAL_DEFAULT_PRIVACY;
+    try {
+      const back = await patchEntry(synced.id, { privacy: next });
+      onChanged(back ?? { ...synced, privacy: next });
+    } catch (err) {
+      setProblem(problemText(err, "That change did not save. Try again in a moment."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveEdit = async () => {
     if (!synced || !editing) return;
@@ -99,6 +121,9 @@ export default function EntryCard({
               <span className="rounded-full bg-amber-light px-2 py-0.5 text-xs font-semibold text-amber-ink">
                 Saved on this device
               </span>
+            )}
+            {isPrivate && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">Private</span>
             )}
           </span>
           {preview(e.answers) && <span className="mt-1 block text-sm text-muted-foreground">{preview(e.answers)}</span>}
@@ -197,10 +222,20 @@ export default function EntryCard({
                   >
                     Edit
                   </button>
+                  <button type="button" className={BTN_QUIET} onClick={() => void setPrivate(!isPrivate)} disabled={busy}>
+                    {isPrivate ? "Share it with organisational memory" : "Keep it private"}
+                  </button>
                   <button type="button" className={BTN_QUIET} onClick={() => setConfirmDelete(true)}>
                     Forget this entry
                   </button>
                 </div>
+              )}
+              {synced && (
+                <p className="text-xs text-muted-foreground">
+                  {isPrivate
+                    ? "Private: it stays in this village, for you alone."
+                    : "Shared with the village's organisational memory when that is connected, under code-names."}
+                </p>
               )}
               {synced && confirmDelete && (
                 <div role="group" aria-label="Confirm forgetting this entry" className="rounded-xl bg-destructive/10 p-3">

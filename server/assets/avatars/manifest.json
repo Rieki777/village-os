@@ -1,0 +1,246 @@
+{
+  "assets": {
+    "building-f-deep": {
+      "at": "2026-08-10T15:32:29+00:00",
+      "base": "building-f",
+      "derivedFromBase": false,
+      "file": "building-f-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 73
+    },
+    "building-f-light": {
+      "at": "2026-08-10T15:44:18+00:00",
+      "base": "building-f",
+      "derivedFromBase": false,
+      "file": "building-f-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 76
+    },
+    "building-f-olive": {
+      "at": "2026-08-10T15:33:26+00:00",
+      "base": "building-f",
+      "derivedFromBase": true,
+      "file": "building-f-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 72
+    },
+    "building-m-deep": {
+      "at": "2026-08-10T15:44:46+00:00",
+      "base": "building-m",
+      "derivedFromBase": false,
+      "file": "building-m-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "building-m-light": {
+      "at": "2026-08-10T15:39:00+00:00",
+      "base": "building-m",
+      "derivedFromBase": false,
+      "file": "building-m-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 78
+    },
+    "building-m-olive": {
+      "at": "2026-08-10T15:39:59+00:00",
+      "base": "building-m",
+      "derivedFromBase": true,
+      "file": "building-m-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 78
+    },
+    "catalyzing-f-deep": {
+      "at": "2026-08-10T16:18:01+00:00",
+      "base": "catalyzing-f",
+      "derivedFromBase": false,
+      "file": "catalyzing-f-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 79
+    },
+    "catalyzing-f-light": {
+      "at": "2026-08-10T16:19:01+00:00",
+      "base": "catalyzing-f",
+      "derivedFromBase": false,
+      "file": "catalyzing-f-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "catalyzing-f-olive": {
+      "at": "2026-08-10T16:18:34+00:00",
+      "base": "catalyzing-f",
+      "derivedFromBase": false,
+      "file": "catalyzing-f-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 76
+    },
+    "catalyzing-m-deep": {
+      "at": "2026-08-10T16:19:57+00:00",
+      "base": "catalyzing-m",
+      "derivedFromBase": false,
+      "file": "catalyzing-m-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "catalyzing-m-light": {
+      "at": "2026-08-10T16:19:26+00:00",
+      "base": "catalyzing-m",
+      "derivedFromBase": false,
+      "file": "catalyzing-m-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 69
+    },
+    "catalyzing-m-olive": {
+      "at": "2026-08-10T16:20:28+00:00",
+      "base": "catalyzing-m",
+      "derivedFromBase": false,
+      "file": "catalyzing-m-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 79
+    },
+    "facilitating-f-deep": {
+      "at": "2026-08-10T16:15:38+00:00",
+      "base": "facilitating-f",
+      "derivedFromBase": false,
+      "file": "facilitating-f-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 76
+    },
+    "facilitating-f-light": {
+      "at": "2026-08-10T16:15:13+00:00",
+      "base": "facilitating-f",
+      "derivedFromBase": false,
+      "file": "facilitating-f-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 79
+    },
+    "facilitating-f-olive": {
+      "at": "2026-08-10T16:16:03+00:00",
+      "base": "facilitating-f",
+      "derivedFromBase": false,
+      "file": "facilitating-f-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 79
+    },
+    "facilitating-m-deep": {
+      "at": "2026-08-10T16:17:05+00:00",
+      "base": "facilitating-m",
+      "derivedFromBase": false,
+      "file": "facilitating-m-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 77
+    },
+    "facilitating-m-light": {
+      "at": "2026-08-10T16:17:32+00:00",
+      "base": "facilitating-m",
+      "derivedFromBase": false,
+      "file": "facilitating-m-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "facilitating-m-olive": {
+      "at": "2026-08-10T16:16:36+00:00",
+      "base": "facilitating-m",
+      "derivedFromBase": false,
+      "file": "facilitating-m-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "researching-f-deep": {
+      "at": "2026-08-10T16:12:47+00:00",
+      "base": "researching-f",
+      "derivedFromBase": false,
+      "file": "researching-f-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 77
+    },
+    "researching-f-light": {
+      "at": "2026-08-10T16:13:13+00:00",
+      "base": "researching-f",
+      "derivedFromBase": false,
+      "file": "researching-f-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 77
+    },
+    "researching-f-olive": {
+      "at": "2026-08-10T16:12:22+00:00",
+      "base": "researching-f",
+      "derivedFromBase": false,
+      "file": "researching-f-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 79
+    },
+    "researching-m-deep": {
+      "at": "2026-08-10T16:13:41+00:00",
+      "base": "researching-m",
+      "derivedFromBase": false,
+      "file": "researching-m-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "researching-m-light": {
+      "at": "2026-08-10T16:14:46+00:00",
+      "base": "researching-m",
+      "derivedFromBase": false,
+      "file": "researching-m-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "researching-m-olive": {
+      "at": "2026-08-10T16:14:08+00:00",
+      "base": "researching-m",
+      "derivedFromBase": false,
+      "file": "researching-m-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 80
+    },
+    "storytelling-f-deep": {
+      "at": "2026-08-10T16:21:26+00:00",
+      "base": "storytelling-f",
+      "derivedFromBase": false,
+      "file": "storytelling-f-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 73
+    },
+    "storytelling-f-light": {
+      "at": "2026-08-10T16:21:57+00:00",
+      "base": "storytelling-f",
+      "derivedFromBase": false,
+      "file": "storytelling-f-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 75
+    },
+    "storytelling-f-olive": {
+      "at": "2026-08-10T16:20:55+00:00",
+      "base": "storytelling-f",
+      "derivedFromBase": false,
+      "file": "storytelling-f-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 76
+    },
+    "storytelling-m-deep": {
+      "at": "2026-08-10T16:22:22+00:00",
+      "base": "storytelling-m",
+      "derivedFromBase": false,
+      "file": "storytelling-m-deep.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 74
+    },
+    "storytelling-m-light": {
+      "at": "2026-08-10T16:23:13+00:00",
+      "base": "storytelling-m",
+      "derivedFromBase": false,
+      "file": "storytelling-m-light.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 71
+    },
+    "storytelling-m-olive": {
+      "at": "2026-08-10T16:22:47+00:00",
+      "base": "storytelling-m",
+      "derivedFromBase": false,
+      "file": "storytelling-m-olive.webp",
+      "model": "gemini-3-pro-image",
+      "webpQuality": 76
+    }
+  },
+  "updatedAt": "2026-08-10T16:23:13+00:00",
+  "note": "webpQuality is the libwebp quality each file is DELIVERED at, which is no longer the flat DELIVER_QUALITY=80 in scripts/gen_avatars.py. 23 of these were re-encoded downward in one pass (sharp, webp, effort 6, no resize) to free room in scripts/image-budget-baseline.json for five missing module images. Each took the HIGHEST quality whose mean SSIM against the file shipping before the pass stayed at or above 0.993, so the loss is spread evenly across the whole cast. The 7 rows still at 80 could not reach that floor at any quality and were left alone. Regenerating from the script rewrites every row at 80 and puts roughly 138 KB back on the budget; the masters in scripts/avatar-bases are out of git, so these files are the only masters there are."
+}

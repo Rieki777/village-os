@@ -86,11 +86,19 @@ export interface SheetSection {
  */
 export const SHEET_SECTIONS: SheetSection[] = [
   // ── NOW: nothing has to happen first ───────────────────────────────────
+  // Start here: the one next step from joining to proposing, and the other
+  // doors open to this member, for the owner alone (StartHereCard.tsx).
+  { id: "startHere", band: "now", quiet: "" },
   { id: "nextStep", band: "now", quiet: "" },
+  // The task board: what you took on in a live session, and what your seats
+  // hold. Answered today, with nothing earned first. Absent with the module off.
+  { id: "tasks", band: "now", quiet: "" },
   // Quests rides with nextStep inside GameDashboard, and belongs here anyway:
   // browsing and claiming a quest needs nothing earned first.
   { id: "quests", band: "now", quiet: "" },
   { id: "vessel", band: "now", quiet: "" },
+  // Your season: the seats you keep, hand back or ask for, and your part.
+  { id: "season", band: "now", quiet: "" },
   { id: "aboutYou", band: "now", quiet: "" },
   { id: "paths", band: "now", quiet: "" },
 
@@ -101,6 +109,8 @@ export const SHEET_SECTIONS: SheetSection[] = [
   // ── RECORD: fills in as you go ─────────────────────────────────────────
   { id: "contributions", band: "record", quiet: "" },
   { id: "journey", band: "record", quiet: "" },
+  // What you have aligned with: the terms of the seats you applied for, and where each stands.
+  { id: "aligned", band: "record", quiet: "" },
 
   // ── PATH: present and quiet until the path is walked ───────────────────
   {

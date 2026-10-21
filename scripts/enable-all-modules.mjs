@@ -57,12 +57,19 @@ const TARGETS = [
   // A member's own journal is never anybody else's to read, and the module
   // has no public surface to probe.
   ["journal", "members"],
+  // A circle's calls are for the people in them, members only and no guests,
+  // and the module has no public surface to probe.
+  ["sessions", "members"],
   // AFTER messaging, which it requires. Measured: with introductions ahead of
   // it the server answered 409 "requires messaging to be enabled first", the
   // module stayed off, and this script still exited 0. Order is load-bearing
   // in this list, exactly as the note at the top says.
   ["introductions", "members"],
   ["automation", "members"],
+  // Members, never public: public is what lets a stranger RSVP as a guest,
+  // which is a village's own choice. Turning the module on sends nothing by
+  // itself, because every journey inside it also ships off.
+  ["comms", "members"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */

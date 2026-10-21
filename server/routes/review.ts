@@ -105,6 +105,9 @@ import {
   rejectQuestProposal,
   type HumanReward,
 } from "../lib/questProposals";
+import { withdrawDraftBallot } from "../lib/orgDraftDecide";
+import { register as registerStructureReview } from "./structureReview";
+import { circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
 
 type Deps = Pick<
   AppDeps,
@@ -118,10 +121,24 @@ type Deps = Pick<
   | "members"
   | "questsRepo"
   | "circlesRepo"
->;
+  | "seasonState"
+  | "notify"
+  | "firstName"
+> & {
+  /** Who holds a power live, for the carry list's "who can do it". `liveHoldersOf` in server/index.ts. */
+  liveHoldersOf(capability: string): Promise<string[]>;
+};
 
 /** The kinds whose accept builds an org draft. Everything else is a record. */
 const ORG_KINDS = new Set(["org.proposed", "role.proposed", "circle.proposed"]);
+
+/*
+ * A circle proposal's name (`name`, else the vendor's own "Circle Name"), the
+ * slug a proposed circle gets and the id a proposed seat gets now live in
+ * shared/structurePlan.ts, so this accept and the structure change review
+ * cannot drift apart on any of the three. The first real sync sent circles
+ * only under the vendor's key, and every one previewed as `Create the circle ""`.
+ */
 
 /** Keys one proposal carried that nothing read. Only proposals with at least one are listed. */
 interface IgnoredKeys {
@@ -141,44 +158,6 @@ interface IgnoredKeys {
  * its seats previewed as "A seat needs a name", and a seat that did carry a
  * name would have published into no circle at all.
  */
-
-/**
- * The id a proposed seat gets, which is never the vendor's string as sent.
- *
- * `org_roles.id` DOUBLES AS A URL SLUG AND AS A PATH SEGMENT. The public org
- * export builds filesystem-shaped paths from it and refuses anything that is
- * not `^[a-z0-9][a-z0-9-]{0,63}$`, because there is no legitimate seat called
- * `../../etc/passwd`. That guard is right and it fails CLOSED in the wrong
- * direction for us: a seat whose id a vendor supplied as "Water Steward!"
- * would be created, would render on the map, and would then be silently absent
- * from every federated document forever, with nothing anywhere saying why.
- *
- * So the vendor's id is slugified rather than trusted or refused. Slugified
- * and not dropped, because a batch describing relations between its own seats
- * needs those references to keep pointing at the same rows; and never used raw,
- * because a namespace we do not control has no business minting ids in ours.
- * A string with nothing slug-shaped left in it falls back to one derived from
- * the proposal, which is always a valid slug by construction.
- */
-function seatIdFor(vendorId: unknown, fallback: string): string {
-  /*
-   * THE SAME SHAPE CODEQL FLAGGED ON THE CIRCLE SLUG BELOW, and this one is
-   * older, which is why it was never called new and never fixed.
-   *
-   * `/^-+|-+$/` on an UNBOUNDED vendor string is a polynomial ReDoS: the
-   * trailing half rescans from every position and a name of many dashes costs
-   * nothing to send. Bounding first and trimming in two linear passes removes
-   * the backtracking rather than hiding it. The final `-+$` is kept below
-   * because by then the string is at most 64 characters.
-   */
-  let slug = String(vendorId ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .slice(0, 64);
-  while (slug.startsWith("-")) slug = slug.slice(1);
-  while (slug.endsWith("-")) slug = slug.slice(0, -1);
-  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug) ? slug : fallback;
-}
 
 /** The shape the review page reads. Evidence forward, machinery behind. */
 function toCard(p: ExternalProposalRow) {
@@ -233,7 +212,10 @@ function proposedChangeShares(items: ReturnType<typeof toCard>[], circles: reado
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin } = deps;
+  // The structure change review reads and accepts a batch whole, with a
+  // steward's decisions. Same key as this queue, so it registers from here.
+  registerStructureReview(app, deps);
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -311,6 +293,19 @@ export function register(app: Express, deps: Deps): void {
     // one read above, and listed even when its preview throws (stuckQueueDrafts).
     // A reader given the quest half alone read no drafts, so it lists none.
     const stuckDrafts = drafts && previewContext ? stuckQueueDrafts(drafts, previewContext, proposalChangeLimit) : [];
+    // Every open draft this queue made, with the batch whose page shows it, so
+    // a steward can find the draft an accept made from the queue itself.
+    const openDrafts = await Promise.all(
+      (drafts ?? [])
+        .filter((d) => d.status === "open" && d.sourceProposalId)
+        .slice(0, 20)
+        .map(async (d) => ({
+          draftId: d.id,
+          title: d.title,
+          changes: d.changes.length,
+          batchId: (await proposalById(pool, String(d.sourceProposalId)))?.batchId ?? null,
+        })),
+    );
     const circles = circlesRepo.all() as LiveCircle[];
 
     res.json({
@@ -347,6 +342,7 @@ export function register(app: Express, deps: Deps): void {
       })),
       drops,
       stuckDrafts,
+      openDrafts,
       counts: { proposals: proposals.length, quests: quests.length },
       scope: { proposals: readsProposals, quests: readsQuests },
     });
@@ -470,59 +466,65 @@ export function register(app: Express, deps: Deps): void {
     // ONE read of the circles for the whole accept, so every seat in it is
     // placed against the same list. See `circlesRepo` in appDeps.ts for why a
     // circle an admin made a moment ago is in it.
-    const circles = circlesRepo.all() as LiveCircle[];
+    const live = circlesRepo.all() as LiveCircle[];
     let seats = 0;
     const ignored: IgnoredKeys[] = [];
+    /*
+     * A CIRCLE PROPOSAL BECOMES A CIRCLE, not a seat.
+     *
+     * `circle.proposed` has been an accepted kind since 0140 and every one
+     * of them used to be run through the SEAT reader below, because
+     * `DraftOp` had no way to make a circle. Accepting one produced a seat
+     * named after the circle, silently, and no test covered it. `create_circle`
+     * exists now, so the kind finally means what it says.
+     *
+     * CIRCLES FIRST, SEATS SECOND, whatever order the batch arrived in. A
+     * vendor's reading of a village arrives as circles AND the seats inside
+     * them, and its seats name their circle in words. Those words were placed
+     * against the LIVE circles only, so every seat naming a circle this same
+     * draft creates kept its name, matched nothing, and blocked on "There is
+     * no circle called X yet" beside the very line that creates it. So the
+     * circles are added to the draft first, which is also the order publish
+     * applies them in (`sort_order`), and each one this draft creates joins
+     * the list the seats are placed against. A name answering to a live circle
+     * AND a new one matches two and blocks as ambiguous, which is the honest
+     * reading rather than a guess.
+     */
+    const drafted: LiveCircle[] = [];
+    for (const p of org) {
+      if (p.kind !== "circle.proposed") continue;
+      const payload = (edits[p.id] ?? p.payload) as Record<string, unknown>;
+      const rawName = proposedCircleName(payload);
+      // A slug, because that is what this table's ids are, bounded and trimmed
+      // without a regex (circleIdFor). Falling back to the proposal id keeps a
+      // nameless proposal previewable, where it blocks with a reason.
+      const circleId = circleIdFor(rawName, p.id);
+      const r = await addChange(getPool(), made.id, {
+        op: "create_circle",
+        orgRoleId: `circle:${circleId}`,
+        payload: {
+          name: rawName,
+          // `purpose` only, and never the vendor's "Notes": on the first real
+          // sync that field was the vendor's own change log ("[Rewritten ...
+          // per ... V5]"), which is not what a circle is for.
+          purpose: typeof payload.purpose === "string" ? payload.purpose : null,
+          parentCircleId:
+            typeof payload.parentCircleId === "string" && payload.parentCircleId ? payload.parentCircleId : null,
+        },
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      if (rawName !== "") drafted.push({ id: circleId, name: rawName });
+    }
+    const circles: LiveCircle[] = [...live, ...drafted];
+
     for (let i = 0; i < org.length; i++) {
       const p = org[i];
+      if (p.kind === "circle.proposed") continue;
       // An edited payload goes through the same reading as the vendor's own,
       // so a steward's correction is placed and reported the same way. The
       // flags match what `createDraft` above took: the title off the first
       // proposal, the rationale only when there is one, so a rationale on any
       // other record is reported instead of vanishing.
-      /*
-       * A CIRCLE PROPOSAL BECOMES A CIRCLE, not a seat.
-       *
-       * `circle.proposed` has been an accepted kind since 0140 and every one
-       * of them used to be run through the SEAT reader below, because
-       * `DraftOp` had no way to make a circle. Accepting one produced a seat
-       * named after the circle, silently, and no test covered it. `create_circle`
-       * exists now, so the kind finally means what it says.
-       */
-      if (p.kind === "circle.proposed") {
-        const payload = (edits[p.id] ?? p.payload) as Record<string, unknown>;
-        const rawName = typeof payload.name === "string" ? payload.name.trim() : "";
-        // A slug, because that is what this table's ids are: the migration's own
-        // example is `permaculture-council`. Falling back to the proposal id
-        // keeps a nameless proposal previewable, where it blocks with a reason.
-        /*
-         * TRIMMED WITHOUT A REGEX, and bounded BEFORE the trim.
-         *
-         * The first version ended `.replace(/^-+|-+$/g, "")`, which CodeQL
-         * flagged as a polynomial ReDoS at high severity and was right to: the
-         * `-+$` half has to scan from every position, the input is a name an
-         * outside service supplied, and a name of many dashes is cheap to send.
-         * Slicing first bounds the work whatever arrives, and two loops trim in
-         * one pass each with nothing to backtrack over.
-         */
-        let slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 56);
-        while (slug.startsWith("-")) slug = slug.slice(1);
-        while (slug.endsWith("-")) slug = slug.slice(0, -1);
-        const circleId = slug !== "" ? slug : `circle-${p.id.toLowerCase()}`;
-        const r = await addChange(getPool(), made.id, {
-          op: "create_circle",
-          orgRoleId: `circle:${circleId}`,
-          payload: {
-            name: rawName,
-            purpose: typeof payload.purpose === "string" ? payload.purpose : null,
-            parentCircleId:
-              typeof payload.parentCircleId === "string" && payload.parentCircleId ? payload.parentCircleId : null,
-          },
-        });
-        if (!r.ok) return { ok: false, error: r.error };
-        continue;
-      }
-
       const read = readProposedSeats(edits[p.id] ?? p.payload, circles, {
         readsTitle: i === 0,
         readsRationale: org.length === 1,
@@ -683,6 +685,10 @@ export function register(app: Express, deps: Deps): void {
     const actor = await actorId(req);
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Withdrawing a draft needs a named person" });
     const draftId = String(req.params.id);
+    // A vote on the draft goes first, and refusing it leaves the draft as it
+    // was: cast votes are discarded only by an admin or a proposal.decide holder.
+    const vote = await withdrawDraftBallot(getPool(), draftId, actor, (await isAdmin(req)) || (await mayAct(req, "proposal.decide")).ok);
+    if (!vote.ok) return res.status(409).json({ error: vote.error, ballotId: vote.ballotId });
     const r = await withdrawDraft(getPool(), draftId);
     // `draftStatus` tells this refusal apart from the break-glass one, which is
     // also a 409 and changes nothing about the draft.
@@ -694,7 +700,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor,
       audience: "admin",
     });
-    res.json({ success: true, reopened });
+    res.json({ success: true, reopened, ballotWithdrawn: vote.ballotId });
   });
   app.post("/api/review/batches/:batchId/accept", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
@@ -758,7 +764,7 @@ export function register(app: Express, deps: Deps): void {
       reward,
       edits: req.body?.edits ?? null,
       note: req.body?.note ?? null,
-    });
+    }, notify); // the proposer hears it is on the board (lib/questProposals.ts)
     if (!r.ok) return res.status(r.status).json({ error: r.error });
     res.json({ success: true, questId: r.questId });
   });
@@ -771,7 +777,7 @@ export function register(app: Express, deps: Deps): void {
       id: String(req.params.id),
       decidedBy: actor,
       note: String(req.body?.note ?? "").slice(0, 2000),
-    });
+    }, notify); // and hears the no, with the steward's reason when one was typed
     if (!ok) return res.status(409).json({ error: "That proposal was already decided" });
     res.json({ success: true });
   });

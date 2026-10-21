@@ -153,6 +153,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "proposal.open": "open a governance decision",
   "proposal.decide": "record the outcome of a governance decision and close it",
   "map.viewPeople": "see which named people hold which seats",
+  "terms.read": "read what every seat offers whoever holds it, money included",
   "map.contact": "reach role holders through the contact relay",
   "map.edit": "reshape the land in build mode, as a draft nobody else sees yet",
   "map.publish": "put a drafted map in front of every visitor",
@@ -175,6 +176,8 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
     "admit somebody as a member outright, without the vouches the village asks for",
   "org.seat": "seat people in the village's seats, and take them out again",
   "org.seatAgent": "seat software agents in the village's seats, and take them out again",
+  "org.decide":
+    "publish a change to the village's circles and seats straight onto the chart, or put it to the village for a vote",
   "intake.moderate": "work the queues the village puts things into, and act on what gets reported",
   "library.keep": "keep the shared library: what comes in, what goes out on loan, what comes back",
   "story.tell": "say what this village is, in public, in its own words",
@@ -184,4 +187,6 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
     "agree that a member has been paid off the platform, and destroy the tokens they redeemed",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",
+  "comms.manage":
+    "run the village's email: turn automations on and off, change their words, send letters to people who agreed to get them, and see the village's address book and every email the village still keeps: who it went to, its subject, whether it arrived, and its words",
 };

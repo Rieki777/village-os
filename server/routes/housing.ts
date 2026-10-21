@@ -47,6 +47,9 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
+// Village Comms: the one door to the email system (server/lib/commsSink.ts).
+import { commsSink } from "../lib/commsSink";
+import { FORM_CONSENT_FIELD } from "../../shared/comms/contracts";
 import {
   allHomeTypes,
   allRows as housingRows,
@@ -396,6 +399,8 @@ export function register(app: Express, deps: Deps): void {
       arrivedFrom,
       userId: user?.id ?? null,
     });
+    // A new reservation is written as `new` (drizzle/0077's default).
+    commsSink.fire({ type: "housing_status", reservationId: id, status: "new", email, name, consentPaths: b[FORM_CONSENT_FIELD] === true });
 
     /*
      * The village's own history. Audience 'admin', because the text carries a
@@ -435,6 +440,7 @@ export function register(app: Express, deps: Deps): void {
       if (recipients.length) {
         await sendResendEmail({
           to: recipients,
+          origin: "housing.team_alert",
           // The person who asked, so a founder can hit reply and be talking
           // to them. Same move the contact relay makes.
           replyTo: email,
@@ -459,6 +465,7 @@ export function register(app: Express, deps: Deps): void {
       // step records an intent, and the next move is a human one.
       await sendResendEmail({
         to: [email],
+        origin: "housing.ack",
         subject: "We have your reservation request",
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +
@@ -541,6 +548,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await setReservationStatus(getPool(), before.id, status, before.status))) {
       return res.json({ ok: true, notified: false });
     }
+    commsSink.fire({ type: "housing_status", reservationId: before.id, status, email: before.email ?? null });
 
     // Asked before the hamlet lookup, because two of the four statuses say
     // nothing and a silent move should cost no reads.
@@ -564,6 +572,7 @@ export function register(app: Express, deps: Deps): void {
     if (notice) {
       void sendResendEmail({
         to: [before.email],
+        origin: "housing.status",
         subject: notice.subject,
         html:
           `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">` +

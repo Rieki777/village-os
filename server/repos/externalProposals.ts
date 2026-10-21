@@ -179,6 +179,20 @@ export async function proposalRowsInBatch(pool: Pool, batchId: string): Promise<
 }
 
 /**
+ * Which batch each proposal arrived in, for many proposals in ONE read: the
+ * task board links an open draft to the structure page of the batch it was
+ * accepted from (shared/waitingOnYou.ts). An id with no row is simply absent.
+ */
+export async function batchIdsOf(pool: Pool, ids: readonly string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, batch_id FROM external_proposals WHERE id IN (${ids.map(() => "?").join(",")})`,
+    [...ids],
+  );
+  return new Map(rows.map((r) => [String(r.id), String(r.batch_id)]));
+}
+
+/**
  * Record a steward's decision, and report whether it reached a row.
  *
  * THE EDITED PAYLOAD IS STORED WHEN THERE IS ONE. A steward who redacted a name
@@ -265,4 +279,65 @@ export async function clearQuotesOn(pool: Pool, ids: readonly string[]): Promise
     ids as string[],
   );
   return Number(q?.affectedRows) || 0;
+}
+
+/**
+ * A copy of one waiting record carrying a different payload, for the half of a
+ * split structure that stays in the queue (the structure change review).
+ *
+ * WHY A COPY AND NOT A NEW LANDING. `landProposal` would run the door's checks
+ * again, count a drop on refusal, and supersede every other waiting record
+ * with the same identity, which for a structure with no source reference is
+ * every other structure that vendor sent. A remainder is the same claim, cut
+ * in two by a steward. So every column comes across from the original, and the
+ * identity with it, so a later redelivery from the vendor supersedes the
+ * remainder exactly as it would have the whole. Only the id, the payload and
+ * the dedupe key are new, the last because it is unique.
+ *
+ * The people the record names come across too, so the remainder is found by
+ * their export and their erasure like the original.
+ */
+export async function insertProposalCopy(
+  pool: Pool,
+  fromId: string,
+  input: { id: string; payload: Record<string, unknown>; dedupeKey: string },
+): Promise<boolean> {
+  const [res] = await pool.query<any>(
+    "INSERT INTO external_proposals (id, village_id, module_id, batch_id, correlation_id, kind, payload, quote, " +
+      "source_ref, source_occurred_at, subject_ref, trust_tier, significance, confidence, evidence, audience, " +
+      "dedupe_key, identity_key, received_at) " +
+      "SELECT ?, village_id, module_id, batch_id, correlation_id, kind, ?, quote, source_ref, source_occurred_at, " +
+      "subject_ref, trust_tier, significance, confidence, evidence, audience, ?, identity_key, received_at " +
+      "FROM external_proposals WHERE id = ? AND status = 'proposed'",
+    [input.id, JSON.stringify(input.payload), input.dedupeKey, fromId],
+  );
+  if (!(Number(res?.affectedRows ?? 0) > 0)) return false;
+  await pool.query(
+    "INSERT IGNORE INTO external_proposal_subjects (id, proposal_id, subject_ref, member_id, position) " +
+      "SELECT CONCAT('eps-', LEFT(REPLACE(UUID(), '-', ''), 12)), ?, subject_ref, member_id, position " +
+      "FROM external_proposal_subjects WHERE proposal_id = ?",
+    [input.id, fromId],
+  );
+  return true;
+}
+
+/**
+ * Move one record that is STILL WAITING into a newer delivery, and report
+ * whether it moved.
+ *
+ * For a sync a steward can press again. A re-read that finds the same claim
+ * about the same vendor record lands nothing new (the dedupe key holds it),
+ * which used to leave that record in the OLD delivery while everything that
+ * changed arrived in the new one, so neither delivery could be reviewed
+ * whole. The newer read owns what it re-read, so a waiting record follows it.
+ *
+ * `AND status = 'proposed'` is the guard: a record a steward has accepted,
+ * rejected, or that a newer claim superseded, is history and never moves.
+ */
+export async function rebatchWaiting(pool: Pool, id: string, batchId: string): Promise<boolean> {
+  const [res] = await pool.query<any>(
+    "UPDATE external_proposals SET batch_id = ? WHERE id = ? AND status = 'proposed' AND batch_id <> ?",
+    [batchId, id, batchId],
+  );
+  return Number(res?.affectedRows ?? 0) > 0;
 }

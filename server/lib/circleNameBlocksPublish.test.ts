@@ -216,7 +216,8 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     }) as mysql.Pool;
     const drafts = await listDrafts(pool);
     const context = await loadPreviewContext(counting);
-    expect(queries).toBe(2);
+    // Seats, circles, and the seats somebody holds (0243): three reads, once.
+    expect(queries).toBe(3);
 
     const stuck = stuckQueueDrafts(drafts, context, 99);
     const ids = stuck.map((d) => d.draftId);
@@ -225,7 +226,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     expect(ids).not.toContain(clean);
     // Made by a person, so no proposal goes back and it is not the queue's to list.
     expect(ids).not.toContain(byHand);
-    expect(queries).toBe(2);
+    expect(queries).toBe(3);
 
     // A draft whose preview throws is listed with its withdraw, and the rest still are.
     const broken = drafts.map((d) => (d.id === blockedA ? ({ ...d, changes: undefined } as unknown as Draft) : d));

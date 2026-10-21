@@ -42,6 +42,7 @@ export const SHEET_WORDS = {
   unreachable: "Held, and not reachable through the map yet.",
   raise: "Raise your hand",
   raiseConsequence: "A raised hand reaches the founding team, who will be in touch.",
+  applyConsequence: "Opens your application for this seat and its terms. A seat holder or the village adopts it.",
   raisePlaceholder: "Why this role calls to you (optional)",
   raiseTermLabel: "End date for your seat (optional)",
   raiseSubmit: "Raise my hand",
@@ -70,6 +71,14 @@ export const SHEET_WORDS = {
   livePreview: "Live preview",
   livePreviewSub: "Shows the role you picked.",
 } as const;
+
+/**
+ * The line under a seat's live preview. "Shows the role you picked." was wrong
+ * twice over for a seat application with several seats: it is a seat, and the
+ * card shows only the first (red team U11). No count: the line says which.
+ */
+export const seatPreviewSub = (picked: number): string =>
+  picked > 1 ? "Shows the first seat you picked. Your terms cover every seat you picked." : "Shows the seat you picked.";
 
 export const suitsLabel = (className: string): string => `Suits ${className}`;
 export const speaksForLabel = (circle: string): string => `Speaks for ${circle}`;

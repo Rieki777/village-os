@@ -65,13 +65,21 @@ export default function TypographyPanel({ password }: { password: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // SENDS ONLY ITS OWN THREE FIELDS. The server merges `theme` key by key, and
+  // this panel loads the whole theme once, when the page opens. Posting that
+  // whole copy back wrote every field it held at load time over whatever the
+  // Look panel beside it had saved since, so a founder who saved their colour
+  // and then their fonts lost the colour without a word (found in production, 2026-10-14).
+  // The Look panel already sends only its own fields; this one now does too.
   const save = async (next: ThemeFields) => {
     setSaving(true);
     try {
       const res = await fetch("/api/admin/brand", {
         method: "PUT",
         headers: { Authorization: `Bearer ${password}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: next }),
+        body: JSON.stringify({
+          theme: { fontDisplay: next.fontDisplay ?? "", fontBody: next.fontBody ?? "", fontAccent: next.fontAccent ?? "" },
+        }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();

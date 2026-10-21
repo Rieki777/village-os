@@ -1,6 +1,12 @@
 /**
  * The last step of a sitting: everything written, editable in place, then
  * Save. Pulse numbers show as a line each with a way back to change them.
+ *
+ * WHERE IT GOES is said here, beside Save, because this is the moment it is
+ * decided. An entry is shared with the village's organisational memory unless
+ * the member keeps it private (ruling 2026-10-05). The sentence says "when
+ * that is connected" on purpose: until the bridge carries journal entries,
+ * nothing has gone anywhere, and the page must not claim otherwise.
  */
 import { JOURNAL_ANSWER_MAX, JOURNAL_REFLECTION_MAX } from "@shared/journal";
 import GrowingTextarea from "./GrowingTextarea";
@@ -13,6 +19,7 @@ export default function ReviewStep({
   onText,
   onGoTo,
   onReflection,
+  onKeepPrivate,
   onSave,
   saving,
   canSave,
@@ -22,6 +29,7 @@ export default function ReviewStep({
   onText: (key: string, text: string) => void;
   onGoTo: (index: number) => void;
   onReflection: (text: string) => void;
+  onKeepPrivate: (keepPrivate: boolean) => void;
   onSave: () => void;
   saving: boolean;
   canSave: boolean;
@@ -92,6 +100,24 @@ export default function ReviewStep({
           </button>
         </div>
       )}
+
+      <div className={CARD}>
+        <label className="flex items-start gap-3 font-semibold text-foreground">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 shrink-0 accent-current"
+            checked={sitting.keepPrivate === true}
+            onChange={(e) => onKeepPrivate(e.target.checked)}
+            aria-describedby="review-privacy-hint"
+          />
+          Keep this entry private
+        </label>
+        <p id="review-privacy-hint" className={`${HINT} mt-1`}>
+          {sitting.keepPrivate === true
+            ? "It stays in this village, for you alone."
+            : "Unless you keep it private, this entry is shared with the village's organisational memory when that is connected, with member names replaced by code-names. Inside the village it is still yours alone."}
+        </p>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className={BTN_PRIMARY} onClick={onSave} disabled={saving || !canSave}>

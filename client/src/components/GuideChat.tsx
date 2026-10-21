@@ -3,7 +3,8 @@
 // /api/assistant/proposal with a `kind`, so the two flows stay in step.
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Loader2, CheckCircle2, ArrowRight, Send } from "lucide-react";
-import { submitProposal, ProposalKind } from "@/lib/proposals";
+import { sendProposal, ProposalKind } from "@/lib/proposals";
+import type { IdeaReceipt } from "@shared/questIdeas";
 import MicButton from "@/components/MicButton";
 
 interface ChatMsg { role: "user" | "assistant"; content: string }
@@ -24,7 +25,8 @@ export default function GuideChat({
   assistantName: string;
   greeting?: string;
   empty: Record<string, any>;
-  onSubmitted: () => void;
+  /** `idea` is where a quest idea went (null for other kinds), and `sent` is what left, so a held idea can be edited. */
+  onSubmitted: (idea: IdeaReceipt | null, sent: Record<string, any>) => void;
   onFallback: () => void;
   onRefineInForm: (p: Record<string, any>) => void;
   refineLabel?: string;
@@ -80,10 +82,10 @@ export default function GuideChat({
   const submit = async () => {
     if (!proposal) return;
     setSubmitting(true);
-    const ok = await submitProposal(kind, proposal);
+    const answer = await sendProposal(kind, proposal);
     setSubmitting(false);
-    if (ok) {
-      onSubmitted();
+    if (answer.ok) {
+      onSubmitted(answer.idea, proposal);
       return;
     }
     /*

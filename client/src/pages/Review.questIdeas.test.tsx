@@ -54,13 +54,13 @@ const card = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function serve(quests: unknown[]) {
+function serve(quests: unknown[], drops: unknown[] = []) {
   const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
     if (String(url).startsWith("/api/review/queue")) {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ batches: [], quests, drops: [], counts: { proposals: 0, quests: quests.length } }),
+        json: async () => ({ batches: [], quests, drops, counts: { proposals: 0, quests: quests.length } }),
       };
     }
     if (String(url).startsWith("/api/review/quests/")) {
@@ -124,5 +124,39 @@ describe("a quest idea on /review says where it came from, and what the person a
       reward: { gratitude: "50-100", stayCreditReward: null },
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
+  });
+
+  it("sends the reason a steward typed with a rejection, which the proposer reads", async () => {
+    // Rejecting always sent an empty note, so a no could never say why.
+    const fetchMock = serve([card()]);
+    renderReview();
+    await waitFor(() => expect(screen.getByText("Build a seed library shelf")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Why, if you reject it/), { target: { value: "  The shelf went up last moon.  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+
+    const rejected = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/reject");
+    await waitFor(() => expect(rejected()).toBeTruthy());
+    expect(JSON.parse(String(rejected()![1]?.body))).toEqual({ note: "The shelf went up last moon." });
+  });
+});
+
+describe("the refusal count says what was kept", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("says a held quest idea is kept in the admin inbox, and an outside service's refused record was not stored", async () => {
+    // "None of it was stored" was printed under every line, and for a quest
+    // idea it was false: the submission is stored, only the review copy is not.
+    serve([], [
+      { moduleId: PROPOSE_QUEST_MODULE, reason: "over_allowance", dropped: 2, lastAt: null },
+      { moduleId: "saberra", reason: "contained_an_email", dropped: 1, lastAt: null },
+    ]);
+    renderReview();
+    const idea = await screen.findByText(/^2 from the Propose a Quest form were held back/);
+    expect(idea.textContent).toContain("Each one is kept as a submission in the admin inbox, under Form Submissions.");
+    expect(idea.textContent).not.toContain("None of it was stored");
+    const vendor = screen.getByText(/^1 from saberra carried an email address/);
+    expect(vendor.textContent).toContain("None of it was stored.");
   });
 });

@@ -39,9 +39,14 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
+import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
+import { canonicalJson } from "../../shared/canonicalJson";
+import { OFFER_WORDS, readTermsOffer } from "../../shared/seatTermsOffer";
+import { ORG_DRAFT } from "../../shared/ballotSubjects";
+import { openBallotFor } from "./ballots";
 
 export type DraftOp =
   | "create_seat"
@@ -50,7 +55,8 @@ export type DraftOp =
   | "rest_seat"
   | "seat_holder"
   | "end_holding"
-  | "move_circle";
+  | "move_circle"
+  | "rest_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -343,6 +349,7 @@ export async function setDraftVision(
   const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
   if (!d) return { ok: false, error: "No such draft" };
   if (d.status !== "open") return { ok: false, error: `This draft is ${d.status} and can no longer be edited` };
+  if (await openBallotFor(pool, ORG_DRAFT, draftId)) return { ok: false, error: UNDER_A_VOTE };
   await pool.query("UPDATE org_drafts SET vision = ? WHERE id = ?", [
     vision === null ? null : JSON.stringify(vision),
     draftId,
@@ -602,6 +609,10 @@ export async function createDraft(
   return { ok: true, id };
 }
 
+/** Why an open draft cannot be edited while the village is voting on it. */
+const UNDER_A_VOTE =
+  "The village is voting on this draft, so it cannot be changed until the vote closes. Withdraw the draft to stop the vote.";
+
 export async function addChange(
   pool: Pool,
   draftId: string,
@@ -612,6 +623,9 @@ export async function addChange(
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
   if (d.status !== "open") return { ok: false, error: `This draft is ${d.status} and can no longer be edited` };
+  // The village votes on the draft it read, so a draft under a vote is frozen
+  // (server/lib/orgDraftDecide.ts). Withdrawing it calls the vote off.
+  if (await openBallotFor(pool, ORG_DRAFT, draftId)) return { ok: false, error: UNDER_A_VOTE };
   const [[n]] = await pool.query<any[]>(
     "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM org_draft_changes WHERE draft_id = ?", [draftId],
   );
@@ -801,19 +815,45 @@ export interface PreviewContext {
   roles: any[];
   circleIds: Set<string>;
   /** Every circle and where it sits, for a move_circle line (0208). */
-  circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean }>;
+  circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean; status?: string }>;
+  /**
+   * Seats somebody holds right now (0243). Read so a steward's retirement of
+   * the old chart can never unseat anybody, whatever changed since the accept.
+   * Optional, because a context built by hand in a test may leave it out, and
+   * then only that one check has nothing to read.
+   */
+  heldSeatIds?: Set<string>;
+}
+
+/**
+ * A retirement a steward chose, as opposed to one a machine proposed.
+ *
+ * The structure review stamps `chosenBy` with the steward's id on every
+ * `rest_seat` and `rest_circle` it writes, because retiring the old chart is
+ * the steward's own decision, made on the review page and nowhere else. No
+ * vendor payload ever becomes one of these ops: the accept paths only make
+ * circles, make seats and update seats out of what a vendor sent.
+ */
+function stewardChose(c: { payload?: any }): boolean {
+  return typeof c.payload?.chosenBy === "string" && c.payload.chosenBy.trim() !== "";
 }
 
 export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<PreviewContext> {
-  const [roles]: any = await pool.query("SELECT id, name, is_example, active FROM org_roles");
+  const roles = await readRolesForPreview(pool);
   const circles = await readCirclesForPreview(pool);
   const all = (circles as any[]).map((c) => ({
     id: String(c.id),
     name: String(c.name ?? c.id),
     parentCircleId: c.parent_circle_id ? String(c.parent_circle_id) : null,
     isExample: !!c.is_example,
+    status: c.status ? String(c.status) : "active",
   }));
-  return { roles: roles as any[], circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)), circles: all };
+  return {
+    roles: roles as any[],
+    circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)),
+    circles: all,
+    heldSeatIds: await readHeldSeatIds(pool),
+  };
 }
 
 /**
@@ -897,10 +937,18 @@ export function previewLoadedDraft(
      */
     if (machine && (c.op === "seat_holder" || c.op === "end_holding")) {
       blocked = "A proposal never names who holds a seat. Structure can be proposed; occupancy is a human act";
+    } else if (machine && carriesTerms(c.payload)) {
+      // TERMS NEVER CROSS THE BRIDGE (seat settings PR3). What a seat offers
+      // whoever holds it is the village's own economics, written by a member.
+      // A vendor's or Saberra's draft carrying an offer under either spelling
+      // is blocked here, and `applyChange` refuses it again at publish.
+      blocked = OFFER_WORDS.machineRefused;
     } else if (machine && index > cap) {
       blocked = `This proposal is past this village's limit of ${cap} changes in one reorganisation`;
-    } else if (machine && c.op === "rest_seat") {
+    } else if (machine && c.op === "rest_seat" && !stewardChose(c)) {
       blocked = "A proposal never rests an existing seat. Removing a seat from the chart is a human decision";
+    } else if (machine && c.op === "rest_circle" && !stewardChose(c)) {
+      blocked = "A proposal never retires a circle. Retiring one is a human decision";
     }
 
     if (blocked) {
@@ -929,6 +977,52 @@ export function previewLoadedDraft(
       else if (moving.isExample) blocked = "A standing example is not moved. Publish your own circles and it is removed";
       else blocked = parentingRefusal(working, circleId, parentId)?.message ?? null;
       if (!blocked && moving) moving.parentCircleId = parentId;
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
+      continue;
+    }
+
+    if (c.op === "rest_circle") {
+      /*
+       * A CIRCLE A DRAFT RETIRES (0243): it rests as `dormant`, the status the
+       * old chart's retire list names as the safe first step, and the row and
+       * its history stay.
+       *
+       * ONLY AN EMPTY CIRCLE. Checked against the village as this whole draft
+       * leaves it, in any order: a seat still in it that this draft neither
+       * rests nor moves out, a seat this draft makes or moves into it, or a
+       * circle still inside it, each refuses. Retiring a circle never moves or
+       * unseats anybody by the back door.
+       */
+      const circleId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
+      const target = working.find((x) => x.id === circleId);
+      reads = `Retire the circle "${target?.name ?? circleId}", so it rests as dormant`;
+      const restedSeats = new Set(draft.changes.filter((x) => x.op === "rest_seat").map((x) => x.orgRoleId));
+      const restedCircles = new Set(
+        draft.changes
+          .filter((x) => x.op === "rest_circle")
+          .map((x) => (x.orgRoleId.startsWith("circle:") ? x.orgRoleId.slice("circle:".length) : x.orgRoleId)),
+      );
+      const movedTo = new Map<string, string>();
+      for (const x of draft.changes) {
+        const to = primitiveText(circleIdOf(x.payload));
+        if ((x.op === "update_seat" || x.op === "create_seat") && to) movedTo.set(x.orgRoleId, to);
+      }
+      const liveLeft = roles.filter((r) => {
+        if (r.is_example || !r.active || restedSeats.has(String(r.id))) return false;
+        const where = movedTo.get(String(r.id)) ?? (r.circle_id ? String(r.circle_id) : "");
+        return where === circleId;
+      }).length;
+      const madeHere = draft.changes.filter((x) => x.op === "create_seat" && movedTo.get(x.orgRoleId) === circleId).length;
+      const seatsLeft = liveLeft + madeHere;
+      const childLeft = working.find(
+        (x) => x.parentCircleId === circleId && !x.isExample && x.status !== "dormant" && !restedCircles.has(x.id),
+      );
+      if (!target) blocked = "That circle does not exist";
+      else if (target.isExample) blocked = "A standing example is not retired. Publish your own circles and it is removed";
+      else if (target.status === "dormant") blocked = "That circle is already dormant";
+      else if (seatsLeft > 0) {
+        blocked = `${seatsLeft === 1 ? "A seat still sits" : `${seatsLeft} seats still sit`} in this circle. Retire or move them first`;
+      } else if (childLeft) blocked = `"${childLeft.name}" still sits inside this circle. Retire or move it first`;
       lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
       continue;
     }
@@ -1044,6 +1138,8 @@ export function previewLoadedDraft(
         const circle = circleNameBlock(c.payload, fromQueue, reasons.length === 0);
         if (circle) reasons.push(circle);
       }
+      const terms = termsBlock(c.payload);
+      if (terms) reasons.push(terms);
       blocked = reasons.length ? reasons.join(". ") : null;
     } else {
       if (!existing && !willExist.has(c.orgRoleId)) blocked = "That seat no longer exists";
@@ -1055,6 +1151,7 @@ export function previewLoadedDraft(
         reads = `Edit ${name}`;
         if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
         if (!blocked) blocked = seatShapeBlocks(c.payload)[0] ?? null;
+        if (!blocked) blocked = termsBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
@@ -1071,13 +1168,36 @@ export function previewLoadedDraft(
           blocked = "That circle does not exist, and this draft does not create it";
         }
       }
-      if (c.op === "rest_seat") reads = `Rest ${name}, so it stops appearing on the chart`;
+      if (c.op === "rest_seat") {
+        reads = `Rest ${name}, so it stops appearing on the chart`;
+        // A steward retiring the old chart never unseats anybody (0243). Read
+        // at preview, and so again inside the publish transaction, so a seating
+        // made after the accept still holds the seat.
+        if (!blocked && stewardChose(c) && context.heldSeatIds?.has(c.orgRoleId)) {
+          blocked = "Somebody holds this seat. Give them a seat in the new chart before it is retired";
+        }
+      }
       if (c.op === "seat_holder") reads = `Put ${primitiveText(c.payload?.displayName) ?? "a member"} in ${name}`;
       if (c.op === "end_holding") reads = `End a holding on ${name}`;
     }
     lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
   }
   return { lines, blocked: lines.filter((l) => l.blocked).length };
+}
+
+/** True when a change carries terms on offer, under the field's name or the column's. */
+function carriesTerms(payload: Record<string, any> | null | undefined): boolean {
+  return !!payload && (payload.termsOffer !== undefined || payload.terms_offer !== undefined);
+}
+
+/**
+ * Why an offer a person wrote cannot be published, or null. `null` itself is
+ * a real offer: it takes the seat's terms off offer.
+ */
+function termsBlock(payload: Record<string, any> | null | undefined): string | null {
+  if (!payload || payload.termsOffer === undefined) return null;
+  const read = readTermsOffer(payload.termsOffer);
+  return read.ok ? null : `These terms cannot be offered. ${read.problem}`;
 }
 
 /** One change in a draft that cannot apply: what it would do, and why it cannot. */
@@ -1171,7 +1291,10 @@ export async function publishDraft(
    * term (0199). A draft with no seating in it publishes without one.
    */
   calendar?: SeatCalendar | null,
-): Promise<{ ok: true; applied: number; seated: DraftSeating[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; applied: number; seated: DraftSeating[]; circleMoves: DraftCircleMove[] }
+  | { ok: false; error: string }
+> {
   const conn: PoolConnection = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -1207,11 +1330,17 @@ export async function publishDraft(
      * this publish wrote.
      */
     const seated: DraftSeating[] = [];
+    const circleMoves: DraftCircleMove[] = [];
     for (const c of draft.changes) {
       const before = await captureBefore(conn, c);
       await conn.query("UPDATE org_draft_changes SET before_json = ? WHERE id = ?", [JSON.stringify(before), c.id]);
-      const s = await applyChange(conn, c, calendar ?? null);
+      const s = await applyChange(conn, c, calendar ?? null, { machine: draft.sourceKind !== "human", by: publishedBy });
       if (s) seated.push(s);
+      // The status the circle held before, read inside this transaction, so the
+      // caller can run the dormancy hook once the commit has happened.
+      if (c.op === "rest_circle" && before) {
+        circleMoves.push({ id: String(before.id), name: String(before.name ?? before.id), from: String(before.status ?? "active"), to: "dormant" });
+      }
     }
     // THE WHOLE POINT OF THE `status = 'open'` CLAUSE IS THIS COUNT.
     //
@@ -1230,7 +1359,7 @@ export async function publishDraft(
       return { ok: false, error: "This draft was published by someone else while this was being applied" };
     }
     await conn.commit();
-    return { ok: true, applied: draft.changes.length, seated };
+    return { ok: true, applied: draft.changes.length, seated, circleMoves };
   } catch (e: any) {
     await conn.rollback();
     return { ok: false, error: String(e?.message ?? e).slice(0, 200) };
@@ -1240,6 +1369,10 @@ export async function publishDraft(
 }
 
 async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any> {
+  if (c.op === "rest_circle") {
+    const [[row]] = await conn.query<any[]>("SELECT id, name, status FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    return row ?? null;
+  }
   if (c.op === "move_circle") {
     const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
@@ -1256,7 +1389,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting FROM org_roles WHERE id = ?",
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
   return row ?? null;
@@ -1267,7 +1400,24 @@ const SEAT_FIELDS: Record<string, string> = {
   name: "name", circleId: "circle_id", aim: "aim", domain: "domain",
   whyItMatters: "why_it_matters", seats: "seats", criticality: "criticality",
   recruiting: "recruiting",
+  // 0256: the terms on offer. Written by a draft a HUMAN wrote and nobody
+  // else, and never through the generic loop below: `applyChange` reads it
+  // through the one parser and stamps when and by whom.
+  termsOffer: "terms_offer",
 };
+
+/**
+ * A circle a publish set dormant, for the caller to hand to the dormancy hook
+ * (`applyCircleStatusChanges`) after the commit. Same shape as that hook's
+ * `CircleStatusMove`, written out here so this file imports nothing from the
+ * treasury.
+ */
+export interface DraftCircleMove {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+}
 
 /** The seating a change made, for the caller to tell the person about. */
 export interface DraftSeating {
@@ -1279,7 +1429,27 @@ export interface DraftSeating {
   seatAim: string | null;
 }
 
-async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatCalendar | null): Promise<DraftSeating | null> {
+/**
+ * The terms a change puts on offer, as the three column values, or undefined
+ * when it names none. Refuses a machine's draft outright: the preview has
+ * already blocked it, and this is the second lock on the same door. Exported
+ * so that lock has a test of its own (seatTermsOffer.drafts.test.ts).
+ */
+export function offerColumns(p: any, who: { machine: boolean; by: string | null }): [string | null, Date, string | null] | undefined {
+  if (p.termsOffer === undefined && p.terms_offer === undefined) return undefined;
+  if (who.machine) throw new Error(OFFER_WORDS.machineRefused);
+  if (p.termsOffer === undefined) return undefined;
+  const read = readTermsOffer(p.termsOffer);
+  if (!read.ok) throw new Error(`These terms cannot be offered. ${read.problem}`);
+  return [read.settings ? canonicalJson(read.settings) : null, new Date(), who.by];
+}
+
+async function applyChange(
+  conn: PoolConnection,
+  c: DraftChange,
+  calendar: SeatCalendar | null,
+  who: { machine: boolean; by: string | null } = { machine: true, by: null },
+): Promise<DraftSeating | null> {
   const p = c.payload ?? {};
   if (c.op === "move_circle") {
     /*
@@ -1331,18 +1501,26 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
     // and flag are NOT NULL with a DEFAULT, and an explicit NULL is not an
     // absent column, so an unnamed field writes the default value itself.
     // `previewDraft` has already blocked any criticality other than these two.
+    // 0256: and the terms it offers, when a member wrote some.
+    const offer = offerColumns(p, who) ?? [null, null, null];
     await conn.query(
-      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
-        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0],
+        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer],
     );
     return null;
   }
   if (c.op === "rest_seat") {
     await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
+    return null;
+  }
+  if (c.op === "rest_circle") {
+    // Raw SQL in the transaction and a version bump, for the reason create_circle gives above.
+    await conn.query("UPDATE circles SET status = 'dormant' WHERE id = ? AND is_example = 0", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return null;
   }
   if (c.op === "seat_holder") {
@@ -1402,9 +1580,14 @@ async function applyChange(conn: PoolConnection, c: DraftChange, calendar: SeatC
   const sets: string[] = [];
   const args: any[] = [];
   for (const [key, col] of Object.entries(SEAT_FIELDS)) {
-    if (p[key] === undefined) continue;
+    if (p[key] === undefined || key === "termsOffer") continue;
     sets.push(`\`${col}\` = ?`);
     args.push(p[key]);
+  }
+  const offer = offerColumns(p, who);
+  if (offer) {
+    sets.push("`terms_offer` = ?", "`terms_offer_at` = ?", "`terms_offer_by` = ?");
+    args.push(...offer);
   }
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
@@ -1489,6 +1672,14 @@ export async function revertDraft(
         const revertId = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
         await conn.query("UPDATE circles SET status = 'dormant' WHERE id = ?", [revertId]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
         await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+      } else if (c.op === "rest_circle") {
+        // The status it held before the publish. A retired circle comes back as
+        // it was; its swept treasury does not, and reviving it says so where the
+        // circle is edited.
+        if (c.beforeJson?.status) {
+          await conn.query("UPDATE circles SET status = ? WHERE id = ?", [String(c.beforeJson.status), c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+          await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        }
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
@@ -1515,12 +1706,26 @@ export async function revertDraft(
         );
       } else if (c.beforeJson) {
         const b = c.beforeJson;
+        /*
+         * 0256: the terms on offer go back too, but ONLY when this change's
+         * `before_json` captured them. A draft published by the release before
+         * 0256 captured no terms, and reverting it must not wipe an offer
+         * somebody made since, so the CASE leaves the columns as they stand.
+         */
+        const hadTerms = "terms_offer" in b ? 1 : 0;
+        const termsBack = b.terms_offer === null || b.terms_offer === undefined ? null
+          : typeof b.terms_offer === "string" ? b.terms_offer : JSON.stringify(b.terms_offer);
         await conn.query(
           `UPDATE org_roles SET circle_id = ?, name = ?, aim = ?, domain = ?, accountabilities = ?,
-             why_it_matters = ?, seats = ?, criticality = ?, active = ?, recruiting = ? WHERE id = ?`,
+             why_it_matters = ?, seats = ?, criticality = ?, active = ?, recruiting = ?,
+             terms_offer = CASE WHEN ? = 1 THEN ? ELSE terms_offer END,
+             terms_offer_at = CASE WHEN ? = 1 THEN ? ELSE terms_offer_at END,
+             terms_offer_by = CASE WHEN ? = 1 THEN ? ELSE terms_offer_by END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
-            b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting, c.orgRoleId],
+            b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
+            hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
+            hadTerms, b.terms_offer_by ?? null, c.orgRoleId],
         );
       }
     }

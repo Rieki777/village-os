@@ -65,6 +65,11 @@ import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
+import { STRUCTURE_KINDS } from "@shared/structurePlan";
+import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
+
+/** The kinds that change the chart, as the structure review reads them. */
+const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
 
 interface ProposalCard {
   id: string;
@@ -109,6 +114,8 @@ interface Queue {
   drops: Drop[];
   /** Open drafts this queue made that cannot publish. Absent from an older server. */
   stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
+  /** Every open draft this queue made, with the batch whose page shows it. Absent from an older server. */
+  openDrafts?: { draftId: string; title: string; changes: number; batchId: string | null }[];
   counts: { proposals: number; quests: number };
   /**
    * The halves this reader was given. An older server sends no `scope`, and it
@@ -591,10 +598,10 @@ export default function Review() {
     }
   };
 
-  const rejectQuest = async (q: QuestCard) => {
+  const rejectQuest = async (q: QuestCard, reason: string) => {
     setBusy(q.id);
     try {
-      if (await post(`/api/review/quests/${q.id}/reject`, { note: "" })) {
+      if (await post(`/api/review/quests/${q.id}/reject`, { note: reason })) {
         toast.success("Rejected");
         await load();
       }
@@ -744,8 +751,12 @@ export default function Review() {
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               {drops.map((d) => (
                 <li key={`${d.moduleId}:${d.reason}`}>
-                  {d.dropped} from {d.moduleId} {DROP_WORDS[d.reason] ?? `were refused as ${d.reason}`}.
-                  None of it was stored.
+                  {/* A quest idea held back is still a stored submission; an outside service's refused record is not. */}
+                  {d.dropped} from {d.moduleId === PROPOSE_QUEST_MODULE ? "the Propose a Quest form" : d.moduleId}{" "}
+                  {DROP_WORDS[d.reason] ?? `were refused as ${d.reason}`}.{" "}
+                  {d.moduleId === PROPOSE_QUEST_MODULE
+                    ? "Each one is kept as a submission in the admin inbox, under Form Submissions."
+                    : "None of it was stored."}
                 </li>
               ))}
             </ul>
@@ -782,6 +793,26 @@ export default function Review() {
             </button>
           </div>
         ))}
+
+        {/* An open draft from this queue, and where to finish it. An accepted
+            batch leaves the queue, so without this card the draft it made could
+            be found from no screen a steward uses. */}
+        {(queue?.openDrafts ?? [])
+          .filter((d) => d.batchId && !stuck[d.draftId])
+          .map((d) => (
+            <div key={d.draftId} className={card} data-testid={`open-draft-${d.draftId}`}>
+              <h2 className="text-sm font-semibold text-foreground">A draft from this queue is waiting to publish</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                {d.title}. {d.changes === 1 ? "1 change" : `${d.changes} changes`}. Nothing is live yet.
+              </p>
+              <Link
+                href={`/review/structure/${encodeURIComponent(String(d.batchId))}`}
+                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              >
+                Open the draft
+              </Link>
+            </div>
+          ))}
 
         {notRead.lines.length > 0 && (
           <div className={card}>
@@ -834,6 +865,17 @@ export default function Review() {
               </h2>
               <p className="text-xs text-muted-foreground">Arrived {when(batch.receivedAt)}</p>
             </div>
+
+            {/* A batch that changes the chart opens whole, as one change, on its
+                own page: the map, the seats that already exist, and the draft. */}
+            {batch.items.some((i) => CHART_KINDS.includes(i.kind)) && (
+              <Link
+                href={`/review/structure/${encodeURIComponent(batch.batchId)}`}
+                className="inline-flex items-center text-sm bg-teal-deep text-white rounded-lg px-4 py-2 mt-3 min-h-[44px] font-medium"
+              >
+                Review it as one structure change
+              </Link>
+            )}
 
             {typeof batch.proposedChanges === "number" && typeof queue?.proposalChangeLimit === "number" && (
               <div className="mt-3">
@@ -933,7 +975,7 @@ export default function Review() {
             arrived={when(q.receivedAt)}
             busy={busy === q.id}
             onAccept={(typed) => void acceptQuest(q, typed)}
-            onReject={() => void rejectQuest(q)}
+            onReject={(reason) => void rejectQuest(q, reason)}
           />
         ))}
       </div>

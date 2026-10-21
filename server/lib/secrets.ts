@@ -78,22 +78,40 @@ import type { Pool } from "mysql2/promise";
 import { registrySecretKeys } from "../../shared/modules";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 
-/** The platform's own seven. A literal union, so every call site still typechecks. */
+/**
+ * The platform's own slots. A literal union, so every call site still typechecks.
+ *
+ * The last two are the setup game's MASTER ROOTS (shared/guilds.ts,
+ * `railway-root` and `dns-root`): one Railway token scoped to one project and
+ * environment, and one DNS token scoped to one zone. They live here because
+ * the village has ONE root cellar (ruling of 2026-10-13), so they inherit every
+ * rule this store already keeps: sealed at rest, written only by an admin or
+ * founder through the Integrations route, audit-logged on every set and clear,
+ * and never returned to any surface, an agent's included. Only the server reads
+ * them, to call the provider. They have no environment fallback, which is
+ * `CELLAR_ONLY` below.
+ */
 const BASE_SECRET_KEYS = [
   "stripe_secret_key",
   "stripe_webhook_secret",
   "resend_api_key",
+  // Village Comms: the signing secret the email provider's delivery reports
+  // carry, checked by server/routes/commsWebhook.ts. Declared beside the key it
+  // belongs to, the way the Stripe pair sits together.
+  "resend_webhook_secret",
   "assistant_api_key",
   "riverside_webhook_secret",
   "governance_hub_secret",
   "basescan_api_key",
+  "railway_project_token",
+  "dns_zone_token",
 ] as const;
 export type BaseSecretKey = (typeof BASE_SECRET_KEYS)[number];
 
 /**
  * A platform key, or a slot a listing contributed.
  *
- * `string & {}` keeps the seven literals in autocomplete and in every existing
+ * `string & {}` keeps the platform literals in autocomplete and in every existing
  * call site's type check while admitting a registry-contributed slot. Before
  * this, adding one vendor credential meant editing a frozen union and a
  * hardcoded env map in platform code and shipping a release to every fork,
@@ -111,24 +129,53 @@ export const SECRET_KEYS: readonly SecretKey[] = [
   ...registrySecretKeys().filter((k) => !(BASE_SECRET_KEYS as readonly string[]).includes(k)),
 ];
 
-/** Env fallback per platform key, the names FORK_RUNBOOK.md has always documented. */
-const BASE_ENV_FALLBACK: Record<BaseSecretKey, string> = {
+/**
+ * Env fallback per platform key, the names FORK_RUNBOOK.md has always
+ * documented. `null` is a slot with NO fallback, said out loud.
+ *
+ * CELLAR_ONLY. A master root in the service's own environment would be
+ * readable by every process in the container and by anybody with the hosting
+ * dashboard, and the Railway token would sit inside the very project it can
+ * rewrite. So the two roots are typed into the store or not held at all.
+ */
+const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   stripe_secret_key: "STRIPE_SECRET_KEY",
   stripe_webhook_secret: "STRIPE_WEBHOOK_SECRET",
   resend_api_key: "RESEND_API_KEY",
+  resend_webhook_secret: "RESEND_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   assistant_api_key: "ANTHROPIC_API_KEY",
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",
   basescan_api_key: "BASESCAN_API_KEY",
+  railway_project_token: null,
+  dns_zone_token: null,
 };
 
 /**
- * The env var a slot falls back to. The seven keep the exact names the runbook
+ * The env var a slot falls back to. The platform slots keep the exact names the runbook
  * documents; a registry slot takes its own name uppercased, which is a rule a
  * fork operator can apply without reading any code.
  */
-export function envNameFor(key: SecretKey): string {
-  return BASE_ENV_FALLBACK[key as BaseSecretKey] ?? String(key).toUpperCase();
+export function envNameFor(key: SecretKey): string | null {
+  if (Object.prototype.hasOwnProperty.call(BASE_ENV_FALLBACK, key)) return BASE_ENV_FALLBACK[key as BaseSecretKey];
+  return String(key).toUpperCase();
+}
+
+/**
+ * The Integrations cards for the two master roots, which `integrationCards()`
+ * in server/index.ts lists after the platform's own. Kept beside the slots
+ * they write, so the copy that says "no host variable stands in" sits next to
+ * the `null` that makes it true.
+ */
+export const ROOT_SLOT_CARDS: ReadonlyArray<{ key: BaseSecretKey; title: string; unlocks: string; getAt: string; placeholder: string }> = [
+  { key: "railway_project_token", title: "Railway, one project", unlocks: "Lets the setup game set and remove this village's hosting variables inside one Railway project and environment. It reaches no other project, and nothing ever reads it back out.", getAt: "railway.com → your project → Settings → Tokens", placeholder: "a token for this project only" },
+  { key: "dns_zone_token", title: "DNS, one domain", unlocks: "Lets the setup game add the records email and your address need, in this one domain only. It is removed after launch and planted again when a record has to change.", getAt: "your DNS host → API tokens → a token limited to this one zone", placeholder: "a token for this zone only" },
+];
+
+/** The env value a slot falls back to, or "" for a slot with no fallback. */
+function envFallback(key: SecretKey, env: NodeJS.ProcessEnv): string {
+  const name = envNameFor(key);
+  return name ? (env[name] ?? "") : "";
 }
 
 // ── The key ─────────────────────────────────────────────────────────────────
@@ -365,7 +412,7 @@ function openStored(
           (k
             ? `${VILLAGE_SECRETS_ENV} does not match the key it was sealed with.`
             : villageSecretsKeyProblem(env)) +
-          ` Falling back to ${envNameFor(key)} if that is set.`,
+          (envNameFor(key) ? ` Falling back to ${envNameFor(key)} if that is set.` : " This slot has no environment fallback."),
       );
     }
     // An empty plaintext is the same as nothing stored: this store has always
@@ -389,7 +436,7 @@ export function secretValue(
 ): string {
   const stored = openStored(key, env, acceptLegacy);
   if (stored) return stored;
-  return env[envNameFor(key)] ?? "";
+  return envFallback(key, env);
 }
 
 export function secretConfigured(key: SecretKey): boolean {
@@ -443,7 +490,7 @@ export function secretStatus(
       unreadable: false,
     };
   }
-  const envValue = env[envNameFor(key)] ?? "";
+  const envValue = envFallback(key, env);
   return {
     key,
     configured: !!envValue,

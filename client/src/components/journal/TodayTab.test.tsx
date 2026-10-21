@@ -117,6 +117,54 @@ describe("choosing how deep", () => {
   });
 });
 
+/*
+ * Ruling 2026-10-05: "All journal entries go to Saberra (if that module is
+ * on) unless specifically marked private." The review step is where that is
+ * decided, so it says so beside Save, and what it shows is what is sent.
+ */
+describe("where an entry goes", () => {
+  const toReview = () => {
+    renderToday();
+    startPractice("Morning");
+    fireEvent.change(screen.getByRole("textbox", { name: morning("light")[0]!.prompt }), { target: { value: "Slept deep." } });
+    for (let i = 0; i < morning("light").length; i++) next();
+  };
+
+  it("saves an entry as shared unless the member keeps it private, and says so before Save", async () => {
+    toReview();
+    const keep = screen.getByRole("checkbox", { name: "Keep this entry private" });
+    expect(keep).not.toBeChecked();
+    expect(screen.getByText(/shared with the village's organisational memory when that is connected/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save to my journal" }));
+    await waitFor(() => expect(bodiesTo("/api/journal/entries").length).toBe(1));
+    expect(bodiesTo("/api/journal/entries")[0].privacy).toBe("internal");
+  });
+
+  it("sends a private entry as private", async () => {
+    toReview();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Keep this entry private" }));
+    expect(screen.getByText("It stays in this village, for you alone.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save to my journal" }));
+    await waitFor(() => expect(bodiesTo("/api/journal/entries").length).toBe(1));
+    expect(bodiesTo("/api/journal/entries")[0].privacy).toBe("private");
+  });
+});
+
+describe("the weekly pulse asks what the founder asked for", () => {
+  it("leads its light pass with role tensions, work between roles and missed opportunities", () => {
+    const keys = questionsFor("pulse", "light").map((q) => q.key);
+    expect(keys).toEqual(["role-tension", "unowned-work", "opportunity"]);
+    renderToday();
+    startPractice("Weekly pulse");
+    for (let i = 0; i < PULSE_METRICS.length; i++) next();
+    expect(screen.getByRole("heading", { name: "What tension are you experiencing in your role right now?" })).toBeInTheDocument();
+    next();
+    expect(screen.getByRole("heading", { name: "What do you see that needs doing and is not part of your role?" })).toBeInTheDocument();
+    next();
+    expect(screen.getByRole("heading", { name: "What opportunity for growth or revenue is Willowbrook not acting on?" })).toBeInTheDocument();
+  });
+});
+
 describe("one question at a time", () => {
   it("moves with Next and Back and keeps what was written", () => {
     renderToday();

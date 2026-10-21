@@ -347,6 +347,18 @@ export interface ModuleDef {
    * the module's own tables (`server/lib/modules.ts`).
    */
   readiness?: () => Promise<ModuleReadiness>;
+  /**
+   * THE GUILD: every seed this module needs planted before it works, by id
+   * from the closed catalog in `shared/guilds.ts` (secrets, OAuth clients, DNS
+   * records, hosting variables). The setup game plants exactly these for a
+   * village that chooses this module, and nothing else.
+   *
+   * A module with nothing to plant says so with `[]`. Absent is refused:
+   * `guildProblems` fails it at intake and in `shared/guilds.test.ts`.
+   * Optional in the TYPE only so test fixtures stay small, the same rule as
+   * `group`. Every `vendor.secretKeys` slot must be planted by a seed here.
+   */
+  guild?: readonly string[];
   /** The named counterparty. Required at connected and managed, absent at included. */
   vendor?: ModuleVendor;
   /**
@@ -489,6 +501,7 @@ export const MODULES: ModuleDef[] = [
   //    honest about what exists; not disableable in v1. ──────────────────────
   {
     id: "quests",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -504,6 +517,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "gratitude",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -542,6 +556,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "progression",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -557,6 +572,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "profiles",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -575,6 +591,7 @@ export const MODULES: ModuleDef[] = [
   //    per-deployment admin act. ──────────────────────────────────────────────
   {
     id: "map",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -610,6 +627,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "resources",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -653,6 +671,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "forum",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -693,6 +712,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "feed",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -709,6 +729,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "messaging",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -730,6 +751,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "stays",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -764,6 +786,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "automation",
+    guild: ["riverside-webhook-secret", "anthropic-api-key"],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -789,6 +812,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "health",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -811,6 +835,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "library",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -854,6 +879,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "badges",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -871,6 +897,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "exchange",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -913,6 +940,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "redemption",
+    guild: [],
     tier: "included",
     // A redemption row names the member who asked, what they asked for, and
     // who decided. That is a named person's financial request.
@@ -973,6 +1001,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "commerce",
+    guild: ["stripe-secret-key", "stripe-webhook"],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -993,6 +1022,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "network",
+    guild: [],
     tier: "included",
     dataClass: "village-content",
     group: "connect",
@@ -1008,6 +1038,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "crowdpool",
+    guild: [],
     tier: "included",
     // The cache holds hub-public campaign content and the public names its
     // feed already shows. No member of THIS village appears in it at all.
@@ -1049,6 +1080,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "tools",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1087,6 +1119,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "events",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1140,6 +1173,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "introductions",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "connect",
@@ -1162,6 +1196,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "journal",
+    guild: [],
     tier: "included",
     // Entries are one person's words about their own life, and feedback names
     // its recipient. Nothing here is village content: every row is a member's.
@@ -1170,7 +1205,7 @@ export const MODULES: ModuleDef[] = [
     setup: "none",
     name: "Journal",
     description:
-      "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+      "A journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. Inside the village an entry is its author's alone; it is shared with organisational memory under code-names unless the member keeps it private. The village reads the pulse as numbers, and members who say yes can receive unsigned feedback in a weekly batch.",
     requires: [],
     // The guide reads the gratitude a member received lately, and the evening
     // practice asks who they would like to thank. Better with it, whole without it.
@@ -1183,7 +1218,54 @@ export const MODULES: ModuleDef[] = [
     // entries stay in their tables and come back intact when it is turned on.
   },
   {
+    id: "sessions",
+    guild: [],
+    tier: "included",
+    // Every row names a person: who was in the room, the number each gave on
+    // arrival while the session was open, who holds each action, who wrote
+    // which note. Arrival words and numbers are erased at close, and the
+    // record that stays is read by the people who were there and by admins.
+    dataClass: "member-pii",
+    group: "coordinate",
+    // Works the day it is switched on. The place line falls back to a neutral
+    // sentence when a village has not written its own, and the usual length
+    // is a working default; both dials are there for a village that wants
+    // its own words and its own rhythm.
+    setup: "none",
+    name: "Live Sessions",
+    description:
+      "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+    requires: [],
+    // The close opens a gratitude round. Gratitude is core today, so this is
+    // always met; it is named so the dependency reads true if that changes.
+    recommends: ["gratitude"],
+    // None in v1. Each door is a member's own, the room's facilitator is a
+    // fact of the session itself, and an admin reads closed records through
+    // `isAdmin`. A facilitation capability can come later without a
+    // migration, because nothing stores one.
+    capabilities: [],
+    /*
+     * `calendar.seasons` is listed here as well as owned by the calendar's
+     * namespace, because the room is the only surface that reads it: the
+     * close stamps the village's own season on the record. A village running
+     * Live Sessions with the calendar switched off would otherwise have no
+     * card in Admin that shows the dial. A blank list is a right answer, so
+     * it does not change this module's `setup: none`.
+     *
+     * `calendar.hemisphere` stays with the calendar alone. It is a
+     * place-dependent dial, and owning one would oblige this module to say
+     * setup is required, while the room only uses it to light the drawn
+     * moon and falls back to the north on an older stamp.
+     */
+    variableKeys: ["sessions.place_line", "sessions.default_minutes", "calendar.seasons"],
+    apiPrefixes: ["/api/sessions"],
+    // No openStateCheck: a session holds no value anybody is owed. Off hides
+    // the surface, and closed records stay in their tables for when it is
+    // turned back on.
+  },
+  {
     id: "governance",
+    guild: [],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -1207,10 +1289,12 @@ export const MODULES: ModuleDef[] = [
       "governance.consent_window_days",
       "governance.default_method",
     ],
-    apiPrefixes: ["/api/governance", "/api/admin/governance"],
+    // `/api/season-plans`: each member's season plan and the village page of them (season plans RC1).
+    apiPrefixes: ["/api/governance", "/api/admin/governance", "/api/season-plans"],
   },
   {
     id: "hypha",
+    guild: ["basescan-api-key"],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
@@ -1283,6 +1367,70 @@ export const MODULES: ModuleDef[] = [
     hyphaOnly: true,
     // readiness attached by the server at boot (needs the pool).
   },
+  {
+    id: "comms",
+    tier: "included",
+    // An address book, what each person agreed to receive, and a record of
+    // every email written to them. A named person's data from the first row.
+    dataClass: "member-pii",
+    group: "connect",
+    // What a village plants before its email works: the Resend account, its
+    // verified sending domain, a key for it, and the sealing key the stored
+    // provider key and delivery-report secret are kept under.
+    guild: ["resend-account", "resend-setup-key", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
+    /*
+     * REQUIRED, because the parts that make email arrive are the village's own
+     * and no default can stand in for them: its provider key, a sending
+     * domain it has verified, a sender on that domain, delivery reports, and a
+     * postal address for the footer. Every one is supplied in Comms Settings,
+     * and the readiness reader in server/lib/modules.ts answers for them.
+     *
+     * WHAT THIS LIFECYCLE GOVERNS IS THE AUTOMATIONS, never the plumbing.
+     * With the module off, no journey enrolls or sends and guest RSVPs,
+     * time-vote emails and letters stay shut. The post office itself,
+     * unsubscribe and preferences, the delivery-report webhook, essential mail
+     * and member notices run whatever this says, because a password link and
+     * a person's "stop" must never wait on a module (the comms build spec
+     * 5.16).
+     */
+    setup: "required",
+    name: "Village Comms",
+    description:
+      "The village's email in one place: reminders for the gatherings people said yes to, a few emails that walk somebody along the path they chose, guest RSVPs, a live vote on a session time, and letters to the people who agreed to get them. Every email is recorded before it goes, and anybody can stop any kind of email with one click.",
+    requires: [],
+    // Gatherings are where most of its emails come from, and the calendar is
+    // still worth having without it. Paths and letters need neither.
+    recommends: ["events"],
+    capabilities: ["comms.manage"],
+    variableKeys: [
+      "comms.quiet_start_hour",
+      "comms.quiet_end_hour",
+      "comms.daily_cap",
+      "comms.event_reminder_minutes",
+      "comms.host_nudge_minutes",
+      "comms.recap_window_days",
+      "comms.guests_default",
+      "comms.time_poll_freeze_hours",
+      "comms.time_poll_settle_minutes",
+      "comms.letters_per_day",
+      "comms.retention_months",
+      "comms.send_rate_per_second",
+      "comms.notice_expiry_minutes",
+      "comms.open_tracking",
+      "comms.click_tracking",
+    ],
+    /*
+     * GATED PER ROUTE, the way `/api/admin/hypha` is, and never mounted whole.
+     * Comms Settings and Sent mail have to work while the module is off,
+     * because a village sets up its sending BEFORE it turns anything on, and
+     * the Settings screen is where that happens. So server/routes/comms.ts
+     * mounts requireModule("comms") on the automation routes alone. The
+     * public prefix (`/api/comms`, unsubscribe and preferences) and the
+     * delivery-report webhook are plumbing and are not listed: listing them
+     * here would say they sit behind a gate they must never sit behind.
+     */
+    apiPrefixes: ["/api/admin/comms"],
+  },
   /**
    * THE FIRST CONNECTED LISTING IN THIS REGISTRY.
    *
@@ -1306,6 +1454,7 @@ export const MODULES: ModuleDef[] = [
    */
   {
     id: "saberra",
+    guild: ["saberra-api-secret"],
     tier: "connected",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -1351,9 +1500,20 @@ export const MODULES: ModuleDef[] = [
      * rather than in a request, because a sync sends the village's sealed
      * credential to whatever address it is given.
      */
-    defaultConfig: { apiUrl: "", dashboardUrl: "" },
+    /*
+     * `pollSchedule` is how often the module syncs by itself, beside the Sync
+     * now button: off, daily, or every six hours. Off is the default and an
+     * absent key reads as off (`saberraPollSchedule`), because a village that
+     * saved its addresses before the schedule existed has no such key stored.
+     */
+    defaultConfig: { apiUrl: "", dashboardUrl: "", pollSchedule: "off" },
     validateConfig: (config: unknown): string | null => {
       const c = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+      // Absent is off. Anything present has to be one of the three, so a typo
+      // can never be read as a schedule nobody chose.
+      if (c.pollSchedule !== undefined && !(SABERRA_POLL_SCHEDULES as readonly unknown[]).includes(c.pollSchedule)) {
+        return "The sync schedule has to be off, daily, or every 6 hours.";
+      }
       const url = typeof c.dashboardUrl === "string" ? c.dashboardUrl.trim() : "";
       // Empty is fine: the village has not been given its dashboard yet, and a
       // module that refuses to save until every optional field is filled is a
@@ -1432,6 +1592,7 @@ export const MODULE_KEY_PREFIXES: Record<string, string> = {
   introductions: "introductions",
   governance: "governance",
   hypha: "hypha",
+  comms: "comms",
 };
 
 /**
@@ -1545,6 +1706,23 @@ export function supportRoute(def: ModuleDef): SupportRoute {
     };
   }
   return { party: "platform", vendorName: null, supportUrl: null, supportEmail: null };
+}
+
+/**
+ * HOW OFTEN ORGANISATIONAL MEMORY SYNCS BY ITSELF, as the module's config
+ * stores it. The saberra listing's `validateConfig` refuses anything else, the
+ * poll (`server/lib/saberraSync.ts`) reads it through `saberraPollSchedule`,
+ * and the admin panel offers exactly these. Declared here, beside the address
+ * rule, for the same reason: this file takes no runtime import.
+ */
+export const SABERRA_POLL_SCHEDULES = ["off", "daily", "every-6-hours"] as const;
+
+export type SaberraPollSchedule = (typeof SABERRA_POLL_SCHEDULES)[number];
+
+/** The schedule a stored config names. Absent, or anything unknown, is off. */
+export function saberraPollSchedule(config: unknown): SaberraPollSchedule {
+  const raw = config && typeof config === "object" ? (config as Record<string, unknown>).pollSchedule : undefined;
+  return (SABERRA_POLL_SCHEDULES as readonly unknown[]).includes(raw) ? (raw as SaberraPollSchedule) : "off";
 }
 
 const HTTPS = /^https:\/\/[^\s]+$/;

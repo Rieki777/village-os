@@ -40,6 +40,8 @@ export const GATE_LINES: Record<string, string> = {
   badges: "The skills members declare here, and the badges their finished work has earned them.",
   commerce:
     "What this project charges for and what it accepts: application fees, donations, deposits and memberships.",
+  comms:
+    "The village's emails: reminders for gatherings you said yes to, letters you asked for, and one click to stop any kind.",
   crowdpool: "The funding ring, the shelf of what is still needed, and the ledger of who has arrived.",
   events: "Gatherings with a time, a place, and a seat you can take.",
   exchange: "Buying this village's own tokens.",
@@ -55,6 +57,8 @@ export const GATE_LINES: Record<string, string> = {
   map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
   messaging: "Private conversations between members, one to one or in a named group.",
   network: "The needs and offers this village shares with the villages it listens to.",
+  sessions:
+    "A circle's calls, held live: who is arriving, the agenda, decisions by consent, and who holds each action, kept for those who were there.",
   stays: "Rooms on this land, what a night costs in stay credits, and how to book one.",
   tools: "One place to find the chat, the documents, and the governance space this village runs on.",
 };
@@ -66,6 +70,7 @@ export const GATE_LINES: Record<string, string> = {
 export const PAGE_GATE_LINES = {
   places: "Every place on this land somebody has photographed, and the pictures they took of it.",
   propose: "The walk that takes a proposal from its first sentence to a ballot the village can vote on.",
+  seasonPlans: "Each member's plan for the season: the seats they keep, hand back or ask for, and what they will do.",
 } as const;
 
 /** The line for a module, or null when there is nothing true to say. */

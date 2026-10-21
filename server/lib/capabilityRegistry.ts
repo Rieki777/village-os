@@ -35,7 +35,7 @@
  * renamed or deleted route breaks this file loudly rather than leaving a
  * village reading a sentence about a door that is no longer there.
  */
-import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 import {
   ALL_CAPABILITIES,
   capabilityLabel,
@@ -113,6 +113,12 @@ export const POWERS: readonly PowerEntry[] = [
     title: "The village's software seats",
     surface: "Seating a software agent in a seat, and taking it out of it",
     routes: ["/api/admin/org/roles/:id/holders"],
+  },
+  {
+    capability: "org.decide",
+    title: "The village's structure",
+    surface: "Publishing a reorganisation of the circles and seats, or putting it to the village",
+    routes: ["/api/org/drafts/:id/publish-by-power", "/api/admin/org/drafts/:id/publish"],
   },
   {
     capability: "org.declare",
@@ -230,6 +236,21 @@ export const POWERS: readonly PowerEntry[] = [
     ],
   },
   {
+    capability: "comms.manage",
+    title: "The village's email",
+    surface: "Which automations run, what they say, letters to the people who agreed to get them, and the address book and sent mail behind them",
+    // The doors that matter most to somebody handing this over: the address
+    // book (and its export) and the words of what was sent, beside the controls.
+    routes: [
+      "/api/admin/comms/status",
+      "/api/admin/comms/run",
+      "/api/admin/comms/journeys",
+      "/api/admin/comms/people",
+      "/api/admin/comms/people-export",
+      "/api/admin/comms/messages/:id",
+    ],
+  },
+  {
     capability: "ballot.vote",
     title: "The vote itself",
     surface: "Who is on the roll when this village holds a ballot",
@@ -319,7 +340,7 @@ export function powersForReading(
     capability: p.capability,
     title: p.title,
     surface: p.surface,
-    consequence: CAPABILITY_CONSEQUENCE[p.capability],
+    consequence: liveConsequence(p.capability),
     label: capabilityLabel(p.capability),
     heldBy: holders.get(p.capability) ?? null,
   }));

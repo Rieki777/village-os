@@ -174,7 +174,7 @@ export default function Training() {
                   Your progress
                 </h2>
                 <p className="text-sm text-stone-500 mt-0.5">
-                  {done}/{total} modules done
+                  {done}/{total} lessons done
                 </p>
               </div>
               <span className="text-teal-deep font-bold text-2xl">{pct}%</span>
@@ -198,7 +198,7 @@ export default function Training() {
                     <span className="font-semibold text-teal-deep">
                       {requiredDone}/{required.length}
                     </span>{" "}
-                    required modules done. Finish the rest to complete your training.
+                    required lessons done. Finish the rest to complete your training.
                   </>
                 )}
               </p>
@@ -213,11 +213,11 @@ export default function Training() {
 
           {/* Modules */}
           {loading ? (
-            <div className="text-center py-16 text-stone-400">Loading modules…</div>
+            <div className="text-center py-16 text-stone-400">Loading lessons…</div>
           ) : modules.length === 0 ? (
             <div className="text-center py-16 text-stone-400">
               <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No training modules yet.</p>
+              <p>No lessons yet.</p>
             </div>
           ) : (
             <div className="space-y-3">

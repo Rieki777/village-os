@@ -8,6 +8,11 @@
  * sends the words as the steward left them (`edits`), which
  * `acceptQuestProposal` writes to the quest and back onto the proposal row. The
  * reward stays the steward's alone to type, as it always was.
+ *
+ * A REJECTION CAN SAY WHY. Rejecting used to send an empty note, every time,
+ * and the person who proposed the idea heard nothing at all. A signed-in
+ * proposer now gets a notice either way (server/lib/questProposals.ts), and
+ * the reason typed here is the one piece of free text it carries.
  */
 import { useState } from "react";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
@@ -46,7 +51,8 @@ export default function QuestProposalCard({
   arrived: string;
   busy: boolean;
   onAccept: (typed: QuestTyped) => void;
-  onReject: () => void;
+  /** The reason the steward typed, which the proposer reads; empty when none was given. */
+  onReject: (reason: string) => void;
 }) {
   // The words open on what arrived, so a steward who changes nothing sends the idea as it came.
   const [typed, setTyped] = useState<QuestTyped>({
@@ -57,6 +63,7 @@ export default function QuestProposalCard({
   });
   const set = (key: keyof QuestTyped) => (e: { target: { value: string } }) =>
     setTyped((t) => ({ ...t, [key]: e.target.value }));
+  const [reason, setReason] = useState("");
 
   return (
     <div className="bg-card border border-border rounded-xl p-5">
@@ -101,6 +108,17 @@ export default function QuestProposalCard({
         />
       </div>
 
+      <label className="block text-xs text-foreground mt-4 font-medium">
+        Why, if you reject it (optional). A proposer who was signed in reads this in their notice.
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={2000}
+          rows={2}
+          className="w-full mt-2 border border-border rounded-lg p-2 text-sm font-normal bg-background text-foreground"
+        />
+      </label>
+
       <div className="flex gap-2 mt-3">
         <button
           disabled={busy}
@@ -111,7 +129,7 @@ export default function QuestProposalCard({
         </button>
         <button
           disabled={busy}
-          onClick={onReject}
+          onClick={() => onReject(reason.trim())}
           className="text-xs border border-border rounded-lg px-3 py-2 min-h-[44px]"
         >
           Reject

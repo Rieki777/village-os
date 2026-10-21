@@ -195,7 +195,7 @@ describe("PowersMap", () => {
     render(
       <PowersMap catalogue={catalogue} stages={withTraining} stageIndex={0} training={{ done: 2, required: 4 }} />,
     );
-    expect(screen.getByText("2 of 4 required modules")).toBeTruthy();
+    expect(screen.getByText("2 of 4 required lessons")).toBeTruthy();
     expect(screen.queryByText("Finish community training")).toBeNull();
   });
 

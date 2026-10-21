@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 26 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 28 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 25 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 27 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -51,25 +51,25 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | twenty: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `governance` |
+| `member-pii` | 22: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `sessions`, `governance`, `comms` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `sessions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
-| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `saberra` |
+| `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `comms`, `saberra` |
 
 ### The shelves
 
 | Shelf | Id | What is on it | Modules |
 | --- | --- | --- | --- |
-| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 4 |
+| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 5 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
 | Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
-| Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 6 |
+| Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 7 |
 
 ## The whole library at a glance
 
@@ -98,11 +98,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Village Calendar | `events` | Coordinate | no | included | member-pii | required | [events.md](modules/events.md) |
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
+| Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
+| Village Comms | `comms` | Connect | no | included | member-pii | required | [comms.md](modules/comms.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 26 modules, four of them core. Twenty carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 28 modules, four of them core. 22 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -125,6 +127,7 @@ The contribution board: post work, claim it, submit it, consent to release recog
 | Capabilities it adds | `quest.consent` |
 | Variable keys it owns | `quest.consent_cap_mode`, `quest.consent_cap_multiplier`, `quest.require_submission_before_consent` |
 | API prefixes | `/api/quests`, `/api/game/quests` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [quests.md](modules/quests.md) |
 
 ### Gratitude
@@ -144,6 +147,7 @@ Recognition sends, lunar cycles, and the value pool distributed at each close.
 | Capabilities it adds | none |
 | Variable keys it owns | `cycle.mode`, `cycle.settlement_mode`, `cycle.settlement_vote_days`, `feed.max_hearts_per_recipient_per_cycle`, `health.alert_change_pct` |
 | API prefixes | `/api/game/gratitude`, `/api/game/cycle`, `/api/admin/cycles` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [gratitude.md](modules/gratitude.md) |
 
 ### Stages & Roles
@@ -163,6 +167,7 @@ The path from guest to co-creator: stages, capabilities, and appointed roles.
 | Capabilities it adds | `proposal.open`, `proposal.decide` |
 | Variable keys it owns | none |
 | API prefixes | `/api/game/progression`, `/api/roles` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [progression.md](modules/progression.md) |
 
 ### Profiles
@@ -182,6 +187,7 @@ Member identity: handles, journeys, balances, and each member's own ledger.
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/profile` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [profiles.md](modules/profiles.md) |
 
 ## Coordinate
@@ -207,6 +213,7 @@ The weekly call becomes assigned work, not content distribution: recordings in, 
 | Capabilities it adds | none |
 | Variable keys it owns | `assistant.synthesis_batch` |
 | API prefixes | `/api/recordings` |
+| What a village plants | `riverside-webhook-secret`, `anthropic-api-key` |
 | Contract doc | none yet |
 | Config it seeds | `youtubeChannelId`, `maxReadyQueue`, `forumCategory` |
 
@@ -227,6 +234,7 @@ An audience-aware registry of the village's tools: one place to find the chat, t
 | Capabilities it adds | none |
 | Variable keys it owns | `tools.click_tracking`, `tools.link_check_days` |
 | API prefixes | `/api/tools` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [tools-hub.md](modules/tools-hub.md) |
 | Config it seeds | `categories` |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
@@ -248,7 +256,28 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 | Capabilities it adds | `event.rsvp`, `event.manage` |
 | Variable keys it owns | `events.rsvp_enabled`, `events.upcoming_days`, `events.past_visible_days`, `calendar.year_anchor`, `calendar.hemisphere`, `calendar.cross_quarters` |
 | API prefixes | `/api/events`, `/api/admin/events` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [events.md](modules/events.md) |
+
+### Live Sessions
+
+A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.
+
+| Fact | Value |
+| --- | --- |
+| Id | `sessions` |
+| Shelf | Coordinate (`coordinate`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `gratitude` |
+| Capabilities it adds | none |
+| Variable keys it owns | `sessions.place_line`, `sessions.default_minutes`, `calendar.seasons` |
+| API prefixes | `/api/sessions` |
+| What a village plants | nothing beyond the platform's own layers |
+| Contract doc | [live-sessions.md](modules/live-sessions.md) |
 
 ## Recognise
 
@@ -273,6 +302,7 @@ Recognition of who people are and what they can do: self-declared skills, badges
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/badges` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [badges.md](modules/badges.md) |
 
 ## Host and earn
@@ -296,6 +326,7 @@ Accommodation on stay credits: rooms post credit (and optional USD) prices per a
 | Capabilities it adds | `stay.member_rate` |
 | Variable keys it owns | `stay.guest_booking_enabled`, `stay.autopay_default`, `stay.autopay_post_hour`, `stay.low_balance_warn_nights`, `stay.grace_nights`, `stay.max_purchase_nights`, `stay.credit_expiry_days`, `stay.credits_transferable`, `stay.work_exchange_tag`, `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd` |
 | API prefixes | `/api/stays` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | [stays.md](modules/stays.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 | Sells | `stay-credit`, and it is the only module allowed to sell that slug |
@@ -317,6 +348,7 @@ The village's shared tools and goods: donate an item and earn library credits (a
 | Capabilities it adds | none |
 | Variable keys it owns | `library.intake_award_pct`, `library.intake_member_cycle_cap`, `library.intake_dual_signoff_over`, `library.escrow_pct`, `library.usage_fee_pct`, `library.loan_days_default`, `library.dispute_deadline_days`, `library.intake_stall_days` |
 | API prefixes | `/api/library` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [material-library.md](modules/material-library.md) |
 | Config it seeds | `creditSaleEnabled` |
 
@@ -337,6 +369,7 @@ Buy the village's own platform tokens for fiat, out of a stocked treasury, buy-o
 | Capabilities it adds | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | Variable keys it owns | `payments.purchase_limit_per_order_usd`, `payments.purchase_limit_30d_usd`, `payments.purchase_limit_annual_usd`, `governance.weight_mode`, `governance.weight_token` |
 | API prefixes | `/api/exchange` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | [internal-exchange.md](modules/internal-exchange.md) |
 | Config it seeds | `tradingEnabled` |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
@@ -358,6 +391,7 @@ A member asks for tokens they hold to become something real off the platform: ca
 | Capabilities it adds | `redemption.confirm` |
 | Variable keys it owns | `redemption.holds_on_propose`, `redemption.tokens`, `redemption.per_member_per_cycle`, `redemption.expires_after_days`, `redemption.currencies`, `redemption.rate_source`, `redemption.rate_per_token`, `redemption.fee_pct`, `redemption.fee_fixed`, `redemption.min_amount`, `redemption.max_per_request`, `redemption.max_per_member_per_cycle`, `redemption.max_village_per_cycle`, `redemption.process_text` |
 | API prefixes | `/api/redemptions`, `/api/admin/redemptions` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [redemption.md](modules/redemption.md) |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 
@@ -378,6 +412,7 @@ Every payment your project issues or receives, as products you define: applicati
 | Capabilities it adds | none |
 | Variable keys it owns | `payments.donation_max_usd` |
 | API prefixes | `/api/products` |
+| What a village plants | `stripe-secret-key`, `stripe-webhook` |
 | Contract doc | none yet |
 | Legal caution card | yes. Enabling shows it first, and preconditions can refuse outright |
 
@@ -402,6 +437,7 @@ The living org chart: circles, the roles that orbit them, who holds each seat, w
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
 | Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
 
@@ -422,6 +458,7 @@ A declared map of how money and resources are governed: who may spend what, with
 | Capabilities it adds | none |
 | Variable keys it owns | `map.public_structure`, `ledger.admin_mint_cosign_over` |
 | API prefixes | `/api/resources` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [how-resources-flow.md](modules/how-resources-flow.md) |
 | Config it seeds | `requestCategory`, `measuredVisibleTo`, `labels` |
 
@@ -442,6 +479,7 @@ Village conversations: threads by circle-of-life category, @mentions, thread fol
 | Capabilities it adds | `forum.post`, `forum.moderate` |
 | Variable keys it owns | `feed.category_slug` |
 | API prefixes | `/api/forum` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 | Switching it off is blocked by | `feed`, which requires it while non-off |
 | Config it seeds | `categories` |
@@ -463,11 +501,12 @@ The village's vital signs: per-lunation snapshots frozen at each cycle close, th
 | Capabilities it adds | `health.record` |
 | Variable keys it owns | `gratitude.base_budget` |
 | API prefixes | `/api/health` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [health-dashboard.md](modules/health-dashboard.md) |
 
 ### Journal
 
-A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.
+A journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. Inside the village an entry is its author's alone; it is shared with organisational memory under code-names unless the member keeps it private. The village reads the pulse as numbers, and members who say yes can receive unsigned feedback in a weekly batch.
 
 | Fact | Value |
 | --- | --- |
@@ -482,6 +521,7 @@ A private journal for each member: morning and evening practices, a weekly pulse
 | Capabilities it adds | none |
 | Variable keys it owns | `journal.pulse_floor` |
 | API prefixes | `/api/journal` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [journal.md](modules/journal.md) |
 
 ### Governance
@@ -500,7 +540,8 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | Recommends | `forum` |
 | Capabilities it adds | `ballot.vote`, `member.vouch` |
 | Variable keys it owns | `governance.weight_mode`, `governance.weight_token`, `governance.unity_pct`, `governance.quorum_pct`, `governance.vote_days`, `governance.consent_window_days`, `governance.default_method` |
-| API prefixes | `/api/governance`, `/api/admin/governance` |
+| API prefixes | `/api/governance`, `/api/admin/governance`, `/api/season-plans` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 
 ### Hypha Bridge
@@ -520,6 +561,7 @@ Your DAO on Hypha, read from Base and shown here: the contracts this village act
 | Capabilities it adds | none |
 | Variable keys it owns | `tokens.base_rpc_url`, `tokens.equity_address`, `tokens.voice_address`, `governance.default_method` |
 | API prefixes | `/api/hypha`, `/api/admin/hypha` |
+| What a village plants | `basescan-api-key` |
 | Contract doc | [hypha.md](modules/hypha.md) |
 | Display only | yes. Deep links to Base, and never a mint path |
 | Hypha links | `governance`, `proposals`, `treasury`, `members` |
@@ -541,8 +583,9 @@ An outside service reads your meetings and records, and suggests changes to your
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/saberra` |
+| What a village plants | `saberra-api-secret` |
 | Contract doc | [organisational-memory.md](modules/organisational-memory.md) |
-| Config it seeds | `apiUrl`, `dashboardUrl` |
+| Config it seeds | `apiUrl`, `dashboardUrl`, `pollSchedule` |
 | Counterparty | Saberra LLC, https://saberra.com, support hello@saberra.com |
 
 ## Connect
@@ -568,6 +611,7 @@ The everyday stream: microposts, events and announcements from one forum categor
 | Capabilities it adds | `feed.announce` |
 | Variable keys it owns | `feed.category_slug`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle` |
 | API prefixes | `/api/feed` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [gratitude-feed.md](modules/gratitude-feed.md) |
 
 ### Messages
@@ -587,6 +631,7 @@ Private conversations between members: one to one, or a named group carrying its
 | Capabilities it adds | `message.send` |
 | Variable keys it owns | `messaging.sends_per_minute`, `messaging.max_members` |
 | API prefixes | `/api/messages`, `/api/admin/messages` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [messaging.md](modules/messaging.md) |
 | Switching it off is blocked by | `introductions`, which requires it while non-off |
 
@@ -607,6 +652,7 @@ Federation with other villages running this platform: publish your needs and off
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/network` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
 
 ### Crowdpool
@@ -626,6 +672,7 @@ The village's hub crowdpool, told in the living map's own language: a gold fundi
 | Capabilities it adds | none |
 | Variable keys it owns | none |
 | API prefixes | `/api/crowdpool` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [crowdpool.md](modules/crowdpool.md) |
 | Config it seeds | `villageCampaigns` |
 
@@ -646,7 +693,28 @@ Members say in plain words what they seek, confirm offers the village already kn
 | Capabilities it adds | none |
 | Variable keys it owns | `introductions.recipient_daily_cap`, `introductions.match_floor`, `introductions.opportunity_days`, `introductions.retention_days` |
 | API prefixes | `/api/intents` |
+| What a village plants | nothing beyond the platform's own layers |
 | Contract doc | none yet |
+
+### Village Comms
+
+The village's email in one place: reminders for the gatherings people said yes to, a few emails that walk somebody along the path they chose, guest RSVPs, a live vote on a session time, and letters to the people who agreed to get them. Every email is recorded before it goes, and anybody can stop any kind of email with one click.
+
+| Fact | Value |
+| --- | --- |
+| Id | `comms` |
+| Shelf | Connect (`connect`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `required`, needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. |
+| Requires | nothing |
+| Recommends | `events` |
+| Capabilities it adds | `comms.manage` |
+| Variable keys it owns | `comms.quiet_start_hour`, `comms.quiet_end_hour`, `comms.daily_cap`, `comms.event_reminder_minutes`, `comms.host_nudge_minutes`, `comms.recap_window_days`, `comms.guests_default`, `comms.time_poll_freeze_hours`, `comms.time_poll_settle_minutes`, `comms.letters_per_day`, `comms.retention_months`, `comms.send_rate_per_second`, `comms.notice_expiry_minutes`, `comms.open_tracking`, `comms.click_tracking` |
+| API prefixes | `/api/admin/comms` |
+| What a village plants | `resend-account`, `resend-setup-key`, `resend-sending-domain`, `resend-api-key`, `resend-webhook-secret`, `village-secrets-key` |
+| Contract doc | [comms.md](modules/comms.md) |
 
 ## What depends on what
 
@@ -672,12 +740,14 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 | `events` | `map` |
 | `introductions` | `badges`, `map` |
 | `journal` | `gratitude` |
+| `sessions` | `gratitude` |
 | `governance` | `forum` |
 | `hypha` | `governance`, `tools` |
+| `comms` | `events` |
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 26 modules own 95 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 28 modules own 113 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -696,7 +766,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 34 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Twelve modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 37 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Thirteen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -712,6 +782,7 @@ A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which
 | `redemption` | `redemption.confirm` |
 | `events` | `event.rsvp`, `event.manage` |
 | `governance` | `ballot.vote`, `member.vouch` |
+| `comms` | `comms.manage` |
 
 ## Machine-readable
 
@@ -719,7 +790,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 26,
+  "moduleCount": 28,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1294,7 +1365,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     {
       "id": "journal",
       "name": "Journal",
-      "description": "A private journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. The village reads the pulse as numbers only, and members who say yes can receive unsigned feedback in a weekly batch.",
+      "description": "A journal for each member: morning and evening practices, a weekly pulse, a debrief after calls and an open page, with a guide that asks one question at a time and reflects back what it heard. Inside the village an entry is its author's alone; it is shared with organisational memory under code-names unless the member keeps it private. The village reads the pulse as numbers, and members who say yes can receive unsigned feedback in a weekly batch.",
       "core": false,
       "tier": "included",
       "dataClass": "member-pii",
@@ -1312,6 +1383,30 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/journal"
       ],
       "contractDoc": "docs/modules/journal.md"
+    },
+    {
+      "id": "sessions",
+      "name": "Live Sessions",
+      "description": "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "coordinate",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "gratitude"
+      ],
+      "capabilities": [],
+      "variableKeys": [
+        "sessions.place_line",
+        "sessions.default_minutes",
+        "calendar.seasons"
+      ],
+      "apiPrefixes": [
+        "/api/sessions"
+      ],
+      "contractDoc": "docs/modules/live-sessions.md"
     },
     {
       "id": "governance",
@@ -1341,7 +1436,8 @@ The same facts, for anything that would rather parse than read. Regenerated with
       ],
       "apiPrefixes": [
         "/api/governance",
-        "/api/admin/governance"
+        "/api/admin/governance",
+        "/api/season-plans"
       ],
       "contractDoc": null
     },
@@ -1371,6 +1467,44 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/admin/hypha"
       ],
       "contractDoc": "docs/modules/hypha.md"
+    },
+    {
+      "id": "comms",
+      "name": "Village Comms",
+      "description": "The village's email in one place: reminders for the gatherings people said yes to, a few emails that walk somebody along the path they chose, guest RSVPs, a live vote on a session time, and letters to the people who agreed to get them. Every email is recorded before it goes, and anybody can stop any kind of email with one click.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "connect",
+      "setup": "required",
+      "requires": [],
+      "recommends": [
+        "events"
+      ],
+      "capabilities": [
+        "comms.manage"
+      ],
+      "variableKeys": [
+        "comms.quiet_start_hour",
+        "comms.quiet_end_hour",
+        "comms.daily_cap",
+        "comms.event_reminder_minutes",
+        "comms.host_nudge_minutes",
+        "comms.recap_window_days",
+        "comms.guests_default",
+        "comms.time_poll_freeze_hours",
+        "comms.time_poll_settle_minutes",
+        "comms.letters_per_day",
+        "comms.retention_months",
+        "comms.send_rate_per_second",
+        "comms.notice_expiry_minutes",
+        "comms.open_tracking",
+        "comms.click_tracking"
+      ],
+      "apiPrefixes": [
+        "/api/admin/comms"
+      ],
+      "contractDoc": "docs/modules/comms.md"
     },
     {
       "id": "saberra",

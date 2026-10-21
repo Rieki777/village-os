@@ -19,11 +19,21 @@ practices and the questions are platform copy, and the one dial has a working de
 
 ## The privacy line
 
-- **An entry is its author's.** Every read filters on the id from the signed-in member's own token.
-  There is no admin read, no `/api/admin/journal`, and no door that takes another member's id to
-  read with. An admin asking for an entry that is not theirs gets the same 404 as anybody.
-- **The pulse's numbers aggregate; its words never do.** `journal_pulse` holds a number per member
-  per metric per week and no text. The aggregate's SELECT names no `user_id`.
+- **An entry is its author's inside the village.** Every read filters on the id from the signed-in
+  member's own token. There is no admin read, no `/api/admin/journal`, and no door that takes another
+  member's id to read with. An admin asking for an entry that is not theirs gets the same 404 as
+  anybody.
+- **An entry is shared with organisational memory unless the author keeps it private** (Rye,
+  2026-10-05: "All journal entries go to Saberra (if that module is on) unless specifically marked
+  private"). A new entry is `internal` (`JOURNAL_DEFAULT_PRIVACY`); `private` is the author's choice
+  on the review step or later from History, and never crosses. What crosses goes under code-names,
+  with member names swapped out of the prose (ruling 2026-10-02). **The transport is not built**:
+  it waits on a journal write path on the organisational-memory side, so today nothing leaves the
+  village, and the page says "when that is connected" for that reason. What WOULD cross is already
+  recorded, in an outbox: see "The bridge to organisational memory" below. The 0227 column's own
+  DEFAULT is still `private`, so every insert names the tier explicitly.
+- **The pulse's numbers aggregate; its words travel with their entry.** `journal_pulse` holds a
+  number per member per metric per week and no text. The aggregate's SELECT names no `user_id`.
 - **Feedback arrives unsigned.** The received read's SELECT does not name `author_id`, so the
   recipient's payload carries no author at any depth. Feedback ids are random, so an id cannot
   date a message either.
@@ -99,6 +109,39 @@ therapist, answers a crisis with care and a pointer to people they trust or emer
 never discusses other members. With no key configured both guide doors answer 503
 `assistant-unavailable` and the page carries on with the plain questions.
 
+## The bridge to organisational memory
+
+Part 1 of the bridge to the `saberra` module (`drizzle/0261_a_journal_crosses_under_a_code_name.sql`).
+It records what would cross and **sends nothing**: the service has not named a write path.
+
+- **Code-names** (`server/lib/codeNames.ts`, table `member_code_names`). Each member gets a stable
+  code-name, two words and two digits minted with cryptographic randomness from a fixed word list,
+  carrying nothing about them. The map from code-name to person never leaves the village. Each
+  entry has a `purpose` (`journal` today), so a future seat-holder code-name is a different string.
+- **The name swap** (`server/lib/nameSwap.ts`, pure). Before anything is queued, every name the
+  village holds for every member (display name, its first and last word, handle, email) is swapped
+  for that member's code-name: whole words, case and accents folded, longest name first,
+  possessives kept ("Jess's" becomes the code-name plus "'s"). A name two members share becomes
+  "a member". Nicknames and descriptions can still point at a person, and that is accepted.
+- **The outbox** (`server/lib/saberraOutbox.ts`, table `saberra_outbox`). One row per entry, unique
+  on its source, so no entry is queued twice; an edit updates the one row. The payload carries the
+  author's code-name, the swapped words, the civil date, the practice and depth, and the sharing
+  tier. No user id, email, display name, local hour or score. An entry with no words is not queued.
+- **What never crosses.** A `private` entry: never queued, and an entry turned private or deleted
+  before it is sent is withdrawn (held, payload cleared), gated in the same SQL statement as the
+  write and looked at again before any send. **Feedback**, ever: nothing in the bridge reads it.
+  **One member's numbers**: a pulse entry's scores never ride with its words, and a weekly team
+  signal carries a metric only when at least two members answered it (or the pulse floor, if
+  higher), so a week with a single answer sends nothing.
+- **When.** Only while both `journal` and `saberra` are on or in preview. A save or an edit answers
+  the member first and queues afterwards; a failure is logged and the entry stands. The
+  `saberra-bridge` job (every six hours) backfills every shared entry with no row, which queues the
+  history once and repairs any queueing that failed, then queues last week's team signal, then
+  drains. The drain sends nothing until a transport fills `OutboxTransport`, and nothing does.
+- **The admin's view.** The organisational memory setup card lists what would cross by kind, date,
+  code-name, length and status (`GET /api/saberra/outbox`). Never the words: the listing's SELECT
+  does not name the payload.
+
 ## The module boundary
 
 | Declared | Value |
@@ -120,6 +163,12 @@ and the recipient's answer remain. Deleting it would make it vanish at the momen
 a departed member, which names the author of an unsigned message. `GET /api/profile/export` carries
 a `journal` key from `exportMemberJournal`: entries, the member's own pulse, their prefs, what they
 sent, and what they received as message, delivery time and response only.
+
+The next step, `saberra-bridge-after-tombstone`, scrubs every outbox row filed under the member's
+code-name and marks the code-name pending a vendor delete. The map entry is dropped only once the
+service confirms it deleted what it held, and it has no delete endpoint yet, so the entry stays,
+marked pending, and the setup card says so. A dropped code-name keeps its row with the member id
+blanked, so it is never minted again for somebody else.
 
 `GET /api/journal/export.md` gives the member their entries as markdown: frontmatter per entry
 (date, practice, depth, the debrief's call, seats, quests and portability, privacy,

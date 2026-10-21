@@ -375,7 +375,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is nineteen keys, which is the number the ruling was given in", () => {
+    it("is twenty-one keys: the nineteen the ruling was given in, the comms power, and the decide power", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -385,8 +385,60 @@ describe("hasCapability truth table", () => {
        * the count is a change to what he agreed to. Whoever moves it is
        * answering that question rather than breaking an invariant, and this is
        * where they find out they are being asked.
+       *
+       * TWENTY SINCE 2026-10-02, and this is the answer given. Rye approved the
+       * Village Comms plan that day, and its section 8 says of `comms.manage`:
+       * "It can be handed to a role, and the village can hold it." Holding is
+       * what TRANSFERABLE means, so the founding stewards take it at launch with
+       * the nineteen, and the handover counts it. The comms foundation lane
+       * moved this number and named it in its report for the integrator to
+       * confirm, because the plan approved the power and never said the count.
+       *
+       * TWENTY-ONE SINCE 2026-10-20. `org.decide` is Rye's ruling of 2026-09-14,
+       * "by default Stewards, but an Operations or COO type role could be formed
+       * to hold this power", and on 2026-10-20 he asked for it to be
+       * transferable like the village's other powers. Holding it at launch is
+       * how the stewards hold it by default, so it joins this set by design.
        */
-      expect(HANDOVER_SET).toHaveLength(19);
+      expect(HANDOVER_SET).toHaveLength(21);
+      expect(HANDOVER_SET).toContain("comms.manage");
+      expect(HANDOVER_SET).toContain("org.decide");
+    });
+
+    it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {
+      /**
+       * PROSE IS NOT COMPILED, AND THIS PARAGRAPH IS NOT ORDINARY PROSE.
+       *
+       * The comment above `HANDOVER_SET` in shared/capabilities.ts records how the
+       * founder's words about giving over all steward powers were READ - and that
+       * reading is stated as two counts: how many powers are transferable, and how
+       * many are not. Those are claims about the set, so they can be wrong, and on
+       * 2026-10-20 they were: they still read 19 and 15 after `comms.manage` became
+       * transferable, understating what the ruling was read to cover. Nothing
+       * failed, because no gate reads a comment.
+       *
+       * So this test reads it. A new transferable power now has to be an edit
+       * somebody makes to that paragraph on purpose, which is the point: the
+       * paragraph is a decision, not a description.
+       */
+      const fs = await import("node:fs");
+      const url = await import("node:url");
+      const here = url.fileURLToPath(new URL(".", import.meta.url));
+      const src = fs.readFileSync(here + "capabilities.ts", "utf8");
+
+      const transferable = src.match(/ALL TRANSFERABLE POWERS, which is (\d+) keys/);
+      const other = src.match(/The other (\d+) are not withheld/);
+      const holdsAll = src.match(/a launched village holds all (\d+) in the founding seat/);
+      // If the sentences are ever reworded, this test must be reworded with them
+      // rather than passing quietly on three nulls.
+      expect(transferable, "the N-keys sentence").not.toBeNull();
+      expect(other, "the other-N sentence").not.toBeNull();
+      expect(holdsAll, "the holds-all-N sentence").not.toBeNull();
+
+      const notTransferable = ALL_CAPABILITIES.filter((c) => !TRANSFERABLE[c]).length;
+      expect(Number(transferable![1]), "transferable count in the comment").toBe(HANDOVER_SET.length);
+      expect(Number(holdsAll![1]), "holds-all count in the comment").toBe(HANDOVER_SET.length);
+      expect(Number(other![1]), "non-transferable count in the comment").toBe(notTransferable);
     });
 
     it("carries the steward's veto, which is what opens the break-glass", () => {
@@ -742,5 +794,48 @@ describe("keys that carry other keys", () => {
     expect(
       hasCapability("forum.moderate", ctx({ roleCapabilities: ["forum.moderate"], badgeDenies: ["forum.moderate"] })),
     ).toBe(false);
+  });
+});
+
+/*
+ * THE OPEN BOOK (seat settings PR2). Every member reads every seat's terms,
+ * money included; a visitor and a signed-in guest read none of it. One key,
+ * unlocked at the member rung, so the bar is a dial the village can move and
+ * never a rung check somebody wrote inline. Nothing reads it yet: PR3 wires
+ * the seat projection and the presets route to it.
+ */
+describe("terms.read, the open book", () => {
+  it("unlocks at the member rung, and never at guest", () => {
+    expect(STAGE_UNLOCKS["terms.read"]).toBe("member");
+    // The reason it is its own key: map.viewPeople opens at guest.
+    expect(STAGE_UNLOCKS["map.viewPeople"]).toBe("guest");
+    expect(STAGE_UNLOCKS["terms.read"]).not.toBe(STAGE_UNLOCKS["map.viewPeople"]);
+  });
+
+  it("a visitor and a guest lack it, a member holds it", () => {
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("visitor") }))).toBe(false);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("guest") }))).toBe(false);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("member") }))).toBe(true);
+    expect(hasCapability("terms.read", ctx({ stageIndex: stageIndexOf("co-creator") }))).toBe(true);
+  });
+
+  it("a guest holding map.viewPeople still cannot read terms", () => {
+    const guest = ctx({ stageIndex: stageIndexOf("guest") });
+    expect(hasCapability("map.viewPeople", guest)).toBe(true);
+    expect(hasCapability("terms.read", guest)).toBe(false);
+  });
+
+  it("follows a village that moves the rung", () => {
+    const guest = ctx({ stageIndex: stageIndexOf("guest"), stageUnlockOverrides: { "terms.read": "guest" } });
+    expect(hasCapability("terms.read", guest)).toBe(true);
+    const closed = ctx({ stageIndex: stageIndexOf("co-creator"), stageUnlockOverrides: { "terms.read": "none" } });
+    expect(hasCapability("terms.read", closed)).toBe(false);
+  });
+
+  it("is a member's own read: listed, labelled, never transferable", () => {
+    expect(ALL_CAPABILITIES).toContain("terms.read");
+    expect(CAPABILITY_LABELS["terms.read"].length).toBeGreaterThan(10);
+    expect(TRANSFERABLE["terms.read"]).toBe(false);
+    expect(HANDOVER_SET).not.toContain("terms.read");
   });
 });

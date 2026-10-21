@@ -79,6 +79,17 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes opened, and you are on the roll for each one.",
     celebrate: false,
   },
+  /*
+   * Village Comms 5.10: a host asked you to pick the times you can make for
+   * a gathering. Decisions, because the time with the most picks becomes the
+   * gathering's time.
+   */
+  time_poll_open: {
+    group: "decisions",
+    blurb: "Pick the times you can make. The time with the most picks becomes the gathering's time.",
+    many: "{n} gatherings are choosing a time.",
+    celebrate: false,
+  },
   ballot_closing: {
     group: "decisions",
     blurb: "The window is closing and your vote is still owed. Quorum is measured against everyone on the roll.",
@@ -188,6 +199,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} proposals moved.",
     celebrate: false,
   },
+  // In the bell only (no case in emailCadenceFor): one reminder, two days on,
+  // to a seat holder an application still waits on (shared/waitingOnYou.ts).
+  seat_application_reminder: {
+    group: "decisions",
+    blurb: "An application for a seat still waits on a seat holder, and you hold that power.",
+    many: "{n} applications still wait on a seat holder.",
+    celebrate: false,
+  },
   // How much your vote weighs is power, and the weight routes moved it for a
   // year while telling the person it belonged to nothing at all. The trail was
   // readable the whole time, which is a different thing from being told: a
@@ -217,6 +236,19 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "decisions",
     blurb: "The season turns soon. Before it does, the village records what this season did and seats people for the next one, so the reminders start two weeks out.",
     many: "{n} reminders that the season is turning.",
+    celebrate: false,
+  },
+  // Season plans (2026-10-09). Quiet, both: planning is an ask, never a moment.
+  season_plan_open: {
+    group: "decisions",
+    blurb: "Planning is open for the season. Choose the seats you keep, hand back or apply for, and what you will do.",
+    many: "{n} notices that planning is open.",
+    celebrate: false,
+  },
+  season_plan_reminder: {
+    group: "decisions",
+    blurb: "Your season plan is not filed yet. Filing takes a few minutes, and the village sees it by name.",
+    many: "{n} reminders to file your season.",
     celebrate: false,
   },
   term_expiring: {
@@ -338,6 +370,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} claims were released.",
     celebrate: false,
   },
+  quest_idea_on_board: {
+    group: "work",
+    blurb: "A steward put the quest you proposed on the board, where anyone can take it on.",
+    many: "{n} of your quest ideas went on the board.",
+    celebrate: false,
+  },
+  quest_idea_declined: {
+    group: "work",
+    blurb: "A steward read the quest you proposed and left it off the board. You are welcome to propose another.",
+    many: "{n} of your quest ideas were left off the board.",
+    celebrate: false,
+  },
   quest_help: {
     group: "work",
     blurb: "Somebody flagged that they are stuck or wobbling on work they took on.",
@@ -348,6 +392,36 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "work",
     blurb: "A call turned into a suggested task with your name on it. Accept or decline on the thread; nothing happens on its own.",
     many: "{n} tasks were suggested to you from calls.",
+    celebrate: false,
+  },
+  // Live Sessions (server/lib/liveSessions.ts): a session closed, and an action
+  // it left with is held by you, or by a seat you sit in.
+  session_action_held: {
+    group: "work",
+    blurb: "A live session closed with an action held by you or by a seat you sit in. The notice says what it is and by when.",
+    many: "{n} actions from live sessions are held by you or your seats.",
+    celebrate: false,
+  },
+  // The task layer (server/lib/sessionTaskMail.ts, server/lib/sessionTasks.ts):
+  // a gentle note near a task's date, a task handed back to its circle, and a
+  // task sitting with a seat nobody holds. None of them celebrate: each one
+  // asks somebody to look at work, and none happened TO the reader.
+  session_action_due: {
+    group: "work",
+    blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",
+    many: "{n} tasks you hold are near their dates.",
+    celebrate: false,
+  },
+  session_task_back: {
+    group: "work",
+    blurb: "A task from a session you facilitated was handed back. It comes up at the circle's next action check.",
+    many: "{n} tasks came back to their circles.",
+    celebrate: false,
+  },
+  session_task_unheld: {
+    group: "work",
+    blurb: "A task from a live session sits with a seat nobody holds now. Give it to someone at the next call.",
+    many: "{n} tasks sit with seats nobody holds.",
     celebrate: false,
   },
 
@@ -376,6 +450,18 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "people",
     blurb: "Somebody said thank you, and put their name to it.",
     many: "{n} people sent you appreciation.",
+    celebrate: false,
+  },
+  /*
+   * Village Comms, day 21 of a path (the comms build spec 5.11). The
+   * emails have done what emails can do, and the path's contact person is
+   * asked to write to somebody by name. People, because it is a person the
+   * reader is asked to reach.
+   */
+  comms_path_handoff: {
+    group: "people",
+    blurb: "Somebody has been on a path for three weeks. A note from a person is the next step.",
+    many: "{n} people on a path are ready to hear from a person.",
     celebrate: false,
   },
   message: {
@@ -469,10 +555,28 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} things you sent in were triaged.",
     celebrate: false,
   },
+  // Live Sessions: to every admin, when a session closes and its record is kept.
+  session_record_ready: {
+    group: "village",
+    blurb: "A live session closed and its record is kept: the agenda, what was decided, who holds each action, and the backlog.",
+    many: "{n} live session records are ready to read.",
+    celebrate: false,
+  },
   moderation: {
     group: "village",
     blurb: "Something was flagged for a steward to read, or a report you filed was closed.",
     many: "{n} reports moved.",
+    celebrate: false,
+  },
+  /*
+   * Village Comms (5.9): a gathering you hosted has ended and the people who
+   * came are waiting to hear back. The village group, because the recap is
+   * the village keeping its own record of what it did together.
+   */
+  comms_host_recap: {
+    group: "village",
+    blurb: "A gathering you hosted has ended. The people who came will hear from you once you write the recap.",
+    many: "{n} gatherings you hosted are waiting for a recap.",
     celebrate: false,
   },
   restorative_intake: {

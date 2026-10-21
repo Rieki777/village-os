@@ -109,6 +109,8 @@ export interface NextActionRule {
   /** Condition evaluated server-side against the player's game state. */
   when:
     | "no-training"
+    /** Signed the letter, and the village has not answered yet (server/lib/nextAction.ts). */
+    | "membership-waiting"
     | "no-membership"
     | "no-quest-claimed"
     | "quest-in-progress"
@@ -325,6 +327,13 @@ export interface SeasonEntry {
   patternId?: string;
   /** What this season is actually trying to achieve. Shown on the banner//season. */
   goals: { text: string; done: boolean }[];
+  /**
+   * WHEN MEMBERS PLAN THIS SEASON, set by hand (season plans, 2026-10-09).
+   * Absent or null means the window is worked out from the season's first day
+   * (`planWindowFor` in shared/seasonPlans.ts). Both dates are civil dates in
+   * the village's zone and both days are inside the window.
+   */
+  planWindow?: { opensOn: string; closesOn: string } | null;
 }
 
 export interface SeasonConfig {
@@ -584,6 +593,7 @@ export const GAME_CONFIG: GameConfig = {
 
   nextActions: [
     { id: "training", when: "no-training", label: "Finish your community training", href: "/training" },
+    { id: "membership-waiting", when: "membership-waiting", label: "Your {commitment} is with the village. Take a Quest while you wait", href: "/quests" },
     { id: "membership", when: "no-membership", label: "Sign the {commitment}", href: "/love-letter" },
     { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },

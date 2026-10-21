@@ -15,12 +15,28 @@
  *
  * The honeypot is `hp`, the house pattern. ReserveHome.tsx says why the name
  * matters.
+ *
+ * A REQUEST FROM SOMEBODY SIGNED IN NAMES THEIR ACCOUNT. This page sent no
+ * token, and `authedUser` reads `Authorization: Bearer` alone, so a guest who
+ * asked while signed in left a row naming nobody: the desk could not find the
+ * account and the bell could not tell them the answer. It now sends the token
+ * when there is one, the way LoveLetter.tsx does, and the row carries their
+ * `userId`. A stranger sends no header and is stored exactly as before.
+ *
+ * Naming the account does not make accepting the request an admission. Only an
+ * accepted Love Letter signing, enough vouches, or a steward's super vouch
+ * writes membership (server/index.ts, server/routes/vouches.ts), and the
+ * signing is the member's own half by the ruling in server/lib/vouches.ts.
+ * Whether a yes to a request should admit an account is a governance question,
+ * and it is left for a ruling.
  */
 import { useState } from "react";
 import { ArrowRight, CalendarDays, HeartHandshake } from "lucide-react";
 
 import Layout from "@/components/Layout";
+import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
+import { authToken } from "@/lib/gameApi";
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -32,6 +48,7 @@ export default function RequestMembership() {
   const [why, setWhy] = useState("");
   const [heardFrom, setHeardFrom] = useState("");
   const [hp, setHp] = useState("");
+  const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -42,13 +59,14 @@ export default function RequestMembership() {
     setSending(true);
     setError("");
     try {
+      const token = authToken();
       const res = await fetch("/api/forms/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           type: "membership-request",
           hp,
-          data: { name: name.trim(), email: email.trim(), why: why.trim(), heardFrom: heardFrom.trim() },
+          data: { name: name.trim(), email: email.trim(), why: why.trim(), heardFrom: heardFrom.trim(), [FORM_CONSENT_FIELD]: consent },
         }),
       });
       if (res.status === 429) {
@@ -168,6 +186,7 @@ export default function RequestMembership() {
                     className={FIELD}
                   />
                 </div>
+                <PathConsentBox checked={consent} onChange={setConsent} />
                 {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
                 <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>
                   <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />

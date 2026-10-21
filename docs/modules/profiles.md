@@ -129,7 +129,8 @@ opt-OUT.** `registerJob("notification-digest", 24h)` in `server/index.ts` runs `
 against exactly this blob, through `resolveNotifyPrefs` and `emailCadenceFor` in
 `server/lib/notify.ts`. A member who has never opened the panel resolves to `gratitudeEmail` daily,
 `questsEmail` / `rolesEmail` / `mentionsEmail` / `repliesEmail` / `messagesEmail` immediate,
-`governanceEmail` daily, `weeklyBrief` on, `celebrations` on. Every member a fork imports is
+`governanceEmail` daily, `tasksEmail` immediate (the Live Sessions task emails, see
+`docs/modules/live-sessions.md`), `weeklyBrief` on, `celebrations` on. Every member a fork imports is
 therefore subscribed to outbound mail until they say otherwise, and `PUT /api/profile/prefs` is the
 only member-facing switch.
 

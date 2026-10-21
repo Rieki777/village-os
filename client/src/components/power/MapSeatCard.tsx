@@ -26,6 +26,7 @@ import { fromMapSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import SeatAction from "./SeatAction";
 import SeatHistory from "./SeatHistory";
 import SeatTradingCard from "./SeatTradingCard";
+import { applyHrefFor, termsSlotFor } from "./SeatTermsSlot";
 import type { PowerCircle, PowerData, PowerSeat } from "./types";
 import { useClassNames } from "./useClassNames";
 
@@ -53,7 +54,8 @@ export default function MapSeatCard({
         input={input}
         ctx={{ now: new Date(), season: seasonForSheet(season), classNames }}
         onPickPerson={onPickPerson}
-        action={<SeatAction circleId={circle?.id ?? null} />}
+        action={<SeatAction circleId={circle?.id ?? null} applyHref={applyHrefFor(seat)} />}
+        settings={termsSlotFor(seat)}
       />
       {method === "hypha" && hypha.configured && (
         <p className="mt-3 px-1">

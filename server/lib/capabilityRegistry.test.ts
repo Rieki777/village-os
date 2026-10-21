@@ -18,6 +18,7 @@ import {
 } from "./capabilityRegistry";
 import { ALL_CAPABILITIES, TRANSFERABLE, type Capability } from "../../shared/capabilities";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
+import { liveConsequence } from "./capabilityConsequence";
 
 /**
  * Every file that mounts routes, concatenated, not just the big one.
@@ -106,8 +107,12 @@ describe("the powers registry", () => {
   it("sources its sentences from CAPABILITY_CONSEQUENCE and never re-types them", () => {
     const read = powersForReading(new Map());
     for (const row of read) {
-      expect(row.consequence).toBe(CAPABILITY_CONSEQUENCE[row.capability]);
+      // One power adds the live number its sentence depends on (comms.manage, the months mail is kept).
+      expect(row.consequence).toBe(liveConsequence(row.capability));
+      expect(row.consequence.startsWith(CAPABILITY_CONSEQUENCE[row.capability])).toBe(true);
     }
+    const comms = read.find((r) => r.capability === "comms.manage");
+    expect(comms?.consequence).toMatch(/kept \d+ months? as the village is set now$/);
   });
 
   it("keeps a stable order that owes nothing to who holds what", () => {
@@ -161,5 +166,25 @@ describe("the powers registry", () => {
       expect(entry.title.length, cap).toBeGreaterThan(3);
       expect(entry.surface.length, cap).toBeGreaterThan(10);
     }
+  });
+});
+
+/*
+ * terms.read (seat settings PR2) is a member's own read, so it is NOT a power
+ * a village holds and it belongs in neither list. The invariant above
+ * (`undescribedPowers` empty) already covers it because it is not
+ * transferable; this pins that reading, so a later edit that marks it
+ * transferable has to come here and name where it lives.
+ */
+describe("terms.read is a member's own read, not a power", () => {
+  it("is not transferable, so neither list names it", () => {
+    expect(TRANSFERABLE["terms.read"]).toBe(false);
+    expect(POWERS.some((p) => p.capability === "terms.read")).toBe(false);
+    expect(Object.keys(NOT_YET_WIRED)).not.toContain("terms.read");
+    expect(undescribedPowers()).toEqual([]);
+  });
+
+  it("carries a consequence sentence an admin can read", () => {
+    expect(CAPABILITY_CONSEQUENCE["terms.read"]).toMatch(/money included/);
   });
 });

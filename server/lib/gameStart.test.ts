@@ -29,7 +29,8 @@ import {
   RECOGNITION_FAUCET,
   TREASURY,
 } from "./ledger";
-import { readGameStart, recordGameStart, issuanceRefusal } from "./gameStart";
+import { readGameStart, recordGameStart, issuanceRefusal, plantingPhase } from "./gameStart";
+import { launchedAtOf } from "./launch";
 
 const configured = testDbConfigured();
 
@@ -57,6 +58,8 @@ describe.skipIf(!configured)("the Game's start gates issuance (MySQL)", () => {
     expect(fact.startedAt).toBeNull();
     expect(fact.ballotId).toBeNull();
     expect(await issuanceRefusal(pool)).toContain("has not started its Game");
+    // The setup game's planting rule reads the same fact: one founder may plant anything.
+    expect(await plantingPhase(pool)).toBe("before-launch");
   });
 
   it("refuses a faucet posting before the launch vote carries, and writes nothing", async () => {
@@ -143,6 +146,7 @@ describe.skipIf(!configured)("the Game's start gates issuance (MySQL)", () => {
     expect(first.started).toBe(true);
     expect(first.ballotId).toBe("bal-launch-1");
     expect(await issuanceRefusal(pool)).toBeNull();
+    expect(await plantingPhase(pool)).toBe("after-launch");
 
     const paid = await postTransfer(pool, {
       from: RECOGNITION_FAUCET,
@@ -205,6 +209,11 @@ describe.skipIf(!configured)("migration 0112 grandfathers a village that was alr
       expect(fact.ballotId).toBeNull();
       expect(fact.startedBy).toBeNull();
       expect(fact.note).toContain("already issuing tokens before the launch vote existed");
+      // THE REASON plantingPhase reads this row and never launchedAt: a village
+      // that was live before the ballot existed has no launchedAt at all, and
+      // must still ask for a co-sign on a production key.
+      expect(await launchedAtOf(live.conn as any)).toBeNull();
+      expect(await plantingPhase(live.conn as any)).toBe("after-launch");
 
       // Re-running the migration leaves the row exactly where it was.
       await live.conn.query(sql());

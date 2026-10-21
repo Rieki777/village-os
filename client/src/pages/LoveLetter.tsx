@@ -1,11 +1,13 @@
 import Layout from "@/components/Layout";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, CheckCircle2, ArrowRight, Users, Home, TrendingUp, Sparkles, Send } from "lucide-react";
-import { useState } from "react";
-import { authToken, useVillageLinks } from "@/lib/gameApi";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "wouter";
+import { authToken, gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
+import { useOptionalAuth } from "@/contexts/AuthContext";
+import { LETTER_WORDS, letterSourceFrom, renderMembershipLetter, type ServedLetter } from "@shared/membershipLetter";
 import { useVillageContent } from "@/hooks/useVillageContent";
 import { useVillageName } from "@/hooks/useVillageName";
-import { useTokenName } from "@/hooks/useTokenNames";
 
 /**
  * S2 brochure lane, 2026-08-30: this page used to state, nine times, that
@@ -68,18 +70,57 @@ interface LegalContent {
   };
 }
 
-// The covenant names the village in one line, so the list is built after
-// the config answers rather than frozen at module load.
-const buildCommitments = (villageName: string) => [
-  "Treat all beings with respect, compassion, and authentic communication",
-  "Participate in community governance through our sociocratic circles",
-  "Contribute to the regeneration of the land and ecosystem",
-  "Support fellow community members in their growth and wellbeing",
-  `Honor the values and agreements of the ${villageName} community`,
-  "Practice Nonviolent Communication and authentic relating",
-  "Meet financial obligations as agreed with the community",
-  "Show up for community life, circles, celebrations, and shared care",
-];
+/**
+ * THE LETTER IS THE SERVER'S WORDS (seat settings PR9).
+ *
+ * A signed-in member who sends this form ALIGNS with the letter: the server
+ * keeps its exact words in the alignment store, under the member's account.
+ * So the page draws the letter the server rendered (`GET /api/membership-letter`)
+ * and sends back the version it drew; the server refuses a member's signing
+ * whose version is not the letter as it stands, and the page then shows the
+ * letter again. The parts come from shared/membershipLetter.ts, the one
+ * rendering both sides use, which also draws the letter from the page's own
+ * config and content while the server's copy is on its way.
+ *
+ * ONE CLICK FROM THE ACCOUNT, NO TYPED NAME (Rye, 2026-10-01). A member does
+ * not type their name or email: the account names them. The form's own words
+ * say "align" to a member. A visitor without an account still fills in the
+ * form and signs it as before: there is no account to align from, and nothing
+ * is kept for them in the alignment store. The letter's own sentence about
+ * signing is the village's words, kept as written.
+ */
+
+/**
+ * WHAT HAPPENS NEXT, AS THE PRODUCT DOES IT.
+ *
+ * The thank-you used to say "You are now part of the community", promise a
+ * welcome email "within 48 hours" and a personal welcome call, and invite the
+ * signer to a first Community Circle. None of it was true. Membership waits on
+ * the people who look after joining accepting the letter (`intake.moderate`,
+ * `PUT /api/admin/submissions/:id/status`) or on enough vouches
+ * (server/routes/vouches.ts), and no code sends a welcome email, books a call
+ * or invites anybody to a circle. So the page says only what the product does:
+ *
+ *   - the letter waits with the people who look after joining;
+ *   - a signer with an account hears the answer as a notice, because the
+ *     status route notifies the account a row names (server/lib/submissionNotices.ts),
+ *     and their profile shows where it stands under What you have aligned with;
+ *   - members who know them can vouch on their public page. Said only while
+ *     the village counts vouches and the signer still needs some, read from
+ *     `GET /api/me/vouches`, which is the same rule VouchPanel uses to hide;
+ *   - a stranger has no account to notify, so somebody writes to the address
+ *     they gave, the promise the Ask to join page already makes.
+ *
+ * Unknown draws nothing: a vouch read that fails leaves its line out.
+ */
+function NextStep({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+      <p>{children}</p>
+    </div>
+  );
+}
 
 const pathOptions = [
   { id: "investor", label: "Investor / Capital Contributor", icon: TrendingUp, color: "border-amber text-amber" },
@@ -92,8 +133,8 @@ export default function LoveLetter() {
   const { content: legal } = useVillageContent<LegalContent>("legal");
   const { content: covenant } = useVillageContent<CovenantContent>("covenant");
   const villageName = useVillageName();
-  const tokenName = useTokenName("recognition");
-  const commitments = buildCommitments(villageName);
+  const cfg = useGameConfig();
+  const user = useOptionalAuth()?.user ?? null;
   const membership = legal?.membership;
   // The village's own name alone when no entity is published: a name, not a
   // legal claim. Everywhere this file used to say "Amora 508(c)(1)(a)".
@@ -101,20 +142,33 @@ export default function LoveLetter() {
   // had never published a legal entity signed their members into somebody
   // else's church on the line that collects their money.
   const entityName = membership?.entityLabel?.trim() || villageName;
-  const contributionParagraph = membership?.contributionParagraph?.trim();
   const contributionShortNote = membership?.contributionShortNote?.trim();
   const footerNote =
     membership?.footerNote?.trim() ||
     "Ask your community how membership contributions are structured, and whether any part is tax-deductible where you live.";
 
-  // Neither fallback states a fact about any particular place or plan. They
-  // say the same thing the originals said, minus the parts only Amora knew.
-  const openingParagraph =
-    covenant?.opening?.trim() ||
-    "Something in you called you here. Maybe it was the land itself, alive with possibility. Maybe it was the vision of a village where all beings belong and thrive. Maybe it was simply the feeling that the world you want to live in needs to be built.";
-  const governanceParagraph =
-    covenant?.governance?.trim() ||
-    "How residents govern themselves, and how we steward this land together, will be co-created by the first residents. Nothing here is handed down. You are not joining a finished system; you are helping write it.";
+  // The server's letter once it lands; until then the same rendering from
+  // this page's own config and content. A member aligns only with the
+  // server's, because only that one carries a version to send back.
+  const [letter, setLetter] = useState<ServedLetter | null>(null);
+  const [letterFailed, setLetterFailed] = useState(false);
+  const readLetter = useCallback(async () => {
+    try {
+      const res = await fetch("/api/membership-letter");
+      if (!res.ok) throw new Error(String(res.status));
+      setLetter((await res.json()) as ServedLetter);
+      setLetterFailed(false);
+    } catch {
+      setLetterFailed(true);
+    }
+  }, []);
+  useEffect(() => {
+    void readLetter();
+  }, [readLetter]);
+  // Neither fallback inside states a fact about any particular place or plan (shared/membershipLetter.ts).
+  const local = renderMembershipLetter(letterSourceFrom(cfg, { covenant, legal }));
+  const parts = letter?.parts ?? local.parts;
+  const letterTitle = letter?.title ?? local.title;
 
   const [form, setForm] = useState({
     name: "",
@@ -130,6 +184,24 @@ export default function LoveLetter() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  // The server's vouch sentence, once a signer with an account is in and the village still counts vouches for them.
+  const [vouchesLeft, setVouchesLeft] = useState("");
+  const signerId = user?.id ?? "";
+  useEffect(() => {
+    if (!submitted || !signerId) return;
+    let live = true;
+    gameFetch("/api/me/vouches")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (live && d?.state && !d.state.off && !d.state.met) setVouchesLeft(String(d.sentence ?? ""));
+      })
+      .catch(() => {
+        /* Unknown draws nothing. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [submitted, signerId]);
   // The covenant form's failure path used to name one village's inbox, so a
   // would-be member of any other village was told, on the worst screen of the
   // flow, to write to strangers. With no published address the sentence stops
@@ -164,6 +236,10 @@ export default function LoveLetter() {
       setError("Please describe your custom contribution amount.");
       return;
     }
+    if (user && !letter) {
+      setError(LETTER_WORDS.unreadable);
+      return;
+    }
     setError("");
     setSubmitting(true);
     try {
@@ -191,8 +267,9 @@ export default function LoveLetter() {
         body: JSON.stringify({
           type: "membership-508",
           data: {
-            name: form.name,
-            email: form.email,
+            // A member's account names them; nobody types their own name to align (Rye, 2026-10-01).
+            name: user ? user.name : form.name,
+            email: user ? user.email : form.email,
             phone: form.phone,
             paths: form.paths,
             why: form.why,
@@ -200,11 +277,19 @@ export default function LoveLetter() {
             acknowledgedGoodNeighbor: form.goodNeighbor,
             acknowledgedCommitments: form.commitmentAck,
             signedAt: new Date().toISOString(),
+            // The words this page drew. A member is aligned with exactly these, or refused.
+            ...(letter ? { letterVersion: letter.version } : {}),
           },
         }),
       });
       if (res.ok) {
         setSubmitted(true);
+      } else if (res.status === 409) {
+        // The letter changed since this page drew it: show the new words, and ask again.
+        const body = await res.json().catch(() => null);
+        if (body?.letter) setLetter(body.letter as ServedLetter);
+        else void readLetter();
+        setError(String(body?.message ?? LETTER_WORDS.changed));
       } else {
         setError(`Something went wrong. Please try again${emailFallback}.`);
       }
@@ -215,6 +300,8 @@ export default function LoveLetter() {
   };
 
   if (submitted) {
+    const firstName = (user ? user.name : form.name).trim().split(/\s+/)[0] ?? "";
+    const handle = user?.handle?.trim() ?? "";
     return (
       <Layout>
         <section className="py-24 bg-background">
@@ -232,26 +319,37 @@ export default function LoveLetter() {
                 <Heart className="w-12 h-12 text-primary" fill="currentColor" />
               </motion.div>
               <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6">
-                Welcome to the {villageName} Family
+                Thank you{firstName ? `, ${firstName}` : ""}.
               </h1>
-              <p className="text-xl text-muted-foreground leading-relaxed mb-8">
-                Your membership form has been received. You are now part of the {entityName} community.
-              </p>
+              {user && (
+                <p className="text-base text-foreground mb-8">
+                  {LETTER_WORDS.done}{" "}
+                  <Link href="/profile" className="font-semibold text-primary underline underline-offset-2">
+                    {LETTER_WORDS.kept}
+                  </Link>
+                </p>
+              )}
               <div className="bg-card border border-primary/20 rounded-2xl p-8 mb-8 text-left">
                 <h2 className="font-display text-2xl font-bold text-foreground mb-4">What happens next</h2>
-                <div className="space-y-4 text-muted-foreground">
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>You'll receive a welcome email from the {villageName} team within 48 hours with your membership details.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>We'll schedule a personal welcome call to learn more about your vision and which path calls to you most.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <p>You'll be invited to your first Community Circle and introduced to the founding community.</p>
-                  </div>
+                <div data-next-steps="" className="space-y-4 text-muted-foreground">
+                  <NextStep>Your letter is with the people who look after joining {villageName}.</NextStep>
+                  {user ? (
+                    <NextStep>You will get a notice when they answer, and your profile shows where it stands.</NextStep>
+                  ) : (
+                    <NextStep>
+                      Someone will write to you at{" "}
+                      <span className="font-medium text-foreground break-words">{form.email.trim()}</span>.
+                    </NextStep>
+                  )}
+                  {user && handle && vouchesLeft && (
+                    <NextStep>
+                      Members who know you can also vouch for you on{" "}
+                      <Link href={`/profile/${encodeURIComponent(handle)}`} className="font-semibold text-primary underline underline-offset-2">
+                        your page
+                      </Link>
+                      . {vouchesLeft}
+                    </NextStep>
+                  )}
                 </div>
               </div>
               <p className="text-lg font-accent text-primary italic mb-8">
@@ -290,7 +388,7 @@ export default function LoveLetter() {
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Our founding covenant, and your official membership in {entityName}.
-              Read. Reflect. Sign.
+              {user ? ` ${LETTER_WORDS.readReflect}` : " Read. Reflect. Sign."}
             </p>
           </motion.div>
 
@@ -301,20 +399,16 @@ export default function LoveLetter() {
             transition={{ delay: 0.1 }}
             className="bg-card p-8 md:p-12 rounded-2xl shadow-lg font-accent text-lg leading-relaxed mb-10 border border-border"
           >
-            <p className="mb-6 text-foreground">Dear Future {villageName} Family Member,</p>
+            <p className="mb-6 text-foreground">{parts.greeting}</p>
 
-            <p className="mb-6 text-muted-foreground">{openingParagraph}</p>
+            <p className="mb-6 text-muted-foreground">{parts.opening}</p>
 
-            <p className="mb-6 text-muted-foreground">
-              By signing this Love Letter, you are not just joining a community. You are becoming a
-              co-creator of the most beautiful village we can imagine together. You are saying yes to
-              regeneration, of the land, of community, of yourself.
-            </p>
+            <p className="mb-6 text-muted-foreground">{parts.joining}</p>
 
-            <p className="mb-4 text-foreground font-semibold">As a member of {entityName}, you commit to:</p>
+            <p className="mb-4 text-foreground font-semibold">{parts.commitLead}</p>
 
             <ul className="space-y-3 mb-8">
-              {commitments.map((commitment, i) => (
+              {parts.commitments.map((commitment, i) => (
                 <li key={i} className="flex items-start gap-3">
                   <Heart className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                   <span className="text-muted-foreground">{commitment}</span>
@@ -322,21 +416,17 @@ export default function LoveLetter() {
               ))}
             </ul>
 
-            <p className="mb-6 text-muted-foreground">
-              In return, you become a full member of {entityName}, gaining access
-              to community spaces, governance participation, {tokenName} economy, and the opportunity to
-              deepen your involvement through roles, residency, or business creation.
-            </p>
+            <p className="mb-6 text-muted-foreground">{parts.inReturn}</p>
 
-            <p className="mb-6 text-muted-foreground">{governanceParagraph}</p>
+            <p className="mb-6 text-muted-foreground">{parts.governance}</p>
 
-            {contributionParagraph && (
-              <p className="mb-6 text-muted-foreground">{contributionParagraph}</p>
+            {parts.contribution && (
+              <p className="mb-6 text-muted-foreground">{parts.contribution}</p>
             )}
 
             <p className="text-foreground font-semibold italic">
-              With love and anticipation,<br />
-              <span className="font-display text-xl not-italic">The {villageName} Community</span>
+              {parts.closing}<br />
+              <span className="font-display text-xl not-italic">{parts.signature}</span>
             </p>
           </motion.div>
 
@@ -348,15 +438,22 @@ export default function LoveLetter() {
             className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12"
           >
             <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Sign Your Membership
+              {user ? LETTER_WORDS.heading(letterTitle) : "Sign Your Membership"}
             </h2>
             <p className="text-muted-foreground mb-8">
-              Fill in your details below to officially join the {villageName} Family and become a member of {entityName}.
+              {user
+                ? LETTER_WORDS.lede(villageName)
+                : `Fill in your details below to officially join the ${villageName} Family and become a member of ${entityName}.`}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
 
-              {/* Name + Email */}
+              {/* Name + Email: a member's account already holds both, so a member types neither. */}
+              {user ? (
+                <p data-aligning-as="" className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground">
+                  {LETTER_WORDS.asYou(user.name)}
+                </p>
+              ) : (
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   {/* htmlFor on every label here. The text was already above
@@ -393,6 +490,7 @@ export default function LoveLetter() {
                   />
                 </div>
               </div>
+              )}
 
               {/* Phone */}
               <div>
@@ -546,15 +644,21 @@ export default function LoveLetter() {
                       transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                       className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
                     />
-                    Signing your membership...
+                    {user ? LETTER_WORDS.busy : "Signing your membership..."}
                   </>
                 ) : (
                   <>
                     <Send className="w-5 h-5" />
-                    Sign the Love Letter &amp; Join the {villageName} Family
+                    {user ? LETTER_WORDS.button(villageName) : <>Sign the Love Letter &amp; Join the {villageName} Family</>}
                   </>
                 )}
               </button>
+
+              {user && (
+                <p className="text-xs text-center text-muted-foreground">
+                  {letterFailed && !letter ? LETTER_WORDS.unreadable : LETTER_WORDS.kept}
+                </p>
+              )}
 
               <p className="text-xs text-center text-muted-foreground">{footerNote}</p>
             </form>

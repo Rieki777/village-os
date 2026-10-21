@@ -134,9 +134,16 @@ describe("moduleCatalog", () => {
      * default of 1 is ruled (shared/journal.ts) and is a working village: a
      * team of three sees its own pulse the day the module is switched on.
      */
+    /*
+     * Live Sessions joined on 2026-10-09 with two dials. `sessions.default_minutes`
+     * is a working length on day one, and `sessions.place_line` reads a
+     * neutral sentence (SESSION_COPY.placeLineFallback in shared/sessions.ts)
+     * until a village writes its own, so the drop in works everywhere before
+     * anybody has touched either.
+     */
     expect(claiming).toEqual([
       "feed", "forum", "governance", "gratitude",
-      "introductions", "journal", "messaging", "progression", "quests",
+      "introductions", "journal", "messaging", "progression", "quests", "sessions",
     ]);
   });
 
@@ -218,10 +225,34 @@ describe("moduleCatalog", () => {
      *                           the currency dials from an earlier sweep, and
      *                           the price of that is noise a person reads
      *                           once.
+     *
+     * Judged on 2026-10-02, by the comms foundation lane:
+     *
+     *   comms.quiet_start_hour, comms.quiet_end_hour
+     *                           matched on "time zone", and read in the
+     *                           READER's own zone (the village's when theirs is
+     *                           unknown), so 8 to 20 means the same hours of
+     *                           the day in every village on the planet.
+     *   comms.time_poll_settle_minutes
+     *                           a duration, matched on "the time on the
+     *                           calendar" in its own description.
+     *
+     * Judged on 2026-10-14, by the live sessions lane:
+     *
+     *   calendar.seasons        blank, and blank is a right answer under any
+     *                           sky: the room falls back to the hemisphere's
+     *                           four outside the tropics and to no season
+     *                           inside them, reading the land's own latitude.
+     *                           A list is a village's own words, never a
+     *                           platform guess a village must correct.
      */
     expect(hits).toEqual([
       "calendar.cross_quarters",
+      "calendar.seasons",
       "calendar.year_anchor",
+      "comms.quiet_end_hour",
+      "comms.quiet_start_hour",
+      "comms.time_poll_settle_minutes",
       "cycle.mode",
       "economy.claims_week_starts",
       "events.past_visible_days",
@@ -257,8 +288,15 @@ describe("moduleCatalog", () => {
      * every reader treats it as off, and the default is blank precisely so a
      * fork does not inherit somebody else's relay. Redemption's three were not
      * that: `process_text` empty shows a member no card at all.
+     *
+     * `sessions.place_line` is the second honest case, judged on 2026-10-09.
+     * Empty there MEANS the village has not written its own line yet, and the
+     * room reads a neutral sentence in its place (SESSION_COPY.placeLineFallback
+     * in shared/sessions.ts), so a drop in works on day one. A default line
+     * would put platform words where a village's own belong, and a line about
+     * one place is wrong for every other place.
      */
-    expect(blank).toEqual(["governance"]);
+    expect(blank).toEqual(["sessions", "governance"]);
   });
 
   it("the builder links point into the upstream repository's module docs", () => {

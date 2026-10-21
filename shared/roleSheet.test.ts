@@ -805,7 +805,9 @@ describe("the portrait and the chips", () => {
     for (let i = 0; i < 60; i++) {
       const p = portraitFor({ id: `seat-${i}`, name: "Seat" }, ["building"]);
       if (p.kind !== "class") throw new Error("expected class art");
-      expect(fs.existsSync(path.join(ROOT, "client/public", p.src)), p.src).toBe(true);
+      // Served at /images/avatars/ from server/assets/avatars (server/routes/stockAvatars.ts).
+      expect(p.src.startsWith("/images/avatars/"), p.src).toBe(true);
+      expect(fs.existsSync(path.join(ROOT, "server/assets/avatars", path.basename(p.src))), p.src).toBe(true);
       seen.add(p.src);
     }
     expect(seen.size).toBe(6);
@@ -821,7 +823,7 @@ describe("the portrait and the chips", () => {
    * taken off.
    */
   it("zooms exactly the drawings painted on a paper margin", async () => {
-    const dir = path.join(ROOT, "client/public/images/avatars");
+    const dir = path.join(ROOT, "server/assets/avatars");
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".webp"));
     expect(files).toHaveLength(30);
     const measured: Record<string, number> = {};
@@ -1034,6 +1036,15 @@ describe("helpers moved here", () => {
     expect(formatDay("2027-03-21")).toBe("21 Mar 2027");
     expect(formatDay("2026-11-11T12:00:00.000Z", false)).toBe("11 Nov");
     expect(formatDay("nonsense")).toBeNull();
+  });
+
+  it("reads an instant as its day in the village's zone, whatever the viewer's (red team U6)", () => {
+    // A term ending at midnight starting 21 March in UTC is 20 March in Los Angeles.
+    expect(formatDay("2027-03-21T00:00:00.000Z", true, "UTC")).toBe("21 Mar 2027");
+    expect(formatDay("2027-03-21T00:00:00.000Z", true, "America/Los_Angeles")).toBe("20 Mar 2027");
+    expect(formatDay("2027-03-21T07:30:00.000Z", true, "Asia/Tokyo")).toBe("21 Mar 2027");
+    // The sheet carries the season's zone to the term fact.
+    expect(seasonForSheet({ current: { name: "S", endsOn: "2027-03-21" }, daysLeft: 3, timezone: "Asia/Tokyo" })?.timezone).toBe("Asia/Tokyo");
   });
 
   it("names no deficit in the files that now hold the succession words", () => {

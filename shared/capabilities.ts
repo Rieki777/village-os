@@ -35,6 +35,12 @@ export type Capability =
   | "proposal.open" // open a governance decision
   | "proposal.decide" // record a decision's outcome
   | "map.viewPeople" // see WHO holds seats on the village map (not just counts)
+  // The open book (seat settings, 2026-10-09). Every member reads every
+  // seat's terms on offer, money included; a visitor and a signed-in guest
+  // read none of it. One key, unlocked at the member rung, and no bespoke
+  // rung check anywhere: a village that wants its book closed moves the rung.
+  // `map.viewPeople` is never used for this, because it opens at guest.
+  | "terms.read" // read what each seat offers whoever holds it, money included
   | "map.contact" // reach a role holder through the contact relay
   | "map.edit" // enter build mode and keep a draft of the land
   | "map.publish" // push a draft onto the live map everyone sees
@@ -65,6 +71,13 @@ export type Capability =
   // for a route whose only holder could ever be the deployment operator.
   | "org.seat" // seat and unseat the people who hold the village's seats
   | "org.seatAgent" // seat and unseat the software agents that hold seats
+  // ── The decide key (Rye, 2026-09-14) ─────────────────────────────────────
+  //
+  // A reorganisation of the circles and seats is proposed freely and adopted
+  // by whoever holds this: a live holder publishes it straight onto the chart,
+  // with no window and no veto, or puts it to the village. Nobody holding it
+  // means a village ballot (server/routes/orgDraftDecide.ts).
+  | "org.decide" // publish a structure draft live, or put it to the village
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
@@ -114,7 +127,15 @@ export type Capability =
    * not anybody holds this seat. The key opens one door: stopping a landing
    * inside its window, in the open, with a name and a reason on it.
    */
-  | "steward.veto"; // stop a carried decision inside its window, and say why
+  | "steward.veto" // stop a carried decision inside its window, and say why
+  // ── The comms key (Village Comms, 0244) ──────────────────────────────────
+  //
+  // The village's email: which automations run, what they say, and the
+  // letters it sends to people who agreed to get them. It passes the test the
+  // handover keys set: a member can finish "the village's ____ look after
+  // that". The sender, the domain and the provider key are NOT behind it;
+  // they stay with the admin in the secrets plane (the comms build spec 8).
+  | "comms.manage"; // run the village's email: automations, their words, and letters
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -128,6 +149,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "proposal.open",
   "proposal.decide",
   "map.viewPeople",
+  "terms.read",
   "map.contact",
   "map.edit",
   "map.publish",
@@ -149,6 +171,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "member.superVouch",
   "org.seat",
   "org.seatAgent",
+  "org.decide",
   "intake.moderate",
   "library.keep",
   "story.tell",
@@ -156,6 +179,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "quest.approve",
   "redemption.confirm",
   "steward.veto",
+  "comms.manage",
 ];
 
 /**
@@ -183,6 +207,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "proposal.open": "Open a governance decision",
   "proposal.decide": "Record a decision's outcome",
   "map.viewPeople": "See who holds seats on the village map",
+  "terms.read": "Read what each seat offers, money included",
   "map.contact": "Reach a role holder through the contact relay",
   "map.edit": "Draft changes to the land in build mode",
   "map.publish": "Publish a draft onto the live map",
@@ -204,6 +229,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "member.superVouch": "Admit a member outright",
   "org.seat": "Seat and unseat the holders of the village's seats",
   "org.seatAgent": "Seat and unseat the software agents that hold seats",
+  "org.decide": "Publish a change to the village's structure, or put it to the village",
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
@@ -211,6 +237,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "steward.veto": "Stop a carried decision inside its window, and say why",
+  "comms.manage": "Run the village's email: its automations, their words, and letters",
 };
 
 /**
@@ -234,6 +261,10 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
   "forum.post": "member", // you can talk once you have joined
   "proposal.open": "co-creator", // open a decision once you are co-creating
   "map.viewPeople": "guest", // any account sees who holds the village's seats
+  // The open book: membership is the bar for reading a seat's terms. Guest is
+  // deliberately NOT enough, which is why this is its own key and never
+  // map.viewPeople.
+  "terms.read": "member",
   "map.contact": "member", // reaching people through the relay starts at member
   "stay.member_rate": "member", // the member price comes with membership
   // Messaging opens where forum posting opens: once you have joined, you can
@@ -315,6 +346,10 @@ export const STAGE_UNLOCKS: Partial<Record<Capability, string>> = {
   // moderation, the library, the village's public voice and its own dials to
   // everyone who did enough quests, which is how you get a power with no
   // holder and nobody to ask about it.
+  //
+  // `comms.manage` is absent for the same reason, the way `feed.announce` is.
+  // A letter reaches every inbox that said yes to the village at once, so who
+  // may send one is an appointment and never a rung.
 };
 
 /**
@@ -383,6 +418,17 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "story.tell": true,
   "org.seat": true,
   "org.seatAgent": true,
+  /*
+   * ADOPTING A REORGANISATION. Rye, 2026-09-14: "a person holding the power
+   * (in this case by default Stewards, but an Operations or COO type role
+   * could be formed to hold this power) can publish live OR send it to be a
+   * ballot". The default he named is reached by this `true` and nothing else:
+   * it puts the key in HANDOVER_SET, so the founding stewards take it at
+   * launch with the rest, and a village can then move it to an Operations
+   * circle the way it moves any power. Both doors that publish ask
+   * `mayAct`, so the escape hatch and the public record are there.
+   */
+  "org.decide": true,
   "dial.set": true,
   /*
    * The steward's seat is the one power the founder designed to CHANGE HANDS,
@@ -402,6 +448,23 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "event.manage": true,
   "exchange.manage": true,
   "forum.moderate": true,
+  /*
+   * THE VILLAGE'S EMAIL, and it copies `feed.announce` rather than
+   * `message.send`. Writing to a person is a personal act, but running the
+   * village's own automations and letters is a job the village fills, and the
+   * plan Rye approved on 2026-10-02 says so in as many words: "It can be
+   * handed to a role, and the village can hold it."
+   *
+   * The condition this column sets is met by construction. Every route that
+   * acts on it asks `guardCapability` (server/routes/comms.ts and the comms
+   * routes that follow it), so the escape hatch and the public record are
+   * both there, and a read that refuses asks `mayStillSee`.
+   *
+   * IT JOINS HANDOVER_SET, which is the consequence to know about: a village
+   * launching after this entrusts it to the founding seat with the others,
+   * and the handover counts it.
+   */
+  "comms.manage": true,
   // ── The seven that crossed in 0103 ──────────────────────────────────────
   //
   // Each of these was `false` for one mechanical reason: its routes asked
@@ -442,6 +505,8 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "stay.member_rate": false,
   "map.photograph": false,
   "map.viewPeople": false,
+  // Reading is a member's own act, so there is nobody for it to move to.
+  "terms.read": false,
   "map.contact": false,
   "map.edit": false,
 
@@ -497,12 +562,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 19 keys
- * today. The other 15 are not withheld from anybody: they are personal acts
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 21 keys
+ * today. The other 16 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 19 in the founding seat and has
+ * Read this way, a launched village holds all 21 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -511,6 +576,14 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * So this is ONE constant that the seating and the handover read, and
  * narrowing it is an edit to this one expression. Every caller and every test
  * follows it, and nothing else in the codebase has to be found.
+ *
+ * THE TWO NUMBERS IN THIS PARAGRAPH ARE ASSERTED, not maintained by hope.
+ * They read 19 and 15 until 2026-10-20, by which time `comms.manage` had
+ * become transferable and nobody had edited this paragraph - so the
+ * authoritative explanation of the founder's words understated what those
+ * words were read to cover. `capabilities.test.ts` now parses these sentences
+ * and compares them with the derived set, so the next transferable power is an
+ * edit somebody makes here on purpose, not a drift nobody sees.
  *
  * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
  * capability added to the union with no line there is a type error and a
@@ -668,6 +741,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "forum.moderate": true,
   "proposal.decide": true,
   "map.viewPeople": true,
+  "terms.read": true, // a look, like map.viewPeople: a deny may pause it
   "map.edit": true,
   "map.publish": true,
   "map.curatePhotos": true,
@@ -682,6 +756,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   "org.declare": true,
   "org.seat": true,
   "org.seatAgent": true,
+  // A job: pausing it stops somebody publishing the chart on their own say,
+  // and the village can still vote a reorganisation through without them.
+  "org.decide": true,
   "intake.moderate": true,
   // A job, and not a voice. Pausing it stops somebody putting paid work on
   // the board while a village works something out; it takes away nothing they
@@ -696,6 +773,10 @@ export const DENIABLE: Record<Capability, boolean> = {
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
+  // A job, like `feed.announce`: pausing it stops somebody sending the
+  // village's letters and changing its automations, and takes away nothing
+  // they hold as a say in a decision.
+  "comms.manage": true,
 };
 
 /**
@@ -783,6 +864,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "proposal.open": true,
   "proposal.decide": true,
   "map.viewPeople": true,
+  "terms.read": true,
   "map.contact": true,
   "map.edit": true,
   "map.publish": true,
@@ -804,12 +886,16 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "member.superVouch": true,
   "org.seat": true,
   "org.seatAgent": true,
+  "org.decide": true,
   "intake.moderate": true,
   "library.keep": true,
   "story.tell": true,
   "dial.set": true,
   "quest.approve": true,
   "redemption.confirm": true,
+  // An ordinary appointment, the same as `feed.announce`: a badge is an
+  // honest way to hand the village's email to somebody.
+  "comms.manage": true,
 };
 
 /**

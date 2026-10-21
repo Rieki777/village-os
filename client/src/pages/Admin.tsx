@@ -20,6 +20,7 @@ import { ALL_CAPABILITIES, isDeniable } from "@shared/capabilities";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
+import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
@@ -78,6 +79,7 @@ import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/componen
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
+import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
 // visit-inquiry and membership-508 were missing, and they are the two highest-value
 // submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
@@ -85,7 +87,7 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "
 // the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
 // membership-request is somebody with no invitation asking to join, from
 // RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact"] as const;
+const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact", "comms-change"] as const;
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.
@@ -749,7 +751,7 @@ export function SubmissionsTab({ password }: { password: string }) {
     load();
   };
 
-  const setStatus = async (id: string, status: string) => {
+  const setStatus = async (id: string, status: string, type = "") => {
     try {
       const res = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
         method: "PUT",
@@ -762,9 +764,9 @@ export function SubmissionsTab({ password }: { password: string }) {
       else if (data.admitted) toast.success("Accepted. They hold membership now.");
       // A stranger signed with no account, so the accept stands and admits nobody.
       else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // Whether the person who sent this heard about the move. Members hear;
-      // a public form filled in by a stranger has no account to reach, and a
-      // founder who knows which is which can pick up the phone.
+      // A yes to joining admits nobody, even from an account (a signing or vouches do), and names the next step:
+      // for an account, the doors that do admit; for a stranger's form, with no account to reach, an invitation.
+      else if (type === "membership-request" && status === "accepted") toast.success(data.notified ? "Accepted, and they have been told. A yes to a request admits nobody. Their signed letter, once accepted, or enough vouches will make them a member." : "Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
       else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
       else toast.success("Status updated");
       load();
@@ -855,7 +857,7 @@ export function SubmissionsTab({ password }: { password: string }) {
                     <label className="text-xs font-medium text-gray-500">Status</label>
                     <select
                       value={s.status ?? "new"}
-                      onChange={(e) => setStatus(s.id, e.target.value)}
+                      onChange={(e) => setStatus(s.id, e.target.value, s.type)}
                       className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
                     >
                       {SUBMISSION_STATUSES.map((st) => (
@@ -898,150 +900,6 @@ export function SubmissionsTab({ password }: { password: string }) {
               )}
             </div>
           ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ── Email Settings Tab ────────────────────────────────────────────────────────
-
-interface EmailConfig {
-  investor: string;
-  steward: string;
-  resident: string;
-  prosperity: string;
-}
-
-/**
- * Hoisted OUT of EmailSettingsTab on purpose (the cursor-jump bug): a
- * component type created inside a render is a NEW type every keystroke, so
- * React unmounted and remounted the input mid-word and focus fell to the
- * top of the section. Module scope = stable identity = the cursor stays
- * where the person is typing.
- */
-function EmailField({ label, value, onChange, hint }: {
-  label: string; value: string; onChange: (v: string) => void; hint: string;
-}) {
-  return (
-    <div>
-      <label className="text-sm font-medium text-gray-700 block mb-1">{label}</label>
-      {/* type=text, not email: these fields take a comma-separated LIST so
-          several people can receive updates, and the browser's single-email
-          validation would fight that. */}
-      <input
-        type="text"
-        inputMode="email"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-        placeholder="one@example.org, two@example.org"
-      />
-      <p className="text-xs text-gray-400 mt-1">{hint} Several people? Separate addresses with commas.</p>
-    </div>
-  );
-}
-
-function EmailSettingsTab({ password, openIntegrations }: { password: string; openIntegrations: () => void }) {
-  const [cfg, setCfg] = useState<EmailConfig>({
-    investor: "", steward: "", resident: "", prosperity: "",
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/email-config`, { headers: authHeaders(password) });
-      const data = await res.json();
-      setCfg({
-        investor: data.investor ?? "",
-        steward: data.steward ?? "",
-        resident: data.resident ?? "",
-        prosperity: data.prosperity ?? "",
-      });
-    } catch {
-      toast.error("Failed to load email settings");
-    }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/email-config`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify(cfg),
-      });
-      if (!res.ok) throw new Error("Save failed");
-      toast.success("Email settings saved");
-    } catch {
-      toast.error("Failed to save");
-    }
-    setSaving(false);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Email Settings</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Form submissions are routed to the matching inbox via Resend.
-          </p>
-        </div>
-        <button
-          onClick={save}
-          disabled={saving || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
-        >
-          <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save"}
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading...</div>
-      ) : (
-        <div className="space-y-5 max-w-xl">
-          <EmailField
-            label="Business Inquiries (Prosperity / Contact)"
-            value={cfg.prosperity}
-            onChange={(v) => setCfg({ ...cfg, prosperity: v })}
-            hint="Receives business and contact form submissions."
-          />
-          <EmailField
-            label="Investor"
-            value={cfg.investor}
-            onChange={(v) => setCfg({ ...cfg, investor: v })}
-            hint="Receives investor enquiries and document requests."
-          />
-          <EmailField
-            label="Core Team (Steward)"
-            value={cfg.steward}
-            onChange={(v) => setCfg({ ...cfg, steward: v })}
-            hint="Receives Village Steward applications."
-          />
-          <EmailField
-            label="Resident"
-            value={cfg.resident}
-            onChange={(v) => setCfg({ ...cfg, resident: v })}
-            hint="Receives Resident applications and waitlist signups."
-          />
-
-          <div className="border-t border-gray-100 pt-5">
-            <p className="text-sm text-gray-600">
-              API keys (Resend, Anthropic, Stripe) moved to{" "}
-              <button onClick={openIntegrations} className="text-teal-deep font-medium hover:underline">
-                Integrations
-              </button>,{" "}
-              one place for every third-party connection, and keys never travel
-              back to a browser once saved.
-            </p>
-          </div>
         </div>
       )}
     </div>
@@ -1378,7 +1236,7 @@ function InvestorInboxCard({ password }: { password: string }) {
           <p className="text-xs text-muted-foreground mt-1">
             When somebody asks for the packet below, the documents go to them and
             the alert comes to you. These are the addresses it reaches. They are
-            the same two inboxes as Email Settings, so an edit in either place is
+            the same two inboxes as Comms Settings, so an edit in either place is
             the same edit.
           </p>
         </div>
@@ -8152,7 +8010,7 @@ function LedgerTab({ password }: { password: string }) {
 interface SeasonGoal { text: string; done: boolean }
 interface SeasonRow {
   id: string; name: string; theme: string; focus: string;
-  startsOn: string; endsOn: string; goals: SeasonGoal[];
+  startsOn: string; endsOn: string; goals: SeasonGoal[]; planWindow?: PlanWindowValue;
 }
 
 const CADENCES = [
@@ -8270,8 +8128,7 @@ export function SeasonTab({ password }: { password: string }) {
                     <input type="date" value={s.endsOn} onChange={(e) => update(i, { endsOn: e.target.value })} className="px-2 py-2 text-sm border border-gray-200 rounded-lg" />
                   </div>
                 </div>
-                <input type="text" value={s.focus} onChange={(e) => update(i, { focus: e.target.value })} placeholder="What this season is for (shown on the banner)" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
-
+                <input type="text" value={s.focus} onChange={(e) => update(i, { focus: e.target.value })} placeholder="What this season is for (shown on the banner)" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" /><SeasonPlanWindowFields value={s.planWindow} onChange={(planWindow) => update(i, { planWindow })} />
                 <div>
                   <p className="text-xs font-semibold text-gray-500 mb-1.5">Main goals</p>
                   <div className="space-y-1.5">
@@ -9451,7 +9308,13 @@ export default function Admin() {
           {activeTab === "events-admin" && <EventsAdminPanel password={password} />}
           {activeTab === "submissions" && <SubmissionsTab password={password} />}
           {CONTENT_SECTIONS.map(({ key, label }) => (activeTab === key ? <ContentEditorTab key={key} password={password} sectionKey={key} sectionLabel={label} /> : null))}
-          {activeTab === "email-settings" && <EmailSettingsTab password={password} openIntegrations={() => setActiveTab("integrations")} />}
+          {(activeTab === "comms-settings" || activeTab === "email-settings") && <CommsSettings password={password} openIntegrations={() => setActiveTab("integrations")} />}
+          {activeTab === "comms-overview" && <CommsOverview password={password} />}
+          {activeTab === "comms-journeys" && <CommsJourneys password={password} />}
+          {activeTab === "comms-words" && <CommsWords password={password} />}
+          {activeTab === "comms-people" && <CommsPeople password={password} />}
+          {activeTab === "comms-letters" && <CommsLetters password={password} />}
+          {activeTab === "comms-sent" && <CommsSentMail password={password} />}
           {activeTab === "integrations" && <IntegrationsTab password={password} />}
           {activeTab === "feedback" && <FeedbackAdminTab password={password} />}
           {activeTab === "forum-moderation" && <ForumModerationTab password={password} />}

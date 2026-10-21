@@ -551,9 +551,14 @@ quests/roles/mentions/replies immediate by preference, gratitude/stage/
 unknown types in-app only. `quest_submitted` rides the member's quest
 preference, because work arriving for consent is the same conversation as
 consent read from the steward's side. The daily digest job batches unread, never-emailed rows from
-the last 3 days. `emailed_at` is stamped even when the provider quietly
-declined — a late retry email surprises more than a missed one. Tombstones
-and claim-pending accounts (no `passwordHash`) get no email.
+the last 3 days. Every one of these emails goes through the comms post office
+(`server/lib/comms/postOffice.ts`) as kind `notices`, under a key of the spine's
+own: `notify:<id>`, `digest:<userId>:<YYYY-MM-DD>`, `brief:<week>:<userId>`.
+`emailed_at` is stamped when the post office takes the email and never when it
+refuses it (no provider, a suppressed address). The stamp does not wait for the
+provider: a notice still unsent after `comms.notice_expiry_minutes` is dropped,
+because a late notice surprises more than a missed one. Tombstones and
+claim-pending accounts (no `passwordHash`) get no email.
 
 ### 3.7 The scheduler — `server/lib/scheduler.ts`
 

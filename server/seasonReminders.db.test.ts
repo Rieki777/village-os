@@ -52,8 +52,10 @@ function deps(sent: string[], prefs: unknown): NotifyDeps {
   return {
     pool,
     memberById: async (id: string) => ({ id, email: `${id}@example.test`, passwordHash: "hash", prefs }),
+    // Answers as the post office does when it takes the row, so the spine stamps `emailed_at`.
     sendEmail: async (o) => {
       sent.push(o.subject);
+      return { accepted: true, status: "queued" };
     },
     origin: () => "https://example.test",
     projectName: () => "Test village",
@@ -141,7 +143,7 @@ describe.skipIf(!configured)("the daily cap and the season-end reminder", () => 
       "SELECT user_id, link FROM notifications WHERE dedupe_key LIKE 'season-ending:spring-2026:2026-10-01:14:u-sweep-%' ORDER BY user_id",
     );
     expect(rows.map((r) => [r.user_id, r.link])).toEqual([
-      ["u-sweep-a", "/seasonal-festivals"],
+      ["u-sweep-a", "/season-plans/mine"],
       ["u-sweep-b", "/admin?tab=seasons-patterns"],
     ]);
   });
