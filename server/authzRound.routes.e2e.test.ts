@@ -66,7 +66,7 @@ async function call(
 
 /** How many emails the post office recorded for one origin. Every post writes a row, sent or not. */
 async function mailRows(origin: string): Promise<number> {
-  const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM comms_messages WHERE origin = ?", [origin]);
+  const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM comms_messages WHERE origin = ?", [origin]); // module-review-ok: the e2e harness reading its own scratch schema
   return Number(rows[0]?.n ?? 0);
 }
 
@@ -177,7 +177,7 @@ describe.skipIf(!DB_CONFIGURED)("one public request, one recipient", () => {
     expect(await waitForMailRows("forms.ack", 1)).toBeGreaterThanOrEqual(1);
     await new Promise((r) => setTimeout(r, 500));
     expect(await mailRows("forms.ack")).toBe(1);
-    const [rows] = await pool.query<any[]>("SELECT to_email FROM comms_messages WHERE origin = 'forms.ack'");
+    const [rows] = await pool.query<any[]>("SELECT to_email FROM comms_messages WHERE origin = 'forms.ack'"); // module-review-ok: the e2e harness reading its own scratch schema
     expect(rows.map((r) => r.to_email)).toEqual(["proposer@example.test"]);
   });
 });
@@ -249,7 +249,7 @@ describe.skipIf(!DB_CONFIGURED)("the public library catalogue", () => {
   it("names no donor and no intake signer to a stranger", async () => {
     const on = await call("PUT", "/api/admin/modules/library/lifecycle", { lifecycle: "public", examples: false });
     expect(on.status, on.text).toBe(200);
-    await pool.query(
+    await pool.query( // module-review-ok: the e2e harness seeding its own scratch schema
       "INSERT INTO library_items (id, name, status, credit_value, donor_user_id, intake_signed_by) VALUES (?,?,?,?,?,?)",
       ["lib-authz-1", "A good drill", "available", 40, "user-donor-authz", "user-signer-authz"],
     );
