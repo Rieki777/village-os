@@ -737,7 +737,7 @@ function StewardNextStepForm() {
             required
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder="Full name"
           />
         </div>
@@ -752,7 +752,7 @@ function StewardNextStepForm() {
             required
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder="you@example.com"
           />
         </div>
@@ -767,7 +767,7 @@ function StewardNextStepForm() {
           type="text"
           value={form.gifts}
           onChange={(e) => setForm((f) => ({ ...f, gifts: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           placeholder="e.g. regenerative farming, facilitation, web development..."
         />
       </div>
@@ -781,7 +781,7 @@ function StewardNextStepForm() {
           rows={3}
           value={form.question}
           onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
           placeholder="Share what resonated, what you're looking for, or any questions on your heart..."
         />
       </div>
