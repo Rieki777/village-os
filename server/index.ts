@@ -15,6 +15,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
+import { securityHeaders } from "./lib/securityHeaders";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
@@ -6370,48 +6371,23 @@ async function startServer() {
   app.set("query parser", "extended");
 
   /**
-   * SECURITY RESPONSE HEADERS, on every response this process writes.
-   *
-   * Registered FIRST, ahead of the webhooks and every route below, because a
-   * header set per-route is a header some route will be added without. Live
-   * measurement before this landed: no CSP, no X-Frame-Options, no nosniff, no
-   * Referrer-Policy, no Permissions-Policy on any path, and `x-powered-by:
-   * Express` announcing the stack to anyone running `curl -sI`.
-   *
-   * `frame-ancestors 'self'` is the one that mattered most. /map is a
-   * full-viewport iframe of /grounds/index.html, so the whole village was
-   * embeddable in anyone's page: a pixel-perfect copy under a stranger's
-   * domain, with the member's own session inside it. Same-origin framing is
-   * what the shell does (LivingMap, MapPeek, WalkEditorPanel all point at
-   * /grounds/index.html), so 'self' keeps every one of them and refuses the
-   * rest. X-Frame-Options rides along for the browsers that still read it.
-   *
-   * A FULL CSP IS DELIBERATELY OUT OF SCOPE. docs/prototypes/grounds-v0.html
-   * is ~5 MB of self-contained page with inline scripts and inline styles
-   * throughout, so any script-src or style-src worth writing would blank the
-   * map. frame-ancestors stands on its own and needs no allowlist to maintain.
-   *
-   * Permissions-Policy denies camera and geolocation outright. The microphone
-   * is allowed for THIS origin only, `microphone=(self)`, because MicButton's
-   * speech input (the journal, every guide chat) needs it, and `microphone=()`
-   * made every mic fail silently with `not-allowed`. Frames from elsewhere stay
-   * denied. Widening a list here is a deliberate act and never a default.
-   *
-   * NO Strict-Transport-Security. It is set once and believed for its whole
-   * max-age, so it can only be sent when EVERY hostname this app answers on
-   * terminates TLS. The custom domain does (`curl -sI http://…` answers 301 to
-   * https), and the Railway-generated hostname cannot be enumerated from here.
-   * An unverified HSTS is not a header that can be taken back. See the report.
+   * SECURITY RESPONSE HEADERS, on every response this process writes:
+   * CSP, framing, nosniff, referrer, permissions, opener isolation.
+   * server/lib/securityHeaders.ts holds the policy and the measurements
+   * behind every directive. Registered FIRST, ahead of the webhooks and every
+   * route below, because a header set per-route is a header some route will
+   * be added without. The shell path mirrors `staticPath` further down: the
+   * policy hashes the inline scripts of the exact file the SPA fallback sends.
    */
   app.disable("x-powered-by");
-  app.use((_req, res, next) => {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
-    next();
-  });
+  app.use(
+    securityHeaders({
+      shellPath: path.join(
+        process.env.NODE_ENV === "production" ? path.resolve(__dirname, "public") : path.resolve(__dirname, "..", "dist", "public"),
+        "index.html",
+      ),
+    }),
+  );
 
   /**
    * S13/S32, the framework-owned settlement seam (economy invariant #10): ONE
