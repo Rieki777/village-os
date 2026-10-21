@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { DoorOpen, HeartHandshake, ShieldQuestion } from "lucide-react";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
+import LeavingEnds, { useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -25,6 +26,8 @@ export default function ExitPolicy() {
   const [error, setError] = useState("");
   // A member with no password confirms with Google (components/auth/ConfirmWithGoogle.tsx).
   const identity = useIdentityConfirm("request-exit");
+  // The aligned terms a departure ends when it is resolved (seat settings PR8). Signed in only.
+  const endingTerms = useTermsLeavingEnds(!!user);
 
   useEffect(() => {
     fetch("/api/exit-policy").then((r) => r.json()).then(setData).catch(() => {});
@@ -168,6 +171,7 @@ export default function ExitPolicy() {
                 Your contributions stay part of the village's record; your
                 identity is removed at the end, when everything is settled.
               </p>
+              <LeavingEnds titles={endingTerms} />
               <div className="space-y-2">
                 <IdentityConfirmField state={identity} action="request-exit"
                   password={password} onPassword={setPassword}

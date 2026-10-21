@@ -42,6 +42,8 @@ export interface StoredApplication {
   termSeasonId: string | null;
   termFollowsSeason: boolean;
   startsAt: Date | null;
+  /** The application whose terms this one amends (PR8), or null. */
+  supersedesId: string | null;
   status: ApplicationStatus;
   adoptedVia: "holder" | "ballot" | null;
   adoptedRef: string | null;
@@ -52,7 +54,7 @@ export interface StoredApplication {
 
 const COLUMNS =
   "id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, settings_hash, text_id, text_hash, " +
-  "term_ends_at, term_season_id, term_follows_season, starts_at, status, adopted_via, adopted_ref, " +
+  "term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status, adopted_via, adopted_ref, " +
   "authority_ref, decided_at, created_at";
 
 /** MySQL hands JSON back parsed on some drivers and as text on others. */
@@ -90,6 +92,7 @@ function rowToApplication(r: any): StoredApplication {
     termSeasonId: r.term_season_id ?? null,
     termFollowsSeason: Number(r.term_follows_season) === 1,
     startsAt: instant(r.starts_at),
+    supersedesId: r.supersedes_id ?? null,
     status: String(r.status) as ApplicationStatus,
     adoptedVia: r.adopted_via === "holder" || r.adopted_via === "ballot" ? r.adopted_via : null,
     adoptedRef: r.adopted_ref ?? null,
@@ -115,14 +118,16 @@ export interface NewApplication {
   termSeasonId: string | null;
   termFollowsSeason: boolean;
   startsAt: Date | null;
+  /** The application this one amends (PR8). */
+  supersedesId?: string | null;
   status: ApplicationStatus;
 }
 
 export async function insertApplication(db: Db, a: NewApplication): Promise<void> {
   await db.query(
     "INSERT INTO seat_applications (id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, " +
-      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, status) " +
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status) " +
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     [
       a.id,
       a.candidateUserId,
@@ -138,6 +143,7 @@ export async function insertApplication(db: Db, a: NewApplication): Promise<void
       a.termSeasonId,
       a.termFollowsSeason ? 1 : 0,
       a.startsAt,
+      a.supersedesId ?? null,
       a.status,
     ],
   );

@@ -15,7 +15,6 @@ import multer from "multer";
 import bcrypt from "bcrypt";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
-import { signingOf } from "../shared/membershipSigning";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
 // the active clock now, and it had no caller left here. `sceneStopsFor` and
 // `cleanCrewName` go with main's dead-import pass for the same reason,
@@ -130,6 +129,7 @@ import { register as registerMapChipsRoutes } from "./routes/mapChips";
 import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
 import { register as registerSeatApplicationRoutes, ballotNamesItsCloser, closeNoteFor, heldTermsFor } from "./routes/seatApplications";
 import { register as registerAlignmentRoutes, alignmentsForExport } from "./routes/alignments";
+import { register as registerMembershipLetterRoutes, legacySigningOf, letterSourceFrom } from "./routes/membershipLetter";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -4041,8 +4041,8 @@ async function departureStrandingRefusal(target: any, self: boolean): Promise<st
  * suffixed per recipient so "each admin hears it once" and "the event fires
  * once" stay separate concerns.
  */
-async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin"): Promise<void> {
-  const admins = (await members.all()).filter((u: any) => u.role === "admin" || u.role === "founder");
+async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = []): Promise<void> {
+  const admins = (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && !except.includes(String(u.id)));
   for (const a of admins) {
     await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}` });
   }
@@ -7630,8 +7630,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       submittedAt: new Date().toISOString(),
     };
     if (submitter) { entry.userId = submitter.id; entry.userName = submitter.name; }
-    // One INSERT, then a quest idea queued for review: server/lib/publicForms.ts.
-    await landPublicSubmission(submissionsRepo, getPool(), entry);
+    // One INSERT, a quest idea queued for review, and a member's signing aligned with the letter they read or refused: server/lib/publicForms.ts.
+    const refused = (await landPublicSubmission(submissionsRepo, getPool(), entry, letterSourceFrom(mergedConfig(), contentRepo.get()))).refused; if (refused) return res.status(409).json(refused);
     commsSink.fire(formSubmittedTrigger(type, entry.id, data));
 
     /*
@@ -20152,8 +20152,8 @@ ${inner}
         .sort((a, b) => String(b.at).localeCompare(String(a.at)))
         .map((e) => ({ fromStage: e.fromStage, toStage: e.toStage, unlocked: e.unlocked, reason: e.reason, at: e.at })),
       firsts: await firstTimesFor(user.id),
-      // The signing this account carries, free off `inbox`. See `shared/membershipSigning.ts`.
-      signing: signingOf(inbox, user.id),
+      // A signing with no alignment text (before PR9) stays in the journey; a newer one is under What you have aligned with (server/lib/membershipLetter.ts).
+      signing: await legacySigningOf(getPool(), inbox, user.id),
     });
   });
 
@@ -25040,7 +25040,8 @@ ${inner}
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
-  registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar });
+  registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
+  registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
