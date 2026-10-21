@@ -343,17 +343,23 @@ export default function StewardRights() {
             The Steward journey starts with a single step, showing up to a Community Call and
             saying yes to what's calling you.
           </p>
+          {/* Each door is ONE link. A <button> inside a <Link> is a control
+              inside a control: two tab stops for one action, read as "link,
+              button", and invalid HTML. self-center keeps the content width
+              the old inline button had in the phone's column. */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/steward">
-              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors">
-                Return to Steward Journey
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            <Link
+              href="/steward"
+              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-deep text-white font-medium hover:bg-teal-deep-dark transition-colors"
+            >
+              Return to Steward Journey
+              <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link href="/quests">
-              <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-teal-deep text-teal-deep font-medium hover:bg-teal-deep/5 transition-colors">
-                Explore Quests
-              </button>
+            <Link
+              href="/quests"
+              className="self-center inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-teal-deep text-teal-deep font-medium hover:bg-teal-deep/5 transition-colors"
+            >
+              Explore Quests
             </Link>
           </div>
         </div>
