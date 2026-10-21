@@ -233,7 +233,7 @@ export default function GoodNeighbor() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-xl text-muted-foreground leading-relaxed mb-8"
+              className="text-xl text-foreground leading-relaxed mb-8"
             >
               This is not a legal document or a list of rules. This is a
               heartfelt covenant, a living agreement that expresses the values we
@@ -244,7 +244,7 @@ export default function GoodNeighbor() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-lg text-muted-foreground italic"
+              className="text-lg text-foreground italic"
             >
               "We are called to be architects of the future, not its victims."
               <br />

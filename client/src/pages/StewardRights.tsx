@@ -166,7 +166,7 @@ export default function StewardRights() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-cream/80 text-lg leading-relaxed"
+            className="text-cream text-lg leading-relaxed"
           >
             This is a covenant between co-owners, not a legal document. Every Village
             Steward holds both, the rights that come from real ownership of this place, and the

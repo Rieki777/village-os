@@ -362,7 +362,7 @@ export default function QuestDetail() {
                   <p className="text-muted-foreground leading-relaxed">{why}</p>
                 )}
                 {quest.impact && (
-                  <p className="mt-3 text-sm text-foreground/70 italic border-l-2 border-teal/40 pl-3">
+                  <p className="mt-3 text-sm text-muted-foreground italic border-l-2 border-teal/40 pl-3">
                     "{quest.impact}"
                   </p>
                 )}
@@ -372,12 +372,12 @@ export default function QuestDetail() {
             {/* The first step: small enough to do today */}
             {quest.firstStep && (
               <div className="bg-amber-light border border-amber/30 rounded-2xl p-5">
-                <h2 className="font-display text-lg font-bold text-gold mb-2 flex items-center gap-2">
+                <h2 className="font-display text-lg font-bold text-amber-ink mb-2 flex items-center gap-2">
                   <Footprints className="w-5 h-5" />
                   Your first step
                 </h2>
                 <p className="text-foreground/90 leading-relaxed">{quest.firstStep}</p>
-                <p className="text-xs text-foreground/60 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Fifteen minutes or less. The rest of the quest can wait until you have done this.
                 </p>
               </div>
@@ -474,7 +474,7 @@ export default function QuestDetail() {
                   <Sprout className="w-4 h-4" />
                   {gateText}
                 </p>
-                <p className="text-xs text-foreground/70 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {/* R47: the lock names its fix where the stage has one. */}
                   {quest.minStage
                     ? (gateFix(quest, stages, cfg?.project?.commitmentName) ??
