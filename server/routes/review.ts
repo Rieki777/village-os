@@ -120,8 +120,13 @@ type Deps = Pick<
   | "members"
   | "questsRepo"
   | "circlesRepo"
+  | "seasonState"
   | "notify"
->;
+  | "firstName"
+> & {
+  /** Who holds a power live, for the carry list's "who can do it". `liveHoldersOf` in server/index.ts. */
+  liveHoldersOf(capability: string): Promise<string[]>;
+};
 
 /** The kinds whose accept builds an org draft. Everything else is a record. */
 const ORG_KINDS = new Set(["org.proposed", "role.proposed", "circle.proposed"]);

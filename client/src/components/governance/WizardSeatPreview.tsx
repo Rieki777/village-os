@@ -18,6 +18,7 @@
 import { useEffect, useId, useState } from "react";
 import { useSeason } from "@/lib/gameApi";
 import { SHEET_WORDS } from "@shared/roleSheet";
+import { seatPreviewSub } from "@shared/roleSheetWords";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
@@ -42,10 +43,13 @@ function useOrg(): any | null {
 
 export default function WizardSeatPreview({
   seatId,
+  picked = 1,
   settings,
   look,
 }: {
   seatId: string;
+  /** How many seats are picked. The card shows the first; the line says so (red team U11). */
+  picked?: number;
   /** The terms as the wizard holds them, valid or not yet. */
   settings: unknown;
   /** `rail`: the desktop column beside the steps. `inline`: under the fields on a phone. */
@@ -71,7 +75,7 @@ export default function WizardSeatPreview({
         <span aria-hidden="true" className="size-2 rounded-full bg-open" />
         {SHEET_WORDS.livePreview}
       </p>
-      <p className="mt-1.5 text-xs text-stone-600">{SHEET_WORDS.livePreviewSub}</p>
+      <p className="mt-1.5 text-xs text-stone-600">{seatPreviewSub(picked)}</p>
       <div className="mt-3">
         <SeatTradingCard
           input={input}

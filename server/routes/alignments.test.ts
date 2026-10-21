@@ -76,6 +76,8 @@ function harness() {
     viewer: null as { id: string; stage: string } | null,
     holders: [] as string[],
     villageHeld: [] as string[],
+    /** The village's admins, told as server/index.ts's notifyAdmins tells them. */
+    admins: [] as string[],
     /** When each member last confirmed it is them, ms. Absent: never. */
     confirmedAt: {} as Record<string, number>,
     pool: (): any => {
@@ -101,10 +103,12 @@ function harness() {
     notices.push(input);
     return { inserted: true } as any;
   };
-  const notifyAdmins = async (_t: string, title: string, key: string) => {
+  const notifyAdmins = async (_t: string, title: string, key: string, link?: string, except: readonly string[] = []) => {
     if (seenKeys.has(key)) return;
     seenKeys.add(key);
     adminNotices.push(`${key} ${title}`);
+    // The fan-out server/index.ts runs: one notice per admin, keyed per admin, skipping `except`.
+    for (const id of state.admins.filter((a) => !except.includes(a))) await notify({ userId: id, title, link, dedupeKey: `${key}:${id}` });
   };
   const guardCapability = async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
     const ctx = { stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"), stageIndexOf: (x: string) => LADDER.indexOf(x), roleCapabilities: [] } as unknown as CapabilityCtx;
@@ -246,6 +250,7 @@ describe.skipIf(!configured)("aligning, on a real schema", () => {
     h.state.viewer = { id: "u-ana", stage: "member" };
     h.state.holders = [];
     h.state.villageHeld = [];
+    h.state.admins = [];
     // Ana confirmed a minute ago, so money terms align for her unless a test says otherwise.
     h.state.confirmedAt = { "u-ana": Date.now() - 60_000, "u-hal": Date.now() - 60_000 };
     h.notices.length = 0;
@@ -496,6 +501,19 @@ describe.skipIf(!configured)("aligning, on a real schema", () => {
     expect(village.method).toBe("ballot");
     expect(village.userId).toBeNull();
     expect(village.authorityRef).toBe(a.body.ballot.id);
+  });
+
+  it("A CANDIDATE WHO IS ALSO AN ADMIN hears once that the terms are in force (red team U11)", async () => {
+    h.state.admins = ["u-ana", "u-hal"];
+    const s = await seat("Admin candidate");
+    const a = await apply({ seatIds: [s], seatSettings: HONORARY_TERMS });
+    await land(a.body.id);
+    const told = (who: string) => h.notices.filter((x) => x.userId === who && x.title.startsWith("Aligned and in force"));
+    expect(told("u-ana")).toHaveLength(1);
+    expect(told("u-ana")[0].dedupeKey).toBe(`alignment:${a.body.textId}:user:u-ana:in-force`);
+    // CONTROL: an admin who is no party still hears, for the village.
+    expect(told("u-hal")).toHaveLength(1);
+    expect(told("u-hal")[0].dedupeKey).toBe(`alignment:${a.body.textId}:village:in-force:u-hal`);
   });
 
   it("the closer refuses a text whose hash is not the one the application recorded", async () => {

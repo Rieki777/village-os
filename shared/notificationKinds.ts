@@ -199,6 +199,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} proposals moved.",
     celebrate: false,
   },
+  // In the bell only (no case in emailCadenceFor): one reminder, two days on,
+  // to a seat holder an application still waits on (shared/waitingOnYou.ts).
+  seat_application_reminder: {
+    group: "decisions",
+    blurb: "An application for a seat still waits on a seat holder, and you hold that power.",
+    many: "{n} applications still wait on a seat holder.",
+    celebrate: false,
+  },
   // How much your vote weighs is power, and the weight routes moved it for a
   // year while telling the person it belonged to nothing at all. The trail was
   // readable the whole time, which is a different thing from being told: a
