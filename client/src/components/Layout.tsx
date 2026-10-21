@@ -445,7 +445,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main Content */}
       {/* R47: the Trail, a member's one next step, on every page. */}
       <NextStepTrail />
-      <main id="main" tabIndex={-1} className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1 min-h-svh">
         {children}
       </main>
 
