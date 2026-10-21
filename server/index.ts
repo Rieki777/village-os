@@ -15561,7 +15561,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({
       categories: cats,
-      items: items.map((i) => ({ ...i, escrow: escrowFor(i.creditValue) })),
+      // Never who gave it or who signed it in: donor identity is admin-only (the history route below), and this answers visitors.
+      items: items.map(({ donorUserId: _donor, intakeSignedBy: _signer, ...i }) => ({ ...i, escrow: escrowFor(i.creditValue) })),
       mine,
       escrowPct: numberVar("library.escrow_pct"),
     });
