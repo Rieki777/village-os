@@ -140,10 +140,14 @@ export interface SeasonState {
 
 // One shared, cached fetch of the public config so many components don't each hit it.
 let _configCache: Promise<PublicGameConfig | null> | null = null;
+// The resolved config, so a component mounting after it arrived starts with it
+// instead of rendering empty, painting, and rendering again in an effect.
+let _configNow: PublicGameConfig | null = null;
 export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   if (!_configCache) {
     _configCache = fetch("/api/game/config")
       .then((r) => (r.ok ? r.json() : null))
+      .then((c) => { _configNow = c; return c; })
       .catch(() => null);
   }
   return _configCache;
@@ -157,7 +161,7 @@ export function fetchConfigCached(): Promise<PublicGameConfig | null> {
  * never as "this village has no identity".
  */
 export function useGameConfig(): PublicGameConfig | null {
-  const [config, setConfig] = useState<PublicGameConfig | null>(null);
+  const [config, setConfig] = useState<PublicGameConfig | null>(() => _configNow);
   useEffect(() => {
     let alive = true;
     fetchConfigCached().then((c) => { if (alive && c) setConfig(c); });
@@ -320,7 +324,7 @@ export function useSeatWord(): CatalystLabel {
 /** Live (brand-overlaid) hero image URLs, empty until loaded — callers fall back
  * to their own default so the page never renders imageless. */
 export function useBrandImages(): BrandImages {
-  const [images, setImages] = useState<BrandImages>({});
+  const [images, setImages] = useState<BrandImages>(() => _configNow?.images ?? {});
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.images) setImages(c.images); });
   }, []);

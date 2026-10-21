@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { fetchConfigCached } from "./lib/gameApi";
 import "./index.css";
 
 /**
@@ -91,6 +92,10 @@ import { warmFirstScreenFonts } from "./fontWarmup";
  * does. fontWarmup.ts says which faces and why.
  */
 warmFirstScreenFonts();
+
+// Consume the preloaded config now, so it has usually resolved before the
+// first render and useGameConfig/useBrandImages start with it (gameApi.ts).
+fetchConfigCached();
 
 createRoot(document.getElementById("root")!).render(<App />);
 
