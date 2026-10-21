@@ -1,6 +1,11 @@
 # Seat settings and alignment: build spec
 
 > **Status, 2026-10-20.** This is the build spec as written on 2026-10-09, kept for the reasoning behind each choice. What shipped differs in places: the migrations landed as 0256 to 0259 (not the placeholders below), PR1 to PR5 and the season plans landed together as one integration PR (#452), and the red-team fixes changed several details (see that PR). Where this file and the code disagree, the code is right.
+>
+> **Status, 2026-10-21.**
+> - **Live:** PR6 (the register), PR8 (amend and end, migration 0260) and the membership half of PR9 landed together in #497.
+> - **PR7 is half built.** Its governance half landed in #495 and is live: the `org.decide` capability, the `org_draft` ballot subject and its closer, a holder's publish by power, putting a draft to the village, and the admin publish route checking `org.decide` once the village has launched. That half is server only. Its member half is NOT built: the "Propose a seat" wizard type and the member-authored draft route. Read the PR7 bullets below that way.
+> - **Not built:** village presets adopted by power (PR9's first bullet) and PR10.
 
 Base: origin/main b17db45 (2026-10-09). Held lane: origin/wt/triggers-agreements 8962487, reaching main only through PR #389 (open, CONFLICTING, "HELD: lands once, at the end").
 Winner taken as the base: **thin-layers** (settings model, member door, alignment store). Grafts from seat-terms-first and agreement-first are marked (G). Every defect a judge named is answered in section 8.
