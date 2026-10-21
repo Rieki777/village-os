@@ -29,6 +29,7 @@ import { useState } from "react";
 import { Image } from "@/components/Image";
 import { useVillageLocation, useVillageName } from "@/hooks/useVillageName";
 import { useModule } from "@/modules/ModuleProvider";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 
 
@@ -462,7 +463,9 @@ export default function Home() {
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              className="inline-block px-4 py-1.5 bg-sage/20 rounded-full text-sage text-sm font-medium mb-4"
+              // sage on sage/20 measured 3.99:1; sage-light is the tint
+              // index.css documents for sage ink (4.82:1).
+              className="inline-block px-4 py-1.5 bg-sage-light rounded-full text-sage text-sm font-medium mb-4"
             >
               People like you
             </motion.span>
@@ -585,7 +588,7 @@ export default function Home() {
                 e.preventDefault();
                 document
                   .getElementById("choose-path")
-                  ?.scrollIntoView({ behavior: "smooth" });
+                  ?.scrollIntoView({ behavior: scrollBehavior() });
               }}
             >
               Pick your path <ArrowRight className="w-4 h-4" />

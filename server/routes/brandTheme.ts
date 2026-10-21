@@ -42,15 +42,26 @@ function themeOf(brand: unknown): BrandThemeFields | null {
 }
 
 /**
- * The stylesheet and its version, hashed once per distinct stylesheet. A page
- * load reads the CSS for the shell's link and then again for the stylesheet
- * itself; while the brand stands still, both reuse one hash.
+ * The stylesheet and its version, built and hashed once per distinct theme. A
+ * page load reads the CSS for the shell's link and then again for the
+ * stylesheet itself; while the brand stands still, both reuse one result.
+ *
+ * KEYED ON THE THEME FIELDS, NOT THE CSS. This used to rebuild the CSS on
+ * every call and compare the output, which saved only the hash. With a seed
+ * set, building is the dear part: deriveTheme's colour math measured 1.2 to
+ * 1.9 ms a call (2026-10-20), synchronous, on every page the server sends,
+ * and production has a seed. buildThemeCss is a pure function of these fields
+ * (shared/brandTokens.ts imports nothing), so the same fields always build the
+ * same CSS, and a brand saved in Admin is a different key on the very next
+ * request.
  */
-let last: { css: string; version: string } | null = null;
+let last: { key: string; css: string; version: string } | null = null;
 function currentTheme(getBrand: GetBrand): { css: string; version: string } {
-  const css = buildThemeCss(themeOf(getBrand()));
-  if (last && last.css === css) return last;
-  last = { css, version: themeCssVersion(css) };
+  const theme = themeOf(getBrand());
+  const key = JSON.stringify(theme);
+  if (last && last.key === key) return last;
+  const css = buildThemeCss(theme);
+  last = { key, css, version: themeCssVersion(css) };
   return last;
 }
 

@@ -173,9 +173,9 @@ export default function Decisions() {
 
       <div className="container max-w-6xl px-4 py-8">
         {!user ? (
-          <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h2 className="font-display text-2xl font-bold text-stone-900">Sign in to see what is being decided</h2>
-            <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">
+          <div className="rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
+            <h2 className="font-display text-2xl font-bold text-foreground">Sign in to see what is being decided</h2>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground leading-relaxed">
               Votes here carry names, so the page opens for members.
             </p>
             {/* This card is deliberate and stays: the hero above it is this

@@ -81,9 +81,9 @@ export default function SeasonPlans() {
     return (
       <Layout>
         <div className="container max-w-3xl px-4 py-8">
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{SEASON_PLANS_WORDS.membersOnly}</h1>
-            <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{SEASON_PLANS_WORDS.membersOnlyLine}</p>
+          <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
+            <h1 className="font-display text-2xl font-bold text-foreground">{SEASON_PLANS_WORDS.membersOnly}</h1>
+            <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{SEASON_PLANS_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
                 <SignInDoors next="/season-plans" />
@@ -122,9 +122,9 @@ export default function SeasonPlans() {
           </p>
         )}
         {state === "ready" && data && !data.season && (
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{SEASON_PLANS_WORDS.noSeason}</h1>
-            <p className="mx-auto mt-2 max-w-md text-stone-600">{SEASON_PLANS_WORDS.noSeasonLine}</p>
+          <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
+            <h1 className="font-display text-2xl font-bold text-foreground">{SEASON_PLANS_WORDS.noSeason}</h1>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground">{SEASON_PLANS_WORDS.noSeasonLine}</p>
           </div>
         )}
         {state === "ready" && data?.season && (

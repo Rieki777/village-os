@@ -506,8 +506,24 @@
 }
 
 @layer base {
+  /* The focus outline at FULL ring strength. It was ring/50, which drew the
+     browser's focus ring at about 2.9:1 on a light ground: measured on the
+     deployed build (2026-10-20), 827 Tab stops across 80 routes changed no
+     pixel by 3:1 when focused (WCAG 1.4.11). */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+  }
+  /* The four dark surfaces of the shell take a white outline. --ring is the
+     brand colour, which is the header's and footer's own ground, so a full
+     ring there is invisible (measured: weak focus rose 63 -> 660 without
+     this rule). */
+  :is(nav.bg-teal-deep, footer.bg-teal-deep, #mobile-menu, nav[aria-label="Bottom navigation"]) * {
+    outline-color: #fff;
+  }
+  /* <main> takes focus programmatically (the skip link, a route change). It is
+     a landing point, not a control, so it draws no ring round the whole page. */
+  main[tabindex="-1"]:focus {
+    outline: none;
   }
   body {
     @apply bg-background text-foreground;
@@ -934,6 +950,14 @@ button, a, [role="button"], input, textarea, select, summary {
    screen surfaces that render outside it. */
 .pb-tabbar {
   padding-bottom: var(--tabbar-h);
+}
+
+/* Keyboard focus scrolls into view clear of the fixed bottom bar. Without
+   this the browser stops the focused control at the viewport's edge, under
+   the bar: 321 Tab stops at 390px were wholly covered (WCAG 2.4.11). The
+   variable is 0 from md up, so desks are unaffected. */
+html {
+  scroll-padding-bottom: calc(var(--tabbar-h) + 8px);
 }
 
 /*

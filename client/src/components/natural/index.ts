@@ -40,3 +40,4 @@ export {
 export type { LitSide, MoonReading } from "./moonGeometry";
 
 export { prefersReducedMotion, useReducedMotion } from "./useReducedMotion";
+export { scrollBehavior } from "./scrollBehavior";

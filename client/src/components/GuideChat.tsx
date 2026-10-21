@@ -6,6 +6,7 @@ import { Sparkles, Loader2, CheckCircle2, ArrowRight, Send } from "lucide-react"
 import { sendProposal, ProposalKind } from "@/lib/proposals";
 import type { IdeaReceipt } from "@shared/questIdeas";
 import MicButton from "@/components/MicButton";
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
 interface ChatMsg { role: "user" | "assistant"; content: string }
 
@@ -49,7 +50,7 @@ export default function GuideChat({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: scrollBehavior() });
   }, [messages, thinking]);
 
   const send = async () => {

@@ -212,7 +212,7 @@ export default function Feed() {
                       to say what the card is. */}
                   {item.isExample && <ExampleChip />}
                   {item.kind === "announcement" && (
-                    <span className="inline-flex items-center gap-1 text-[10px] bg-amber/20 text-amber-700 px-1.5 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-[10px] bg-amber/20 text-amber-800 px-1.5 py-0.5 rounded-full">
                       <Megaphone className="w-3 h-3" /> announcement
                     </span>
                   )}

@@ -28,8 +28,9 @@
  *
  * ── AN EMPTY ANSWER IS NOT AN EMPTY WALL ─────────────────────────────────
  *
- * `null` means the read has not landed or it failed, and this renders nothing
- * at all rather than claiming the village has said nothing. The same
+ * `null` means the read has not landed or it failed, and this renders no words
+ * at all rather than claiming the village has said nothing (while it is still
+ * loading, an empty block holds the hero's place; see below). The same
  * three-state discipline the profile's cards hold: a zero is a claim, and a
  * claim needs a payload behind it.
  */
@@ -52,6 +53,9 @@ const sizeAt = (i: number): string => SIZES[i % SIZES.length] ?? SIZES[2];
 
 export default function VoicesHero() {
   const [answer, setAnswer] = useState<VoicesAnswer | null>(null);
+  // True once the read has landed or failed. Until then the hero holds its
+  // place (see the placeholder below).
+  const [settled, setSettled] = useState(false);
   const reduced = useReducedMotion();
 
   useEffect(() => {
@@ -63,13 +67,42 @@ export default function VoicesHero() {
       })
       .catch(() => {
         /* the hero simply does not render; the wall below still does */
+      })
+      .finally(() => {
+        if (alive) setSettled(true);
       });
     return () => {
       alive = false;
     };
   }, []);
 
-  if (!answer || answer.voices.length === 0) return null;
+  /*
+   * THE HERO HOLDS ITS PLACE WHILE IT LOADS.
+   *
+   * It used to render nothing until the read landed, so the wall opened with
+   * the sentence, the send panel and the list at the top of the screen, and a
+   * moment later eight voices arrived above them and pushed all of it off the
+   * bottom. Measured cold on the live wall at 390x844: one layout shift of
+   * 0.71, the worst on any public page, and 0.25 at 1280.
+   *
+   * So until the read settles this is an empty block of roughly the hero's
+   * size. It says nothing, which keeps the rule above: no claim that the
+   * village has or has not said anything. Sized to the eight-slot hero
+   * (HERO_SLOTS) as it renders today: one column on a phone runs well past
+   * the fold, so the block fills the rest of the screen; two columns from
+   * `sm` measured 649px at 768 and 1280 wide. A failed or empty read still
+   * renders nothing, exactly as before.
+   */
+  if (!answer || answer.voices.length === 0) {
+    if (settled) return null;
+    return (
+      <div
+        aria-hidden="true"
+        data-voices-pending=""
+        className="mb-14 min-h-[calc(100svh-9rem)] sm:min-h-[40.5rem]"
+      />
+    );
+  }
 
   const anyExamples = answer.voices.some((v) => v.isExample);
 

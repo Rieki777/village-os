@@ -220,3 +220,42 @@ describe("after a shortcut to the page already showing", () => {
     expect(document.activeElement).toBe(quests);
   });
 });
+
+/*
+ * The shut menu used to sit in flow above the trigger at opacity 0, so the
+ * fixed box was as tall as every row, and a row arriving after first paint
+ * (sign-in, the brochure switch) grew it: a layout shift on every page that
+ * nobody could see. jsdom paints nothing, so these pin the two classes that
+ * keep a shut menu out of the count, measured in a browser in the lane report.
+ */
+describe("the shut menu", () => {
+  beforeEach(() => {
+    session.user = null;
+    session.modules = [];
+  });
+
+  const menu = () => document.querySelector('[role="menu"]') as HTMLElement;
+  const has = (el: HTMLElement, cls: string) => el.className.split(/\s+/).includes(cls);
+
+  it("is out of flow and not drawn, so a late row cannot move the button's box", () => {
+    renderAt();
+    expect(has(menu(), "absolute")).toBe(true);
+    expect(has(menu(), "invisible")).toBe(true);
+    expect(has(menu(), "visible")).toBe(false);
+  });
+
+  it("is drawn the moment it opens", () => {
+    renderAt();
+    openMenu();
+    expect(has(menu(), "visible")).toBe(true);
+    expect(has(menu(), "invisible")).toBe(false);
+  });
+
+  it("stops being drawn only after the rows have faded", () => {
+    renderAt();
+    openMenu();
+    expect(menu().getAttribute("style") ?? "").toMatch(/visibility 0s linear 0s/);
+    fireEvent.click(screen.getByRole("button", { name: "Close shortcuts" }));
+    expect(menu().getAttribute("style") ?? "").toMatch(/visibility 0s linear 400ms/);
+  });
+});

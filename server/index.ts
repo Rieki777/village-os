@@ -15,6 +15,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
+import { securityHeaders } from "./lib/securityHeaders";
 import { claimPaths, GAME_CONFIG, getStage, stageIndex, withCommitmentName } from "../shared/gameConfig";
 import { recognitionNameCheck } from "../shared/launchRequirements";
 // `daysRemainingInCycle` is gone with the clock seam: every consumer reads
@@ -42,9 +43,9 @@ import {
   assertCapabilityHoldingInvariants,
   capabilityHoldings,
   moveCapabilityToVillage,
-  RETURN_NEEDS_A_VOTE,
+  MOVE_NEEDS_A_VOTE, RETURN_NEEDS_A_VOTE,
   returnCapabilityToScaffolding,
-  villageHandoverState,
+  villageHandoverState, villageHoldsRefusal,
   villageHeldCapabilities,
 } from "./lib/capabilityHolding";
 // 0219: the governing purpose statement, its one writer, and its subject.
@@ -102,7 +103,7 @@ import { register as registerGovernanceModeRoutes } from "./routes/governanceMod
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
-import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
+import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, publicChangeSet, publicProposal, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
 import { landWeightMode } from "./lib/landingRefusal";
 import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
@@ -644,7 +645,7 @@ import {
   villageSecretsRefusal,
   type SecretKey,
 } from "./lib/secrets";
-import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, validEmailSender } from "./lib/comms/mailer";
+import { createMailer, DEFAULT_EMAIL_CONFIG, escapeHtml, singlePublicAddress, validEmailSender } from "./lib/comms/mailer";
 import { commsMode } from "./lib/comms/settings";
 import { createPermissionFor, suppressionsPortFor } from "./lib/comms/permissions";
 import { sweepCommsRetention } from "./lib/comms/retention";
@@ -819,6 +820,7 @@ import { MOON_PROPOSER, runMoonProposal, settlementCloser, type MoonProposalDeps
 import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
+import { precompressedAssets } from "./lib/precompressedAssets";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -6372,48 +6374,23 @@ async function startServer() {
   app.set("query parser", "extended");
 
   /**
-   * SECURITY RESPONSE HEADERS, on every response this process writes.
-   *
-   * Registered FIRST, ahead of the webhooks and every route below, because a
-   * header set per-route is a header some route will be added without. Live
-   * measurement before this landed: no CSP, no X-Frame-Options, no nosniff, no
-   * Referrer-Policy, no Permissions-Policy on any path, and `x-powered-by:
-   * Express` announcing the stack to anyone running `curl -sI`.
-   *
-   * `frame-ancestors 'self'` is the one that mattered most. /map is a
-   * full-viewport iframe of /grounds/index.html, so the whole village was
-   * embeddable in anyone's page: a pixel-perfect copy under a stranger's
-   * domain, with the member's own session inside it. Same-origin framing is
-   * what the shell does (LivingMap, MapPeek, WalkEditorPanel all point at
-   * /grounds/index.html), so 'self' keeps every one of them and refuses the
-   * rest. X-Frame-Options rides along for the browsers that still read it.
-   *
-   * A FULL CSP IS DELIBERATELY OUT OF SCOPE. docs/prototypes/grounds-v0.html
-   * is ~5 MB of self-contained page with inline scripts and inline styles
-   * throughout, so any script-src or style-src worth writing would blank the
-   * map. frame-ancestors stands on its own and needs no allowlist to maintain.
-   *
-   * Permissions-Policy denies camera and geolocation outright. The microphone
-   * is allowed for THIS origin only, `microphone=(self)`, because MicButton's
-   * speech input (the journal, every guide chat) needs it, and `microphone=()`
-   * made every mic fail silently with `not-allowed`. Frames from elsewhere stay
-   * denied. Widening a list here is a deliberate act and never a default.
-   *
-   * NO Strict-Transport-Security. It is set once and believed for its whole
-   * max-age, so it can only be sent when EVERY hostname this app answers on
-   * terminates TLS. The custom domain does (`curl -sI http://…` answers 301 to
-   * https), and the Railway-generated hostname cannot be enumerated from here.
-   * An unverified HSTS is not a header that can be taken back. See the report.
+   * SECURITY RESPONSE HEADERS, on every response this process writes:
+   * CSP, framing, nosniff, referrer, permissions, opener isolation.
+   * server/lib/securityHeaders.ts holds the policy and the measurements
+   * behind every directive. Registered FIRST, ahead of the webhooks and every
+   * route below, because a header set per-route is a header some route will
+   * be added without. The shell path mirrors `staticPath` further down: the
+   * policy hashes the inline scripts of the exact file the SPA fallback sends.
    */
   app.disable("x-powered-by");
-  app.use((_req, res, next) => {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
-    next();
-  });
+  app.use(
+    securityHeaders({
+      shellPath: path.join(
+        process.env.NODE_ENV === "production" ? path.resolve(__dirname, "public") : path.resolve(__dirname, "..", "dist", "public"),
+        "index.html",
+      ),
+    }),
+  );
 
   /**
    * S13/S32, the framework-owned settlement seam (economy invariant #10): ONE
@@ -7644,8 +7621,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     const origin = notifyDeps.origin();
     const applicantName = (data as any)?.name ?? (data as any)?.firstName ?? (data as any)?.email ?? "Anonymous";
 
-    // Fire-and-forget notifications
-    (async () => {
+    (async () => { // fire-and-forget notifications
       // Notify the pathway inbox
       const recipients = recipientsForType(type);
       if (recipients.length) {
@@ -7655,10 +7631,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
           html: buildSubmissionEmailHtml(type, data, `${origin}/admin`),
         });
       }
-      // Acknowledge the submitter of a Work With Us proposal
-      if (type === "work-with-us" && (data as any)?.email) {
+      // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
+      const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
+      if (ackTo) {
         await sendResendEmail({
-          to: [(data as any).email], origin: "forms.ack",
+          to: [ackTo], origin: "forms.ack",
           subject: "We've received your proposal",
           html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your proposal is with us</div></div><div style="padding:22px 24px;line-height:1.6"><p>Hi ${escapeHtml(String(applicantName))},</p><p>Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.</p><p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p></div></div></body></html>`,
         });
@@ -13201,6 +13178,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     const cap = String(req.params.capability);
     const roleId = String(req.body?.roleId ?? "").trim();
     if (!roleId) return res.status(400).json({ error: "Name the role that will hold it." });
+    // A power the village ALREADY holds moves sideways only by its vote or the glass: MOVE_NEEDS_A_VOTE, lib/capabilityHolding.ts.
+    const held = (await capabilityHoldings(getPool())).find((h) => h.capability === cap); // even the same role: the upsert nulls moved_by_ballot_id
+    const verdict = held ? await mayAct(req, cap as Capability) : null;
+    if (held && verdict && !verdict.reachedPast) return res.status(409).json(villageHoldsRefusal(held, MOVE_NEEDS_A_VOTE, verdict, "/api/governance/power-transfers"));
     const r = await moveCapabilityToVillage(getPool(), {
       capability: cap,
       holderRoleId: roleId,
@@ -13243,21 +13224,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
       return res.status(404).json({ error: "The village was not holding that one." });
     }
     const verdict = await mayAct(req, cap as Capability);
-    if (!verdict.reachedPast) {
-      const who = holding.holderRoleName ?? holding.holderRoleId;
-      return res.status(409).json({
-        error:
-          `${who} looks after this one. ${RETURN_NEEDS_A_VOTE} ${BREAK_GLASS_WAY_THROUGH} ` +
-          "Send the x-capability-override header with this request to do it that way, and the village will see that you did.",
-        // The browser's half of the same answer (0103's shape): the panel
-        // sends people to the ballot, and offers the glass only to somebody
-        // the gate would actually let through.
-        requiresOverride: true,
-        overrideAvailable: verdict.overrideAvailable,
-        holderName: who,
-        ballotRoute: "/api/governance/power-returns",
-      });
-    }
+    if (!verdict.reachedPast) return res.status(409).json(villageHoldsRefusal(holding, RETURN_NEEDS_A_VOTE, verdict, "/api/governance/power-returns"));
     const existed = await returnCapabilityToScaffolding(getPool(), cap);
     if (!existed) return res.status(404).json({ error: "The village was not holding that one." });
     const what = CAPABILITY_CONSEQUENCE[cap as Capability] ?? cap;
@@ -15459,7 +15426,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     res.json({
       categories: cats,
-      items: items.map((i) => ({ ...i, escrow: escrowFor(i.creditValue) })),
+      // Never who gave it or who signed it in: donor identity is admin-only (the history route below), and this answers visitors.
+      items: items.map(({ donorUserId: _donor, intakeSignedBy: _signer, ...i }) => ({ ...i, escrow: escrowFor(i.creditValue) })),
       mine,
       escrowPct: numberVar("library.escrow_pct"),
     });
@@ -18305,15 +18273,15 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // Public: gated investor doc request
   app.post("/api/investor-docs/request", async (req, res) => {
-    // Unthrottled, this was a free lead-spam channel AND an email cannon (it
-    // sends the packet to any address given). Cap is admin-tunable; the
-    // bucket is per-IP, so keep it generous enough for a shared NAT.
+    // Unthrottled, this was a free lead-spam channel AND an email cannon. Cap is admin-tunable and per-IP, so keep
+    // it generous enough for a shared NAT. The limit counts requests, so ONE address per request: lib/publicAddress.ts.
     if (await overLimit(`investor-docs:${clientIp(req)}`, Math.max(1, numberVar("abuse.investor_docs_per_ip_hourly")), 60 * 60 * 1000)) {
       return res.status(429).json({ error: "Too many requests. Please try again shortly." });
     }
-    const { name, email, accredited } = req.body ?? {};
+    const { name: rawName, email: rawEmail, accredited } = req.body ?? {};
+    const name = typeof rawName === "string" ? rawName.trim().slice(0, 190) : "", email = singlePublicAddress(rawEmail);
     if (!name || !email || typeof accredited !== "boolean") {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({ error: email || rawEmail == null ? "Missing required fields" : "That email address does not look right" });
     }
     /*
      * ── ONLY WHAT A PERSON CHOSE ───────────────────────────────────────────
@@ -20820,27 +20788,8 @@ ${inner}
         names.set(r.actor_user_id, u ? firstName(u.name) : "A departed member");
       }
     }
-    res.json(
-      rows.map((r) => {
-        const def = VARIABLES_BY_KEY[String(r.config_key)];
-        return {
-          id: String(r.id),
-          key: String(r.config_key),
-          label: def?.label ?? r.config_key,
-          // NULL stored = "the platform default at the time"; resolve to the
-          // CURRENT default for display, marked so the page can say so.
-          from: r.old_value ?? def?.default ?? null,
-          fromWasDefault: r.old_value == null,
-          to: r.new_value ?? def?.default ?? null,
-          toIsDefault: r.new_value == null,
-          by: r.actor_user_id ? names.get(String(r.actor_user_id)) : null,
-          source: String(r.source),
-          proposalRef: r.proposal_ref ?? null,
-          note: r.note ?? null,
-          at: r.at instanceof Date ? r.at.toISOString() : String(r.at),
-        };
-      }),
-    );
+    // Values a stranger may not read (a withheld dial, a credential-shaped value) leave both sides blank: lib/mechanicsHistory.ts.
+    res.json(rows.map((r) => publicAmendment(r, VARIABLES_BY_KEY[String(r.config_key)], r.actor_user_id ? names.get(String(r.actor_user_id)) ?? null : null)));
   });
 
   // ── Mechanics proposals: propose-on-the-page ──────────────────────────────
@@ -20978,7 +20927,7 @@ ${inner}
     const proposals = rows.map(rowToProposal);
     const backers = await backerCounts(getPool(), proposals.map((p) => p.id));
     const lastBallot = await lastBallotStatuses(proposals);
-    res.json(await Promise.all(proposals.map((p) => serveProposal(p, backers, lastBallot))));
+    res.json(await Promise.all(proposals.map(async (p) => publicProposal(await serveProposal(p, backers, lastBallot))))); // anonymous: lib/mechanicsHistory.ts
   });
 
   /**
@@ -21149,7 +21098,7 @@ ${inner}
         id: p.id,
         title: p.title,
         rationale: p.rationale,
-        changeSet: p.changeSet,
+        changeSet: publicChangeSet(p.changeSet), // a credential never reaches a public document: lib/mechanicsHistory.ts
         villageName: mergedConfig().project.name,
         proposerName: proposer ? firstName(proposer.name) : "A departed member",
         supports: backers.get(p.id)?.supports ?? 0,
@@ -21574,7 +21523,7 @@ ${inner}
       id: p.id,
       title: p.title,
       rationale: p.rationale,
-      changeSet: p.changeSet,
+      changeSet: publicChangeSet(p.changeSet), // the same rule as /document
       villageName: mergedConfig().project.name,
       proposerName: proposer ? firstName(proposer.name) : "A departed member",
       supports: backers.get(p.id)?.supports ?? 0,
@@ -23296,7 +23245,7 @@ ${inner}
       id: p.id,
       title: p.title,
       rationale: p.rationale,
-      changeSet: p.changeSet,
+      changeSet: publicChangeSet(p.changeSet), // frozen into the ballot, so the same rule as /document
       villageName: mergedConfig().project.name,
       proposerName: proposer ? firstName(proposer.name) : "A departed member",
       supports,
@@ -26471,6 +26420,8 @@ ${inner}
     req.url = rest.replace(/\.(png|jpe?g)$/i, ".webp") + req.url.slice(rest.length);
     next();
   });
+  // The same files at brotli 11, written once by the build: server/lib/precompressedAssets.ts.
+  app.use("/assets", precompressedAssets({ assetsDir: ASSETS_DIR, precompressedDir: path.resolve(staticPath, "..", "precompressed") }));
   app.use("/assets", express.static(ASSETS_DIR, { maxAge: "1y", immutable: true }));
   registerStockAvatarRoutes(app, { dir: path.resolve(__dirname, "..", STOCK_AVATAR_DIR) });
   app.use(express.static(staticPath, { index: false }));
@@ -26564,11 +26515,7 @@ ${inner}
     if (!bare) return next();
     const shell = shellWithTheme(bare, getBrand);
     const village = mergedConfig().project.name;
-    const proto = String(
-      req.headers["x-forwarded-proto"] ?? req.protocol ?? "https",
-    ).split(",")[0].trim();
-    const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "").trim();
-    const origin = host ? `${proto}://${host}` : "";
+    const origin = requestOrigin(req);
     const trim = (s: string, n = 200) =>
       s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s;
 

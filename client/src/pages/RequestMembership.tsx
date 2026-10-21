@@ -30,7 +30,7 @@
  * Whether a yes to a request should admit an account is a governance question,
  * and it is left for a ruling.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, HeartHandshake } from "lucide-react";
 
 import Layout from "@/components/Layout";
@@ -51,6 +51,13 @@ export default function RequestMembership() {
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  // The thank-you replaces the form, so the button that sent it is gone and
+  // focus would fall to <body>. A live region mounted with its words already
+  // in it is not reliably read either. Focus goes to the thanks instead.
+  const thanks = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (sent) thanks.current?.focus();
+  }, [sent]);
   const [error, setError] = useState("");
 
   const submit = async (e: React.FormEvent) => {
@@ -94,7 +101,7 @@ export default function RequestMembership() {
           {sent ? (
             <section aria-live="polite" className="rounded-2xl border border-border bg-card p-8 shadow-sm">
               <HeartHandshake className="h-8 w-8 text-notice" aria-hidden="true" />
-              <h1 className="mt-4 font-display text-3xl font-bold text-card-foreground">
+              <h1 ref={thanks} tabIndex={-1} className="mt-4 font-display text-3xl font-bold text-card-foreground outline-none">
                 Thank you{firstName ? `, ${firstName}` : ""}.
               </h1>
               <p className="mt-3 text-muted-foreground">
