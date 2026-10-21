@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 
 /**
@@ -57,6 +57,34 @@ export default function ScrollToTop() {
       return () => clearTimeout(t);
     }
     window.scrollTo({ top: 0, behavior: "instant" });
+  }, [location]);
+
+  // A NEW PAGE TAKES FOCUS. Every page renders its own Layout, so following a
+  // link unmounts the element that had focus and the browser drops it on
+  // <body>: a screen reader heard nothing, and on a phone the next Tab landed
+  // in the bottom bar (measured on 4 of 4 in-app navigations). Focus goes to
+  // <main> instead, which already has tabIndex -1 for the skip link, so the
+  // reader announces the new page and the next Tab starts in its content.
+  // Not on first load (the visitor's own start), not when the address carries
+  // a hash (the effect above owns that), and never away from a field the new
+  // page focused itself. Lazy pages arrive a few frames late, so it waits.
+  const settled = useRef(location);
+  useEffect(() => {
+    if (location === settled.current) return;
+    settled.current = location;
+    if (window.location.hash) return;
+    let frame = 0;
+    let tries = 0;
+    const land = () => {
+      const main = document.getElementById("main");
+      if (main) {
+        if (!main.contains(document.activeElement)) main.focus({ preventScroll: true });
+        return;
+      }
+      if (++tries < 300) frame = requestAnimationFrame(land);
+    };
+    frame = requestAnimationFrame(land);
+    return () => cancelAnimationFrame(frame);
   }, [location]);
   return null;
 }
