@@ -26,9 +26,11 @@
  * ── STANDING IS THE TASK LAYER'S RULE, FOR EVERY CIRCLE AT ONCE ──────────
  *
  * A member has standing in a circle when they were in its last closed session,
- * or sit in one of its seats now, live and not lapsed (server/lib/sessionTasks.ts
- * `seenBy`, which asks it of one circle at a time). The list asks it of every
- * circle in one read (`lastClosedPerCircle`).
+ * or sit in one of its seats now: a seating live and not lapsed, in a seat that
+ * is active and not a standing example (the task layer's measure in
+ * server/lib/sessionTasks.ts, which asks it of one circle at a time, and
+ * `seatBook`'s reading of a live seat). The list asks it of every circle in one
+ * read (`lastClosedPerCircle`), one step tighter (`libraryViewer` says why).
  *
  * ── EVERY REFUSAL COMES BEFORE THE FIRST WRITE ───────────────────────────
  *
@@ -155,7 +157,10 @@ export async function libraryViewer(
   if (who.userId) {
     const seats = liveSeatIdsFor(await listOrgAssignments(pool as Pool, deps.lapseContext?.()), who.userId);
     if (seats.length) {
-      for (const role of await listOrgRoles(pool as Pool)) if (role.circleId && seats.includes(role.id)) standing.add(String(role.circleId));
+      // A rested seat, or a standing example, puts nobody in its circle.
+      for (const role of await listOrgRoles(pool as Pool)) {
+        if (role.circleId && role.active && !role.isExample && seats.includes(role.id)) standing.add(String(role.circleId));
+      }
     }
   }
   if (who.no != null && who.no > 0) {

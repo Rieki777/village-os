@@ -293,6 +293,17 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     expect((await row(shed)).status).toBe("waiting");
   });
 
+  it("gives no standing for a seat the circle has rested", async () => {
+    // Eve sits in a garden seat that is no longer active: it puts her in no circle.
+    await q("INSERT INTO `org_roles` (`id`, `circle_id`, `name`, `active`, `is_example`) VALUES ('seat-old-bees', 'c-garden', 'Old bee keeper', 0, 0)");
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `term_ends_at`) VALUES " +
+        "('ora-eve-bees', 'seat-old-bees', 'member', 'm-eve', 'm-eve', NULL)",
+    );
+    expect(await titles("m-eve")).toEqual(["Compost rota", "Village picnic"]);
+    expect((await list("m-eve")).library.myCircleIds).toEqual([]);
+  });
+
   it("gives no standing for a session somebody opened and closed alone, and takes none from the circle", async () => {
     const solo = await opened("m-eve", "Eve, alone in the garden", "c-garden");
     await close("m-eve", solo);
