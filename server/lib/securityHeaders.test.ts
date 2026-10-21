@@ -191,6 +191,10 @@ describe("the middleware, on a real server", () => {
     app.use(securityHeaders({ shellPath: shell ?? path.join(dir, "absent.html"), env }));
     app.use("/assets", express.static(path.join(dir, "assets")));
     app.get("/api/thing", (_req, res) => res.json({ ok: true }));
+    app.get("/api/public.json", (_req, res) => {
+      res.header("Cache-Control", "public, max-age=300");
+      res.json({ public: true });
+    });
     app.get("/api/uploads/:filename", (_req, res) => res.type("application/pdf").send(Buffer.from("%PDF-1.4")));
     app.get("/api/boom", () => {
       throw new Error("boom");
@@ -240,6 +244,15 @@ describe("the middleware, on a real server", () => {
       expect(r.headers.get("origin-agent-cluster"), p).toBe("?1");
       expect(r.headers.get("reporting-endpoints"), p).toBeNull();
     }
+  });
+
+  it("keeps API answers out of shared caches by default, and lets a route that sets its own rule win", async () => {
+    const base = await boot({});
+    expect((await fetch(base + "/api/thing")).headers.get("cache-control")).toBe("private, no-cache");
+    expect((await fetch(base + "/api/nothing")).headers.get("cache-control")).toBe("private, no-cache");
+    expect((await fetch(base + "/api/public.json")).headers.get("cache-control")).toBe("public, max-age=300");
+    expect((await fetch(base + "/")).headers.get("cache-control"), "pages are the SPA fallback's to decide").not.toBe("private, no-cache");
+    expect((await fetch(base + "/assets/x.js")).headers.get("cache-control")).not.toBe("private, no-cache");
   });
 
   it("allows exactly the inline scripts of the page it sends, and the page sends CRLF on disk", async () => {

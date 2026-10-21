@@ -40,7 +40,12 @@
  *    edge into HTML requested with `Accept: text/html` (invisible to a plain
  *    curl, and to this repository). static.cloudflareinsights.com serves only
  *    Cloudflare's own beacon, so allowing it opens no host a stranger can
- *    publish to. No eval, no new Function, no string timers in any chunk.
+ *    publish to. Its report goes by sendBeacon to cloudflareinsights.com
+ *    /cdn-cgi/rum, so connect allows that host too; measured with the
+ *    collector removed, the POST is refused and the village's Cloudflare
+ *    analytics stop without a word. Keeping them is a product decision;
+ *    deleting both CLOUDFLARE_BEACON_* entries is how to make the other one.
+ *    No eval, no new Function, no string timers in any chunk.
  *  - the inline-script hashes are COMPUTED from the shell on disk, never
  *    typed. The analytics loader's text differs per build (production ships
  *    the literal `%VITE_ANALYTICS_ENDPOINT%` placeholders, a local build ships
@@ -135,6 +140,21 @@ export const ARTIFACT_PATH = /^\/grounds\/(?:index|grounds-[A-Za-z0-9]+)\.html\/
  * no script policy at all.
  */
 export const UPLOADED_PDF_PATH = /^\/api\/uploads\/[^/]+\.pdf$/i;
+
+/**
+ * The API's default cache rule: kept by no shared cache, revalidated by the
+ * browser. Several answers differ by who asks (heartedByMe, the role-shaped
+ * /api/modules), and none said so: nothing leaked only because Cloudflare
+ * does not cache JSON by default (measured: every /api JSON answers
+ * `cf-cache-status: DYNAMIC`), so one "cache everything" rule would have
+ * served one member's answer to the next. Browsers see no change: the JSON
+ * carries an ETag and no Last-Modified, so it was already revalidated every
+ * time. A route that sets its own rule (uploads one year immutable, the
+ * versioned theme stylesheet, the public documents, the calendar) sets it
+ * later and wins.
+ */
+export const API_PATH = /^\/api\//i;
+export const API_DEFAULT_CACHE = "private, no-cache";
 
 /** Cloudflare Web Analytics, injected at the edge (see the header above). */
 export const CLOUDFLARE_BEACON_SCRIPT = "https://static.cloudflareinsights.com";
@@ -302,6 +322,7 @@ export function securityHeaders(opts: SecurityHeaderOptions): RequestHandler {
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
     res.setHeader("Origin-Agent-Cluster", "?1");
+    if (API_PATH.test(req.path)) res.setHeader("Cache-Control", API_DEFAULT_CACHE);
     const policy = ARTIFACT_PATH.test(req.path)
       ? artifactPolicy
       : UPLOADED_PDF_PATH.test(req.path)
