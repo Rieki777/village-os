@@ -443,6 +443,25 @@ describe("hasCapability truth table", () => {
       expect(holdsAll, "the holds-all-N sentence").not.toBeNull();
 
       const notTransferable = ALL_CAPABILITIES.filter((c) => !TRANSFERABLE[c]).length;
+
+      // THE WHOLE PARAGRAPH, NOT THREE SENTENCES. The first version of this test
+      // parsed only the three sentences above, and on 2026-10-21 a FOURTH sentence
+      // carrying numbers auto-merged into that comment and shipped wrong: it said
+      // `module.switch` "was the first through that door" and gave the pair as
+      // "21 and 16", which was true of the tree it was written on and false once
+      // `org.decide` landed ahead of it. No conflict marker, and the check did not
+      // look at it. The paragraph narrates its own drift in order, so the LAST pair
+      // of numbers in it is a claim about the present and must be the present.
+      const doc = src.slice(0, src.indexOf("export const HANDOVER_SET"));
+      const para = doc.slice(doc.lastIndexOf("/**"));
+      const pairs = [...para.matchAll(/(\d+) and (\d+)/g)];
+      expect(pairs.length, "the paragraph should narrate its drift as N and M pairs").toBeGreaterThan(0);
+      const last = pairs[pairs.length - 1];
+      expect(
+        [Number(last[1]), Number(last[2])],
+        `the last "N and M" in the paragraph is a claim about today: "${last[0]}"`,
+      ).toEqual([HANDOVER_SET.length, notTransferable]);
+
       expect(Number(transferable![1]), "transferable count in the comment").toBe(HANDOVER_SET.length);
       expect(Number(holdsAll![1]), "holds-all count in the comment").toBe(HANDOVER_SET.length);
       expect(Number(other![1]), "non-transferable count in the comment").toBe(notTransferable);

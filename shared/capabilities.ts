@@ -601,9 +601,20 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * words were read to cover. `capabilities.test.ts` now parses these sentences
  * and compares them with the derived set, so the next transferable power is an
  * edit somebody makes here on purpose, not a drift nobody sees.
- * `module.switch` (Rye, 2026-10-09) was the first through that door, and it
- * moved them to 21 and 16: a new key born transferable moves the first
- * number and leaves the second.
+ * TWO POWERS HAVE COME THROUGH THAT DOOR SINCE, in landing order rather than
+ * ruling order: `org.decide` (ruled 2026-09-14, landed 2026-10-20) and then
+ * `module.switch` (ruled 2026-10-09, landed 2026-10-21), which together moved
+ * the pair to 22 and 16. A new key born transferable moves the first number
+ * and leaves the second; a key RECLASSIFIED from withheld to transferable would
+ * move both, in opposite directions.
+ *
+ * This sentence was itself wrong for one batch, and it is the reason the check
+ * below reads the WHOLE paragraph rather than three sentences. It claimed
+ * `module.switch` was first and gave the pair as twenty-one and sixteen - true of the tree it
+ * was written on, false the moment `org.decide` landed ahead of it. It carried
+ * numbers, it auto-merged with no conflict marker, and the three-sentence check
+ * did not look at it. A guard whose hazard list is shorter than the hazard is a
+ * guard that reports clean.
  *
  * DERIVED, NEVER HAND-LISTED. `TRANSFERABLE` is a `Record` on purpose, so a
  * capability added to the union with no line there is a type error and a
