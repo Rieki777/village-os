@@ -43,7 +43,7 @@ import { useSeason } from "@/lib/gameApi";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
-import { seatList } from "@shared/seatApplications";
+import { applicationHref, seatList } from "@shared/seatApplications";
 import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
@@ -68,8 +68,11 @@ export const APPLICATION_WORDS = {
   withdrawYes: "Yes, withdraw it",
   withdrawNo: "Keep it",
   votingLine: "The village is voting on this application.",
+  amends: "These terms amend earlier ones. The earlier terms stay in force until these are.",
+  readEarlier: "Read the earlier terms",
   readTheVote: "Read the vote",
   laterLine: "Adopted. The seats are taken up on the first day it names.",
+  packageTerms: "One set of terms covers every seat above.",
 } as const;
 
 function SeatCards({ app }: { app: ServedApplication }) {
@@ -98,48 +101,56 @@ function SeatCards({ app }: { app: ServedApplication }) {
           href: app.adoptedVia === "ballot" && app.ballotId ? `/decisions/${app.ballotId}` : null,
         }
       : null;
+  /*
+   * ONE SET OF TERMS, ONE DRAWER (red team U11). An application for several
+   * seats asks for them on one set of terms, so the drawer is drawn once: in
+   * the card's tray when there is one seat, under the cards when there are
+   * more. Three identical drawers read as three sets of terms.
+   */
+  const drawer = (
+    <SeatTermsDrawer
+      settings={parsed.ok ? parsed.settings : null}
+      unreadable={!parsed.ok}
+      villagePresets={villagePresets}
+      adopted={adopted}
+      alignment={marks}
+      defaultOpen
+    />
+  );
+  const single = app.seats.length === 1;
   return (
-    <ul className="space-y-6">
-      {app.seats.map((seat) => {
-        const row = roles.find((r) => String(r?.id ?? "") === seat.id);
-        return (
-          <li key={seat.id}>
-            {row ? (
-              <SeatTradingCard
-                input={{ ...fromOrgSeat(row, org?.circles, org?.people, org?.village), mode: "proposal" as const }}
-                ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
-                faces="stacked"
-                settings={
-                  <SeatTermsDrawer
-                    settings={parsed.ok ? parsed.settings : null}
-                    unreadable={!parsed.ok}
-                    villagePresets={villagePresets}
-                    adopted={adopted}
-                    alignment={marks}
-                    defaultOpen
-                  />
-                }
-              />
-            ) : (
-              <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
-                <p className="font-display text-lg font-bold">{seat.name}</p>
-                {seat.aim && <p className="mt-1 text-sm text-muted-foreground">{seat.aim}</p>}
-                <div className="mt-3">
-                  <SeatTermsDrawer
-                    settings={parsed.ok ? parsed.settings : null}
-                    unreadable={!parsed.ok}
-                    villagePresets={villagePresets}
-                    adopted={adopted}
-                    alignment={marks}
-                    defaultOpen
-                  />
+    <div className="space-y-6">
+      <ul className="space-y-6">
+        {app.seats.map((seat) => {
+          const row = roles.find((r) => String(r?.id ?? "") === seat.id);
+          return (
+            <li key={seat.id}>
+              {row ? (
+                // The seat as it stands in the village today, held or open (red team U11): never "Proposed".
+                <SeatTradingCard
+                  input={fromOrgSeat(row, org?.circles, org?.people, org?.village)}
+                  ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
+                  faces="stacked"
+                  settings={single ? drawer : undefined}
+                />
+              ) : (
+                <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
+                  <p className="font-display text-lg font-bold">{seat.name}</p>
+                  {seat.aim && <p className="mt-1 text-sm text-muted-foreground">{seat.aim}</p>}
+                  {single && <div className="mt-3">{drawer}</div>}
                 </div>
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {!single && (
+        <div data-package-terms="" className="sheet-night rounded-xl bg-card p-4 text-foreground">
+          <p className="text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>
+          <div className="mt-3">{drawer}</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -256,6 +267,14 @@ export default function SeatApplication() {
 
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
+            {app.supersedesId && (
+              <p className="text-sm text-stone-700">
+                {APPLICATION_WORDS.amends}{" "}
+                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-teal-deep underline underline-offset-2">
+                  {APPLICATION_WORDS.readEarlier}
+                </a>
+              </p>
+            )}
 
             <section aria-labelledby="sa-words">
               <h2 id="sa-words" className="text-lg font-bold text-stone-900">

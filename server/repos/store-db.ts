@@ -199,8 +199,14 @@ export interface DbCollection<T extends Row = Row> {
    * it is rebased onto the current rows rather than overwriting them.
    */
   replaceAll(rows: T[]): Promise<void>;
-  /** Append one row. */
-  insert(row: T): Promise<T>;
+  /**
+   * Append one row. `alsoInTransaction`, when given, runs on the same
+   * connection after the row is written and before the commit, so a write
+   * that must land with this row or not at all rides in its transaction: a
+   * throw rolls both back and leaves the cache as it was. The Love Letter
+   * signing uses it to write the member's alignment (server/lib/membershipLetter.ts).
+   */
+  insert(row: T, alsoInTransaction?: (conn: PoolConnection) => Promise<void>): Promise<T>;
   /**
    * Delete the named rows and nothing else, under the same version lock
    * `insert` takes. This is the removal primitive: a list of ids says exactly
@@ -686,13 +692,14 @@ export function dbCollection<T extends Row = Row>(pool: Pool, spec: CollectionSp
       }
     },
 
-    async insert(row) {
+    async insert(row, alsoInTransaction) {
       await ensureVersionRow();
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
         const dbVersion = await readVersionForUpdate(conn);
         await insertOn(conn, row);
+        if (alsoInTransaction) await alsoInTransaction(conn);
         // If somebody else wrote since this cache loaded, appending to it would
         // leave the cache missing their rows AND claiming to be current, which
         // is how the next whole-table write would erase them. Re-read instead.

@@ -179,6 +179,20 @@ export async function proposalRowsInBatch(pool: Pool, batchId: string): Promise<
 }
 
 /**
+ * Which batch each proposal arrived in, for many proposals in ONE read: the
+ * task board links an open draft to the structure page of the batch it was
+ * accepted from (shared/waitingOnYou.ts). An id with no row is simply absent.
+ */
+export async function batchIdsOf(pool: Pool, ids: readonly string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, batch_id FROM external_proposals WHERE id IN (${ids.map(() => "?").join(",")})`,
+    [...ids],
+  );
+  return new Map(rows.map((r) => [String(r.id), String(r.batch_id)]));
+}
+
+/**
  * Record a steward's decision, and report whether it reached a row.
  *
  * THE EDITED PAYLOAD IS STORED WHEN THERE IS ONE. A steward who redacted a name

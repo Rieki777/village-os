@@ -1,6 +1,6 @@
 /**
  * Where ONE structure change stands: accepted into a draft, waiting to publish,
- * live. It replaces a "How it lands" box that described the three steps in
+ * live, and then its people carried across from the old chart. It replaces a "How it lands" box that described the three steps in
  * general and never said which one this batch was on, and whose second step
  * promised a withdraw with no button anywhere near it.
  *
@@ -12,12 +12,18 @@
  * separately as an org.decide ballot). It is a sentence and never a button
  * until that path exists: a button that goes nowhere is the defect this page
  * is being rebuilt to remove.
+ *
+ * Step four, carrying people across, follows a published change: everyone on
+ * the old chart moves to a seat on the new one, and the old chart retires once
+ * it is empty (components/review/CarryAcross.tsx). `carry` puts the page on it,
+ * and `complete` marks it done. A server too old to send the carry list stays
+ * on "live", where step four reads as next.
  */
 import type { ReactNode } from "react";
 
-export type StructureStage = "review" | "draft" | "live";
+export type StructureStage = "review" | "draft" | "live" | "carry";
 
-const ORDER: StructureStage[] = ["review", "draft", "live"];
+const ORDER: StructureStage[] = ["review", "draft", "live", "carry"];
 
 const card = "rounded-2xl border border-border bg-card text-card-foreground";
 
@@ -25,8 +31,11 @@ export default function StructureSteps({
   stage,
   source,
   action,
+  complete = false,
 }: {
   stage: StructureStage;
+  /** The carry step is finished: everyone moved and the old chart retired. */
+  complete?: boolean;
   /** The source's display name, or a plain stand-in. */
   source: string;
   /** The current step's action, rendered under its sentence. */
@@ -46,8 +55,15 @@ export default function StructureSteps({
       title: "Live",
       body: "Circles and seats publish together. People keep their seats, and a seat somebody holds is never retired.",
     },
+    {
+      title: "Carry people across",
+      body: "Each person on the old chart gets a seat on the new one, one at a time. The old chart retires once nobody is left in it.",
+    },
   ];
-  const stateOf = (i: number): "done" | "now" | "next" => (i < at || (stage === "live" && i === at) ? "done" : i === at ? "now" : "next");
+  const stateOf = (i: number): "done" | "now" | "next" =>
+    i < at || (stage === "live" && i === at) || (stage === "carry" && complete && i === at) ? "done" : i === at ? "now" : "next";
+  // Step three reads "Live now" from the moment the change is live, whichever step the page is on.
+  const liveNow = (i: number) => i === 2 && at >= 2;
   const WORD = { done: "Done", now: "Now", next: "Next" } as const;
 
   return (
@@ -61,7 +77,7 @@ export default function StructureSteps({
               key={s.title}
               data-testid={`step-${i + 1}`}
               data-state={state}
-              aria-current={state === "now" || (stage === "live" && i === 2) ? "step" : undefined}
+              aria-current={state === "now" || (stage === "live" && i === 2) || (complete && i === at) ? "step" : undefined}
               className={`px-4 py-3.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 ${i ? "border-t border-border" : ""}`}
             >
               <span
@@ -84,12 +100,12 @@ export default function StructureSteps({
                       state === "done" ? "text-open" : state === "now" ? "text-notice" : "text-muted-foreground"
                     }`}
                   >
-                    {stage === "live" && i === 2 ? "Live now" : WORD[state]}
+                    {liveNow(i) ? "Live now" : WORD[state]}
                   </span>
                 </p>
                 <span className="text-[13px] text-muted-foreground">{s.body}</span>
                 {i === at && action && <div className="mt-2 grid gap-2">{action}</div>}
-                {i === 1 && stage !== "live" && (
+                {i === 1 && at <= 1 && (
                   <p
                     className="mt-2 rounded-xl border border-dashed border-border px-3 py-2 text-[13px] text-muted-foreground"
                     data-testid="put-to-village-slot"

@@ -15,6 +15,8 @@ export interface ServedApplication {
   href: string;
   status: ApplicationStatus;
   statusWords: string;
+  /** The application whose terms this one amends (seat settings PR8), or null. */
+  supersedesId?: string | null;
   candidate: { id: string; name: string | null };
   seats: Array<{ id: string; name: string; aim: string | null }>;
   note: string | null;

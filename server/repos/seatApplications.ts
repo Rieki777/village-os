@@ -42,6 +42,8 @@ export interface StoredApplication {
   termSeasonId: string | null;
   termFollowsSeason: boolean;
   startsAt: Date | null;
+  /** The application whose terms this one amends (PR8), or null. */
+  supersedesId: string | null;
   status: ApplicationStatus;
   adoptedVia: "holder" | "ballot" | null;
   adoptedRef: string | null;
@@ -52,7 +54,7 @@ export interface StoredApplication {
 
 const COLUMNS =
   "id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, settings_hash, text_id, text_hash, " +
-  "term_ends_at, term_season_id, term_follows_season, starts_at, status, adopted_via, adopted_ref, " +
+  "term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status, adopted_via, adopted_ref, " +
   "authority_ref, decided_at, created_at";
 
 /** MySQL hands JSON back parsed on some drivers and as text on others. */
@@ -90,6 +92,7 @@ function rowToApplication(r: any): StoredApplication {
     termSeasonId: r.term_season_id ?? null,
     termFollowsSeason: Number(r.term_follows_season) === 1,
     startsAt: instant(r.starts_at),
+    supersedesId: r.supersedes_id ?? null,
     status: String(r.status) as ApplicationStatus,
     adoptedVia: r.adopted_via === "holder" || r.adopted_via === "ballot" ? r.adopted_via : null,
     adoptedRef: r.adopted_ref ?? null,
@@ -115,14 +118,16 @@ export interface NewApplication {
   termSeasonId: string | null;
   termFollowsSeason: boolean;
   startsAt: Date | null;
+  /** The application this one amends (PR8). */
+  supersedesId?: string | null;
   status: ApplicationStatus;
 }
 
 export async function insertApplication(db: Db, a: NewApplication): Promise<void> {
   await db.query(
     "INSERT INTO seat_applications (id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, " +
-      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, status) " +
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status) " +
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     [
       a.id,
       a.candidateUserId,
@@ -138,6 +143,7 @@ export async function insertApplication(db: Db, a: NewApplication): Promise<void
       a.termSeasonId,
       a.termFollowsSeason ? 1 : 0,
       a.startsAt,
+      a.supersedesId ?? null,
       a.status,
     ],
   );
@@ -189,6 +195,32 @@ export async function applicationsInSeason(db: Db, seasonId: string, candidateUs
     candidateUserId ? [seasonId, candidateUserId] : [seasonId],
   );
   return rows.map(rowToApplication);
+}
+
+/**
+ * Every application waiting on a seat holder, oldest first. With `olderThanSeconds`,
+ * only those written at least that long ago: the age is worked out by MySQL
+ * against its own clock, so a session zone that differs from the server's
+ * cannot shift a TIMESTAMP read across the line (the reminder job asks this).
+ */
+export async function awaitingHolderApplications(db: Db, olderThanSeconds = 0): Promise<StoredApplication[]> {
+  const aged = olderThanSeconds > 0;
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications WHERE status = 'awaiting-holder'` +
+      `${aged ? " AND TIMESTAMPDIFF(SECOND, created_at, NOW()) >= ?" : ""} ORDER BY created_at, id`,
+    aged ? [Math.floor(olderThanSeconds)] : [],
+  );
+  return rows.map(rowToApplication);
+}
+
+/** Seats by id with the name of the circle each sits in, in one read. A seat with no circle reads null. */
+export async function seatsWithCircles(db: Db, seatIds: readonly string[]): Promise<Array<{ id: string; name: string; circle: string | null }>> {
+  if (seatIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT r.id, r.name, c.name AS circle_name FROM org_roles r LEFT JOIN circles c ON c.id = r.circle_id WHERE r.id IN (${seatIds.map(() => "?").join(",")})`,
+    [...seatIds],
+  );
+  return rows.map((r: any) => ({ id: String(r.id), name: String(r.name ?? r.id), circle: r.circle_name ? String(r.circle_name) : null }));
 }
 
 export interface StatusChange {
