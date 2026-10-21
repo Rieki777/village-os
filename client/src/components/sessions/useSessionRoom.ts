@@ -18,6 +18,11 @@
  *   is not that: the poll carries on and catches up when the village answers,
  *   and while it does `lagging` says the room on screen may be behind.
  *
+ *   GONE IS NOT MISSING. A 404 for a room this page already held means the
+ *   room was discarded (or its record deleted) while it was on screen, and the
+ *   status says "gone", so the page can take its reader to the list and say
+ *   so. A 404 for a room that never arrived is "missing", as before.
+ *
  *   QUIET ONCE CLOSED. A closed session's record stays as it was, so the poll
  *   asks nothing more once it holds one.
  *
@@ -57,7 +62,7 @@ import {
   type SessionView,
 } from "@shared/sessions";
 
-export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "failed";
+export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
 /** A write's answer, with the room as the server holds it afterwards. */
 export type WriteResult<T = Record<string, unknown>> =
@@ -116,6 +121,8 @@ export interface RoomActions {
   hosts(input: { facilitatorUserId?: number; secretaryUserId?: number | null }, opts?: WriteOptions): Promise<WriteResult>;
   close(opts?: WriteOptions): Promise<WriteResult & { unowned?: number[] }>;
   toolFeedback(text: string, opts?: WriteOptions): Promise<WriteResult>;
+  /** DELETE the session: discard an open room, or delete a closed record. Never toasts; the confirm says a refusal itself. */
+  discard(): Promise<WriteResult>;
 }
 
 export interface SessionRoom {
@@ -225,7 +232,8 @@ export function useSessionRoom(
         }
         if (res.status === 401 || res.status === 403 || res.status === 404) {
           stopped.current = true;
-          setStatus(res.status === 401 ? "signed-out" : res.status === 403 ? "refused" : "missing");
+          // A room that was on screen and now is not there was discarded under this page.
+          setStatus(res.status === 401 ? "signed-out" : res.status === 403 ? "refused" : current.current ? "gone" : "missing");
           return current.current;
         }
         if (!res.ok) return missed();
@@ -364,6 +372,7 @@ export function useSessionRoom(
       return { ...r, unowned };
     },
     toolFeedback: (text, opts) => write("POST", "/tool-feedback", { text }, opts),
+    discard: () => write("DELETE", "", undefined, { quiet: true }),
   }), [write]);
 
   return { view, status, lagging, offset, refresh, actions };

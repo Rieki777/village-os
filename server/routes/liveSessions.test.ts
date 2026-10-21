@@ -23,6 +23,7 @@ const DOORS = [
   "POST /api/sessions",
   "GET /api/sessions/:id",
   "PATCH /api/sessions/:id",
+  "DELETE /api/sessions/:id",
   "POST /api/sessions/:id/join",
   "POST /api/sessions/:id/here",
   "POST /api/sessions/:id/arrival",
@@ -308,6 +309,7 @@ describe("who may reach a live session", () => {
   it.each([
     ["POST /api/sessions", {}],
     ["POST /api/sessions/:id/join", { params: { id: "12" } }],
+    ["DELETE /api/sessions/:id", { params: { id: "12" } }],
     ["POST /api/sessions/:id/here", { params: { id: "12" } }],
     ["POST /api/sessions/:id/items", { params: { id: "12" } }],
     ["POST /api/sessions/:id/entries", { params: { id: "12" } }],

@@ -27,8 +27,12 @@
  * latest answer's line. The facilitator and admins also find Send the task
  * emails here (`TaskMailButton`). If the task layer does not answer, the record
  * still reads whole, as it was said.
+ *
+ * AN ADMIN CAN DELETE THE RECORD, at its very foot, after everything it says
+ * (`deleteRecord`, a DiscardSession the room hands in for admins only). The
+ * facilitator alone cannot: a closed record belongs to everybody who was in it.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { Copy } from "lucide-react";
@@ -197,7 +201,7 @@ function ShareableMinutes({ view }: { view: SessionView }) {
   );
 }
 
-export default function ClosedRecord({ view }: { view: SessionView }) {
+export default function ClosedRecord({ view, deleteRecord }: { view: SessionView; deleteRecord?: ReactNode }) {
   const items = agendaOrder(view.items);
   const loose = view.entries.filter((e) => e.itemId == null || !view.items.some((i) => i.id === e.itemId));
   const backlog = view.entries.filter((e) => e.kind === "tension" || e.status === "parked");
@@ -331,6 +335,8 @@ export default function ClosedRecord({ view }: { view: SessionView }) {
       <FacilitationReading view={view} />
 
       {view.me.admin && <ShareableMinutes view={view} />}
+
+      {deleteRecord && <div className="flex justify-end pt-2">{deleteRecord}</div>}
     </div>
   );
 }

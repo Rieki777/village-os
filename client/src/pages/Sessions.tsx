@@ -18,6 +18,10 @@
  * without a reload. The room itself polls far faster (ROOM_POLL_MS); a list
  * of who is meeting does not need that.
  *
+ * A ROOM THAT WENT. Somebody who was in a room when it was discarded, or on a
+ * record when it was deleted, lands here, and the page says so once, above
+ * the lists (components/sessions/roomGone.ts carries the sentence over).
+ *
  * Shapes, limits and words all come from shared/sessions.ts, the contract the
  * server reads too.
  *
@@ -42,6 +46,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
+import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
@@ -114,6 +119,11 @@ export default function Sessions() {
 
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [join, setJoin] = useState<JoinState>({ joiningId: null, error: null });
+  // A room that went while this member had it open: said once, on this visit.
+  const [gone] = useState(peekRoomGone);
+  useEffect(() => {
+    clearRoomGone();
+  }, []);
 
   const [title, setTitle] = useState("");
   const [circleId, setCircleId] = useState("");
@@ -283,6 +293,11 @@ export default function Sessions() {
       <div className="container max-w-5xl pb-16">
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
           <div className="space-y-6">
+            {gone && (
+              <p role="status" className={`${LIST_UI.card} text-foreground`}>
+                {gone}
+              </p>
+            )}
             {load.kind === "loading" && (
               <div className={`${LIST_UI.card} flex justify-center py-10`}>
                 <BreathingLoader label={SESSION_LIST_COPY.loading} showLabel />

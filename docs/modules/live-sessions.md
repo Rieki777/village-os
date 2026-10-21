@@ -188,6 +188,18 @@ indexed read, and reading or joining a room closes that one first when its row i
 room is locked and checked again before it closes, so two readers close it once, and a room somebody
 came back to stays open (`closeStaleRooms` in `server/lib/liveSessions.ts`).
 
+**A session opened by mistake can be discarded, and a record can be deleted.** One door,
+`DELETE /api/sessions/:id`. While the session is open, its facilitator or an admin (joined or not)
+can discard it from the facilitator's bar or the admin's strip in the room, after a
+confirm that says everything in it goes for everyone. Once it has closed, only an admin can delete
+its record, from the bottom of the record; the facilitator alone cannot. Either way it is a real
+delete, in one transaction that locks the session row first: its people, items, entries and
+answers, its task state, task answers and task sends, and the session row itself. An item in a
+later session that was brought over from it keeps its words and loses the link. Notifications and
+emails already sent keep their link as text. Everybody else in an open room finds it gone on their
+next poll and lands on the list, which says the session was discarded (`discardSession` in
+`server/lib/liveSessions.ts`).
+
 ## After the call: tasks
 
 When a session closes, every action somebody holds becomes a **task** that keeps going after the
