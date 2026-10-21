@@ -45,7 +45,9 @@ import { cleanDueOn, cleanLine } from "./sessions";
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task: TaskCard }, or 409 { error, task }
  *   POST  /api/sessions/tasks/:entryId/done   {} -> { task: TaskCard }; already done answers 200 and changes
  *                                             nothing; 403 { error } without the right; 409 { error, task } once let go
- *   GET   /api/sessions/:id/task-record       TaskRecordPayload
+ *   GET   /api/sessions/:id/task-record       TaskRecordPayload: every task for whoever may read the record, and
+ *                                             for anybody else the cards they may see and no mail line; 403
+ *                                             when that is none
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while the session is open
  */
 export const TASKS_API = "/api/sessions/tasks";
@@ -180,7 +182,10 @@ export interface TaskCard {
   canAnswer: boolean;
   canReopen: boolean;
   canTake: boolean;
-  /** True only for people who were in the room, and admins. */
+  /**
+   * True only for people who were in the room, and admins: the closed record's
+   * own reading rule. A seat holder or a circle member who was not there gets none.
+   */
   recordLink: boolean;
   version: number;
 }
@@ -190,6 +195,11 @@ export interface TaskBoardPayload {
   holding: TaskCard[];
   /** Held by a seat you sit in now. */
   seatsHold: TaskCard[];
+  /**
+   * Back with a circle you have standing in: open, nobody holds it, and you
+   * may take it. By date, undated last. Never counted into what waits on you.
+   */
+  circleBack: TaskCard[];
   /** Done or let go within the last TASK_FINISHED_DAYS days (three moons). */
   finished: TaskCard[];
   /** Finished before that. The rows load on demand (?earlier=1). */
@@ -222,6 +232,7 @@ export interface TaskAnswer {
 
 export interface TaskRecordPayload {
   tasks: TaskCard[];
+  /** The record's own line. Somebody who reads only the circle's cards gets `{ canSend: false, lastSend: null }`. */
   mail: {
     canSend: boolean;
     /** `queued` is how many emails that send put on their way; null while it is still going out. */
@@ -304,12 +315,17 @@ export interface TaskEventRow {
 }
 
 /** What the rights functions need to know about a task. */
-export type TaskSubject = Pick<TaskState, "status" | "ownerNo" | "ownerSeatId">;
+export type TaskSubject = Pick<TaskState, "status" | "ownerNo" | "ownerSeatId" | "circleId">;
 
 /**
  * Who is asking, as the server measured it. Every flag is about THIS task:
  * the source session is the one the task came from, and the open room is any
  * open session of the task's circle.
+ *
+ * STANDING in a circle is one measure on the server (`standingIn`,
+ * server/lib/sessionTasks.ts): they were in the circle's last closed session,
+ * or they sit in one of its seats now. Both flags below that name a circle
+ * read it.
  */
 export interface TaskViewer {
   /** Their number in `live_session_members`, or null when they have never touched a session. */
@@ -327,6 +343,11 @@ export interface TaskViewer {
    * they sit in one of its seats now. The server measures both.
    */
   hostsOpenRoomInCircle: boolean;
+  /**
+   * They have standing in the task's circle, hosting or not. False for a task
+   * with no circle, and `canSeeTask` reads it only when the task has one.
+   */
+  standsInCircle: boolean;
 }
 
 /**
@@ -383,15 +404,23 @@ export function holdsTask(t: TaskSubject, viewer: TaskViewer): boolean {
 
 /**
  * Who may read a task card at all. The people who were in the session it came
- * from, whoever holds it now (person or seat), the facilitator or secretary
- * of an open session in the same circle, and admins.
+ * from, whoever holds it now (person or seat), every member with standing in
+ * the task's circle, the facilitator or secretary of an open session in the
+ * same circle, and admins.
  *
- * A seat holder who was not in the room reads the text, title, circle, date
- * and status, and gets no record link (`recordLink` on the card). Whether a
- * whole circle may read its task cards waits on a ruling; it changes here.
+ * THE WHOLE CIRCLE READS ITS TASK CARDS (Rye, 2026-10-21). A sociocratic
+ * circle works in the open, and a task that comes back to the circle should be
+ * visible to everyone who might take it. A task with no circle has no circle
+ * to read it, so it keeps the narrower rule.
+ *
+ * Reading a card is not reading the record. A seat holder or a circle member
+ * who was not in the room reads the text, title, circle, date, status and the
+ * latest answer, and gets no record link (`recordLink` on the card), because
+ * the closed record opens only to the people who were in it and admins.
  */
 export function canSeeTask(t: TaskSubject, viewer: TaskViewer): boolean {
-  return viewer.inSourceSession || holdsTask(t, viewer) || viewer.hostsOpenRoomInCircle || viewer.admin;
+  const circle = t.circleId != null && viewer.standsInCircle;
+  return viewer.inSourceSession || holdsTask(t, viewer) || circle || viewer.hostsOpenRoomInCircle || viewer.admin;
 }
 
 export interface TaskRights {
@@ -415,15 +444,23 @@ export interface TaskRights {
  *            mistaken tap. A let go task: the hosts and admins only, because
  *            letting go was the holder's answer to the circle.
  *   take     anyone who can see the task, once it is back with the circle.
+ *            Since the whole circle reads its cards, that is every member
+ *            with standing there: the task came back so somebody would take it.
+ *            That includes somebody who sits in one of the circle's seats and
+ *            has never joined a session: the server gives them their number
+ *            when they take it, the way it does for an answer through a seat.
+ *
+ * Standing in the circle widens seeing and taking, and nothing else. A circle
+ * member who holds nothing and hosts nothing may not answer a task somebody
+ * else holds, and may not open a finished one again.
  */
 export function taskRights(t: TaskSubject, viewer: TaskViewer): TaskRights {
   const hosts = viewer.hostsSource || viewer.hostsOpenRoomInCircle;
   const any = holdsTask(t, viewer) || hosts || viewer.admin;
-  const someone = viewer.no != null && viewer.no > 0;
   return {
     answer: t.status === "open" && any,
     reopen: t.status === "done" ? any : t.status === "let_go" ? hosts || viewer.admin : false,
-    take: isBackWithCircle(t) && someone && canSeeTask(t, viewer),
+    take: isBackWithCircle(t) && canSeeTask(t, viewer),
   };
 }
 
@@ -557,12 +594,18 @@ export interface TaskCardParts {
 
 /**
  * One card for one viewer. The viewer's rights become three flags, and the
- * record link is set only for people who were in the room, and admins. A card
- * still in an open session carries no rights: it is answered in the room.
+ * record link is set only for people who were in the room, and admins, the
+ * closed record's own rule. A card still in an open session carries no
+ * rights: it is answered in the room.
  */
 export function taskCardFor(parts: TaskCardParts, viewer: TaskViewer): TaskCard {
   const s = parts.state;
-  const subject: TaskSubject = s ?? { status: "open", ownerNo: parts.live?.ownerNo ?? null, ownerSeatId: parts.live?.ownerSeatId ?? null };
+  const subject: TaskSubject = s ?? {
+    status: "open",
+    ownerNo: parts.live?.ownerNo ?? null,
+    ownerSeatId: parts.live?.ownerSeatId ?? null,
+    circleId: parts.live?.circleId ?? null,
+  };
   const rights = s ? taskRights(s, viewer) : { answer: false, reopen: false, take: false };
   const mine = subject.ownerNo != null && viewer.no != null && viewer.no > 0 && subject.ownerNo === viewer.no;
   const heldAs: TaskCard["heldAs"] = mine ? "you" : subject.ownerNo != null ? "person" : subject.ownerSeatId ? "seat" : "circle";
@@ -865,7 +908,9 @@ export function buildAfterNote(input: TaskNoteInput): TaskEmail {
 export const TASK_COPY = {
   heading: "Your task board",
   lede: "What you took on in your circles' calls, and what your seats hold.",
-  groups: { holding: "Holding", seatsHold: "Your seats hold", finished: "Finished", earlier: "Earlier" },
+  groups: { holding: "Holding", seatsHold: "Your seats hold", circleBack: "Back with your circles", finished: "Finished", earlier: "Earlier" },
+  /** Under the circles' group: nobody holds these, and anyone in the circle may take one. */
+  circleBackHint: "Nobody holds these yet. Anyone in the circle can take one.",
   empty: "Nothing in your hands right now. Tasks you take on in a live session land here.",
   loadFailed: "The task board did not load.",
   retry: "Try again",

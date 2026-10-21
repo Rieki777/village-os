@@ -91,8 +91,9 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
   const today = roomDay(view.serverNow);
   const source = carried?.sessionId ?? newestSource(tasks);
   // The action check is a title of the room's own, so the room asks its agenda whether it is there yet.
+  // Any earlier session counts: a member with standing and no `carried` reads another source, and one check is enough.
   const checkTitle = ROOM_COPY.actionCheckTitle.toLowerCase();
-  const checkAdded = view.items.some((i) => i.fromSessionId === source && i.title.toLowerCase() === checkTitle);
+  const checkAdded = view.items.some((i) => i.fromSessionId != null && i.title.toLowerCase() === checkTitle);
   // The server knows when the circle last met; the cards' own guess is the fallback.
   const groups = useTasks ? groupForCheck(tasks, view.circleLastMetAt ?? lastMetFrom(tasks)) : [];
 

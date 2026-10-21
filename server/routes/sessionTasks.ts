@@ -9,7 +9,7 @@
  *   GET   /api/sessions/tasks/count           TaskCountPayload, the signed-in member's own
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task }, or 409 { error, task }
  *   POST  /api/sessions/tasks/:entryId/done   {} -> { task }: "It's done" from a notice
- *   GET   /api/sessions/:id/task-record       TaskRecordPayload
+ *   GET   /api/sessions/:id/task-record       TaskRecordPayload; the mail line only for the record's readers
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while open
  *
  * A refusal is `{ error: <a sentence> }` with a 4xx status, and every
@@ -170,7 +170,7 @@ export function register(app: Express, deps: Deps): void {
     const id = parseId(req.params?.id);
     if (id == null) return res.status(404).json({ error: R.notFound });
     const pool = getPool();
-    const viewer = { no: await memberNo(pool, who.userId), admin: who.admin };
+    const viewer = { no: await memberNo(pool, who.userId), admin: who.admin, userId: who.userId };
     answer(res, await taskRecord(pool, id, viewer, tasks), (v) => v);
   });
 

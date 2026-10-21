@@ -60,6 +60,41 @@ describe("the task board", () => {
     expect(headings).toEqual([G.holding, G.seatsHold, G.finished]);
   });
 
+  it("draws what is back with your circles below your own open tasks, with the take and no record link", async () => {
+    const back = makeTask({ entryId: 5, text: "Mend the fence", heldAs: "circle", holderName: null, canAnswer: false, canTake: true, recordLink: false });
+    fetchMock
+      .mockResolvedValueOnce(
+        reply(200, makeBoard({
+          holding: [makeTask({ entryId: 1, text: "Fix the gate latch" })],
+          circleBack: [back],
+          finished: [makeTask({ entryId: 3, status: "done", canAnswer: false, text: "Paint the shed" })],
+        })),
+      )
+      .mockResolvedValueOnce(reply(200, { task: { ...back, heldAs: "you", holderName: "Ada Lovelace", canTake: false, canAnswer: true, version: 2 } }))
+      .mockResolvedValueOnce(reply(200, makeBoard({ holding: [makeTask({ entryId: 1, text: "Fix the gate latch" }), makeTask({ entryId: 5, text: "Mend the fence", version: 2 })] })));
+    render(<TaskBoard />);
+    const group = await screen.findByRole("region", { name: G.circleBack });
+    expect(within(group).getByText("Mend the fence")).toBeInTheDocument();
+    expect(within(group).getByText(TASK_COPY.circleBackHint)).toBeInTheDocument();
+    expect(within(group).queryByText(TASK_COPY.buttons.record)).toBeNull();
+    expect(within(group).queryByRole("button", { name: TASK_COPY.buttons.done })).toBeNull();
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual([G.holding, G.circleBack, G.finished]);
+    // Taken, it is yours: the re-read moves it up to Holding and the circles' group goes.
+    fireEvent.click(within(group).getByRole("button", { name: TASK_COPY.buttons.taken }));
+    fireEvent.click(screen.getByRole("button", { name: TASK_COPY.sheets.taken.confirm }));
+    await waitFor(() => expect(within(groupNamed(G.holding)).getByText("Mend the fence")).toBeInTheDocument());
+    expect(screen.queryByRole("region", { name: G.circleBack })).toBeNull();
+  });
+
+  it("reads a board from a server that sends no circles' group", async () => {
+    const { circleBack: _none, ...older } = makeBoard({ holding: [makeTask({ entryId: 1, text: "Fix the gate latch" })] });
+    fetchMock.mockResolvedValueOnce(reply(200, older));
+    render(<TaskBoard />);
+    expect(await screen.findByText("Fix the gate latch")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: G.circleBack })).toBeNull();
+  });
+
   it("says nothing is in your hands, and leaves out the groups that are empty", async () => {
     fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
     render(<TaskBoard />);

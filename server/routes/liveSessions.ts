@@ -314,7 +314,8 @@ export function register(app: Express, deps: Deps): void {
     const id = parseId(req.params?.id);
     if (id == null) return res.status(404).json({ error: R.notFound });
     const pool = getPool();
-    const viewer = { no: await memberNo(pool, String(user.id)), admin: await isAdmin(req) };
+    // Their own id rides along so "From last time" reads their seats before they have a number.
+    const viewer = { no: await memberNo(pool, String(user.id)), admin: await isAdmin(req), userId: String(user.id) };
     const found = await current(pool, id, viewer);
     if (!found) return res.status(404).json({ error: R.notFound });
     if (!maySee(found.s, found.joined, viewer.admin)) return res.status(403).json({ error: SESSION_COPY.closedNoAccess });

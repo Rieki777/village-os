@@ -176,7 +176,7 @@ describe("with the sessions module on", () => {
   it("serves the board at /tasks/mine, never the room's /:id", async () => {
     const out = await call("m-ana", "GET", "/api/sessions/tasks/mine");
     expect(out.status).toBe(200);
-    expect(Object.keys(out.body).sort()).toEqual(["earlierCount", "finished", "holding", "seatsHold", "today"]);
+    expect(Object.keys(out.body).sort()).toEqual(["circleBack", "earlierCount", "finished", "holding", "seatsHold", "today"]);
     // And the room's own door still answers one segment, with its own refusal.
     expect(await call("m-ana", "GET", "/api/sessions/tasks")).toEqual({ status: 404, body: { error: SESSION_REFUSALS.notFound } });
   });
