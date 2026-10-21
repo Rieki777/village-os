@@ -19,13 +19,13 @@ describe("firstFamily", () => {
 
 describe("firstScreenFontQueries", () => {
   // The two stacks production served on 2026-10-20 (/api/brand/theme.css).
-  const AMORA: Record<string, string> = {
+  const LIVE_THEME: Record<string, string> = {
     "--font-body": ' "Jost", -apple-system, BlinkMacSystemFont, sans-serif',
     "--font-display": ' "Cormorant Garamond", Georgia, serif',
   };
 
   it("asks for the five measured first-screen cuts of the village's own families", () => {
-    expect(firstScreenFontQueries((t) => AMORA[t] ?? "")).toEqual([
+    expect(firstScreenFontQueries((t) => LIVE_THEME[t] ?? "")).toEqual([
       '400 1em "Jost"',
       '500 1em "Jost"',
       '600 1em "Jost"',

@@ -15,8 +15,8 @@
  * WHICH FACES is read from the page, never written down. The village's own
  * theme stylesheet (server/routes/brandTheme.ts) overrides `--font-body` and
  * `--font-display`, and it has already applied by the time a module script
- * runs, so the families asked for are the ones this village renders: Amora
- * gets its own two, a fork gets its own, an untouched fork gets the platform
+ * runs, so the families asked for are the ones this village renders: the live
+ * village gets its own two, a fork gets its own, an untouched fork gets the platform
  * defaults in index.css. Nothing here names a typeface.
  *
  * WHICH WEIGHTS is measured. On 2026-10-20 production's first screens of /,
