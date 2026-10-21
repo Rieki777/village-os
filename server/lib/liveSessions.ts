@@ -35,6 +35,10 @@
  *   anyone in the room claims an action nobody holds; the holder or the
  *          facilitator lets it go.
  *
+ * Removing (`discardSession`, the one write that needs no seat): an open
+ * session is discarded by its facilitator or an admin, joined or not; a
+ * closed record is deleted by an admin only.
+ *
  * EVERY WRITE LOCKS THE SESSION ROW AND BUMPS ITS VERSION in the same
  * transaction (`inRoom`), so the version is the room's whole history and a
  * page that sends it back as an ETag gets a 304 until something moved.
@@ -63,7 +67,7 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
-import { exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
+import { deleteTaskRowsForSession, exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
 import { avatarFor } from "./characters";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { circleTasksFor, villageDate } from "./sessionTasks";
@@ -1364,6 +1368,43 @@ export async function closeSession(pool: Pool, sessionId: number, actor: Actor, 
   return inRoom(pool, sessionId, actor, async ({ conn, s, roles }) => {
     if (!roles.runs) return refuse(403, R.facilitatorOnly);
     return closeLocked(conn, s, ctx, now);
+  });
+}
+
+// ── Discarding a session, deleting a record ─────────────────────────────────
+
+/** Who may remove a session, by its status. Pure, so the matrix is read and tested in one place. */
+export function mayDiscard(s: Pick<SessionRec, "status" | "facilitatorNo" | "secretaryNo">, viewer: Viewer): Outcome<null> {
+  const roles = rolesIn(s, viewer);
+  if (s.status === "closed") return roles.admin ? done(null) : refuse(403, R.recordAdminOnly);
+  return roles.runs ? done(null) : refuse(403, R.discardNotYours);
+}
+
+/**
+ * Remove a session and everything in it: a real delete, nothing kept. While
+ * it is open, its facilitator or an admin may (an admin need not have joined,
+ * nor hold a number at all); once it has closed, only an admin may, because a
+ * closed record belongs to everybody who was in it.
+ *
+ * One transaction. The session row is locked first, so a write to the room,
+ * the close, or a quiet room's own close that waits on it finds the room gone
+ * and refuses with `notFound`; and the status is read under that lock, so a
+ * facilitator can never delete a record that closed a moment before. Then the
+ * task layer's rows for its entries (0255), then the room's own rows (0238).
+ * Notifications and emails that already went out carry the session's link as
+ * text, and stay as they were sent. Nothing is recorded: there is no event
+ * for a session that is meant never to have been.
+ */
+export async function discardSession(pool: Pool, sessionId: number, viewer: Viewer): Promise<Outcome<{ status: SessionRec["status"] }>> {
+  return repo.inTransaction(pool, async (conn) => {
+    const rows = await repo.sessionRow(conn, sessionId, true);
+    if (!rows.length) return refuse(404, R.notFound);
+    const s = mapSession(rows[0]);
+    const may = mayDiscard(s, viewer);
+    if (!may.ok) return may;
+    await deleteTaskRowsForSession(conn, sessionId, await repo.sessionEntryIds(conn, sessionId));
+    if (!(await repo.deleteSessionRows(conn, sessionId))) return refuse(404, R.notFound);
+    return done({ status: s.status });
   });
 }
 

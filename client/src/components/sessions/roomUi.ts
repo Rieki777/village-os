@@ -140,6 +140,17 @@ export const BTN_SECONDARY =
 export const BTN_QUIET =
   `inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-foreground underline decoration-notice/60 underline-offset-4 hover:bg-muted disabled:opacity-50 ${FOCUS}`;
 
+/**
+ * Removing something for everyone: discarding a session, deleting a record.
+ * The quiet one is the control that opens the confirm, kept small and away
+ * from the forward button; the solid one is the confirm's own yes.
+ */
+export const BTN_DANGER_QUIET =
+  `inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-destructive underline decoration-destructive/50 underline-offset-4 hover:bg-muted disabled:opacity-50 ${FOCUS}`;
+
+export const BTN_DANGER =
+  `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-destructive px-5 py-2.5 font-semibold text-destructive-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
+
 export const BTN_ICON =
   `inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40 ${FOCUS}`;
 
