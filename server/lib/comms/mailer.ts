@@ -160,6 +160,13 @@ export function normalizeRecipients(to: string[]): string[] {
   ));
 }
 
+/**
+ * Which is exactly why a STRANGER's typed address must never reach `to` raw:
+ * one public request became one essential email per comma. Public forms read
+ * their address through this, from server/lib/publicAddress.ts.
+ */
+export { singlePublicAddress } from "../publicAddress";
+
 /** The post office's answer, in the words the old mailer's callers read. */
 export function mailResultOf(r: PostResult): MailResult {
   if (r.status === "sent") return { sent: true };
