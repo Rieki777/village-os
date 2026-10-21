@@ -296,8 +296,8 @@ export default function CoCreatorsGuide() {
         </div>
       </section>
 
-      {/* QUICK NAV BAR */}
-      <section className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-muted">
+      {/* QUICK NAV BAR: sticks under the 96px site header (top-24 z-30, like the quest board's filters); at top-0 z-50 it covered the home link and menu. Its sections carry scroll-mt-40. */}
+      <section className="sticky top-24 z-30 bg-background/95 backdrop-blur border-b border-muted">
         <div className="container py-4">
           <div className="overflow-x-auto scrollbar-hide">
             <div className="flex gap-2 min-w-min">
@@ -319,7 +319,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* R-IKIGAI SECTION */}
-      <section id="r-ikigai" className="py-20 bg-background">
+      <section id="r-ikigai" className="scroll-mt-40 py-20 bg-background">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -472,7 +472,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* GRATITUDE ECONOMY SECTION */}
-      <section id="recognition" className="py-20 bg-primary/5">
+      <section id="recognition" className="scroll-mt-40 py-20 bg-primary/5">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -485,7 +485,7 @@ export default function CoCreatorsGuide() {
                 The {tokenName} Economy
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two tokens, two jobs. The work, time, and resources you contribute to {villageName} are acknowledged in
+                Two tokens, two jobs. The work, time, and resources you contribute to {villageName} are acknowledged in{" "}
                 {tokenName}, the recognition signal, which carries no financial value of its own. {valueName} are the tracked
                 value: each cycle the community shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
               </p>
@@ -610,7 +610,7 @@ export default function CoCreatorsGuide() {
 
 
       {/* VOICE & GOVERNANCE SECTION */}
-      <section id="voice" className="py-20 bg-background overflow-x-clip">
+      <section id="voice" className="scroll-mt-40 py-20 bg-background overflow-x-clip">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -738,7 +738,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* HYPHA PLATFORM SECTION */}
-      <section id="hypha" className="py-20 bg-teal-deep">
+      <section id="hypha" className="scroll-mt-40 py-20 bg-teal-deep">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -881,7 +881,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* THE FOUR SPACES SECTION */}
-      <section id="spaces" className="py-20 bg-primary/5">
+      <section id="spaces" className="scroll-mt-40 py-20 bg-primary/5">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -929,7 +929,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* PATH OF GROWTH SECTION */}
-      <section id="progression" className="py-20 bg-background">
+      <section id="progression" className="scroll-mt-40 py-20 bg-background">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}
@@ -984,7 +984,7 @@ export default function CoCreatorsGuide() {
                             {stage.label}
                           </p>
                           {stage.subLabel && (
-                            <p className={`text-xs ${textColor} opacity-70`}>
+                            <p className={`text-xs ${textColor}`}>
                               {stage.subLabel}
                             </p>
                           )}
@@ -1046,7 +1046,7 @@ export default function CoCreatorsGuide() {
       </section>
 
       {/* GOOD NEIGHBOR SECTION */}
-      <section id="good-neighbor" className="py-20 bg-primary/5">
+      <section id="good-neighbor" className="scroll-mt-40 py-20 bg-primary/5">
         <div className="container">
           <motion.div
             initial={{ opacity: 0 }}

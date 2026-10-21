@@ -102,7 +102,7 @@ function InvitationNeeded({ villageName, reason }: { villageName: string; reason
       <div className="flex flex-col gap-3 sm:flex-row">
         <a
           href="/request-membership"
-          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold rounded-lg hover:shadow-lg transition-shadow"
+          className="inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-teal-deep text-white font-semibold rounded-lg hover:bg-teal-deep-dark hover:shadow-lg transition-[background-color,box-shadow]"
         >
           Ask to join
           <ArrowRight className="w-5 h-5" aria-hidden="true" />
@@ -400,7 +400,7 @@ export default function Register() {
                 whileTap={{ scale: 0.98 }}
                 disabled={loading}
                 type="submit"
-                className="w-full bg-gradient-to-r from-teal-deep to-teal-deep/80 text-white font-semibold py-3 rounded-lg hover:shadow-lg transition-shadow disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-teal-deep text-white font-semibold py-3 rounded-lg hover:bg-teal-deep-dark hover:shadow-lg transition-[background-color,box-shadow] disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading ? "Creating your account…" : "Create account"}
                 {!loading && <ArrowRight className="w-5 h-5" />}
