@@ -10,8 +10,10 @@ import { useLocation } from "wouter";
 export default function NotFound() {
   const [, setLocation] = useLocation();
 
+  // <main>, because this page renders without the shell: it was the one page
+  // with no main landmark at all, and every module-off route lands here.
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-teal-deep/10 to-background px-4">
+    <main className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-teal-deep/10 to-background px-4">
       <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-lg p-8 text-center">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 rounded-full bg-amber/15 flex items-center justify-center">
@@ -38,6 +40,6 @@ export default function NotFound() {
           Back to the village
         </button>
       </div>
-    </div>
+    </main>
   );
 }
