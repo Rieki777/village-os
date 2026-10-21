@@ -401,7 +401,7 @@ export default function Layout({ children }: LayoutProps) {
                         <Link
                           key={item.href}
                           href={item.href}
-                          className="block text-white hover:underline transition-colors text-sm py-2"
+                          className="flex min-h-11 items-center text-white hover:underline transition-colors text-sm py-2"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           {item.label === "My Profile" ? `My Profile (${user.name.split(" ")[0]})` : item.label}
