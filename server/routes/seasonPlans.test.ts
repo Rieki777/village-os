@@ -21,7 +21,12 @@
  *   - a seat you do not hold cannot be handed back, and with no season to
  *     plan, saving is refused in words;
  *   - the erasure step takes the member's words and leaves the seats handed back;
- *   - neither recordEvent nor addActivity appears in any file this adds.
+ *   - neither recordEvent nor addActivity appears in any file this adds;
+ *   - Your part's suggestions (2026-10-21): quests take the largest fewest and
+ *     most across seats with adopted terms over an offer, measures come from
+ *     terms then from what each seat answers for, a guest is read no terms
+ *     (control: a member on the same seat is), no money key reaches the page,
+ *     and reading the page never writes a plan.
  *
  * Every figure is fake: XTS is the ISO 4217 code reserved for testing.
  */
@@ -365,6 +370,142 @@ describe.skipIf(!configured)("planning a season, on a real schema", () => {
     }
     // Control: another member's words are untouched.
     expect((await planVersions(pool, "u-ana", "s-next")).every((r) => r.aim)).toBe(true);
+  });
+});
+
+describe.skipIf(!configured)("your part, started from your seats (2026-10-21)", () => {
+  const h = harness();
+  let db: TestDb;
+  let pool: mysql.Pool;
+
+  /** Terms with quests, measures AND money, so the privacy check has something to leak. */
+  const terms = (min: number, max: number, measure: string, target: string) => ({
+    ...MONEY_TERMS,
+    quests: { perMoonMin: min, perMoonMax: max, doneWhenRequired: true },
+    scoreboard: { measures: [{ measure, target, readFrom: "the issue list" }] },
+  });
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = testPool(db, { connectionLimit: 4 });
+    h.state.pool = () => pool;
+    await h.start();
+    for (const p of PEOPLE) {
+      await pool.query("INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?,?,?,'x',?)", [p.id, p.name, `${p.id}@example.org`, p.handle]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    }
+    const fe = await createOrgRole(pool, {
+      id: "seat-fe",
+      name: "Front-End",
+      seats: 2,
+      accountabilities: ["The org chart, role proposals and Game mechanics showing accurately for members"],
+    });
+    const kitchen = await createOrgRole(pool, { id: "seat-kitchen", name: "Kitchen keeper", seats: 1, accountabilities: ["The kitchen"] });
+    const garden = await createOrgRole(pool, { id: "seat-garden", name: "Gardener", seats: 2, accountabilities: ["The garden beds"] });
+    // The seat's offer: a lower quest count, which the adopted terms must beat.
+    await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify(terms(1, 2, "Pages shipped", "two a moon")), fe]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify(terms(6, 8, "Beds weeded", "every bed each moon")), garden]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const app = (id: string, who: string, status: "voting" | "adopted", seats: string[], settings: unknown) =>
+      insertApplication(pool, {
+        id,
+        candidateUserId: who,
+        proposedBy: who,
+        seatIds: seats,
+        note: "Stipend reviewed with the stewards.",
+        deliverables: "Two more people can run it.",
+        settings: settings as any,
+        settingsHash: "0".repeat(64),
+        termEndsAt: new Date("2027-06-01T00:00:00Z"),
+        termSeasonId: "s-next",
+        termFollowsSeason: true,
+        startsAt: new Date("2027-03-01T00:00:00Z"),
+        status,
+      });
+    // Ana is seated on Front-End through adopted terms, 3 to 5, and applied for the kitchen on 2 to 7.
+    await app("sa-00000000000000b1", "u-ana", "adopted", [fe], terms(3, 5, "Bugs closed", "every reported bug by the moon's end"));
+    await seatHolder(pool, fe, { userId: "u-ana", seasonId: "s-now", termEndsAt: new Date("2027-03-01T00:00:00Z"), applicationId: "sa-00000000000000b1" });
+    await app("sa-00000000000000b2", "u-ana", "voting", [kitchen], terms(2, 7, "Meals served", "dinner every gathering"));
+    // The guest and Mo both garden, on the seat's offer alone.
+    await seatHolder(pool, garden, { userId: "u-guest", seasonId: "s-now", termEndsAt: new Date("2027-03-01T00:00:00Z") });
+    await seatHolder(pool, garden, { userId: "u-mo", seasonId: "s-now", termEndsAt: new Date("2027-03-01T00:00:00Z") });
+  });
+
+  afterAll(async () => {
+    await h.stop();
+    await pool?.end();
+    await db?.drop();
+  });
+
+  beforeEach(() => {
+    h.state.seasons = SEASONS;
+  });
+
+  it("takes the largest fewest and most across the member's seats, adopted terms over the seat's offer", async () => {
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    const r = await h.call("GET", "/api/season-plans/mine");
+    expect(r.status).toBe(200);
+    expect(r.body.suggestions.quests).toEqual({
+      min: 3,
+      max: 7,
+      from: "terms",
+      source: [
+        { seatId: "seat-fe", seat: "Front-End", min: 3, max: 5 },
+        { seatId: "seat-kitchen", seat: "Kitchen keeper", min: 2, max: 7 },
+      ],
+    });
+  });
+
+  it("suggests every terms measure, adopted first, then one per accountability, grouped by seat", async () => {
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    const r = await h.call("GET", "/api/season-plans/mine");
+    expect(r.body.suggestions.measures).toEqual([
+      { seatId: "seat-fe", seat: "Front-End", from: "terms", measure: "Bugs closed", target: "every reported bug by the moon's end" },
+      { seatId: "seat-kitchen", seat: "Kitchen keeper", from: "terms", measure: "Meals served", target: "dinner every gathering" },
+      { seatId: "seat-fe", seat: "Front-End", from: "terms", measure: "Pages shipped", target: "two a moon" },
+      { seatId: "seat-fe", seat: "Front-End", from: "accountability", measure: "Org chart and role proposals show accurately" },
+      { seatId: "seat-kitchen", seat: "Kitchen keeper", from: "accountability", measure: "Kitchen in good order" },
+    ]);
+  });
+
+  it("carries no money key or figure, though every set of terms behind it does", async () => {
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    const r = await h.call("GET", "/api/season-plans/mine");
+    expect(r.body.suggestions.measures.length).toBeGreaterThan(0);
+    expect(moneyIn(r.body)).toEqual([]);
+    expect(JSON.stringify(r.body)).not.toContain("readFrom");
+  });
+
+  it("reads no terms for a guest: what the seat answers for, and the platform's starting point", async () => {
+    h.state.viewer = { id: "u-guest", stage: "guest" };
+    const guest = await h.call("GET", "/api/season-plans/mine");
+    expect(guest.body.suggestions).toEqual({
+      quests: { min: 3, max: 5, from: "default", source: [] },
+      measures: [{ seatId: "seat-garden", seat: "Gardener", from: "accountability", measure: "Garden beds in good order" }],
+    });
+    // Control: a member on the same seat reads its offer.
+    h.state.viewer = { id: "u-mo", stage: "member" };
+    const mo = await h.call("GET", "/api/season-plans/mine");
+    expect(mo.body.suggestions.quests).toMatchObject({ min: 6, max: 8, from: "terms" });
+    expect(mo.body.suggestions.measures[0]).toMatchObject({ measure: "Beds weeded", from: "terms" });
+  });
+
+  it("a member with no seats and no applications gets no measures and the default quests", async () => {
+    h.state.viewer = { id: "u-zed", stage: "member" };
+    const r = await h.call("GET", "/api/season-plans/mine");
+    expect(r.body.heldSeats).toEqual([]);
+    expect(r.body.applications).toEqual([]);
+    expect(r.body.suggestions).toEqual({ quests: { min: 3, max: 5, from: "default", source: [] }, measures: [] });
+  });
+
+  it("never writes the suggestion: reading saves nothing, and a saved count comes back as saved", async () => {
+    h.state.viewer = { id: "u-mo", stage: "member" };
+    await h.call("GET", "/api/season-plans/mine");
+    expect(await planVersions(pool, "u-mo", "s-next")).toEqual([]);
+    const saved = await h.call("PUT", "/api/season-plans/mine", { aim: "Weed every bed.", commitments: { quests: { perMoonMin: 1, perMoonMax: 2 } } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.suggestions.quests).toMatchObject({ min: 6, max: 8 });
+    const again = await h.call("GET", "/api/season-plans/mine");
+    expect(again.body.plan.commitments.quests).toMatchObject({ perMoonMin: 1, perMoonMax: 2 });
+    expect((await planVersions(pool, "u-mo", "s-next")).length).toBe(1);
   });
 });
 
