@@ -12,7 +12,10 @@ Provenance: platform
 > (below, "After the call: tasks") has its own contract in `shared/sessionTasks.ts`, its doors in
 > `server/routes/sessionTasks.ts`, its rules in `server/lib/sessionTasks.ts`, its emails in
 > `server/lib/sessionTaskMail.ts`, its statements in `server/repos/sessionTasks.ts` and its schema
-> in `drizzle/0255_a_task_keeps_going_after_the_call.sql`.
+> in `drizzle/0255_a_task_keeps_going_after_the_call.sql`. What members bring before a call (below,
+> "Before the call: the agenda library") has its contract in `shared/sessionLibrary.ts`, its doors in
+> `server/routes/sessionLibrary.ts`, its rules in `server/lib/sessionLibrary.ts`, its statements in
+> `server/repos/sessionLibrary.ts` and its schema in `drizzle/0264_a_circle_keeps_an_agenda_library.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -149,15 +152,21 @@ every half minute while its tab is visible.
   would say who had just pressed send.
 - **The record of a closed session** (agenda, outcomes, decisions, what we learned on each item, actions and backlog) is
   read by the people who were in it and by the village's admins, and by nobody else.
+- **What members bring for a circle** waits where the people with standing in that circle, the person who brought
+  it, and admins read it; an item for no circle in particular is read by every member. Once a session takes an
+  item up, anyone who looks into that open room reads it and its note, the way they read the rest of the agenda,
+  and the form says so before it is sent. The circle line is a filter on the waiting list, and the room's own line
+  takes over from there.
 - **Nothing is written to `health_events`.** `recordEvent` defaults to a public audience, and the
   Village Pulse reads public events.
 - **The shareable minutes name no person at all** (below).
 
 ## What the record holds
 
-Nine tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other eight holds that number. The
-last three (0255) are the task layer, described under "After the call: tasks".
+Eleven tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other ten holds that number. Three
+(0255) are the task layer, described under "After the call: tasks", and the last two (0264) are the
+agenda library, described under "Before the call: the agenda library".
 
 | Table | Holds |
 |---|---|
@@ -169,6 +178,8 @@ last three (0255) are the task layer, described under "After the call: tasks".
 | `live_session_task_state` | One row per action open or done at close: its status (`open`, `done`, `let_go`), its person or seat now, its date, the kind and the one line of its latest answer, who gave it, and a version that goes up on every answer. |
 | `live_session_task_events` | Every answer to a task, in order, with the state it left. Append-only. |
 | `live_session_task_sends` | Each time a session's task emails went out: the send's number (1 is the close), who pressed, and the counts by outcome. Numbers only, never an address. |
+| `live_session_library` | One row per item a member brought for a circle's next session: its title, the aim it needs if they knew it, a note, the circle (or none), who brought it, where it stands now (`waiting`, `on_agenda`, `taken_up`), the session and agenda item it is on or was taken up in, and who last changed its words when that was somebody else. |
+| `live_session_library_takes` | Every time a session took an item, and how it left that session: `taken_up`, `back`, or nothing yet while the session is open. One take of an item per session. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -199,6 +210,107 @@ later session that was brought over from it keeps its words and loses the link. 
 emails already sent keep their link as text. Everybody else in an open room finds it gone on their
 next poll and lands on the list, which says the session was discarded (`discardSession` in
 `server/lib/liveSessions.ts`).
+
+## Before the call: the agenda library
+
+Members bring what needs a circle's time before the circle meets, and the session that opens next
+takes it up. The code calls it the library, the founder's word. **A member never reads that word**:
+the village already has a Library (the shared material library) and a Module Library, so on
+/sessions the section is **Waiting for a circle**, and the start card and the room head their lists
+"Brought for the Garden circle".
+
+**Bringing an item.** Any admitted member, on /sessions: "Bring an item" opens the room's own add form
+without the minutes (a title, the aim it needs from the circle, or "Not sure yet", and anything the
+circle should know first), and the circle it is for, which must be answered: one of the village's live
+circles, or "No circle in particular" as a deliberate last choice. It is chosen for a member who has
+standing in exactly one circle. A member may bring something to a circle they are not in, the way a
+tension is raised with the circle that holds it, and they always see their own. Fifty waiting items
+per member at most.
+
+**The list.** One list per circle, the member's own circles first, then the others, then no circle in
+particular, each oldest first, and every card says where it stands in one line: waiting (and "back for
+next time" when a session did not reach it), on the agenda of a room open now with a link into it, or
+taken up, which folds under "Taken up lately" for three moons. Every card names who brought it and
+when, and who last changed its words when that was somebody else. It rides on `GET /api/sessions`,
+because `GET /api/sessions/library` would be read as the room numbered "library".
+
+**Who sees an item** (`canSeeBrought` in the contract): whoever brought it, admins, every member for an
+item for no circle in particular, and the people with **standing** in its circle, the task layer's rule
+taken one step tighter: they were in the circle's last closed session **that at least two people were
+in**, or sit in one of its seats now, live and not lapsed. The floor is there because any member may open
+a room for any circle and close it alone, and under the plain rule that one close would hand them the
+circle's waiting items, with the words of the people who brought them, and take the list from everybody
+at the circle's last real meeting. The task layer keeps the plain rule for now. A taken-up item reaches
+whoever brought it, admins and the people who were in the session that took it up, through every door,
+and a closed session's title reaches only them. An item somebody may not see answers 404, the same as one
+that is not there, so a refusal never says an item exists.
+
+**Who changes an item** (`broughtRights`): whoever brought it and admins change its title, aim, note
+and circle, withdraw it at any time, and bring a taken-up item again. The facilitator or secretary of
+an open session of its circle, who has standing there, may reword it (title, aim and note), never move
+its circle, because the circle is the item's audience. Nobody but the bringer and admins rewords an
+item for no circle in particular: any member can open a session with no circle, so hosting one says
+nothing. The words and the circle change only while it waits; on an agenda, the room's own edit rights
+govern the agenda item. A change is made against the row as it is, locked, so a host's new title never
+puts back a circle the bringer had just moved, and a card says "Words changed by" whoever last changed
+somebody else's.
+
+**Taking it up.** The "Start a session" card lists what the chosen circle may take up: that circle's
+waiting items, then the ones for no circle in particular (a session for no circle is offered only
+those). The ticks follow the circle and drop when they stop fitting, the list scrolls inside its card,
+the minutes they would plan show under it, and "Open the room with 2 items" puts them on the agenda in
+the order shown. In an open room, the agenda stage shows the same kind of list after "From last time",
+each viewer reading their own (joining a room asks nothing about its circle), and anyone in the room
+brings one with "Add to the agenda", the way a parked item comes over from last time. The room's
+consent to the agenda is the circle's check.
+
+Each item becomes an ordinary agenda item added by whoever took it, presented by whoever brought it
+when they are in the room, with its aim (explore when they were not sure) and the minutes that aim
+usually gets (report 5, explore 10, decide 15); its note becomes the item's first note, written by
+whoever wrote the note as it stands (whoever brought it, unless a host or an admin reworded it), so the
+record keeps it as said and says whose words they are. The agenda row reads "Brought by" with their
+name, in the room or not. Opening and bringing are **all or none, and every refusal comes before the
+first write** (the room's transactions commit whatever was written before a refusal returns): the items
+are locked after the session row and checked, the agenda's 30 and the entries' room are measured, and
+one item that went elsewhere a moment ago refuses the whole batch with one sentence that names no item,
+and the page reads the list again. An item already on this agenda is a quiet yes.
+
+**The close settles them, on its own.** Inside the close's own transaction, after the record is
+written, an item the record says is done is taken up, and one the session did not reach (waiting or
+parked) goes back to wait for next time. Automatic, never a question on close, for three reasons: a
+quiet room closes itself with nobody there to ask and both closes run the same code (`closeLocked`), so a
+choice could only ever reach one of them; the close already stops on unheld actions, and a second
+question at the moment people leave gets skipped; and an item somebody brought stays with the circle
+until the circle has taken it up, so dropping it is the bringer's act (withdraw) or an admin's, never an
+accident of where the clock ran out. The library follows the record: the item on screen when the room
+closed is done in the minutes, so it is taken up, and whoever brought it can bring it again. "From last
+time" leaves out an item the library took back, so it is offered once.
+
+**A withdrawn item** goes from the list at once, and from an open agenda it stays as the room recorded
+it. Its takes stay: they hold no words, and they keep "From last time" from offering the agenda item it
+became a second time.
+
+**A session removed.** A discarded open session's items wait again and its takes go, because the
+session is meant never to have been. A deleted closed record's taken-up items stay taken up and lose
+the link, the way an item brought over from it keeps its words. A release from before the library
+closes and deletes sessions without settling anything, so the list mends what such a session left on
+its agenda when it is read (`reconcileLibrary`).
+
+**The notices**, in the bell only: no email preference a member has set covers an agenda item. When a
+session takes an item, whoever brought it hears it is on that session's agenda (`session_item_taken`),
+unless they took it themselves; when that session closes, whoever brought it and was not in the room
+hears whether it was taken up or waits for next time (`session_item_settled`), and that notice never
+names the closed session. Both open the item's own card on /sessions (`/sessions#brought-<id>`), never
+the session, because a closed record refuses anybody who was not in it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `POST /api/sessions/library` | an admitted member | 60 an hour, 50 waiting |
+| `PATCH /api/sessions/library/:itemId` | `broughtRights` | 120 changes an hour |
+| `DELETE /api/sessions/library/:itemId` | whoever brought it, admins | the same bucket |
+| `POST /api/sessions/library/:itemId/again` | whoever brought it, admins | the same bucket |
+| `GET /api/sessions/:id/library` | a signed-in member, their own list | none |
+| `POST /api/sessions/:id/library` | anyone in the open room | the same bucket |
 
 ## After the call: tasks
 
@@ -393,8 +505,17 @@ answer, the answer keeps its kind and loses their number and their words, and ev
 gave reads as a member's with its note removed. A send they pressed reads as sent by nobody.
 `sessionIdsNaming` reads the three task tables too, so every record that named them is rebuilt.
 
+The agenda library goes in the same transaction too, after every session row is held: the items they
+brought go (their takes stay, holding no words), a take they made reads as taken by nobody, where they
+last changed somebody else's words the item says nobody, and a note they wrote on somebody else's item
+goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
+it goes with the rest.
+
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
 and their own answers. From the task layer it carries `tasks`, the tasks they hold now, and
 `taskAnswers`, every answer they gave a task with its date and words. A note somebody else left on
-a task they hold is that person's, and stays out.
+a task they hold is that person's, and stays out. From the agenda library it carries `library`, the
+items they brought in their own words, `libraryTakes`, the times they put an item on an agenda, and
+`libraryNotes`, the notes they wrote on items somebody else brought (the note and nothing else of the
+item); a session's id travels only where they may read that session.
