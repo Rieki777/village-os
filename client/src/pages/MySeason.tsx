@@ -82,7 +82,7 @@ export const MY_SEASON_WORDS = {
   addNamed: (measure: string) => `Add ${measure}`,
   fromTerms: "From its terms",
   fromAnswersFor: "What it answers for",
-  termsTarget: (target: string) => `Its terms aim for ${target}.`,
+  termsTarget: (target: string) => `Aims for ${target}.`,
   noRoleMeasures: "Your seats do not list what they answer for yet.",
   applyForMeasures: "Apply for a seat to see measures from its role.",
   save: "Save",

@@ -140,7 +140,7 @@ describe("measures from your roles", () => {
     const box = await screen.findByTestId("role-measures");
     expect(within(box).getByText("From your roles")).toBeTruthy();
     expect(within(box).getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual(["Front-End", "Kitchen keeper"]);
-    expect(within(box).getByText(/Its terms aim for every reported bug by the moon's end\./)).toBeTruthy();
+    expect(within(box).getByText(/From its terms\. Aims for every reported bug by the moon's end\./)).toBeTruthy();
     // Never added for the member.
     expect(measureInputs()).toEqual([]);
 
