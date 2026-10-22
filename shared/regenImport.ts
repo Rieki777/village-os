@@ -341,14 +341,14 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
     if (namesInFile.has(lower)) {
       return {
         ...base, id: "", existing: false, payload: null, holder: null, holderAlready: false, needLinks: [],
-        leftOut: `A second seat called "${s.name}" is in this file. A village keeps one seat to a name, so the second is left out. Rename it on ReGen Civics, or add it by hand on the Org Chart.`,
+        leftOut: `A second role called "${s.name}" is in this file. A village keeps one role to a name, so the second is left out. Rename it on ReGen Civics, or add it by hand on the Org Chart.`,
         lines: [],
       };
     }
     namesInFile.add(lower);
     if (liveSeat) {
       const holderAlready = !!holder && liveSeat.holders.some((h) => h.trim().toLowerCase() === holder.toLowerCase());
-      const lines = [`Your chart has a seat called "${liveSeat.name}" already, so this load leaves it as it is.`];
+      const lines = [`Your chart has a role called "${liveSeat.name}" already, so this load leaves it as it is.`];
       if (holder && !holderAlready) lines.push(`${holder} goes into it as a holder you name, until they have an account and claim it.`);
       return { ...base, id: liveSeat.id, circleId: liveSeat.circleId ?? circle.id, existing: true, payload: null, holder, holderAlready, leftOut: null, lines };
     }
@@ -356,7 +356,7 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
     const being = s.heldBy === "being";
     const sentence = (t: string | null) => (t && !/[.!?]$/.test(t) ? `${t}.` : t);
     const why = being
-      ? [sentence(s.why), `A being holds this seat${s.who ? `: ${s.who}` : ""}. It is open for someone to speak for it.`].filter(Boolean).join(" ")
+      ? [sentence(s.why), `A being holds this role${s.who ? `: ${s.who}` : ""}. It is open for someone to speak for it.`].filter(Boolean).join(" ")
       : s.why;
     const domain = s.domain ?? (fileCircles.get(s.circle)?.decidesOn.length ? fileCircles.get(s.circle)!.decidesOn.join("; ") : null);
     const accountabilities = accountabilitiesFor(s);
@@ -376,7 +376,7 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
     if (s.why) lines.push(`Why it matters: ${s.why}`);
     if (holder) lines.push(`Held by ${holder}, written down as a holder you name until they have an account and claim it.`);
     else if (s.heldBy === "team") lines.push("Held by someone on your team. The file does not say who, so nobody is put in it.");
-    else if (being) lines.push(`A being holds it${s.who ? `: ${s.who}` : ""}. It goes in as an open seat, with the being named on its card.`);
+    else if (being) lines.push(`A being holds it${s.who ? `: ${s.who}` : ""}. It goes in as an open role, with the being named on its card.`);
     else lines.push("Open, and marked as recruiting.");
     if (s.seats > 1) lines.push(`Room for ${s.seats} people.`);
     return { ...base, id, existing: false, payload, holder, holderAlready: false, leftOut: null, lines };
@@ -393,12 +393,12 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
   for (const l of card.needLinks) {
     const label = needName(l.needKey, card.needs.find((n) => n.needKey === l.needKey)?.label);
     if (l.circle === "own") {
-      unseatedLinks.push(`${label} is met by one of your own circles that the file does not name. Tag a seat for it on What this village is for, screen 5.`);
+      unseatedLinks.push(`${label} is met by one of your own circles that the file does not name. Tag a role for it on What this village is for, screen 5.`);
       continue;
     }
     const carried = card.seats.some((s) => s.circle === l.circle && s.needLinks.some((x) => x.needKey === l.needKey));
     if (!carried) {
-      unseatedLinks.push(`${label} is met by ${l.circleLabel}, and no seat in it carries that yet. Tag one on What this village is for, screen 5, once the seats exist.`);
+      unseatedLinks.push(`${label} is met by ${l.circleLabel}, and no role in it carries that yet. Tag one on What this village is for, screen 5, once the roles exist.`);
     }
   }
 
@@ -409,7 +409,7 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
 
   const holdersWait = live.seasonEnds
     ? null
-    : "Naming who holds a seat waits for a running season with an end date, because every holding ends with its season. Set your seasons under Season, then load this file again for its holders.";
+    : "Naming who holds a role waits for a running season with an end date, because every holding ends with its season. Set your seasons under Season, then load this file again for its holders.";
 
   // ── The 1.0 file's own sections ──────────────────────────────────────────
   const identity: IdentityPrefill = {};
@@ -495,7 +495,7 @@ export function planImport(profile: RegenProfile, live: LiveVillage, opts: { tag
  * plain "set by hand".
  */
 const NOTE_WHERE: Record<string, string> = {
-  "seats.nextHolder": "Org Chart, on each seat",
+  "seats.nextHolder": "Org Chart, in each role",
   "decide.together": "Governance",
   "decide.voting": "Game variables, governance",
   "decide.founders": "Members, and the launch vote on the Launch Plan",

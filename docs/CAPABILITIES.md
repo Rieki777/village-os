@@ -128,7 +128,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `map.viewPeople` | See who holds seats on the village map | yes | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
+| `map.viewPeople` | See who holds roles on the village map | yes | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
 | `map.contact` | Reach a role holder through the contact relay | yes | yes | no | `member` (rung 5 of 12) | How Power Is Held |
 | `map.edit` | Draft changes to the land in build mode | yes | yes | no | no rung | no module |
 | `map.publish` | Publish a draft onto the live map | yes | yes | yes | no rung | no module |
@@ -139,7 +139,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `terms.read` | Read what each seat offers, money included | yes | yes | no | `member` (rung 5 of 12) | no module |
+| `terms.read` | Read what each role offers, money included | yes | yes | no | `member` (rung 5 of 12) | no module |
 
 ### `feed`
 
@@ -191,8 +191,8 @@ Four columns need a word before the tables:
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
 | `org.declare` | Declare how the village holds power | yes | yes | yes | no rung | no module |
-| `org.seat` | Seat and unseat the holders of the village's seats | yes | yes | yes | no rung | no module |
-| `org.seatAgent` | Seat and unseat the software agents that hold seats | yes | yes | yes | no rung | no module |
+| `org.seat` | Seat and unseat the holders of the village's roles | yes | yes | yes | no rung | no module |
+| `org.seatAgent` | Seat and unseat the software agents that hold roles | yes | yes | yes | no rung | no module |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | yes | yes | yes | no rung | no module |
 
 ### `ballot`
@@ -435,7 +435,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "map.viewPeople",
-      "label": "See who holds seats on the village map",
+      "label": "See who holds roles on the village map",
       "deniable": true,
       "transferable": false,
       "stageUnlock": "guest",
@@ -446,7 +446,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "terms.read",
-      "label": "Read what each seat offers, money included",
+      "label": "Read what each role offers, money included",
       "deniable": true,
       "transferable": false,
       "stageUnlock": "member",
@@ -654,7 +654,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's seats",
+      "label": "Seat and unseat the holders of the village's roles",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
@@ -663,7 +663,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "org.seatAgent",
-      "label": "Seat and unseat the software agents that hold seats",
+      "label": "Seat and unseat the software agents that hold roles",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,

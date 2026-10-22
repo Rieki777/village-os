@@ -539,7 +539,7 @@ export default function Roles() {
               )}
               {linkMissed && (
                 <p className="text-center text-sm text-muted-foreground mb-8">
-                  That seat is not on this page anymore.
+                  That role is not on this page anymore.
                 </p>
               )}
             </div>

@@ -144,12 +144,12 @@ export function relationProblem(
   if (!known.types.has(rel.typeId)) return "That relationship type does not exist";
   const endpoint = (kind: string, id: string) =>
     kind === "circle" ? known.circles.has(id) : kind === "org_role" ? known.roles.has(id) : false;
-  if (!endpoint(rel.fromKind, rel.fromId)) return "The first end of the link is not a seat or a circle here";
-  if (!endpoint(rel.toKind, rel.toId)) return "The other end of the link is not a seat or a circle here";
+  if (!endpoint(rel.fromKind, rel.fromId)) return "The first end of the link is not a role or a circle here";
+  if (!endpoint(rel.toKind, rel.toId)) return "The other end of the link is not a role or a circle here";
   // A node standing in for itself is always a mistake, and it is the one that
   // renders as an infinite loop on the page rather than as bad data.
   if (rel.fromKind === rel.toKind && rel.fromId === rel.toId) {
-    return "A seat cannot be linked to itself";
+    return "A role cannot be linked to itself";
   }
   return null;
 }

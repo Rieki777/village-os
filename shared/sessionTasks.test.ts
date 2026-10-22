@@ -614,14 +614,14 @@ describe("the task emails", () => {
 
   it("says one more and n more for a seat beside their own tasks, and No date for an undated one", () => {
     const one = buildTaskEmail({ ...base, seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }] }] });
-    expect(one.text).toContain("Your seat, Water keeper, holds one more:");
+    expect(one.text).toContain("Your role, Water keeper, holds one more:");
     expect(one.text).toContain("- Order seed. No date.");
     expect(one.text).toContain("Thank you for carrying these.");
     const two = buildTaskEmail({
       ...base,
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }, { text: "Mend the hose", dueOn: "2026-10-30" }] }],
     });
-    expect(two.text).toContain("Your seat, Water keeper, holds 2 more:");
+    expect(two.text).toContain("Your role, Water keeper, holds 2 more:");
   });
 
   it("opens with the seat for a seat holder who was not in the room, with no record link", () => {
@@ -632,7 +632,7 @@ describe("the task emails", () => {
       own: [],
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }] }],
     });
-    expect(one.text).toContain("The Garden circle met on Wednesday 14 October and a task landed with your seat, Water keeper. Here it is:");
+    expect(one.text).toContain("The Garden circle met on Wednesday 14 October and a task landed with your role, Water keeper. Here it is:");
     expect(one.text).not.toContain("sessions/3");
     expect(one.blocks.some((b) => b.kind === "button" && b.label === TASK_EMAIL_COPY.openRecord)).toBe(false);
     const two = buildTaskEmail({
@@ -641,7 +641,7 @@ describe("the task emails", () => {
       own: [],
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }, { text: "Mend the hose", dueOn: null }] }],
     });
-    expect(two.text).toContain("and 2 tasks landed with your seat, Water keeper. Here they are:");
+    expect(two.text).toContain("and 2 tasks landed with your role, Water keeper. Here they are:");
   });
 
   it("names the session when there is no circle, and says who asked on a send again", () => {
@@ -718,7 +718,7 @@ describe("the copy", () => {
   it("writes the in-app notices", () => {
     expect(TASK_NOTICES.back("Fix the tank")).toBe("Fix the tank is back with the circle. It will be in the next action check.");
     expect(TASK_NOTICES.unheld("Garden, week 2", "Water keeper")).toBe(
-      'A task from "Garden, week 2" sits with Water keeper, and nobody holds that seat now. Give it to someone at the next call.',
+      'A task from "Garden, week 2" sits with Water keeper, and nobody holds that role now. Give it to someone at the next call.',
     );
   });
 
@@ -789,7 +789,7 @@ describe("the words for the menu, the profile card and the bell", () => {
   it("names each bell button with the task it acts on", () => {
     expect(TASK_COPY.bell.done).toBe("It's done");
     expect(TASK_COPY.bell.open).toBe("Open");
-    expect(TASK_COPY.bell.marked).toBe("Done. The circle sees it at the next action check.");
+    expect(TASK_COPY.bell.marked).toBe("Beautiful work. The circle sees it at the next action check.");
     expect(TASK_COPY.bell.undo).toBe("Open it again");
     expect(TASK_COPY.bell.doneLabel("Fix the tank")).toBe("It's done: Fix the tank");
     // Label in Name (WCAG 2.5.3): a voice user says the visible words, so each name starts with them.

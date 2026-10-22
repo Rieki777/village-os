@@ -23,7 +23,7 @@ export const PLAN_CARD_WORDS = {
   serves: "Serves",
   thisMoon: "This moon",
   measures: "Measures",
-  noSeats: "No seats yet.",
+  noSeats: "No roles yet.",
 } as const;
 
 /** Quest pips: filled to the quests done, outlined to the most agreed. */

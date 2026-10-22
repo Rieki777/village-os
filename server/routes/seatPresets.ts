@@ -51,7 +51,7 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/seat-presets", async (req, res) => {
     const viewer = await authedUser(req);
     if (!viewer || !hasCapability("terms.read", await capabilityCtx(viewer))) {
-      return res.status(401).json({ error: "auth_required", message: "Members read the village's seat presets" });
+      return res.status(401).json({ error: "auth_required", message: "Members read the village's role presets" });
     }
     const doc = await docNow();
     res.json({ presets: villagePresetsFrom(doc.get()) });

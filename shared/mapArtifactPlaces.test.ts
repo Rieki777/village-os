@@ -459,7 +459,7 @@ describe("the seats, once the village has said which roles it keeps", () => {
     wall: string;
   };
   let maiaTab: number;
-  const seatItems = () => m.run<{ h: string }[]>("attnItems()").map((x) => x.h).filter((h) => h.includes("Seat"));
+  const seatItems = () => m.run<{ h: string }[]>("attnItems()").map((x) => x.h).filter((h) => h.includes("Role open"));
   beforeAll(async () => {
     m = boot("#skipIntro", { shell: true });
     await settle(200);
@@ -503,7 +503,7 @@ describe("the seats, once the village has said which roles it keeps", () => {
   });
 
   it("offers only the open seat the village keeps in What needs hands", () => {
-    expect(after.seatItems).toEqual([`⛨ Seat open: ${OPEN}`]);
+    expect(after.seatItems).toEqual([`⛨ Role open: ${OPEN}`]);
   });
 
   it("shows a held seat as held, with no hand to raise", () => {
@@ -531,11 +531,11 @@ describe("the seats, once the village has said which roles it keeps", () => {
     expect(row?.querySelector("b")?.textContent).toBe(UNLISTED);
     expect(row?.querySelector(".why")?.textContent).toBe("Drawn on this map. Not one of the village's roles yet.");
     expect(row?.querySelector("a, button")).toBeNull();
-    expect(after.wall).toContain("seats on the map, not the village's roles yet");
+    expect(after.wall).toContain("roles on the map, not on the village's chart yet");
   });
 
   it("counts only the open seat on the place's overview", () => {
-    expect(after.overview).toContain("⛨ 1 open seat ·");
+    expect(after.overview).toContain("⛨ 1 open role ·");
   });
 
   it("opens Maia's seat answer on the Seats tab", () => {

@@ -42,7 +42,7 @@
 import { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import { authToken, gameFetch } from "@/lib/gameApi";
-import { useSeatWord } from "@/lib/gameApi";
+import { useRoleWord } from "@/lib/gameApi";
 
 /** Exactly what `/api/org/roles/:id/history` answers with, per row. */
 export interface SeatSeating {
@@ -141,7 +141,7 @@ export default function SeatHistory({
   canSeePeople: boolean;
 }) {
   /* What this village calls one person's turn holding a role. Default "Seat". */
-  const seatWord = useSeatWord();
+  const roleWord = useRoleWord();
   const [rows, setRows] = useState<SeatSeating[] | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   /*
@@ -189,13 +189,13 @@ export default function SeatHistory({
     if (signedIn) return null;
     return (
       <p className="text-xs text-muted-foreground">
-        Sign in to see who has held this {seatWord.name.toLowerCase()} before.
+        Sign in to see who has held this {roleWord.name.toLowerCase()} before.
       </p>
     );
   }
 
   if (rows === null) {
-    return <p className="text-xs text-muted-foreground">Reading who has held this seat…</p>;
+    return <p className="text-xs text-muted-foreground">Reading who has held this role…</p>;
   }
 
   const names = holderOrder(rows);
@@ -206,7 +206,7 @@ export default function SeatHistory({
     <div>
       <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
         <History className="w-3.5 h-3.5" aria-hidden="true" />
-        Who has held this seat
+        Who has held this role
       </h4>
 
       {/* A SEAT NOBODY HAS HELD AND A SEAT WHOSE NAMES ARE GONE ARE NOT THE
@@ -218,26 +218,26 @@ export default function SeatHistory({
           erasing them a second time. */}
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Nobody has been recorded in this seat yet. That is what a seat looks like before somebody
+          Nobody has been recorded in this role yet. That is what a role looks like before somebody
           steps into it.
         </p>
       ) : names.length === 0 ? (
         <p className="text-sm text-muted-foreground leading-relaxed">
-          This seat has been held. The names on its record have been taken off, and the dates below are
+          This role has been held. The names on its record have been taken off, and the dates below are
           what it keeps.
         </p>
       ) : names.length === 1 ? (
         <p className="text-sm text-foreground leading-relaxed">
-          {names[0]} is the first person on this seat's record.
+          {names[0]} is the first person on this role's record.
         </p>
       ) : (
-        <p className="text-sm text-foreground leading-relaxed">This seat has been held by {chain(names)}.</p>
+        <p className="text-sm text-foreground leading-relaxed">This role has been held by {chain(names)}.</p>
       )}
 
       {passed && (
         <p className="mt-1.5 text-sm text-foreground leading-relaxed">
-          It passed from {passed.from} to {passed.to} on {day(passed.on)}. A seat that outlasts the
-          person holding it is the reason a village writes its seats down.
+          It passed from {passed.from} to {passed.to} on {day(passed.on)}. A role that outlasts the
+          person holding it is the reason a village writes its roles down.
         </p>
       )}
 

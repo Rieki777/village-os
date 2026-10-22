@@ -313,14 +313,14 @@ function Preview({
       {plan.circles.length || plan.seats.length ? (
         <Part
           id="rc-structure"
-          title="Your circles and seats, as one draft"
+          title="Your circles and roles, as one draft"
           status={statusOf(p, "seats.cards") ?? statusOf(p, "circles.list")}
           checked={choices.structure}
           onToggle={(on) => set({ structure: on })}
         >
           <p className="font-medium text-gray-900">Circles</p>
-          <Lines lines={plan.circles.map((c) => (c.reused ? `${c.name}: your village has this circle already, and its seats go into it.` : `${c.name}: a new circle.`))} />
-          <p className="font-medium text-gray-900 mt-3">Seats</p>
+          <Lines lines={plan.circles.map((c) => (c.reused ? `${c.name}: your village has this circle already, and its roles go into it.` : `${c.name}: a new circle.`))} />
+          <p className="font-medium text-gray-900 mt-3">Roles</p>
           <ul className="space-y-2 mt-1">
             {plan.seats.map((s) => (
               <SeatRow
@@ -338,7 +338,7 @@ function Preview({
           </div>
           {plan.unseatedLinks.length ? (
             <div className="mt-3">
-              <p className="font-medium text-gray-900">Circles that meet a need no seat carries yet</p>
+              <p className="font-medium text-gray-900">Circles that meet a need no role carries yet</p>
               <Lines lines={plan.unseatedLinks} />
             </div>
           ) : null}
@@ -349,11 +349,11 @@ function Preview({
       ) : null}
 
       {plan.seats.some((s) => s.holder && !s.holderAlready) ? (
-        <Part id="rc-holders" title="Who holds the seats" checked={choices.holders && !plan.holdersWait} onToggle={plan.holdersWait ? undefined : (on) => set({ holders: on })}>
+        <Part id="rc-holders" title="Who holds the roles" checked={choices.holders && !plan.holdersWait} onToggle={plan.holdersWait ? undefined : (on) => set({ holders: on })}>
           {plan.holdersWait ? <p className="text-amber-800">{plan.holdersWait}</p> : null}
           <Lines lines={plan.seats.filter((s) => s.holder && !s.holderAlready).map((s) => `${s.holder} in ${s.name}`)} />
           <p className={`${HINT} mt-2`}>
-            Each is written down as a name. When that person has an account, they claim the seat from their profile.
+            Each is written down as a name. When that person has an account, they claim the role from their profile.
           </p>
         </Part>
       ) : null}
@@ -361,7 +361,7 @@ function Preview({
       {choices.structure && createsCircles && plan.oldCircles.length ? (
         <Part id="rc-old" title="The circles this village started with">
           <p>A village built from your file starts with your circles. These are the ones it has now that your file does not name.</p>
-          <Lines lines={plan.oldCircles.map((c) => (c.seats ? `${c.name}: ${c.seats} seat${c.seats === 1 ? " sits" : "s sit"} in it, so it can only be marked forming.` : c.name))} />
+          <Lines lines={plan.oldCircles.map((c) => (c.seats ? `${c.name}: ${c.seats} role${c.seats === 1 ? " sits" : "s sit"} in it, so it can only be marked forming.` : c.name))} />
           <fieldset className="mt-2 space-y-1">
             <legend className="sr-only">What happens to them</legend>
             {(
@@ -381,8 +381,8 @@ function Preview({
       ) : null}
 
       {plan.seats.some((s) => s.needLinks.length) ? (
-        <Part id="rc-links" title="Which human needs each seat meets" checked={choices.links} onToggle={(on) => set({ links: on })}>
-          <p>Each seat is tagged with its own needs once the seat exists, and only with needs your village has taken on.</p>
+        <Part id="rc-links" title="Which human needs each role meets" checked={choices.links} onToggle={(on) => set({ links: on })}>
+          <p>Each role is tagged with its own needs once the role exists, and only with needs your village has taken on.</p>
         </Part>
       ) : null}
 
@@ -800,8 +800,8 @@ export default function ProfileImport({
             ))}
           </ul>
           <p className={`${HINT} mt-2`}>
-            Read it before you publish it. Published, it makes the circles and seats; load the same file again
-            afterwards to tag each seat with its needs and say how each circle decides.
+            Read it before you publish it. Published, it makes the circles and roles; load the same file again
+            afterwards to tag each role with its needs and say how each circle decides.
           </p>
         </div>
       ) : null}

@@ -151,22 +151,22 @@ describe("carrying people across, once the draft is live", () => {
     await open();
     const ana = screen.getByTestId("carry-row-s-ana");
     expect(within(ana).getByTestId("suggested").textContent).toBe("Suggested · Similar name");
-    expect((within(ana).getByLabelText("New seat for Ana") as HTMLSelectElement).value).toBe("rec-finance");
+    expect((within(ana).getByLabelText("New role for Ana") as HTMLSelectElement).value).toBe("rec-finance");
     // Nothing moved on load.
     expect(posts).toEqual([]);
 
     const bo = screen.getByTestId("carry-row-s-bo");
     expect(within(bo).queryByTestId("suggested")).toBeNull();
-    expect(within(bo).getByText("No seat on the new chart has a name like it. Pick one.")).toBeTruthy();
+    expect(within(bo).getByText("No role on the new chart has a name like it. Pick one.")).toBeTruthy();
     expect((within(bo).getByRole("button", { name: "Move Bo" }) as HTMLButtonElement).disabled).toBe(true);
 
     // Keep this seat for now is a choice, and it moves nobody.
-    fireEvent.change(within(ana).getByLabelText("New seat for Ana"), { target: { value: "keep" } });
+    fireEvent.change(within(ana).getByLabelText("New role for Ana"), { target: { value: "keep" } });
     expect((within(ana).getByRole("button", { name: "Move Ana" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(ana).getByText("Ana stays in Finance Lead for now. A seat somebody holds is never retired.")).toBeTruthy();
+    expect(within(ana).getByText("Ana stays in Finance Lead for now. A role somebody holds is never retired.")).toBeTruthy();
 
     // A pick of the steward's own moves that one person, with one request.
-    fireEvent.change(within(bo).getByLabelText("New seat for Bo"), { target: { value: "rec-events" } });
+    fireEvent.change(within(bo).getByLabelText("New role for Bo"), { target: { value: "rec-events" } });
     expect(within(bo).getByText("Your pick")).toBeTruthy();
     fireEvent.click(within(bo).getByRole("button", { name: "Move Bo" }));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -176,11 +176,11 @@ describe("carrying people across, once the draft is live", () => {
   it("confirm all suggested lists the visible suggested rows first, then moves only those", async () => {
     await open();
     // Dee's suggestion is changed away, so it is no longer a suggested row.
-    fireEvent.change(screen.getByLabelText("New seat for Dee"), { target: { value: "rec-events" } });
+    fireEvent.change(screen.getByLabelText("New role for Dee"), { target: { value: "rec-events" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm all suggested (2)" }));
     expect(posts).toEqual([]);
     const confirm = screen.getByTestId("carry-confirm-all");
-    expect(within(confirm).getByText("Move 2 people to their suggested seat?")).toBeTruthy();
+    expect(within(confirm).getByText("Move 2 people to their suggested role?")).toBeTruthy();
     expect(Array.from(confirm.querySelectorAll("li")).map((li) => li.textContent)).toEqual([
       "Cy: Advisory Board to Advisory Council Member",
       "Ana: Finance Lead to Finance Steward",
@@ -191,7 +191,7 @@ describe("carrying people across, once the draft is live", () => {
       { seatingId: "s-cy", toSeatId: "rec-advisory" },
       { seatingId: "s-ana", toSeatId: "rec-finance" },
     ]);
-    await screen.findByText("2 people moved to their new seat.");
+    await screen.findByText("2 people moved to their new role.");
   });
 
   it("shows the list read only to a member without the power, and who holds it", async () => {

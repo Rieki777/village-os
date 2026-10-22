@@ -435,7 +435,7 @@ describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be as
     const read = await call("GET", `/api/governance/ballots/${running.id}`, { token: idaToken });
     expect(read.status, JSON.stringify(read.json)).toBe(200);
     const doc = String(read.json?.docMarkdown);
-    expect(doc).toContain("Who carries the steward's seat");
+    expect(doc).toContain("Who carries the steward role");
     expect(doc, "the person who chose the list is named in it").toContain("chose who it puts forward");
     expect(doc, "and what accepting costs is in it too").toContain(
       `all ${HANDOVER_SET.length} of the powers this village has to give`,

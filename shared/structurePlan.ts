@@ -368,8 +368,8 @@ export function planStructure(
       const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
       const circleId = typeof seat.payload.circleId === "string" && seat.payload.circleId ? seat.payload.circleId : null;
       let problem: string | null = null;
-      if (name.trim() === "") problem = "This seat came with no name";
-      else if (liveSeatIds.has(id)) problem = `A seat with the id "${id}" already exists`;
+      if (name.trim() === "") problem = "This role came with no name";
+      else if (liveSeatIds.has(id)) problem = `A role with the id "${id}" already exists`;
       seats.push({
         key: `${p.id}#${index}`,
         proposalId: p.id,
@@ -510,10 +510,10 @@ export function decideStructure(
     if (!inChange(s.key)) continue;
     const choice = s.match ? conflicts[s.key] : undefined;
     if (choice?.choice === "leave") continue;
-    if (s.problem) problems.push(`${s.name || "A seat"}: ${s.problem}. Leave it out to go ahead.`);
+    if (s.problem) problems.push(`${s.name || "A role"}: ${s.problem}. Leave it out to go ahead.`);
     if (s.circleProblem) problems.push(`"${s.name}": ${s.circleProblem}. Leave it out to go ahead.`);
     if (s.circleId && leftOutNewIds.has(s.circleId)) {
-      problems.push(`"${s.name}" sits in "${nameOfCircle(s.circleId)}", which is left out. Keep the circle or leave the seat out.`);
+      problems.push(`"${s.name}" sits in "${nameOfCircle(s.circleId)}", which is left out. Keep the circle or leave the role out.`);
     }
     if (!s.match) {
       creates.push(s);
@@ -538,8 +538,8 @@ export function decideStructure(
   if (unsettled > 0) {
     problems.push(
       unsettled === 1
-        ? "One seat already exists here. Choose what happens to it."
-        : `${unsettled} seats already exist here. Choose what happens to each one.`,
+        ? "One role already exists here. Choose what happens to it."
+        : `${unsettled} roles already exist here. Choose what happens to each one.`,
     );
   }
 
@@ -560,9 +560,9 @@ export function decideStructure(
   for (const [key, typed] of Array.from(renames.entries())) {
     const seat = plan.seats.find((s) => s.key === key)!;
     if (typed === "") problems.push(`Type a new name for the second "${seat.name}", or choose another option.`);
-    else if (typed.length > 120) problems.push(`"${typed.slice(0, 40)}" is longer than a seat name can be.`);
-    else if (liveNames.has(seatNameKey(typed))) problems.push(`A live seat is already called "${typed}". Type a name of its own.`);
-    else if ((finalNames.get(seatNameKey(typed)) ?? 0) > 1) problems.push(`Two seats in this change would be called "${typed}".`);
+    else if (typed.length > 120) problems.push(`"${typed.slice(0, 40)}" is longer than a role name can be.`);
+    else if (liveNames.has(seatNameKey(typed))) problems.push(`A live role is already called "${typed}". Type a name of its own.`);
+    else if ((finalNames.get(seatNameKey(typed)) ?? 0) > 1) problems.push(`Two roles in this change would be called "${typed}".`);
   }
 
   // ── Retiring the old chart ──

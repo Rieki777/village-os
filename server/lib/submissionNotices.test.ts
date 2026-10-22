@@ -52,9 +52,9 @@ describe("submissionSubject", () => {
   });
 
   it("falls back to the seat-less phrase when the row carries no name", () => {
-    expect(submissionSubject("role-application", {})).toBe("your offer to hold a seat");
-    expect(submissionSubject("role-application", { roleName: "   " })).toBe("your offer to hold a seat");
-    expect(submissionSubject("role-application", null)).toBe("your offer to hold a seat");
+    expect(submissionSubject("role-application", {})).toBe("your offer to hold a role");
+    expect(submissionSubject("role-application", { roleName: "   " })).toBe("your offer to hold a role");
+    expect(submissionSubject("role-application", null)).toBe("your offer to hold a role");
   });
 
   it("names the seat on an ask to be confirmed, which is a different act from a raised hand", () => {
@@ -64,8 +64,8 @@ describe("submissionSubject", () => {
     expect(submissionSubject("seat-claim", { roleName: "Water Steward" })).toBe(
       "your ask to be confirmed as Water Steward",
     );
-    expect(submissionSubject("seat-claim", {})).toBe("your ask to be confirmed in a seat");
-    expect(submissionSubject("seat-claim", null)).toBe("your ask to be confirmed in a seat");
+    expect(submissionSubject("seat-claim", {})).toBe("your ask to be confirmed in a role");
+    expect(submissionSubject("seat-claim", null)).toBe("your ask to be confirmed in a role");
   });
 
   it("names the power on a hand raised for one, in the words of its label", () => {

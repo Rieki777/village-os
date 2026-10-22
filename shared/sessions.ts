@@ -103,7 +103,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
     lede: "One item at a time, each with its own clock and its own page. Notes, ideas and actions land on the item they belong to.",
     cues: [
       "Start the item's clock and say its aim out loud.",
-      "Catch every action as it comes, with a name or a seat on it.",
+      "Catch every action as it comes, with a name or a role on it.",
       "Close each item with what we learned, in one sentence for the record.",
     ],
     glyph: "sprout",
@@ -111,7 +111,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
   actions: {
     title: "Who does what",
     short: "Actions",
-    lede: "Every action leaves with a person or a seat on it, claimed here and now. Anything nobody can hold goes to the backlog.",
+    lede: "Every action leaves with a person or a role on it, claimed here and now. Anything nobody can hold goes to the backlog.",
     cues: [
       "Read each action out, then wait for a claim.",
       "No action leaves without an owner. Park it if nobody can hold it.",
@@ -872,7 +872,7 @@ export function unownedActions(entries: Pick<SessionEntry, "id" | "kind" | "stat
     .map((e) => e.id);
 }
 
-export const CLOSE_REFUSAL = "Every action needs a person or a seat before the session closes. Claim it, name a seat, or park it.";
+export const CLOSE_REFUSAL = "Every action needs a person or a role before the session closes. Claim it, name a role, or park it.";
 
 // ── Minutes ──────────────────────────────────────────────────────────────────
 
@@ -1006,14 +1006,14 @@ export const SESSION_COPY = {
   durationLabel: "How long, in minutes",
   openNow: "Happening now",
   recent: "Recent sessions",
-  nothingOpen: "No session is open right now.",
+  nothingOpen: "All quiet for now. Open the room when your circle is ready.",
   joinButton: "Join the room",
   joinedLabel: "You're in",
   placeLineFallback: "Take a moment to feel where you are.",
   arrivalPrompt: "How are you arriving, from 1 to 11?",
   wishPrompt: "What would make it an 11+?",
   wishPlaceholder: "Optional, in a few words",
-  arrivalSaved: "Thank you. Your number is in the room.",
+  arrivalSaved: "Thanks. You're checked in.",
   arrivalLow: "The room is arriving low. The facilitator may offer a lighter agenda.",
   agendaAdd: "Add an item",
   agendaAimLabel: "Aim",
@@ -1033,18 +1033,18 @@ export const SESSION_COPY = {
   addDecision: "Write the proposal",
   claim: "I'll take it",
   release: "Hand it back",
-  nameSeat: "Name a seat",
+  nameSeat: "Name a role",
   park: "Park it",
   unownedLeft: "still need someone",
   everyoneHolds: "Every action has someone holding it.",
   closeButton: "Close the session",
-  closeDone: "The session is closed. The record went to the admins.",
+  closeDone: "Beautiful work, circle. The session is closed, and the notes are saved for everyone who was here.",
   wordPrompt: "One word as you leave",
   facilitationPrompt: "How did the facilitation feel?",
   facilitationMore: "What would you keep, or try next time? The facilitator reads this unsigned.",
   toolPrompt: "How could this tool flow better?",
   toolPlaceholder: "Your idea goes to the village's feedback inbox.",
-  toolSent: "Thank you. Your idea is in the feedback inbox.",
+  toolSent: "Thanks. Your idea was sent.",
   gratitudeTitle: "Gratitude",
   gratitudeLede: "Thank someone for what they brought today.",
   recordTitle: "The record",
@@ -1087,9 +1087,9 @@ export const SESSION_REFUSALS = {
   entryUnknown: "That entry is not in this session.",
   entriesFull: `This session holds ${SESSION_LIMITS.maxEntries} entries, and that is all it can hold.`,
   yoursFull: `One person can add ${SESSION_LIMITS.maxEntriesPerPerson} entries to a session, and you have.`,
-  seatUnknown: "That seat is not an active seat in this village.",
+  seatUnknown: "That role is not an active role in this village.",
   dueOn: "A due date reads like 2026-10-31.",
-  notAction: "Only an action can be claimed or handed back.",
+  notAction: "Only an action can be taken or handed back.",
   heldAlready: "Someone already holds this action.",
   notHeld: "Nobody holds this action yet.",
   releaseNotYours: "Only the person holding it, or the facilitator, can hand it back.",
@@ -1200,7 +1200,7 @@ export const ROOM_COPY = {
   takeOverHint: "If the facilitator has stepped away, an admin can hold the room from here.",
 
   whoIsHere: "Who is here",
-  nobodyHere: "Nobody has arrived yet.",
+  nobodyHere: "The room is quiet. Nobody has arrived yet.",
   breathTitle: "Breathe together",
   breathIdle: "When the facilitator starts it, every screen breathes at the same pace.",
   breathDone: "Let the quiet sit for a moment.",
@@ -1230,7 +1230,7 @@ export const ROOM_COPY = {
   roundEnd: "End the round",
   speakingNow: "Speaking now",
   readyNext: "Ready next",
-  roundDone: "Everyone has spoken.",
+  roundDone: "Everyone has spoken. Thank you all.",
   joinFirst: "Join the room to take part here.",
 
   parkedItems: "Parked last time",
@@ -1240,7 +1240,7 @@ export const ROOM_COPY = {
   itemTitleLabel: "Item title",
   itemTitlePlaceholder: "What needs the circle's time?",
   addItemButton: "Add it",
-  agendaEmpty: "No items yet. Anyone in the room can add one.",
+  agendaEmpty: "The agenda is still blank. Anyone in the room can add the first item.",
   moveUp: "Move up",
   moveDown: "Move down",
   edit: "Edit",
@@ -1285,8 +1285,8 @@ export const ROOM_COPY = {
   decidedBadge: "Decided",
   seedSave: "Add to the record",
   dueLabel: "Due by",
-  seatLabel: "A seat holds it",
-  noSeat: "No seat",
+  seatLabel: "A role holds it",
+  noSeat: "No role",
   remove: "Remove",
   heldBy: "Held by",
   nobodyHolds: "Nobody holds this yet",
@@ -1296,7 +1296,7 @@ export const ROOM_COPY = {
   doneLabel: "Done",
 
   tensionPlaceholder: "What are you sensing? It goes to the backlog.",
-  tensionSaved: "Thank you. It is in the backlog.",
+  tensionSaved: "Thanks. It's in the backlog.",
   send: "Send",
 
   amountLabel: "Amount",
@@ -1309,11 +1309,11 @@ export const ROOM_COPY = {
   wordSave: "Leave my word",
   roomWords: "The room's words",
   facilitationSend: "Send it unsigned",
-  facilitationSent: "Thank you. The facilitator reads it unsigned.",
+  facilitationSent: "Thanks. The facilitator reads it unsigned.",
   facilitationHeading: "What the room said about the facilitation",
   facilitationNone: "No feedback yet.",
   toolSend: "Send the idea",
-  closeConfirm: "Close the session now? The arrival words are erased and the record goes to the admins.",
+  closeConfirm: "Close the session now? The arrival words are erased, and the notes are saved for everyone who was here.",
   closeYes: "Yes, close it",
   closeNo: "Not yet",
 

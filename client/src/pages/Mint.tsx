@@ -117,7 +117,7 @@ const ruleWarn = "mt-2 rounded-lg bg-amber-light px-3 py-2 text-sm text-gray-900
 const TRIGGER_WORDS: Record<string, string> = {
   "quest.completed": "A steward confirms finished work",
   "gratitude.given": "A member thanks another",
-  "role.cycle": "Each moon, to everyone holding a seat",
+  "role.cycle": "Each moon, to everyone holding a role",
   "journey.stage_reached": "Reaching a stage of the journey",
   "welcome_aboard.quest": "A welcome quest",
   "library.contributed": "Lending something to the library",
@@ -596,10 +596,10 @@ export default function Mint() {
           <section className={`${card} mt-6`}>
             <h2 className={h2}>At the next moon</h2>
             {view.settlementPreview.seats === 0 ? (
-              <p className="text-gray-700">Nobody holds a seat, so the settlement pays nothing.</p>
+              <p className="text-gray-700">Nobody holds a role, so the settlement pays nothing.</p>
             ) : (
               <p className="text-gray-800">
-                {view.settlementPreview.seats} seat
+                {view.settlementPreview.seats} role holder
                 {view.settlementPreview.seats === 1 ? "" : "s"} thanked
                 {view.settlementPreview.mints.length
                   ? `, and ${view.settlementPreview.mints

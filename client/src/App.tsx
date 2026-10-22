@@ -142,6 +142,20 @@ const PAGE_TITLES: Record<string, string> = {
   "/sessions": "Live sessions",
 };
 
+/**
+ * The old spelling of /role-applications/:id (Rye, 2026-10-21: members say role,
+ * never seat). Emails and notices already sent carry it, so it stays mounted and
+ * moves the visitor to the new address, keeping the query and the hash.
+ */
+function SeatApplicationsAlias() {
+  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    const to = location.replace(/^\/seat-applications\//, "/role-applications/");
+    setLocation(to + window.location.search + window.location.hash, { replace: true });
+  }, [location, setLocation]);
+  return null;
+}
+
 function PageTitle() {
   const [location] = useLocation();
   const [village, setVillage] = useState<string>("");
@@ -430,8 +444,9 @@ function Router() {
       <Route path="/decisions" component={Decisions} />
       <Route path="/decisions/:id" component={Decision} />
       <Route path="/propose" component={Propose} />
-      {/* One application to hold seats, on terms. Members only, behind terms.read. */}
-      <Route path="/seat-applications/:id" component={SeatApplication} />
+      {/* One application to hold roles, on terms. Members only, behind terms.read. */}
+      <Route path="/role-applications/:id" component={SeatApplication} />
+      <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Your season: your own plan, then the village's page of everyone's, by name. */}
       <Route path="/season-plans/mine" component={MySeason} />
       <Route path="/season-plans" component={SeasonPlans} />

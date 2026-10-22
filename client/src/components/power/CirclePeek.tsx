@@ -34,7 +34,7 @@ export function peekSummary(circle: PowerCircle, data: PowerData): string {
   const held = seats.reduce((n, s) => n + s.holderCount, 0);
   const places = seats.reduce((n, s) => n + s.seats, 0);
   const inside = data.circles.filter((c) => c.parentCircleId === circle.id).length;
-  const seatLine = places > 0 ? `${held} of ${places} seat${places === 1 ? "" : "s"} held` : "no seats yet";
+  const seatLine = places > 0 ? `${held} of ${places} held` : "no roles yet";
   if (inside === 0) return seatLine.charAt(0).toUpperCase() + seatLine.slice(1);
   return `${inside} circle${inside === 1 ? "" : "s"} inside · ${seatLine}`;
 }

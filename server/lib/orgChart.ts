@@ -746,10 +746,10 @@ export function structuralLoad(
     concentration: readable && seatingsLive > 0 ? holders.reduce((m, h) => Math.max(m, h.share), 0) : null,
     possibleDuplicates,
     note: readable
-      ? "Sole-held seats are the ones with no second holder, so they are what stops if that person stops. A seat with somebody named to carry it is a plan; the rest are the ones to name somebody for. Carrying a lot is a load and not a fault, and a seat one person carries alone is the first candidate to grow into a circle."
+      ? "Sole-held roles are the ones with no second holder, so they are what stops if that person stops. A role with somebody named to carry it is a plan; the rest are the ones to name somebody for. Carrying a lot is a load and not a fault, and a role one person carries alone is the first candidate to grow into a circle."
       : holders.length === 0
-        ? "No seats have holders yet, so there is no load to read."
-        : "One person holds every seat. That is what a founding looks like, not a finding. This reads once a second person is seated.",
+        ? "No roles have holders yet, so there is no load to read."
+        : "One person holds every role. That is what a founding looks like, not a finding. This reads once a second person is seated.",
   };
 }
 
@@ -798,7 +798,7 @@ export function describeOrgChange(before: OrgRole | null, after: Partial<OrgRole
   // written by the assistant's draft-publish path, and a whyItMatters-only edit
   // produced no journal line at all because `changes.length` gates the write.
   if (after.whyItMatters !== undefined && (after.whyItMatters ?? "") !== (before.whyItMatters ?? "")) {
-    lines.push("why this seat matters rewritten");
+    lines.push("why this role matters rewritten");
   }
   if (after.active !== undefined) say(after.active ? "reopened" : "rested", before.active, after.active);
   if (after.recruiting !== undefined) say("recruiting", before.recruiting, after.recruiting);
@@ -850,7 +850,7 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
   const cols = ["id", "name", "circle_id", "aim", "domain", "accountabilities", "seats", "sort_order"];
   const vals: unknown[] = [
     id,
-    String(body?.name ?? "New seat"),
+    String(body?.name ?? "New role"),
     body?.circleId || null,
     body?.aim ?? null,
     body?.domain ?? null,
@@ -895,7 +895,7 @@ export function statusOverrideProblem(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
   if (DECLARABLE_STATES.includes(v as SeatState)) return null;
   if (v === "expired") {
-    return "A seat cannot be declared expired. That is worked out from the terms on its holders.";
+    return "A role cannot be declared expired. That is worked out from the terms on its holders.";
   }
   return `A declared state must be one of: ${DECLARABLE_STATES.join(", ")}`;
 }
@@ -1043,7 +1043,7 @@ export async function seatHolder(
      * is never given a member account", which would have read as false the day
      * the first river got a vote.
      */
-    return { ok: false, reason: "A seat-plane agent holds its seat as documented, with no member account" };
+    return { ok: false, reason: "A role-plane agent holds its role as documented, with no member account" };
   }
   const kind = h.userId ? "member" : "documented";
   if (kind === "documented" && !String(h.displayName ?? "").trim()) {
@@ -1083,7 +1083,7 @@ export async function seatHolder(
   } catch (e: any) {
     // The unique key is on (seat, active holder key), so this is the one
     // collision it exists to catch.
-    if (e?.code === "ER_DUP_ENTRY") return { ok: false, reason: "They already hold this seat" };
+    if (e?.code === "ER_DUP_ENTRY") return { ok: false, reason: "They already hold this role" };
     throw e;
   }
 }

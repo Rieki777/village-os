@@ -192,7 +192,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
     // sentence names that, and it still says nothing is waiting, because
     // nothing is.
     expect(state.stillAsked).toBe(true);
-    expect(state.sentence).toBe("No steward holds the seat; Game changes land at their landing time.");
+    expect(state.sentence).toBe("No steward holds the role; Game changes land at their landing time.");
     expect(state.sentence, "the old model's queue is gone from the copy too").not.toContain("wait");
   });
 
@@ -730,7 +730,7 @@ describe.skipIf(!configured)("a term that runs out, and the vacancy it leaves", 
     const state = await vacancyState(pool);
     expect(state.seated).toBe(false);
     expect(state.lapsed).toHaveLength(1);
-    expect(state.sentence).toBe("No steward holds the seat; Game changes land at their landing time.");
+    expect(state.sentence).toBe("No steward holds the role; Game changes land at their landing time.");
     expect(state.healthy, "an empty seat is a state the village may be in, not a gap").toBe(true);
   });
 

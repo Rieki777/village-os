@@ -176,10 +176,10 @@ type Deps = Pick<
   closers: Record<string, SubjectCloser>;
 };
 
-const MEMBERS_ONLY = { error: "auth_required", message: "Members read seat applications." };
+const MEMBERS_ONLY = { error: "auth_required", message: "Members read role applications." };
 /** A text not written yet has nothing to end (PR8). */
 const NO_ACTS = { mayGiveNotice: false, notice: null, mayEndByAgreement: false, ask: null };
-const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these seats. Withdraw it first, or wait for it.";
+const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these roles. Withdraw it first, or wait for it.";
 
 /** A seat's term as a civil date, from the terms' own length when no date is written. */
 function requestedEndsOn(settings: SeatSettings, startsAt: Date, timezone: string): string | null {
@@ -435,9 +435,9 @@ export function register(app: Express, deps: Deps): void {
   // ── Apply ─────────────────────────────────────────────────────────────────
   app.post("/api/governance/role-applications", async (req, res) => {
     const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to apply for a seat." });
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to apply for a role." });
     const userId = String(user.id);
-    if (!(await guardCapability(req, res, "terms.read", { status: 403, body: { error: "members_only", message: "Applying for a seat opens at the member rung." } }))) return;
+    if (!(await guardCapability(req, res, "terms.read", { status: 403, body: { error: "members_only", message: "Applying for a role opens at the member rung." } }))) return;
     if (await overLimit(`seat-application:${userId}`, ASKS_PER_WINDOW, ASK_WINDOW_MS)) {
       return res.status(429).json({ error: "too_many_asks", message: "That is a lot of applications in a few minutes. Wait a little and try again." });
     }
@@ -481,7 +481,7 @@ export function register(app: Express, deps: Deps): void {
       if (old.candidateUserId !== userId) return res.status(403).json({ error: "Only the member who holds these terms can propose to amend them.", field: "supersedesId" });
       const sameSeats = old.seatIds.length === input.seatIds.length && old.seatIds.every((s) => input.seatIds.includes(s));
       if (!sameSeats) {
-        return res.status(409).json({ error: "An amendment names the same seats as the terms it replaces. Apply for other seats in an application of their own.", field: "seatIds" });
+        return res.status(409).json({ error: "An amendment names the same roles as the terms it replaces. Apply for other roles in an application of their own.", field: "seatIds" });
       }
       const oldView = old.textId ? await viewText(pool, old.textId, today(), tz) : null;
       if (old.status !== "adopted" || !oldView || oldView.derived.state !== "in-force") {
@@ -496,11 +496,11 @@ export function register(app: Express, deps: Deps): void {
     const lapseNow = { ...lapse(), now };
     for (const id of input.seatIds) {
       const seat = seats.find((s) => s.id === id);
-      if (!seat) return res.status(404).json({ error: "There is no seat by that id.", seatId: id });
+      if (!seat) return res.status(404).json({ error: "There is no role by that id.", seatId: id });
       if (seat.isExample) {
-        return res.status(409).json({ error: `${seat.name} is one of the platform's example seats. Apply for one of this village's own.`, seatId: id });
+        return res.status(409).json({ error: `${seat.name} is one of the platform's example roles. Apply for one of this village's own.`, seatId: id });
       }
-      if (!seat.active) return res.status(409).json({ error: `${seat.name} is not a seat the village fills right now.`, seatId: id });
+      if (!seat.active) return res.status(409).json({ error: `${seat.name} is not a role the village fills right now.`, seatId: id });
       const here = live.filter((l) => l.orgRoleId === id);
       if (here.some((l) => l.userId === userId)) continue; // already seated: the terms will link to that seating
       // An application for a later day is counted when that day comes.
@@ -591,7 +591,7 @@ export function register(app: Express, deps: Deps): void {
     const raced = (e: any) => {
       if (e?.code === "SA_PENDING") return { status: 409, body: { error: PENDING_MESSAGE, applicationId: e.applicationId } };
       if (e?.code === "ER_LOCK_DEADLOCK" || e?.errno === 1213 || e?.errno === 1020) {
-        return { status: 409, body: { error: "Another application for these seats was written at the same moment. Read your applications, then try again." } };
+        return { status: 409, body: { error: "Another application for these roles was written at the same moment. Read your applications, then try again." } };
       }
       return null;
     };
@@ -738,7 +738,7 @@ export function register(app: Express, deps: Deps): void {
       return null;
     }
     if (a.status !== "awaiting-holder") {
-      res.status(409).json({ error: `This application is ${STATUS_WORDS[a.status].toLowerCase()}, so it is not waiting for a seat holder.`, status: a.status });
+      res.status(409).json({ error: `This application is ${STATUS_WORDS[a.status].toLowerCase()}, so it is not waiting for a role holder.`, status: a.status });
       return null;
     }
     return { user, a, rule: await adoptionRule(user) };

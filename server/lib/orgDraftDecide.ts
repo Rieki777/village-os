@@ -248,7 +248,7 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
     if (c.op === "create_circle") circles.set(bare(c.orgRoleId), text(c.payload?.name));
     if (c.op === "create_seat") seats.set(c.orgRoleId, text(c.payload?.name));
   }
-  const seat = (id: string) => `"${seats.get(id) ?? "a seat"}"`;
+  const seat = (id: string) => `"${seats.get(id) ?? "a role"}"`;
   const circle = (id: string | null) => `"${(id && circles.get(id)) ?? "a circle"}"`;
   return draft.changes.map((c) => {
     const circleId = text(Array.isArray(c.payload?.circleId) ? c.payload.circleId[0] : c.payload?.circleId);
@@ -258,18 +258,18 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
         return `Create the circle ${circle(bare(c.orgRoleId))}${parent ? ` inside ${circle(parent)}` : ""}`;
       }
       case "create_seat":
-        return `Create the seat ${seat(c.orgRoleId)}${circleId ? ` in ${circle(circleId)}` : ""}`;
+        return `Create the role ${seat(c.orgRoleId)}${circleId ? ` in ${circle(circleId)}` : ""}`;
       case "update_seat": {
         const renamed = text(c.payload?.name);
         const was = seats.get(c.orgRoleId);
         return (
-          `Change the seat ${seat(c.orgRoleId)}` +
+          `Change the role ${seat(c.orgRoleId)}` +
           (renamed && renamed !== was ? `, renaming it "${renamed}"` : "") +
           (circleId ? `, in ${circle(circleId)}` : "")
         );
       }
       case "rest_seat":
-        return `Retire the seat ${seat(c.orgRoleId)}`;
+        return `Retire the role ${seat(c.orgRoleId)}`;
       case "seat_holder":
         return `Seat somebody in ${seat(c.orgRoleId)}`;
       case "end_holding":
@@ -297,7 +297,7 @@ export function orgDraftBallotText(
 ): { title: string; doc: string } {
   const lines = publicDraftLines(draft, context);
   const n = lines.length;
-  const title = `A change to the village's structure: ${n} change${n === 1 ? "" : "s"} to its circles and seats`;
+  const title = `A change to the village's structure: ${n} change${n === 1 ? "" : "s"} to its circles and roles`;
   const because =
     why === "a-role-holds-it"
       ? "A holder of the power to adopt a change to the structure chose to put this one to the village."
@@ -307,7 +307,7 @@ export function orgDraftBallotText(
   const doc = [
     "WHAT THE VILLAGE IS ASKED",
     "",
-    "Whether to publish this change to the village's circles and seats. If it carries, it is on the chart the moment the vote closes.",
+    "Whether to publish this change to the village's circles and roles. If it carries, it is on the chart the moment the vote closes.",
     "",
     "THE CHANGES",
     "",
@@ -319,7 +319,7 @@ export function orgDraftBallotText(
     "",
     "TAKING IT BACK",
     "",
-    "A published change can be reverted, and the circles and seats go back to how they stood before it.",
+    "A published change can be reverted, and the circles and roles go back to how they stood before it.",
     "",
     `Opened on ${on.toISOString().slice(0, 10)}.`,
     "",
@@ -507,7 +507,7 @@ export async function publishOrgDraft(
         dedupeKey: `org-seat:${st.assignmentId}`,
       });
     } catch (e) {
-      console.error("[org] a published draft could not tell a member about their seat:", draftId, st.userId, st.seatName, e);
+      console.error("[org] a published draft could not tell a member about their role:", draftId, st.userId, st.seatName, e);
     }
   }
   // One journal line per seat the draft touched, so a reorganisation shows up

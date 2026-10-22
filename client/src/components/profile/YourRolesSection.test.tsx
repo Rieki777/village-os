@@ -78,7 +78,7 @@ describe("Your roles, for a member", () => {
       data: {
         applications: [
           app("sa-0000000000000001"),
-          app("sa-0000000000000002", { status: "awaiting-holder", statusWords: "Waiting for a seat holder", seats: [{ id: "seat-alder", name: "Seed keeper", aim: null }, { id: "seat-birch", name: "Path warden", aim: null }], createdAt: "2027-02-05T00:00:00.000Z" }),
+          app("sa-0000000000000002", { status: "awaiting-holder", statusWords: "Waiting for a role holder", seats: [{ id: "seat-alder", name: "Seed keeper", aim: null }, { id: "seat-birch", name: "Path warden", aim: null }], createdAt: "2027-02-05T00:00:00.000Z" }),
           app("sa-0000000000000003", { status: "adopted", statusWords: "Adopted", seats: [{ id: "seat-xylem", name: "Adopted seat", aim: null }] }),
           app("sa-0000000000000004", { you: { isCandidate: false }, seats: [{ id: "seat-yarrow", name: "Someone else's seat", aim: null }] }),
         ],
@@ -101,7 +101,7 @@ describe("Your roles, for a member", () => {
     // Newest first, open ones only, the reader's own only.
     expect(open.map((a) => a.getAttribute("href"))).toEqual(["/seat-applications/sa-0000000000000002", "/seat-applications/sa-0000000000000001"]);
     expect(open[0].textContent).toContain("Seed keeper, Path warden");
-    expect(open[0].textContent).toContain("Waiting for a seat holder");
+    expect(open[0].textContent).toContain("Waiting for a role holder");
     expect(open[1].textContent).toContain("The village is voting");
     expect(screen.queryByText("Adopted seat")).toBeNull();
     expect(screen.queryByText(/Someone else/)).toBeNull();

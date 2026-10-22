@@ -415,8 +415,8 @@ describe("each journey says its own steps (F37)", () => {
 
   it("counts seats in agreement with the verb", () => {
     const all = [...walked.values()].flat().map((s) => s.said);
-    expect(all.filter((s) => /open seats belongs/.test(s)), "plural seats with a singular verb").toEqual([]);
-    expect(all.some((s) => /\d+ open seats belong to this place/.test(s)), "the plural form is said somewhere").toBe(true);
+    expect(all.filter((s) => /open roles belongs/.test(s)), "plural roles with a singular verb").toEqual([]);
+    expect(all.some((s) => /\d+ open roles belong to this place/.test(s)), "the plural form is said somewhere").toBe(true);
   });
 
   it("gives the village's walk its own words and never the monologue (the control: the monologue is still on the page)", () => {

@@ -296,9 +296,9 @@ export function WhoRunsCommsEditor({ data }: EditorProps) {
         <p className="text-sm text-gray-600">Nobody holds the power to run comms through a role yet, so the admins do it.</p>
       )}
       <p className="text-xs text-gray-500">
-        Running comms is an appointment: a role carries the power, and whoever is seated in that role holds it.{" "}
+        Running comms is an appointment: a power group carries the power, and whoever is in that group holds it.{" "}
         <a href="/admin?tab=game-roles" className="text-teal-deep underline">
-          Give it to a role in Game Roles
+          Give it to a power group
         </a>
       </p>
     </div>

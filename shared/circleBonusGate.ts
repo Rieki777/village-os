@@ -201,7 +201,7 @@ export function circleRollProblem(electorate: CompletionElectorate): string | nu
   if (electorate !== "circle") return null;
   return (
     "This village has no membership of a circle to build a roll from. Circles are pointed at by " +
-    "permission groups and by org seats, and neither of those is a list of who votes. A circle " +
+    "permission groups and by org roles, and neither of those is a list of who votes. A circle " +
     "roll has to be defined before a vote can be put to one."
   );
 }

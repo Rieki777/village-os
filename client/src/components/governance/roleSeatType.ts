@@ -25,7 +25,7 @@ export const ROLE_SEAT_TYPE: WizardTypeConfig = {
   title: "Seat someone in a role",
   description: "Ask the village to seat a member in one of its roles, until a date you pick or the end of the season.",
   consequence:
-    "Publishing opens the vote to the whole roll. If it carries, the member sits in the role from that day until the end date, holding every power the role carries, and the village can vote the seat back at any time.",
+    "Publishing opens the vote to the whole roll. If it carries, the member sits in the role from that day until the end date, holding every power the role carries, and the village can vote the role back at any time.",
   opensVote: true,
   publish: {
     path: "/api/governance/role-seats",
@@ -74,15 +74,15 @@ export const ROLE_SEAT_TYPE: WizardTypeConfig = {
     },
     terms: {
       label: "For how long",
-      intro: "Every seat has an end. Leave the date empty and the seat ends with the season.",
+      intro: "Every role has an end. Leave the date empty and the role ends with the season.",
       fields: [
         {
           key: "termEndsOn",
           kind: "seatTerm",
           roleKey: "roleId",
           label: "End date",
-          help: "A steward's seat can end no later than the season's end. Any other seat can run as long as the village wants.",
-          tip: "Seats come back to the village. A seat running past four seasons carries a caution on the ballot, and the vote can still carry it.",
+          help: "A steward role can end no later than the season's end. Any other role can run as long as the village wants.",
+          tip: "Roles come back to the village. A role running past four seasons carries a caution on the ballot, and the vote can still carry it.",
         },
       ],
     },

@@ -234,10 +234,10 @@ export interface ParsedSettings {
  * percentage scaled both pay and voice.
  */
 const REFUSED_KEYS: Record<string, string> = {
-  voice: "Voice is never a term of a seat. Every member's say comes from the village's own rules.",
-  voiceWeight: "Voice is never a term of a seat. Every member's say comes from the village's own rules.",
-  commitment: "A seat is held whole. Terms carry no commitment share.",
-  commitmentPct: "A seat is held whole. Terms carry no commitment share.",
+  voice: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
+  voiceWeight: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
+  commitment: "A role is held whole. Terms carry no commitment share.",
+  commitmentPct: "A role is held whole. Terms carry no commitment share.",
   deferredPct: "Deferred pay is written as a pay kind with a note.",
   tokenSlug: "Terms record money in a currency. Tokens are paid through the village's own rules.",
   tokenPerCycle: "Terms record money in a currency. Tokens are paid through the village's own rules.",
@@ -267,7 +267,7 @@ const RANKS_PEOPLE =
   /\b(rank|ranks|ranked|ranking|leaderboard|league table|top \d+|best (?:member|person|people|holder)|worst|power level)\b/i;
 
 export const PAYMENT_DETAIL_MESSAGE =
-  "This looks like a bank or card number. Payment details are never stored in a seat's terms.";
+  "This looks like a bank or card number. Payment details are never stored in a role's terms.";
 
 /** True when a piece of free text carries something shaped like payment details. */
 export function looksLikePaymentDetails(text: string): boolean {
@@ -506,7 +506,7 @@ function readMoney(
   if (!kind) return undefined;
   const carriesAmount = out.amountMinor !== undefined || out.minMinor !== undefined || out.maxMinor !== undefined;
   if ((kind === "none" || kind === "honorary") && carriesAmount) {
-    r.refuse(`${group}.amountMinor`, "An unpaid or honorary seat records no amount.");
+    r.refuse(`${group}.amountMinor`, "An unpaid or honorary role records no amount.");
   }
   if (kind === "range" && out.amountMinor !== undefined) {
     r.refuse("pay.amountMinor", "A range records its lowest and highest amounts.");
@@ -657,7 +657,7 @@ export function parseSeatSettings(raw: unknown): ParsedSettings {
     return { ok: true, settings: emptySettings(), problems: [], flags: [] };
   }
   if (!isPlainObject(raw)) {
-    r.refuse("", "A seat's settings arrive as a set of groups.");
+    r.refuse("", "A role's settings arrive as a set of groups.");
     return { ok: false, settings: null, problems: r.problems, flags: r.flags };
   }
   if (raw.v !== undefined && raw.v !== SEAT_SETTINGS_VERSION) {

@@ -242,7 +242,7 @@ describe("NeedsPanel", () => {
     await openPanel();
     await user.click(screen.getByRole("button", { name: "5. What meets them" }));
     expect(uncoveredSentence("Growth")).toBe(
-      "Nothing in this village meets Growth yet. A quest or a seat tagged to it will show here.",
+      "Nothing in this village meets Growth yet. A quest or a role tagged to it will show here.",
     );
     expect(await screen.findByText(uncoveredSentence("Growth"))).toBeInTheDocument();
   });

@@ -233,8 +233,8 @@ export async function exitOpenState(pool: Pool, userId: string, roleIds: string[
     domain: "roles",
     count: roleIds.length,
     description: roleIds.length
-      ? `holds ${roleIds.join(", ")}. Seats vacate at resolution; hand off the work first`
-      : "no seats held",
+      ? `holds ${roleIds.join(", ")}. Roles vacate at resolution; hand off the work first`
+      : "no roles held",
     blocking: false,
   });
 

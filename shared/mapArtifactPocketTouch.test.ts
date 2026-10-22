@@ -241,7 +241,7 @@ describe("Where can I help? in Maia's phone sheet", () => {
 
   it("never tells a phone to press a key", () => {
     const lines = [...b.doc.querySelectorAll("#maiaLog .mline")].map((n) => n.textContent ?? "");
-    expect(lines.join(" ")).toContain("Get Involved lists every open seat and quest");
+    expect(lines.join(" ")).toContain("Get Involved lists every open role and quest");
     expect(lines.join(" ")).not.toMatch(/Space/);
     expect(b.uncaught).toEqual([]);
   });

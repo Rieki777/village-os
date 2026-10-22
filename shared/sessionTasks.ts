@@ -908,8 +908,8 @@ export function buildAfterNote(input: TaskNoteInput): TaskEmail {
 /** The board, the card, the sheets, the mail button and the preference. */
 export const TASK_COPY = {
   heading: "Your task board",
-  lede: "What you took on in your circles' calls, and what your seats hold.",
-  groups: { holding: "Holding", seatsHold: "Your seats hold", circleBack: "Back with your circles", finished: "Finished", earlier: "Earlier" },
+  lede: "What you took on in your circles' calls, and what your roles hold.",
+  groups: { holding: "Holding", seatsHold: "Your roles hold", circleBack: "Back with your circles", finished: "Finished", earlier: "Earlier" },
   /** Under the circles' group: nobody holds these, and anyone in the circle may take one. */
   circleBackHint: "Nobody holds these yet. Anyone in the circle can take one.",
   empty: "Nothing in your hands right now. Tasks you take on in a live session land here.",
@@ -923,7 +923,7 @@ export const TASK_COPY = {
   heldSeatVacant: (seat: string): string => `${seat} holds it · nobody sits there yet`,
   heldCircle: "Back with the circle",
   /** A seat the org chart no longer names. */
-  seatUnnamed: "A seat",
+  seatUnnamed: "A role",
   due:(date: string): string => `By ${date}`,
   noDate: "No date",
   /** Normal ink. A date gone by is a question, never a red mark. */
@@ -953,7 +953,7 @@ export const TASK_COPY = {
       hint: null,
       datePrompt: null,
       confirm: "Mark it done",
-      toast: "Marked done. The circle sees it at the next action check.",
+      toast: "Beautiful work. The circle sees it at the next action check.",
     },
     not_yet: {
       lede: null,
@@ -1039,7 +1039,7 @@ export const TASK_COPY = {
     doneLabel: (what: string): string => `It's done: ${what}`,
     openLabel: (what: string): string => `Open it on your task board: ${what}`,
     working: "Saving",
-    marked: "Done. The circle sees it at the next action check.",
+    marked: "Beautiful work. The circle sees it at the next action check.",
     undo: "Open it again",
     undoLabel: (what: string): string => `Open it again: ${what}`,
     reopened: "Open again. It is back on your task board.",
@@ -1059,7 +1059,7 @@ export const TASK_COPY = {
 export const TASK_REFUSALS = {
   needSentence: "Letting go needs one sentence.",
   needDate: "Pick a date after today.",
-  notYours: "Only the person or seat holding this, the facilitator, or an admin can answer it.",
+  notYours: "Only the person or role holding this, the facilitator, or an admin can answer it.",
   moved: "Someone answered this a moment ago. Here is where it stands now.",
   stillOpen: "The session is still open. Task emails go out when it closes.",
   notFound: "That task isn't here.",
@@ -1085,10 +1085,10 @@ export const TASK_EMAIL_COPY = {
   opening: (theCall: string, when: string): string =>
     `${theCall} closed ${when}. Here is what you took on, written down so you don't have to hold it in your head.`,
   seatOpening: (who: string, when: string, n: number, seatNames: readonly string[]): string =>
-    `${who} met ${when} and ${n === 1 ? "a task" : `${n} tasks`} landed with ${seatNames.length === 1 ? "your seat" : "your seats"}, ` +
+    `${who} met ${when} and ${n === 1 ? "a task" : `${n} tasks`} landed with ${seatNames.length === 1 ? "your role" : "your roles"}, ` +
     `${joinNames(seatNames)}. Here ${n === 1 ? "it is" : "they are"}:`,
-  seatHoldsMore: (seatName: string, n: number): string => `Your seat, ${seatName}, holds ${n === 1 ? "one more" : `${n} more`}:`,
-  seatHolds: (seatName: string, n: number): string => `Your seat, ${seatName}, holds ${n === 1 ? "one task" : `${n} tasks`}:`,
+  seatHoldsMore: (seatName: string, n: number): string => `Your role, ${seatName}, holds ${n === 1 ? "one more" : `${n} more`}:`,
+  seatHolds: (seatName: string, n: number): string => `Your role, ${seatName}, holds ${n === 1 ? "one task" : `${n} tasks`}:`,
   lineBy: (text: string, date: string): string => `${text}. By ${date}.`,
   lineNoDate: (text: string): string => `${text}. No date.`,
   resend: (firstName: string | null): string =>
@@ -1123,5 +1123,5 @@ export const TASK_NOTICES = {
   back: (text: string): string => `${cutText(text, 80)} is back with the circle. It will be in the next action check.`,
   /** To admins and the facilitator, when a task sits with a seat nobody holds. */
   unheld: (sessionTitle: string, seatName: string): string =>
-    `A task from "${sessionTitle}" sits with ${seatName}, and nobody holds that seat now. Give it to someone at the next call.`,
+    `A task from "${sessionTitle}" sits with ${seatName}, and nobody holds that role now. Give it to someone at the next call.`,
 } as const;

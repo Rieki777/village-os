@@ -87,8 +87,8 @@ describe("reading a file", () => {
   it("shows every part with its own tick, and writes nothing yet", async () => {
     await readCard();
     expect(await screen.findByText("The human needs your village is here to meet")).toBeTruthy();
-    expect(screen.getByText("Your circles and seats, as one draft")).toBeTruthy();
-    expect(screen.getByText("Who holds the seats")).toBeTruthy();
+    expect(screen.getByText("Your circles and roles, as one draft")).toBeTruthy();
+    expect(screen.getByText("Who holds the roles")).toBeTruthy();
     expect(screen.getByText("The circles this village started with")).toBeTruthy();
     expect(screen.getByText("Love: Alive, for 60 percent of your people.")).toBeTruthy();
     expect(screen.getByText("Ana in Water keeper")).toBeTruthy();
@@ -153,7 +153,7 @@ describe("loading what the founder kept", () => {
   it("sends no draft at all when the circles and seats are unticked", async () => {
     await readCard();
     await screen.findByText("The human needs your village is here to meet");
-    await userEvent.click(screen.getByRole("checkbox", { name: "Your circles and seats, as one draft" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Your circles and roles, as one draft" }));
     await userEvent.click(screen.getByRole("button", { name: "Load what you kept" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("4 human needs."));
     expect(writes().some((c) => c.url.startsWith("/api/admin/org/drafts"))).toBe(false);

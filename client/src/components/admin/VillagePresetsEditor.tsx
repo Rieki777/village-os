@@ -29,8 +29,8 @@ import { gameFetch } from "@/lib/gameApi";
 import { settingsWords } from "@shared/seatSettings";
 
 export const PRESET_EDITOR_WORDS = {
-  title: "Village seat presets",
-  sub: "Starting points for a seat's terms, with this village's own figures. Members pick them after the platform's shapes. Retired presets leave the picker and stay on record.",
+  title: "Village role presets",
+  sub: "Starting points for a role's terms, with this village's own figures. Members pick them after the platform's shapes. Retired presets leave the picker and stay on record.",
   add: "Add a preset",
   group: "Group",
   label: "Name",

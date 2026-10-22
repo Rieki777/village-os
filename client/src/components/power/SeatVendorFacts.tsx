@@ -139,7 +139,7 @@ export default function SeatVendorFacts({
         return (
           <div key={fact.vendorRecordId} className="space-y-2">
             <p className="text-sm">
-              These are {serviceName}'s own words about this seat. {whenRead(fact.updatedAt)}
+              These are {serviceName}'s own words about this role. {whenRead(fact.updatedAt)}
             </p>
             <dl className="space-y-1">
               {pairs.map(([k, v]) => (

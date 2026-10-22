@@ -146,7 +146,7 @@ export function deferredSeatVote(): { opener: OpenSeatVote; fill(built: OpenSeat
     // caller is an `await` inside an express handler, and the two are not the
     // same thing to a caller that wraps its await.
     opener: async (ask) => {
-      if (!built) throw new Error("A seat vote was asked for before registerSeatVote ran.");
+      if (!built) throw new Error("A role vote was asked for before registerSeatVote ran.");
       return built(ask);
     },
     fill: (o) => {
@@ -441,7 +441,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({
         error: "no_role_carries_it",
         message:
-          `No role in this village carries ${hand.powerLabel ? `"${hand.powerLabel}"` : "that power"} yet, so there is no seat to vote anybody into. ` +
+          `No role in this village carries ${hand.powerLabel ? `"${hand.powerLabel}"` : "that power"} yet, so there is no role to vote anybody into. ` +
           "The village votes a power onto a role first, and then a hand for it has somewhere to go.",
         rolesCarrying: state.carrying,
       });
@@ -684,10 +684,10 @@ export function registerSeatVote(app: Express, deps: SeatVoteDeps): OpenSeatVote
       reason,
       "",
       `## How long`, "",
-      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this seat moves with it.` : `Until ${term.endsOn}.`} When the term ends the seat ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
+      `${term.followsSeason ? `Until the season ends on ${term.endsOn}, and if the season's end date moves, this role moves with it.` : `Until ${term.endsOn}.`} When the term ends the role ends, and the village can seat them again.`, ...(term.caution ? ["", term.caution] : []), "",
       `## Taking it back`,
       "",
-      `The village can vote this seat back at any time, and that vote is an ordinary one.`,
+      `The village can vote this role back at any time, and that vote is an ordinary one.`,
       "",
       `Asked by ${firstName(user.name)} on ${new Date().toISOString().slice(0, 10)}.`,
       "",

@@ -63,7 +63,7 @@ describe("the steward slate on a launch decision", () => {
         busy={false}
       />,
     );
-    const button = screen.getByRole("button", { name: /Decline the steward's seat/ });
+    const button = screen.getByRole("button", { name: /Decline the steward role/ });
     await userEvent.click(button);
     expect(onAnswer).toHaveBeenCalledWith(false);
     // ACCEPTING IS NOT HERE. It rides on the vote, because the acceptance is
@@ -107,7 +107,7 @@ describe("the steward slate on a launch decision", () => {
 
   it("renders a proposal that names nobody without pretending it is a fault", () => {
     render(<StewardSlate slate={{ ...SLATE, members: [], proposedBy: null }} onAnswer={async () => {}} busy={false} />);
-    expect(screen.getByText(/names nobody for the steward's seat/)).toBeTruthy();
+    expect(screen.getByText(/names nobody for the steward role/)).toBeTruthy();
     expect(screen.getByText(/That stops nothing/)).toBeTruthy();
   });
 

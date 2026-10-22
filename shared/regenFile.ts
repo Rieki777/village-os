@@ -283,7 +283,7 @@ export function readRegenFile(input: unknown): ReadResult {
   const cardRaw = isObj(raw.card) ? raw.card : {};
   const cardSchema = schemaOf(cardRaw);
   if (cardSchema && cardSchema !== REGEN_CARD_SCHEMA) {
-    leftOut.push(`The card inside this file says it is "${cardSchema.slice(0, 80)}", so its needs, circles and seats were not read.`);
+    leftOut.push(`The card inside this file says it is "${cardSchema.slice(0, 80)}", so its needs, circles and roles were not read.`);
   }
   return {
     ok: true,
@@ -371,12 +371,12 @@ function readSeat(v: unknown, leftOut: string[]): ProfileSeat | null {
   const s = obj(v);
   const name = text(s.name, 120);
   if (!name) {
-    leftOut.push("A seat with no name was left out.");
+    leftOut.push("A role with no name was left out.");
     return null;
   }
   const circle = cleanCircleKey(s.circle);
   if (!circle) {
-    leftOut.push(`The seat "${name}" was left out: it does not say which circle it sits in.`);
+    leftOut.push(`The role "${name}" was left out: it does not say which circle it sits in.`);
     return null;
   }
   const heldBy = (HELD_BY as readonly string[]).includes(String(s.heldBy)) ? (s.heldBy as HeldBy) : "open";

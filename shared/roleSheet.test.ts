@@ -766,9 +766,9 @@ describe("the commitments: seven, one look each", () => {
       `Still to be written down: what it decides on, what it answers for and why it matters.${close}`,
     );
     const blank = { aim: null, domain: null, accountabilities: [], whyItMatters: null };
-    expect(line(blank)).toBe(`Nobody has written down what this seat is for yet.${close}`);
+    expect(line(blank)).toBe(`Nobody has written down what this role is for yet.${close}`);
     expect(line({ ...blank, howChosen: null })).toBe(
-      `Nobody has written down what this seat is for yet. Also still to be written down: how the next holder is chosen.${close}`,
+      `Nobody has written down what this role is for yet. Also still to be written down: how the next holder is chosen.${close}`,
     );
     expect(line({ howChosen: null, termEnds: null })).toBe(`Still to be written down: when the term ends and how the next holder is chosen.${close}`);
   });
@@ -800,7 +800,7 @@ describe("the portrait and the chips", () => {
   it("picks one stock drawing per seat, the same every time, from art that ships", () => {
     const a = portraitFor({ id: "water-keeper", name: "Water Keeper" }, ["researching"], CLASS_NAMES);
     expect(portraitFor({ id: "water-keeper", name: "Water Keeper" }, ["researching"], CLASS_NAMES)).toEqual(a);
-    expect(a).toMatchObject({ kind: "class", key: "researching", alt: "Stock art for The Architect, a class suggested for this seat" });
+    expect(a).toMatchObject({ kind: "class", key: "researching", alt: "Stock art for The Architect, a class suggested for this role" });
     const seen = new Set<string>();
     for (let i = 0; i < 60; i++) {
       const p = portraitFor({ id: `seat-${i}`, name: "Seat" }, ["building"]);
@@ -857,7 +857,7 @@ describe("the portrait and the chips", () => {
     const unread = sheet(fromMap(SAMPLE_MAP), { ...CTX, classNames: null });
     expect(unread.chips.suits).toBeNull();
     expect(JSON.stringify(unread)).not.toContain("The Architect");
-    expect(unread.portrait).toMatchObject({ kind: "class", alt: "Stock art for a class suggested for this seat" });
+    expect(unread.portrait).toMatchObject({ kind: "class", alt: "Stock art for a class suggested for this role" });
     // Control: once read, the chip and the alt carry the village's word.
     const read = sheet(fromMap(SAMPLE_MAP));
     expect(read.chips.suits).toEqual({ key: "researching", name: "The Architect" });

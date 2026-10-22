@@ -292,7 +292,7 @@ export default function Circles() {
                 ? Array.from(new Set(heldBy)).join(", ")
                 : seats.length
                   ? heldSeats
-                    ? `${seats.length} role${seats.length === 1 ? "" : "s"}, ${heldSeats} seat${heldSeats === 1 ? "" : "s"} held`
+                    ? `${seats.length} role${seats.length === 1 ? "" : "s"}, ${heldSeats} role${heldSeats === 1 ? "" : "s"} held`
                     : `${seats.length} role${seats.length === 1 ? "" : "s"}, none held yet`
                   : "",
             } as CircleEntry;

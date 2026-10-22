@@ -563,7 +563,7 @@ export function register(app: Express, deps: Deps): void {
     void recordEvent(getPool(), {
       kind: "org",
       text:
-        `${org.length} proposal(s) accepted into draft ${made.id}: ${seats} seat(s)` +
+        `${org.length} proposal(s) accepted into draft ${made.id}: ${seats} role(s)` +
         (preview.blocked ? `, ${preview.blocked} blocked` : "") +
         (ignored.length
           ? `, ${ignored.reduce((n, i) => n + i.keys.length, 0)} key(s) not read in ${ignored.length} proposal(s)`

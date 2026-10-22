@@ -484,7 +484,7 @@ export default function VotingWeightsPanel({
                       autoFocus
                       aria-label={`Why ${m.name} moves from ${weightText(m.weight)} to ${weightText(asNumber)}`}
                       aria-describedby={`${m.id}-reason-hint`}
-                      placeholder="Elected to the finance seat this season"
+                      placeholder="Elected to the finance role this season"
                       onChange={(e) => setReason({ ...reason, [m.id]: e.target.value })}
                       className={`${inputCls} w-full mt-1 min-h-[44px] block`}
                     />

@@ -133,7 +133,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const id = await draftWith([{ op: "create_seat", orgRoleId: "cnb-unread", payload: seat.payload }]);
     const preview = await previewDraft(pool, id, 99);
     expect(preview.blocked).toBe(1);
-    expect(preview.lines[0].blocked).toContain('This seat gave its circle under "circle" in a form this village cannot read');
+    expect(preview.lines[0].blocked).toContain('This role gave its circle under "circle" in a form this village cannot read');
     const r = await publishDraft(pool, id, "u-steward", 99);
     expect(r.ok).toBe(false);
     expect(await seatRow("cnb-unread")).toBeUndefined();
@@ -150,10 +150,10 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
   it("blocks a text field that is an object or a list, and a recruiting flag it would write as 0", async () => {
     const cases: [string, Record<string, unknown>, string][] = [
       // An object publishes as the literal "[object Object]".
-      ["cnb-obj-aim", { name: "Cook", aim: { text: "Feed the village" } }, "This seat's aim is not text"],
-      ["cnb-obj-name", { name: { en: "Cook" } }, "This seat's name is not text"],
+      ["cnb-obj-aim", { name: "Cook", aim: { text: "Feed the village" } }, "This role's aim is not text"],
+      ["cnb-obj-name", { name: { en: "Cook" } }, "This role's name is not text"],
       // An array expands into extra VALUES and rolls the whole publish back.
-      ["cnb-arr-domain", { name: "Pump Keeper", domain: ["Water lines", "Pumps"] }, "This seat's domain is not text"],
+      ["cnb-arr-domain", { name: "Pump Keeper", domain: ["Water lines", "Pumps"] }, "This role's domain is not text"],
       ["cnb-yes", { name: "Recruiter", recruiting: "yes" }, "Recruiting is true or false"],
     ];
     for (const [seatId, payload, sentence] of cases) {
@@ -171,8 +171,8 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
       null,
     );
     const reason = String((await previewDraft(pool, id, 99)).lines[0].blocked);
-    expect(reason).toContain("This seat's aim is not text");
-    expect(reason).toContain("This seat's domain is not text");
+    expect(reason).toContain("This role's aim is not text");
+    expect(reason).toContain("This role's domain is not text");
     expect(reason).toContain("Recruiting is true or false");
   });
 
@@ -181,9 +181,9 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const hostile = () => JSON.parse('{"toString":0,"valueOf":0}');
     const cases: [string, Record<string, unknown>, string][] = [
       ["cnb-h-crit", { name: "Crit Seat", criticality: hostile() }, "Criticality is normal or high"],
-      ["cnb-h-seats", { name: "Seats Seat", seats: hostile() }, "A seat holds between 1 and 50 people"],
+      ["cnb-h-seats", { name: "Seats Seat", seats: hostile() }, "A role holds between 1 and 50 people"],
       ["cnb-h-circle", { name: "Circle Seat", circleId: hostile() }, "That circle does not exist"],
-      ["cnb-h-name", { name: hostile() }, "This seat's name is not text"],
+      ["cnb-h-name", { name: hostile() }, "This role's name is not text"],
       ["cnb-h-matches", { name: "Match Seat", circleName: "Nowhere Circle", circleMatches: hostile() }, 'There is no circle called "Nowhere Circle"'],
     ];
     for (const [seatId, payload, sentence] of cases) {
@@ -194,7 +194,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     }
     await pool.query("INSERT INTO org_roles (id, name, seats) VALUES ('cnb-existing', 'Existing Seat', 1)"); // module-review-ok: a fixture on the scratch schema this suite provisioned
     const edit = await draftWith([{ op: "update_seat", orgRoleId: "cnb-existing", payload: { seats: hostile() } }]);
-    expect((await previewDraft(pool, edit, 99)).lines[0].blocked).toBe("A seat holds between 1 and 50 people");
+    expect((await previewDraft(pool, edit, 99)).lines[0].blocked).toBe("A role holds between 1 and 50 people");
   });
 
   it("lists the queue's stuck drafts from one read of seats and circles, and a draft whose preview throws", async () => {
@@ -278,7 +278,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
       { op: "create_seat", orgRoleId: "cnb-unread-seats", payload: { name: "Pump Keeper", seats: 400, circleUnread: ["circle"] } },
     ]);
     const reason = String((await previewDraft(pool, unread, 99)).lines[0].blocked);
-    expect(reason).toContain("A seat holds between 1 and 50 people");
+    expect(reason).toContain("A role holds between 1 and 50 people");
     expect(reason).toContain('where you can write the circle\'s name under "circle" and accept again');
 
     const unknown = await draftWith([
@@ -324,7 +324,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
       { op: "update_seat", orgRoleId: "cnb-existing", payload: { aim: { text: "A new aim" } } },
     ]);
     const shapedPreview = await previewDraft(pool, shaped, 99);
-    expect(shapedPreview.lines[0].blocked).toContain("This seat's aim is not text");
+    expect(shapedPreview.lines[0].blocked).toContain("This role's aim is not text");
   });
 
   it("publishes a seat whose circle name resolved, into that circle, with its accountabilities as a list", async () => {
@@ -362,7 +362,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const preview = await previewDraft(pool, id, 99);
     expect(preview.blocked).toBe(1);
     const reason = String(preview.lines[0].blocked);
-    const collision = reason.indexOf('This village already has a live seat called "Operations Keeper"');
+    const collision = reason.indexOf('This village already has a live role called "Operations Keeper"');
     expect(collision, reason).toBeGreaterThanOrEqual(0);
     expect(reason.indexOf('There is no circle called "Nowhere Circle" yet'), reason).toBeGreaterThan(collision);
     expect(reason).toContain("reject this one or give it a name of its own");
@@ -376,7 +376,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
       { op: "create_seat", orgRoleId: "cnb-live", payload: { name: "Fresh Name", circleId: "cnb-missing" } },
     ]);
     const bothReason = String((await previewDraft(pool, both, 99)).lines[0].blocked);
-    expect(bothReason).toContain("A seat with that id already exists");
+    expect(bothReason).toContain("A role with that id already exists");
     expect(bothReason).toContain("That circle does not exist");
   });
 

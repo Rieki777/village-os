@@ -147,8 +147,8 @@ function sourceWords(s: QuestSource): string {
 
 /** The one line under a prefilled Fewest and Most. */
 export function questHint(q: QuestSuggestion): string {
-  if (q.from === "default" || q.source.length === 0) return "A starting point. Change it if your seats ask for more.";
-  return `From your seats' terms: ${q.source.map(sourceWords).join(", ")}`;
+  if (q.from === "default" || q.source.length === 0) return "A starting point. Change it if your roles ask for more.";
+  return `From your roles' terms: ${q.source.map(sourceWords).join(", ")}`;
 }
 
 // ── Phrasing an accountability as a measure ─────────────────────────────────

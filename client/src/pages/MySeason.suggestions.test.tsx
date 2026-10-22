@@ -101,7 +101,7 @@ describe("quests a moon, filled in from your seats", () => {
     expect(fewest().value).toBe("3");
     expect(most().value).toBe("7");
     const hint = screen.getByTestId("quests-suggested");
-    expect(hint.textContent).toContain("From your seats' terms: Front-End 3 to 5, Kitchen keeper 2 to 7");
+    expect(hint.textContent).toContain("From your roles' terms: Front-End 3 to 5, Kitchen keeper 2 to 7");
     expect(hint.textContent).toContain("Suggested. Saved when you save.");
     expect(fewest().className).toContain("border-dashed");
 
@@ -130,7 +130,7 @@ describe("quests a moon, filled in from your seats", () => {
     await screen.findByText("Your part");
     expect(fewest().value).toBe("3");
     expect(most().value).toBe("5");
-    expect(screen.getByTestId("quests-suggested").textContent).toContain("A starting point. Change it if your seats ask for more.");
+    expect(screen.getByTestId("quests-suggested").textContent).toContain("A starting point. Change it if your roles ask for more.");
   });
 });
 
@@ -173,8 +173,8 @@ describe("measures from your roles", () => {
     mine = () => json({ ...MINE, heldSeats: [], applications: [], suggestions: { quests: { min: 3, max: 5, from: "default", source: [] }, measures: [] } });
     render(<MySeason />);
     const box = await screen.findByTestId("role-measures");
-    expect(box.textContent).toContain("Apply for a seat to see measures from its role.");
-    expect(within(box).getByRole("link", { name: "Apply for a seat" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
+    expect(box.textContent).toContain("Apply for a role to see measures from its role.");
+    expect(within(box).getByRole("link", { name: "Apply for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
     await waitFor(() => expect(within(box).queryAllByRole("button").length).toBe(0));
   });
 });
