@@ -235,12 +235,13 @@ when, and who last changed its words when that was somebody else. It rides on `G
 because `GET /api/sessions/library` would be read as the room numbered "library".
 
 **Who sees an item** (`canSeeBrought` in the contract): whoever brought it, admins, every member for an
-item for no circle in particular, and the people with **standing** in its circle, the task layer's rule
-taken one step tighter: they were in the circle's last closed session **that at least two people were
-in**, or sit in one of its seats now, live and not lapsed. The floor is there because any member may open
-a room for any circle and close it alone, and under the plain rule that one close would hand them the
-circle's waiting items, with the words of the people who brought them, and take the list from everybody
-at the circle's last real meeting. The task layer keeps the plain rule for now. A taken-up item reaches
+item for no circle in particular, and the people with **standing** in its circle, the same rule the
+task layer reads, from the same function (`standingIn` in `server/lib/circleStanding.ts`): they were
+in the circle's **last meeting**, or sit in one of its seats now, live and not lapsed, in a seat the
+circle still keeps. A meeting is a closed session **at least two people were in** (Rye, 2026-10-21),
+because any member may open a room for any circle and close it alone, and that one close would
+otherwise hand them the circle's waiting items, with the words of the people who brought them, and
+take the list from everybody at the circle's last real meeting. A taken-up item reaches
 whoever brought it, admins and the people who were in the session that took it up, through every door,
 and a closed session's title reaches only them. An item somebody may not see answers 404, the same as one
 that is not there, so a refusal never says an item exists.
@@ -341,10 +342,14 @@ when they take it.
 
 **Who may see a task.** `canSeeTask`: the people who were in the session it came from, whoever
 holds it now (person or seat), **every member with standing in the task's circle**, the facilitator
-or secretary of an open session in the same circle, and admins. Standing is one measure
-(`standingIn` in `server/lib/sessionTasks.ts`): they were in the circle's last closed session, or
-they sit in one of its seats now, with a term that has not lapsed, in a seat the circle still keeps
-(active and not a standing example). A seat holder who has never joined a session has standing
+or secretary of an open session in the same circle, and admins. Standing is one measure, shared
+with the agenda library (`standingIn` in `server/lib/circleStanding.ts`): they were in the circle's
+last meeting, a closed session **at least two people were in** (a session somebody opened and
+closed alone gives nobody standing and takes it from nobody; the count is the one the close kept, so
+a meeting that has closed stays one after a member later leaves the village), or they sit in one of
+its seats now,
+with a term that has not lapsed, in a seat the circle still keeps (active and not a standing
+example). A seat holder who has never joined a session has standing
 too: every door reads their seats by their own id. Rye ruled on 2026-10-21 that the
 whole circle reads its task cards: a sociocratic circle works in the open, and a task that comes
 back to the circle should be visible to everyone who might take it. Standing widens seeing and
@@ -362,7 +367,7 @@ admins.
 |---|---|---|---|---|---|
 | Holds it (in person, or sits in the holding seat now) | yes | | yes | done: yes; let go: no | only if they were in the room |
 | Was in the session it came from | yes | yes | | | yes |
-| Has standing in its circle (last closed session, or a live seat) | yes | yes | | | no, unless they were in the room |
+| Has standing in its circle (its last meeting of two or more, or a live seat) | yes | yes | | | no, unless they were in the room |
 | Facilitates or keeps notes for the source session, or for an open room of the circle where they have standing | yes | yes | yes | yes | only if they were in the room |
 | Admin | yes | yes | yes | yes | yes |
 | Anybody else | no (404) | | | | |
@@ -450,9 +455,16 @@ and the admins.
   village's hemisphere. The stamp is on the record and at the top of the minutes.
 - **The backlog seeds the next session.** When a circle meets again, the room shows "From last
   time": every open task from all of the circle's earlier sessions, and every one answered since it
-  last met, each with its latest answer, for an action check; and the backlog of its last closed
-  session (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
-  brought over is offered no more, and a second copy of it from the same session is refused.
+  last met, each with its latest answer, for an action check; and the backlog of its last meeting
+  (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
+  brought over is offered no more, and a second copy of it from the same session is refused. "Last
+  time" is the circle's last close, passing over a session one person was in that left nothing
+  behind, no agenda item and no entry (`lastTimeIn` in `server/lib/circleStanding.ts`): a test room
+  or a room opened by mistake never stands between a circle and its last meeting. A one-person
+  session that did leave something stays last time, even though it gives nobody standing: passing
+  over it would hide what it parked, and offer again what it brought over from the meeting before it
+  and dealt with. The action check reads every open task of the circle whatever session it came
+  from, so no task depends on which session is last time.
 - **The feedback inbox.** An idea for the tool, given at close, lands in the village's feedback
   inbox as an idea and stays in the village. The close form promises the inbox only, so the idea is
   recorded as not relayable (`may_relay` 0) and the feedback relay never sends it to the platform

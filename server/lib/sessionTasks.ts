@@ -31,10 +31,11 @@
  * `taskRights`, `mayGive`). This file only measures the `TaskViewer` they
  * read: the asker's number, their live seats (lapsed terms left out), the
  * sessions they were in, the circles where they have standing (they were in
- * its last closed session, or sit in one of its seats: `standingIn`, the one
- * measure), and the open rooms they host in such a circle. A task the asker
- * may not see answers 404, the same as a task that is not there, so a refusal
- * never says a task exists.
+ * its last meeting, a closed session two or more people were in, or they sit
+ * in one of its seats: `standingIn` in server/lib/circleStanding.ts, the one
+ * measure the agenda library reads too), and the open rooms they host in such
+ * a circle. A task the asker may not see answers 404, the same as a task that
+ * is not there, so a refusal never says a task exists.
  *
  * ── A PERSON IS A NUMBER, AND A CARD CARRIES NAMES ───────────────────────
  *
@@ -50,6 +51,7 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
 import * as store from "../repos/sessionTasks";
 import { listOrgAssignments, listOrgRoles, type LapseContext, type OrgAssignment } from "./orgChart";
+import { lastTimeIn, standingIn } from "./circleStanding";
 import { villageTimezone } from "./villageReaders";
 import { ensureMemberNo, mapSession, maySee, memberNo, namesFor, rolesIn, type MemberLookup, type Named, type Outcome, type Refusal, type SessionRec, type Viewer } from "./liveSessions";
 import { civilDateKey } from "../../shared/lunar";
@@ -176,7 +178,7 @@ interface Seen {
   liveSeatIds: string[];
   /** The sessions, among the ones read, the asker was in. */
   joined: Set<number>;
-  /** The circles, among the ones read, where the asker has standing (`standingIn`). */
+  /** The circles, among the ones read, where the asker has standing (`standingIn`, server/lib/circleStanding.ts). */
   standing: Set<string>;
   /** The circles, among the ones read, where the asker facilitates or keeps notes for an open room and has standing. */
   hostsOpenIn: Set<string>;
@@ -185,41 +187,6 @@ interface Seen {
 /** Every live seating, with lapsed terms marked when the season's reading is at hand. */
 async function seatingsNow(pool: Pool | PoolConnection, deps: Pick<TaskDeps, "lapseContext">): Promise<OrgAssignment[]> {
   return listOrgAssignments(pool as Pool, deps.lapseContext?.());
-}
-
-/**
- * STANDING: the circles, among `circleIds`, where one member has it. They were
- * in the circle's last closed session, or they sit in one of its seats now
- * (`liveSeatIds`, lapsed terms already left out, in a seat the circle still
- * keeps: active and not a standing example, the reading the room's own seat
- * list makes). It is the task layer's ONE measure, read by every task rule
- * that names a circle: the open room's host (`hostsOpenRoomInCircle`), and the
- * whole circle reading its task cards (`standsInCircle`). The room's own
- * carry-over (`carried` in server/lib/liveSessions.ts) is narrower: the
- * people who were in the last closed session, and admins. Any member may open
- * a room in any circle, so being in a room or hosting one is never standing on
- * its own.
- */
-async function standingIn(pool: Pool | PoolConnection, no: number | null, liveSeatIds: readonly string[], circleIds: Iterable<string>): Promise<Set<string>> {
-  const wanted = new Set(circleIds);
-  const out = new Set<string>();
-  if (!wanted.size) return out;
-  if (liveSeatIds.length) {
-    for (const role of await listOrgRoles(pool as Pool)) {
-      if (!role.active || role.isExample) continue;
-      const circleId = role.circleId ? String(role.circleId) : null;
-      if (circleId && wanted.has(circleId) && liveSeatIds.includes(role.id)) out.add(circleId);
-    }
-  }
-  if (no != null && no > 0) {
-    for (const circleId of Array.from(wanted)) {
-      if (out.has(circleId)) continue;
-      // An open room is never a closed session, so there is nothing to leave out (0).
-      const [prev] = await repo.lastClosedInCircle(pool, circleId, 0);
-      if (prev && (await repo.personRow(pool, Number(prev.id), no)).length > 0) out.add(circleId);
-    }
-  }
-  return out;
 }
 
 /** The asker, for the task rows read: the sessions they were in, their standing, and the open rooms they host. */
@@ -233,7 +200,7 @@ async function seenBy(
   const circles = new Set(rows.filter((r) => r.circle_id != null && r.circle_id !== "").map((r) => String(r.circle_id)));
   const joined = new Set<number>(who.no != null ? (await repo.joinedRows(pool, who.no, ids)).map((r) => Number(r.session_id)) : []);
   const liveSeatIds = who.userId ? liveSeatIdsFor(seatings, who.userId) : [];
-  const standing = await standingIn(pool, who.no, liveSeatIds, circles);
+  const standing = await standingIn(pool, { no: who.no, liveSeatIds }, circles);
   const hostsOpenIn = new Set<string>();
   if (who.no != null && standing.size) {
     for (const r of await repo.openSessionRows(pool, 50)) {
@@ -397,7 +364,7 @@ export async function taskBoard(pool: Pool, who: Asker, deps: TaskDeps, opts: { 
     store.backWithCircleIds(pool),
   ]);
   // Standing first, in the circles something is back with, so only their own circles' tasks are read.
-  const backRows = await store.backWithCircleRows(pool, Array.from(await standingIn(pool, no, seats, backCircles)));
+  const backRows = await store.backWithCircleRows(pool, Array.from(await standingIn(pool, { no, liveSeatIds: seats }, backCircles)));
   const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [...rows, ...liveRows, ...backRows], seatings);
   const book = await bookFor(pool, [...rows, ...liveRows, ...backRows], seatings, deps.lookup);
 
@@ -589,8 +556,9 @@ async function userIdOf(pool: Pool | PoolConnection, no: number | null): Promise
  * sits in one of the circle's seats reads the cards before they have joined a
  * session and been given a number.
  *
- * `lastMetAt` is the close of the circle's last session, the line the check
- * groups by. It comes only with cards, so a viewer who may see none of the
+ * `lastMetAt` is the close of the session the room carries from (`lastTimeIn`:
+ * a session one person was in that left nothing behind is passed over), the
+ * line the check groups by. It comes only with cards, so a viewer who may see none of the
  * circle's tasks learns nothing about when it met.
  *
  * Best effort. The room is the thing a viewer came for, so a task layer that
@@ -606,7 +574,8 @@ export async function circleTasksFor(
   const none = { cards: [], lastMetAt: null };
   if (s.status !== "open" || !s.circleId) return none;
   try {
-    const [prev] = await repo.lastClosedInCircle(pool, s.circleId, s.id);
+    // The circle's last time: never a session one person was in that left nothing behind (server/lib/circleStanding.ts).
+    const prev = await lastTimeIn(pool, s.circleId, s.id);
     const lastMet = prev?.closed_at ? new Date(prev.closed_at) : null;
     const metAt = lastMet && Number.isFinite(lastMet.getTime()) ? lastMet : null;
     const rows = await store.circleTaskRows(pool, s.circleId, metAt);
