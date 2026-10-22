@@ -185,7 +185,7 @@ describe("taskRights: every role against every op", () => {
   for (const [taskName, byRole] of Object.entries(EXPECT)) {
     for (const [role, [answer, reopen, take]] of Object.entries(byRole) as [Role, [boolean, boolean, boolean]][]) {
       it(`${role} on a ${taskName} task`, () => {
-        expect(taskRights(TASKS[taskName], ROLES[role])).toEqual({ answer, reopen, take });
+        expect(taskRights(TASKS[taskName], ROLES[role])).toEqual({ answer, reopen, take, accept: false });
       });
     }
   }
@@ -193,7 +193,7 @@ describe("taskRights: every role against every op", () => {
   it("refuses a lapsed seat holder, allows the open-room facilitator of the same circle, and refuses a stranger", () => {
     expect(taskRights(TASKS.seatOpen, ROLES.lapsedSeatHolder).answer).toBe(false);
     expect(taskRights(TASKS.personOpen, ROLES.openRoomHost).answer).toBe(true);
-    expect(taskRights(TASKS.personOpen, ROLES.stranger)).toEqual({ answer: false, reopen: false, take: false });
+    expect(taskRights(TASKS.personOpen, ROLES.stranger)).toEqual({ answer: false, reopen: false, take: false, accept: false });
   });
 
   it("lets the holder open a done task again, and never a let go one", () => {
@@ -204,24 +204,25 @@ describe("taskRights: every role against every op", () => {
   it("lets somebody with no number yet take what they can see, and gives them nothing else", () => {
     // A seat in the circle and never a session joined: the server numbers them when they take it.
     const seatedOnly = viewer({ no: null, liveSeatIds: ["seat-other"], standsInCircle: true });
-    expect(taskRights(TASKS.circle, seatedOnly)).toEqual({ answer: false, reopen: false, take: true });
-    expect(taskRights(TASKS.personOpen, seatedOnly)).toEqual({ answer: false, reopen: false, take: false });
+    expect(taskRights(TASKS.circle, seatedOnly)).toEqual({ answer: false, reopen: false, take: true, accept: false });
+    expect(taskRights(TASKS.personOpen, seatedOnly)).toEqual({ answer: false, reopen: false, take: false, accept: false });
     // With no number and no way to see it, nothing.
-    expect(taskRights(TASKS.circle, viewer({ no: null }))).toEqual({ answer: false, reopen: false, take: false });
+    expect(taskRights(TASKS.circle, viewer({ no: null }))).toEqual({ answer: false, reopen: false, take: false, accept: false });
   });
 
   it("maps every op to the right it needs", () => {
-    const only = (k: "answer" | "reopen" | "take") => ({ answer: k === "answer", reopen: k === "reopen", take: k === "take" });
-    const need: Record<TaskOp, "answer" | "reopen" | "take"> = {
+    const only = (k: "answer" | "reopen" | "take" | "accept") => ({ answer: k === "answer", reopen: k === "reopen", take: k === "take", accept: k === "accept" });
+    const need: Record<TaskOp, "answer" | "reopen" | "take" | "accept"> = {
       done: "answer",
       not_yet: "answer",
       let_go: "answer",
       handed_back: "answer",
       taken: "take",
       reopened: "reopen",
+      accepted: "accept",
     };
     for (const op of TASK_EVENT_KINDS) {
-      for (const k of ["answer", "reopen", "take"] as const) expect(mayGive(op, only(k)), `${op} with ${k}`).toBe(need[op] === k);
+      for (const k of ["answer", "reopen", "take", "accept"] as const) expect(mayGive(op, only(k)), `${op} with ${k}`).toBe(need[op] === k);
     }
   });
 });
@@ -267,9 +268,9 @@ describe("the whole circle reads its task cards (Rye, 2026-10-21)", () => {
   });
 
   it("lets that member take a task back with the circle, and answer or reopen nothing", () => {
-    expect(taskRights(TASKS.circle, member)).toEqual({ answer: false, reopen: false, take: true });
+    expect(taskRights(TASKS.circle, member)).toEqual({ answer: false, reopen: false, take: true, accept: false });
     for (const name of ["personOpen", "seatOpen", "done", "letGo"]) {
-      expect(taskRights(TASKS[name], member), name).toEqual({ answer: false, reopen: false, take: false });
+      expect(taskRights(TASKS[name], member), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
     }
     // The ops their rights allow: the take, and nothing else.
     const rights = taskRights(TASKS.circle, member);
@@ -279,7 +280,7 @@ describe("the whole circle reads its task cards (Rye, 2026-10-21)", () => {
   it("shows a member of another circle nothing, and gives them nothing", () => {
     for (const [name, t] of Object.entries(TASKS)) {
       expect(canSeeTask(t, outsider), name).toBe(false);
-      expect(taskRights(t, outsider), name).toEqual({ answer: false, reopen: false, take: false });
+      expect(taskRights(t, outsider), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
     }
   });
 
@@ -287,7 +288,7 @@ describe("the whole circle reads its task cards (Rye, 2026-10-21)", () => {
     const noCircle = (t: TaskSubject): TaskSubject => ({ ...t, circleId: null });
     for (const [name, t] of Object.entries(TASKS)) {
       expect(canSeeTask(noCircle(t), member), name).toBe(false);
-      expect(taskRights(noCircle(t), member), name).toEqual({ answer: false, reopen: false, take: false });
+      expect(taskRights(noCircle(t), member), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
     }
     // The narrower rule still holds there: the room it came from, and whoever holds it.
     expect(canSeeTask(noCircle(TASKS.circle), ROLES.wasThere)).toBe(true);
