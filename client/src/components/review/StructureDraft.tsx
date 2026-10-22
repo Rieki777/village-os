@@ -30,6 +30,7 @@ import { Link } from "wouter";
 import StructureMap, { StructureMapList } from "@/components/review/StructureMap";
 import StructureSteps from "@/components/review/StructureSteps";
 import CarryAcross, { carryDone, carrySummary, type CarryAnswer } from "@/components/review/CarryAcross";
+import { RoleFieldChanges } from "@/components/review/RoleFieldChanges";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import { decideStructure, type PlanSeat, type StructureDecisions, type StructurePlan } from "@shared/structurePlan";
 import { stayedBehind, type DraftCounts } from "@shared/structureDraft";
@@ -396,6 +397,7 @@ export default function StructureDraft({
                             {s.match.holders ? `${plural(s.match.holders, "person keeps it", "people keep it")}.` : "Nobody holds it yet."}
                           </p>
                         )}
+                        <RoleFieldChanges payload={s.payload} match={s.match} liveSeats={draft.plan.live.seats} />
                       </div>
                       {s.match ? (
                         <span className={`${pillBase} text-notice border-current`}>Moves here</span>

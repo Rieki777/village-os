@@ -30,6 +30,7 @@ import {
 } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
+import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -144,6 +145,17 @@ export interface OrgRole {
   valueMinor?: number | null;
   valueCurrency?: string | null;
   valueTokens?: TokenAmount[] | null;
+  /**
+   * THE HANDOVER WORDS (0268, Rye 2026-10-22). "Bring me" and "Not mine to
+   * hold" are short lists; the runbook is words or one https link. They live
+   * on the role and change only through an `update_seat` or `create_seat`
+   * draft, so they outlive whoever holds it (shared/roleHandover.ts).
+   * Optional for the reason the value fields above are: absent reads exactly
+   * as NULL, nothing written.
+   */
+  bringMe?: string[] | null;
+  notMine?: string[] | null;
+  runbook?: string | null;
 }
 
 export interface OrgAssignment {
@@ -211,7 +223,9 @@ const ROLE_COLS =
   // `terms.read` tier (server/lib/seatProjection.ts).
   "terms_offer, terms_offer_at, terms_offer_by, " +
   // 0265: the value and the list. Projected at the `terms.read` tier.
-  "value_minor, value_currency, value_tokens";
+  "value_minor, value_currency, value_tokens, " +
+  // 0268: the handover words. Structure like aim and domain, in every tier's core.
+  "bring_me, not_mine, runbook";
 
 const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -277,6 +291,9 @@ function rowToRole(r: any): OrgRole {
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
+    bringMe: readStoredRoleList(r.bring_me),
+    notMine: readStoredRoleList(r.not_mine),
+    runbook: readStoredRunbook(r.runbook),
   };
 }
 

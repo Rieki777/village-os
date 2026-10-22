@@ -52,6 +52,7 @@ import StructureMap, { StructureMapList } from "@/components/review/StructureMap
 import StructureDraft, { type DraftAnswer } from "@/components/review/StructureDraft";
 import type { CarryAnswer } from "@/components/review/CarryAcross";
 import StructureSteps from "@/components/review/StructureSteps";
+import { RoleFieldChanges } from "@/components/review/RoleFieldChanges";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import {
   decideStructure,
@@ -700,6 +701,14 @@ export default function StructureReview() {
                               {s.problem && <p className="text-[13px] text-destructive">{s.problem}</p>}
                               {s.match && !settledOrOut(s) && (
                                 <p className="text-[13px] text-muted-foreground">Settle it above.</p>
+                              )}
+                              {/* A move lists the live words it changes; a new role, or one added under its own name, lists what it writes. */}
+                              {(!s.match || conflicts[s.key]?.choice === "update" || conflicts[s.key]?.choice === "rename") && (
+                                <RoleFieldChanges
+                                  payload={s.payload}
+                                  match={conflicts[s.key]?.choice === "update" ? s.match : null}
+                                  liveSeats={plan.live.seats}
+                                />
                               )}
                               <details className="text-xs text-muted-foreground mt-1">
                                 <summary className="cursor-pointer min-h-[24px]">What {source} sent</summary>
