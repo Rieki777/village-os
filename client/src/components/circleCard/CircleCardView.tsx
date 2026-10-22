@@ -25,6 +25,11 @@ import type { CircleCard, CircleSection, RoleRowOut } from "@shared/circleCard";
 const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
 const HEADING_TAP = "inline-flex min-h-11 items-center text-left";
+/**
+ * An inline trigger inside a sentence keeps the sentence's line height, and an
+ * invisible inset grows its touch target to 44px, the bare InfoTip's own trick.
+ */
+const INLINE_TAP = "relative before:absolute before:-inset-x-1 before:-inset-y-3 before:content-['']";
 
 /** A heading, with its CCOS term on hover or tap when the village shows the terms. */
 function Heading({ text, term, level }: { text: string; term: string | null; level: 2 | 3 }) {
@@ -215,7 +220,13 @@ export default function CircleCardView({ card }: { card: CircleCard }) {
             <SlotView slot={purpose.slot}>{(t) => <p className="whitespace-pre-line text-base">{t}</p>}</SlotView>
             {header.existsWhile.kind !== "unread" ? (
               <p className="text-sm text-muted-foreground">
-                {header.existsWhileTerm ? <InfoTip tip={header.existsWhileTerm}>{header.existsWhileLabel}</InfoTip> : header.existsWhileLabel}
+                {header.existsWhileTerm ? (
+                  <InfoTip tip={header.existsWhileTerm} triggerClassName={INLINE_TAP}>
+                    {header.existsWhileLabel}
+                  </InfoTip>
+                ) : (
+                  header.existsWhileLabel
+                )}
                 {header.existsWhile.kind === "shown" ? ` ${header.existsWhile.value}` : `: ${header.existsWhile.words}`}
               </p>
             ) : null}
