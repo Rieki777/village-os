@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * What the consent section promises before anybody presses (finding 10).
+ * What the consent section shows before anybody presses, and what a press sends.
  *
- * The box opens on a number the route will take, and the button refuses what
- * the route would refuse. That `canGrant` and the route's refusal agree for
- * every mode, label, zero dial and amount is proven in
- * server/lib/questConsent.test.ts. This file proves the screen asks it, and
- * that a refusal the screen cannot foresee comes back in the server's words.
+ * A consent is a yes (Rye, 2026-10-21). There is no amount box: no quest pays
+ * Gratitude, and the quest pays what it says (0265). So the steward reads what
+ * saying yes releases, from the claim's `pay`, which is the answer the quest's
+ * card gives and the consent prices from. A refusal the screen cannot foresee
+ * comes back in the server's words.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -16,16 +16,18 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
-import type { ConsentBounds } from "@shared/questConsentBounds";
+import type { WorkPay } from "@shared/workValue";
+import { forgetDisplayRates } from "@/lib/workPay";
 import ConsentQueue, { type ConsentClaim } from "./ConsentQueue";
 
-const posted: ConsentBounds = {
-  label: "50-100",
-  readable: true,
-  floor: 50,
-  ceiling: 100,
-  zeroAllowed: false,
-  mode: "posted",
+const valued: WorkPay = {
+  value: { minor: 2500000, currency: "CRC" },
+  lines: [
+    { token: "credits", name: "Village Credits", amount: 40, capped: false },
+    { token: "village-voice", name: "Village Voice", amount: 5, capped: false },
+  ],
+  source: "own",
+  cadence: "once",
 };
 
 const claim = (over: Partial<ConsentClaim> = {}): ConsentClaim => ({
@@ -40,7 +42,7 @@ const claim = (over: Partial<ConsentClaim> = {}): ConsentClaim => ({
   amount: null,
   claimedAt: "2026-09-10T10:00:00.000Z",
   submittedAt: "2026-09-12T10:00:00.000Z",
-  bounds: posted,
+  pay: valued,
   ...over,
 });
 
@@ -60,98 +62,67 @@ function show(c: ConsentClaim, extra: Partial<Parameters<typeof ConsentQueue>[0]
   );
 }
 
-const box = () => screen.getByLabelText("What this work earns") as HTMLInputElement;
-const type = (value: string) => fireEvent.change(box(), { target: { value } });
-const consentButton = () => screen.getByRole("button", { name: /^Consent/ }) as HTMLButtonElement;
+const consentButton = () => screen.getByRole("button", { name: "Consent" }) as HTMLButtonElement;
 
+/** Every request answers this, and the day's rates answer nothing, so no conversion is drawn. */
 function answer(status: number, body: unknown) {
-  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  }));
+  const fetchMock = vi.fn(async (url: string, _init?: RequestInit) =>
+    String(url).includes("/api/fx/rates")
+      ? { ok: false, status: 404, json: async () => null }
+      : { ok: status >= 200 && status < 300, status, json: async () => body },
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-describe("the consent section refuses what the route would refuse, before anybody presses (finding 10)", () => {
+describe("the consent section: a yes, and what it releases", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    forgetDisplayRates();
+    answer(200, {});
   });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("opens the box on the floor the quest advertises, and says the range", () => {
+  it("shows what saying yes releases, and asks for no amount", () => {
     show(claim());
-    expect(box().value).toBe("50");
-    expect(screen.getByText(/Between 50 and 100, what the board advertises/)).toBeTruthy();
-    expect(consentButton().disabled).toBe(false);
-    expect(consentButton().textContent).toBe("Consent and credit 50");
-  });
-
-  it("refuses above the advertised top under posted, and names the top", () => {
-    show(claim());
-    type("101");
-    expect(consentButton().disabled).toBe(true);
-    expect(screen.getByText("Above 100, the most this quest advertises.")).toBeTruthy();
-    type("100");
+    expect(screen.getByText(/Worth/).textContent).toContain("25,000");
+    expect(screen.getByText("40 Village Credits")).toBeTruthy();
+    expect(screen.getByText("5 Village Voice")).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(consentButton().disabled).toBe(false);
   });
 
-  it("under capped the bonus ceiling is the top, and the floor still holds", () => {
-    show(claim({ bounds: { ...posted, mode: "capped", ceiling: 200 } }));
-    type("200");
-    expect(consentButton().disabled).toBe(false);
-    type("201");
-    expect(consentButton().disabled).toBe(true);
-    expect(screen.getByText("Above 200, the most this village allows.")).toBeTruthy();
-    type("49");
-    expect(consentButton().disabled).toBe(true);
-    expect(screen.getByText("Below 50, the least this quest pays.")).toBeTruthy();
-  });
-
-  it("offers 0 only where the quest or the village allows it", () => {
-    const first = show(claim());
-    type("0");
-    expect(consentButton().disabled).toBe(true);
-    expect(screen.getByText("This quest does not allow a consent at 0.")).toBeTruthy();
-    first.unmount();
-
-    show(claim({ bounds: { ...posted, zeroAllowed: true } }));
-    type("0");
-    expect(consentButton().disabled).toBe(false);
-    expect(consentButton().textContent).toBe("Consent at 0");
-  });
-
-  it("never offers a fraction, a negative or a word, which the ledger could not post", () => {
-    show(claim());
-    for (const value of ["60.5", "-1", "sixty"]) {
-      type(value);
-      expect(consentButton().disabled, value).toBe(true);
-      expect(screen.getByText("Whole tokens only, 0 or more.")).toBeTruthy();
-    }
-  });
-
-  it("an unreadable reward says so, and nothing can be pressed", () => {
-    show(
-      claim({
-        bounds: { label: "tbd", readable: false, floor: null, ceiling: null, zeroAllowed: false, mode: "posted" },
-      }),
-    );
-    expect(box().value).toBe("");
-    expect(screen.getByText(/reads "tbd", which is not an amount/)).toBeTruthy();
-    for (const value of ["5", "0"]) {
-      type(value);
-      expect(consentButton().disabled, value).toBe(true);
-    }
+  it("says to inquire for a quest nobody has valued and nothing pays", () => {
+    show(claim({ pay: { value: null, lines: [], source: "standard", cadence: "once" } }));
+    expect(screen.getByText(/Inquire for payment details/)).toBeTruthy();
   });
 
   it("a claim whose quest is gone is left to the server to answer", () => {
-    show(claim({ bounds: null }));
+    show(claim({ pay: null }));
     expect(screen.getByText(/Its quest is gone from the board/)).toBeTruthy();
-    type("60");
     expect(consentButton().disabled).toBe(false);
+  });
+
+  it("a consent that lands sends a yes and nothing else, and reads the claims again", async () => {
+    const fetchMock = answer(200, {});
+    show(claim());
+    fireEvent.click(consentButton());
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes("/consent"))!;
+    expect(call[0]).toBe("/api/admin/quest-claims/c1/consent");
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ approve: true });
+    expect(toast.success).toHaveBeenCalledWith("Consented. The quest pays what it says.");
+  });
+
+  it("a decline sends a no", async () => {
+    const fetchMock = answer(200, {});
+    show(claim());
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes("/consent"))!;
+    expect(JSON.parse(String(call[1]?.body))).toEqual({ approve: false });
   });
 
   it("a refusal it could not foresee comes back in the server's words, nothing says it landed, and the list is read again", async () => {
@@ -180,16 +151,22 @@ describe("the consent section refuses what the route would refuse, before anybod
     expect(onChanged).not.toHaveBeenCalled();
   });
 
-  it("a consent that lands sends the amount in the box, and reads the claims again", async () => {
-    const fetchMock = answer(200, {});
-    show(claim());
-    type("75");
-    fireEvent.click(consentButton());
-    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/admin/quest-claims/c1/consent");
-    expect(JSON.parse(String(init?.body))).toEqual({ approve: true, amount: 75 });
-    expect(toast.success).toHaveBeenCalledWith("Consented, and the credit is posted.");
+  it("a recently decided consent names the Gratitude an older consent granted, and only that", () => {
+    render(
+      <ConsentQueue
+        claims={[
+          claim({ id: "old", status: "consented", amount: 60, resolvedAt: "2026-09-01T00:00:00.000Z", userName: "Old Witnessed" }),
+          claim({ id: "new", status: "consented", amount: null, resolvedAt: "2026-10-21T00:00:00.000Z", userName: "New Witnessed" }),
+        ]}
+        refused={false}
+        error={null}
+        headers={() => ({})}
+        onChanged={onChanged}
+        onRetry={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Old Witnessed on .*: consented at 60/)).toBeTruthy();
+    expect(screen.getByText(/New Witnessed on .*: consented$/)).toBeTruthy();
   });
 
   it("a failed read says the list may not be empty, and a refused read renders nothing", () => {

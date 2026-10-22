@@ -263,16 +263,20 @@ And two more, on tables this module owns:
   quest is created by an admin, or by a holder of `quest.approve` accepting a proposal. Its
   submission lands in `submissions`, and a proposal derived from it lands in `quest_proposals`
   for review (see Data model).
-- `client/src/pages/Admin.tsx` holds `QuestsTab` (the CRUD) and `QuestClaimsTab`, which since
-  2026-09-14 is only a door to `/review`.
+- `client/src/components/admin/QuestsTab.tsx` is the CRUD, moved out of `client/src/pages/Admin.tsx`
+  on 2026-10-21, and Admin keeps `QuestClaimsTab`, which since 2026-09-14 is only a door to `/review`.
+  Both quest forms set what a quest is worth and pays through `client/src/components/WorkValueEditor.tsx`,
+  which offers the tokens `GET /api/quests/pay-options` names; a new quest is refused without a value.
+- `client/src/components/WorkPayBlock.tsx` is what every quest and role card says a piece of work pays,
+  from the `pay` the server attaches: the value in the village's currency with a conversion beside it,
+  every token by its live name, a role's cash per its agreement, or "Inquire for payment details".
 - `client/src/pages/Review.tsx` is the steward surface, one section per key. `intake.moderate` or
   `quest.approve` reads the proposed quests, and the queue's `scope` names the halves it answered.
   `quest.consent` reads the consent queue, rendered by `client/src/components/review/ConsentQueue.tsx`:
-  each amount box opens on the quest's floor from the claim's `bounds`, and the button asks
-  `canGrant` (`shared/questConsentBounds.ts`) before anybody presses. Both bells, the submit sweep's
-  and the confidence flag's, link to `/review`.
+  each claim shows the `pay` saying yes will release, and a consent is a yes with no amount to type.
+  Both bells, the submit sweep's and the confidence flag's, link to `/review`.
 
-**What `QuestsTab` cannot set.** The edit form renders title, description, reward, circle, status,
+**What `QuestsTab` cannot set.** The edit form renders title, description, value and token amounts, circle, status,
 difficulty, duration, subtitle, first step, why it matters, what changes, steps, tips, deliverable
 and poster path. It has no field for either **enforced** gate (`min_stage`, `requires_role`), none
 for the second currency (`stay_credit_reward`), and none for the three calendar dates
@@ -280,7 +284,7 @@ for the second currency (`stay_credit_reward`), and none for the three calendar 
 `PUT /api/admin/quests/:id` does `Object.assign(q, req.body, { id: q.id })`, so all six are
 reachable by curl, by the seed file, and by `acceptQuestProposal`. Everything Mechanics and
 Endpoints say those columns do is true and unreachable from the admin browser. `Review.tsx` is the
-one surface that can set two of them, `gratitude` and `stayCreditReward`, and only on the accept of
+one surface that can set one of them, `stayCreditReward`, with the value and token amounts, and only on the accept of
 a proposal, which today means an idea from the public form. Each proposal is a `QuestProposalCard`
 (`client/src/components/review/QuestProposalCard.tsx`), where the steward types the reward and may
 change the title and description first, because a person's idea goes onto a public board and only

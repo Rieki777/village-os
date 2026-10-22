@@ -10,6 +10,7 @@
 
 import { hashString, sceneStopsFor, type SceneStop } from "@shared/questScenes";
 import type { StageRule } from "@shared/gameConfig";
+import type { WorkPay } from "@shared/workValue";
 
 export interface BoardQuest {
   id: string;
@@ -23,7 +24,13 @@ export interface BoardQuest {
   deliverable?: string | null;
   tips?: string[];
   imageUrl?: string | null;
+  /** The retired Gratitude label (0004). Read by nothing that pays since 2026-10-21. */
   gratitude: string;
+  /**
+   * What the quest is worth and pays (0265), worked out by the server from the
+   * function the consent pays from. Absent from an older server.
+   */
+  pay?: WorkPay | null;
   duration?: string | null;
   difficulty?: string | null;
   circle?: string | null;

@@ -156,9 +156,13 @@ export function register(app: Express, deps: Deps): void {
    * enabled rule for, with the ceiling and the standard amount. The editor
    * prefills a new quest's list from the standard amounts, so what the steward
    * sees is what the quest pays.
+   *
+   * PUBLIC, because every figure in it already is: the rules feed
+   * (`publicRules`) states each rule's amount and ceiling to anyone, and a
+   * steward accepting a proposal holds `quest.approve`, which is not an admin.
+   * Registered before `/api/quests/:id` so the literal path wins.
    */
-  app.get("/api/admin/work-pay", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+  app.get("/api/quests/pay-options", async (_req, res) => {
     const [quest, role] = await Promise.all([questPayRules(getPool()), rolePayRules(getPool())]);
     res.json({
       currency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),

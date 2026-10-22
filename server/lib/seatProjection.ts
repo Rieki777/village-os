@@ -331,6 +331,11 @@ function recruitmentPack(role: OrgRole) {
     locationExpectations: role.locationExpectations,
     compensationReality: role.compensationReality,
     evidenceRequired: role.evidenceRequired,
+    // The role's own value and list as stored (0265), for the editor that sets
+    // them. What they pay under the rules is `pay`, at the terms tier.
+    valueMinor: role.valueMinor ?? null,
+    valueCurrency: role.valueCurrency ?? null,
+    valueTokens: role.valueTokens ?? null,
   };
 }
 

@@ -704,6 +704,15 @@ jobs:
         # are cheap to reconcile. `--list` prints the surface.
         run: node scripts/check-economics-narrative.mjs
 
+      - name: Typed payout guard
+        # No page states a payout figure it did not read from data. The
+        # Co-Creators Guide typed "40-300" Gratitude for quests and
+        # "200-500/month" for roles, and nothing paid either (Rye, 2026-10-21).
+        # Since 0265 every quest and role carries its own value and token
+        # amounts, and cards read them through `pay`. Its self-test runs with
+        # the others in `run-self-tests.mjs`.
+        run: node scripts/check-typed-payouts.mjs
+
       - name: Token doc, self-test
         # The generator's own fixture suite: the UPDATE sweep it exists to
         # catch, the statement shapes it must refuse rather than skip, and the

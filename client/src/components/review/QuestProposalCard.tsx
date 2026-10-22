@@ -7,15 +7,18 @@
  * with it: the only screen before the board is for email addresses. Accepting
  * sends the words as the steward left them (`edits`), which
  * `acceptQuestProposal` writes to the quest and back onto the proposal row. The
- * reward stays the steward's alone to type, as it always was.
+ * reward stays the steward's alone to type, as it always was: since 0265 it is
+ * a value in the village's currency and the token amounts beside it, never a
+ * Gratitude label, because no quest pays Gratitude (Rye, 2026-10-21).
  *
  * A REJECTION CAN SAY WHY. Rejecting used to send an empty note, every time,
  * and the person who proposed the idea heard nothing at all. A signed-in
  * proposer now gets a notice either way (server/lib/questProposals.ts), and
  * the reason typed here is the one piece of free text it carries.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
+import WorkValueEditor, { draftFrom, usePayOptions, type WorkValueDraft } from "@/components/WorkValueEditor";
 
 export interface QuestCard {
   id: string;
@@ -31,7 +34,8 @@ export interface QuestCard {
 
 /** What a steward typed on one card: the reward, and the words as they will stand on the board. */
 export interface QuestTyped {
-  gratitude: string;
+  /** What it is worth and pays, as typed. */
+  pay: WorkValueDraft;
   stayCreditReward: string;
   title: string;
   description: string;
@@ -55,13 +59,20 @@ export default function QuestProposalCard({
   onReject: (reason: string) => void;
 }) {
   // The words open on what arrived, so a steward who changes nothing sends the idea as it came.
+  const options = usePayOptions();
   const [typed, setTyped] = useState<QuestTyped>({
-    gratitude: "",
+    pay: { value: "", tokens: {} },
     stayCreditReward: "",
     title: String(q.prose.title ?? ""),
     description: String(q.prose.description ?? ""),
   });
-  const set = (key: keyof QuestTyped) => (e: { target: { value: string } }) =>
+  // A new quest opens on the village's standard amounts once they arrive, so
+  // what the steward sees is what it pays.
+  useEffect(() => {
+    if (!options) return;
+    setTyped((t) => (Object.keys(t.pay.tokens).length ? t : { ...t, pay: { ...draftFrom(null, options.quest, options.currency), value: t.pay.value } }));
+  }, [options]);
+  const set = (key: "stayCreditReward" | "title" | "description") => (e: { target: { value: string } }) =>
     setTyped((t) => ({ ...t, [key]: e.target.value }));
   const [reason, setReason] = useState("");
 
@@ -91,14 +102,17 @@ export default function QuestProposalCard({
       <p className="text-xs text-foreground mt-4 font-medium">
         What it pays. Nothing else can set this, so it is yours to type.
       </p>
-      <div className="flex flex-wrap gap-2 mt-2">
-        <input
-          aria-label="What this quest pays"
-          placeholder="50-100"
-          value={typed.gratitude}
-          onChange={set("gratitude")}
-          className={field}
+      <div className="mt-2 text-foreground">
+        <WorkValueEditor
+          draft={typed.pay}
+          onChange={(pay) => setTyped((t) => ({ ...t, pay }))}
+          offered={options ? options.quest : null}
+          currency={options?.currency ?? null}
+          cadence="once"
+          inputClassName={field}
         />
+      </div>
+      <div className="flex flex-wrap gap-2 mt-2">
         <input
           aria-label="Stay credits, in nights"
           placeholder="Nights, optional"

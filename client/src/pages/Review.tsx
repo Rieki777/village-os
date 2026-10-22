@@ -64,6 +64,7 @@ import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
+import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
@@ -573,15 +574,19 @@ export default function Review() {
   };
 
   const acceptQuest = async (q: QuestCard, typed: QuestTyped) => {
-    if (!typed.gratitude.trim()) {
-      toast.error("Type what this quest pays before it goes on the board.");
+    // The value and its token amounts (0265). The server checks them again.
+    const options = await loadPayOptions();
+    const body = draftToBody(typed.pay, options?.quest ?? [], options?.currency ?? "", { required: true });
+    if (!body.ok) {
+      toast.error(body.error);
       return;
     }
     setBusy(q.id);
     try {
       const ok = await post(`/api/review/quests/${q.id}/accept`, {
         reward: {
-          gratitude: typed.gratitude.trim(),
+          valueMinor: body.valueMinor,
+          valueTokens: body.valueTokens,
           stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
         // The words as the steward left them: the one way a name typed into an idea comes out before the board.

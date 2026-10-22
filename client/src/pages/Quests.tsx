@@ -17,7 +17,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
 import { useValueConversion } from "@/lib/moneyClaims";
-import { rewardCeiling } from "@shared/questRewards";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
@@ -213,17 +212,12 @@ export default function Quests() {
             {/* R47: the Trail line leads, the reward word keeps its tooltip,
                 and the Lore line comes last, after the numbers. */}
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-              Take a Quest, do the work, turn it in. The village thanks you in{" "}
-              <InfoTip tip={`${currencyName} is thanks for work, never pay. A finished quest carries its thank-you, released when the circle consents the work is done.`}>{currencyName}</InfoTip>.
+              Take a Quest, do the work, turn it in. Every quest says what it pays, released when the circle confirms the work is done.
             </p>
             <ExamplesBanner moduleId="quests" noun="quest" />
             <p className="text-sm text-muted-foreground mb-8">
-              {quests.length} active quests &nbsp;·&nbsp; up to{" "}
-              {quests
-                .reduce((s, q) => s + rewardCeiling(q.gratitude), 0)
-                .toLocaleString()}{" "}
-              {currencyName} available
-              <InfoTip tip="Every open quest names its own thank-you; this number is all of them added together." label="Where this number comes from" />
+              {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
+              <InfoTip tip="A quest with a value shows what it is worth and the tokens it pays. One without says to inquire for payment details." label="What a value is" />
             </p>
             <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
               Real work, on real land, beside people becoming your people.
@@ -447,7 +441,6 @@ export default function Quests() {
                           claim={claims[quest.id]}
                           signs={signs?.perQuest?.[quest.id]}
                           stages={stages}
-                          currencyName={currencyName}
                           priority={ring === RING_ORDER[0] && index === 0}
                         />
                       </motion.div>
@@ -553,22 +546,22 @@ export default function Quests() {
               About {currencyName}
             </h2>
             <p className="text-muted-foreground text-center mb-10">
-              {villageName} acknowledges contributions in {currencyName}, a recognition signal with
-              no financial value of its own. The value rides beside it: each cycle the
-              community sets aside a real pool of {valueName} and shares it across
-              everyone's {currencyName}, so appreciation decides where the value flows.
+              {villageName} pays for quests in its own tokens, and every quest card says what it pays.
+              {" "}{currencyName} is something else: members give it to each other as thanks, and each
+              cycle the community shares a real pool of {valueName} across everyone's {currencyName},
+              so appreciation decides where that value flows.
             </p>
             <div className="grid sm:grid-cols-3 gap-6">
               {[
                 {
-                  title: "Earn",
-                  body: `Complete quests, contribute to circles, steward the land, teach, build, host, create. Every meaningful act earns ${currencyName}.`,
-                  icon: Heart,
+                  title: "Get paid",
+                  body: "Every quest names what it is worth and the tokens it pays, released when the circle confirms the work. A quest with no value yet says to inquire.",
+                  icon: Star,
                 },
                 {
-                  title: "Hold",
-                  body: `Your Village Profile accumulates ${currencyName} and reflects your full contribution history, a record of everything you have invested.`,
-                  icon: Star,
+                  title: "Thank",
+                  body: `Members thank each other in ${currencyName}, from an allowance each cycle. A quest never pays it.`,
+                  icon: Heart,
                 },
                 {
                   title: "Share",

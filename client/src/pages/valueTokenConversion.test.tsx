@@ -121,7 +121,8 @@ const PAGES = [
   {
     name: "CoCreatorsGuide",
     render: () => render(<Router><CoCreatorsGuide /></Router>),
-    anchor: /Gratitude Economy/,
+    // Renamed 2026-10-21: quests and roles pay in tokens, and Gratitude is thanks.
+    anchor: /Pay, and Gratitude/,
   },
   {
     name: "HowWeCreate",

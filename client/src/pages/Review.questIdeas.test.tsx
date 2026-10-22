@@ -63,6 +63,14 @@ function serve(quests: unknown[], drops: unknown[] = []) {
         json: async () => ({ batches: [], quests, drops, counts: { proposals: 0, quests: quests.length } }),
       };
     }
+    // What a quest may pay in this village (0265): one token, with its ceiling and standard amount.
+    if (String(url).startsWith("/api/quests/pay-options")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ currency: "CRC", quest: [{ token: "credits", name: "Village Credits", ceiling: 250, standard: 25, decimals: 2 }], role: [] }),
+      };
+    }
     if (String(url).startsWith("/api/review/quests/")) {
       return { ok: true, status: 200, json: async () => ({ success: true, questId: "q-new" }) };
     }
@@ -115,13 +123,15 @@ describe("a quest idea on /review says where it came from, and what the person a
 
     // The number a person typed comes out before anybody else can read it.
     fireEvent.change(asks, { target: { value: "Turn the old bookcase into a seed library." } });
-    fireEvent.change(screen.getByLabelText("What this quest pays"), { target: { value: "50-100" } });
+    // A value in the village's currency, and the token boxes open on the standard amounts.
+    await waitFor(() => expect((screen.getByLabelText("Village Credits") as HTMLInputElement).value).toBe("25"));
+    fireEvent.change(screen.getByLabelText(/What it is worth/), { target: { value: "25000" } });
     fireEvent.click(screen.getByRole("button", { name: "Put it on the board" }));
 
     const accepted = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/accept");
     await waitFor(() => expect(accepted()).toBeTruthy());
     expect(JSON.parse(String(accepted()![1]?.body))).toEqual({
-      reward: { gratitude: "50-100", stayCreditReward: null },
+      reward: { valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
   });
