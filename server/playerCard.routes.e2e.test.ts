@@ -11,6 +11,13 @@
  * an org draft (`update_seat`) and changes nothing on the role until it is
  * adopted. Somebody who does not hold the role is refused.
  *
+ * PR 9: tensions from role_tensions, as each reader may see them: a member
+ * who neither raised nor holds reads the count only, the raiser and the
+ * holder read the words, and once a tension is brought to the circle every
+ * member reads them. The raise control goes to a member who does not hold the
+ * role, Waiting on you to the holder's own card. The role tile on /api/org
+ * counts the same rows.
+ *
  * PR 8: the accomplishments (by accomplishmentsOf's viewer rule), the role's
  * handover words and the four-check meter, the owner's card words and this
  * moon's load, each read back through the card.
@@ -42,6 +49,7 @@ const TENSION = "The tank valve sticks on cold mornings";
 const ACCOMPLISHED = "Mend the spring cover";
 const ACCEPT_NOTE = "Done well, and early.";
 const RUNBOOK = "https://example.org/lower-tanks";
+const RAISED = "Nobody answers the tank alarm at night";
 
 let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
@@ -53,6 +61,7 @@ let founderToken = "";
 let ownerToken = "";
 let ownerId = "";
 let readerToken = "";
+let raiserToken = "";
 
 interface Answer { status: number; json: any }
 
@@ -126,7 +135,9 @@ beforeAll(async () => {
   ownerId = owner.id;
   const reader = await register("Tomas Reed", `tomas-${PORT}@example.test`);
   readerToken = reader.token;
-  for (const id of [owner.id, reader.id]) {
+  const raiser = await register("Ida Moss", `ida-${PORT}@example.test`);
+  raiserToken = raiser.token;
+  for (const id of [owner.id, reader.id, raiser.id]) {
     expect((await call("PUT", `/api/admin/players/${id}/stage`, { body: { stageId: "member" } })).status).toBe(200);
   }
   await pool.query("UPDATE users SET handle = 'wren-card' WHERE id = ?", [ownerId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -145,15 +156,15 @@ beforeAll(async () => {
   };
   await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify(offer), ROLE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
 
-  // A tension raised to the role, by its holder, in a circle session.
+  // A tension raised to the role by its holder, through the tension door (role_tensions, 0269).
+  const raisedByOwner = await call("POST", `/api/roles/${ROLE}/tensions`, { body: { text: TENSION }, token: ownerToken });
+  expect(raisedByOwner.status, JSON.stringify(raisedByOwner.json)).toBe(201);
+
+  // A circle session, for the accomplished task below.
   const [m]: any = await pool.query("INSERT INTO live_session_members (user_id) VALUES (?)", [ownerId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   const [s]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "INSERT INTO live_sessions (title, circle_id, status, facilitator_no, created_by_no, duration_min, state, stamp) VALUES ('Call', NULL, 'closed', ?, ?, 60, '{}', '{}')",
     [m.insertId, m.insertId],
-  );
-  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    "INSERT INTO live_session_entries (session_id, kind, text, status, author_no, owner_seat_id) VALUES (?, 'tension', ?, 'open', ?, ?)",
-    [s.insertId, TENSION, m.insertId, ROLE],
   );
 
   // PR 8: a task the owner held in person, done and accepted, in a session the reader was never in.
@@ -193,6 +204,7 @@ describe.skipIf(!DB_CONFIGURED)("the player role card at three tiers", () => {
     expect(r.json.card.roles[0].purpose.text).toEqual({ kind: "shown", value: "Clean water for every house." });
     expect(r.json.card.agreements.roles[0].rows).toEqual({ kind: "unread" });
     expect(r.json.card.roles[0].tensions).toEqual({ kind: "unread" });
+    expect(r.json.card.roles[0].tensionDoor).toBeNull();
     const text = JSON.stringify(r.json);
     expect(text).not.toContain("Fixed pay");
     expect(text).not.toContain(TENSION);
@@ -344,5 +356,62 @@ describe.skipIf(!DB_CONFIGURED)("PR 8: the pieces wired onto the live card", () 
     expect(self.json.card.roles[0].pending).toContain("notMine");
     // Nothing changes on the role until the draft is adopted.
     expect(self.json.card.roles[0].notMine.items).toEqual({ kind: "empty", words: "Not written yet" });
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("PR 9: tensions on the card, as each reader may see them", () => {
+  const tensionsOf = async (token: string | null) => (await card(token)).json.card.roles[0];
+  const orgTile = async (token: string) => {
+    const r = await call("GET", "/api/org", { token });
+    expect(r.status).toBe(200);
+    return (r.json.roles as any[]).find((x) => x.id === ROLE);
+  };
+
+  it("a member who did not raise it and does not hold the role reads the count only", async () => {
+    const raised = await call("POST", `/api/roles/${ROLE}/tensions`, { body: { text: RAISED }, token: raiserToken });
+    expect(raised.status, JSON.stringify(raised.json)).toBe(201);
+    const role = await tensionsOf(readerToken);
+    expect(role.tensions.kind).toBe("shown");
+    expect(role.tensions.value.counts).toEqual(["2 open tensions, private to the role's holders"]);
+    expect(role.tensions.value.open).toEqual([]);
+    expect(JSON.stringify(role)).not.toContain(RAISED);
+    expect(JSON.stringify(role)).not.toContain(TENSION);
+    expect(role.tensionDoor).toBe("raise");
+    // A stranger reads nothing, not even the count.
+    const stranger = await tensionsOf(null);
+    expect(stranger.tensions).toEqual({ kind: "unread" });
+    expect(stranger.tensionDoor).toBeNull();
+  });
+
+  it("the raiser reads their own words, and the holder reads every open one", async () => {
+    const raiser = await tensionsOf(raiserToken);
+    expect(raiser.tensions.value.open).toEqual([RAISED]);
+    expect(raiser.tensions.value.counts).toEqual(["2 open tensions, 1 private to the role's holders"]);
+    expect(raiser.tensionDoor).toBe("raise");
+    const holder = await tensionsOf(ownerToken);
+    expect([...holder.tensions.value.open].sort()).toEqual([RAISED, TENSION].sort());
+    expect(holder.tensions.value.counts).toEqual(["2 open tensions"]);
+    // The holder answers through Waiting on you, and is never offered the raise.
+    expect(holder.tensionDoor).toBe("waiting");
+  });
+
+  it("the role tile on /api/org counts the same open rows", async () => {
+    const tile = await orgTile(readerToken);
+    expect(tile.health, JSON.stringify(tile)).toBeTruthy();
+    expect(tile.health.openTensions).toBe(2);
+    expect(JSON.stringify(tile)).not.toContain(RAISED);
+  });
+
+  it("once brought to the circle, every member reads the words, and the count moves", async () => {
+    // A bring needs a circle that has met; the state it leaves is what the card reads.
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "UPDATE role_tensions SET status = 'brought_to_circle', answered_at = UTC_TIMESTAMP() WHERE org_role_id = ? AND text = ?",
+      [ROLE, RAISED],
+    );
+    const role = await tensionsOf(readerToken);
+    expect(role.tensions.value.public).toEqual([RAISED]);
+    expect(role.tensions.value.counts).toEqual(["1 open tension, private to the role's holders", "1 answered this moon"]);
+    expect(JSON.stringify(role)).not.toContain(TENSION);
+    expect((await orgTile(readerToken)).health.openTensions).toBe(1);
   });
 });
