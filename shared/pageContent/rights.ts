@@ -484,7 +484,7 @@ export const RIGHTS_STEWARD_PAGE: PageSpec = rightsPage({
     eyebrow: "Your Path Forward",
     heading: "Rights Deepen as You Grow",
     intro:
-      "Your rights and voice grow with your commitment. This is not a hierarchy of worth, it's a recognition that those who have poured the most into this place hold the most wisdom for its future.",
+      "Your rights and voice grow with your commitment, in recognition that those who have poured the most into this place hold the most wisdom for its future.",
     // TOKEN_COPY_PROPOSAL rows 19 and 20.
     stages: [
       { level: "Co-Creator", description: "Full governance voice, seasonal role eligibility", years: "" },
