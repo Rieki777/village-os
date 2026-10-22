@@ -13,6 +13,7 @@ import { useTokenName } from "@/hooks/useTokenNames";
 import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
 import NextStepTrail from "./NextStepTrail";
+import { SITE_FOOTER_SIGNOFF } from "@shared/pageContent/site";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -33,6 +34,9 @@ export default function Layout({ children }: LayoutProps) {
   // the logo boxes reserve their height (64px header / 90px footer) so the
   // page never shifts on first paint, and outside links simply don't render.
   const cfg = useGameConfig();
+  // The footer's sign-off is the village's own words (Admin, Pages, Whole site),
+  // served inside the config. Unknown until the config answers.
+  const signoff = cfg ? (cfg.site?.footerSignoff ?? SITE_FOOTER_SIGNOFF) : undefined;
   const siteUrl = String(cfg?.project?.siteUrl ?? "").trim();
   const eventsUrl = String(cfg?.project?.eventsUrl ?? "").trim();
   const villageName = String(cfg?.project?.name ?? "").trim();
@@ -801,7 +805,7 @@ export default function Layout({ children }: LayoutProps) {
             </p>
             <div className="flex items-center gap-2 text-white text-sm">
               <TreePine className="w-4 h-4" />
-              <span>Built with Pura Vida by ReGenCivics.Earth</span>
+              <span>{signoff === undefined ? "\u00a0" : `${signoff ? `${signoff} ` : ""}ReGenCivics.Earth`}</span>
             </div>
           </div>
         </div>

@@ -104,6 +104,8 @@ export interface PublicGameConfig {
   /** Whether this village serves the brochure pages (shared/brochure.ts).
    *  Absent on a server older than 1.2.0, which reads as off. */
   brochurePages?: boolean;
+  /** Site-wide words from Admin, Pages, Whole site. Absent on an older server. */
+  site?: { footerSignoff: string };
 }
 
 export interface SeasonEntry {

@@ -52,6 +52,7 @@ import {
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { pageContentProblem } from "../shared/pageContent";
+import { sitePageMeta, siteWords, spliceMeta, trimTo } from "./lib/pageMeta";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -65,6 +66,7 @@ import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
 import { type FaqPathway, register as registerFaqRoutes } from "./routes/faqs";
+import { register as registerBrochurePagesRoutes } from "./routes/brochurePages";
 import { register as registerBrandRoutes } from "./routes/brand";
 import { register as registerBrandThemeRoutes, shellWithTheme } from "./routes/brandTheme";
 import { register as registerGratitudeVoiceRoutes } from "./routes/gratitudeVoices";
@@ -180,7 +182,7 @@ import {
   readSetPasswordToken,
   setPasswordLinkRefusal,
 } from "./lib/memberTokens";
-import { sanitizeFontName } from "./lib/themeCss";
+import { brandColour, sanitizeFontName } from "./lib/themeCss";
 import { applyTimingOf, publicValueFields, ringOf, VARIABLES_BY_KEY } from "../shared/gameVariables";
 import { CONSTITUTION } from "../shared/constitution";
 import { circleViews, loopedCirclesRefusal } from "../shared/circleView";
@@ -18489,6 +18491,7 @@ ${inner}
   // â”€â”€ FAQs (NEW-1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   registerFaqRoutes(app, { isAdmin, guardCapability, faqsRepo });
+  registerBrochurePagesRoutes(app, { isAdmin, guardCapability });
 
   // â”€â”€ Milestones (NEW-3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -18825,6 +18828,7 @@ ${inner}
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
       brochurePages: brochurePagesOn(),
+      site: siteWords(contentRepo.get() ?? null, m),
     });
   });
 
@@ -26298,7 +26302,8 @@ ${inner}
       display: "standalone",
       orientation: "any",
       background_color: "#ffffff",
-      theme_color: "#2D5A5A",
+      // The village's own brand colour, derived the way theme.css derives it.
+      theme_color: brandColour(getBrand().theme),
       icons: [
         // One entry, `any` sized: the brand icon is an SVG on most forks and
         // a raster on some, and claiming sizes we have not measured would put
@@ -26524,65 +26529,41 @@ ${inner}
     const bare = indexShell();
     if (!bare) return next();
     const shell = shellWithTheme(bare, getBrand);
-    const village = mergedConfig().project.name;
+    const config = mergedConfig();
     const origin = requestOrigin(req);
-    const trim = (s: string, n = 200) =>
-      s.length > n ? `${s.slice(0, n - 1).trimEnd()}...` : s;
-
-    let title = `Quests at ${village}`;
-    let description = `The work the village is asking for, and what it gives back.`;
-    let image = "";
+    const meta = sitePageMeta(req.path, origin, config, contentRepo.get() ?? null);
+    meta.title = `Quests at ${config.project.name}`;
+    meta.description = `The work the village is asking for, and what it gives back.`;
+    meta.image = "";
+    meta.type = "article";
     if (req.params.id) {
       const quest = await questsRepo.byId(String(req.params.id));
       // A link to a retired quest falls through to the SPA, which says so far
       // better than a meta tag can.
       if (!quest) return next();
-      title = `${quest.title} at ${village}`;
-      description = trim(
-        String(quest.subtitle || quest.firstStep || quest.description || description),
-      );
-      image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
+      meta.title = `${quest.title} at ${config.project.name}`;
+      meta.description = trimTo(String(quest.subtitle || quest.firstStep || quest.description || meta.description));
+      meta.image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
+      meta.imageSize = { width: OG_WIDTH, height: OG_HEIGHT };
     }
-    const url = origin ? origin + req.path : "";
-    const tags = [
-      `<title>${escapeHtml(title)}</title>`,
-      `<meta name="description" content="${escapeHtml(description)}" />`,
-      `<meta property="og:type" content="article" />`,
-      `<meta property="og:site_name" content="${escapeHtml(village)}" />`,
-      `<meta property="og:title" content="${escapeHtml(title)}" />`,
-      `<meta property="og:description" content="${escapeHtml(description)}" />`,
-      url ? `<meta property="og:url" content="${escapeHtml(url)}" />` : "",
-      image ? `<meta property="og:image" content="${escapeHtml(image)}" />` : "",
-      image ? `<meta property="og:image:width" content="${OG_WIDTH}" />` : "",
-      image ? `<meta property="og:image:height" content="${OG_HEIGHT}" />` : "",
-      `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}" />`,
-      url ? `<link rel="canonical" href="${escapeHtml(url)}" />` : "",
-    ]
-      .filter(Boolean)
-      .join("\n    ");
-
-    // The neutral tags come OUT before ours go in. Two og:title tags is not a
-    // richer card, it is a coin toss over which one a crawler believes.
-    const html = shell
-      .replace(/<title>[\s\S]*?<\/title>\s*/i, "")
-      .replace(/<meta\s+name="description"[^>]*>\s*/i, "")
-      .replace(/<meta\s+property="og:[^"]*"[^>]*>\s*/gi, "")
-      .replace("</head>", `  ${tags}\n  </head>`);
+    const html = spliceMeta(shell, meta);
     // index.html is never cached hard here: a member holding a stale shell
     // asks for a bundle hash that no longer exists, which is a white screen.
     res.type("html").set("Cache-Control", "no-cache").send(html);
   });
 
   // Every page, `/` included (express.static above serves no index), gets the
-  // shell with its stylesheet link versioned: server/routes/brandTheme.ts.
-  app.get("/{*splat}", (_req, res) => {
+  // shell with its stylesheet link versioned (server/routes/brandTheme.ts) and
+  // this village's own share card (server/lib/pageMeta.ts).
+  app.get("/{*splat}", (req, res) => {
     const shell = indexShell();
     if (!shell) {
       const indexPath = path.join(staticPath, "index.html");
       console.error(`[sendFile error] ${indexPath}: the shell is missing`);
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
-    res.type("html").set("Cache-Control", "no-cache").send(shellWithTheme(shell, getBrand));
+    const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null);
+    res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
   });
 
   // Terminal error handler. Express 5 forwards a rejected handler promise
