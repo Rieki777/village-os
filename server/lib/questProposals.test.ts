@@ -95,7 +95,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await acceptQuestProposal(pool, quests, {
       id: p.ok ? p.id : "",
       decidedBy: "u1",
-      reward: { gratitude: "   " },
+      reward: { valueMinor: null, valueCurrency: "CRC" },
     });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error).toContain("Nobody else can set that");
@@ -104,15 +104,17 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     expect(await questProposalQueue(pool)).toHaveLength(1);
   });
 
-  it("refuses a reward this village could not read as an amount", async () => {
-    expect(rewardProblem({ gratitude: "" })).toContain("Nobody else can set that");
-    expect(rewardProblem({ gratitude: "some hearts" })).toContain("could not read");
-    expect(rewardProblem({ gratitude: "50-100" })).toBeNull();
-    expect(rewardProblem({ gratitude: "75" })).toBeNull();
-    expect(rewardProblem({ gratitude: "50", stayCreditReward: -2 })).toContain("whole number");
-    // A deliberate zero is allowed. Caps fail closed in this platform, zero
-    // means zero, and a quest may pay stay credits alone.
-    expect(rewardProblem({ gratitude: "0", stayCreditReward: 2 })).toBeNull();
+  it("refuses a quest with no value, and a value nobody meant", async () => {
+    // Every quest carries a value from the moment it is created (0265, Rye
+    // 2026-10-21). The value replaced the Gratitude label this used to read.
+    expect(rewardProblem({ valueMinor: null, valueCurrency: "CRC" })).toContain("Nobody else can set that");
+    expect(rewardProblem({ valueMinor: 2.5, valueCurrency: "CRC" })).toContain("whole number");
+    expect(rewardProblem({ valueMinor: -1, valueCurrency: "CRC" })).toContain("whole number");
+    expect(rewardProblem({ valueMinor: 2500000, valueCurrency: "CRC" })).toBeNull();
+    expect(rewardProblem({ valueMinor: 500, valueCurrency: "CRC", stayCreditReward: -2 })).toContain("whole number");
+    // A deliberate zero is allowed. Zero means zero, and a quest may pay stay
+    // credits alone.
+    expect(rewardProblem({ valueMinor: 0, valueCurrency: "CRC", stayCreditReward: 2 })).toBeNull();
   });
 
   it("reads a label naming no number as invalid, which it did not always", () => {
@@ -136,28 +138,21 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await acceptQuestProposal(pool, quests, {
       id: p.ok ? p.id : "",
       decidedBy: "u1",
-      reward: { gratitude: "50-100", stayCreditReward: 2, minStage: "contributor", requiresRole: null },
+      reward: { valueMinor: 2500000, valueCurrency: "CRC", valueTokens: [{ token: "credits", amount: 40 }], stayCreditReward: 2, minStage: "contributor", requiresRole: null },
     });
     expect(r.ok).toBe(true);
 
     const [q] = await quests.all();
     expect(q.title).toBe("Clear the north swale");
-    expect(q.gratitude).toBe("50-100");
+    // The value and its list, and no Gratitude label: no quest pays it.
+    expect(q.valueMinor).toBe(2500000);
+    expect(q.valueCurrency).toBe("CRC");
+    expect(q.valueTokens).toEqual([{ token: "credits", amount: 40 }]);
+    expect(q.gratitude).toBe("");
     expect(q.stayCreditReward).toBe(2);
     expect(q.minStage).toBe("contributor");
     expect(q.status).toBe("Open");
     expect(q.isExample).toBe(false);
-
-    // gratitude_min and gratitude_max are DERIVED by the repository's own save
-    // path from the label, and are authored by nobody, admin included. This is
-    // the invariant that comes for free by calling questsRepo.add instead of
-    // writing a second insert.
-    const [[row]] = await pool.query<any[]>( // module-review-ok: reading back the scratch schema this suite provisioned
-      "SELECT gratitude_min, gratitude_max FROM quests WHERE id = ?",
-      [r.ok ? r.questId : ""],
-    );
-    expect(Number(row.gratitude_min)).toBe(50);
-    expect(Number(row.gratitude_max)).toBe(100);
   });
 
   it("writes the steward's edits and not the version that arrived", async () => {
@@ -168,7 +163,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await acceptQuestProposal(pool, quests, {
       id: p.ok ? p.id : "",
       decidedBy: "u1",
-      reward: { gratitude: "50" },
+      reward: { valueMinor: 5000, valueCurrency: "CRC" },
       edits: { title: "Clear the north swale, with Ada", description: "Redacted by a steward." },
     });
     expect(r.ok).toBe(true);
@@ -188,7 +183,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await acceptQuestProposal(pool, quests, {
       id: p.ok ? p.id : "",
       decidedBy: "u1",
-      reward: { gratitude: "50" },
+      reward: { valueMinor: 5000, valueCurrency: "CRC" },
       edits: { description: "ask ada@example.org" },
     });
     expect(r.ok).toBe(false);
@@ -198,8 +193,8 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
   it("decides once: a second accept on the same proposal refuses", async () => {
     const p = await proposeQuest(pool, propose());
     const id = p.ok ? p.id : "";
-    expect((await acceptQuestProposal(pool, quests, { id, decidedBy: "u1", reward: { gratitude: "50" } })).ok).toBe(true);
-    const again = await acceptQuestProposal(pool, quests, { id, decidedBy: "u1", reward: { gratitude: "9999" } });
+    expect((await acceptQuestProposal(pool, quests, { id, decidedBy: "u1", reward: { valueMinor: 5000, valueCurrency: "CRC" } })).ok).toBe(true);
+    const again = await acceptQuestProposal(pool, quests, { id, decidedBy: "u1", reward: { valueMinor: 999900, valueCurrency: "CRC" } });
     expect(again.ok).toBe(false);
     expect(!again.ok && again.status).toBe(409);
     expect(await quests.all()).toHaveLength(1);
@@ -260,7 +255,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const r = await acceptQuestProposal(pool, quests, {
       id: p.ok ? p.id : "",
       decidedBy: "u1",
-      reward: { gratitude: "50" },
+      reward: { valueMinor: 5000, valueCurrency: "CRC" },
       edits: { subtitle: "S".repeat(900), circle: "C".repeat(400) },
     });
     expect(r.ok, !r.ok ? r.error : "").toBe(true);
@@ -304,7 +299,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
   it("tells the member their idea is on the board, linked to the quest, with none of the idea's words", async () => {
     const { notices, notify } = spine();
     const p = await proposeQuest(pool, fromAda());
-    const r = await acceptQuestProposal(pool, quests, { id: p.ok ? p.id : "", decidedBy: "u-steward", reward: { gratitude: "50" } }, notify);
+    const r = await acceptQuestProposal(pool, quests, { id: p.ok ? p.id : "", decidedBy: "u-steward", reward: { valueMinor: 5000, valueCurrency: "CRC" } }, notify);
     expect(r.ok).toBe(true);
     expect(notices).toEqual([
       {
@@ -349,7 +344,7 @@ describe.skipIf(!configured)("a proposed quest and the reward a human types", ()
     const { notices, notify } = spine();
     const visitor = await proposeQuest(pool, propose({ moduleId: "propose-quest", proposedBy: null, proposedByKind: "human" }));
     const machine = await proposeQuest(pool, propose({ prose: { title: "Mend the gate" }, proposedBy: "assistant", proposedByKind: "agent" }));
-    expect((await acceptQuestProposal(pool, quests, { id: visitor.ok ? visitor.id : "", decidedBy: "u-steward", reward: { gratitude: "5" } }, notify)).ok).toBe(true);
+    expect((await acceptQuestProposal(pool, quests, { id: visitor.ok ? visitor.id : "", decidedBy: "u-steward", reward: { valueMinor: 500, valueCurrency: "CRC" } }, notify)).ok).toBe(true);
     expect(await rejectQuestProposal(pool, { id: machine.ok ? machine.id : "", decidedBy: "u-steward", note: "No." }, notify)).toBe(true);
     expect(notices).toEqual([]);
   });

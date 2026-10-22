@@ -16,7 +16,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { ARCHETYPES } from "../../shared/archetypes";
-import { CREDITS, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
+import { CREDITS, EARNED_EQUITY, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
 
 /**
  * The starting rules: VILLAGE VOICE AND VILLAGE CREDITS, and not Gratitude.
@@ -89,6 +89,14 @@ const RULES = [
   { trigger: "role.cycle", token: CREDITS, amount: 25, ceiling: 250, recipient: "holder", enabled: true },
   // Off, not gone. See the block comment above.
   { trigger: "role.cycle", token: HEARTS, amount: 20, ceiling: 100, recipient: "holder", enabled: false },
+  // EARNED EQUITY (0266), OFF, because a village decides what pays equity.
+  // Seeded at all only because no route creates a mint rule: without these two
+  // rows a village could never pay it from a quest or a seat. One whole unit
+  // and a ceiling of one is the smallest payable figure and a placeholder to
+  // edit, chosen low because equity already in people's hands cannot be
+  // un-issued. Turning either on is one PATCH before launch or one vote after.
+  { trigger: "quest.completed", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
+  { trigger: "role.cycle", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "holder", enabled: false },
 ];
 
 export interface SeedReport {

@@ -299,7 +299,8 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
   let peerId = "";
   let founderId = "";
   let questId = "";
-  let questReward = 0;
+  /** What the doer's quest says it pays in Village Credits, whole credits, read off its card (0265). */
+  let questCredits = 0;
   let claimId = "";
 
   it("boots against a throwaway data dir, seeded", async () => {
@@ -378,12 +379,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const quests = await api("GET", "/api/quests");
     const open = quests.json.find((q: any) => q.status !== "closed") ?? quests.json[0];
     questId = open.id;
-    // The reward is an advertised RANGE ("50-100"), so take its ceiling: that is
-    // a legitimate award and what the consent cap will accept. `Number()` on a
-    // range is NaN, which silently became 0 and made every later assertion vacuous.
-    const rewardBounds = String(open.gratitude).split(/[^0-9]+/).filter(Boolean).map(Number);
-    questReward = rewardBounds.length ? Math.max(...rewardBounds) : 0;
-    expect(questReward).toBeGreaterThan(0);
+    // WHAT THE QUEST PAYS IS ON ITS CARD (0265, Rye 2026-10-21), worked out by
+    // the function the consent pays from. A seeded quest carries no list of its
+    // own, so the village's standard rules pay it, and it pays no Gratitude.
+    const credits = (open.pay?.lines ?? []).find((l: any) => l.token === "credits");
+    questCredits = Number(credits?.amount ?? 0);
+    expect(questCredits, "the card names what the consent will pay").toBeGreaterThan(0);
+    expect((open.pay?.lines ?? []).map((l: any) => l.token)).not.toContain("gratitude");
     expect(questId).toBeTruthy();
 
     const claim = await api("POST", `/api/game/quests/${questId}/claim`, {}, doerToken);
@@ -471,19 +473,23 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(profile.json.recognitionBalance).toBe(0);
   });
 
-  it("releases Gratitude on consent, and records it in the Village Pulse", async () => {
+  it("pays what the card says on consent, moves no Gratitude, and records it in the Village Pulse", async () => {
+    // A consent is a yes (Rye, 2026-10-21): an amount in the body is read by
+    // nothing, the claim records no grant, and Gratitude only shares out the pool.
     const consent = await api(
       "POST",
       `/api/admin/quest-claims/${claimId}/consent`,
-      { approve: true, amount: questReward },
+      { approve: true, amount: 999 },
       founderToken,
     );
     expect(consent.status).toBe(200);
     expect(consent.json.status).toBe("consented");
-    expect(consent.json.amount).toBe(questReward);
+    expect(consent.json.amount ?? null).toBeNull();
 
     const profile = await api("GET", "/api/profile", undefined, doerToken);
-    expect(profile.json.recognitionBalance).toBe(questReward);
+    expect(profile.json.recognitionBalance).toBe(0);
+    const ledger = await api("GET", "/api/game/ledger", undefined, doerToken);
+    expect(ledger.json.balances.credits?.balance, "the card's credits, in minor units").toBe(questCredits * (await scale("credits")));
 
     const pulse = await api("GET", "/api/game/pulse");
     expect(pulse.status).toBe(200);
@@ -717,63 +723,37 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(wall.status).toBe(200);
   });
 
-  it("caps consent at the posted amount: the quest board is a contract", async () => {
-    // Item 7. Default cap mode is "posted": whatever an admin types, the award
-    // is exactly what the board advertised. A fresh member runs one quest.
+  it("pays what the card says whatever amount a steward sends: the quest board is a contract", async () => {
+    // A consent carries no amount any more (Rye, 2026-10-21). The quest pays
+    // what its card says, so a steward typing 999999 moves exactly the card.
     const worker = { email: `worker-${PORT}@example.test`, password: "LoopTest123!", name: "Honest Worker" };
     const reg = await api("POST", "/api/auth/register", { ...worker, paths: ["resident"] });
     const workerToken = reg.json.token;
 
     const quests = await api("GET", "/api/quests");
-    // Quests advertise a RANGE like "50-100", never a bare number. An earlier
-    // version of this test filtered on Number(q.gratitude) > 0, which is NaN for
-    // every quest in the seed and matched nothing.
     const open = quests.json.find(
-      (q: any) => !q.minStage && !q.requiresRole && q.id !== questId && /\d/.test(String(q.gratitude ?? "")),
+      (q: any) => !q.minStage && !q.requiresRole && q.id !== questId && (q.pay?.lines ?? []).length > 0,
     );
     expect(open).toBeTruthy();
-    const bounds = String(open.gratitude).split(/[^0-9]+/).filter(Boolean).map(Number);
-    const lo = Math.min(...bounds);
-    const hi = Math.max(...bounds);
-    expect(hi).toBeGreaterThan(0);
+    const card = (open.pay.lines as any[]).find((l) => l.token === "credits");
+    expect(card, "the card names its credits").toBeTruthy();
 
     const claim = await api("POST", `/api/game/quests/${open.id}/claim`, {}, workerToken);
     expect(claim.status).toBe(200);
     await api("POST", `/api/game/quests/${open.id}/submit`, { note: "done" }, workerToken);
 
-    // Above the advertised ceiling: refused, because the board is the contract.
-    const tooMuch = await api(
+    const consent = await api(
       "POST",
       `/api/admin/quest-claims/${claim.json.id}/consent`,
       { approve: true, amount: 999999 },
       founderToken,
     );
-    expect(tooMuch.status).toBe(409);
-    expect(tooMuch.json.max).toBe(hi);
-
-    // Below the advertised floor is refused too, so nobody is quietly underpaid.
-    if (lo > 0) {
-      const tooLittle = await api(
-        "POST",
-        `/api/admin/quest-claims/${claim.json.id}/consent`,
-        { approve: true, amount: lo - 1 },
-        founderToken,
-      );
-      expect(tooLittle.status).toBe(409);
-    }
-
-    // Inside the range lands exactly as asked.
-    const consent = await api(
-      "POST",
-      `/api/admin/quest-claims/${claim.json.id}/consent`,
-      { approve: true, amount: hi },
-      founderToken,
-    );
     expect(consent.status).toBe(200);
-    expect(consent.json.amount).toBe(hi);
+    expect(consent.json.amount ?? null).toBeNull();
 
-    const profile = await api("GET", "/api/profile", undefined, workerToken);
-    expect(profile.json.recognitionBalance).toBe(hi);
+    const ledger = await api("GET", "/api/game/ledger", undefined, workerToken);
+    expect(ledger.json.balances.credits?.balance).toBe(Number(card.amount) * (await scale("credits")));
+    expect(ledger.json.balance, "and no Gratitude").toBe(0);
   });
 
   it("exposes the rules publicly, and Admin edits a variable with validation", async () => {
@@ -841,16 +821,16 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
       expect(Array.isArray(e.unlocked)).toBe(true);
     }
 
-    // Flows: the doer earned questReward from consent and sent 5 to the peer.
+    // Flows: the doer was paid for the quest in credits and thanked by nobody, and sent 5 to the peer.
     const flows = await api("GET", "/api/game/gratitude/flows", undefined, doerToken);
     expect(flows.status).toBe(200);
     // Lifetime totals: 5 sent to the peer in this cycle, plus the 8 the cycle
     // close test backdated into the previous lunation.
     expect(flows.json.totals.sent).toBe(13);
-    // Sending spends from the cycle BUDGET (a giving allowance), not from the
-    // earned balance, so the balance still holds what consent released. The
-    // backdated 8 sits in a closed cycle and does not touch this cycle's spend.
-    expect(flows.json.balance).toBe(questReward);
+    // Sending spends from the cycle BUDGET (a giving allowance), never from a
+    // balance, so the doer gives with nothing received: a quest pays no Gratitude.
+    // The backdated 8 sits in a closed cycle and does not touch this cycle's spend.
+    expect(flows.json.balance).toBe(0);
     expect(flows.json.budget.spent).toBe(5);
     expect(flows.json.byCycle.length).toBeGreaterThanOrEqual(0);
 
@@ -876,21 +856,24 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     const ledger = await api("GET", "/api/game/ledger", undefined, doerToken);
     expect(ledger.status).toBe(200);
     expect(ledger.json.inSync).toBe(true);
-    expect(ledger.json.balance).toBe(questReward);
-    expect(ledger.json.cachedBalance).toBe(questReward);
+    // Recognition: nobody thanked the doer, and a quest pays none.
+    expect(ledger.json.balance).toBe(0);
+    expect(ledger.json.cachedBalance).toBe(0);
     expect(ledger.json.currency).toBe("Gratitude");
 
     // The consent that released value is explained, not just totalled.
-    // BY TOKEN, not just by source. A confirmed quest posts three
-    // quest_consent rows now (gratitude, credits, voice), so a bare `find`
-    // returned whichever the API listed first and compared 10000 ledger units
-    // of Village Voice against the Gratitude reward.
+    // BY TOKEN, not just by source. A confirmed quest posts a quest_consent row
+    // per token it pays (credits and voice here), and none in Gratitude.
     const consentEntry = ledger.json.entries.find(
-      (e: any) => e.source === "quest_consent" && e.tokenType === "gratitude",
+      (e: any) => e.source === "quest_consent" && e.tokenType === "credits",
     );
     expect(consentEntry).toBeTruthy();
-    expect(consentEntry.amount).toBe(questReward);
+    expect(consentEntry.amount).toBe(questCredits * (await scale("credits")));
     expect(consentEntry.sourceRef).toBe(claimId);
+    expect(
+      ledger.json.entries.some((e: any) => e.source === "quest_consent" && e.tokenType === "gratitude"),
+      "a quest pays no Gratitude",
+    ).toBe(false);
 
     // The peer's side: their balance is entirely explained by gratitude received.
     const peerLedger = await api("GET", "/api/game/ledger", undefined, peerToken);
@@ -925,36 +908,35 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
 
     const quests = await api("GET", "/api/quests");
     const open = quests.json.find(
-      (q: any) => !q.minStage && !q.requiresRole && /\d/.test(String(q.gratitude ?? "")),
+      (q: any) => !q.minStage && !q.requiresRole && (q.pay?.lines ?? []).length > 0,
     );
-    const bounds = String(open.gratitude).split(/[^0-9]+/).filter(Boolean).map(Number);
-    const award = Math.max(...bounds);
 
     const claim = await api("POST", `/api/game/quests/${open.id}/claim`, {}, token);
     await api("POST", `/api/game/quests/${open.id}/submit`, { note: "done" }, token);
     const first = await api(
       "POST",
       `/api/admin/quest-claims/${claim.json.id}/consent`,
-      { approve: true, amount: award },
+      { approve: true },
       founderToken,
     );
     expect(first.status).toBe(200);
 
     const afterFirst = await api("GET", "/api/game/ledger", undefined, token);
     const entriesAfterFirst = afterFirst.json.entries.length;
-    expect(afterFirst.json.balance).toBe(award);
+    const paid = afterFirst.json.balances.credits?.balance;
+    expect(paid, "the first consent paid the card's credits").toBeGreaterThan(0);
 
     // Consent again on the same claim. Whatever the route decides to answer, the
     // ledger must not gain an entry and the balance must not move.
     await api(
       "POST",
       `/api/admin/quest-claims/${claim.json.id}/consent`,
-      { approve: true, amount: award },
+      { approve: true },
       founderToken,
     );
     const afterSecond = await api("GET", "/api/game/ledger", undefined, token);
     expect(afterSecond.json.entries.length).toBe(entriesAfterFirst);
-    expect(afterSecond.json.balance).toBe(award);
+    expect(afterSecond.json.balances.credits?.balance).toBe(paid);
     expect(afterSecond.json.inSync).toBe(true);
   });
 
@@ -2746,7 +2728,7 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     // ── Work-exchange (F2): a quest carries stay credits in a SEPARATE column,
     // released by the SAME human consent, keyed on the claim. ──
     const wq = await api("POST", "/api/admin/quests", {
-      title: "Rebuild the garden beds", gratitude: "10", stayCreditReward: 3, tags: ["work-exchange"],
+      title: "Rebuild the garden beds", valueMinor: 1000000, stayCreditReward: 3, tags: ["work-exchange"],
     }, founderToken);
     expect(wq.status).toBe(200);
     const wClaim = await api("POST", `/api/game/quests/${wq.json.id}/claim`, {}, doerToken);
@@ -3411,13 +3393,13 @@ describe.skipIf(!DB_CONFIGURED)("the coordination loop, end to end", () => {
     expect(mods.quests.core).toBe(true);
 
     // The consent queue: submitted work appears; consent clears it.
-    const ccq = await api("POST", "/api/admin/quests", { title: "Sweep the commons", gratitude: "5" }, founderToken);
+    const ccq = await api("POST", "/api/admin/quests", { title: "Sweep the commons", valueMinor: 500000 }, founderToken);
     const ccClaim = await api("POST", `/api/game/quests/${ccq.json.id}/claim`, {}, peerToken);
     expect(ccClaim.status).toBe(200);
     await api("POST", `/api/game/quests/${ccq.json.id}/submit`, { note: "Swept and raked." }, peerToken);
     const withPending = await api("GET", "/api/admin/command-centre", undefined, founderToken);
     expect(withPending.json.pendingConsents.some((p: any) => p.id === ccClaim.json.id)).toBe(true);
-    await api("POST", `/api/admin/quest-claims/${ccClaim.json.id}/consent`, { approve: true, amount: 5 }, founderToken);
+    await api("POST", `/api/admin/quest-claims/${ccClaim.json.id}/consent`, { approve: true }, founderToken);
     const afterConsent = await api("GET", "/api/admin/command-centre", undefined, founderToken);
     expect(afterConsent.json.pendingConsents.some((p: any) => p.id === ccClaim.json.id)).toBe(false);
 

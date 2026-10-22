@@ -37,9 +37,10 @@ const RIGHTS = (tokenName: string, valueName: string, villageName: string, conve
   },
   {
     icon: Heart,
-    title: `Earn ${tokenName} for Your Contribution`,
+    // Quests and roles pay in the village's own tokens, and Gratitude is thanks (Rye, 2026-10-21).
+    title: "Get Paid for Your Contribution",
     description:
-      `Every role you hold, every quest you complete, and every meaningful act of stewardship earns you ${tokenName}: the recognition signal, with no financial value of its own. Each cycle the community shares a real pool of ${valueName} across everyone's ${tokenName}, so appreciation decides where value flows.${conversionNote ? ` ${conversionNote}` : ""} Your effort builds real wealth.`,
+      `Every role you hold and every quest you complete says what it is worth and pays, in the village's own tokens. ${tokenName} is the thanks members give each other, with no financial value of its own. Each cycle the community shares a real pool of ${valueName} across everyone's ${tokenName}, so appreciation decides where that value flows.${conversionNote ? ` ${conversionNote}` : ""} Your effort builds real wealth.`,
   },
   {
     icon: Star,

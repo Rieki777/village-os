@@ -69,19 +69,19 @@ describe("proposer standing", () => {
 
 describe("change-set validation", () => {
   const effective = (key: string) =>
-    ({ "gratitude.base_budget": "100", "gratitude.pool_per_cycle": "1000", "quest.consent_cap_mode": "posted" })[key] ?? "";
+    ({ "gratitude.base_budget": "100", "gratitude.pool_per_cycle": "1000", "governance.voice_weighting": "equal" })[key] ?? "";
 
   it("accepts a clean set and captures the live baseline", async () => {
     const { problems, normalized } = await validateChangeSet(
       noPool,
-      [{ key: "gratitude.base_budget", to: "150" }, { key: "quest.consent_cap_mode", to: "capped" }],
+      [{ key: "gratitude.base_budget", to: "150" }, { key: "governance.voice_weighting", to: "hypha-mirror" }],
       effective,
       0,
     );
     expect(problems).toEqual([]);
     expect(normalized).toEqual([
       { key: "gratitude.base_budget", from: "100", to: "150" },
-      { key: "quest.consent_cap_mode", from: "posted", to: "capped" },
+      { key: "governance.voice_weighting", from: "equal", to: "hypha-mirror" },
     ]);
   });
 
@@ -174,7 +174,7 @@ describe("the proposal document", () => {
 
   it("display values read like the game, not like storage", () => {
     expect(displayChangeValue("gratitude.require_message", "true")).toBe("On");
-    expect(displayChangeValue("quest.consent_cap_mode", "posted")).toBe("Exactly the posted amount");
+    expect(displayChangeValue("governance.voice_weighting", "equal")).toBe("One person, one voice");
     expect(displayChangeValue("gratitude.base_budget", "100")).toBe("100 Gratitude");
   });
 });

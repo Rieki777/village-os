@@ -42,16 +42,14 @@ import type express from "express";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
-import { owedForClaim, toLedgerUnits } from "../lib/economy";
+import { humanAtScale, owedForClaim } from "../lib/economy";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { issuanceRefusal } from "../lib/gameStart";
-import { memberAccount, PLATFORM_TOKEN, postTransferOn, RECOGNITION_FAUCET } from "../lib/ledger";
-import { effectiveLifecycle } from "../lib/modules";
-import { checkConsentAmount, consentBounds, payoutFor } from "../lib/questConsent";
-import { rewardMultiplierFor } from "../lib/seasonPatterns";
+import { tokenDef } from "../lib/ledger";
+import { questPay, questPayRules } from "../lib/workPay";
 import { STAY_CREDIT } from "../lib/stays";
-import { boolVar, numberVar, stringVar } from "../lib/variables";
+import { boolVar, numberVar } from "../lib/variables";
 import {
   owedPostingsFor,
   recordOwed,
@@ -60,7 +58,6 @@ import {
   type SettleOutcome,
 } from "../repos/questOwedPostings";
 import type { ClaimRecord } from "../repos/quests";
-import { parseRewardRange } from "../../shared/questRewards";
 
 /**
  * What the consent gate answers.
@@ -123,7 +120,6 @@ export function register(app: Express, deps: Deps): void {
     recordStageEvent,
     consentActor,
     addActivity,
-    dormantBadgeIds,
   } = deps;
 
   /**
@@ -159,6 +155,16 @@ export function register(app: Express, deps: Deps): void {
    * once as well. Voice and credits minted by the rules never had a line of
    * their own, and still do not: the consent's own notification is the news.
    */
+  /** What a consent's posted rows paid, for the member's notification: " (+40 Village Credits)". */
+  function paidLine(outcomes: SettleOutcome[]): string {
+    const parts = outcomes.flatMap((o) =>
+      o.outcome === "posted"
+        ? [`+${humanAtScale(o.row.units, o.row.decimals)} ${tokenDef(o.row.tokenSlug)?.name ?? o.row.tokenSlug}`]
+        : [],
+    );
+    return parts.length ? ` (${parts.join(", ")})` : "";
+  }
+
   async function announceSettled(
     claim: { id: string; userId: string; questTitle: string },
     outcomes: SettleOutcome[],
@@ -185,25 +191,17 @@ export function register(app: Express, deps: Deps): void {
     const [claims, quests] = await Promise.all([claimsRepo.all(), questsRepo.all()]);
     claims.sort((a, b) => new Date(b.claimedAt ?? 0).getTime() - new Date(a.claimedAt ?? 0).getTime());
     /*
-     * WHAT EACH CLAIM'S QUEST LETS A STEWARD GRANT, beside the claim.
-     *
-     * The amount box opened at a hardcoded 50 and knew nothing about the quest,
-     * so under the shipped `posted` mode the first press on a quest paying 100
-     * to 200 was a guaranteed 409, and the number the steward needed was on
-     * another page. `consentBounds` reads the same definition the consent route
-     * below enforces, so the queue and the refusal are one reading of the dials.
-     * A claim whose quest was deleted carries no bounds: nothing is advertised.
+     * WHAT EACH CLAIM'S CONSENT WILL PAY, beside the claim, so a steward reads
+     * what saying yes releases before saying it. The same answer the quest's
+     * card gives and the consent prices from (server/lib/workPay.ts). A claim
+     * whose quest was deleted carries none: nothing is advertised.
      */
-    const dials = {
-      capMode: stringVar("quest.consent_cap_mode"),
-      capMultiplier: numberVar("quest.consent_cap_multiplier"),
-      allowZero: boolVar("quest.allow_zero_consent"),
-    };
+    const rules = await questPayRules(getPool());
     const questsById = new Map(quests.map((q) => [q.id, q]));
     res.json(
       claims.map((c) => {
         const quest = questsById.get(c.questId);
-        return { ...c, bounds: quest ? consentBounds({ range: parseRewardRange(quest.gratitude), ...dials }) : null };
+        return { ...c, pay: quest ? questPay(quest, rules) : null };
       }),
     );
   });
@@ -380,7 +378,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/quest-claims/:id/consent", async (req, res) => {
     const actor = await consentActor(req);
     if (!actor.ok) return res.status(actor.status).json(actor.body);
-    const { approve, amount } = req.body ?? {};
+    const { approve } = req.body ?? {};
     const claim = await claimsRepo.byId(req.params.id);
     if (!claim) return res.status(404).json({ error: "Not found" });
     // The last door on the example-quest chain. Claim and submit both refuse
@@ -503,43 +501,33 @@ export function register(app: Express, deps: Deps): void {
     // two stewards consenting at once both passed it.
     const consentableFrom: ClaimRecord["status"][] =
       boolVar("quest.require_submission_before_consent") ? ["submitted"] : ["claimed", "submitted"];
-    // Item 7: the award was unbounded and never compared to the posted amount,
-    // so the quest board was not a contract. The ceiling is a village choice.
-    const requested = Math.max(0, Number(amount) || 0);
-    // Quests advertise a RANGE ("50-100"), not a number: the same work done
-    // thoroughly is worth more than done adequately, and the consenting steward
-    // decides where in the range it landed. parseRewardRange is the one place
-    // that knows the format.
+    /*
+     * A CONSENT IS A YES, AND THE QUEST PAYS WHAT IT SAYS (Rye, 2026-10-21).
+     *
+     * The witness used to type a Gratitude amount inside the quest's advertised
+     * range, and the consent minted it. Gratitude's only job is now sharing out
+     * the cycle pool, so no quest pays it: the witness confirms the work was
+     * done, and the quest pays the token amounts it carries (0265), under the
+     * village's rule ceilings, exactly as its card said. An `amount` in the body
+     * is read by nothing. The three consent dials that bounded that amount, and
+     * the badge lift on it, had nothing left to act on and went with it.
+     *
+     * `quests.gratitude` stays on the row, read by nothing that pays.
+     */
     const consentedQuest = await questsRepo.byId(claim.questId);
-    const range = parseRewardRange(consentedQuest?.gratitude);
-    // The zero rule, the readable-label rule and the range are decided in
-    // server/lib/questConsent.ts, as a pure function of the range and the three
-    // consent dials, so every combination is a row in a table test. The rulings
-    // they hold are in that file's header; read them before moving a comparison.
-    const verdict = checkConsentAmount({
-      requested,
-      range,
-      capMode: stringVar("quest.consent_cap_mode"),
-      capMultiplier: numberVar("quest.consent_cap_multiplier"),
-      allowZero: boolVar("quest.allow_zero_consent"),
-    });
-    if (!verdict.ok) return res.status(verdict.status).json(verdict.body);
-    const granted = verdict.granted;
+    const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
     /*
      * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE ANY WORK IS DONE.
      *
      * The ledger refuses a faucet posting until the launch vote carries, and
-     * `postTransferOn` asks the same question inside the transaction below,
-     * where a refusal now rolls the flip back with it. So this is no longer
-     * the thing standing between a member and a lost consent; it is a cheap
-     * first ask that hands back the ledger's own sentence verbatim, before a
-     * multiplier lookup and a transaction are spent finding out.
-     *
-     * `granted > 0` because a village that has opted into consenting at zero
-     * posts nothing at all, and refusing that would be withholding an
-     * acknowledgement that costs no tokens.
+     * `postTransferOn` asks the same question inside the transaction below. So
+     * this is a cheap first ask that hands back the ledger's own sentence,
+     * asked only when the consent would pay something: a quest that pays
+     * nothing can be witnessed before launch, because refusing that would be
+     * withholding an acknowledgement that costs no tokens.
      */
-    if (granted > 0) {
+    const pays = consentedQuest ? questPay(consentedQuest, await questPayRules(getPool())) : null;
+    if ((pays?.lines.length ?? 0) > 0 || stayReward > 0) {
       const notStarted = await issuanceRefusal(getPool());
       if (notStarted) return res.status(409).json({ error: notStarted });
     }
@@ -550,29 +538,16 @@ export function register(app: Express, deps: Deps): void {
     const claimant = await members.byId(claim.userId);
     const stageBefore = claimant ? await stageOf(claimant) : null;
 
-    // A standing badge lifts the grant toward the cap and never past it (Rye,
-    // 2026-09-14). Why multiplied rather than added is in `rewardMultiplierFor`
-    // (server/lib/seasonPatterns.ts); the bound is `payoutFor`.
-    const multiplier =
-      effectiveLifecycle("badges") === "off"
-        ? 1
-        : await rewardMultiplierFor(getPool(), claim.userId, await dormantBadgeIds());
-    const payout = payoutFor({ granted, multiplier, liftTop: verdict.liftTop });
-    // The quest's own stay-credit reward, in whole credits, owed by this consent
-    // at any grant. The post below records it.
-    const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
-    // The recomputed balance, set by the post below and read after it commits.
-    // At payout 0 (allow_zero_consent) nothing posts and this stays null, so
-    // the cache write is skipped: the old code wrote the failed post's 0.
-    let credited: number | null = null;
-    // One commit: the status check, the flip and the credit, or none of them.
-    // The account of why is on `consentOnce` in server/repos/quests.ts.
+    // One commit: the status check, the flip and what the consent owes, or
+    // none of them. The account of why is on `consentOnce` in server/repos/quests.ts.
     const outcome = await claimsRepo.consentOnce(
       claim.id,
       consentableFrom,
       (c) => {
         c.status = "consented";
-        c.amount = granted;
+        // No Gratitude is granted for a quest, so the claim records none. The
+        // column keeps what older consents granted.
+        c.amount = null;
         c.resolvedAt = new Date().toISOString();
         // WHO witnessed it (0070). The guard above already refuses self-consent
         // in the moment; recording the witness is what lets the audit see a
@@ -580,51 +555,23 @@ export function register(app: Express, deps: Deps): void {
         // once the request is over.
         c.consentedBy = actor.userId ?? null;
       },
-      // No member row means no account to credit and nobody to owe, which is
+      // No member row means no account to pay and nobody to owe, which is
       // what the old `if (claimant && consented)` said.
       !claimant ? null : async (conn, c) => {
-        if (payout > 0) {
-          // Through the ledger, not `+=`. The idempotency key is the claim, so a
-          // retried or double-clicked consent credits exactly once, and the balance
-          // column is RECOMPUTED from the ledger rather than incremented. S7:
-          // recognition issues from the faucet account, so issuance is visible.
-          const credit = await postTransferOn(conn, {
-            from: RECOGNITION_FAUCET,
-            to: memberAccount(claim.userId),
-            // MINOR units, which is `postTransfer`'s contract; `payout` is the
-            // human reward the quest names.
-            amount: toLedgerUnits(PLATFORM_TOKEN, payout),
-            source: "quest_consent",
-            sourceRef: claim.id,
-            // Keyed on what moved, not on whether a badge exists: a badge at the
-            // top of the range lifts nothing, and saying otherwise misstates it.
-            description:
-              payout === granted
-                ? `Quest consented: ${claim.questTitle}`
-                : `Quest consented: ${claim.questTitle} (${granted}, lifted to ${payout} by a standing badge)`,
-            idempotencyKey: `quest_consent:${claim.id}`,
-          });
-          if (!credit.ok) return { ok: false as const, error: credit.error ?? "the ledger refused the credit" };
-          credited = credit.toBalance;
-        }
-        // WHAT ELSE THIS CONSENT OWES, recorded in this same commit (drizzle/0210).
+        // WHAT THIS CONSENT OWES, recorded in this same commit (drizzle/0210).
         //
-        // The rules' voice and credits, and the quest's own stay credits, used to
-        // post after the commit, best effort, and a failure was lost for good:
-        // consenting again is refused once a claim is consented. Priced here on
-        // the consent's own connection and recorded before the commit, what a
-        // consent owes exists exactly when the consent does, and the settle below
-        // the commit, or a steward's press on /review, pays it.
-        //
-        // A grant of 0 prices no rule inside `owedForClaim` (economics and
-        // governance, 2026-09-14), and the stay credits are still owed, because
-        // they are the quest's own payment, typed onto it by a person.
+        // Priced here on the consent's own connection and recorded before the
+        // commit, so what a consent owes exists exactly when the consent does,
+        // and the settle below the commit, or a steward's press on /review,
+        // pays it. The quest's own list (0265) prices it when it has one; the
+        // village's standard rules price it when it does not. The stay credits
+        // are the quest's own payment, typed onto it by a person.
         const priced = await owedForClaim(conn, {
           id: c.id,
           questId: c.questId,
           userId: c.userId,
-          granted,
           stay: stayReward > 0 ? { reward: stayReward, questTitle: c.questTitle } : undefined,
+          valueTokens: consentedQuest?.valueTokens ?? null,
         });
         if (priced.skipped) console.log(`[economy] claim ${c.id}: no rule priced (${priced.skipped})`);
         await recordOwed(conn, c.id, priced.owed);
@@ -643,9 +590,9 @@ export function register(app: Express, deps: Deps): void {
       }
       // Nothing was written, so this is a refusal and not a 500: the claim is
       // untouched, the member is still owed, and consenting again is the retry.
-      console.error(`[quests] consent credit refused for claim ${claim.id}: ${outcome.error}`);
+      console.error(`[quests] consent refused for claim ${claim.id}: ${outcome.error}`);
       return res.status(409).json({
-        error: `The credit could not be posted, so nothing was recorded and the claim is untouched: ${outcome.error}`,
+        error: `What this consent owes could not be recorded, so nothing was written and the claim is untouched: ${outcome.error}`,
       });
     }
     const consented = outcome.claim;
@@ -665,18 +612,13 @@ export function register(app: Express, deps: Deps): void {
         audience: "admin",
       });
     }
-    // Credit the player's balance
     if (claimant) {
-      let after: any = claimant;
-      if (credited !== null) {
-        after = await members.update(claimant.id, (u: any) => { u.recognitionBalance = credited; });
-      }
       // PAY WHAT THIS CONSENT OWES, now that its commit recorded it. Each row is
       // its own transaction (`settleOwedPosting`, server/repos/questOwedPostings.ts).
       // A row that cannot be paid stays owed for a steward to pay from /review, or
       // is marked refused with the ledger's own reason. Never allowed to fail the
-      // consent: the work was witnessed and credited, and what it still owes is
-      // recorded where nothing can lose it.
+      // consent: the work was witnessed, and what it still owes is recorded where
+      // nothing can lose it.
       let settled: SettleOutcome[] = [];
       try {
         settled = await settleOwedForClaim(getPool(), consented.id);
@@ -688,13 +630,11 @@ export function register(app: Express, deps: Deps): void {
       await notify({
         userId: consented.userId,
         type: "quest_consented",
-        // What was actually CREDITED, not what was consented. A standing
-        // badge can multiply the two apart, and telling a member a number
-        // their balance does not match is the fastest way to lose their
-        // trust in the ledger.
-        title: payout === granted
-          ? `Your quest was consented: ${consented.questTitle} (+${payout})`
-          : `Your quest was consented: ${consented.questTitle} (+${payout}, including your badge bonus)`,
+        // What was actually PAID, from the rows that posted, never what the
+        // card said: a rule can change between the card and the consent, and
+        // telling a member a number their balance does not match is the
+        // fastest way to lose their trust in the ledger.
+        title: `Your quest was consented: ${consented.questTitle}${paidLine(settled)}`,
         link: `/quests/${consented.questId}`,
         // The real actor, admin or steward (see the declines branch above).
         actorUserId: actor.userId,
@@ -705,16 +645,12 @@ export function register(app: Express, deps: Deps): void {
       // whole point of widening this gate — needs its own row.
       if (!actor.isAdminActor) {
         void recordEvent(getPool(), {
-          // Both figures: what the steward decided, and what the ledger
-          // moved. An audit row carrying only the first would misstate the
-          // release it exists to attribute.
           kind: "audit",
-          text: payout === granted
-            ? `quest:consented:${consented.id}:${payout}`
-            : `quest:consented:${consented.id}:granted=${granted}:paid=${payout}:x${multiplier}`,
+          text: `quest:consented:${consented.id}`,
           actorUserId: actor.userId, entityType: "quest_claim", entityRef: consented.id, audience: "admin",
         });
       }
+      const after = await members.byId(claimant.id);
       if (after) {
         const stageAfter = await stageOf(after);
         if (stageBefore) await recordStageEvent(after, stageBefore, stageAfter, `quest consented: ${consented.questTitle}`);

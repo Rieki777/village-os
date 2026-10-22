@@ -7,6 +7,7 @@ import { useCountUp, useMomentWindow } from "@/components/natural/moments";
 import { claimMoment } from "@/lib/celebrated";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { playMoment } from "@/lib/sound";
+import { linesWords, type WorkPay } from "@/lib/workPay";
 
 // questIdFromTitle is gone (S10): quest ids are REAL server references now.
 // Deriving ids from titles meant a rename silently orphaned every claim.
@@ -34,7 +35,12 @@ import { playMoment } from "@/lib/sound";
  * positioned, so the row below stays clickable while it plays and the layout
  * does not move underneath a thumb.
  */
-function ConsentedReward({ claim, decimals }: { claim: QuestClaim; decimals: number }) {
+/*
+ * SINCE 2026-10-21 A CONSENT GRANTS NO GRATITUDE, so `amount` is null on every new
+ * consent and the line names what the quest pays instead (0265). An older
+ * consent still shows the recognition its witness granted, badge bonus and all.
+ */
+function ConsentedReward({ claim, decimals, pay }: { claim: QuestClaim; decimals: number; pay?: WorkPay | null }) {
   const granted = claim.amount ?? 0;
   const credited = claim.credited ?? granted;
   const bonus = credited - granted;
@@ -77,7 +83,7 @@ function ConsentedReward({ claim, decimals }: { claim: QuestClaim; decimals: num
             intensity="moment"
             size={88}
             seed={granted}
-            message={`Quest complete! +${show(credited)}`}
+            message={credited ? `Quest complete! +${show(credited)}` : "Quest complete!"}
           />
         </span>
       )}
@@ -87,6 +93,9 @@ function ConsentedReward({ claim, decimals }: { claim: QuestClaim; decimals: num
       {/* The bonus is information, so it stays after the drawing has gone. A
           badge holder was previously told the pre-multiplier grant and never
           saw the rest of what landed. */}
+      {!credited && pay && pay.lines.length > 0 && (
+        <p className="text-xs text-emerald-800 mt-1">This quest pays {linesWords(pay.lines)}.</p>
+      )}
       {bonus > 0 && (
         <p className="text-xs text-emerald-800 mt-1">
           {show(granted)} granted, and {show(bonus)} more for a standing badge you hold.
@@ -101,6 +110,7 @@ export default function QuestActions({
   signedIn,
   claim,
   decimals = 0,
+  pay,
   onChanged,
 }: {
   questId: string;
@@ -112,6 +122,8 @@ export default function QuestActions({
    * Voice and what an unanswered payload honestly means.
    */
   decimals?: number;
+  /** What the quest pays (0265), named on the consented line. */
+  pay?: WorkPay | null;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -231,7 +243,7 @@ export default function QuestActions({
           <Send className="w-4 h-4" /> Turned in. Waiting on the circle's yes.
         </span>
       ) : (
-        <ConsentedReward claim={claim} decimals={decimals} />
+        <ConsentedReward claim={claim} decimals={decimals} pay={pay} />
       )}
       {/* role="alert": claiming, submitting and abandoning a quest all
           report their refusal here, and it is the only report. Without the

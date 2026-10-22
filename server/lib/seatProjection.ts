@@ -43,6 +43,9 @@
 import type { ModuleLifecycle } from "../../shared/modules";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
+import type { MintRule } from "./economy";
+import { rolePay } from "./workPay";
+import type { StatedCash } from "../../shared/workValue";
 
 /**
  * The name a stranger reads for a seat an agent holds (0142).
@@ -115,6 +118,12 @@ export interface SeatProjectionCtx {
    * (server/lib/heldTerms.ts). Read at the `terms.read` tier only (red team U2).
    */
   heldTerms?: ReadonlyMap<string, unknown>;
+  /**
+   * The village's enabled rules for paying a role each cycle, read once by the
+   * route (server/lib/workPay.ts `rolePayRules`). Read at the `terms.read` tier
+   * only: what a role pays is money, and it sits beside the terms it belongs to.
+   */
+  payRules?: readonly MintRule[];
 }
 
 /**
@@ -322,6 +331,11 @@ function recruitmentPack(role: OrgRole) {
     locationExpectations: role.locationExpectations,
     compensationReality: role.compensationReality,
     evidenceRequired: role.evidenceRequired,
+    // The role's own value and list as stored (0265), for the editor that sets
+    // them. What they pay under the rules is `pay`, at the terms tier.
+    valueMinor: role.valueMinor ?? null,
+    valueCurrency: role.valueCurrency ?? null,
+    valueTokens: role.valueTokens ?? null,
   };
 }
 
@@ -339,6 +353,29 @@ function termsOffer(role: OrgRole) {
     termsOffer: read.ok ? read.settings : null,
     termsOfferUnreadable: !read.ok,
     termsOfferAt: role.termsOfferAt ? new Date(role.termsOfferAt).toISOString() : null,
+  };
+}
+
+/**
+ * WHAT THE ROLE PAYS, `terms.read` TIER ONLY (0265, Rye 2026-10-21).
+ *
+ * The tokens come from the engine's own answer (`rolePay`), so the card shows
+ * what the cycle settlement would post. The cash is the money the terms on
+ * offer record, read here by the one parser and handed in: it is stated on the
+ * card and never paid by the platform, and the pay path may not read terms.
+ * Only a fixed amount or a range is cash; the other kinds say so in the drawer.
+ */
+function statedCash(role: OrgRole): StatedCash | null {
+  const read = readTermsOffer(role.termsOffer);
+  const pay = read.ok ? read.settings?.pay : undefined;
+  if (!pay || (pay.kind !== "fixed" && pay.kind !== "range")) return null;
+  return {
+    kind: pay.kind,
+    currency: pay.currency ?? null,
+    minor: pay.amountMinor ?? null,
+    minMinor: pay.minMinor ?? null,
+    maxMinor: pay.maxMinor ?? null,
+    per: pay.per ?? null,
   };
 }
 
@@ -376,6 +413,7 @@ export function projectSeat(
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
     ...(tier.terms ? termsOffer(role) : {}),
+    ...(tier.terms && ctx.payRules ? { pay: rolePay(role, ctx.payRules, statedCash(role)) } : {}),
     // The terms each live holder is seated on, beside what the seat offers (red team U2).
     ...(tier.terms && ctx.heldTerms ? { heldTerms: heldTermsOf(held, ctx.heldTerms, ctx) } : {}),
   };

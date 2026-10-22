@@ -11,16 +11,13 @@
  * consent's home is this page, beside the other things a steward decides, and
  * that tab is only a door to it now.
  *
- * ── THE BOX OPENS ON A NUMBER THE SERVER WILL TAKE ───────────────────────
+ * ── A CONSENT IS A YES (Rye, 2026-10-21) ─────────────────────────────────
  *
- * The admin panel's box opened at a hardcoded 50, and under the shipped `posted`
- * mode the first press on a quest paying 100 to 200 was a certain 409. Here each
- * claim arrives with `bounds` (`consentBounds`, server/lib/questConsent.ts), the
- * box opens on its floor, and the button asks `canGrant`
- * (shared/questConsentBounds.ts) before anybody presses. The grid in
- * server/lib/questConsent.test.ts holds `canGrant` equal to the route's own
- * refusal for every mode, label, zero dial and amount, so a button this screen
- * enables is an amount the route accepts. The route still decides the rest: a
+ * There is no amount to type. A steward used to choose a Gratitude amount inside
+ * the quest's advertised range; no quest pays Gratitude now, and the quest pays
+ * what it says (0265). Each claim arrives with `pay`, the same answer the
+ * quest's card gives and the consent prices from, so the steward reads what
+ * saying yes releases before saying it. The route still decides the rest: a
  * self-consent, a claim nobody submitted and issuance that has not started are
  * refusals this screen cannot see, and their sentences come back verbatim.
  *
@@ -34,9 +31,10 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { authToken } from "@/lib/gameApi";
-import { canGrant, type ConsentBounds, type ConsentCapMode } from "@shared/questConsentBounds";
+import type { WorkPay } from "@shared/workValue";
+import WorkPayBlock from "@/components/WorkPayBlock";
 
-/** One row of `GET /api/admin/quest-claims`: `ClaimRecord` in server/repos/quests.ts, plus `bounds`. */
+/** One row of `GET /api/admin/quest-claims`: `ClaimRecord` in server/repos/quests.ts, plus `pay`. */
 export interface ConsentClaim {
   id: string;
   questId: string;
@@ -46,14 +44,15 @@ export interface ConsentClaim {
   status: "claimed" | "submitted" | "consented" | "declined";
   artifactUrl?: string | null;
   note?: string | null;
+  /** The Gratitude an older consent granted. Null on every consent since 2026-10-21. */
   amount?: number | null;
   claimedAt: string | null;
   submittedAt?: string | null;
   resolvedAt?: string | null;
   confidence?: "on_track" | "at_risk" | "stuck" | null;
   confidenceNote?: string | null;
-  /** `null` when the claim's quest is gone, so nothing is advertised. */
-  bounds: ConsentBounds | null;
+  /** What saying yes releases. `null` when the claim's quest is gone, so nothing is advertised. */
+  pay?: WorkPay | null;
 }
 
 interface Props {
@@ -67,52 +66,11 @@ interface Props {
   onRetry: () => void;
 }
 
-/** What a steward may grant, in words, keyed by the dial's own union. */
-const RANGE_WORDS: Record<ConsentCapMode, (b: ConsentBounds) => string> = {
-  posted: (b) =>
-    b.floor === b.ceiling
-      ? `Exactly ${b.floor}, what the board advertises.`
-      : `Between ${b.floor} and ${b.ceiling}, what the board advertises.`,
-  capped: (b) =>
-    `Between ${b.floor} and ${b.ceiling}. The board advertises ${b.label}, and this village allows a bonus up to ${b.ceiling}.`,
-  unlimited: (b) =>
-    b.readable
-      ? `The board advertises ${b.label}, and this village sets no ceiling on what a steward grants.`
-      : `The board's reward reads "${b.label}", and this village sets no ceiling on what a steward grants.`,
-};
-
 const CONFIDENCE_WORDS: Record<NonNullable<ConsentClaim["confidence"]>, string> = {
   on_track: "says it is on track",
   at_risk: "flagged a wobble",
   stuck: "is stuck",
 };
-
-function rangeSentence(b: ConsentBounds | null): string {
-  if (!b) {
-    return "Its quest is gone from the board, so there is no advertised amount to check. The server answers when you press.";
-  }
-  if (b.mode !== "unlimited" && !b.readable) {
-    return `The board's reward reads "${b.label}", which is not an amount, so nothing can be granted until the quest says a number.`;
-  }
-  const zero = b.zeroAllowed && b.floor !== 0 ? " 0 is allowed too, which completes the claim and moves no recognition." : "";
-  return RANGE_WORDS[b.mode](b) + zero;
-}
-
-/** Why a typed amount cannot be sent, or null when it can. An empty box is neither, and is handled by the caller. */
-function refusalFor(text: string, b: ConsentBounds | null): string | null {
-  const n = Number(text);
-  if (!Number.isInteger(n) || n < 0) return "Whole tokens only, 0 or more.";
-  if (!b || canGrant(n, b)) return null;
-  if (n === 0) return "This quest does not allow a consent at 0.";
-  if (b.mode !== "unlimited" && !b.readable) return "Nothing can be granted until the quest says a number.";
-  if (b.floor !== null && n < b.floor) return `Below ${b.floor}, the least this quest pays.`;
-  if (b.ceiling !== null && n > b.ceiling) {
-    return b.mode === "capped"
-      ? `Above ${b.ceiling}, the most this village allows.`
-      : `Above ${b.ceiling}, the most this quest advertises.`;
-  }
-  return "Outside what this quest allows.";
-}
 
 function day(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -121,7 +79,6 @@ function day(iso: string | null | undefined): string {
 }
 
 export default function ConsentQueue({ claims, refused, error, headers, onChanged, onRetry }: Props) {
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const card = "bg-card border border-border rounded-xl p-5";
 
@@ -150,7 +107,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
     .sort((a, b) => String(b.resolvedAt ?? "").localeCompare(String(a.resolvedAt ?? "")))
     .slice(0, 10);
 
-  const decide = async (c: ConsentClaim, approve: boolean, amount: number) => {
+  const decide = async (c: ConsentClaim, approve: boolean) => {
     setBusy(c.id);
     try {
       // The Response is held before anything says a decision landed, which is
@@ -158,7 +115,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
       const res = await fetch(`/api/admin/quest-claims/${c.id}/consent`, {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify(approve ? { approve: true, amount } : { approve: false }),
+        body: JSON.stringify({ approve }),
       }).catch(() => null);
       const d = res ? await res.json().catch(() => ({})) : {};
       if (!res || !res.ok) {
@@ -171,13 +128,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
         if (res) await onChanged();
         return;
       }
-      toast.success(
-        approve
-          ? amount > 0
-            ? "Consented, and the credit is posted."
-            : "Consented at 0."
-          : "Declined. The quest is open again.",
-      );
+      toast.success(approve ? "Consented. The quest pays what it says." : "Declined. The quest is open again.");
       await onChanged();
     } finally {
       setBusy(null);
@@ -191,7 +142,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
           Finished work waiting for a witness
         </h2>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Consent is the one step that releases value. Read what they did, then say what it earns.
+          Consent is the one step that releases value. Read what they did. Saying yes pays what the quest says.
         </p>
       </div>
 
@@ -202,11 +153,6 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
       )}
 
       {waiting.map((c) => {
-        const text = amounts[c.id] ?? (c.bounds?.floor != null ? String(c.bounds.floor) : "");
-        const empty = text.trim() === "";
-        const why = empty ? null : refusalFor(text, c.bounds);
-        const blocked = empty || why !== null;
-        const n = Number(text);
         const submitted = day(c.submittedAt ?? c.claimedAt);
         // A member typed this. Only a web address becomes a link.
         const href = c.artifactUrl && /^https?:\/\//i.test(c.artifactUrl) ? c.artifactUrl : null;
@@ -232,39 +178,29 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
                 <p className="text-sm text-muted-foreground mt-1 break-all">{c.artifactUrl}</p>
               ))}
 
-            <p className="text-xs text-muted-foreground mt-4">{rangeSentence(c.bounds)}</p>
+            <div className="mt-4 rounded-lg bg-muted/40 px-3 py-2">
+              {c.pay ? (
+                <WorkPayBlock pay={c.pay} variant="full" />
+              ) : (
+                <p className="text-xs text-muted-foreground">Its quest is gone from the board, so nothing is advertised. The server answers when you press.</p>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <label className="sr-only" htmlFor={`grant-${c.id}`}>
-                What this work earns
-              </label>
-              <input
-                id={`grant-${c.id}`}
-                inputMode="numeric"
-                value={text}
-                onChange={(e) => setAmounts((s) => ({ ...s, [c.id]: e.target.value }))}
-                aria-describedby={why ? `grant-why-${c.id}` : undefined}
-                className="w-28 border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-background text-foreground"
-              />
               <button
-                disabled={busy === c.id || blocked}
-                onClick={() => void decide(c, true, n)}
+                disabled={busy === c.id}
+                onClick={() => void decide(c, true)}
                 className="text-sm bg-teal-deep text-white rounded-lg px-3 py-2 min-h-[44px] font-medium disabled:opacity-40"
               >
-                {blocked ? "Consent and credit" : n === 0 ? "Consent at 0" : `Consent and credit ${n}`}
+                Consent
               </button>
               <button
                 disabled={busy === c.id}
-                onClick={() => void decide(c, false, 0)}
+                onClick={() => void decide(c, false)}
                 className="text-sm border border-border rounded-lg px-3 py-2 min-h-[44px]"
               >
                 Decline
               </button>
             </div>
-            {why && (
-              <p id={`grant-why-${c.id}`} className="text-xs text-destructive mt-2">
-                {why}
-              </p>
-            )}
           </div>
         );
       })}
@@ -292,7 +228,7 @@ export default function ConsentQueue({ claims, refused, error, headers, onChange
           <ul className="text-sm text-muted-foreground mt-2 space-y-1">
             {decided.map((c) => (
               <li key={c.id}>
-                {c.userName} on {c.questTitle}: {c.status === "consented" ? `consented at ${c.amount ?? 0}` : "declined"}
+                {c.userName} on {c.questTitle}: {c.status === "consented" ? (c.amount ? `consented at ${c.amount}` : "consented") : "declined"}
               </li>
             ))}
           </ul>

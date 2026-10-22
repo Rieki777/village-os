@@ -4,6 +4,7 @@ import { useVillageLinks } from "@/lib/gameApi";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
 import { useValueConversion } from "@/lib/moneyClaims";
+import EarningsFromTheWork from "@/components/EarningsFromTheWork";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -42,7 +43,7 @@ type ScrollNavPill = { id: string; label: string };
 
 const navPills = (tokenName: string): ScrollNavPill[] => [
   { id: "r-ikigai", label: "R-Ikigai" },
-  { id: "recognition", label: `${tokenName} Economy` },
+  { id: "recognition", label: `Pay and ${tokenName}` },
   { id: "voice", label: "Voice & Governance" },
   { id: "hypha", label: "Hypha Platform" },
   { id: "spaces", label: "The Four Spaces" },
@@ -71,10 +72,10 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
   },
   {
     icon: Receipt,
-    title: `Claim Your ${tokenName}`,
+    title: "Claim Your Tokens",
     subtitle: "After completing a task, pay period, or season",
     description:
-      `When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered, what ${villageName} gained, and claim your ${tokenName}. This is how the value you create becomes visible and rewarded.`,
+      `When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered, what ${villageName} gained, and claim the tokens it earned. This is how the value you create becomes visible and rewarded.`,
     cta: "Propose a Contribution",
     suffix: "/agreements/create/propose-contribution",
     color: "border-sage/30 bg-sage/5",
@@ -107,18 +108,20 @@ const buildHyphaActions = (villageName: string, tokenName: string) => [
   },
 ];
 
-// A function of the live token names AND of the conversion sentence (lib/moneyClaims.ts), so a rename and a correction both reach every card.
+/*
+ * A function of the live token names AND of the conversion sentence (lib/moneyClaims.ts), so a rename and a correction both reach every card.
+ *
+ * NO PAYOUT FIGURE IS TYPED HERE ANY MORE (Rye, 2026-10-21). This page used to
+ * say quests paid "40-300" Gratitude and circle roles "200-500/month", numbers
+ * nothing in the platform paid. Quests and roles pay in the village's own
+ * tokens, never in Gratitude, and what each one pays is read off the work itself
+ * by `EarningsFromTheWork` below. Gratitude is thanks members give each other.
+ */
 const recognitionItems = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => ({
-  earn: [
-    { label: "Quests", range: `40-300 ${tokenName}` },
-    { label: "Circle Roles", range: "200-500/month" },
-    { label: "Land Stewardship Shifts", range: "60-120" },
-    { label: "Business Revenue Share", range: "Variable" },
-  ],
   hold: [
-    "Visible balance on your profile",
-    "Reflects your contribution history",
-    "Unlocks role eligibility",
+    "Members give it to each other as thanks, from an allowance each cycle",
+    "Thanks received shows on your profile",
+    "No quest and no role pays it",
     "Represents community trust",
   ],
   spend: [
@@ -334,7 +337,7 @@ export default function CoCreatorsGuide() {
               </h2>
               <p className="text-muted-foreground text-lg">
                 The intersection of what you love, what you're good at, what {villageName} needs,
-                and what earns you {tokenName}.
+                and what the village pays for.
               </p>
             </div>
 
@@ -398,7 +401,7 @@ export default function CoCreatorsGuide() {
                     What the VILLAGE NEEDS
                   </text>
                   <text x="280" y="150" textAnchor="middle" className="text-sm font-bold fill-amber">
-                    What Earns GRATITUDE
+                    What PAYS
                   </text>
 
                   {/* Center */}
@@ -459,10 +462,10 @@ export default function CoCreatorsGuide() {
                 <div className="p-4 rounded-lg bg-amber/5 border-l-4 border-amber">
                   <h3 className="font-bold text-foreground mb-2 flex items-center gap-2">
                     <DollarSign className="w-5 h-5 text-amber" />
-                    What Earns GRATITUDE (Compensation)
+                    What PAYS (Compensation)
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Roles, quests, and contributions that our community values and rewards.
+                    Roles and quests, each with its own value and the tokens it pays, on its card.
                   </p>
                 </div>
               </div>
@@ -482,12 +485,12 @@ export default function CoCreatorsGuide() {
           >
             <div className="mb-12 text-center">
               <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-3">
-                The {tokenName} Economy
+                Pay, and {tokenName}
               </h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                Two tokens, two jobs. The work, time, and resources you contribute to {villageName} are acknowledged in{" "}
-                {tokenName}, the recognition signal, which carries no financial value of its own. {valueName} are the tracked
-                value: each cycle the community shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
+                Two different things. Quests and roles pay in {villageName}'s own tokens, and every card says what.{" "}
+                {tokenName} is thanks members give each other, with no financial value of its own: each cycle the community
+                shares a real pool of {valueName} across everyone's {tokenName}.{conversionNote ? ` ${conversionNote}` : ""}
               </p>
             </div>
 
@@ -505,19 +508,9 @@ export default function CoCreatorsGuide() {
                   <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
                     <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
-                  <h3 className="font-bold text-xl text-foreground">Earn {tokenName}</h3>
+                  <h3 className="font-bold text-xl text-foreground">Get paid for your work</h3>
                 </div>
-                <div className="space-y-3">
-                  {recognition.earn.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-3 pb-3 border-b border-muted last:border-0">
-                      <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.range}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <EarningsFromTheWork />
               </motion.div>
 
               {/* HOLD */}
@@ -532,7 +525,7 @@ export default function CoCreatorsGuide() {
                   <div className="w-12 h-12 rounded-lg bg-teal-100 flex items-center justify-center">
                     <Heart className="w-6 h-6 text-teal-deep" />
                   </div>
-                  <h3 className="font-bold text-xl text-foreground">Hold {tokenName}</h3>
+                  <h3 className="font-bold text-xl text-foreground">Give and receive {tokenName}</h3>
                 </div>
                 <div className="space-y-3">
                   {recognition.hold.map((item, idx) => (
@@ -583,7 +576,7 @@ export default function CoCreatorsGuide() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="px-4 py-2 bg-primary/10 rounded-lg text-sm font-medium text-primary">
-                    {tokenName} Earned
+                    {tokenName} Given
                   </div>
                   <ArrowRight className="w-5 h-5 text-muted-foreground" />
                 </div>

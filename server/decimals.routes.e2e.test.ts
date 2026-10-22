@@ -512,7 +512,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
      */
     await call("PUT", "/api/admin/modules/stays/lifecycle", { body: { lifecycle: "public" } });
     const quest = await call("POST", "/api/admin/quests", {
-      body: { title: `Rebuild the beds ${PORT}`, gratitude: "10", stayCreditReward: 3, tags: ["work-exchange"] },
+      body: { title: `Rebuild the beds ${PORT}`, valueMinor: 1000000, stayCreditReward: 3, tags: ["work-exchange"] },
     });
     expect(quest.status, JSON.stringify(quest.json)).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -529,8 +529,8 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
 
     // Three whole stay credits, at four decimals.
     expect(await minorBalance(benId, STAY_CREDIT)).toBe(before + 3 * SCALE4);
-    // And the consent credit on the same act, in recognition's own units.
-    expect(await minorBalance(benId, GRATITUDE)).toBe(gratBefore + 10 * SCALE4);
+    // And no Gratitude on the same act: a quest pays none (Rye, 2026-10-21).
+    expect(await minorBalance(benId, GRATITUDE)).toBe(gratBefore);
 
     // The member is told the human number, which is the whole point of
     // converting at the boundary rather than inside the ledger.

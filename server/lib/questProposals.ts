@@ -47,7 +47,8 @@
  */
 import { createHash, randomUUID } from "crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
-import { parseRewardRange } from "../../shared/questRewards";
+import { formatMoney } from "../../shared/money";
+import type { TokenAmount } from "../../shared/workValue";
 import type { QuestRecord, QuestsRepo } from "../repos/quests";
 import { recordEvent } from "./events";
 import { containsEmail } from "./externalProposals";
@@ -89,14 +90,19 @@ export interface QuestProse {
 /**
  * What a person types, and the only route by which any of it reaches a quest.
  *
- * `gratitudeMin` and `gratitudeMax` are deliberately absent from this
- * interface as well as from the table: they are DERIVED from the label by
- * shared/questRewards.ts inside the repository's save path, and are authored
- * by nobody, admin included.
+ * A VALUE AND WHAT IT PAYS (0265, Rye 2026-10-21). This used to be a Gratitude
+ * label, "50-100", that the consent then paid. No quest pays Gratitude now:
+ * every quest carries a value from the moment it is created, and the token
+ * amounts beside it are checked against the village's rules by the route
+ * before they reach here.
  */
 export interface HumanReward {
-  /** The advertised label, verbatim: "50-100", "75". A contract. */
-  gratitude: string;
+  /** What the quest is worth, in minor units of `valueCurrency`. Required. */
+  valueMinor: number | null;
+  /** The village's currency, stamped by the route and never typed. */
+  valueCurrency: string;
+  /** What it pays at consent. Null is the village's standard rules. */
+  valueTokens?: TokenAmount[] | null;
   stayCreditReward?: number | null;
   minStage?: string | null;
   requiresRole?: string | null;
@@ -406,28 +412,12 @@ export async function questProposalById(pool: Pool, id: string): Promise<QuestPr
 
 /** What is wrong with a typed reward, in the words somebody would use. */
 export function rewardProblem(reward: HumanReward | null | undefined): string | null {
-  const label = str(reward?.gratitude);
-  if (!label) {
-    return "Type what this quest pays before it goes on the board. Nobody else can set that.";
+  const value = reward?.valueMinor;
+  if (value === null || value === undefined) {
+    return "Say what this quest is worth before it goes on the board. Nobody else can set that.";
   }
-  /*
-   * THE DIGIT TEST THAT USED TO BE HERE IS GONE, and the note survives it.
-   *
-   * `parseRewardRange` documented itself as returning valid:false for anything
-   * unparseable and did the opposite for one whole class: a label with NO
-   * DIGITS stripped to the empty string, `Number("")` is 0, `Number.isFinite`
-   * is true, and it came back `{min: 0, max: 0, valid: true}`. "some hearts"
-   * was a valid reward of nothing, and under the default cap mode the
-   * advertised label IS the payout contract.
-   *
-   * This gate carried its own digit check for that. The parser now makes the
-   * same judgement itself, so the check is redundant and one place decides
-   * again instead of two. The test in this file's suite that pinned the old
-   * behaviour has been flipped to assert the new one.
-   */
-  const range = parseRewardRange(label);
-  if (!range.valid) {
-    return `This village could not read "${label}" as an amount. Write a number, or a range like 50-100.`;
+  if (!Number.isInteger(value) || value < 0) {
+    return "A value is a whole number of the currency's smallest unit, zero or more.";
   }
   const credit = reward?.stayCreditReward;
   if (credit !== null && credit !== undefined && (!Number.isFinite(Number(credit)) || Number(credit) < 0)) {
@@ -548,9 +538,14 @@ export async function acceptQuestProposal(
     circle: clip(prose.circle, W.circle),
     icon: clip(prose.icon, W.icon) ?? "Star",
     roleRequired: clip(prose.roleRequired, W.roleRequired),
-    // The five a human typed. Nothing on the proposal row could have set them.
+    // What a human typed. Nothing on the proposal row could have set them.
     // A human typed these, and a human can paste. Same ceilings.
-    gratitude: String(input.reward.gratitude).trim().slice(0, W.gratitude),
+    // No Gratitude label: no quest pays it (Rye, 2026-10-21). The value and
+    // its list are what the board shows and what the consent pays (0265).
+    gratitude: "",
+    valueMinor: input.reward.valueMinor,
+    valueCurrency: input.reward.valueCurrency,
+    valueTokens: input.reward.valueTokens ?? null,
     stayCreditReward:
       input.reward.stayCreditReward === null || input.reward.stayCreditReward === undefined
         ? null
@@ -598,7 +593,7 @@ export async function acceptQuestProposal(
     kind: "audit",
     // The ACCEPT is a human act even when a machine wrote the proposal, and
     // the row records both: proposed_by_kind on the proposal, this actor here.
-    text: `quest proposal accepted: ${quest.title} pays ${quest.gratitude}`,
+    text: `quest proposal accepted: ${quest.title} is worth ${formatMoney(Number(quest.valueMinor ?? 0), String(quest.valueCurrency ?? ""))}`,
     actorUserId: input.decidedBy,
     actorKind: "human",
     originModuleId: row.moduleId === "local" ? null : row.moduleId,

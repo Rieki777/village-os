@@ -95,9 +95,13 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
   };
 
   /** A quest, claimed and submitted by Ora. Returns the claim and quest ids. */
-  const readyClaim = async (title: string, gratitude: string, stayCreditReward = 0) => {
+  /**
+   * The quest carries its own list (0265): ten credits at consent, and no
+   * Gratitude, because no quest pays it (Rye, 2026-10-21).
+   */
+  const readyClaim = async (title: string, stayCreditReward = 0) => {
     const quest = await call("POST", "/api/admin/quests", {
-      title, description: "Work exchange", gratitude, stayCreditReward, status: "Open",
+      title, description: "Work exchange", valueMinor: 1000000, valueTokens: [{ token: "credits", amount: 10 }], stayCreditReward, status: "Open",
     }, founderToken);
     expect(quest.status, quest.text.slice(0, 200)).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -110,25 +114,34 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     return { questId, claimId };
   };
 
-  /** What the ledger actually paid for this claim, in MINOR units. */
+  /** The credits the ledger paid for this claim, in MINOR units, read off the rows keyed on it. */
   const paidFor = async (claimId: string): Promise<number> => {
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
-      [`quest_consent:${claimId}`],
+      "SELECT amount FROM token_ledger WHERE source = 'quest_consent' AND source_ref = ? AND token_type = 'credits'",
+      [claimId],
     );
-    expect(rows.length, "the recognition leg must have been written exactly once").toBe(1);
+    expect(rows.length, "the credits leg must have been written exactly once").toBe(1);
     return Number(rows[0].amount);
   };
 
-  /** The claim row's own number, read straight off the table. */
-  const claimAmount = async (claimId: string): Promise<number> => {
+  /** Whether any Gratitude was posted for this claim. A quest pays none. */
+  const gratitudeFor = async (claimId: string): Promise<number> => {
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM token_ledger WHERE source_ref = ? AND token_type = 'gratitude'",
+      [claimId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  };
+
+  /** The claim row's own number, read straight off the table. Null since a consent grants no Gratitude. */
+  const claimAmount = async (claimId: string): Promise<number | null> => {
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, status FROM quest_claims WHERE id = ?",
       [claimId],
     );
     expect(rows.length).toBe(1);
     expect(String(rows[0].status)).toBe("consented");
-    return Number(rows[0].amount);
+    return rows[0].amount == null ? null : Number(rows[0].amount);
   };
 
   /** How many times the village pulse says this quest was completed. */
@@ -202,9 +215,9 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
    * claim. A member would have been shown a completed quest worth 90 over a
    * balance that moved by 10.
    */
-  it("refuses a second consent, so the claim's amount is the amount the ledger paid", async () => {
+  it("refuses a second consent, so the ledger pays the quest once and the claim records no grant", async () => {
     await setVar("quest.require_submission_before_consent", "false");
-    const { claimId } = await readyClaim("Mend the fence", "10-100");
+    const { claimId } = await readyClaim("Mend the fence");
 
     const first = await call("POST", `/api/admin/quest-claims/${claimId}/consent`, {
       approve: true, amount: 10,
@@ -222,17 +235,17 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     // status of the claim beside it.
     expect(second.json?.status, `the refusal names the status of the claim: ${second.text.slice(0, 300)}`).toBe("consented");
 
-    // THE ASSERTION THE OLD CODE FAILED, in the units each side actually holds:
-    // `quest_claims.amount` is the human number a witness typed and the ledger
-    // row is in minor units, so the comparison converts by the token's own
-    // scale rather than assuming today's.
+    // THE ASSERTION THE OLD CODE FAILED, now about the one number a consent
+    // moves: the quest's own ten credits, in the token's own minor units, once.
+    // The claim records no grant, because a consent is a yes (Rye, 2026-10-21).
     const tokens = await call("GET", "/api/admin/tokens", undefined, founderToken);
-    const recognition = (tokens.json?.tokens ?? []).find((t: any) => t.slug === "gratitude");
-    expect(recognition, "the recognition token is registered at boot").toBeTruthy();
-    const scale = 10 ** Number(recognition.decimals ?? 0);
+    const credits = (tokens.json?.tokens ?? []).find((t: any) => t.slug === "credits");
+    expect(credits, "the credits token is registered at boot").toBeTruthy();
+    const scale = 10 ** Number(credits.decimals ?? 0);
 
-    expect(await claimAmount(claimId), "the claim must hold what the first consent granted").toBe(10);
-    expect(await paidFor(claimId), "and the ledger must hold the same number").toBe(10 * scale);
+    expect(await claimAmount(claimId), "the claim records no grant").toBeNull();
+    expect(await paidFor(claimId), "and the ledger holds the quest's ten credits, once").toBe(10 * scale);
+    expect(await gratitudeFor(claimId), "and no Gratitude").toBe(0);
 
     await setVar("quest.require_submission_before_consent", "true");
   }, 120_000);
@@ -253,7 +266,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     // A case that reads a dial another case left behind is measuring the order
     // the file happened to run in.
     await setVar("quest.require_submission_before_consent", "true");
-    const { questId, claimId } = await readyClaim("Clear the north path", "10", 20);
+    const { questId, claimId } = await readyClaim("Clear the north path", 20);
 
     const results = await Promise.all(
       Array.from({ length: 6 }, () =>
@@ -278,13 +291,16 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
       expect(String(r.json?.error ?? ""), r.text.slice(0, 200)).toContain("consented");
     }
 
-    // THE MONEY, unchanged by the fix and asserted from the ledger. Two legs,
-    // one claim, whatever the concurrency.
+    // THE MONEY, unchanged by the fix and asserted from the ledger: the
+    // quest's credits once and its stay credits once, whatever the
+    // concurrency, and no Gratitude at all.
+    expect(await paidFor(claimId), "the credits leg, once").toBeGreaterThan(0);
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT idempotency_key, token_type, amount FROM token_ledger WHERE idempotency_key IN (?, ?)",
-      [`quest_consent:${claimId}`, `queststay:${claimId}`],
+      "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ?",
+      [`queststay:${claimId}`],
     );
-    expect(rows.length, "one claim, two value legs, whatever the concurrency").toBe(2);
+    expect(rows.length, "one stay leg, whatever the concurrency").toBe(1);
+    expect(await gratitudeFor(claimId), "and no Gratitude").toBe(0);
 
     // THE VILLAGE PULSE. One act, one line in the feed the whole village reads.
     expect(await pulseRows(questId), "the village hears about one completion, not six").toBe(1);

@@ -153,8 +153,9 @@ above the size of a gathering, not to the size of one person's usage.
   the first one, which would take a new village from sixteen voices to one.
   They seed into `gratitude_voices` (0180) and never into `gratitude_log`,
   because a gratitude row posts to the ledger at creation.
-- `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits,
-  and stay-credit, library-credit and village-voice arrive at first boot) - a
+- `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits and,
+  since 0266, earned-equity; stay-credit, library-credit and village-voice
+  arrive at first boot) - a
   fork renames its recognition token HERE AND NOWHERE ELSE, through Admin,
   The Game, Tokens. The registry is the single source of truth for a token's
   display name (`mergedConfig()` reads `tokens`.`name` ahead of both the brand
@@ -165,6 +166,13 @@ above the size of a gathering, not to the size of one person's usage.
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
+- Earned equity (0266, no env var): the migration seeds the `earned-equity`
+  token with `sys:equity-mint`, `sys:equity-bridge` and `sys:equity-settled`,
+  and `seedEconomy` adds its two mint rules (`quest.completed`, `role.cycle`)
+  switched OFF at 1 and ceiling 1. Nothing pays it until your village turns a
+  rule on in Admin then The Mint. Rename it in Admin then Tokens; the slug is
+  permanent. Claims to Hypha stay shut until the bridge dispatch ships, like
+  voice claims.
 
 ## Brand overlay (make it yours)
 

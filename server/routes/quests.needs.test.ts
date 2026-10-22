@@ -115,6 +115,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
       roleIdsFor: () => [],
       currentPatternId: () => null,
       questConsentRecipients: async () => [],
+      projectCurrency: () => "CRC",
     } as any);
     handlers = h;
   }, 180_000);
@@ -136,7 +137,8 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
 
   const makeQuest = async (id: string, title: string) => {
     const out = await call(handlers, "POST /api/admin/quests", {
-      body: { id, title, gratitude: "50", status: "Open" },
+      // Every quest carries a value from the moment it is created (0265).
+      body: { id, title, gratitude: "50", status: "Open", valueMinor: 500000 },
     });
     expect(out.status).toBe(200);
     return id;
