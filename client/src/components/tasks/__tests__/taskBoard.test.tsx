@@ -204,8 +204,17 @@ describe("waiting on you", () => {
     fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
     render(<TaskBoard />);
     await screen.findByRole("region", { name: WAITING_COPY.heading });
+    // The board and the waiting group load on their own, and the group tells
+    // the board it drew something from an effect, one commit after its rows
+    // appear. So for that one commit an empty board can still read "nothing
+    // in your hands". Asserting at a single instant raced that commit: it went
+    // red in CI on 2026-10-21 (push run of #516, shard 4) and again locally
+    // whenever the waiting reply landed a few milliseconds after the board.
+    // What the case promises is the settled board, so wait for the board to
+    // load and then for the line to be gone; a board that kept the line fails.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(screen.queryByText(TASK_COPY.empty)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("region", { name: TASK_COPY.heading })).toHaveAttribute("aria-busy", "false"));
+    await waitFor(() => expect(screen.queryByText(TASK_COPY.empty)).toBeNull());
   });
 
   it("never says nothing is in your hands before the waiting read answers, even when the board answers first", async () => {

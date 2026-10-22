@@ -2,7 +2,13 @@
 # Keep this fast and boring: the same three commands every session runs locally
 # (MODULES_MASTER_PLAN.md Part 2.3), plus an advisory audit and a bundle report.
 #
-# Order matters: build BEFORE test — server/loop.e2e.test.ts boots dist/index.js.
+# Three jobs, since 2026-10-21 (Rye: "split the tests"):
+#
+#   verify          install, both typechecks, every guard, the build, the budgets
+#   test (i/N)      the vitest suite in N shards, each against its own MySQL
+#   tests-ran-once  reads every shard's report back: each file once, all passed
+#
+# Each test shard builds before it tests: the e2e suites boot dist/index.js.
 name: ci
 
 on:
@@ -38,6 +44,10 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # 20, cut from 40 on 2026-10-21 when the suite moved out to the `test` jobs below.
+    # Everything left here took 4m40s on b878eaf (the guard self-tests 2m21s of it,
+    # the build 13s), so 20 is four times the job and still cancels a hung step long
+    # before a runner is wasted. The history of the old limit, for whoever reads it:
     # 25, raised from 15 on 2026-09-15: verify on 9f560fc took 14m43s (Test 10m38s), and
     # on 1364bdb it took 15m05s and was cancelled mid-Test by this limit, not by a failure.
     # The suite grows with every lane; cancelled reads like a red, so keep real headroom.
@@ -45,9 +55,10 @@ jobs:
     # 22m44s and 22m16s on bebd522, against 15m27s on b54035d before it, so the suite sat
     # 2.5 minutes under the limit. During that day's GitHub Actions outage, f4aa5b2 and
     # f62f0ac ran all 57 steps green in about 27 minutes and were reported cancelled.
-    # release.yml publishes only a commit this job passed, so one slow runner at the
-    # limit refuses a release.
-    timeout-minutes: 40
+    # release.yml publishes only a commit ci passed, so one slow runner at the limit
+    # refuses a release. On 2026-10-21 a run was cancelled at 40m22s on a tree whose
+    # twin passed in 30m34s, with the suite 85% of the job, and the suite was split.
+    timeout-minutes: 20
     services:
       # S5: the DB-backed suites (server/db/*.test.ts) run against a real MySQL.
       # The harness provisions its own scratch schema and applies every
@@ -827,36 +838,16 @@ jobs:
 
       - name: Build
         id: build
-        # Runs even behind a failed guard, for the same reason the suite does,
-        # and because the suite is useless without it: the e2e reach tests read
-        # dist/index.js directly and fail with "dist/index.js is missing" if it
-        # was never produced. Measured, not assumed: with only the suite made
-        # conditional, a deliberately failed doc guard gave Build: skipped and
-        # Test: failure, and that failure named the missing bundle rather than
-        # anything a reader could act on.
+        # Runs even behind a failed guard, so a guard failure and a build
+        # failure are reported as the two different facts they are. The suite
+        # no longer runs here: each `test (i/N)` job below builds its own
+        # bundle, so it never waits on this job or depends on its guards.
         if: ${{ !cancelled() }}
         run: pnpm build
 
-      - name: Test
-        # RUNS EVEN WHEN AN EARLIER GUARD FAILED. This job is 35 sequential
-        # steps and the suite is the 33rd, so without this one red guard means
-        # the tests never ran and the build reports a single red step either
-        # way. CI was red for five commits that way, and for those five nothing
-        # exercised the code at all. A guard failure and a test failure are
-        # different facts and the build should report both.
-        #
-        # `!cancelled()` rather than `always()`, deliberately. This workflow
-        # sets cancel-in-progress on a group keyed by ref, and with the current
-        # merge rate runs are cancelled constantly: three of mine were
-        # cancelled inside 90 seconds one afternoon. `always()` would keep a
-        # ten-minute suite running on every one of them. `!cancelled()` keeps
-        # the point of the change, which is that a failing guard no longer
-        # hides the suite, without paying for runs nobody is waiting on.
-        # Gated on the build SUCCEEDING, not merely on not-cancelled. A suite
-        # run against a bundle that was never built reports a missing file and
-        # buries the real failure, which is worse than not running at all.
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test
+      # (The suite ran here as one `Test` step until 2026-10-21, 25.8 of this
+      # job's 30.5 minutes. It now runs in the `test (i/N)` jobs below, and
+      # `tests-ran-once` proves the shards between them ran every file.)
 
       - name: Bundle budget
         # A report nobody reads is not a guard. The plan called for a threshold
@@ -960,3 +951,154 @@ jobs:
         # or an explicit ignore with a dated reason. Do not re-add
         # continue-on-error: it cannot tell the two cases apart either.
         run: node scripts/dependency-audit.mjs
+
+  # THE SUITE, IN SHARDS. Split out of `verify` on 2026-10-21 by Rye's ruling
+  # ("split the tests"). Measured on b878eaf, the last single-job run: Test was
+  # 31m40s of a 40-minute job, 855 files, 23.1 minutes of that inside the files
+  # themselves. The time is NOT where the names suggest: the 74 e2e files were
+  # 4.8 minutes and the 781 others 18.3, ten minutes of it in the living-map
+  # suites under shared/mapArtifact*. So an "e2e job and a unit job" split
+  # would have left one job at about 26 minutes; this shards the whole suite.
+  #
+  # vitest's --shard hashes each file path and hands every shard an equal COUNT
+  # of files. Replaying that hash over b878eaf's per-file timings puts the four
+  # shards at 9.2, 7.1, 7.9 and 7.5 minutes of test time, plus about two and a
+  # half minutes each of containers, install and build.
+  #
+  # TO CHANGE THE SHARD COUNT, edit the list below AND `--shards` in
+  # tests-ran-once. The job total in each shard's command and report name comes
+  # from `strategy.job-total`, so a list and a --shards that disagree fail
+  # tests-ran-once by name instead of passing with a shard unread.
+  #
+  # Expanded job names are `test (1/4)` through `test (4/4)`.
+  #
+  # WHAT EACH SHARD STILL GUARANTEES ON ITS OWN. `vitest run --shard=i/N` is a
+  # WHOLE run as server/db/provisioningReport.ts reads argv (every argument is a
+  # flag, and provisioningReport.test.ts pins this exact argv), and CI is set,
+  # so a shard with no TEST_DATABASE_URL, or one that provisioned no scratch
+  # schema, fails its own job with the same message the single run gave. Each
+  # shard prints its own provisioning receipt, builds its own template schema
+  # in its own MySQL, and checks its own bundle against distFreshness.
+  test:
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    # 30: about four times the slowest shard's measured test time, with room
+    # for the suite to keep growing and for the 4x runner-to-runner spread
+    # this repository has measured on identical content.
+    timeout-minutes: 30
+    strategy:
+      # One red shard must not cancel the others: a cancelled shard reads as
+      # a cut run, and the other shards' failures are facts worth having.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      # The same MySQL as `verify` above, for the same reasons: the
+      # mirror.gcr.io pull-through cache (no credentials, no secret store that
+      # some events lack) and the datadir on tmpfs. Read the comments on
+      # verify's service before changing either.
+      mysql:
+        image: mirror.gcr.io/library/mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ci-test
+        ports:
+          - 3306:3306
+        options: >-
+          --tmpfs /var/lib/mysql:rw,size=4g
+          --health-cmd "mysqladmin ping -h localhost -pci-test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: mysql://root:ci-test@127.0.0.1:3306/mysql
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history, exactly as verify checks out, so no test can meet a
+          # shallower tree here than it met when the suite ran in that job.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        id: build
+        # Each shard builds its own bundle: 13 seconds on b878eaf, cheaper
+        # than handing an artifact between jobs, and it keeps every shard
+        # independent of verify, so a failed guard can never hide the suite.
+        run: pnpm build
+
+      - name: Test
+        id: test
+        # Gated on the build SUCCEEDING. A suite run against a bundle that was
+        # never built reports a missing file and buries the real failure.
+        #
+        # The reporters: `default` and `github-actions` are what vitest picks
+        # by itself on a runner, and naming any reporter replaces that
+        # default, so both are named again. `json` writes the report that
+        # tests-ran-once reads back.
+        if: ${{ steps.build.outcome == 'success' }}
+        run: >-
+          pnpm test
+          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default
+          --reporter=github-actions
+          --reporter=json
+          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+
+      - name: Upload the shard report
+        # Even when the suite failed: a failed shard's report is what tells
+        # tests-ran-once which files failed, as against which never ran.
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-shard-${{ matrix.shard }}
+          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # EVERY FILE, ONCE, PASSED. A split suite can lose a file between shards, or
+  # run one twice, while every shard reports green about the files it was
+  # handed. This reads each shard's JSON report back against the file list
+  # vitest resolves for the WHOLE suite and fails on a file in no shard, in two,
+  # one nobody listed, one that failed or skipped whole, or a missing shard.
+  # The reasoning, and what it cannot see, are in scripts/check-test-shards.mjs;
+  # its self-test runs with the others in verify.
+  #
+  # `!cancelled()` so it still reports when a shard went red: it then says
+  # which files failed, and confirms nothing else fell through.
+  tests-ran-once:
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        # vitest itself resolves the expected file list from vitest.config.ts,
+        # so the comparison uses the same include globs the shards ran under.
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the shard reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-results-shard-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Every test file ran exactly once and passed
+        if: ${{ !cancelled() }}
+        run: node scripts/check-test-shards.mjs --shards 4 --dir test-results
