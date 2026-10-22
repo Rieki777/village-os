@@ -30,7 +30,8 @@
  * `roleHealth` leaves out a fact whose input was not read. A role nobody holds
  * has no health: there is no holding to be healthy.
  */
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import { applicationSettingsOf, handlesOf, openTensionCounts } from "../repos/orgRoleHealth";
 import { roleHealth, type HealthOut } from "../../shared/playerCardHealth";
 import type { SignOut, Slot } from "../../shared/playerCard";
 import { isSignKey, type SignKey } from "../../shared/roleSigns";
@@ -53,8 +54,6 @@ export interface OrgRoleExtras {
   handleOf?: (userId: string) => string | null;
 }
 
-const marks = (n: number) => Array.from({ length: n }, () => "?").join(",");
-
 function settingsOf(raw: unknown): SeatSettings | null {
   let v = raw;
   if (typeof v === "string") {
@@ -71,22 +70,6 @@ function settingsOf(raw: unknown): SeatSettings | null {
 function offerOf(role: OrgRole): SeatSettings | null {
   const r = readTermsOffer(role.termsOffer);
   return r.ok ? r.settings ?? null : null;
-}
-
-/** Open tensions per role, or null when the table cannot be read here. */
-async function openTensions(pool: Pool, roleIds: string[]): Promise<Map<string, number> | null> {
-  if (!roleIds.length) return new Map();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT owner_seat_id, COUNT(*) AS n FROM live_session_entries " +
-        `WHERE kind = 'tension' AND status <> 'done' AND owner_seat_id IN (${marks(roleIds.length)}) GROUP BY owner_seat_id`,
-      roleIds,
-    );
-    return new Map(rows.map((r) => [String(r.owner_seat_id), Number(r.n)]));
-  } catch (e: any) {
-    if (e?.code === "ER_NO_SUCH_TABLE" || e?.code === "ER_BAD_FIELD_ERROR") return null;
-    throw e;
-  }
 }
 
 /**
@@ -112,26 +95,19 @@ export async function orgRoleExtras(
   const heldRoles = active.filter((r) => (byRole.get(r.id) ?? []).length > 0);
   const appIds = Array.from(new Set(live.map((a) => a.applicationId).filter((x): x is string => !!x)));
 
-  const q = async (sql: string, args: unknown[]) => (await pool.query<RowDataPacket[]>(sql, args))[0];
+  const none = new Map<string, never>();
   const [handles, apps, tensions] = await Promise.all([
-    tier.people === "member" && memberIds.length
-      ? q(`SELECT id, handle FROM users WHERE id IN (${marks(memberIds.length)})`, memberIds)
-      : Promise.resolve([] as RowDataPacket[]),
-    tier.terms && appIds.length
-      ? q(`SELECT id, settings_json FROM seat_applications WHERE id IN (${marks(appIds.length)})`, appIds)
-      : Promise.resolve([] as RowDataPacket[]),
-    tier.terms ? openTensions(pool, heldRoles.map((r) => r.id)) : Promise.resolve(null),
+    tier.people === "member" ? handlesOf(pool, memberIds) : Promise.resolve(none),
+    tier.terms ? applicationSettingsOf(pool, appIds) : Promise.resolve(none),
+    tier.terms ? openTensionCounts(pool, heldRoles.map((r) => r.id)) : Promise.resolve(null),
   ]);
 
   const out: OrgRoleExtras = {};
-  if (tier.people === "member") {
-    const handleById = new Map(handles.map((u) => [String(u.id), u.handle ? String(u.handle) : null]));
-    out.handleOf = (userId) => handleById.get(String(userId)) ?? null;
-  }
+  if (tier.people === "member") out.handleOf = (userId) => handles.get(String(userId)) ?? null;
   if (!tier.structure) return out;
 
   // The terms each role is held on: the earliest holding's adopted terms, else the offer.
-  const appSettings = new Map(apps.map((a) => [String(a.id), settingsOf(a.settings_json)]));
+  const appSettings = new Map(Array.from(apps, ([id, raw]) => [id, settingsOf(raw)] as const));
   const settingsFor = (role: OrgRole): SeatSettings | null => {
     for (const h of byRole.get(role.id) ?? []) {
       const s = h.applicationId ? appSettings.get(h.applicationId) : null;
