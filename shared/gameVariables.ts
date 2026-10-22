@@ -657,6 +657,21 @@ export const VARIABLES: VariableDef[] = [
     unit: "voice",
   },
   {
+    // The equity twin of the dial above (0266). A claim on equity rides the
+    // same Claims Week, the same Hypha space and the same bridge gate as a
+    // claim on voice; only how much a member gathers first is its own.
+    key: "economy.equity_claim_threshold",
+    category: "The Mint",
+    label: "Earned equity needed before a member can claim",
+    description:
+      "How much earned equity someone gathers before they can carry it across to Hypha. Each claim becomes one proposal in your Hypha space and takes the member's whole balance, and claims open only in Claims Week, so each member raises at most one equity proposal a window. The default of 1 means any equity a member has earned can be claimed. Raise it if your circle would sooner consider fewer, larger claims. Nothing pays earned equity until your village turns on a rule that pays it.",
+    type: "integer",
+    default: "1",
+    min: 1,
+    max: 100000,
+    unit: "equity",
+  },
+  {
     key: "economy.claims_week_days",
     category: "The Mint",
     label: "How many days Claims Week stays open",
@@ -3410,6 +3425,7 @@ const CYCLE_APPLY_KEYS = new Set([
   // The claim dials shape what a member is told they can do THIS season, so a
   // mid-season change would move the goalposts under somebody already counting.
   "economy.voice_claim_threshold",
+  "economy.equity_claim_threshold",
   "economy.claims_week_days",
   "economy.claims_week_starts",
   "gratitude.base_budget",

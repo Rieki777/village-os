@@ -172,12 +172,20 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     const snapshot = await read();
     const places = decimalsOf(snapshot.tokens);
 
-    // The four rows the migrations seed, plus the one `ensureVoiceToken`
+    // The five rows the migrations seed, plus the one `ensureVoiceToken`
     // registers at boot. `0006` gives every migrated row `decimals int NOT NULL
     // DEFAULT 0` and `0202` then raises the currency-like ones, which is
-    // `credits` here: recognition and the two hypha mirrors stay whole and
-    // village-voice takes VOICE_DECIMALS.
-    expect(Object.keys(places).sort()).toEqual(["credits", "equity", "gratitude", "village-voice", "voice"]);
+    // `credits` here: recognition, the two hypha mirrors and 0266's earned
+    // equity stay whole and village-voice takes VOICE_DECIMALS.
+    expect(Object.keys(places).sort()).toEqual([
+      "credits",
+      "earned-equity",
+      "equity",
+      "gratitude",
+      "village-voice",
+      "voice",
+    ]);
+    expect(places["earned-equity"]).toBe(0);
     expect(places["gratitude"]).toBe(0);
     expect(places["credits"]).toBe(CURRENCY_DECIMALS);
     expect(places["voice"]).toBe(0);
@@ -201,6 +209,13 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
 
     // village-voice issues from its own mint.
     expect(tokenBySlug(snapshot.tokens, VILLAGE_VOICE).faucet).toBe("sys:voice-mint");
+
+    // So does earned equity (0266), and it is the village's to mint where the
+    // `equity` mirror beside it is not.
+    const earned = tokenBySlug(snapshot.tokens, "earned-equity");
+    expect(earned.governance).toBe("platform");
+    expect(earned.faucet).toBe("sys:equity-mint");
+    expect(tokenBySlug(snapshot.tokens, "equity").faucet).toBeNull();
   });
 
   it("carries every balance as a bigint, faucets and their negatives included", async () => {
@@ -239,8 +254,10 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     const snapshot = await read();
     expect(snapshot.mintRules.map((r) => r.id).sort()).toEqual([
       "rule-quest.completed-credits",
+      "rule-quest.completed-earned-equity",
       "rule-quest.completed-village-voice",
       "rule-role.cycle-credits",
+      "rule-role.cycle-earned-equity",
       "rule-role.cycle-gratitude",
       "rule-role.cycle-village-voice",
     ]);
@@ -303,8 +320,8 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
       const snapshot = await readEconomySnapshot(conn);
       const provenance = await economyProvenance(conn);
       await conn.query("COMMIT"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      expect(snapshot.tokens.length).toBe(5);
-      expect(snapshot.mintRules.length).toBe(5);
+      expect(snapshot.tokens.length).toBe(6);
+      expect(snapshot.mintRules.length).toBe(7);
       expect(provenance.anySeeded).toBe(false);
     } finally {
       conn.release();
@@ -346,15 +363,15 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
       conn.release();
     }
     expect(provenance.tokens.source).toBe("live");
-    expect(provenance.tokens.rows).toBe(5);
+    expect(provenance.tokens.rows).toBe(6);
     expect(provenance.mintRules.source).toBe("live");
-    expect(provenance.mintRules.rows).toBe(5);
+    expect(provenance.mintRules.rows).toBe(7);
     expect(provenance.balances.source).toBe("live");
     expect(provenance.balances.rows).toBe(2);
     expect(provenance.variables.rows).toBe(1);
     expect(provenance.anySeeded).toBe(false);
     expect(provenance.sentence).toBe(
-      `tokens: live (5 rows), mint rules: live (5 rows), balances: live (2 rows), ` +
+      `tokens: live (6 rows), mint rules: live (7 rows), balances: live (2 rows), ` +
         `variables: live (1 stored, ${VARIABLES.length} platform defaults)`,
     );
   });
@@ -572,7 +589,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
   it("the seed's registry is what the migrations seed plus the token boot registers", async () => {
     const { seed } = await readBoth();
     const seeded = seed.tokens.map((t) => t.slug).sort();
-    expect(migratedSlugs).toEqual(["credits", "equity", "gratitude", "voice"]);
+    expect(migratedSlugs).toEqual(["credits", "earned-equity", "equity", "gratitude", "voice"]);
     expect(seeded).toEqual(migratedSlugs.concat([VILLAGE_VOICE]).sort());
     expect(tokenBySlug(seed.tokens, VILLAGE_VOICE).decimals).toBe(VOICE_DECIMALS);
   });
@@ -580,11 +597,11 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
   it("an empty registry yields the seed's tokens, and the provenance says so", async () => {
     const { snapshot, provenance } = await readBoth();
     expect(snapshot.tokens.map((t) => t.slug).sort()).toEqual(
-      ["credits", "equity", "gratitude", "village-voice", "voice"],
+      ["credits", "earned-equity", "equity", "gratitude", "village-voice", "voice"],
     );
     expect(provenance.tokens.source).toBe("seed");
-    expect(provenance.tokens.rows).toBe(5);
-    expect(provenance.tokens.clause).toBe("tokens: seed defaults (5 rows)");
+    expect(provenance.tokens.rows).toBe(6);
+    expect(provenance.tokens.clause).toBe("tokens: seed defaults (6 rows)");
     expect(provenance.anySeeded).toBe(true);
   });
 
@@ -592,8 +609,10 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     const { snapshot, provenance } = await readBoth();
     expect(snapshot.mintRules.map((r) => r.id).sort()).toEqual([
       "rule-quest.completed-credits",
+      "rule-quest.completed-earned-equity",
       "rule-quest.completed-village-voice",
       "rule-role.cycle-credits",
+      "rule-role.cycle-earned-equity",
       "rule-role.cycle-gratitude",
       "rule-role.cycle-village-voice",
     ]);
@@ -602,7 +621,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     expect(voice.amountRaw).toBe("50.0000");
     expect(voice.ceiling).toBe(BigInt(200 * 10 ** VOICE_DECIMALS));
     expect(provenance.mintRules.source).toBe("seed");
-    expect(provenance.mintRules.clause).toBe("mint rules: seed defaults (5 rows)");
+    expect(provenance.mintRules.clause).toBe("mint rules: seed defaults (7 rows)");
   });
 
   it("balances and variables stay live and say zero, because zero is a measurement", async () => {
@@ -633,6 +652,9 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // above to check the snapshot should carry it. It almost certainly should.
     expect(Object.keys(snapshot.balances).sort()).toEqual([
       "sys:cycle-pool",
+      "sys:equity-bridge",
+      "sys:equity-mint",
+      "sys:equity-settled",
       "sys:event-escrow",
       "sys:exit-settlement",
       "sys:gratitude-pool",
@@ -659,6 +681,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     const { seed } = await readBoth();
     expect(Object.keys(seed.balances).sort()).toEqual([
       "sys:cycle-pool",
+      "sys:equity-mint",
       "sys:gratitude-pool",
       "sys:treasury",
       "sys:voice-mint",

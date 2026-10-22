@@ -100,6 +100,18 @@ export const HEARTS = "gratitude";
 /** The village's own voice token. Accrues here, settles on Hypha. */
 export const VILLAGE_VOICE = "village-voice";
 /**
+ * Equity a member earns here and claims across to Hypha. Seeded by 0266.
+ *
+ * THE TWIN OF THE `equity` MIRROR, the way `village-voice` is the twin of the
+ * `voice` mirror. The mirror is governed on Hypha and `validateLeg` refuses to
+ * move it, which is what makes the on-chain figure trustworthy, so equity has
+ * to accrue in a platform token before it can be claimed. This is that token.
+ * Its kind is `equity`, so the exchange refuses to list it and the exit levers
+ * read `exit.keep_pct.equity` for it. Its display name is the village's to
+ * change; the slug never moves.
+ */
+export const EARNED_EQUITY = "earned-equity";
+/**
  * The village's spendable value token, seeded by 0007 and the default the
  * cycle pool pays out. Named here for the same reason HEARTS is: a slug typed
  * as a bare string in four files is a slug that gets misspelled in a fifth,
@@ -130,6 +142,10 @@ export function recognitionName(): string {
 export const VOICE_MINT = "sys:voice-mint";
 /** Not a faucet: voice held against an open claim came from a member. */
 export const VOICE_BRIDGE = "sys:voice-bridge";
+/** The earned equity faucet, seeded by 0266. Its negative balance is the equity issued here. */
+export const EQUITY_MINT = "sys:equity-mint";
+/** Not a faucet, seeded by 0266: equity held against an open claim came from a member. */
+export const EQUITY_BRIDGE = "sys:equity-bridge";
 /**
  * Where Voice goes when it wanes. Seeded by 0203, and NOT a faucet.
  *
@@ -392,6 +408,8 @@ export const keys = {
    */
   reversal: (v: string, eventKey: string) => `reversal:${esc(v)}:${eventKey}`,
   voiceClaim: (v: string, claimRowId: string) => `voice-claim:${esc(v)}:${esc(claimRowId)}`,
+  /** The intent an earned equity claim is dispatched under. Same row, same rule, its own prefix. */
+  equityClaim: (v: string, claimRowId: string) => `equity-claim:${esc(v)}:${esc(claimRowId)}`,
   /**
    * The two postings one redemption can make, and they are built HERE.
    *
@@ -2134,6 +2152,8 @@ export function faucetFor(tokenSlug: string): string | null {
       return RECOGNITION_FAUCET;
     case VILLAGE_VOICE:
       return VOICE_MINT;
+    case EARNED_EQUITY:
+      return EQUITY_MINT;
     case CREDITS:
       return CYCLE_POOL_FAUCET;
     case "stay-credit":
