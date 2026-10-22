@@ -340,14 +340,14 @@ export default function PagesEditor({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div className="min-w-0 flex-1 basis-64">
           <h2 className="text-xl font-bold text-foreground">Pages</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Every word your public pages say about this village. Boxes you leave alone follow the platform's default.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={load} aria-label="Reload the saved words" className="p-2 text-muted-foreground hover:bg-muted rounded-lg">
             <RefreshCw className="w-4 h-4" />
           </button>

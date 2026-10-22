@@ -90,6 +90,18 @@ const PATH_CARD_LOOK = {
   prosperity: { icon: Sparkles, href: "/prosperity", color: "bg-teal-light", imageKey: "prosperityHero", altKey: "prosperityHeroAlt" },
 } as const;
 
+/**
+ * The headline steps down a size as it grows, so a village's own longer line
+ * still sits in about four lines instead of running six deep. Up to 36
+ * characters keeps the original size, which the platform's own headline fits.
+ */
+function headlineSize(text: string): string {
+  const n = Array.from(text).length;
+  if (n <= 36) return "text-5xl md:text-7xl";
+  if (n <= 44) return "text-4xl md:text-6xl";
+  return "text-4xl md:text-5xl";
+}
+
 /** Icons for the stages and the people cards, handed out in order. */
 const STAGE_ICONS = [Heart, Calendar, Users, CheckCircle2, HomeIcon, TreePine];
 const PERSONA_LOOKS = [
@@ -173,7 +185,10 @@ export default function Home() {
         </div>
 
         {/* Content */}
-        <div className="container relative z-10 py-10 md:py-20">
+        {/* Top padding clears the fixed header. With the old py-20 a tall
+            headline pushed the badge and its first line under the header,
+            measured with every field at its limit (1280x900, 2026-10-22). */}
+        <div className="container relative z-10 pt-28 pb-10 md:pt-32 md:pb-20">
           <div className="relative max-w-2xl">
             {/* THE COPY SITS ON AN OPAQUE BAND, AND THAT IS THE WHOLE FIX.
 
@@ -206,7 +221,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className={`relative font-display text-5xl md:text-7xl font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
+              className={`relative font-display ${headlineSize(hero?.headline ?? "")} font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
             >
               {/* text-amber-on-band, not text-primary. --primary is the seed
                   colour derived to clear 4.5:1 against WHITE, and the phrase
