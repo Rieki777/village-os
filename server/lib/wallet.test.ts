@@ -208,11 +208,11 @@ describe("the member wallet's decisions", () => {
 
   it("follows a rename on the same request, the mirror's included", () => {
     const renamed = TOKENS.map((t) =>
-      t.slug === "earned-equity" ? { ...t, name: "Amora Earned" } : t.slug === "equity" ? { ...t, name: "Amora" } : t,
+      t.slug === "earned-equity" ? { ...t, name: "Our Stake, Earned" } : t.slug === "equity" ? { ...t, name: "Our Stake" } : t,
     );
     const { rows } = assembleWallet(inputs({ tokens: renamed }));
-    expect(row(rows, "earned-equity").name).toBe("Amora Earned");
-    expect(row(rows, "earned-equity").onBase?.mirrorName).toBe("Amora");
+    expect(row(rows, "earned-equity").name).toBe("Our Stake, Earned");
+    expect(row(rows, "earned-equity").onBase?.mirrorName).toBe("Our Stake");
   });
 
   it("keeps a balance in sight even when its token left the registry or retired", () => {
