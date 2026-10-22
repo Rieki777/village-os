@@ -26,6 +26,7 @@
  */
 import { CHARTER_LIST_LIMITS, type CharterListField, type CircleCharter, type CircleValue } from "./circleCharter";
 import { CCOS_TERMS, CIRCLE_CARD_WORDS as W, CIRCLE_HEADINGS, termLabel, type CircleSectionKey } from "./circleCardWords";
+import type { CircleWordKey } from "./circleCharterParse";
 import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
 import { proposeTermsHref } from "./seatTermsOffer";
@@ -111,6 +112,8 @@ export interface CircleCardIn {
   timeZone: string;
   /** Show the CCOS term beside each heading (`org.ccos_terms`). */
   frameworkTerms: boolean;
+  /** The words an open org draft would change: "Proposed, waiting for consent" beside each. */
+  pending?: Read<CircleWordKey[]>;
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -166,6 +169,10 @@ export interface CircleCard {
     termsKey: string | null;
   };
   sections: CircleSection[];
+  /** The words an open draft would change, by payload key. Empty when none, or unread. */
+  pending: CircleWordKey[];
+  /** The words "Proposed, waiting for consent". */
+  pendingWords: string;
 }
 
 // ── The pieces ──────────────────────────────────────────────────────────────
@@ -281,5 +288,7 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
       list("tools"),
       adoptionSection(adoptions, timeZone, terms),
     ],
+    pending: Array.from(new Set(input.pending ?? [])),
+    pendingWords: W.pending,
   };
 }

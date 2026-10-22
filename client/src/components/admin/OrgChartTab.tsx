@@ -200,7 +200,8 @@ export function OrgChartTab({ password }: { password: string }) {
               */}
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
-                const cDirty = ["name", "purpose", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                // The purpose is not edited here: it changes by consent, on the circle's card.
+                const cDirty = ["name", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
@@ -232,24 +233,23 @@ export function OrgChartTab({ password }: { password: string }) {
                         {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
                       </div>
                     </div>
-                    <label className="text-xs text-gray-500 block mt-2">Purpose
-                      {/* A wrapping <label> names the control with EVERY string
-                          inside it, so this field announced its name plus the
-                          whole hint as one sentence. The name is the field, the
-                          hint is a description a reader can take or skip. */}
-                      <textarea rows={2} value={cd.purpose ?? ""} className={`${inputCls} w-full mt-1`} disabled={!!c.isExample}
-                        aria-label="Purpose"
-                        aria-describedby={`${c.id}-purpose-hint`}
-                        onChange={(e) => setCircle({ purpose: e.target.value })} />
-                      <span id={`${c.id}-purpose-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                        Printed on /circles as the circle's description, and on /roles as the heading under its name.
-                      </span>
-                    </label>
+                    {/* A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): shown here, and
+                        proposed on the circle's card, where it goes to the village as an org draft. */}
+                    <div className="text-xs text-gray-500 mt-2">
+                      <p>Purpose</p>
+                      <p className="text-sm text-gray-700 mt-1">{c.purpose || "No purpose written yet"}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Changes by consent.{" "}
+                        <a href={`/circles/${encodeURIComponent(String(c.id))}`} className="inline-flex min-h-[44px] items-center underline">
+                          Propose new words on the circle's card
+                        </a>
+                      </p>
+                    </div>
                     <button
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>

@@ -24,10 +24,11 @@
 import type { Pool } from "mysql2/promise";
 import { buildCircleCard, type CircleCard, type CircleRoleIn } from "../../shared/circleCard";
 import { charterFromRow } from "../../shared/circleCharter";
+import { circleWordKeysOf } from "../../shared/circleCharterParse";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { projectSeats, type SeatTier } from "./seatProjection";
 import { handlesOf } from "../repos/orgRoleHealth";
-import { readCharterRow, readCircleAdoptions } from "../repos/circleCard";
+import { openCircleWordPayloads, readCharterRow, readCircleAdoptions } from "../repos/circleCard";
 
 /** A circle as the circles store holds it (`circlesRepo`). */
 export interface StoredCircle {
@@ -36,6 +37,7 @@ export interface StoredCircle {
   purpose?: string | null;
   status?: string | null;
   parentCircleId?: string | null;
+  isExample?: boolean;
 }
 
 export interface CircleCardCtx {
@@ -58,17 +60,19 @@ export async function buildCircleCardFor(
   circles: readonly StoredCircle[],
   ctx: CircleCardCtx,
 ): Promise<CircleCard> {
-  const [roles, assignments, charterRow, adoptions] = await Promise.all([
+  // The words an open draft would change are read where the holder rows are: the member tier.
+  const memberTier = ctx.tier.people === "member";
+  const [roles, assignments, charterRow, adoptions, pendingPayloads] = await Promise.all([
     listOrgRoles(pool),
     listOrgAssignments(pool, ctx.lapse),
     readCharterRow(pool, circle.id),
     readCircleAdoptions(pool, circle.id),
+    memberTier ? openCircleWordPayloads(pool, circle.id) : Promise.resolve(null),
   ]);
   const inCircle = roles.filter((r) => r.active && r.circleId === circle.id);
   const ids = new Set(inCircle.map((r) => r.id));
   const held = assignments.filter((a) => ids.has(a.orgRoleId));
 
-  const memberTier = ctx.tier.people === "member";
   const memberIds = Array.from(new Set(held.filter((a) => a.holderKind === "member" && a.userId).map((a) => String(a.userId))));
   const handles = memberTier ? await handlesOf(pool, memberIds) : new Map<string, string | null>();
 
@@ -113,5 +117,6 @@ export async function buildCircleCardFor(
     })),
     timeZone: ctx.timeZone,
     frameworkTerms: ctx.frameworkTerms,
+    pending: pendingPayloads ? pendingPayloads.flatMap((p) => circleWordKeysOf(p)) : undefined,
   });
 }

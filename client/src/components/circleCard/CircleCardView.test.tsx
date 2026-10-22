@@ -4,13 +4,16 @@
  * that show their CCOS term on hover or tap, the roles with their card links,
  * and the adoption record.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import CircleCardView from "./CircleCardView";
 import { buildCircleCard, type CircleCardIn } from "@shared/circleCard";
 import { EMPTY_CHARTER } from "@shared/circleCharter";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const input = (over: Partial<CircleCardIn> = {}): CircleCardIn => ({
   circle: { id: "c-garden", name: "Garden circle", purpose: "Grow food together.", status: "active", parent: { id: "c-root", name: "Coordinating circle" } },
@@ -74,5 +77,48 @@ describe("the circle card, drawn", () => {
     render(<CircleCardView card={buildCircleCard(input({ charter: null, frameworkTerms: false }))} />);
     expect(screen.getAllByText("Not written yet").length).toBe(10);
     expect(document.body.textContent).toContain("This circle exists while: not written yet");
+  });
+});
+
+describe("proposing new words, for the circle's role holders", () => {
+  it("draws no propose control for a reader who may not propose", () => {
+    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" />);
+    expect(screen.queryByRole("button", { name: "Propose new words" })).toBeNull();
+  });
+
+  it("checks the words in the browser by the server's own parser, and sends nothing when refused", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose reviewHref="/review" />);
+    fireEvent.click(screen.getByRole("button", { name: "Propose new words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Propose new words: What you can count on us for" }));
+    fireEvent.change(screen.getByLabelText("What you can count on us for"), { target: { value: "Only one" } });
+    fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
+    expect(await screen.findByText("Write 3 to 6 lines, or leave it empty for now.")).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("sends one field, then says it waits for consent and links to the proposal", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ success: true, draftId: "d-1", review: "/review" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const reload = vi.fn();
+    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose reviewHref="/review" reload={reload} />);
+    fireEvent.click(screen.getByRole("button", { name: "Propose new words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Propose new words: What we look after" }));
+    const box = screen.getByLabelText("What we look after") as HTMLTextAreaElement;
+    expect(box.value).toBe("The food forest");
+    fireEvent.change(box, { target: { value: "The food forest\nThe seed library" } });
+    fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
+    expect(await screen.findByText("Proposed, waiting for consent", { exact: false })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "See the proposal" }).getAttribute("href")).toBe("/review");
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/org/circles/c-garden/card/propose");
+    expect(JSON.parse(String(init.body))).toEqual({ domains: "The food forest\nThe seed library" });
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("marks each word an open draft would change", () => {
+    render(<CircleCardView card={buildCircleCard(input({ pending: ["domains", "purpose"] }))} circleId="c-garden" />);
+    expect(screen.getAllByText("Proposed, waiting for consent")).toHaveLength(2);
   });
 });

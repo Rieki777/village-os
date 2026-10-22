@@ -114,8 +114,38 @@ export const CIRCLE_CARD_WORDS = {
   createdLine: "The circle was created",
   wordsLine: "New words for the circle",
 
+  // Proposing new words (they change only by consent, through an org draft)
+  proposeWords: "Propose new words",
+  doneProposing: "Done",
+  proposeNote: "A circle's words change by consent. Your words go to the village as a proposed change, and the card shows them once it is adopted.",
+  oneLine: "One line each.",
+  valuesHint: "Up to two, one per line, each as the value, a colon, then one practice that shows it.",
+  proposeSend: "Propose this change",
+  cancel: "Cancel",
+  proposed: "Proposed, waiting for consent",
+  seeProposal: "See the proposal",
+  pending: "Proposed, waiting for consent",
+  proposeFailed: "That did not go through. Try again.",
+
   // Loading
   failed: "This circle card did not load.",
   retry: "Retry",
   notFound: "There is no circle here.",
+} as const;
+
+/** The refusals a proposal for a circle's words can meet, one sentence each. */
+export const CIRCLE_WORD_REFUSALS = {
+  notWords: "This needs to be words.",
+  textTooLong: (max: number) => `Keep it to ${max} characters.`,
+  itemTooLong: (max: number) => `Keep each line to ${max} characters.`,
+  tooMany: (max: number) => `Up to ${max} lines.`,
+  tooFew: (min: number, max: number) => `Write ${min} to ${max} lines, or leave it empty for now.`,
+  valueShape: "Write each value as the value, a colon, then the practice that shows it.",
+  valuesTooMany: (max: number) => `Up to ${max} values of the circle's own.`,
+  valueTooLong: (value: number, practice: number) => `Keep a value to ${value} characters and its practice to ${practice}.`,
+  nothingNamed: "This names no word this village can change on a circle.",
+  notAHolder: "Only someone who holds a role in this circle can propose its words from the card.",
+  example: "A standing example circle is not changed. Publish your own circles and it is removed.",
+  signIn: "Sign in to propose new words for a circle.",
+  tooManyProposals: "That is a lot of proposals in a few minutes. Wait a little and try again.",
 } as const;

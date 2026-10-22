@@ -55,3 +55,32 @@ export async function readCircleAdoptions(pool: Pool, circleId: string): Promise
     created: Number(r.created) === 1,
   }));
 }
+
+/** The reader holds a live role in this circle, as a member (examples left out). */
+export async function holdsRoleInCircle(pool: Pool, userId: string, circleId: string): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT 1 FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
+      "WHERE a.user_id = ? AND a.ended_at IS NULL AND a.holder_kind = 'member' AND a.is_example = 0 " +
+      "AND r.circle_id = ? AND r.active = 1 AND r.is_example = 0 LIMIT 1",
+    [userId, circleId],
+  );
+  return rows.length > 0;
+}
+
+/** The payloads of every open draft that would change this circle's words. */
+export async function openCircleWordPayloads(pool: Pool, circleId: string): Promise<unknown[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT c.payload FROM org_draft_changes c JOIN org_drafts d ON d.id = c.draft_id " +
+      "WHERE d.status = 'open' AND c.op = 'update_circle' AND c.org_role_id = ?",
+    [`circle:${circleId}`],
+  );
+  return rows.map((r) => (typeof r.payload === "string" ? safeJson(r.payload) : r.payload));
+}
+
+function safeJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
