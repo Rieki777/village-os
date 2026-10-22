@@ -125,7 +125,7 @@ The contribution board: post work, claim it, submit it, consent to release recog
 | Requires | nothing |
 | Recommends | nothing |
 | Capabilities it adds | `quest.consent` |
-| Variable keys it owns | `quest.consent_cap_mode`, `quest.consent_cap_multiplier`, `quest.require_submission_before_consent` |
+| Variable keys it owns | `quest.require_submission_before_consent` |
 | API prefixes | `/api/quests`, `/api/game/quests` |
 | What a village plants | nothing beyond the platform's own layers |
 | Contract doc | [quests.md](modules/quests.md) |
@@ -747,7 +747,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 28 modules own 113 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 28 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -815,8 +815,6 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "quest.consent"
       ],
       "variableKeys": [
-        "quest.consent_cap_mode",
-        "quest.consent_cap_multiplier",
         "quest.require_submission_before_consent"
       ],
       "apiPrefixes": [

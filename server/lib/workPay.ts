@@ -1,0 +1,150 @@
+/**
+ * WHAT A CARD SAYS A PIECE OF WORK PAYS, from the engine's own answer.
+ *
+ * Rye, 2026-10-21: quest and role cards show every token assigned to them, or
+ * "inquire for payment details" when no value is set, with live token names
+ * and a live currency conversion so the cards stay accurate.
+ *
+ * Every figure here comes from `quoteWorkPay` (server/lib/economy.ts), the
+ * function the consent and the cycle settlement pay from. A card therefore
+ * cannot promise a token amount the engine would not post: the same rules, the
+ * same ceilings, the same refusals. Nothing here posts anything.
+ *
+ * MONEY IS THE VALUE ONLY. A token is never converted into money on a card,
+ * because a token only has a price when the exchange posts one, and "no price
+ * set" is not "worth nothing". The value is held in the village's currency and
+ * the client converts it for display (shared/money.ts).
+ *
+ * A ROLE'S CASH IS HANDED IN, NEVER READ HERE. It lives in the role's terms,
+ * and the terms model may not be reachable from any module that moves value
+ * (shared/seatSettings.boundary.test.ts). This file names `role.cycle`, which
+ * makes it one of those modules, so the seat projection reads the cash and
+ * passes it through.
+ */
+import type { Pool, PoolConnection } from "mysql2/promise";
+import {
+  HEARTS,
+  humanAtScale,
+  quoteWorkPay,
+  rulesFor,
+  ruleCannotPay,
+  toLedgerUnits,
+  type MintRule,
+} from "./economy";
+import { tokenDef } from "./ledger";
+import {
+  GRATITUDE_NEVER_PAYS,
+  readWorkValue,
+  type PayLine,
+  type StatedCash,
+  type TokenAmount,
+  type WorkPay,
+} from "../../shared/workValue";
+
+/** The stay token, spelled as `faucetFor` spells it (economy.ts says why it is not imported). */
+const STAY_TOKEN = "stay-credit";
+
+/** What a quest or a role carries that a card needs. */
+export interface ValuedWork {
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: TokenAmount[] | null;
+}
+
+/** The enabled rules each kind of work answers to, read once per request. */
+export async function questPayRules(pool: Pool | PoolConnection): Promise<MintRule[]> {
+  return rulesFor(pool, "quest.completed");
+}
+
+export async function rolePayRules(pool: Pool | PoolConnection): Promise<MintRule[]> {
+  return rulesFor(pool, "role.cycle");
+}
+
+function linesOf(work: ValuedWork, rules: readonly MintRule[], kind: "quest" | "seat"): { lines: PayLine[]; source: WorkPay["source"] } {
+  const quote = quoteWorkPay(rules, work.valueTokens ?? null, kind);
+  return {
+    source: quote.source,
+    lines: quote.lines.map((l) => ({
+      token: l.token,
+      name: tokenDef(l.token)?.name ?? l.token,
+      amount: humanAtScale(l.units, l.decimals),
+      capped: l.capped,
+    })),
+  };
+}
+
+/**
+ * What a quest pays, for its card. The quest's stay credits are its own
+ * payment, released by the same consent, so they are a line here too.
+ */
+export function questPay(quest: ValuedWork & { stayCreditReward?: number | null }, rules: readonly MintRule[]): WorkPay {
+  const { lines, source } = linesOf(quest, rules, "quest");
+  const stay = Math.max(0, Math.floor(Number(quest.stayCreditReward ?? 0)));
+  if (stay > 0 && !ruleCannotPay(STAY_TOKEN) && toLedgerUnits(STAY_TOKEN, stay) > 0) {
+    lines.push({ token: STAY_TOKEN, name: tokenDef(STAY_TOKEN)?.name ?? STAY_TOKEN, amount: stay, capped: false });
+  }
+  return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once" };
+}
+
+/** What a role pays each seat every cycle, for its card, with the cash its terms state. */
+export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: StatedCash | null): WorkPay {
+  const { lines, source } = linesOf(role, rules, "seat");
+  return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash };
+}
+
+/** The recognition token's live name: a village may call it something else. */
+export function recognitionName(): string | null {
+  return tokenDef(HEARTS)?.name ?? null;
+}
+
+/** One token a steward may put on a quest or a role, and the most it may pay. */
+export interface PayableToken {
+  token: string;
+  name: string;
+  /** The village's ceiling for one quest or one seat a cycle, in human units. */
+  ceiling: number;
+  /** The rule's fixed amount, which a quest with no list of its own is paid. Null when the rule reads it from the work. */
+  standard: number | null;
+  decimals: number;
+}
+
+/**
+ * The tokens the editor offers: a platform token the engine can issue, with an
+ * enabled rule for this kind of work to cap it. Gratitude is never one of them.
+ */
+export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
+  const out: PayableToken[] = [];
+  for (const r of rules) {
+    if (r.tokenSlug === HEARTS || ruleCannotPay(r.tokenSlug)) continue;
+    if (out.some((t) => t.token === r.tokenSlug)) continue;
+    const def = tokenDef(r.tokenSlug);
+    out.push({
+      token: r.tokenSlug,
+      name: def?.name ?? r.tokenSlug,
+      ceiling: Number(r.ceiling),
+      standard: r.amount,
+      decimals: def?.decimals ?? 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Why a steward's line cannot be stored, or null. Asked at the save, so a
+ * figure the engine would refuse is refused before it is ever written, in a
+ * sentence that names what to change.
+ */
+export function payLineProblem(rules: readonly MintRule[], token: string, amount: number): string | null {
+  if (token === HEARTS) return GRATITUDE_NEVER_PAYS;
+  const offered = payableTokens(rules).find((t) => t.token === token);
+  if (!offered) {
+    const name = tokenDef(token)?.name ?? token;
+    const cannot = ruleCannotPay(token);
+    if (cannot) return `${name} cannot be paid here: ${cannot}.`;
+    return `This village has no enabled rule paying ${name} for this kind of work, so nothing caps it. Add one on the Mint panel first.`;
+  }
+  if (amount > offered.ceiling) {
+    return `The village caps ${offered.name} at ${offered.ceiling} here. Lower the amount, or ask the village to raise the ceiling.`;
+  }
+  return null;
+}

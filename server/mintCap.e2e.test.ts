@@ -37,7 +37,7 @@ import { waitForHealth } from "./db/e2eBoot";
 import { HAND_MINT_SOURCES, MINT_CAP_KEY, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
 import { CIRCLE_BONUS_SOURCE, payCircleBonus } from "./lib/circleBonus";
 import { CYCLE_POOL_FAUCET, MINT_FAUCET, RECOGNITION_FAUCET, loadTokenRegistry } from "./lib/ledger";
-import { LIBRARY_MINT, VOICE_MINT, toLedgerUnits } from "./lib/economy";
+import { EQUITY_MINT, LIBRARY_MINT, VOICE_MINT, toLedgerUnits } from "./lib/economy";
 import { setVariable } from "./lib/variables";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -437,7 +437,7 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
       [CREDIT],
     );
     const quest = await call("POST", "/api/admin/quests", {
-      title: "Rebuild the swale", description: "Work exchange", gratitude: "10", stayCreditReward: 30, status: "Open",
+      title: "Rebuild the swale", description: "Work exchange", valueMinor: 1000000, stayCreditReward: 30, status: "Open",
     }, founderToken);
     expect(quest.status, `quest: ${quest.text.slice(0, 200)}`).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -483,7 +483,11 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
       "SELECT id FROM ledger_accounts WHERE faucet = 1 ORDER BY id",
     );
     const inDatabase = rows.map((r: any) => String(r.id)).sort();
-    const byHand = [RECOGNITION_FAUCET, VOICE_MINT, MINT_FAUCET, LIBRARY_MINT, CYCLE_POOL_FAUCET].sort();
+    // The sixth faucet, sys:equity-mint, arrived with 0266 and tripped this as
+    // designed. Both supply surfaces derive their set through `faucetAccounts`
+    // since ECONOMICS.md 10.33, so it reached them with no edit; it joins the
+    // list here so the next faucet trips it too.
+    const byHand = [RECOGNITION_FAUCET, VOICE_MINT, MINT_FAUCET, LIBRARY_MINT, CYCLE_POOL_FAUCET, EQUITY_MINT].sort();
     expect(inDatabase, "a faucet the hand-kept list does not know about is invisible to two supply surfaces").toEqual(byHand);
   }, 60_000);
 
@@ -767,15 +771,15 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
    *
    * Six consents fired together on one claim. The claim-keyed idempotency is
    * what makes this safe, and the counter's new subtraction must not have
-   * moved it: exactly one recognition row and exactly one work-exchange row,
-   * and the member paid once.
+   * moved it: exactly one work-exchange row, and no recognition row, because a
+   * quest pays no Gratitude (Rye, 2026-10-21), and the member paid once.
    */
-  it("survives six concurrent consents on one claim with exactly two rows", async () => {
+  it("survives six concurrent consents on one claim with exactly one claim-keyed row", async () => {
     await setVar("ledger.admin_mint_cycle_cap", "100000");
     await testDb!.conn.query("UPDATE mint_rules SET enabled = 0 WHERE id = 'mr-mintcap'"); // module-review-ok: the rule door is proven above; this case counts the two claim-keyed rows
 
     const quest = await call("POST", "/api/admin/quests", {
-      title: "Clear the north path", description: "Work exchange", gratitude: "10", stayCreditReward: 20, status: "Open",
+      title: "Clear the north path", description: "Work exchange", valueMinor: 1000000, stayCreditReward: 20, status: "Open",
     }, founderToken);
     expect(quest.status, quest.text.slice(0, 200)).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -791,13 +795,15 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
       Array.from({ length: 6 }, () =>
         call("POST", `/api/admin/quest-claims/${claimId}/consent`, { approve: true, amount: 10 }, founderToken)),
     );
-    // THE MONEY IS THE ASSERTION. Two rows, keyed on the claim, whatever the
-    // concurrency, and the member's stay credits move once.
+    // THE MONEY IS THE ASSERTION. One row keyed on the claim, whatever the
+    // concurrency, and the member's stay credits move once. The recognition key
+    // is still asked for, so a consent that minted Gratitude again fails here.
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT idempotency_key, token_type, amount FROM token_ledger WHERE idempotency_key IN (?, ?)",
       [`quest_consent:${claimId}`, `queststay:${claimId}`],
     );
-    expect(rows.length, "one claim, two rows, whatever the concurrency").toBe(2);
+    expect(rows.length, "one claim, one stay row, and no Gratitude row, whatever the concurrency").toBe(1);
+    expect(rows[0].idempotency_key).toBe(`queststay:${claimId}`);
 
     const after = (await guardView()).minted;
     expect(after - before, "the work exchange paid once").toBe(20);

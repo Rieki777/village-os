@@ -52,6 +52,9 @@ export const TOKEN_NOTES: Readonly<Record<string, TokenNote>> = {
   "village-voice": {
     what: "Governance weight earned here on site, held until a member claims it onto Base. It rides in hundredths, so a rule can pay a fraction of one and so that a waning rate reaches a member holding a single whole one.",
   },
+  "earned-equity": {
+    what: "Equity a member earns here, paid by whichever rules the village turns on, and held until they claim it across to the village's equity on Hypha. Whole units, and it is never sold or sent between members.",
+  },
   "stay-credit": {
     what: "Nights in the village's own accommodation. Priced per night by the stays desk, and members never send it to each other.",
     module: "stays",

@@ -657,6 +657,21 @@ export const VARIABLES: VariableDef[] = [
     unit: "voice",
   },
   {
+    // The equity twin of the dial above (0266). A claim on equity rides the
+    // same Claims Week, the same Hypha space and the same bridge gate as a
+    // claim on voice; only how much a member gathers first is its own.
+    key: "economy.equity_claim_threshold",
+    category: "The Mint",
+    label: "Earned equity needed before a member can claim",
+    description:
+      "How much earned equity someone gathers before they can carry it across to Hypha. Each claim becomes one proposal in your Hypha space and takes the member's whole balance, and claims open only in Claims Week, so each member raises at most one equity proposal a window. The default of 1 means any equity a member has earned can be claimed. Raise it if your circle would sooner consider fewer, larger claims. Nothing pays earned equity until your village turns on a rule that pays it.",
+    type: "integer",
+    default: "1",
+    min: 1,
+    max: 100000,
+    unit: "equity",
+  },
+  {
     key: "economy.claims_week_days",
     category: "The Mint",
     label: "How many days Claims Week stays open",
@@ -909,33 +924,10 @@ export const VARIABLES: VariableDef[] = [
     unit: "changes",
   },
 
-  // ── Quests: how work becomes recognition ──────────────────────────────────
-  {
-    key: "quest.consent_cap_mode",
-    category: "Quests",
-    label: "How much can be released at consent",
-    description:
-      "Controls what a steward may award when consenting to finished work, and the most a consent can pay. A standing badge can lift a consent toward that top and never past it, so under the posted amount what a quest advertises is what it pays.",
-    type: "choice",
-    default: "posted",
-    choices: [
-      { value: "posted", label: "Exactly the posted amount", hint: "Safest. The board is the contract." },
-      { value: "capped", label: "The posted range, with a bonus ceiling above it", hint: "Never below the posted floor. Exceptional work can earn up to a multiple of the posted top." },
-      { value: "unlimited", label: "Any amount", hint: "No ceiling. Only sensible with a very small, very trusted admin group." },
-    ],
-  },
-  {
-    key: "quest.consent_cap_multiplier",
-    category: "Quests",
-    label: "Bonus ceiling multiplier",
-    description:
-      "When the cap mode allows a bonus ceiling, this is that ceiling as a multiple of the top of the posted range. 2 means a quest posted at 50-100 can pay at most 200, badges included.",
-    type: "decimal",
-    default: "2",
-    min: 1,
-    max: 100,
-    unit: "x posted",
-  },
+  // ── Quests: how finished work is witnessed ────────────────────────────────
+  // The three dials that bounded a Gratitude grant at consent left with the
+  // grant (Rye, 2026-10-21): no quest pays Gratitude, and a quest pays what it
+  // says (0265). A village's stored row for one is harmless and read by nothing.
   {
     key: "quest.require_submission_before_consent",
     category: "Quests",
@@ -944,15 +936,6 @@ export const VARIABLES: VariableDef[] = [
       "When on, value can only be released for work that was actually filed. Turning this off lets an admin credit a quest nobody submitted, which breaks the promise that credit follows shown work.",
     type: "boolean",
     default: "true",
-  },
-  {
-    key: "quest.allow_zero_consent",
-    category: "Quests",
-    label: "Allow consenting at zero",
-    description:
-      "When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes with no recognition, and no token the village's quest-completion rules would pay moves either, voice and credits included. A stay-credit reward the quest itself carries still releases, because a person set that payment on the quest, so in a village that weights votes by stay credits such a quest still moves weight. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.",
-    type: "boolean",
-    default: "false",
   },
   {
     key: "quest.self_consent_until_members",
@@ -3410,6 +3393,7 @@ const CYCLE_APPLY_KEYS = new Set([
   // The claim dials shape what a member is told they can do THIS season, so a
   // mid-season change would move the goalposts under somebody already counting.
   "economy.voice_claim_threshold",
+  "economy.equity_claim_threshold",
   "economy.claims_week_days",
   "economy.claims_week_starts",
   "gratitude.base_budget",

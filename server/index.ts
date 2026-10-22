@@ -161,6 +161,7 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
+import { register as registerWalletRoutes } from "./routes/wallet";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
@@ -382,7 +383,7 @@ import {
   spendSurfacesFor,
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
-import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
+import { allowanceFor, applyMintRuleChanges, canConfirm, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
 import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
@@ -9821,7 +9822,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
     const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
       route: "map", now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
-      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined,
+      heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await rulesFor(getPool(), "role.cycle") : undefined,
     });
 
     const seasonNow = seasonState();
@@ -19182,7 +19183,7 @@ ${inner}
   registerQuestRoutes(app, {
     isAdmin, authedUser, adminActor, getPool, uploadsDir: UPLOADS_DIR, members,
     questsRepo, claimsRepo, crewsRepo, firstName, notify, stageOf, loadRoles,
-    roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp,
+    roleIdsFor, currentPatternId, questConsentRecipients, overLimit, clientIp, projectCurrency: () => mergedConfig().project.fiatCurrency,
     // The share-card raster reads the guard's third answer for itself: it is
     // the one route here that rasters for an anonymous caller, so it refuses
     // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
@@ -19636,6 +19637,7 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
+  registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
 
   /**
    * Somebody else's sheet.
@@ -25047,7 +25049,6 @@ ${inner}
         hyphaThreshold: numberVar("governance.hypha_threshold"),
         sensingDays: numberVar("governance.sensing_days"),
       },
-      quests: { consentCapMode: stringVar("quest.consent_cap_mode"), consentCapMultiplier: numberVar("quest.consent_cap_multiplier") },
       // The rung that opens buying, so /wallet names the village's own rung.
       exchange: { buyOpensAt: stringVar("progression.unlock.exchange.buy") },
       tokens: {
@@ -25212,7 +25213,7 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined }), // heldTerms: red team U2, server/lib/heldTerms.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined }), // heldTerms: red team U2, server/lib/heldTerms.ts
     });
   });
 
@@ -25688,7 +25689,7 @@ ${inner}
   registerOrgRoutes(app, {
     isAdmin, authedUser, guardCapability, getPool, members, firstName,
     capabilityCtx, lapseContext, currentPatternId, seasonState, notify, notifyAdmins, circlesRepo,
-    submissionsRepo, liveHoldersOf,
+    submissionsRepo, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
 
   // The steward review surface (0140-0141). Mounted here beside the org
@@ -25696,7 +25697,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf,
+    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });

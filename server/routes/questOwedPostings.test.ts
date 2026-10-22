@@ -8,22 +8,21 @@
  * never only a response:
  *
  *  - a consent records what it owes and pays all of it before it answers;
- *  - a consent at 0 owes the stay credits and no rule token;
+ *  - a quest whose own list is empty owes its stay credits and no rule token;
  *  - two presses at once pay each still-owed row exactly once;
  *  - a posting that already landed pays nothing on a press, and its row reads posted;
  *  - a refusal no retry can change marks the row refused, and the next press
  *    does not try it again.
  *
- * WHAT IS MOCKED: the three module-scope seams questConsentPayout.test.ts mocks
- * for the same reason (the badges lifecycle, a member's multiplier and the
- * dials). Everything that moves value is real.
+ * NOTHING IS MOCKED. Everything that moves value is real. The seams this file
+ * once mocked bounded a Gratitude grant, which a consent no longer makes.
  *
  * Runs against the S5 harness. No TEST_DATABASE_URL and the suite skips loudly.
  */
 import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { owedForClaim, postOwed, villageId, type OwedPosting } from "../lib/economy";
 import { seedEconomy } from "../lib/economySeed";
@@ -33,36 +32,6 @@ import { ensureStayToken } from "../lib/stays";
 import { recordOwed } from "../repos/questOwedPostings";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestsRepo } from "../repos/quests";
 import { register } from "./questClaims";
-
-const ctl = vi.hoisted(() => ({
-  /** `effectiveLifecycle("badges")`. */
-  badges: "public",
-  /** What `rewardMultiplierFor` answers for the member. */
-  multiplier: 1,
-  /** Dial values by key; a key absent here reads the platform default. */
-  vars: {} as Record<string, string>,
-}));
-
-vi.mock("../lib/modules", async (importOriginal) => {
-  const actual: any = await importOriginal();
-  return {
-    ...actual,
-    effectiveLifecycle: (id: string) => (id === "badges" ? ctl.badges : actual.effectiveLifecycle(id)),
-  };
-});
-vi.mock("../lib/seasonPatterns", async (importOriginal) => {
-  const actual: any = await importOriginal();
-  return { ...actual, rewardMultiplierFor: async () => ctl.multiplier };
-});
-vi.mock("../lib/variables", async (importOriginal) => {
-  const actual: any = await importOriginal();
-  return {
-    ...actual,
-    stringVar: (k: string) => (k in ctl.vars ? ctl.vars[k] : actual.stringVar(k)),
-    numberVar: (k: string) => (k in ctl.vars ? Number(ctl.vars[k]) : actual.numberVar(k)),
-    boolVar: (k: string) => (k in ctl.vars ? ctl.vars[k] === "true" : actual.boolVar(k)),
-  };
-});
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -95,7 +64,11 @@ const consent = (claimId: string, amount: number) =>
 const pay = (claimId: string) => call("POST", `/api/admin/quest-claims/${claimId}/owed/pay`);
 
 /** A real quest and a real submitted claim on it, ready for a steward. */
-const submittedOn = async (key: string, label: string, extra: { stayCreditReward?: number } = {}) => {
+const submittedOn = async (
+  key: string,
+  label: string,
+  extra: { stayCreditReward?: number; valueMinor?: number; valueCurrency?: string; valueTokens?: Array<{ token: string; amount: number }> | null } = {},
+) => {
   const questId = `q-${key}`;
   const claimId = `claim-${key}`;
   await quests.add({ id: questId, title: `Quest ${key}`, gratitude: label, status: "Open", tags: [], order: 1, ...extra });
@@ -145,7 +118,6 @@ const recordAsTheConsentDoes = async (claimId: string, questId: string): Promise
       id: claimId,
       questId,
       userId: MEMBER.id,
-      granted: 60,
       stay: { reward: 2, questTitle: `Quest for ${claimId}` },
     });
     await recordOwed(conn, claimId, priced.owed);
@@ -241,9 +213,6 @@ describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real le
   });
 
   beforeEach(() => {
-    ctl.badges = "public";
-    ctl.multiplier = 1;
-    ctl.vars = {};
     rung = [];
   });
 
@@ -263,9 +232,10 @@ describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real le
     expect(rung.filter((n) => n.type === "stays")).toHaveLength(1);
   });
 
-  it("a consent at 0 owes the stay credits and no rule token", async () => {
-    ctl.vars = { "quest.allow_zero_consent": "true" };
-    const id = await submittedOn("owed-zero", "50-100", { stayCreditReward: 2 });
+  it("a quest whose own list is empty owes its stay credits and no rule token", async () => {
+    // A consent is a yes, and the quest pays what it says (0265). An empty list
+    // is a decision to pay no tokens; the stay credits are the quest's own payment.
+    const id = await submittedOn("owed-zero", "", { stayCreditReward: 2, valueMinor: 0, valueCurrency: "CRC", valueTokens: [] });
     expect((await consent(id, 0)).status).toBe(200);
     const rows = await owedRows(id);
     expect(rows.map((r) => r.token)).toEqual([STAY]);
@@ -356,26 +326,28 @@ describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real le
     expect(list.body.find((x: any) => x.claimId === claimId)?.holder).toBe(queued.userName);
   });
 
-  it("before the Game starts, a consent at 0 leaves its stay credits owed, and after launch two presses pay them once", async () => {
-    ctl.vars = { "quest.allow_zero_consent": "true" };
-    const id = await submittedOn("owed-unlaunched", "50-100", { stayCreditReward: 2 });
-    const stayKey = `queststay:${id}`;
+  it("before the Game starts, a consent that would pay is refused and the claim waits; owed rows wait too, and after launch two presses pay them once", async () => {
+    const id = await submittedOn("owed-unlaunched", "", { stayCreditReward: 2, valueMinor: 0, valueCurrency: "CRC", valueTokens: [] });
+    const { claimId: recorded, questId } = await consentedOn("owed-unlaunched-recorded");
+    const stayKey = `queststay:${recorded}`;
     const [saved] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `value` FROM `app_config` WHERE `config_key` = 'game-start'",
     );
     expect(saved.length, "provisioning started the Game, which this case undoes").toBe(1);
     await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     try {
-      // A consent at 0 posts no recognition, so the launch gate does not refuse it,
-      // and the stay credits it owes cannot issue yet.
-      expect((await consent(id, 0)).status).toBe(200);
-      expect(await owedRows(id)).toEqual([
-        expect.objectContaining({ token: STAY, state: "owed", reason: "not_launched", attempts: 1 }),
-      ]);
-      expect(await ledgerRows(stayKey)).toEqual([]);
+      // The consent would release stay credits that cannot issue yet, so the
+      // route asks the launch gate before it writes, and the claim stays where a
+      // later consent can find it.
+      const early = await consent(id, 0);
+      expect(early.status).toBe(409);
+      expect(String(early.body?.error)).toContain("has not started its Game");
+      expect((await claims.byId(id))?.status).toBe("submitted");
 
-      const early = await pay(id);
-      expect(early.body.outcomes).toEqual([expect.objectContaining({ outcome: "still_owed", reason: "not_launched" })]);
+      // Rows a consent recorded are owed, and a press before launch leaves them owed.
+      await recordAsTheConsentDoes(recorded, questId);
+      const press = await pay(recorded);
+      expect(press.body.outcomes).toContainEqual(expect.objectContaining({ outcome: "still_owed", reason: "not_launched" }));
       expect(await ledgerRows(stayKey)).toEqual([]);
     } finally {
       const value = saved[0].value;
@@ -385,12 +357,14 @@ describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real le
       );
     }
 
-    const [a, b] = await Promise.all([pay(id), pay(id)]);
+    const [a, b] = await Promise.all([pay(recorded), pay(recorded)]);
     expect(a.status).toBe(200);
     expect(b.status).toBe(200);
     expect(await ledgerRows(stayKey)).toHaveLength(1);
-    expect((await owedRows(id))[0]).toMatchObject({ state: "posted", reason: null });
-    expect(rung.filter((n) => n.type === "stays")).toHaveLength(1);
+    expect((await owedRows(recorded)).find((r) => r.token === STAY)).toMatchObject({ state: "posted", reason: null });
+    // And the waiting claim is consented now, at full value.
+    expect((await consent(id, 0)).status).toBe(200);
+    expect(await ledgerRows(`queststay:${id}`)).toHaveLength(1);
   });
 
   it("answers 404 for a claim that does not exist, and pays nothing", async () => {

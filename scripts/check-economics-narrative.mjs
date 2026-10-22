@@ -213,6 +213,9 @@ export const SURFACE_MIGRATIONS = [
   "drizzle/0071_economy_core.sql",
   "drizzle/0092_token_sinks.sql",
   "drizzle/0124_the_equity_token_names_no_village.sql",
+  // Seeds the earned equity token and its faucet; its name carries none of the
+  // hint words below, so it is named here.
+  "drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql",
 ];
 
 /**

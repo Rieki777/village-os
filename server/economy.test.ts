@@ -49,6 +49,7 @@ import {
   reversePair,
   runSettlement,
   shareCapFor,
+  toLedgerUnits,
   VILLAGE_VOICE,
   VOICE_DECIMALS,
   VOICE_BRIDGE,
@@ -117,15 +118,9 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  * (`server/routes/questClaims.ts`), so these take the two steps and this
  * reports the three fields the old return value carried.
  *
- * IT IS A TRANSLATION AND NOT A MOVE. Three things differ, and each one is a
+ * IT IS A TRANSLATION AND NOT A MOVE. Two things differ, and each one is a
  * way a case could go green while proving nothing:
  *
- *  - `granted` is REQUIRED on `OwedClaim`, and `priceClaim`'s `noRules` is
- *    true whenever it is zero or less. A case that left it out would price
- *    NOTHING, and "posted no more than the ceiling" would then pass over an
- *    empty set: a test defending the absence of the thing it checks. A grant
- *    above zero is passed on every call, and `owedPostings.test.ts` passes one
- *    for the same reason.
  *  - `owedForClaim` answers rows PRICED AND NOT YET POSTED, so `minted` here
  *    is the rows whose posting came back `posted`, which is what the old field
  *    meant.
@@ -140,7 +135,7 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  */
 async function payClaim(
   p: mysql.Pool,
-  claim: { id: string; questId: string; userId: string; granted?: number },
+  claim: { id: string; questId: string; userId: string },
 ): Promise<{
   priced: string[];
   considered: number;
@@ -148,7 +143,7 @@ async function payClaim(
   unpayable: Array<{ token: string; reason: string }>;
   skipped?: string;
 }> {
-  const out = await owedForClaim(p, { granted: 1, ...claim });
+  const out = await owedForClaim(p, claim);
   const minted: Array<{ token: string; units: number; decimals: number }> = [];
   const unpayable = [...out.unpayable];
   for (const row of out.owed) {
@@ -1185,32 +1180,50 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(out.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
     });
 
-    it("names a quest rule that reads its amount from work that posts none", async () => {
-      // `amount: null` means "read it from whatever posted the work", and
-      // `queueRuleChange` accepts it on any rule. The only amount a quest
-      // posts is its Gratitude range, which the consent route already spends,
-      // so a from_source rule on a second token can never resolve an amount on
-      // any quest, ever. It used to fall through `if (human <= 0) continue`.
+    it("pays a quest rule that reads its amount from the work only on a quest that names one", async () => {
+      // `amount: null` means "read it from whatever posted the work". Until a
+      // quest could carry its own amounts (0265) the only amount a quest posted
+      // was its Gratitude range, so a from_source rule on a second token could
+      // never pay and was reported on every consent. It now pays the quests
+      // that name an amount for it, under its ceiling, and is quiet on a quest
+      // that names none: that quest simply does not pay this token.
       // A token of its own. `mint_rules` is UNIQUE on
       // (village_id, trigger, token_slug), so reusing `credits` here would not
       // add a rule at all: it would silently rewrite the credits rule the
       // block above proved, and this test would then pass by mutating its
-      // neighbour rather than by testing anything.
+      // neighbour rather than by testing anything. Registered here with the
+      // same scale the ceiling block below gives it, so neither moves it.
+      await registerToken(pool, { slug: "library-credit", name: "Library Credit", kind: "credit", governance: "platform", transferable: false, decimals: 0 });
+      await loadTokenRegistry(pool);
       await pool.query(
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
-          "VALUES ('rule-fromsource-test', ?, 'quest.completed', 'stay-credit', NULL, 50, 'claimant', 1) " +
+          "VALUES ('rule-fromsource-test', ?, 'quest.completed', 'library-credit', NULL, 50, 'claimant', 1) " +
           "ON DUPLICATE KEY UPDATE `enabled` = 1, `amount` = NULL",
         [villageId()],
       );
-      const u = await makeMember("econ-fromsource-1");
-      const out = await payClaim(pool, { id: "claim-fromsource-1", questId: "q-fromsource", userId: u });
-      expect(out.priced).toContain(CREDITS); // denominator
-      const said = out.unpayable.find((x) => x.token === "stay-credit");
-      expect(said?.reason).toMatch(/reads its amount/);
-      // The credits rule beside it is untouched and still pays.
-      expect(out.minted.map((m) => m.token)).toContain(CREDITS);
-      // Clear it again: the rules table is shared by the tests below.
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'");
+      try {
+        const u = await makeMember("econ-fromsource-1");
+        const quiet = await payClaim(pool, { id: "claim-fromsource-1", questId: "q-fromsource", userId: u });
+        expect(quiet.priced).toContain(CREDITS); // denominator
+        expect(quiet.priced).not.toContain("library-credit");
+        expect(quiet.unpayable.find((x) => x.token === "library-credit")).toBeUndefined();
+        // The credits rule beside it is untouched and still pays.
+        expect(quiet.minted.map((m) => m.token)).toContain(CREDITS);
+
+        // A quest naming 70 is paid the ceiling of 50, and nothing it did not name.
+        const named = await owedForClaim(pool, {
+          id: "claim-fromsource-2",
+          questId: "q-fromsource",
+          userId: u,
+          valueTokens: [{ token: "library-credit", amount: 70 }],
+        });
+        expect(named.owed.map((o) => o.tokenSlug)).toEqual(["library-credit"]);
+        expect(named.owed[0].units).toBe(toLedgerUnits("library-credit", 50));
+      } finally {
+        // Clear it again: the rules table is shared by the tests below, and a
+        // row left behind here rewrites their rule through the unique key.
+        await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      }
     });
 
     it("stays quiet about a rule a village deliberately set to zero", async () => {
@@ -3504,11 +3517,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
     });
 
     it("does not call a settlement that could pay nothing an already settled moon", async () => {
-      // The seat rule reads its amount from the work and a seat posts none, so
-      // this rule can never pay. It used to sail through the payable filter,
-      // pay nobody, and come back `alreadyRun: true` with an EMPTY unpayable
-      // list: a misconfiguration reported as a completed moon, which is the
-      // reading that stops anybody looking.
+      // The seat rule reads its amount from the role and its ceiling is zero,
+      // so it can never pay, whatever a role names (0265). It used to sail
+      // through the payable filter, pay nobody, and come back `alreadyRun: true`
+      // with an EMPTY unpayable list: a misconfiguration reported as a completed
+      // moon, which is the reading that stops anybody looking. The ceiling is
+      // the number that stops it, so the ceiling is what the sentence names.
       await atScale(0);
       await pool.query("DELETE FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         villageId(),
@@ -3517,7 +3531,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const out = await runSettlement(pool);
       expect(out.minted).toEqual([]);
       expect(out.alreadyRun).toBe(false);
-      expect(out.unpayable.find((x) => x.token === TOKEN)?.reason).toMatch(/reads its amount from the work/);
+      expect(out.unpayable.find((x) => x.token === TOKEN)?.reason).toMatch(/ceiling is 0, so it can pay no/);
     });
 
     // ── What held before this change, and still holds ────────────────────────

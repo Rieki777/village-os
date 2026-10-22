@@ -77,7 +77,7 @@ import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { writtenAmount } from "../../shared/dryRun/economicsModel";
 import type { MintRuleSpec, TokenGovernance, TokenSpec, VillageSnapshot } from "../../shared/dryRun/types";
 import { VARIABLES } from "../../shared/gameVariables";
-import { CREDITS, HEARTS, VILLAGE_VOICE, faucetFor, villageId } from "./economy";
+import { CREDITS, EARNED_EQUITY, HEARTS, VILLAGE_VOICE, faucetFor, villageId } from "./economy";
 import { CURRENCY_DECIMALS, VOICE_DECIMALS } from "../../shared/tokenScale";
 import { TREASURY } from "./ledger";
 import { spendSinkFor } from "./spending";
@@ -127,13 +127,14 @@ export interface EconomyProvenance {
 /**
  * The registry a village holds before anybody has touched it.
  *
- * Four rows arrive from the migrations: `gratitude`, `equity` and `voice` from
+ * Five rows arrive from the migrations: `gratitude`, `equity` and `voice` from
  * drizzle/0006_token_registry.sql:41, `credits` from
  * drizzle/0007_village_credits_token.sql:10. `equity` is the slug
  * drizzle/0124_the_equity_token_names_no_village.sql:188 renamed the old
- * per-village one to, so naming it here carries no village's brand. The fifth,
- * `village-voice`, is registered at boot by `ensureVoiceToken`
- * (server/lib/economy.ts:122) at `VOICE_DECIMALS` places.
+ * per-village one to, so naming it here carries no village's brand. A fifth,
+ * `earned-equity`, arrives from drizzle/0266 as the equity mirror's accruing
+ * twin. The sixth, `village-voice`, is registered at boot by `ensureVoiceToken`
+ * (server/lib/economy.ts) at `VOICE_DECIMALS` places.
  *
  * `stay-credit` and `library-credit` are deliberately ABSENT. Those two are
  * registered by their own modules at boot and only when those modules are on,
@@ -160,6 +161,8 @@ const SEED_TOKENS: readonly SeedTokenRow[] = [
   { slug: "voice", kind: "voice", decimals: 0, governance: "hypha" },
   { slug: CREDITS, kind: "credit", decimals: CURRENCY_DECIMALS, governance: "platform" },
   { slug: VILLAGE_VOICE, kind: "voice", decimals: VOICE_DECIMALS, governance: "platform" },
+  // drizzle/0266: the equity a village earns here and claims across to Hypha.
+  { slug: EARNED_EQUITY, kind: "equity", decimals: 0, governance: "platform" },
 ];
 
 /**
@@ -195,6 +198,9 @@ const SEED_RULES: readonly SeedRuleRow[] = [
   { trigger: "role.cycle", token: CREDITS, amountRaw: "25.0000", ceilingRaw: "250.0000", recipient: "holder", enabled: true },
   // Seeded off, and off is not gone. See the block comment at economySeed.ts:99.
   { trigger: "role.cycle", token: HEARTS, amountRaw: "20.0000", ceilingRaw: "100.0000", recipient: "holder", enabled: false },
+  // Earned Equity, seeded off: a village decides what pays it. See economySeed.ts.
+  { trigger: "quest.completed", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "claimant", enabled: false },
+  { trigger: "role.cycle", token: EARNED_EQUITY, amountRaw: "1.0000", ceilingRaw: "1.0000", recipient: "holder", enabled: false },
 ];
 
 // ── Reading one value at a time ─────────────────────────────────────────────

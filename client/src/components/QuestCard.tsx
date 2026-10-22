@@ -15,10 +15,11 @@ import { Link } from "wouter";
 import { useState } from "react";
 import {
   ArrowRight, Baby, BookOpen, Brush, Calendar, Camera, CheckCircle2, ChefHat,
-  Clock, Compass, Hammer, Heart, Home, Laptop, Leaf, Music, ShieldCheck,
+  Clock, Compass, Hammer, Home, Laptop, Leaf, Music, ShieldCheck,
   Sprout, Star, TreePine, Users,
 } from "lucide-react";
 import type { QuestClaim } from "@/lib/gameApi";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import {
   gateLabel, questScene, sceneGradient, statusIs, type BoardQuest,
 } from "@/lib/questBoard";
@@ -98,14 +99,12 @@ export default function QuestCard({
   claim,
   signs,
   stages,
-  currencyName,
   priority = false,
 }: {
   quest: BoardQuest;
   claim?: QuestClaim;
   signs?: { active: number; done: number };
   stages?: { id: string; name: string }[] | null;
-  currencyName: string;
   priority?: boolean;
 }) {
   const Icon = iconFor(quest.icon);
@@ -164,12 +163,8 @@ export default function QuestCard({
           )}
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            {quest.gratitude && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-semibold">
-                <Heart className="w-3.5 h-3.5" />
-                {quest.gratitude} {currencyName}
-              </span>
-            )}
+            {/* What the quest is worth and pays, or to inquire (0265). Never Gratitude, which pays no quest. */}
+            <WorkPayBlock pay={quest.pay} />
             {quest.duration && (
               <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <Clock className="w-3.5 h-3.5" />

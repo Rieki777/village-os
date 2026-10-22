@@ -390,7 +390,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     // given. A village should be able to hand out the first without the
     // second, and this is that being true rather than being intended.
     const r = await call("POST", "/api/review/quests/anything/accept", {
-      reward: { gratitude: "50-100" },
+      reward: { valueMinor: 5000 },
     }, kiraToken);
     expect(r.status).not.toBe(200);
     expect([401, 403, 409]).toContain(r.status);
@@ -701,7 +701,7 @@ describe.skipIf(!DB_CONFIGURED)("the person who proposed a quest", () => {
 
   it("hears that the idea went on the board, with a link to the quest and no words from the idea", async () => {
     const id = await inQueue("Mend the orchard gate");
-    const put = await call("POST", `/api/review/quests/${id}/accept`, { reward: { gratitude: "20" } });
+    const put = await call("POST", `/api/review/quests/${id}/accept`, { reward: { valueMinor: 2000 } });
     expect(put.status, put.text).toBe(200);
     const onBoard = await noticesOf("quest_idea_on_board");
     expect(onBoard).toHaveLength(1);
