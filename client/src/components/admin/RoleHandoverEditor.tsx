@@ -106,6 +106,7 @@ export default function RoleHandoverEditor({
         rows={rows}
         value={value}
         className={box}
+        aria-label={label}
         aria-describedby={`${id}-hint`}
         aria-invalid={problem ? true : undefined}
         onChange={(e) => set(e.target.value)}

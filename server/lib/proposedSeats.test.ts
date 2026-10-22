@@ -644,3 +644,21 @@ describe("keys nothing reads", () => {
     expect(one.ignored).toEqual([]);
   });
 });
+
+describe("the handover words a proposal may carry (0268)", () => {
+  it("carries Bring me, Not mine to hold and the runbook as sent, under either spelling", () => {
+    const r = normaliseProposedSeat(
+      { name: "Water Steward", bring_me: ["A reading"], notMine: "Garden\nRoof", runbook: "https://example.org/w" },
+      [],
+    );
+    expect(r.payload).toMatchObject({ bringMe: ["A reading"], notMine: "Garden\nRoof", runbook: "https://example.org/w" });
+    expect(r.ignored).toEqual([]);
+  });
+
+  it("reports a value of the wrong shape and leaves it out of the payload", () => {
+    const r = normaliseProposedSeat({ name: "Water Steward", bringMe: 42, runbook: { url: "x" } }, []);
+    expect(r.payload).not.toHaveProperty("bringMe");
+    expect(r.payload).not.toHaveProperty("runbook");
+    expect(r.ignored).toEqual(["bringMe", "runbook"]);
+  });
+});
