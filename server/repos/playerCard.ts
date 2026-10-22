@@ -36,7 +36,11 @@ export interface CardRows {
   relations: RowDataPacket[];
   relationTypes: RowDataPacket[];
   grants: RowDataPacket[];
-  /** The people's own applications, and every application a held seating came through. */
+  /**
+   * Every application a held seating came through, for its terms. The
+   * people's own applications are read by `applicationsOfCandidates`
+   * (server/repos/seatApplications.ts), the read the `?candidate=` list makes.
+   */
   applications: RowDataPacket[];
   plans: RowDataPacket[];
   tasks: RowDataPacket[];
@@ -78,9 +82,9 @@ export async function readCardRows(
     q(`SELECT capability, holder_role_id FROM capability_holding WHERE holder_role_id IN (${held})`, ids),
     q(
       "SELECT id, candidate_user_id, seat_ids, status, settings_json, created_at, decided_at, term_season_id, starts_at, term_ends_at " +
-        `FROM seat_applications WHERE candidate_user_id IN (${marks(n)}) OR id IN (` +
+        "FROM seat_applications WHERE id IN (" +
         `SELECT application_id FROM org_role_assignments WHERE ended_at IS NULL AND application_id IS NOT NULL AND user_id IN (${marks(n)}))`,
-      [...ids, ...ids],
+      ids,
     ),
     q(
       "SELECT user_id, season_id, version, aim, serves_goal, filed_at, superseded_at, created_at " +
@@ -120,6 +124,40 @@ export async function readCardRows(
     users, seatings, roles, roleNames, circles, relations, relationTypes, grants,
     applications, plans, tasks, taskEvents, tensions, circleDecisions, pending,
   };
+}
+
+/** What a role application's card reads about the roles it names. */
+export interface ProposalRows {
+  roles: RowDataPacket[];
+  /** Live seatings on those roles, every holder, for the holder count only. */
+  seatings: RowDataPacket[];
+  circles: RowDataPacket[];
+  relations: RowDataPacket[];
+  grants: RowDataPacket[];
+}
+
+/**
+ * The roles some applications name, for proposal cards: five reads with
+ * `IN (...)` over every role every application in the batch names, so a
+ * person applying for five roles costs what one role costs.
+ */
+export async function readProposalRows(pool: Pool, roleIds: readonly string[]): Promise<ProposalRows> {
+  const ids = Array.from(new Set(roleIds));
+  if (!ids.length) return { roles: [], seatings: [], circles: [], relations: [], grants: [] };
+  const n = ids.length;
+  const q = async (sql: string, args: unknown[]) => (await pool.query<RowDataPacket[]>(sql, args))[0];
+  const [roles, seatings, circles, relations, grants] = await Promise.all([
+    q(`SELECT ${ROLE_COLS}, archetypes_suggested FROM org_roles WHERE id IN (${marks(n)}) ORDER BY sort_order, name`, ids),
+    q(`SELECT ${ASSIGN_COLS} FROM org_role_assignments WHERE ended_at IS NULL AND org_role_id IN (${marks(n)}) ORDER BY started_at, id`, ids),
+    q(`SELECT id, name FROM circles WHERE id IN (SELECT circle_id FROM org_roles WHERE id IN (${marks(n)}))`, ids),
+    q(
+      "SELECT r.id, r.type_id, r.from_kind, r.from_id, r.to_kind, r.to_id, r.note, r.is_example " +
+        `FROM org_relations r WHERE r.from_id IN (${marks(n)}) OR r.to_id IN (${marks(n)})`,
+      [...ids, ...ids],
+    ),
+    q(`SELECT capability, holder_role_id FROM capability_holding WHERE holder_role_id IN (${marks(n)})`, ids),
+  ]);
+  return { roles, seatings, circles, relations, grants };
 }
 
 /** The role, when this person holds it live as a member, examples left out. */

@@ -373,6 +373,8 @@ describe("my applications", () => {
           app("sa-next", { term_season_id: "s3" }),
           app("sa-other", { candidate_user_id: "u-someone" }),
         ],
+        // Past is a season that has ended (PR 3): s1 ended before s2 began.
+        endedSeasonIds: ["s1"],
       }),
     );
     expect(value(card.applications.past).map((a) => a.id)).toEqual(["sa-old"]);
@@ -427,5 +429,65 @@ describe("copy rules", () => {
     expect(text).not.toMatch(/48 hours|\bhours\b/);
     expect(text).not.toMatch(/[–—]/);
     expect(text).not.toMatch(/scoreboard/i);
+  });
+});
+
+describe("proposal mode (PR 3): the card a role application asks for", () => {
+  const roles5 = [1, 2, 3, 4, 5].map((n) => role(n, { termEndsAt: "2027-03-31T06:00:00Z" }));
+  const proposal = () => buildPlayerCard(input({ roles: roles5, mode: "proposal", viewerUserId: "u-reader" }));
+
+  it("one person applying for five roles is one card naming all five", () => {
+    const card = proposal();
+    expect(card.roles).toHaveLength(5);
+    expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
+    for (const r of roles5) expect(card.header.rolesLine).toContain(r.name);
+    expect(card.tiles.heading).toBe(CARD_WORDS.proposedRoles);
+  });
+
+  it("every live section reads Starts once adopted", () => {
+    const card = proposal();
+    expect(card.across.tasks).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(card.across.signs).toEqual({ kind: "empty", words: "Starts once adopted" });
+    for (const r of card.roles) {
+      expect(r.working.items).toEqual({ kind: "empty", words: "Starts once adopted" });
+      expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    }
+    expect(card.across.load.openTasks).toBeNull();
+  });
+
+  it("a proposal holds nothing yet, so no tile reads a health dot", () => {
+    for (const t of value(proposal().tiles.items)) expect(t.health).toBeNull();
+  });
+
+  it("the terms are the application's own, money small and last", () => {
+    const rows = value(proposal().agreements.roles[0].rows);
+    expect(rows[0].label).toBe("Term");
+    expect(rows.slice(-3).every((r) => r.small)).toBe(true);
+  });
+
+  it("a live card is unchanged by the mode it does not ask for", () => {
+    const live = buildPlayerCard(input());
+    expect(live.across.tasks.kind).toBe("shown");
+    expect(live.tiles.heading).toBe(CARD_WORDS.myRoles);
+  });
+});
+
+describe("old seatings with no application join Past", () => {
+  it("in plain words, linked to the role, never to an application", () => {
+    const card = buildPlayerCard(
+      input({
+        applications: [],
+        roleNames: { r1: "Human Operations & Onboarding Lead Steward" },
+        pastSeatings: [{ roleId: "r1", startedAt: "2026-03-01T18:00:00Z", endedAt: "2026-06-01T18:00:00Z" }],
+      }),
+    );
+    const past = value(card.applications.past);
+    expect(past).toHaveLength(1);
+    expect(past[0]).toMatchObject({
+      title: "Human Operations & Onboarding Lead Steward",
+      status: "Held, with no application on file",
+      href: "/roles?seat=r1",
+    });
+    expect(past[0].filed).toMatch(/^Held from .+ to .+$/);
   });
 });

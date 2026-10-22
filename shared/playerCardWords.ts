@@ -29,6 +29,7 @@ export const CARD_WORDS = {
   rolesLine: (n: number, names: string) => `${plural(n, "role", "roles")}: ${names}`,
   dayOfSeason: (day: number, of: number) => `Day ${day} of ${of}`,
   seasonNotRead: "No season set",
+  appliesFor: (names: string) => `Applies for ${names}`,
 
   // Doors
   applyDoor: "Apply for a role",
@@ -36,6 +37,7 @@ export const CARD_WORDS = {
 
   // Tiles
   myRoles: "My roles",
+  proposedRoles: "The roles I am applying for",
 
   // Across
   acrossOne: "Across my role",

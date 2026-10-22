@@ -40,6 +40,7 @@ import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleS
 import { roleHandover, roleHealth, type HandoverOut, type HealthOut } from "./playerCardHealth";
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
+import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 
 export * from "./playerCardWords";
@@ -243,7 +244,19 @@ export interface PlayerCardInput {
    * model reads `signRows` itself.
    */
   signReader?: (key: string | null, circleId: string | null) => SignReading;
+  /**
+   * "proposal" draws the card a role application asks for: the roles it
+   * names, on its terms, and every live section (tasks, signs, tensions)
+   * reading "Starts once adopted". Live by default.
+   */
+  mode?: CardMode;
+  /** Seasons whose end has passed, for the "Past" group. */
+  endedSeasonIds?: readonly string[];
+  /** The owner's old seatings that came through no application. */
+  pastSeatings?: Read<PastSeating[]>;
 }
+
+export type CardMode = "live" | "proposal";
 
 /** The five steps of the owner's own load read. */
 export const LOAD_STEPS = [1, 2, 3, 4, 5] as const;
@@ -418,7 +431,9 @@ function header(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined): Head
       ? ""
       : roles.length === 0
         ? W.holdsNoRoles
-        : W.rolesLine(roles.length, joinList(roles.map((r) => r.name)));
+        : input.mode === "proposal"
+          ? W.appliesFor(joinList(roles.map((r) => r.name)))
+          : W.rolesLine(roles.length, joinList(roles.map((r) => r.name)));
   let day: HeaderOut["day"] = UNREAD;
   if (input.season === null) day = empty(W.seasonNotRead);
   else if (input.season) {
@@ -451,6 +466,7 @@ function playsAs(role: PlayerRoleIn, names: Read<Record<string, string> | null>)
 
 function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
   if (role.settings === undefined) return UNREAD;
+  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
   const measures = role.settings?.scoreboard?.measures ?? [];
   if (!measures.length) return empty(W.noSigns);
   const windows = cycleWindows(input.now, LUNAR_CLOCK, input.timeZone);
@@ -493,6 +509,7 @@ export function signSheetKey(key: string, circleId: string | null): string {
 
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
   if (role.tensions === undefined) return UNREAD;
+  if (input.mode === "proposal") return empty(W.startsOnceAdopted);
   const viewer = input.viewerUserId ?? null;
   const isHolder = viewer !== null && viewer === input.owner.userId;
   const open = role.tensions
@@ -605,10 +622,13 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
           );
 
   const titleOf = new Map((roles ?? []).map((r) => [r.id, r.name]));
+  const proposal = input.mode === "proposal";
   const tasks: AcrossOut["tasks"] =
     input.tasks === undefined
       ? UNREAD
-      : input.tasks.length === 0
+      : proposal
+        ? empty(W.startsOnceAdopted)
+        : input.tasks.length === 0
         ? empty(W.noTasks)
         : shown(
             input.tasks.map((t) => ({
@@ -625,13 +645,15 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
   const signs: AcrossOut["signs"] =
     roles === undefined || (signLists.length > 0 && signLists.every((s) => s.kind === "unread"))
       ? UNREAD
-      : allSigns.length
-        ? shown(allSigns)
-        : empty(W.noSigns);
+      : proposal
+        ? empty(W.startsOnceAdopted)
+        : allSigns.length
+          ? shown(allSigns)
+          : empty(W.noSigns);
 
   const rolesFig: Figure = { n, source: "roles.length" };
   const openTasks: Figure | null =
-    input.tasks === undefined ? null : { n: input.tasks.filter((t) => t.status === "open").length, source: "tasks.status" };
+    input.tasks === undefined || proposal ? null : { n: input.tasks.filter((t) => t.status === "open").length, source: "tasks.status" };
   const words = [W.loadRoles(n), ...(openTasks ? [W.loadTasks(openTasks.n)] : [])].join(" · ");
   const lr = input.loadRead;
   const own: AcrossOut["load"]["own"] =
@@ -728,29 +750,48 @@ function applications(input: PlayerCardInput): ApplicationsOut {
   const heading = W.applications;
   if (input.applications === undefined) return { heading, past: UNREAD, thisSeason: UNREAD, nextSeason: UNREAD };
   const names = input.roleNames ?? {};
-  const seasonId = input.season?.id ?? null;
-  const seasonEnd = input.season ? instantOf(input.season.endsOn, input.timeZone) : null;
-  const next = input.nextSeasonId ?? null;
+  const tz = input.timeZone;
+  const ctx = {
+    now: input.now,
+    seasonId: input.season?.id ?? null,
+    seasonEndsAt: input.season ? instantOf(input.season.endsOn, tz) : null,
+    nextSeasonId: input.nextSeasonId ?? null,
+    endedSeasonIds: input.endedSeasonIds ?? [],
+  };
   const groups: Record<"past" | "thisSeason" | "nextSeason", ApplicationOut[]> = { past: [], thisSeason: [], nextSeason: [] };
 
   for (const a of input.applications) {
     if (a.candidate_user_id !== input.owner.userId) continue;
     const titles = a.seat_ids.map((id) => names[id]).filter((s): s is string => !!clean(s));
     const status = isStatus(a.status) ? APPLICATION_STATUS_WORDS[a.status] : "";
-    const starts = instantOf(a.starts_at, input.timeZone);
     const pending = isStatus(a.status) && OPEN_STATUSES.includes(a.status);
-    const out: ApplicationOut = {
+    const filedDay = formatDay(a.created_at, true, tz);
+    groups[
+      applicationGroup(
+        { candidateUserId: a.candidate_user_id, termSeasonId: a.term_season_id, startsAt: a.starts_at, termEndsAt: a.term_ends_at },
+        ctx,
+      )
+    ].push({
       id: a.id,
       href: applicationHref(a.id),
       title: joinList(titles),
       status,
-      filed: formatDay(a.created_at, true, input.timeZone) ? W.filedOn(formatDay(a.created_at, true, input.timeZone)!) : null,
+      filed: filedDay ? W.filedOn(filedDay) : null,
       starts: pending ? W.startsOnceAdopted : null,
-    };
-    if (seasonId !== null && a.term_season_id === seasonId) groups.thisSeason.push(out);
-    else if ((next !== null && a.term_season_id === next) || (starts && seasonEnd && starts.getTime() >= seasonEnd.getTime()))
-      groups.nextSeason.push(out);
-    else groups.past.push(out);
+    });
+  }
+  // Old seatings with no application behind them, in plain words, linked to the role.
+  for (const p of input.pastSeatings ?? []) {
+    const title = clean(names[p.roleId]);
+    if (!title) continue;
+    groups.past.push({
+      id: `held-${p.roleId}-${p.startedAt ?? ""}`,
+      href: `${APPLY_HREF}?seat=${encodeURIComponent(p.roleId)}`,
+      title,
+      status: PAST_SEATING_WORDS.status,
+      filed: PAST_SEATING_WORDS.held(formatDay(p.startedAt, true, tz), formatDay(p.endedAt, true, tz)),
+      starts: null,
+    });
   }
   const slot = (list: ApplicationOut[], words: string): Slot<ApplicationOut[]> => (list.length ? shown(list) : empty(words));
   return {
@@ -836,7 +877,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
   const list = roles ?? [];
   const roleOuts = list.map((r) => roleOut(r, input));
   const tiles: PlayerCard["tiles"] = {
-    heading: W.myRoles,
+    heading: input.mode === "proposal" ? W.proposedRoles : W.myRoles,
     items:
       roles === undefined
         ? UNREAD
@@ -846,7 +887,8 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
                 roleId: r.id,
                 title: r.name,
                 anchor: ROLE_ANCHOR(r.id),
-                health: roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
+                // A proposal holds nothing yet, so it has no health to read.
+                health: input.mode === "proposal" ? null : roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
               })),
             )
           : empty(W.holdsNoRoles),

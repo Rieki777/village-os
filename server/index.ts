@@ -136,6 +136,7 @@ import { register as registerAlignmentRoutes, alignmentsForExport } from "./rout
 import { register as registerMembershipLetterRoutes, legacySigningOf, letterSourceFrom } from "./routes/membershipLetter";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerPlayerCardRoutes } from "./routes/playerCard";
+import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -24888,6 +24889,7 @@ ${inner}
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
+  registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 
@@ -25215,7 +25217,7 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined }), // heldTerms: red team U2, server/lib/heldTerms.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
     });
   });
 
