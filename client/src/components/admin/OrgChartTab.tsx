@@ -29,6 +29,7 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
 import RoleValueEditor from "@/components/admin/RoleValueEditor";
+import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
@@ -444,6 +445,8 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
                       {/* What the role is worth and pays each seat every cycle (0265). */}
                       {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
+                      {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>

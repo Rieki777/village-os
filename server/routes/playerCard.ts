@@ -38,14 +38,14 @@ import { listArchetypes } from "../lib/characters";
 import { villageId } from "../lib/economy";
 import type { LapseContext } from "../lib/orgChart";
 import { addChange, createDraft } from "../lib/orgDrafts";
-import { buildPlayerCards, cardSeasons, type CardLevel, type CardTier } from "../lib/playerCardData";
+import { buildPlayerCards, cardSeasons, type CardContext, type CardLevel, type CardTier } from "../lib/playerCardData";
 import { userIdForHandle } from "../lib/profile";
 import { mapShowsStructureTo, orgSeatTier } from "../lib/seatProjection";
 import { roleHeldBy } from "../repos/playerCard";
 
-type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "firstName" | "overLimit"> & {
-  /** `seasonState()`: the current and upcoming seasons and the village's zone. */
-  seasonState(): { current?: any; upcoming?: any; timezone?: string };
+export type CardDeps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "firstName"> & {
+  /** `seasonState()`: every season, the current and upcoming ones, and the village's zone. */
+  seasonState(): { current?: any; upcoming?: any; seasons?: any[]; timezone?: string };
   lapse(): LapseContext;
   /** The map module's effective lifecycle, for the structure rule. */
   mapLifecycle(): ModuleLifecycle;
@@ -55,33 +55,66 @@ type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool"
   now?: () => Date;
 };
 
+type Deps = CardDeps & Pick<AppDeps, "overLimit">;
+
+/**
+ * What a reader may see of the seat fields on a card: `/api/org`'s tier by
+ * the same three functions. Shared with the proposal card on a role
+ * application (server/routes/applicationCard.ts).
+ */
+export async function cardSeatTier(
+  deps: CardDeps,
+  req: any,
+  viewer: any,
+  v: { terms: boolean; isSelf: boolean },
+): Promise<CardTier["seat"]> {
+  const admin = await deps.isAdmin(req);
+  const ctx = viewer ? await deps.capabilityCtx(viewer) : null;
+  const viewPeople = admin || (ctx ? hasCapability("map.viewPeople", ctx) : false);
+  return orgSeatTier({
+    editing: false,
+    terms: v.terms || v.isSelf,
+    viewPeople: viewPeople || v.isSelf,
+    peopleArePublic: deps.boolVar("org.public_people"),
+    mapStructure: mapShowsStructureTo({
+      lifecycle: deps.mapLifecycle(),
+      publicStructure: deps.boolVar("map.public_structure"),
+      signedIn: !!viewer,
+      admin,
+    }),
+  });
+}
+
+/** The card's context for one request: the clock, the seasons, the village and its class names. */
+export async function cardContext(deps: CardDeps, viewerId: string | null): Promise<CardContext> {
+  const now = deps.now ? deps.now() : new Date();
+  const state = deps.seasonState();
+  const archetypes = await listArchetypes(deps.getPool(), villageId());
+  return {
+    now,
+    timeZone: state.timezone || "UTC",
+    viewerUserId: viewerId,
+    ...cardSeasons(state, now),
+    villageName: deps.villageName(),
+    lapse: deps.lapse(),
+    archetypeNames: Object.fromEntries(archetypes.map((a) => [a.key, a.name])),
+    firstName: deps.firstName,
+  };
+}
+
 /** Ten proposals in ten minutes per member: each one is a draft somebody has to read. */
 const PROPOSALS_PER_WINDOW = 10;
 const PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
 
 export function register(app: Express, deps: Deps): void {
-  const now = () => (deps.now ? deps.now() : new Date());
 
   async function tierFor(req: any, ownerId: string): Promise<{ tier: CardTier; viewerId: string | null }> {
     const viewer = await deps.authedUser(req);
-    const admin = await deps.isAdmin(req);
     const ctx = viewer ? await deps.capabilityCtx(viewer) : null;
-    const viewPeople = admin || (ctx ? hasCapability("map.viewPeople", ctx) : false);
     const terms = ctx ? hasCapability("terms.read", ctx) : false;
     const viewerId = viewer ? String(viewer.id) : null;
     const isSelf = viewerId !== null && viewerId === ownerId;
-    const seat = orgSeatTier({
-      editing: false,
-      terms: terms || isSelf,
-      viewPeople: viewPeople || isSelf,
-      peopleArePublic: deps.boolVar("org.public_people"),
-      mapStructure: mapShowsStructureTo({
-        lifecycle: deps.mapLifecycle(),
-        publicStructure: deps.boolVar("map.public_structure"),
-        signedIn: !!viewer,
-        admin,
-      }),
-    });
+    const seat = await cardSeatTier(deps, req, viewer, { terms, isSelf });
     const level: CardLevel = isSelf ? "self" : terms ? "member" : "stranger";
     return { tier: { level, seat }, viewerId };
   }
@@ -97,18 +130,7 @@ export function register(app: Express, deps: Deps): void {
     }
     if (!ownerId) return res.status(404).json({ error: "Not found" });
     const { tier, viewerId } = await tierFor(req, ownerId);
-    const state = deps.seasonState();
-    const archetypes = await listArchetypes(pool, villageId());
-    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], {
-      now: now(),
-      timeZone: state.timezone || "UTC",
-      viewerUserId: viewerId,
-      ...cardSeasons(state),
-      villageName: deps.villageName(),
-      lapse: deps.lapse(),
-      archetypeNames: Object.fromEntries(archetypes.map((a) => [a.key, a.name])),
-      firstName: deps.firstName,
-    });
+    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], await cardContext(deps, viewerId));
     const card = cards.get(ownerId);
     if (!card) return res.status(404).json({ error: "Not found" });
     res.json(card);

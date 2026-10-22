@@ -49,6 +49,7 @@
  * Pure: no pool, no clock.
  */
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
+import type { RoleWordsLike } from "./roleFieldChanges";
 
 /** What the source's own status says, in the four words it uses, or `other`. */
 export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
@@ -143,6 +144,12 @@ export interface PlanLiveSeat {
   isExample: boolean;
   /** How many people hold it now, from this village's own seatings. */
   holders: number;
+  /**
+   * The live role's own words, so the review can say what a move would
+   * change field by field (shared/roleFieldChanges.ts). Optional: a reader
+   * without them lists no before.
+   */
+  words?: RoleWordsLike;
 }
 
 // ── The plan ─────────────────────────────────────────────────────────────

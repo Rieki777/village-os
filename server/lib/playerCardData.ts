@@ -30,6 +30,21 @@
  *             even before it is filed, the role words waiting on consent, and a
  *             link to their wallet.
  *
+ * ── PROPOSAL MODE: THE CARD A ROLE APPLICATION ASKS FOR (PR 3) ───────────
+ *
+ * An owner handed with a `proposal` gets the card their application asks
+ * for: the roles come from the application's `seat_ids` (one card for up to
+ * five roles), the terms from its `settings_json`, and every live section
+ * (tasks, signs, tensions) reads "Starts once adopted". The roles are read by
+ * `readProposalRows`, five reads for every role every application in the
+ * batch names. No sign is counted for a proposal.
+ *
+ * ── MY APPLICATIONS ────────────────────────────────────────────────────────
+ *
+ * Read by `applicationsOfCandidates`, the same statement the `?candidate=`
+ * list runs, and grouped by shared/applicationGroups.ts. Old seatings that
+ * came through no application join "Past" on the owner's own card only.
+ *
  * ── SIGNS ARE COUNTED ONCE PER CYCLE, NEVER ONCE PER ROLE ─────────────────
  *
  * A sign is a village-wide count. Its reading and its sheet are memoised by
@@ -56,10 +71,13 @@ import { cycleWindows, readSign, SIGNS, isSignKey, type SignKey, type SignReadin
 import { signSheetRows, type SignSheetRow } from "../../shared/roleSignRows";
 import { parseSeatSettings, type SeatSettings } from "../../shared/seatSettings";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
+import { civilDateInstant } from "../../shared/seatTerms";
+import { endedSeasons } from "../../shared/applicationGroups";
 import { isLapsed, rowToAssignment, rowToRole, type LapseContext, type OrgAssignment, type OrgRole } from "./orgChart";
 import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations";
 import { projectSeat, type SeatTier } from "./seatProjection";
-import { readCardRows, readSignTables, type SignTable } from "../repos/playerCard";
+import { readCardRows, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
+import { applicationsOfCandidates, pastSeatingsWithoutApplication } from "../repos/seatApplications";
 
 import type { CardLevel, PlayerCardPayload, SignSheetOut } from "../../shared/playerCardPayload";
 
@@ -90,6 +108,26 @@ export interface CardContext {
   /** The village's class names, read once (`listArchetypes`). */
   archetypeNames: Record<string, string>;
   firstName: (name: string) => string;
+  /** Seasons whose end has passed, for the "Past" applications. */
+  endedSeasonIds?: readonly string[];
+}
+
+/** The application a proposal card is drawn for. */
+export interface CardProposal {
+  applicationId: string;
+  /** `seat_applications.seat_ids`, 1 to 5 roles. */
+  seatIds: string[];
+  /** `seat_applications.settings_json`, as stored. */
+  settings: unknown;
+  /** `seat_applications.term_ends_at`. */
+  termEndsAt: string | null;
+}
+
+/** One owner in a batch: who, at what tier, and the application when the card is a proposal. */
+export interface CardOwner {
+  userId: string;
+  tier: CardTier;
+  proposal?: CardProposal;
 }
 
 // ── The sign memo ──────────────────────────────────────────────────────────
@@ -118,10 +156,10 @@ const memoKey = (key: string, cycleId: string, circleId: string | null) =>
  * Read and memoise every sign these roles name, counting each table once.
  * Answers a reader the model can call per measure without touching a table.
  */
-async function signReaderFor(
+export async function signReaderFor(
   pool: Pool,
   wanted: Array<{ key: SignKey; circleId: string | null }>,
-  ctx: CardContext,
+  ctx: Pick<CardContext, "now" | "timeZone"> & { season: { id: string } | null },
 ): Promise<(key: string | null, circleId: string | null) => MemoEntry | null> {
   const windows = cycleWindows(ctx.now, LUNAR_CLOCK, ctx.timeZone);
   const cycleId = windows.current.from.toISOString();
@@ -222,30 +260,39 @@ function moonStart(now: Date, back: number): Date {
  */
 export async function buildPlayerCards(
   pool: Pool,
-  owners: ReadonlyArray<{ userId: string; tier: CardTier }>,
+  owners: ReadonlyArray<CardOwner>,
   ctx: CardContext,
 ): Promise<Map<string, PlayerCardPayload>> {
   const out = new Map<string, PlayerCardPayload>();
   if (!owners.length) return out;
   const moonFrom = moonStart(ctx.now, 0);
-  const rows = await readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) });
+  const memberIds = owners.filter((o) => o.tier.level !== "stranger").map((o) => o.userId);
+  const selfIds = owners.filter((o) => o.tier.level === "self").map((o) => o.userId);
+  const [rows, prop, ownApps, pastHeld] = await Promise.all([
+    readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) }),
+    readProposalRows(pool, owners.flatMap((o) => o.proposal?.seatIds ?? [])),
+    applicationsOfCandidates(pool, memberIds),
+    pastSeatingsWithoutApplication(pool, selfIds),
+  ]);
 
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
-    rows.roles.map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
+    [...rows.roles, ...prop.roles].map((r) => [String(r.id), { ...rowToRole(r), archetypesSuggested: !!r.archetypes_suggested }]),
   );
   const roleName = new Map(rows.roleNames.map((r) => [String(r.id), String(r.name)]));
-  const circleName = new Map(rows.circles.map((c) => [String(c.id), String(c.name)]));
+  const circleName = new Map([...rows.circles, ...prop.circles].map((c) => [String(c.id), String(c.name)]));
   const lapseCtx = { ...ctx.lapse, now: ctx.now };
-  const seatings: OrgAssignment[] = rows.seatings.map((r) => {
+  const seatingRows = Array.from(new Map([...rows.seatings, ...prop.seatings].map((r) => [String(r.id), r])).values());
+  const seatings: OrgAssignment[] = seatingRows.map((r) => {
     const a = rowToAssignment(r);
     const v = isLapsed(a, { expiresEachSeason: roles.get(a.orgRoleId)?.expiresEachSeason ?? null }, lapseCtx);
     return { ...a, lapsed: v.lapsed, lapsedReason: v.reason };
   });
   const seatingsByRole = groupBy(seatings, (s) => s.orgRoleId);
-  const relations = rows.relations.map(relationOf);
+  const relations = Array.from(new Map([...rows.relations, ...prop.relations].map((r) => [String(r.id), r])).values()).map(relationOf);
   const types = new Map(rows.relationTypes.map(relationTypeOf).map((t) => [t.id, t]));
   const covered = coveredSeatIds(relations, types);
-  const grantsByRole = groupBy(rows.grants, (g) => String(g.holder_role_id));
+  const grantRows = Array.from(new Map([...rows.grants, ...prop.grants].map((g) => [`${g.holder_role_id}|${g.capability}`, g])).values());
+  const grantsByRole = groupBy(grantRows, (g) => String(g.holder_role_id));
   const appsById = new Map(rows.applications.map((a) => [String(a.id), a]));
   const decisionsByCircle = new Map(rows.circleDecisions.map((d) => [String(d.circle_id), Number(d.n)]));
   const pendingByRole = new Map<string, Set<RoleEditKey>>();
@@ -261,7 +308,7 @@ export async function buildPlayerCards(
   // Every sign any owner's roles name, read once for the whole batch.
   const wanted: Array<{ key: SignKey; circleId: string | null }> = [];
   for (const o of owners) {
-    if (o.tier.level === "stranger") continue;
+    if (o.tier.level === "stranger" || o.proposal) continue;
     for (const s of seatings) {
       if (s.userId !== o.userId || s.holderKind !== "member" || s.isExample) continue;
       const role = roles.get(s.orgRoleId);
@@ -280,14 +327,20 @@ export async function buildPlayerCards(
     const { level, seat } = owner.tier;
     const isSelf = level === "self";
     const memberUp = level !== "stranger";
+    const proposal = owner.proposal ?? null;
     const mine = seatings.filter((s) => s.userId === owner.userId && s.holderKind === "member" && !s.isExample);
-    const heldIds = Array.from(new Set(mine.map((s) => s.orgRoleId))).filter((id) => roles.has(id));
-    const rolesVisible = isSelf || seat.people !== "none";
+    // A proposal's roles are the ones it names, in its order; a live card's are the ones held.
+    const heldIds = proposal
+      ? Array.from(new Set(proposal.seatIds)).filter((id) => roles.has(id))
+      : Array.from(new Set(mine.map((s) => s.orgRoleId))).filter((id) => roles.has(id));
+    // An application names its roles to every member who may read it.
+    const rolesVisible = isSelf || !!proposal || seat.people !== "none";
+    const proposalSettings = proposal ? settingsOf(proposal.settings) : null;
 
     const roleIns: PlayerRoleIn[] = heldIds.map((id) => {
       const role = roles.get(id)!;
       const held = seatingsByRole.get(id) ?? [];
-      const own = mine.find((s) => s.orgRoleId === id)!;
+      const own = proposal ? null : mine.find((s) => s.orgRoleId === id)!;
       // The /api/org seat object, at this reader's tier, holders never read.
       const p = projectSeat(role, held, { ...seat, people: "none", editing: false }, {
         route: "org",
@@ -295,7 +348,7 @@ export async function buildPlayerCards(
         nameOf: () => "",
         firstName: ctx.firstName,
       });
-      const ownSettings = own.applicationId ? settingsOf(appsById.get(own.applicationId)?.settings_json) : null;
+      const ownSettings = proposal ? proposalSettings : own?.applicationId ? settingsOf(appsById.get(own.applicationId)?.settings_json) : null;
       const offer = seat.terms && p.termsOffer ? (p.termsOffer as SeatSettings) : null;
       const worksWith: WorksWithIn[] = [];
       for (const r of relations) {
@@ -319,7 +372,13 @@ export async function buildPlayerCards(
         accountabilities: (p.accountabilities as string[]) ?? [],
         criticality: p.criticality as "normal" | "high",
         circle: role.circleId ? { id: role.circleId, name: circleName.get(role.circleId) ?? "" } : null,
-        termEndsAt: memberUp ? iso(own.termEndsAt) : seat.structure ? ((p.termEnds as string | null) ?? null) : undefined,
+        termEndsAt: proposal
+          ? iso(proposal.termEndsAt)
+          : memberUp
+            ? iso(own!.termEndsAt)
+            : seat.structure
+              ? ((p.termEnds as string | null) ?? null)
+              : undefined,
         archetypes: seat.structure ? ((p.archetypes as string[]) ?? []) : undefined,
         archetypesSuggested: role.archetypesSuggested,
         bringMe: null,
@@ -332,16 +391,18 @@ export async function buildPlayerCards(
               label: CAPABILITY_LABELS[g.capability as Capability] ?? String(g.capability),
             }))
           : undefined,
-        tensions: memberUp ? tensions : undefined,
-        settings: seat.terms ? ownSettings ?? offer : undefined,
+        tensions: memberUp ? (proposal ? [] : tensions) : undefined,
+        // A proposal is drawn on its own terms, never the offer on the role.
+        settings: seat.terms ? (proposal ? proposalSettings : ownSettings ?? offer) : undefined,
         holderCount: Number(p.holderCount ?? held.length),
         covered: seat.structure ? covered.has(id) : undefined,
-        circleDecisions: memberUp && role.circleId ? decisionsByCircle.get(role.circleId) ?? 0 : memberUp ? 0 : undefined,
-        pendingWords: isSelf ? Array.from(pendingByRole.get(id) ?? []) : [],
+        // The decisions read counts only the circles of held roles, so a proposal leaves it uncounted.
+        circleDecisions: proposal ? undefined : memberUp && role.circleId ? decisionsByCircle.get(role.circleId) ?? 0 : memberUp ? 0 : undefined,
+        pendingWords: isSelf && !proposal ? Array.from(pendingByRole.get(id) ?? []) : [],
       };
     });
 
-    const tasks: TaskIn[] = heldIds.flatMap((id) =>
+    const tasks: TaskIn[] = proposal ? [] : heldIds.flatMap((id) =>
       (tasksByRole.get(id) ?? [])
         // Open, or done this moon: by its own stamp, or by a "done" answer this moon.
         .filter((t) => t.status === "open" || (t.status === "done" && (t.done_at !== null || doneThisMoon.has(String(t.entry_id)))))
@@ -355,19 +416,22 @@ export async function buildPlayerCards(
 
     const plans = rows.plans.filter((p) => String(p.user_id) === owner.userId);
     const plan = isSelf ? plans[plans.length - 1] : [...plans].reverse().find((p) => p.filed_at);
-    const applications: ApplicationIn[] = rows.applications
-      .filter((a) => String(a.candidate_user_id) === owner.userId)
+    const applications: ApplicationIn[] = ownApps
+      .filter((a) => a.candidateUserId === owner.userId)
       .map((a) => ({
-        id: String(a.id),
-        candidate_user_id: String(a.candidate_user_id),
-        seat_ids: json<unknown[]>(a.seat_ids, []).map(String),
-        status: String(a.status),
-        created_at: iso(a.created_at) ?? "",
-        decided_at: iso(a.decided_at),
-        term_season_id: a.term_season_id ?? null,
-        starts_at: iso(a.starts_at),
-        term_ends_at: iso(a.term_ends_at),
+        id: a.id,
+        candidate_user_id: a.candidateUserId,
+        seat_ids: a.seatIds,
+        status: a.status,
+        created_at: iso(a.createdAt) ?? "",
+        decided_at: iso(a.decidedAt),
+        term_season_id: a.termSeasonId ?? null,
+        starts_at: iso(a.startsAt),
+        term_ends_at: iso(a.termEndsAt),
       }));
+    const pastSeatings = pastHeld
+      .filter((p) => p.userId === owner.userId)
+      .map((p) => ({ roleId: p.roleId, startedAt: iso(p.startedAt), endedAt: iso(p.endedAt) }));
 
     const input: PlayerCardInput = {
       now: ctx.now,
@@ -386,6 +450,9 @@ export async function buildPlayerCards(
       signRows: memberUp ? {} : undefined,
       howIHold: memberUp ? null : undefined,
       applications: memberUp ? applications : undefined,
+      pastSeatings: isSelf ? pastSeatings : undefined,
+      endedSeasonIds: ctx.endedSeasonIds ?? [],
+      mode: proposal ? "proposal" : "live",
       roleNames: Object.fromEntries(roleName),
       bonusTokenName: null,
       loadRead: memberUp ? null : undefined,
@@ -439,14 +506,21 @@ function readOffer(role: OrgRole): SeatSettings | null {
   return r.ok ? r.settings ?? null : null;
 }
 
-/** For the route: the season and the next one, out of `seasonState()`. */
-export function cardSeasons(state: {
-  current?: { id: string; name?: string | null; startsOn?: string | null; endsOn?: string | null } | null;
-  upcoming?: { id: string } | null;
-}): { season: CardSeason | null; nextSeasonId: string | null } {
+/** For the route: the season, the next one and the ended ones, out of `seasonState()`. */
+export function cardSeasons(
+  state: {
+    current?: { id: string; name?: string | null; startsOn?: string | null; endsOn?: string | null } | null;
+    upcoming?: { id: string } | null;
+    seasons?: ReadonlyArray<{ id: string; endsOn?: string | null }>;
+    timezone?: string;
+  },
+  now: Date = new Date(),
+): { season: CardSeason | null; nextSeasonId: string | null; endedSeasonIds: string[] } {
   const c = state.current ?? null;
+  const tz = state.timezone || "UTC";
   return {
     season: c ? { id: String(c.id), name: c.name ?? null, startsOn: c.startsOn ?? null, endsOn: c.endsOn ?? null } : null,
     nextSeasonId: state.upcoming?.id ? String(state.upcoming.id) : null,
+    endedSeasonIds: Array.from(endedSeasons(state.seasons ?? [], (d) => civilDateInstant(d, tz), now)),
   };
 }
