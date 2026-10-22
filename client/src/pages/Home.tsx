@@ -3,7 +3,7 @@ import BuildProgress from "@/components/BuildProgress";
 import SeasonBanner from "@/components/SeasonBanner";
 import VillagePulse from "@/components/VillagePulse";
 import MapPeek from "@/components/MapPeek";
-import { altOr, useBrandImages, useGameConfig, useVillageLinks } from "@/lib/gameApi";
+import { altOr, useBrandImages, useVillageLinks } from "@/lib/gameApi";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -27,7 +27,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Image } from "@/components/Image";
-import { useVillageLocation, useVillageName } from "@/hooks/useVillageName";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized, Highlighted } from "@/components/PageText";
+import { HOME_PAGE } from "@shared/pageContent/home";
 import { useModule } from "@/modules/ModuleProvider";
 import { scrollBehavior } from "@/components/natural/scrollBehavior";
 
@@ -80,73 +82,42 @@ function JourneyArt({ src, alt }: { src: string | undefined; alt: string }) {
   );
 }
 
-const journeyCards = (villageName: string) => [
-  {
-    id: "investor",
-    title: "Investor",
-    subtitle: "Capital Contributor",
-    description: "Plant capital in a project built to last. The village grows, community ownership stays intact, and returns and values move in the same direction.",
-    icon: TrendingUp,
-    href: "/investor",
-    color: "bg-amber",
-    imageKey: "investorHero" as const,
-  },
-  {
-    id: "steward",
-    title: "Village Steward",
-    subtitle: "Co-Creator",
-    description: "Hold a role, join a circle, and keep the whole village running.",
-    icon: Users,
-    href: "/steward",
-    color: "bg-sage",
-    imageKey: "stewardHero" as const,
-  },
-  {
-    id: "resident",
-    title: "Resident",
-    subtitle: "Co-Creator",
-    description: `Make ${villageName} your home. Find a place to live, join the waitlist, and belong.`,
-    icon: HomeIcon,
-    href: "/resident",
-    color: "bg-teal",
-    imageKey: "residentHero" as const,
-  },
-  {
-    id: "prosperity",
-    title: "Prosperity Creator",
-    subtitle: "Business Builder",
-    description: "Launch or grow your business inside the village, and share in what you build.",
-    icon: Sparkles,
-    href: "/prosperity",
-    color: "bg-teal-light",
-    imageKey: "prosperityHero" as const,
-  },
-];
+/** What each path card needs that is not words: where it goes, its icon, its picture. */
+const PATH_CARD_LOOK = {
+  investor: { icon: TrendingUp, href: "/investor", color: "bg-amber", imageKey: "investorHero", altKey: "investorHeroAlt" },
+  steward: { icon: Users, href: "/steward", color: "bg-sage", imageKey: "stewardHero", altKey: "stewardHeroAlt" },
+  resident: { icon: HomeIcon, href: "/resident", color: "bg-teal", imageKey: "residentHero", altKey: "residentHeroAlt" },
+  prosperity: { icon: Sparkles, href: "/prosperity", color: "bg-teal-light", imageKey: "prosperityHero", altKey: "prosperityHeroAlt" },
+} as const;
 
-const journeyStages = [
-  { stage: "Align", description: "Discover our values", icon: Heart },
-  { stage: "Experience", description: "Visit & participate", icon: Calendar },
-  { stage: "Co-Create", description: "Join our circles", icon: Users },
-  { stage: "Integrate", description: "Become a member", icon: CheckCircle2 },
-  { stage: "Home", description: "Make it home", icon: HomeIcon },
+/** Icons for the stages and the people cards, handed out in order. */
+const STAGE_ICONS = [Heart, Calendar, Users, CheckCircle2, HomeIcon, TreePine];
+const PERSONA_LOOKS = [
+  { icon: Laptop, color: "bg-teal/10", iconColor: "text-teal-700" },
+  { icon: GraduationCap, color: "bg-sage/20", iconColor: "text-sage" },
+  { icon: Sunset, color: "bg-amber/20", iconColor: "text-amber-700" },
+  { icon: Zap, color: "bg-primary/10", iconColor: "text-primary" },
+  { icon: Briefcase, color: "bg-teal-light/20", iconColor: "text-teal-600" },
+  { icon: Globe, color: "bg-sage-light/40", iconColor: "text-sage" },
+  { icon: MapPin, color: "bg-teal/10", iconColor: "text-teal-700" },
+  { icon: FileText, color: "bg-sage/20", iconColor: "text-sage" },
+  { icon: Heart, color: "bg-amber/20", iconColor: "text-amber-700" },
 ];
 
 export default function Home() {
   // Blank hides both buttons rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
-  const villageName = useVillageName();
-  // The most-read sentence on the site said "in Costa Rica" in compiled JSX.
-  // Blank means the village has not said where it is, and the sentence then
-  // omits the place rather than naming somebody else's.
-  const location = useVillageLocation();
   const brand = useBrandImages();
-  // The headline is the village's own Tagline from the Setup Wizard. It was
-  // compiled in, so an admin could save a new one, see it served by
-  // /api/game/config, and watch the homepage keep the old words. Blank falls
-  // back to the original line. Null config is "unknown": the heading keeps
-  // its space and stays invisible so the old words never flash first.
-  const cfg = useGameConfig();
-  const tagline = String(cfg?.project?.tagline ?? "").trim();
+  // Every word on this page is the village's own, from Admin, Pages, Home
+  // (shared/pageContent/home.ts). Null until the saved words have arrived:
+  // the hero keeps its space and stays invisible meanwhile, so a visitor never
+  // reads the platform's defaults and then watches them change.
+  const page = usePageContent(HOME_PAGE);
+  const hero = page?.hero.fields;
+  const journey = page?.journey;
+  const paths = page?.paths;
+  const personas = page?.personas;
+  const cta = page?.cta;
   // R47: the hero holds one door forward, plus the map when this village has
   // one. An off module would only answer the door with its closed card.
   const mapOn = !!useModule("map");
@@ -226,34 +197,39 @@ export default function Home() {
               aria-hidden="true"
               className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-teal-band"
             />
+            {hero?.badge ? (
+              <span className="relative inline-block px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-white text-sm font-medium mb-6">
+                {hero.badge}
+              </span>
+            ) : null}
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className={`relative font-display text-5xl md:text-7xl font-bold text-white leading-tight mb-6${cfg ? "" : " invisible"}`}
+              className={`relative font-display text-5xl md:text-7xl font-bold text-white leading-tight mb-6 break-words${hero ? "" : " invisible"}`}
             >
-              {tagline ? tagline : (<>
-              Co-Become the Most{" "}
               {/* text-amber-on-band, not text-primary. --primary is the seed
-                  colour derived to clear 4.5:1 against WHITE, and this word has
-                  a dark band behind it, so it was measured at 1.65:1 and 2.52:1
-                  on the live palette. --tone-sun-on-band is the other half of
-                  the pair --tone-brand-band belongs to: shared/brandTokens.ts
-                  moves the two toward each other until they clear 4.5:1 and
-                  refuses to ship a village theme where they do not. */}
-              <span className="text-amber-on-band">Beautiful</span> Village
-              </>)}
+                  colour derived to clear 4.5:1 against WHITE, and the phrase
+                  has a dark band behind it, so it was measured at 1.65:1 and
+                  2.52:1 on the live palette. --tone-sun-on-band is the other
+                  half of the pair --tone-brand-band belongs to:
+                  shared/brandTokens.ts moves the two toward each other until
+                  they clear 4.5:1 and refuses to ship a village theme where
+                  they do not. */}
+              <Highlighted
+                text={hero?.headline || "\u00a0"}
+                phrase={hero?.highlight ?? ""}
+                render={(phrase) => <span className="text-amber-on-band">{phrase}</span>}
+              />
             </motion.h1>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative text-xl text-white/80 leading-relaxed mb-8"
+              className={`relative text-xl text-white/80 leading-relaxed mb-8${hero ? "" : " invisible"}`}
             >
-              A regenerative village{location ? ` in ${location}` : ""} where all beings{" "}
-              <span className="font-semibold text-white">belong</span> and{" "}
-              <span className="font-semibold text-white">thrive</span>. Start here: pick your path.
+              <Emphasized text={hero?.subline ?? ""} strongClassName="font-semibold text-white" />
             </motion.p>
 
             <motion.div
@@ -325,20 +301,23 @@ export default function Home() {
       </section>
 
       {/* Journey Stages */}
+      {journey && !journey.hidden && (
       <section className="py-16 bg-aqua-light">
         <div className="container">
           <div className="text-center mb-12">
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
-              From First Visit to Home
+              {journey.fields.heading}
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Each stage is a chance to get to know each other. You figure out if {villageName} fits your life; we figure out if you're a good fit for the village.
+              <Emphasized text={journey.fields.intro} />
             </p>
           </div>
 
           <div className="flex flex-wrap justify-center gap-4 md:gap-0">
-            {journeyStages.map((item, index) => (
-              <div key={item.stage} className="flex items-center">
+            {journey.lists.stages.map((item, index, all) => {
+              const Icon = STAGE_ICONS[index % STAGE_ICONS.length];
+              return (
+              <div key={`${index}-${item.name}`} className="flex items-center">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
@@ -347,23 +326,25 @@ export default function Home() {
                   className="flex flex-col items-center px-6 py-4"
                 >
                   <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                    <item.icon className="w-6 h-6 text-primary" />
+                    <Icon className="w-6 h-6 text-primary" />
                   </div>
                   <span className="font-display text-lg font-semibold text-foreground">
-                    {item.stage}
+                    {item.name}
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {item.description}
                   </span>
                 </motion.div>
-                {index < journeyStages.length - 1 && (
+                {index < all.length - 1 && (
                   <ArrowRight className="w-5 h-5 text-muted-foreground hidden md:block" />
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
+      )}
 
       <SeasonBanner />
 
@@ -375,8 +356,10 @@ export default function Home() {
           being asked which way into it you want. */}
       <MapPeek />
 
-      {/* Choose Your Path */}
-      <section id="choose-path" className="py-24 bg-background">
+      {/* Choose Your Path. The section keeps its id when hidden so the
+          hero's "Pick your path" anchor never points at nothing. */}
+      <section id="choose-path" className={paths && !paths.hidden ? "py-24 bg-background" : undefined}>
+        {paths && !paths.hidden && (
         <div className="container">
           <div className="text-center mb-16">
             <motion.span
@@ -385,7 +368,7 @@ export default function Home() {
               viewport={{ once: true }}
               className="inline-block px-4 py-1.5 bg-primary/10 rounded-full text-primary text-sm font-medium mb-4"
             >
-              What brought you here?
+              {paths.fields.eyebrow}
             </motion.span>
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
@@ -393,7 +376,7 @@ export default function Home() {
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
             >
-              Choose your path
+              {paths.fields.heading}
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -402,12 +385,15 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-xl text-muted-foreground max-w-2xl mx-auto"
             >
-              Four ways into {villageName}. Pick the one that fits you today. You can add more later.
+              <Emphasized text={paths.fields.intro} />
             </motion.p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            {journeyCards(villageName).map((card, index) => (
+            {paths.lists.cards.map((card, index) => {
+              const look = PATH_CARD_LOOK[card.id as keyof typeof PATH_CARD_LOOK];
+              if (!look) return null;
+              return (
               <motion.div
                 key={card.id}
                 initial={{ opacity: 0, y: 30 }}
@@ -415,20 +401,22 @@ export default function Home() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
               >
-                <Link href={card.href}>
+                <Link href={look.href}>
                   <div className="group relative overflow-hidden rounded-2xl bg-card shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer">
-                    {/* Image */}
+                    {/* Image. The alt is the one the founder wrote for this
+                        picture; it used to be the card's title, which left
+                        the four alt boxes in Pictures doing nothing here. */}
                     <div className="relative h-56 overflow-hidden">
-                      <JourneyArt src={brand[card.imageKey]} alt={card.title} />
+                      <JourneyArt src={brand[look.imageKey]} alt={altOr(brand[look.altKey], card.title)} />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      <div className={`absolute top-4 left-4 w-12 h-12 ${card.color} rounded-xl flex items-center justify-center`}>
-                        <card.icon className="w-6 h-6 text-white" />
+                      <div className={`absolute top-4 left-4 w-12 h-12 ${look.color} rounded-xl flex items-center justify-center`}>
+                        <look.icon className="w-6 h-6 text-white" />
                       </div>
                     </div>
 
                     {/* Content */}
                     <div className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex flex-wrap items-center gap-x-2 mb-2">
                         <h3 className="font-display text-2xl font-bold text-foreground">
                           {card.title}
                         </h3>
@@ -447,13 +435,16 @@ export default function Home() {
                   </div>
                 </Link>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         </div>
+        )}
       </section>
 
 
       {/* Who comes to this village */}
+      {personas && !personas.hidden && (
       <section className="py-24 bg-background">
         <div className="container">
           <div className="text-center mb-16">
@@ -465,7 +456,7 @@ export default function Home() {
               // index.css documents for sage ink (4.82:1).
               className="inline-block px-4 py-1.5 bg-sage-light rounded-full text-sage text-sm font-medium mb-4"
             >
-              People like you
+              {personas.fields.eyebrow}
             </motion.span>
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
@@ -473,7 +464,7 @@ export default function Home() {
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4"
             >
-              Who Comes to {villageName}?
+              {personas.fields.heading}
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -482,75 +473,16 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-xl text-muted-foreground max-w-2xl mx-auto"
             >
-              {villageName} attracts people who are done half-living. Here are some of
-              the souls who find their way here.
+              <Emphasized text={personas.fields.intro} />
             </motion.p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {[
-              {
-                icon: Laptop,
-                label: "Digital Nomad Couple",
-                tagline: "We want roots without walls.",
-                body: "Location-independent professionals ready to stop bouncing between Airbnbs and plant themselves somewhere with depth, community, and a reason to stay.",
-                color: "bg-teal/10",
-                iconColor: "text-teal-700",
-              },
-              {
-                icon: GraduationCap,
-                label: "Worldschooling Family",
-                tagline: "Our kids deserve a village.",
-                body: "Families who want their children raised by a community, surrounded by nature, multi-generational wisdom, and real-world learning instead of a system.",
-                color: "bg-sage/20",
-                iconColor: "text-sage",
-              },
-              {
-                icon: Sunset,
-                label: "Retiree & Snowbird",
-                tagline: "Finally, a second chapter worth living.",
-                // The closing line was one country's tourism slogan, which a
-                // village elsewhere cannot honour and should not print.
-                body: "Post-career dreamers who want warmth, beauty, belonging, and a role that still matters, not a golf course.",
-                color: "bg-amber/20",
-                iconColor: "text-amber-700",
-              },
-              {
-                icon: Zap,
-                label: "Longevity Seeker",
-                tagline: "I want to live well, not just long.",
-                body: "Health-conscious individuals chasing clean air, organic food, movement, community, and purpose as medicine: building a life designed to thrive.",
-                color: "bg-primary/10",
-                iconColor: "text-primary",
-              },
-              {
-                icon: Briefcase,
-                label: "Remote Exec & Founder",
-                tagline: "I built the life. Now I want meaning.",
-                body: "High-achievers who want their next chapter to matter: contributing capital, skills, or leadership to something regenerative and lasting.",
-                color: "bg-teal-light/20",
-                iconColor: "text-teal-600",
-              },
-              {
-                icon: Globe,
-                /*
-                 * This card used to read "Costa Rican & LatAm Professional",
-                 * offering "the regenerative future of Central America". Every
-                 * other persona here describes a KIND of person and travels
-                 * to any village; this one named one continent, so a founder
-                 * in Portugal or Vermont published an invitation to a region
-                 * they are not in. Generalised rather than deleted: the
-                 * audience is real everywhere, only the map was Amora's.
-                 */
-                label: "Regional Changemaker",
-                tagline: "I want to build something here.",
-                body: `Local and regional changemakers who see ${villageName} as the proving ground for a regenerative future in their own part of the world, and want to help shape it.`,
-                color: "bg-sage-light/40",
-                iconColor: "text-sage",
-              },
-            ].map((persona, index) => (
+            {personas.lists.items.map((persona, index) => {
+              const look = PERSONA_LOOKS[index % PERSONA_LOOKS.length];
+              return (
               <motion.div
-                key={persona.label}
+                key={`${index}-${persona.label}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -558,26 +490,29 @@ export default function Home() {
                 className="bg-card rounded-xl p-6 shadow-sm border border-border"
               >
                 <div
-                  className={`w-12 h-12 rounded-xl ${persona.color} flex items-center justify-center mb-4`}
+                  className={`w-12 h-12 rounded-xl ${look.color} flex items-center justify-center mb-4`}
                 >
-                  <persona.icon className={`w-6 h-6 ${persona.iconColor}`} />
+                  <look.icon className={`w-6 h-6 ${look.iconColor}`} />
                 </div>
                 <h3 className="font-display text-lg font-bold text-foreground mb-1">
                   {persona.label}
                 </h3>
+                {persona.tagline && (
                 <p className="text-primary text-sm font-medium italic mb-3">
                   "{persona.tagline}"
                 </p>
+                )}
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   {persona.body}
                 </p>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="text-center mt-12">
             <p className="text-muted-foreground mb-4">
-              See yourself here? There's a path with your name on it.
+              {personas.fields.footer}
             </p>
             <a
               href="#choose-path"
@@ -594,8 +529,10 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
 
       {/* CTA Section */}
+      {cta && !cta.hidden && (
       <section className="py-24 bg-primary/5">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
@@ -605,7 +542,7 @@ export default function Home() {
               viewport={{ once: true }}
               className="font-display text-4xl md:text-5xl font-bold text-foreground mb-6"
             >
-              Ready to Begin Your Journey?
+              {cta.fields.heading}
             </motion.h2>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -614,8 +551,7 @@ export default function Home() {
               transition={{ delay: 0.1 }}
               className="text-xl text-muted-foreground mb-8"
             >
-              Join our next community call to learn about the basics and ask any questions. 
-              It's the perfect first step on any path.
+              <Emphasized text={cta.fields.body} />
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -632,23 +568,24 @@ export default function Home() {
                   className="px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg hover:bg-teal-deep-dark transition-all duration-200 flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
-                  Join Community Call
+                  {cta.fields.primaryLabel}
                 </a>
               )}
-              {eventsUrl && (
+              {eventsUrl && cta.fields.secondaryLabel && (
                 <a
                   href={eventsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-8 py-4 bg-secondary text-secondary-foreground rounded-lg font-semibold text-lg hover:opacity-90 transition-all duration-200"
                 >
-                  View All Events
+                  {cta.fields.secondaryLabel}
                 </a>
               )}
             </motion.div>
           </div>
         </div>
       </section>
+      )}
     </Layout>
   );
 }

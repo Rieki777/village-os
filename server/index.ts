@@ -51,6 +51,7 @@ import {
 // 0219: the governing purpose statement, its one writer, and its subject.
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
+import { pageContentProblem } from "../shared/pageContent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -7916,6 +7917,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     // 0098: `story.tell`. What a village says about itself in public is the
     // clearest case in the set of a power that belongs to the village.
     if (!(await guardCapability(req, res, "story.tell"))) return;
+    const pageProblem = pageContentProblem(req.params.section, req.body);
+    if (pageProblem) return res.status(400).json({ error: pageProblem });
     const content = contentRepo.get();
     content[req.params.section] = req.body;
     await contentRepo.put(content);
