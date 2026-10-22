@@ -9,7 +9,12 @@
  *                  application. Hand it back is filed with your plan.
  *   NEW SEATS      Apply for a seat opens the same door with no seat picked.
  *   YOUR PART      your aim, the season goal you serve, quests a moon and up
- *                  to three measures. Filed, never voted.
+ *                  to three measures. Filed, never voted. With no quests
+ *                  saved, Fewest and Most fill in from the member's seats
+ *                  (shared/seasonPartSuggestions.ts), marked until saved and
+ *                  never over a saved value. From your roles offers measures
+ *                  from the seats' terms and what each seat answers for, each
+ *                  added only by the member's own Add.
  *
  * Save keeps a new version. File my season stamps the newest one, and the
  * village page shows the version you filed. A plan filed after the window
@@ -29,6 +34,7 @@ import { BreathingLoader } from "@/components/natural";
 import { ApplicationChip, QuestPips } from "@/components/seasonPlans/PlanCard";
 import { fetchMine, fileMine, saveMine, type MinePayload, type PlanBody } from "@/components/seasonPlans/seasonPlansApi";
 import { AIM_MAX, applyHref, civilDayWords, PLAN_MEASURES_MAX } from "@shared/seasonPlans";
+import { questHint, type MeasureSuggestion } from "@shared/seasonPartSuggestions";
 
 export const MY_SEASON_WORDS = {
   title: "Your season",
@@ -67,6 +73,18 @@ export const MY_SEASON_WORDS = {
   target: "Target",
   addMeasure: "Add a measure",
   removeMeasure: "Remove this measure",
+  suggested: "Suggested. Saved when you save.",
+  fromRoles: "From your roles",
+  fromRolesLine: "Add one, then set your own target.",
+  pickUpTo: `Pick up to ${PLAN_MEASURES_MAX}.`,
+  add: "Add",
+  added: "Added",
+  addNamed: (measure: string) => `Add ${measure}`,
+  fromTerms: "From its terms",
+  fromAnswersFor: "What it answers for",
+  termsTarget: (target: string) => `Aims for ${target}.`,
+  noRoleMeasures: "Your seats do not list what they answer for yet.",
+  applyForMeasures: "Apply for a seat to see measures from its role.",
   save: "Save",
   file: "File my season",
   saved: "Saved.",
@@ -84,6 +102,101 @@ interface Measure {
 
 const inputClass =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
+/** A value the page filled in and the member has not saved: dashed, so it reads as a suggestion. */
+const suggestedInputClass = inputClass.replace("border-stone-300 bg-white", "border-dashed border-amber-600 bg-amber-50");
+
+/** The same measure in other words of case and spacing. */
+const measureKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Suggestions by seat, in the order the server ranked them. */
+function bySeat(list: readonly MeasureSuggestion[]): Array<{ seatId: string; seat: string; items: MeasureSuggestion[] }> {
+  const groups: Array<{ seatId: string; seat: string; items: MeasureSuggestion[] }> = [];
+  for (const m of list) {
+    let g = groups.find((x) => x.seatId === m.seatId);
+    if (!g) {
+      g = { seatId: m.seatId, seat: m.seat, items: [] };
+      groups.push(g);
+    }
+    g.items.push(m);
+  }
+  return groups;
+}
+
+/**
+ * FROM YOUR ROLES: measures the member's seats suggest, by seat, each with an
+ * Add button. Nothing is added for them, and Add stops at the plan's limit.
+ */
+function RoleMeasures(props: {
+  suggestions: readonly MeasureSuggestion[];
+  hasSeats: boolean;
+  applyLink: string | null;
+  measures: readonly Measure[];
+  onAdd: (s: MeasureSuggestion) => void;
+}) {
+  const { suggestions, hasSeats, applyLink, measures, onAdd } = props;
+  const taken = new Set(measures.map((m) => measureKey(m.measure)).filter(Boolean));
+  const room = measures.some((m) => !m.measure.trim()) || measures.length < PLAN_MEASURES_MAX;
+  return (
+    <section aria-labelledby="ms-roles" className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4" data-testid="role-measures">
+      <h3 id="ms-roles" className="text-sm font-semibold text-stone-900">
+        {MY_SEASON_WORDS.fromRoles}
+      </h3>
+      {!hasSeats ? (
+        <p className="mt-1 text-sm text-stone-700">
+          {MY_SEASON_WORDS.applyForMeasures}{" "}
+          {applyLink && (
+            <Link href={applyLink} className="font-semibold text-teal-deep underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep">
+              {MY_SEASON_WORDS.apply}
+            </Link>
+          )}
+        </p>
+      ) : suggestions.length === 0 ? (
+        <p className="mt-1 text-sm text-stone-700">{MY_SEASON_WORDS.noRoleMeasures}</p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-stone-700">
+            {MY_SEASON_WORDS.fromRolesLine} <span className={room ? "" : "font-semibold text-stone-900"}>{MY_SEASON_WORDS.pickUpTo}</span>
+          </p>
+          {bySeat(suggestions).map((g) => (
+            <div key={g.seatId} className="mt-3">
+              <h4 className="text-sm font-bold text-stone-800">{g.seat}</h4>
+              <ul className="mt-1 space-y-2">
+                {g.items.map((s) => {
+                  const added = taken.has(measureKey(s.measure));
+                  return (
+                    <li key={`${s.from}:${s.measure}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-stone-900">{s.measure}</p>
+                        <p className="text-xs text-stone-600">
+                          {s.from === "terms" ? MY_SEASON_WORDS.fromTerms : MY_SEASON_WORDS.fromAnswersFor}
+                          {s.target ? `. ${MY_SEASON_WORDS.termsTarget(s.target)}` : ""}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onAdd(s)}
+                        disabled={added || !room}
+                        aria-label={added ? `${MY_SEASON_WORDS.added}: ${s.measure}` : MY_SEASON_WORDS.addNamed(s.measure)}
+                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-teal-deep px-3 text-sm font-semibold text-teal-deep hover:bg-teal-deep/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:border-stone-300 disabled:text-stone-600 disabled:hover:bg-transparent"
+                      >
+                        {added ? MY_SEASON_WORDS.added : (
+                          <>
+                            <Plus className="h-4 w-4" aria-hidden="true" />
+                            {MY_SEASON_WORDS.add}
+                          </>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
 
 export default function MySeason() {
   const { user } = useAuth();
@@ -102,14 +215,23 @@ export default function MySeason() {
   const [most, setMost] = useState("");
   const [measures, setMeasures] = useState<Measure[]>([]);
   const [handingBack, setHandingBack] = useState<string[]>([]);
+  /** True while Fewest and Most hold the seats' suggestion and nothing the member saved. */
+  const [questsSuggested, setQuestsSuggested] = useState(false);
 
   const adopt = useCallback((d: MinePayload) => {
     setData(d);
     const p = d.plan;
     setAim(p?.aim ?? "");
     setGoal(p?.servesGoal ?? "");
-    setFewest(p?.commitments?.quests?.perMoonMin != null ? String(p.commitments.quests.perMoonMin) : "");
-    setMost(p?.commitments?.quests?.perMoonMax != null ? String(p.commitments.quests.perMoonMax) : "");
+    const savedQuests = p?.commitments?.quests;
+    const hasSaved = savedQuests?.perMoonMin != null || savedQuests?.perMoonMax != null;
+    // A saved value is never overwritten. With none, the seats' suggestion fills in, marked until saved.
+    const fill = hasSaved ? null : d.suggestions?.quests ?? null;
+    const min = hasSaved ? savedQuests?.perMoonMin : fill?.min;
+    const max = hasSaved ? savedQuests?.perMoonMax : fill?.max;
+    setFewest(min != null ? String(min) : "");
+    setMost(max != null ? String(max) : "");
+    setQuestsSuggested(!!fill && (fill.min != null || fill.max != null));
     setMeasures((p?.commitments?.scoreboard?.measures ?? []).map((m) => ({ measure: m.measure, target: m.target ?? "" })));
     setHandingBack(p?.handingBack ?? []);
   }, []);
@@ -391,18 +513,26 @@ export default function MySeason() {
                   </div>
                 )}
 
-                <fieldset>
+                <fieldset aria-describedby={questsSuggested ? "ms-quests-hint" : undefined}>
                   <legend className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.quests}</legend>
                   <div className="mt-1 grid max-w-xs grid-cols-2 gap-3">
                     <label className="text-sm text-stone-700">
                       {MY_SEASON_WORDS.fewest}
-                      <input type="number" min={1} max={12} inputMode="numeric" value={fewest} onChange={(e) => setFewest(e.target.value)} className={`mt-1 ${inputClass}`} />
+                      <input type="number" min={1} max={12} inputMode="numeric" value={fewest} onChange={(e) => setFewest(e.target.value)} className={`mt-1 ${questsSuggested ? suggestedInputClass : inputClass}`} />
                     </label>
                     <label className="text-sm text-stone-700">
                       {MY_SEASON_WORDS.most}
-                      <input type="number" min={1} max={12} inputMode="numeric" value={most} onChange={(e) => setMost(e.target.value)} className={`mt-1 ${inputClass}`} />
+                      <input type="number" min={1} max={12} inputMode="numeric" value={most} onChange={(e) => setMost(e.target.value)} className={`mt-1 ${questsSuggested ? suggestedInputClass : inputClass}`} />
                     </label>
                   </div>
+                  {questsSuggested && data.suggestions && (
+                    <div id="ms-quests-hint" data-testid="quests-suggested" className="mt-2 text-sm text-stone-700">
+                      <p>{questHint(data.suggestions.quests)}</p>
+                      <p className="mt-1 inline-flex items-center rounded-full border border-dashed border-amber-600 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                        {MY_SEASON_WORDS.suggested}
+                      </p>
+                    </div>
+                  )}
                   <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-stone-700">
                     {MY_SEASON_WORDS.thisMoon}:{" "}
                     <QuestPips done={data.questsThisMoon.done} min={fewest ? Number(fewest) : null} max={most ? Number(most) : null} />
@@ -455,6 +585,21 @@ export default function MySeason() {
                       {MY_SEASON_WORDS.addMeasure}
                     </button>
                   )}
+                  <RoleMeasures
+                    suggestions={data.suggestions?.measures ?? []}
+                    hasSeats={data.heldSeats.length > 0 || data.applications.length > 0}
+                    applyLink={data.mayApply === false ? null : applyHref({ seasonId: season.id })}
+                    measures={measures}
+                    onAdd={(s) =>
+                      setMeasures((list) => {
+                        if (list.some((x) => measureKey(x.measure) === measureKey(s.measure))) return list;
+                        // The target is the member's to set.
+                        const empty = list.findIndex((x) => !x.measure.trim());
+                        if (empty >= 0) return list.map((x, xi) => (xi === empty ? { ...x, measure: s.measure } : x));
+                        return list.length < PLAN_MEASURES_MAX ? [...list, { measure: s.measure, target: "" }] : list;
+                      })
+                    }
+                  />
                 </fieldset>
               </div>
             </section>
