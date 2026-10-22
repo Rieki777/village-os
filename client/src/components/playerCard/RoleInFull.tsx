@@ -36,7 +36,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         {role.title}
       </h3>
 
-      <div className="rounded-xl border-l-4 border-notice bg-muted p-4">
+      <div className="rounded-xl border border-notice/40 border-l-4 border-l-notice bg-card p-4">
         <Eyebrow gold>{role.purpose.heading}</Eyebrow>
         <SlotView slot={role.purpose.text}>{(t) => <p className="mt-1 font-display text-xl">{t}</p>}</SlotView>
         {role.purpose.why ? <p className="mt-2 text-sm text-muted-foreground">{role.purpose.why}</p> : null}
