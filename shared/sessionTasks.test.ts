@@ -789,7 +789,7 @@ describe("the words for the menu, the profile card and the bell", () => {
   it("names each bell button with the task it acts on", () => {
     expect(TASK_COPY.bell.done).toBe("It's done");
     expect(TASK_COPY.bell.open).toBe("Open");
-    expect(TASK_COPY.bell.marked).toBe("Done. The circle sees it at the next action check.");
+    expect(TASK_COPY.bell.marked).toBe("Beautiful work. The circle sees it at the next action check.");
     expect(TASK_COPY.bell.undo).toBe("Open it again");
     expect(TASK_COPY.bell.doneLabel("Fix the tank")).toBe("It's done: Fix the tank");
     // Label in Name (WCAG 2.5.3): a voice user says the visible words, so each name starts with them.

@@ -468,7 +468,7 @@ export const LIBRARY_COPY = {
   save: ROOM_COPY.save,
   saving: "Saving...",
   saved: (circleName: string | null): string =>
-    circleName ? `Thank you. It is waiting for the ${circleWords(circleName)}.` : "Thank you. It is waiting for any circle.",
+    circleName ? `Thanks. It's waiting for the ${circleWords(circleName)}.` : "Thanks. It's waiting for any circle.",
   empty: "Nothing is waiting yet. Bring what needs a circle's time, and it is offered when that circle next meets.",
   broughtBy: (name: string, date: string): string => `Brought by ${name} · ${date}`,
   /** On the room's agenda row, where whoever brought it may not be in the room. */
