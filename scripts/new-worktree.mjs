@@ -116,8 +116,33 @@ if (fs.existsSync(dir)) fail(`${dir} already exists.`);
 const branches = git(["for-each-ref", "--format=%(refname:short)", "refs/heads"]).split("\n");
 if (branches.includes(branch)) fail(`branch ${branch} already exists. Pick another name or delete it first.`);
 
-console.log(`fetching ${BASE.split("/")[0]}...`);
-git(["fetch", BASE.split("/")[0] ?? "origin", "--quiet"]);
+/*
+ * WHICH REMOTE TO FETCH, when `--base` may not name one.
+ *
+ * This read `BASE.split("/")[0]` as the remote, which is right for
+ * `origin/main` and wrong for every base without a slash: `--base <SHA>`
+ * became `git fetch <SHA>`, which fails with "does not appear to be a git
+ * repository" and reads as a bad SHA rather than a bad assumption. Found while
+ * rehearsing production's migrations from a commit rather than a branch.
+ *
+ * So ask git what its remotes ARE, and only treat the prefix as one when it is
+ * on that list. A bare SHA, a tag, or a local branch all fall through to
+ * `origin`, which is what the fetch was for: making sure the base exists
+ * locally before the worktree is cut from it.
+ */
+const REMOTES = git(["remote"]).split(/\s+/).filter(Boolean);
+const BASE_PREFIX = BASE.includes("/") ? BASE.slice(0, BASE.indexOf("/")) : "";
+const FETCH_REMOTE = REMOTES.includes(BASE_PREFIX)
+  ? BASE_PREFIX
+  : REMOTES.includes("origin")
+    ? "origin"
+    : REMOTES[0];
+if (!FETCH_REMOTE) {
+  console.log("no remotes configured, skipping the fetch");
+} else {
+  console.log(`fetching ${FETCH_REMOTE}...`);
+  git(["fetch", FETCH_REMOTE, "--quiet"]);
+}
 
 // TRAP 1. `--no-track` is the whole fix: the upstream is never created.
 console.log(`creating the worktree...`);
