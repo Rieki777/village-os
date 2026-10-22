@@ -402,9 +402,22 @@ describe("hasCapability truth table", () => {
        *
        * TWENTY-TWO WITH `module.switch`, Rye's ruling of 2026-10-09: after launch
        * a live holder of the modules power turns a module on directly, so
-       * `module.switch` is a power a village hands to a seat, and the founding
-       * stewards take it with the rest at launch. Flagged to him in the lane
-       * report. It is a new key born transferable, so the complement stays 16.
+       * `module.switch` is a power a village hands to a role, and the founding
+       * stewards take it with the rest at launch. It is a new key born
+       * transferable, so the complement stays 16.
+       *
+       * CONFIRMED BY RYE ON 2026-10-22, in as many words: "confirm 22 and 12".
+       * His 2026-10-09 ruling records TWENTY, and the three powers above are why
+       * it reads 22 - comms.manage, org.decide and module.switch were each judged
+       * transferable after he counted. Nobody mis-implemented anything; the set is
+       * DERIVED, so it recounted itself. The reasoning he accepted: this set is
+       * what the founding role holds at launch and can hand over, so leaving a
+       * power OUT would mean nobody holds it at all - the opposite of what the
+       * handover is for.
+       *
+       * A FURTHER transferable power still needs his word. The count is a reading
+       * of "all steward powers", not an implementation detail, and the check below
+       * exists so the next one asks him rather than drifting past.
        */
       expect(HANDOVER_SET).toHaveLength(22);
       expect(HANDOVER_SET).toContain("comms.manage");
