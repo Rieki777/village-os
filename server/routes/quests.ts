@@ -72,7 +72,7 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
-import { payLineProblem, payableTokens, questPay, questPayRules, rolePayRules } from "../lib/workPay";
+import { payLineProblem, payableTokens, questPay, questPayRules, recognitionName, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput } from "../../shared/workValue";
 
@@ -166,6 +166,8 @@ export function register(app: Express, deps: Deps): void {
     const [quest, role] = await Promise.all([questPayRules(getPool()), rolePayRules(getPool())]);
     res.json({
       currency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),
+      // The recognition token's live name, for the sentence saying it pays no work.
+      recognition: recognitionName(),
       quest: payableTokens(quest),
       role: payableTokens(role),
     });

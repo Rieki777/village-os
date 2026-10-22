@@ -110,6 +110,7 @@ export default function QuestProposalCard({
           currency={options?.currency ?? null}
           cadence="once"
           inputClassName={field}
+          recognitionName={options?.recognition ?? null}
         />
       </div>
       <div className="flex flex-wrap gap-2 mt-2">
