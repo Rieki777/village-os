@@ -1035,7 +1035,7 @@ export const SESSION_COPY = {
   unownedLeft: "still need someone",
   everyoneHolds: "Every action has someone holding it.",
   closeButton: "Close the session",
-  closeDone: "Beautiful work, circle. The session is closed, and the record is saved for everyone who was here.",
+  closeDone: "Beautiful work, circle. The session is closed, and the notes are saved for everyone who was here.",
   wordPrompt: "One word as you leave",
   facilitationPrompt: "How did the facilitation feel?",
   facilitationMore: "What would you keep, or try next time? The facilitator reads this unsigned.",
@@ -1310,7 +1310,7 @@ export const ROOM_COPY = {
   facilitationHeading: "What the room said about the facilitation",
   facilitationNone: "No feedback yet.",
   toolSend: "Send the idea",
-  closeConfirm: "Close the session now? The arrival words are erased, and the record is saved for everyone who was here.",
+  closeConfirm: "Close the session now? The arrival words are erased, and the notes are saved for everyone who was here.",
   closeYes: "Yes, close it",
   closeNo: "Not yet",
 

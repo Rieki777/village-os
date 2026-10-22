@@ -251,9 +251,10 @@ screen element that shows it.
 | Work With Us email | today's | (unchanged) |
 | Maia's voice | C | Speak as the village's guide from inside its world. Name the place and the people, then offer one next step. |
 
-As shipped, the session-closed line says "the record" in place of "the notes":
-inside a session, Notes already names the note entries, and the closed
-session's page is titled The record. One name per thing.
+The session-closed line ships as picked. Asked whether "notes" should become
+"record" (Notes already names the note entries inside a session), the founder
+ruled on 2026-10-22: "leave it as notes". The close confirmation says the
+same.
 
 ## Applied first
 
