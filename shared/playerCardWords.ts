@@ -63,6 +63,13 @@ export const CARD_WORDS = {
   load: "Load this moon",
   loadRoles: (n: number) => plural(n, "role", "roles"),
   loadTasks: (n: number) => `${plural(n, "open task", "open tasks")} this moon`,
+  loadCaption: "My own read, set each moon.",
+  loadNotSet: "Not set this moon",
+  loadSlider: "How this moon feels, from Healthy to Heavy",
+  loadEnds: ["Healthy", "Heavy"] as const,
+  loadStep: { 1: "Healthy", 2: "Leaning healthy", 3: "Balanced", 4: "Leaning heavy", 5: "Heavy" } as Record<1 | 2 | 3 | 4 | 5, string>,
+  growingEdge: "Growing edge",
+  whoCouldHoldNext: "Who could hold this next",
 
   // One role in full
   keyRole: "Key role",
