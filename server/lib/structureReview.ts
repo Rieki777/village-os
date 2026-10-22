@@ -110,6 +110,16 @@ export async function liveChart(
       active: r.active,
       isExample: r.isExample,
       holders: held.get(r.id) ?? 0,
+      // The live words, for the review's before and after (0268 adds the handover three).
+      words: {
+        aim: r.aim,
+        domain: r.domain,
+        whyItMatters: r.whyItMatters,
+        accountabilities: r.accountabilities,
+        bringMe: r.bringMe ?? null,
+        notMine: r.notMine ?? null,
+        runbook: r.runbook ?? null,
+      },
     })),
   };
 }
