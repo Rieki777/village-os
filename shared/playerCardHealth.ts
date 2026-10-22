@@ -87,7 +87,7 @@ export const HEALTH_WORDS = {
   card: "Card complete",
   partsWritten: (n: number, of: number, missing: string) =>
     missing ? `${n} of ${of} parts written: ${missing} missing` : `All ${of} parts written`,
-  runbook: "Runbook written",
+  runbook: "Runbook",
   decisions: "Decisions recorded in the circle, last 3 moons",
   decisionsN: (n: number) => (n === 1 ? "1 decision recorded" : `${n} decisions recorded`),
   noCircle: "The role sits in no circle",
