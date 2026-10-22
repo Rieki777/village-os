@@ -6,7 +6,9 @@
  * (version 12). Its order is this file's order: the header; one tile per
  * role; what runs across every role; each role in full, title first and its
  * purpose straight after; the moon timeline; how I hold my roles; my
- * applications; my agreements, with pay small at the bottom.
+ * applications; my agreements, with pay small at the bottom. Accomplished
+ * (PR 4) follows the moon timeline: the tasks whose work was accepted, by
+ * the moon the work was done in.
  *
  * Pure and node-tested (`playerCard.test.ts`), the same pattern as
  * `shared/roleSheet.ts`, whose rules it keeps:
@@ -37,8 +39,11 @@ import { civilDaysBetween, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W, ALLOWANCE_WORDS, APPLICATION_STATUS_WORDS, PAY_WORDS, PER_WORDS } from "./playerCardWords";
 import { formatDay, joinList, type Read } from "./roleSheet";
 import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleSigns";
+import { roleHandover, roleHealth, type HandoverOut, type HealthOut } from "./playerCardHealth";
+import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
+import type { AccomplishmentMoon } from "./taskAccomplishments";
 
 export * from "./playerCardWords";
 export type { Read } from "./roleSheet";
@@ -146,6 +151,14 @@ export interface PlayerRoleIn {
    * a host passes nothing and no invoice marker is drawn.
    */
   invoiceOn?: string[];
+  /** Live holders of the role, the owner included (`holderCount` on `/api/org`). */
+  holderCount?: Read<number>;
+  /** A deputy or successor relation covers the role (`coveredSeatIds`). */
+  covered?: Read<boolean>;
+  /** Decisions recorded in the role's circle over the last three moons. */
+  circleDecisions?: Read<number>;
+  /** Role words an open org draft would change: "Proposed, waiting for consent". */
+  pendingWords?: Read<RoleEditKey[]>;
 }
 
 export interface TaskIn {
@@ -219,7 +232,32 @@ export interface PlayerCardInput {
   roleNames: Read<Record<string, string>>;
   /** The equity token's name, for the bonus words. */
   bonusTokenName: Read<string | null>;
+  /**
+   * The owner's accepted tasks by moon, straight from `accomplishmentsFor`
+   * (shared/taskAccomplishments.ts), which `accomplishmentsOf` on the server
+   * reads for one member. Optional, so a host written before it compiles:
+   * left out is unread, and draws nothing.
+   */
+  accomplished?: Read<AccomplishmentMoon[]>;
+  /**
+   * The owner's own read of this moon's load, 1 (Healthy) to 5 (Heavy).
+   * Self-reported, never computed. Null is "Not set this moon"; its storage
+   * arrives with the season plan migration (PR 6).
+   */
+  loadRead?: Read<LoadStep | null>;
+  growingEdge?: Read<string | null>;
+  whoCouldHoldNext?: Read<string | null>;
+  /**
+   * Reads one sign. A host passes a memoised reader so a sign is counted once
+   * per cycle for the whole village, never once per role. Without one the
+   * model reads `signRows` itself.
+   */
+  signReader?: (key: string | null, circleId: string | null) => SignReading;
 }
+
+/** The five steps of the owner's own load read. */
+export const LOAD_STEPS = [1, 2, 3, 4, 5] as const;
+export type LoadStep = (typeof LOAD_STEPS)[number];
 
 // ── Output ──────────────────────────────────────────────────────────────────
 
@@ -238,6 +276,8 @@ export interface TileOut {
   title: string;
   /** The role's section on this card. */
   anchor: string;
+  /** Three facts and a dot, never a score. Null when nothing could be read. */
+  health: HealthOut | null;
 }
 
 export interface SignOut {
@@ -249,6 +289,8 @@ export interface SignOut {
   from: string | null;
   reading: SignReading;
   target: Figure | null;
+  /** Which sheet of rows stands behind this sign: its key, and the circle for a circle sign. */
+  sheetKey: string | null;
 }
 
 export interface AcrossOut {
@@ -259,7 +301,17 @@ export interface AcrossOut {
   goals: Slot<{ goal: string; howItHelps: string }[]>;
   tasks: Slot<{ id: string; title: string; roleTitle: string | null; state: string; doneWhen: string | null }[]>;
   signs: Slot<SignOut[]>;
-  load: { words: string; roles: Figure; openTasks: Figure | null };
+  load: {
+    heading: string;
+    words: string;
+    roles: Figure;
+    openTasks: Figure | null;
+    /** The owner's own read, self-reported. */
+    own: Slot<{ step: LoadStep; words: string }>;
+    caption: string;
+  };
+  growingEdge: { heading: string; text: Slot<string> };
+  whoCouldHoldNext: { heading: string; text: Slot<string> };
 }
 
 export interface RoleOut {
@@ -278,6 +330,9 @@ export interface RoleOut {
   runbook: { heading: string; text: Slot<string> };
   powers: { heading: string; items: Slot<string[]> };
   tensions: Slot<{ heading: string; open: string[]; answered: Figure; public: string[] }>;
+  handover: HandoverOut;
+  /** Role words a proposed change is waiting on consent for. */
+  pending: RoleEditKey[];
 }
 
 export type MarkerKind = "new-moon" | "full-moon" | "review" | "renewal" | "ends" | "invoice";
@@ -334,12 +389,28 @@ export interface AgreementsOut {
   roles: { roleId: string; title: string; rows: Slot<AgreementRow[]> }[];
 }
 
+export interface AccomplishedItemOut {
+  id: string;
+  title: string;
+  /** The role it was done for, by full title, when the card knows it. */
+  roleTitle: string | null;
+  /** "Accepted on 3 November". */
+  accepted: string;
+  note: string | null;
+}
+
+export interface AccomplishedOut {
+  heading: string;
+  moons: Slot<{ label: string; startsAt: string; items: AccomplishedItemOut[] }[]>;
+}
+
 export interface PlayerCard {
   header: HeaderOut;
   tiles: { heading: string; items: Slot<TileOut[]> };
   across: AcrossOut;
   roles: RoleOut[];
   timeline: TimelineOut;
+  accomplished: AccomplishedOut;
   howIHold: { heading: string; items: Slot<{ label: string; text: string }[]> };
   applications: ApplicationsOut;
   agreements: AgreementsOut;
@@ -414,7 +485,10 @@ function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
     : {};
   return shown(
     measures.map((m) => {
-      const reading = readSign(m.countedBy ?? null, rows, windows);
+      const circleId = role.circle ? role.circle.id : null;
+      const reading = input.signReader
+        ? input.signReader(m.countedBy ?? null, circleId)
+        : readSign(m.countedBy ?? null, rows, windows);
       const value =
         reading.kind === "counted"
           ? reading.now.of === undefined
@@ -432,9 +506,15 @@ function signsFor(role: PlayerRoleIn, input: PlayerCardInput): Slot<SignOut[]> {
           reading.kind === "counted" && m.targetCount !== undefined
             ? { n: m.targetCount, source: "settings.scoreboard.measures.targetCount" }
             : null,
+        sheetKey: reading.kind === "counted" ? signSheetKey(reading.key, circleId) : null,
       };
     }),
   );
+}
+
+/** The key a sign's sheet of rows is filed under: a circle sign is per circle. */
+export function signSheetKey(key: string, circleId: string | null): string {
+  return key === "circle-met" && circleId ? `${key}:${circleId}` : key;
 }
 
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
@@ -507,6 +587,8 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
     powers: { heading: anyShared ? W.powersShared : W.powers, items: powers },
     tensions: tensionsFor(role, input),
+    handover: roleHandover(role),
+    pending: role.pendingWords ?? [],
   };
 }
 
@@ -577,7 +659,24 @@ function across(input: PlayerCardInput, roles: PlayerRoleIn[] | undefined, roleO
   const openTasks: Figure | null =
     input.tasks === undefined ? null : { n: input.tasks.filter((t) => t.status === "open").length, source: "tasks.status" };
   const words = [W.loadRoles(n), ...(openTasks ? [W.loadTasks(openTasks.n)] : [])].join(" · ");
-  return { heading, doors, aim, seasonalGoals, goals, tasks, signs, load: { words, roles: rolesFig, openTasks } };
+  const lr = input.loadRead;
+  const own: AcrossOut["load"]["own"] =
+    lr === undefined ? UNREAD : lr === null ? empty(W.loadNotSet) : shown({ step: lr, words: W.loadStep[lr] });
+  return {
+    heading,
+    doors,
+    aim,
+    seasonalGoals,
+    goals,
+    tasks,
+    signs,
+    load: { heading: W.load, words, roles: rolesFig, openTasks, own, caption: W.loadCaption },
+    growingEdge: { heading: W.growingEdge, text: input.growingEdge === undefined ? UNREAD : textSlot(input.growingEdge, W.notWritten) },
+    whoCouldHoldNext: {
+      heading: W.whoCouldHoldNext,
+      text: input.whoCouldHoldNext === undefined ? UNREAD : textSlot(input.whoCouldHoldNext, W.notWritten),
+    },
+  };
 }
 
 // ── The timeline ───────────────────────────────────────────────────────────
@@ -756,6 +855,36 @@ function agreements(input: PlayerCardInput, roles: PlayerRoleIn[]): AgreementsOu
   };
 }
 
+// ── Accomplished ───────────────────────────────────────────────────────────
+
+function accomplished(input: PlayerCardInput, roles: PlayerRoleIn[]): AccomplishedOut {
+  const heading = W.accomplished;
+  const moons = input.accomplished;
+  if (moons === undefined) return { heading, moons: UNREAD };
+  const tz = input.timeZone;
+  const titleOf = new Map(roles.map((r) => [r.id, r.name]));
+  const names = input.roleNames ?? {};
+  const out = moons
+    .map((m) => {
+      const lastDay = new Date(Date.parse(m.endsAt) - 1).toISOString();
+      return {
+        label: W.moonDates(formatDay(m.startsAt, false, tz) ?? "", formatDay(lastDay, false, tz) ?? ""),
+        startsAt: m.startsAt,
+        items: m.items
+          .filter((a) => clean(a.text))
+          .map((a) => ({
+            id: String(a.entryId),
+            title: clean(a.text)!,
+            roleTitle: a.roleId ? (titleOf.get(a.roleId) ?? clean(names[a.roleId]) ?? null) : null,
+            accepted: W.acceptedOn(formatDay(a.acceptedAt, false, tz) ?? ""),
+            note: clean(a.note),
+          })),
+      };
+    })
+    .filter((m) => m.items.length > 0);
+  return { heading, moons: out.length ? shown(out) : empty(W.noAccomplished) };
+}
+
 // ── The card ───────────────────────────────────────────────────────────────
 
 export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
@@ -768,7 +897,14 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
       roles === undefined
         ? UNREAD
         : list.length
-          ? shown(list.map((r) => ({ roleId: r.id, title: r.name, anchor: ROLE_ANCHOR(r.id) })))
+          ? shown(
+              list.map((r, i) => ({
+                roleId: r.id,
+                title: r.name,
+                anchor: ROLE_ANCHOR(r.id),
+                health: roleHealth(r, roleOuts[i].working.items, input.now, input.timeZone),
+              })),
+            )
           : empty(W.holdsNoRoles),
   };
   return {
@@ -777,6 +913,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
     across: across(input, roles, roleOuts),
     roles: roleOuts,
     timeline: timeline(input, list),
+    accomplished: accomplished(input, list),
     howIHold: {
       heading: W.howIHold,
       items:

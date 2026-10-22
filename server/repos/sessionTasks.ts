@@ -236,6 +236,48 @@ export async function eventRows(q: Queryable, entryId: number): Promise<RowDataP
   );
 }
 
+// ── Accepted as accomplished ────────────────────────────────────────────────
+
+/**
+ * The tasks accepted as accomplished that could be one member's: held by them
+ * in person, or held by a role (whoever marked it done is read off the events
+ * by the lib). Through the owner index for the first half.
+ */
+export async function acceptedTaskRowsFor(q: Queryable, memberNo: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'done' AND \`t\`.\`latest_kind\` = 'accepted' ` +
+      "AND (`t`.`owner_no` = ? OR ((`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) AND `t`.`owner_seat_id` IS NOT NULL AND `t`.`owner_seat_id` <> '')) " +
+      "ORDER BY `t`.`entry_id`",
+    [memberNo],
+  );
+}
+
+/** Every answer these tasks were given, oldest first per task, through the entry index. */
+export async function eventRowsFor(q: Queryable, entryIds: readonly number[]): Promise<RowDataPacket[]> {
+  if (entryIds.length === 0) return [];
+  return rowsOf(
+    q,
+    "SELECT `id`, `entry_id`, `session_id`, `kind`, `by_no`, `status`, `owner_no`, `owner_seat_id`, `note`, `created_at` " +
+      "FROM `live_session_task_events` WHERE `entry_id` IN (?) ORDER BY `entry_id`, `id`",
+    [[...entryIds]],
+  );
+}
+
+/**
+ * Done tasks not accepted yet, marked done at or after `since`, newest first,
+ * at most `limit`. What a holder of the power that seats people may be asked
+ * to accept; the lib leaves out their own work.
+ */
+export async function doneNotAcceptedRows(q: Queryable, since: Date, limit: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'done' AND \`t\`.\`latest_kind\` <> 'accepted' ` +
+      "AND `t`.`done_at` >= ? ORDER BY `t`.`done_at` DESC, `t`.`entry_id` DESC LIMIT ?",
+    [since, Math.max(1, Math.floor(limit))],
+  );
+}
+
 // ── A circle, and one session ───────────────────────────────────────────────
 
 /**

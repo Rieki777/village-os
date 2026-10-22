@@ -9,6 +9,7 @@
  *   GET   /api/sessions/tasks/count           TaskCountPayload, the signed-in member's own
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task }, or 409 { error, task }
  *   POST  /api/sessions/tasks/:entryId/done   {} -> { task }: "It's done" from a notice
+ *   POST  /api/sessions/tasks/:entryId/accept { note? } -> { task }: "Accept as accomplished"
  *   GET   /api/sessions/:id/task-record       TaskRecordPayload; the mail line only for the record's readers
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while open
  *
@@ -37,18 +38,20 @@ import type { AppDeps } from "../lib/appDeps";
 import { memberNo, parseId, rolesIn, mapSession, type MemberLookup, type Outcome } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import { registerJob } from "../lib/scheduler";
-import { answerTask, markTaskDone, taskBoard, taskCount, taskRecord, type TaskDeps } from "../lib/sessionTasks";
+import { acceptTask, answerTask, markTaskDone, taskBoard, taskCount, taskRecord, type TaskDeps } from "../lib/sessionTasks";
 import { TASK_NOTES_EVERY_MS, TASK_NOTES_JOB, reserveSend, runTaskNotes, sendTaskEmails } from "../lib/sessionTaskMail";
 import { sessionRow } from "../repos/liveSessions";
 import { SESSION_REFUSALS as R } from "../../shared/sessions";
-import { TASK_LIMITS, TASK_REFUSALS, TASKS_API } from "../../shared/sessionTasks";
+import { ACCEPTING_POWER, TASK_LIMITS, TASK_REFUSALS, TASKS_API } from "../../shared/sessionTasks";
 
 /**
  * What this module touches, and why. `members` names the people on a card,
  * `circlesRepo` names a circle. The post office, the spine's member reader,
  * `notify`, `notifyAdmins`, the origin and the village's name carry the task
  * emails and the notices. `lapseContext` reads whose seat term still runs.
- * `overLimit` bounds the two doors that write.
+ * `overLimit` bounds the doors that write. `liveHoldersOf` counts who holds
+ * the power that seats people the way the gate counts, for who may accept
+ * work as accomplished; without it nobody is offered the accept control.
  */
 type Deps = Pick<
   AppDeps,
@@ -65,7 +68,10 @@ type Deps = Pick<
   | "lapseContext"
   | "deploymentOrigin"
   | "projectName"
->;
+> & {
+  /** `liveHoldersOf` in server/index.ts. */
+  liveHoldersOf?(capability: string): Promise<string[]>;
+};
 
 const HOUR_MS = 60 * 60 * 1000;
 /** How long a person's name is remembered between reads. */
@@ -93,7 +99,14 @@ export function register(app: Express, deps: Deps): void {
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
     return c ? String(c.name ?? id) : null;
   };
-  const tasks: TaskDeps = { lookup, circleName, lapseContext: deps.lapseContext, notify: deps.notify };
+  const liveHoldersOf = deps.liveHoldersOf;
+  const tasks: TaskDeps = {
+    lookup,
+    circleName,
+    lapseContext: deps.lapseContext,
+    notify: deps.notify,
+    acceptors: liveHoldersOf ? () => liveHoldersOf(ACCEPTING_POWER) : undefined,
+  };
 
   const answer = <T>(res: Response, out: Outcome<T>, ok: (v: T) => unknown) =>
     out.ok ? res.json(ok(out.value)) : res.status(out.status).json({ ...(out.body ?? {}), error: out.error });
@@ -160,6 +173,26 @@ export function register(app: Express, deps: Deps): void {
     const entryId = parseId(req.params?.entryId);
     if (entryId == null) return res.status(404).json({ error: TASK_REFUSALS.notFound });
     answer(res, await markTaskDone(getPool(), who, entryId, tasks), (v) => ({ task: v.task }));
+  });
+
+  /**
+   * "Accept as accomplished". The body is an optional `note`, one line of at
+   * most 300 characters with no payment details; the server reads the version
+   * itself. Nobody accepts their own work (`acceptRefusal`). The appended
+   * `accepted` event is the record of who accepted what and when, the same
+   * audit every answer here leaves, and nothing goes to the public event
+   * spine. A task already accepted answers 200 with the card and changes
+   * nothing. The same hour's bucket as every other answer.
+   */
+  app.post("/api/sessions/tasks/:entryId/accept", async (req, res) => {
+    const who = await signedIn(req, res);
+    if (!who) return;
+    if (await overLimit(`sessions-task-answer:${who.userId}`, TASK_LIMITS.answersPerHour, HOUR_MS)) {
+      return res.status(429).json({ error: TASK_REFUSALS.tooMany });
+    }
+    const entryId = parseId(req.params?.entryId);
+    if (entryId == null) return res.status(404).json({ error: TASK_REFUSALS.notFound });
+    answer(res, await acceptTask(getPool(), who, entryId, req.body, tasks), (v) => ({ task: v.task }));
   });
 
   // ── One session's tasks ───────────────────────────────────────────────────

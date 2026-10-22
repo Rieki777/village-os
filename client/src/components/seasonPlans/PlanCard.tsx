@@ -4,7 +4,8 @@
  * Drawn on the village page and on a member's profile. It carries what the
  * server sends and nothing else: seat names, where each application stands
  * (linking its own page, where members read its terms), the member's aim, the
- * goal they serve, this moon's quest pips and their measures in words. No
+ * goals they serve with how each helps, their seasonal goals, this moon's
+ * quest pips and their measures in words. No
  * money and no terms ever reach this card.
  */
 import type { ReactNode } from "react";
@@ -21,6 +22,9 @@ export const PLAN_CARD_WORDS = {
   applied: "Asked the village",
   aim: "Aim",
   serves: "Serves",
+  howItHelps: "How it helps",
+  seasonalGoals: "Seasonal goals",
+  doneWhen: "Done when",
   thisMoon: "This moon",
   measures: "Measures",
   noSeats: "No roles yet.",
@@ -68,6 +72,9 @@ function Chip({ children, tone = "stone" }: { children: ReactNode; tone?: "stone
 
 export default function PlanCard({ card, headingLevel = 3 }: { card: PlanCardData; headingLevel?: 2 | 3 }) {
   const H = headingLevel === 2 ? "h2" : "h3";
+  // A server before the player card sends only `servesGoal`.
+  const served = card.servesGoals?.length ? card.servesGoals : card.servesGoal ? [{ goal: card.servesGoal, howItHelps: null }] : [];
+  const seasonal = card.seasonalGoals ?? [];
   return (
     <article className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm" aria-labelledby={`plan-${card.userId}`}>
       <header className="flex flex-wrap items-baseline justify-between gap-2">
@@ -120,10 +127,42 @@ export default function PlanCard({ card, headingLevel = 3 }: { card: PlanCardDat
             <dd className="mt-0.5 whitespace-pre-wrap text-base text-stone-900">{card.aim}</dd>
           </div>
         )}
-        {card.servesGoal && (
+        {served.length > 0 && (
           <div>
             <dt className="font-semibold text-stone-700">{PLAN_CARD_WORDS.serves}</dt>
-            <dd className="mt-0.5 text-stone-900">{card.servesGoal}</dd>
+            <dd>
+              <ul className="mt-1 space-y-1.5" data-testid="plan-serves">
+                {served.map((g) => (
+                  <li key={g.goal}>
+                    <p className="text-stone-900">{g.goal}</p>
+                    {g.howItHelps && (
+                      <p className="text-stone-700">
+                        {PLAN_CARD_WORDS.howItHelps}: {g.howItHelps}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        )}
+        {seasonal.length > 0 && (
+          <div>
+            <dt className="font-semibold text-stone-700">{PLAN_CARD_WORDS.seasonalGoals}</dt>
+            <dd>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-stone-900" data-testid="plan-seasonal">
+                {seasonal.map((g, i) => (
+                  <li key={i}>
+                    {g.title}
+                    {g.doneWhen ? (
+                      <span className="block text-stone-700">
+                        {PLAN_CARD_WORDS.doneWhen}: {g.doneWhen}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </dd>
           </div>
         )}
         <div>

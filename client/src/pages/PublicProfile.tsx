@@ -21,6 +21,7 @@ import { formatTokenAmount } from "@/lib/tokenAmount";
 import VouchPanel from "@/components/profile/VouchPanel";
 import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
+import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
@@ -223,6 +224,7 @@ export default function PublicProfile() {
           </section>
         ) : null}
 
+        {sheet.handle ? <PlayerRoleCard handle={sheet.handle} className="mt-10" /> : null}
         {/* Their season (season plans RC1): drawn for a reader holding terms.read, nothing for anybody else. */}
         {sheet.handle && signedIn ? (
           <div className="mt-10">

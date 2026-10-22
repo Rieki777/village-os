@@ -195,9 +195,11 @@ export async function eraseFromAlignments(
   for (const n of names.others) for (const pl of await plansMentioning(pool, n)) if (pl.userId !== who.id) plans.set(pl.id, pl);
   for (const pl of Array.from(plans.values())) {
     const aim = pl.aim === null ? null : scrubText(pl.aim, names.others);
-    const commitments = pl.commitments === null ? null : scrubDeep(pl.commitments, names.others);
-    if (aim === pl.aim && JSON.stringify(commitments) === JSON.stringify(pl.commitments)) continue;
-    await rewritePlanWords(pool, pl.id, aim, commitments);
+    // The plan's JSON groups (0258, 0267): commitments, goals served, seasonal goals and card words.
+    const before = { commitments: pl.commitments, servesGoals: pl.servesGoals, seasonalGoals: pl.seasonalGoals, cardWords: pl.cardWords };
+    const after = scrubDeep(before, names.others);
+    if (aim === pl.aim && JSON.stringify(after) === JSON.stringify(before)) continue;
+    await rewritePlanWords(pool, pl.id, aim, after);
     report.othersWordsScrubbed += 1;
   }
 

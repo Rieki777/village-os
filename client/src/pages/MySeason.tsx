@@ -8,8 +8,10 @@
  *                  for this season, so the village decides it as an ordinary
  *                  application. Hand it back is filed with your plan.
  *   NEW SEATS      Apply for a seat opens the same door with no seat picked.
- *   YOUR PART      your aim, the season goal you serve, quests a moon and up
- *                  to three measures. Filed, never voted. With no quests
+ *   YOUR PART      your aim, a tick for each village goal you serve with a
+ *                  "How it helps" line under each one ticked, one to three
+ *                  seasonal goals of your own (SeasonGoalsFields.tsx), quests
+ *                  a moon and up to three measures. Filed, never voted. With no quests
  *                  saved, Fewest and Most fill in from the member's seats
  *                  (shared/seasonPartSuggestions.ts), marked until saved and
  *                  never over a saved value. From your roles offers measures
@@ -33,6 +35,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import { ApplicationChip, QuestPips } from "@/components/seasonPlans/PlanCard";
 import { fetchMine, fileMine, saveMine, type MinePayload, type PlanBody } from "@/components/seasonPlans/seasonPlansApi";
+import {
+  SeasonalGoalsField,
+  seasonalBody,
+  ServedGoalsField,
+  servedBody,
+  servedRows,
+  type SeasonalRow,
+  type ServedRow,
+} from "@/components/seasonPlans/SeasonGoalsFields";
 import { AIM_MAX, applyHref, civilDayWords, PLAN_MEASURES_MAX } from "@shared/seasonPlans";
 import { questHint, type MeasureSuggestion } from "@shared/seasonPartSuggestions";
 
@@ -62,8 +73,6 @@ export const MY_SEASON_WORDS = {
   partLine: "What you will do this season. You file it. Nobody votes on it.",
   aim: "Your aim",
   aimHelp: "What will be true at the end of the season because of you.",
-  goal: "The season goal you serve",
-  noGoal: "None picked",
   quests: "Quests a moon",
   fewest: "Fewest",
   most: "Most",
@@ -210,7 +219,8 @@ export default function MySeason() {
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [aim, setAim] = useState("");
-  const [goal, setGoal] = useState("");
+  const [served, setServed] = useState<ServedRow[]>([]);
+  const [seasonal, setSeasonal] = useState<SeasonalRow[]>([]);
   const [fewest, setFewest] = useState("");
   const [most, setMost] = useState("");
   const [measures, setMeasures] = useState<Measure[]>([]);
@@ -222,7 +232,9 @@ export default function MySeason() {
     setData(d);
     const p = d.plan;
     setAim(p?.aim ?? "");
-    setGoal(p?.servesGoal ?? "");
+    // A plan saved before the player card holds only `servesGoal`.
+    setServed(servedRows(d.season?.goals ?? [], p?.servesGoals ?? (p?.servesGoal ? [{ goal: p.servesGoal, howItHelps: null }] : [])));
+    setSeasonal((p?.seasonalGoals ?? []).map((g) => ({ title: g.title, doneWhen: g.doneWhen ?? "" })));
     const savedQuests = p?.commitments?.quests;
     const hasSaved = savedQuests?.perMoonMin != null || savedQuests?.perMoonMax != null;
     // A saved value is never overwritten. With none, the seats' suggestion fills in, marked until saved.
@@ -262,9 +274,12 @@ export default function MySeason() {
     const min = n(fewest);
     const max = n(most);
     const kept = measures.filter((m) => m.measure.trim());
+    const servesGoals = servedBody(served);
     return {
       aim: aim.trim(),
-      servesGoal: goal || null,
+      servesGoal: servesGoals[0]?.goal ?? null,
+      servesGoals,
+      seasonalGoals: seasonalBody(seasonal),
       commitments: {
         ...(min !== undefined || max !== undefined
           ? { quests: { ...(min !== undefined ? { perMoonMin: min } : {}), ...(max !== undefined ? { perMoonMax: max } : {}), doneWhenRequired: true as const } }
@@ -273,7 +288,7 @@ export default function MySeason() {
       },
       handingBack,
     };
-  }, [aim, goal, fewest, most, measures, handingBack]);
+  }, [aim, served, seasonal, fewest, most, measures, handingBack]);
 
   const save = async (andFile: boolean) => {
     setBusy(true);
@@ -497,21 +512,8 @@ export default function MySeason() {
                   </p>
                 </div>
 
-                {season.goals.length > 0 && (
-                  <div>
-                    <label htmlFor="ms-goal" className="block text-sm font-semibold text-stone-800">
-                      {MY_SEASON_WORDS.goal}
-                    </label>
-                    <select id="ms-goal" value={goal} onChange={(e) => setGoal(e.target.value)} className={`mt-1 ${inputClass}`}>
-                      <option value="">{MY_SEASON_WORDS.noGoal}</option>
-                      {season.goals.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <ServedGoalsField rows={served} onChange={setServed} />
+                <SeasonalGoalsField rows={seasonal} onChange={setSeasonal} />
 
                 <fieldset aria-describedby={questsSuggested ? "ms-quests-hint" : undefined}>
                   <legend className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.quests}</legend>

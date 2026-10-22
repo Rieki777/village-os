@@ -130,6 +130,9 @@ import { registerJob } from "../lib/scheduler";
 import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
 import { openDraftBallot, ORG_DECIDE, publishDoorFor } from "../lib/orgDraftDecide";
 import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
+import { ACCEPTING_POWER } from "../../shared/sessionTasks";
+import { effectiveLifecycle } from "../lib/modules";
+import { tasksToAccept } from "../lib/sessionTasks";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
@@ -691,7 +694,24 @@ export function register(app: Express, deps: Deps): void {
    * is voting on is frozen, so nobody is asked to publish it and it is left
    * off. Each row links its batch's structure page, which offers the same
    * door (server/routes/structureReview.ts).
+   *
+   * `toAccept` is the done tasks the reader may accept as accomplished
+   * (`tasksToAccept`, server/lib/sessionTasks.ts): a live holder of
+   * `org.seat`, never for their own work. Nothing is read while Live Sessions
+   * is off, and a task layer that cannot be read leaves the group empty
+   * rather than failing the applications beside it.
    */
+  /** The done tasks waiting on this reader to accept them, or none. */
+  const acceptsWaitingOn = async (viewerId: string) => {
+    if (effectiveLifecycle("sessions") === "off") return [];
+    try {
+      return await tasksToAccept(getPool(), viewerId, { acceptors: await liveHoldersOf(ACCEPTING_POWER), lapseContext: lapse });
+    } catch (e) {
+      console.error("[waiting] the tasks to accept could not be read", e);
+      return [];
+    }
+  };
+
   app.get(WAITING_URL, async (req, res) => {
     const viewer = await reader(req, res);
     if (!viewer) return;
@@ -707,6 +727,7 @@ export function register(app: Express, deps: Deps): void {
       drafts: (await publishDoorFor(pool, { userId: viewerId, isAdmin: ctx.isAdmin === true }, await liveHoldersOf(ORG_DECIDE)))
         ? await unfrozen(pool, await draftsWaiting(pool))
         : [],
+      toAccept: await acceptsWaitingOn(viewerId),
     };
     res.set("Cache-Control", "no-store").json(payload);
   });
