@@ -64,7 +64,7 @@ describe("a role's health: three facts and one dot, never a score", () => {
   });
 });
 
-describe("the handover meter: the shared six checks, read as a count", () => {
+describe("the handover meter: the four checks Rye approved, read as a count", () => {
   const base = {
     aim: "Keep the water clean.",
     domain: "The tanks.",
@@ -72,36 +72,56 @@ describe("the handover meter: the shared six checks, read as a count", () => {
     bringMe: null,
     notMine: null,
     runbook: null,
+    circle: { id: "c1", name: "Land" },
+    circleDecisions: 0,
+    holderCount: 1,
+    covered: false,
   };
+  const written = { ...base, bringMe: ["Water readings"], notMine: ["Money"], runbook: "https://example.org/runbook" };
 
-  it("is handoverChecks itself: the same count, the same keys, the same words", () => {
-    const role = { ...base, bringMe: ["Water readings"] };
-    const h = roleHandover(role);
-    const shared = handoverChecks(role);
-    expect(h.summary).toBe(`${shared.done} of ${shared.total} ready`);
-    expect(h.summary).toBe("4 of 6 ready");
-    expect(h.checks.map((c) => c.key)).toEqual(shared.checks.map((c) => c.key));
-    expect(h.checks.map((c) => c.words)).toEqual(shared.checks.map((c) => c.words));
-    expect(h.checks.map((c) => c.state)).toEqual(shared.checks.map((c) => (c.done ? "ready" : "not-yet")));
-  });
-
-  it("reads every check in HANDOVER_CHECK_WORDS, and never a percentage", () => {
-    const h = roleHandover({ ...base, aim: null, accountabilities: [] });
-    expect(h.summary).toBe("1 of 6 ready");
-    expect(h.checks.map((c) => c.words)).toEqual([
-      HANDOVER_CHECK_WORDS.purpose.missing,
-      HANDOVER_CHECK_WORDS.decide.done,
-      HANDOVER_CHECK_WORDS.countOnMe.missing,
-      HANDOVER_CHECK_WORDS.bringMe.missing,
-      HANDOVER_CHECK_WORDS.notMine.missing,
-      HANDOVER_CHECK_WORDS.runbook.missing,
-    ]);
+  it("is card complete, runbook, decisions and someone ready to step in, as N of 4, never a percentage", () => {
+    const h = roleHandover(base);
+    expect(h.checks.map((c) => c.key)).toEqual(["card", "runbook", "decisions", "stepIn"]);
+    expect(h.summary).toBe("0 of 4 ready");
+    expect(roleHandover({ ...written, circleDecisions: 3, holderCount: 2 }).summary).toBe("4 of 4 ready");
     expect(JSON.stringify(h)).not.toMatch(/%|percent/i);
   });
 
-  it("is 6 of 6 when the card and the runbook are written, and an unread word counts as not written", () => {
-    expect(roleHandover({ ...base, bringMe: ["a"], notMine: ["b"], runbook: "https://example.org/runbook" }).summary).toBe("6 of 6 ready");
-    expect(roleHandover({ ...base, bringMe: undefined, notMine: undefined, runbook: undefined }).summary).toBe("3 of 6 ready");
+  it("reads card complete and the runbook straight off handoverChecks, the five parts listed under the card", () => {
+    for (const role of [base, written, { ...base, bringMe: ["x"] }, { ...base, aim: null, runbook: "Notes" }]) {
+      const h = roleHandover(role);
+      const shared = handoverChecks(role);
+      expect(h.checks[0].state).toBe(shared.cardComplete ? "ready" : "not-yet");
+      expect(h.checks[1].state).toBe(shared.runbook ? "ready" : "not-yet");
+      expect(h.checks[0].parts?.map((p) => p.key)).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine"]);
+      expect(h.checks[0].parts?.map((p) => p.words)).toEqual(shared.checks.filter((c) => c.key !== "runbook").map((c) => c.words));
+    }
+  });
+
+  it("says how many parts are written and which are missing", () => {
+    expect(roleHandover({ ...base, bringMe: ["x"] }).checks[0].words).toBe("4 of 5 parts written: Not mine to hold missing");
+    expect(roleHandover(base).checks[0].words).toBe("3 of 5 parts written: Bring me, Not mine to hold missing");
+    expect(roleHandover(written).checks[0].words).toBe("All 5 parts written");
+    expect(roleHandover(written).checks[1].words).toBe(HANDOVER_CHECK_WORDS.runbook.done);
+    expect(roleHandover(base).checks[1].words).toBe(HANDOVER_CHECK_WORDS.runbook.missing);
+  });
+
+  it("counts decisions in the role's circle, and says when the role sits in no circle", () => {
+    expect(roleHandover({ ...base, circleDecisions: 1 }).checks[2]).toMatchObject({ state: "ready", words: "1 decision recorded" });
+    expect(roleHandover({ ...base, circleDecisions: 0 }).checks[2]).toMatchObject({ state: "not-yet", words: "0 decisions recorded" });
+    expect(roleHandover({ ...base, circle: null }).checks[2]).toMatchObject({ state: "not-yet", words: "The role sits in no circle" });
+  });
+
+  it("counts a second holder, or a deputy or successor, as someone ready to step in", () => {
+    expect(roleHandover({ ...base, holderCount: 2 }).checks[3]).toMatchObject({ state: "ready", words: "A second holder holds it too" });
+    expect(roleHandover({ ...base, covered: true }).checks[3]).toMatchObject({ state: "ready", words: "A deputy or successor is written down" });
+    expect(roleHandover(base).checks[3]).toMatchObject({ state: "not-yet", words: "Nobody named yet" });
+  });
+
+  it("says Not counted yet for what the reader could not read", () => {
+    const h = roleHandover({ ...base, circleDecisions: undefined, holderCount: undefined, covered: undefined });
+    expect(h.checks[2]).toMatchObject({ state: "not-counted", words: "Not counted yet" });
+    expect(h.checks[3]).toMatchObject({ state: "not-counted", words: "Not counted yet" });
   });
 });
 
@@ -127,6 +147,7 @@ describe("the model carries health, handover, the load read and pending words", 
     settings: { v: 1, scoreboard: { measures: [{ measure: "Answered", countedBy: "applications-answered", targetCount: 5 }] } },
     holderCount: 1,
     covered: false,
+    circleDecisions: 2,
     pendingWords: ["purpose"],
   };
   const input: PlayerCardInput = {
@@ -170,9 +191,9 @@ describe("the model carries health, handover, the load read and pending words", 
 
   it("carries the handover meter and the words waiting on consent", () => {
     const card = buildPlayerCard(input);
-    expect(card.roles[0].handover.summary).toBe("3 of 6 ready");
+    expect(card.roles[0].handover.summary).toBe("1 of 4 ready");
     expect(buildPlayerCard({ ...input, roles: [{ ...role, bringMe: ["x"], notMine: ["y"], runbook: "Notes in the shed." }] }).roles[0].handover.summary).toBe(
-      "6 of 6 ready",
+      "3 of 4 ready",
     );
     expect(card.roles[0].pending).toEqual(["purpose"]);
   });

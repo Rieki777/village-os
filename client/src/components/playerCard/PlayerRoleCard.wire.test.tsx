@@ -231,20 +231,25 @@ describe("the role's handover words, proposed by consent", () => {
 });
 
 describe("the handover meter", () => {
-  it("reads N of 6 ready from handoverChecks, with each check's words and no percentage", () => {
+  it("reads N of 4 ready: card complete with its five parts, runbook, decisions, someone ready to step in", () => {
     render(<PlayerRoleCardView data={fixturePayload(1, "member")} />);
     const article = document.getElementById("role-r1")!;
-    expect(within(article).getByText("5 of 6 ready")).toBeTruthy();
-    const items = Array.from(article.querySelectorAll("[data-handover-checks] li"));
-    expect(items.map((li) => li.textContent?.slice(1))).toEqual([
+    expect(within(article).getByText("2 of 4 ready")).toBeTruthy();
+    const checks = Array.from(article.querySelectorAll("[data-handover-checks] > li"));
+    expect(checks.map((li) => li.getAttribute("data-check"))).toEqual(["card", "runbook", "decisions", "stepIn"]);
+    expect(checks.map((li) => li.getAttribute("data-ready"))).toEqual(["false", "true", "true", "false"]);
+    expect(checks[0].textContent).toContain("Card complete: 4 of 5 parts written: Not mine to hold missing");
+    const parts = Array.from(checks[0].querySelectorAll("[data-handover-parts] li")).map((li) => li.textContent);
+    expect(parts).toEqual([
       HANDOVER_CHECK_WORDS.purpose.done,
       HANDOVER_CHECK_WORDS.decide.done,
       HANDOVER_CHECK_WORDS.countOnMe.done,
       HANDOVER_CHECK_WORDS.bringMe.done,
       HANDOVER_CHECK_WORDS.notMine.missing,
-      HANDOVER_CHECK_WORDS.runbook.done,
     ]);
-    expect(items.map((li) => li.getAttribute("data-ready"))).toEqual(["true", "true", "true", "true", "false", "true"]);
+    expect(checks[1].textContent).toContain(HANDOVER_CHECK_WORDS.runbook.done);
+    expect(checks[2].textContent).toContain("2 decisions recorded");
+    expect(checks[3].textContent).toContain("Nobody named yet");
     expect(article.textContent).not.toMatch(/\d+\s*%|percent/i);
   });
 });

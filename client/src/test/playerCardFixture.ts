@@ -53,6 +53,7 @@ function role(n: number): PlayerRoleIn {
     settings: SETTINGS,
     holderCount: 1,
     covered: false,
+    circleDecisions: 2,
     pendingWords: n === 1 ? ["purpose"] : [],
   };
 }

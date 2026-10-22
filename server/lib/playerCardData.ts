@@ -290,7 +290,7 @@ export async function buildPlayerCards(
   // Accomplishments are a live card's: a proposal card reads none.
   const liveMemberIds = owners.filter((o) => o.tier.level !== "stranger" && !o.proposal).map((o) => o.userId);
   const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads] = await Promise.all([
-    readCardRows(pool, owners.map((o) => o.userId), { moonFrom }),
+    readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) }),
     readProposalRows(pool, owners.flatMap((o) => o.proposal?.seatIds ?? [])),
     applicationsOfCandidates(pool, memberIds),
     pastSeatingsWithoutApplication(pool, selfIds),
@@ -321,6 +321,7 @@ export async function buildPlayerCards(
   const grantRows = Array.from(new Map([...rows.grants, ...prop.grants].map((g) => [`${g.holder_role_id}|${g.capability}`, g])).values());
   const grantsByRole = groupBy(grantRows, (g) => String(g.holder_role_id));
   const appsById = new Map(rows.applications.map((a) => [String(a.id), a]));
+  const decisionsByCircle = new Map(rows.circleDecisions.map((d) => [String(d.circle_id), Number(d.n)]));
   const pendingByRole = new Map<string, Set<RoleEditKey>>();
   for (const p of rows.pending) {
     const set = pendingByRole.get(String(p.org_role_id)) ?? new Set<RoleEditKey>();
@@ -423,6 +424,8 @@ export async function buildPlayerCards(
         settings: seat.terms ? (proposal ? proposalSettings : ownSettings ?? offer) : undefined,
         holderCount: Number(p.holderCount ?? held.length),
         covered: seat.structure ? covered.has(id) : undefined,
+        // The decisions read counts only the circles of held roles, so a proposal leaves it uncounted.
+        circleDecisions: proposal ? undefined : memberUp && role.circleId ? decisionsByCircle.get(role.circleId) ?? 0 : memberUp ? 0 : undefined,
         pendingWords: isSelf && !proposal ? Array.from(pendingByRole.get(id) ?? []) : [],
       };
     });

@@ -12,7 +12,7 @@
  * adopted. Somebody who does not hold the role is refused.
  *
  * PR 8: the accomplishments (by accomplishmentsOf's viewer rule), the role's
- * handover words and the six-check meter, the owner's card words and this
+ * handover words and the four-check meter, the owner's card words and this
  * moon's load, each read back through the card.
  *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
@@ -265,16 +265,23 @@ describe.skipIf(!DB_CONFIGURED)("PR 8: the pieces wired onto the live card", () 
     expect((await card(null)).json.card.accomplished.moons).toEqual({ kind: "unread" });
   });
 
-  it("reads the role's handover words and counts the meter from the shared six checks", async () => {
+  it("reads the role's handover words and counts the four-check meter", async () => {
     for (const token of [null, readerToken, ownerToken]) {
       const role = (await card(token)).json.card.roles[0];
+      const stranger = token === null;
       expect(role.bringMe.items).toEqual({ kind: "shown", value: ["Readings from the spring"] });
       expect(role.runbook).toEqual({ heading: "Runbook", text: { kind: "shown", value: RUNBOOK } });
       expect(role.notMine.items).toEqual({ kind: "empty", words: "Not written yet" });
-      // Purpose, decide, count on me, bring me and the runbook: five of six, never a percentage.
-      expect(role.handover.summary).toBe("5 of 6 ready");
-      expect(role.handover.checks.map((c: any) => c.key)).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook"]);
-      expect(role.handover.checks.find((c: any) => c.key === "notMine").words).toBe("Not mine to hold is not written yet");
+      // Four checks: the card is one part short, the runbook is written, the role sits in no
+      // circle, and one live holder with no cover. Never a percentage.
+      expect(role.handover.summary).toBe("1 of 4 ready");
+      expect(role.handover.checks.map((c: any) => c.key)).toEqual(["card", "runbook", "decisions", "stepIn"]);
+      expect(role.handover.checks[0]).toMatchObject({ state: "not-yet", words: "4 of 5 parts written: Not mine to hold missing" });
+      expect(role.handover.checks[0].parts.find((p: any) => p.key === "notMine").words).toBe("Not mine to hold is not written yet");
+      expect(role.handover.checks[1]).toMatchObject({ state: "ready", words: "Runbook written" });
+      // A stranger reads no decisions count, so it is not counted for them.
+      expect(role.handover.checks[2].words).toBe(stranger ? "Not counted yet" : "The role sits in no circle");
+      expect(role.handover.checks[3]).toMatchObject({ state: "not-yet", words: "Nobody named yet" });
       expect(JSON.stringify(role.handover)).not.toContain("%");
     }
   });

@@ -2,9 +2,9 @@
  * One role in full: its full title first, then its purpose in a highlighted
  * block, then what it decides, what to bring it, what it answers for, how
  * we'll know it's working, who it works with, what is not its to hold, its
- * runbook, its powers, tensions, and how ready it is to hand over: the six
- * checks of shared/roleHandover.ts, read as "N of 6 ready", never a
- * percentage.
+ * runbook, its powers, tensions, and how ready it is to hand over: four
+ * checks read as "N of 4 ready", never a percentage, the card check listing
+ * its five parts from shared/roleHandover.ts underneath.
  *
  * Role words carry the owner's edit control in edit mode; saving one opens a
  * proposed change that waits for consent. Other roles are named by their full
@@ -167,11 +167,25 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </div>
         <ul className="mt-2 grid gap-1 text-sm" data-handover-checks>
           {role.handover.checks.map((c) => (
-            <li key={c.key} data-ready={c.state === "ready" ? "true" : "false"} className="flex items-start gap-2">
+            <li key={c.key} data-check={c.key} data-ready={c.state === "ready" ? "true" : "false"} className="flex items-start gap-2">
               <span aria-hidden="true" className={c.state === "ready" ? "text-notice" : "text-muted-foreground"}>
                 {c.state === "ready" ? "✓" : "○"}
               </span>
-              <span className={c.state === "ready" ? "text-card-foreground" : "text-muted-foreground"}>{c.words}</span>
+              <span className="grid min-w-0 gap-0.5">
+                <span>
+                  <span className="font-medium">{c.label}:</span>{" "}
+                  <span className={c.state === "ready" ? "text-card-foreground" : "text-muted-foreground"}>{c.words}</span>
+                </span>
+                {c.parts ? (
+                  <ul className="grid gap-0.5 text-xs text-muted-foreground" data-handover-parts>
+                    {c.parts.map((p) => (
+                      <li key={p.key} data-done={p.done ? "true" : "false"}>
+                        {p.words}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </span>
             </li>
           ))}
         </ul>

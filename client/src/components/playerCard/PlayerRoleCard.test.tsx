@@ -32,7 +32,7 @@ describe("the player card, live", () => {
     const article = document.getElementById("role-r1")!;
     const text = article.textContent ?? "";
     expect(text.indexOf(FIXTURE_ROLE_TITLE(1))).toBeLessThan(text.indexOf("Purpose"));
-    expect(text).toContain("5 of 6 ready");
+    expect(text).toContain("2 of 4 ready");
     expect(text).not.toMatch(/\d+%/);
     expect(screen.getByText("Across my role")).toBeTruthy();
   });

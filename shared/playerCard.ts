@@ -156,6 +156,8 @@ export interface PlayerRoleIn {
   holderCount?: Read<number>;
   /** A deputy or successor relation covers the role (`coveredSeatIds`). */
   covered?: Read<boolean>;
+  /** Decisions recorded in the role's circle over the last three moons. */
+  circleDecisions?: Read<number>;
   /** Role words an open org draft would change: "Proposed, waiting for consent". */
   pendingWords?: Read<RoleEditKey[]>;
 }
