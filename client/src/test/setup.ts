@@ -21,7 +21,38 @@
  */
 import "@testing-library/jest-dom/vitest";
 import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
+
+
+/*
+ * A waitFor THAT GIVES UP AFTER ONE SECOND INSIDE A TWO-MINUTE TEST.
+ *
+ * vitest.config.ts sets testTimeout to 120_000, and react-testing-library
+ * keeps its own clock: asyncUtilTimeout, which every waitFor, findBy* and
+ * waitForElementToBeRemoved obeys, defaults to 1000ms. Nothing here had ever
+ * raised it, so 707 waitFor calls across 209 client test files were each a
+ * one-second gate inside a test that had 119 seconds left to give them.
+ *
+ * On a loaded CI shard that race is lost, and it was lost twice in one hour on
+ * 2026-10-22, both times reddening a pull request that had not touched the file:
+ *
+ *   #530  SaberraConfigPanel.test.tsx   expected 0 to be greater than 0
+ *   #532  Review.questIdeas.test.tsx    Unable to find a label: "Village Credits"
+ *
+ * The second one was ALREADY written correctly, inside a waitFor. It simply ran
+ * out of its second while the render waited on a fetch. Both pass locally and
+ * both passed on the same tree in the other CI event, which is the signature of
+ * a clock rather than a defect.
+ *
+ * This costs a green run NOTHING: a satisfied waitFor returns the moment its
+ * condition holds, so the only thing a larger number changes is how long a
+ * genuinely failing assertion takes to admit it. Nothing in the suite asserts
+ * that a waitFor TIMES OUT, so there is no test whose meaning this inverts.
+ *
+ * A per-call timeout option still wins, which is how
+ * SeatTradingCard.test.tsx keeps its deliberate 3000.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 // vitest.config.ts does not set `test.globals`, so there is no ambient
 // `afterEach` for @testing-library/react to auto-detect; register cleanup
