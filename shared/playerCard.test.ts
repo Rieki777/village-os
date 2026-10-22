@@ -20,6 +20,7 @@ import {
   type Slot,
 } from "./playerCard";
 import { applicationHref } from "./seatApplications";
+import { LUNAR_CLOCK } from "./cycleClock";
 import { accomplishmentsFor } from "./taskAccomplishments";
 import type { SeatSettings } from "./seatSettings";
 
@@ -310,6 +311,75 @@ describe("tensions", () => {
     expect(t.answered).toEqual({ n: 2, source: "tensions.status" });
     expect(t.public).toEqual(["Brought to the circle"]);
     expect(JSON.stringify(t)).not.toContain("Kept private");
+  });
+});
+
+describe("tensions in plain words (PR 9)", () => {
+  const NOW = new Date("2026-10-22T18:00:00Z");
+  const moonFrom = LUNAR_CLOCK.boundsFor(NOW).startsAt;
+  const inMoon = new Date(moonFrom.getTime() + 60_000).toISOString();
+  const before = new Date(moonFrom.getTime() - 86_400_000).toISOString();
+  // As the server sends them to a member who neither raised nor holds: the open words blank.
+  const blanked = [
+    { id: "o1", status: "open" as const, raisedBy: "", text: "" },
+    { id: "a1", status: "answered" as const, raisedBy: "", text: "", answeredAt: inMoon },
+    { id: "a2", status: "answered" as const, raisedBy: "", text: "", answeredAt: inMoon },
+    { id: "a3", status: "answered" as const, raisedBy: "", text: "Brought words", broughtToCircle: true, answeredAt: before },
+  ];
+  const card = (over: Partial<PlayerCardInput>, r: Partial<PlayerRoleIn>) => buildPlayerCard(input({ viewerMember: true, ...over, roles: [role(1, r)] })).roles[0];
+
+  it("a member whose words are withheld reads the count, never No tensions raised", () => {
+    const r = card({}, { tensions: [{ id: "o1", status: "open", raisedBy: "", text: "" }] });
+    const t = value(r.tensions);
+    expect(t.counts).toEqual(["1 open tension, private to the role's holders"]);
+    expect(t.open).toEqual([]);
+    expect(JSON.stringify(r.tensions)).not.toContain("No tensions raised");
+  });
+
+  it("counts open and answered this moon, and shows the words brought to the circle", () => {
+    const t = value(card({}, { tensions: blanked }).tensions);
+    expect(t.counts).toEqual(["1 open tension, private to the role's holders", "2 answered this moon"]);
+    expect(t.public).toEqual(["Brought words"]);
+    expect(t.answered.n).toBe(3);
+  });
+
+  it("the raiser reads their own open words, and the rest still counts as private", () => {
+    const t = value(
+      card({ viewerUserId: "u-raiser" }, {
+        tensions: [
+          { id: "o1", status: "open", raisedBy: "u-raiser", text: "My words" },
+          { id: "o2", status: "open", raisedBy: "", text: "" },
+        ],
+      }).tensions,
+    );
+    expect(t.open).toEqual(["My words"]);
+    expect(t.counts).toEqual(["2 open tensions, 1 private to the role's holders"]);
+  });
+
+  it("a co-holder reads the open words on another holder's card, with no privacy line", () => {
+    const t = value(card({ viewerUserId: "u-co" }, { viewerHolds: true, tensions: [{ id: "o1", status: "open", raisedBy: "", text: "Held words" }] }).tensions);
+    expect(t.open).toEqual(["Held words"]);
+    expect(t.counts).toEqual(["1 open tension"]);
+  });
+
+  it("only older answered ones: No open tensions; none at all: No tensions raised", () => {
+    expect(value(card({}, { tensions: [blanked[3]] }).tensions).counts).toEqual(["No open tensions"]);
+    expect(card({}, { tensions: [] }).tensions).toEqual({ kind: "empty", words: "No tensions raised" });
+  });
+
+  it("the door: raise for a member who does not hold it, Waiting on you on the holder's own card, nothing for a guest", () => {
+    expect(card({}, { tensions: [] }).tensionDoor).toBe("raise");
+    expect(card({ viewerUserId: OWNER.userId }, { tensions: [] }).tensionDoor).toBe("waiting");
+    expect(card({ viewerUserId: "u-co" }, { viewerHolds: true, tensions: [] }).tensionDoor).toBeNull();
+    expect(card({ viewerMember: false }, { tensions: [] }).tensionDoor).toBeNull();
+    expect(card({ viewerUserId: null }, { tensions: [] }).tensionDoor).toBeNull();
+    expect(card({}, { tensions: undefined }).tensionDoor).toBeNull();
+  });
+
+  it("proposal mode: Starts once adopted and no door", () => {
+    const r = card({ mode: "proposal" }, { tensions: [] });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(r.tensionDoor).toBeNull();
   });
 });
 

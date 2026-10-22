@@ -317,7 +317,24 @@ export async function tensionsForRoles(pool: Pool, roleIds: readonly string[], v
       raisedBy: may && t.raisedBy === viewer.userId ? viewer.userId : "",
       text: may ? t.text : "",
       broughtToCircle: t.status === "brought_to_circle",
+      answeredAt: !open && t.answeredAt ? t.answeredAt.toISOString() : null,
     });
+  }
+  return out;
+}
+
+/**
+ * How many tensions are open with each of these roles, for the role tiles on
+ * `/roles` (server/lib/orgRoleHealth.ts). The same statement and the same
+ * open rule `tensionsForRoles` counts by, so a tile and the card agree. A
+ * count only: no words, no raiser, so the caller's tier is the only gate.
+ */
+export async function openTensionCountsFor(pool: Pool, roleIds: readonly string[]): Promise<Map<string, number>> {
+  const ids = Array.from(new Set(roleIds.filter((r) => typeof r === "string" && r)));
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  for (const t of await store.tensionsForRoleIds(pool, ids)) {
+    if (isOpenTension(t.status)) out.set(t.roleId, (out.get(t.roleId) ?? 0) + 1);
   }
   return out;
 }

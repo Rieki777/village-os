@@ -6,6 +6,11 @@
  * checks read as "N of 4 ready", never a percentage, the card check listing
  * its five parts from shared/roleHandover.ts underneath.
  *
+ * Tensions read as counts in plain words ("1 open tension, private to the
+ * role's holders"), with the words only where the server sent them. A member
+ * who does not hold the role gets the raise control; the holder's own card
+ * links to Waiting on you, where they answer.
+ *
  * Role words carry the owner's edit control in edit mode; saving one opens a
  * proposed change that waits for consent. Other roles are named by their full
  * title and nobody but the owner is named anywhere.
@@ -14,6 +19,8 @@ import { CARD_WORDS as W, type RoleOut } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { SignSheetOut } from "@shared/playerCardPayload";
 import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
+import { TASK_BOARD_PATH } from "@shared/sessionTasks";
+import RaiseTension from "@/components/roleTension/RaiseTension";
 import { BOX, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
 import { SignList } from "./SignList";
 
@@ -144,21 +151,45 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </RoleWord>
       )}
 
-      <SlotView slot={role.tensions}>
-        {(t) => (
-          <div className={BOX}>
-            <Eyebrow>{t.heading}</Eyebrow>
-            {t.open.length ? (
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                {t.open.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            ) : null}
-            <p className="mt-1 text-sm text-muted-foreground">{W.tensionsAnswered(t.answered.n)}</p>
-          </div>
-        )}
-      </SlotView>
+      {role.tensions.kind !== "unread" && (
+        <div className={BOX} data-role-tensions={role.id}>
+          <Eyebrow>{W.tensions}</Eyebrow>
+          <SlotView slot={role.tensions}>
+            {(t) => (
+              <div className="mt-1 grid gap-2 text-sm">
+                <ul className="grid gap-0.5" data-tension-counts>
+                  {t.counts.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+                {t.open.length ? (
+                  <ul className="list-disc space-y-1 break-words pl-5" data-tension-words="open">
+                    {t.open.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {t.public.length ? (
+                  <div className="grid gap-1">
+                    <p className="text-muted-foreground">{W.tensionsBrought}</p>
+                    <ul className="list-disc space-y-1 break-words pl-5" data-tension-words="circle">
+                      {t.public.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </SlotView>
+          {role.tensionDoor === "waiting" ? (
+            <a href={TASK_BOARD_PATH} className={LINK} data-tension-door="waiting">
+              {W.tensionsWaiting}
+            </a>
+          ) : null}
+          {role.tensionDoor === "raise" ? <RaiseTension roleId={role.id} roleName={role.title} mayRaise /> : null}
+        </div>
+      )}
 
       <div className={BOX}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -36,6 +36,8 @@
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
 import { hasCapability } from "../../shared/capabilities";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { isAdmitted } from "../lib/admission";
 import type { ModuleLifecycle } from "../../shared/modules";
 import { roleWordPayload } from "../../shared/playerCardEdit";
 import type { AppDeps } from "../lib/appDeps";
@@ -100,7 +102,7 @@ export async function cardSeatTier(
  * rule), and this moon's id on the village clock (for the load read, the key
  * `PUT /api/season-plans/mine/load` writes under).
  */
-export async function cardContext(deps: CardDeps, viewerId: string | null, viewerAdmin = false): Promise<CardContext> {
+export async function cardContext(deps: CardDeps, viewerId: string | null, viewerAdmin = false, viewerMember = false): Promise<CardContext> {
   const now = deps.now ? deps.now() : new Date();
   const state = deps.seasonState();
   const archetypes = await listArchetypes(deps.getPool(), villageId());
@@ -109,6 +111,7 @@ export async function cardContext(deps: CardDeps, viewerId: string | null, viewe
     timeZone: state.timezone || "UTC",
     viewerUserId: viewerId,
     viewerAdmin,
+    viewerMember,
     moonId: (deps.clock ?? villageClock)().idFor(now),
     ...cardSeasons(state, now),
     villageName: deps.villageName(),
@@ -124,7 +127,7 @@ const PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
 
 export function register(app: Express, deps: Deps): void {
 
-  async function tierFor(req: any, ownerId: string): Promise<{ tier: CardTier; viewerId: string | null; admin: boolean }> {
+  async function tierFor(req: any, ownerId: string): Promise<{ tier: CardTier; viewerId: string | null; admin: boolean; member: boolean }> {
     const viewer = await deps.authedUser(req);
     const ctx = viewer ? await deps.capabilityCtx(viewer) : null;
     const terms = ctx ? hasCapability("terms.read", ctx) : false;
@@ -133,7 +136,9 @@ export function register(app: Express, deps: Deps): void {
     const seat = await cardSeatTier(deps, req, viewer, { terms, isSelf });
     const level: CardLevel = isSelf ? "self" : terms ? "member" : "stranger";
     const admin = viewer ? await deps.isAdmin(req) : false;
-    return { tier: { level, seat }, viewerId, admin };
+    // A member for the tensions: admitted, or an admin, the rule the tension doors use.
+    const member = !!viewer && (isAdmitted(viewer, GAME_CONFIG.stages) || admin);
+    return { tier: { level, seat }, viewerId, admin, member };
   }
 
   app.get("/api/people/:handle/role-card", async (req, res) => {
@@ -146,8 +151,8 @@ export function register(app: Express, deps: Deps): void {
       ownerId = String(viewer.id);
     }
     if (!ownerId) return res.status(404).json({ error: "Not found" });
-    const { tier, viewerId, admin } = await tierFor(req, ownerId);
-    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], await cardContext(deps, viewerId, admin));
+    const { tier, viewerId, admin, member } = await tierFor(req, ownerId);
+    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], await cardContext(deps, viewerId, admin, member));
     const card = cards.get(ownerId);
     if (!card) return res.status(404).json({ error: "Not found" });
     res.json(card);

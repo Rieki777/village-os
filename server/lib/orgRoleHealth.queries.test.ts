@@ -50,7 +50,11 @@ function stubPool() {
     query: async (sql: string, args: unknown[] = []) => {
       queries.push(sql);
       if (/^SELECT id, handle FROM users/.test(sql)) return [(args as string[]).map((id) => ({ id, handle: `h-${id}` })), []];
-      if (/FROM live_session_entries WHERE kind = 'tension'/.test(sql)) return [[{ owner_seat_id: "r1", n: 2 }], []];
+      // role_tensions rows: two open with r1 (one taken), one answered, which is not counted.
+      if (/FROM `role_tensions` WHERE `org_role_id` IN/.test(sql)) {
+        const row = (id: string, status: string) => ({ id, org_role_id: "r1", raised_by: "u9", text: "Words", status, created_s: 1760000000, answered_s: null });
+        return [[row("t1", "open"), row("t2", "taken"), row("t3", "answered")], []];
+      }
       return [[], []];
     },
   };
@@ -82,8 +86,9 @@ describe("orgRoleExtras reads each table once", () => {
     expect(forty.queries.length).toBe(one.queries.length);
     // One IN-list read per table: never two against the same one. (The sign
     // counters' village-wide reads are separate statements, memoised per cycle.)
-    const inLists = forty.queries.filter((q) => / IN \(\?/.test(q)).map((q) => /FROM (\w+)/.exec(q)?.[1]);
-    expect(inLists.sort()).toEqual(["live_session_entries", "seat_applications", "users"]);
+    const inLists = forty.queries.filter((q) => / IN \(\?/.test(q)).map((q) => /FROM `?(\w+)/.exec(q)?.[1]);
+    // The open tensions come from role_tensions, the statement the player card counts by (PR 9).
+    expect(inLists.sort()).toEqual(["role_tensions", "seat_applications", "users"]);
     expect(new Set(forty.queries).size).toBe(forty.queries.length);
     // And never the card's own per-person reads.
     expect(forty.queries.some((q) => /season_plans|org_draft_changes|live_session_task_state/.test(q))).toBe(false);

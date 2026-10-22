@@ -30,9 +30,21 @@
  *             and their accomplishments, kept to the tasks this reader may
  *             read as cards (`accomplishmentsOfMany`, the rule of
  *             `accomplishmentsOf`).
- *   self      also the full text of their own open tensions, their newest plan
+ *   self      also their newest plan
  *             even before it is filed, the role words waiting on consent, and a
  *             link to their wallet.
+ *
+ * ── TENSIONS: ONE READ FOR THE WHOLE BATCH (PR 9) ────────────────────────
+ *
+ * `tensionsForRoles` (server/lib/roleTensions.ts) is asked once, over every
+ * role any live card in the batch carries, for this reader. It decides who
+ * reads the words: the raiser and the role's holders while a tension is open,
+ * every member once a holder brought it to the circle. Anywhere else the
+ * words arrive blank and the card counts them ("1 open tension, private to
+ * the role's holders"). A reader who is not a signed-in member gets an empty
+ * map, and a role missing from it is unread. The raise control is offered to
+ * a member who does not hold the role; the holder's own card links to
+ * Waiting on you instead.
  *
  * ── PROPOSAL MODE: THE CARD A ROLE APPLICATION ASKS FOR (PR 3) ───────────
  *
@@ -70,7 +82,6 @@ import {
   type PlayerRoleIn,
   type SeasonalGoalIn,
   type TaskIn,
-  type TensionIn,
   type WorksWithIn,
 } from "../../shared/playerCard";
 import { roleWordsIn, type RoleEditKey } from "../../shared/playerCardEdit";
@@ -87,6 +98,7 @@ import { readCardRows, readProposalRows, readSignTables, type SignTable } from "
 import { applicationsOfCandidates, pastSeatingsWithoutApplication } from "../repos/seatApplications";
 import { latestCardWordsFor, moonLoadsFor } from "../repos/seasonPlans";
 import { accomplishmentsOfMany } from "./sessionTasks";
+import { tensionsForRoles } from "./roleTensions";
 import { CARD_WORD_LABELS, servedGoalsOf, type CardWordKey, type CardWords, type SeasonalGoal, type ServedGoal } from "../../shared/seasonPlanWords";
 
 import type { CardLevel, PlayerCardPayload, SignSheetOut } from "../../shared/playerCardPayload";
@@ -124,6 +136,12 @@ export interface CardContext {
   viewerAdmin?: boolean;
   /** This moon's id on the village clock, the key a moon load is stored under. No id, no load read. */
   moonId?: string | null;
+  /**
+   * The reader is a signed-in member: admitted, or an admin, the rule the
+   * tension doors use (server/routes/roleTensions.ts). Absent is not a member,
+   * so a host that never says reads no tensions.
+   */
+  viewerMember?: boolean;
 }
 
 /** The four card words drawn under "How I hold my roles". The other two have their own boxes. */
@@ -328,7 +346,15 @@ export async function buildPlayerCards(
     for (const k of roleWordsIn(json<unknown>(p.payload, {}))) set.add(k);
     pendingByRole.set(String(p.org_role_id), set);
   }
-  const tensionsByRole = groupBy(rows.tensions, (t) => String(t.owner_seat_id));
+  // Every role a live card in the batch carries, the tensions read once for all of them.
+  const liveOwnerIds = new Set(owners.filter((o) => !o.proposal && o.tier.level !== "stranger").map((o) => o.userId));
+  const tensionRoleIds = Array.from(
+    new Set(seatings.filter((s) => s.userId && liveOwnerIds.has(String(s.userId)) && s.holderKind === "member" && !s.isExample).map((s) => s.orgRoleId)),
+  );
+  const tensionsByRole = await tensionsForRoles(pool, tensionRoleIds, { userId: ctx.viewerUserId, member: ctx.viewerMember === true });
+  const viewerHolds = (roleId: string): boolean =>
+    ctx.viewerUserId !== null &&
+    (seatingsByRole.get(roleId) ?? []).some((s) => s.userId === ctx.viewerUserId && s.holderKind === "member" && !s.isExample);
   const doneThisMoon = new Set(rows.taskEvents.filter((e) => e.status === "done").map((e) => String(e.entry_id)));
   const tasksByRole = groupBy(rows.tasks, (t) => String(t.owner_seat_id));
 
@@ -384,12 +410,6 @@ export async function buildPlayerCards(
         if (!other || other === id) continue;
         worksWith.push({ roleId: other, roleName: roleName.get(other) ?? other, about: r.note });
       }
-      const tensions: TensionIn[] = (tensionsByRole.get(id) ?? []).map((t) => ({
-        id: String(t.id),
-        status: t.status === "done" ? "answered" : "open",
-        raisedBy: String(t.raised_by ?? ""),
-        text: String(t.text ?? ""),
-      }));
       return {
         id,
         name: String(p.name),
@@ -419,7 +439,9 @@ export async function buildPlayerCards(
               label: CAPABILITY_LABELS[g.capability as Capability] ?? String(g.capability),
             }))
           : undefined,
-        tensions: memberUp ? (proposal ? [] : tensions) : undefined,
+        // A role missing from the map (a reader who is not a member) is unread, never empty.
+        tensions: memberUp ? (proposal ? [] : tensionsByRole.get(id)?.tensions) : undefined,
+        viewerHolds: viewerHolds(id),
         // A proposal is drawn on its own terms, never the offer on the role.
         settings: seat.terms ? (proposal ? proposalSettings : ownSettings ?? offer) : undefined,
         holderCount: Number(p.holderCount ?? held.length),
@@ -468,6 +490,7 @@ export async function buildPlayerCards(
       timeZone: ctx.timeZone,
       owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: null },
       viewerUserId: ctx.viewerUserId,
+      viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,
       season: ctx.season,
       nextSeasonId: ctx.nextSeasonId,

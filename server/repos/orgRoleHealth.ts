@@ -23,18 +23,5 @@ export async function applicationSettingsOf(pool: Pool, ids: readonly string[]):
   return new Map(rows.map((a) => [String(a.id), a.settings_json]));
 }
 
-/** Tensions raised to these roles and not yet answered, counted in SQL; null when the table cannot be read here. */
-export async function openTensionCounts(pool: Pool, roleIds: readonly string[]): Promise<Map<string, number> | null> {
-  if (!roleIds.length) return new Map();
-  try {
-    const [rows] = await pool.query<RowDataPacket[]>(
-      "SELECT owner_seat_id, COUNT(*) AS n FROM live_session_entries " +
-        `WHERE kind = 'tension' AND status <> 'done' AND owner_seat_id IN (${marks(roleIds.length)}) GROUP BY owner_seat_id`,
-      [...roleIds],
-    );
-    return new Map(rows.map((r) => [String(r.owner_seat_id), Number(r.n)]));
-  } catch (e: any) {
-    if (e?.code === "ER_NO_SUCH_TABLE" || e?.code === "ER_BAD_FIELD_ERROR") return null;
-    throw e;
-  }
-}
+// Open tensions per role are counted by `openTensionCountsFor` (server/lib/roleTensions.ts),
+// over `role_tensions`, the statement the player card reads.
