@@ -507,7 +507,7 @@ describe("the dials and the notices this module registers", () => {
   });
 
   it("keeps the agenda library's two notices in the bell, whatever the member's email settings", () => {
-    for (const type of ["session_item_taken", "session_item_settled"]) {
+    for (const type of ["session_item_taken", "session_item_settled", "session_coming_up"]) {
       expect(NOTIFICATION_KINDS[type], type).toBeTruthy();
       expect(NOTIFICATION_KINDS[type].celebrate, type).toBe(false);
       expect(NOTIFICATION_KINDS[type].blurb, type).not.toMatch(DASHES);
