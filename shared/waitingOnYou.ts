@@ -19,6 +19,11 @@
  *                 nor marked it done (`acceptRefusal`, shared/sessionTasks.ts).
  *                 The row carries the control itself, since the task is not on
  *                 the reader's own board. Done in the last three moons only.
+ *   raisedWithYou tensions a member raised with a role the reader holds live,
+ *                 not answered yet (shared/roleTensions.ts). The row carries
+ *                 the words, which only the role's holders and the raiser may
+ *                 read, and the controls: take it, answer it, or bring it to
+ *                 the circle. It never names who raised it.
  *
  * An application leaves the group the moment it leaves `awaiting-holder`:
  * adopted, put to the village or withdrawn. The read filters on the status,
@@ -32,6 +37,7 @@
  */
 import { seatList } from "./seatApplications";
 import { civilDayWords } from "./seasonPlans";
+import { readHeldTensions, type HeldTension } from "./roleTensions";
 
 export const WAITING_URL = "/api/governance/waiting-on-me";
 
@@ -77,6 +83,8 @@ export interface WaitingPayload {
   drafts: WaitingDraft[];
   /** Absent from a server before PR 4 of the player card: read as none. */
   toAccept?: WaitingAcceptance[];
+  /** Absent from a server before PR 5 of the player card: read as none. */
+  raisedWithYou?: HeldTension[];
 }
 
 /** One gentle reminder, this long after an application was written, to a holder it still waits on. */
@@ -160,5 +168,7 @@ export function readWaiting(v: unknown): WaitingPayload | null {
     circle: typeof t.circle === "string" && t.circle.trim() ? t.circle : null,
     doneOn: t.doneOn,
   }));
-  return { applications, drafts, toAccept };
+  // A server from before the tension group sends none: the group reads as empty.
+  const raisedWithYou = readHeldTensions(p.raisedWithYou);
+  return { applications, drafts, toAccept, raisedWithYou };
 }

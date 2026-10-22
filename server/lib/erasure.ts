@@ -113,6 +113,7 @@ import { eraseFromAlignments } from "./alignmentErasure";
 import { recordPartyLeft } from "./alignmentEndings";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
+import { forgetRoleTensionsFor } from "./roleTensions";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -681,6 +682,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "season-plan-words-after-tombstone",
       run: async () => {
         await eraseSeasonPlanWords(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Role tensions (0269): the member comes off every tension they raised
+       * or answered. The words of each tension they raised that nobody
+       * answered are cleared, since a tension often names a person and its
+       * words were only ever for the role's holders and them. Answered words
+       * stay, de-attributed, as the role's record; their answer notes go.
+       */
+      name: "role-tensions-after-tombstone",
+      run: async () => {
+        await forgetRoleTensionsFor(pool, target.id);
       },
     },
     {

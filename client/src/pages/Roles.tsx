@@ -35,6 +35,7 @@ import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
+import RaiseTension from "@/components/roleTension/RaiseTension";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -313,6 +314,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   on a demonstration seat: nobody is recruited for one, so a
                   link to it has nothing to ask anybody. */}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses
                   when it keeps its org chart in a document. Fetched only once
