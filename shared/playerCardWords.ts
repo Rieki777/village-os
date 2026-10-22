@@ -89,7 +89,7 @@ export const CARD_WORDS = {
   working: "How we'll know it's working",
   worksWith: "Works closely with",
   notMine: "Not mine to hold",
-  runbook: "How the work is done",
+  runbook: "Runbook",
   powers: "Powers",
   powersShared: "Powers, shared",
   sharedWith: (label: string, roles: string) => `${label}, with ${roles}`,
@@ -102,6 +102,16 @@ export const CARD_WORDS = {
   tensions: "Tensions raised to this role",
   tensionsAnswered: (n: number) => `${plural(n, "tension", "tensions")} answered`,
   noTensions: "No tensions raised",
+  tensionsOpen: (n: number) => plural(n, "open tension", "open tensions"),
+  /** Some or all of the open words are kept for the role's holders and the raiser. */
+  tensionsOpenPrivate: (n: number, withheld: number) =>
+    withheld >= n
+      ? `${plural(n, "open tension", "open tensions")}, private to the role's holders`
+      : `${plural(n, "open tension", "open tensions")}, ${withheld} private to the role's holders`,
+  tensionsAnsweredThisMoon: (n: number) => `${n} answered this moon`,
+  noOpenTensions: "No open tensions",
+  tensionsBrought: "Brought to the circle",
+  tensionsWaiting: "Answer them in Waiting on you",
 
   // Timeline
   timeline: "My moon cycle",

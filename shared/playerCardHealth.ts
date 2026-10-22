@@ -9,12 +9,17 @@
  * (`targetCount`). Anything else is "No target set". The dot is the worst of
  * the three, and it carries its own words for a reader who cannot see colour.
  *
- * HANDOVER is four checks, read as "2 of 4 ready" and never as a percentage:
- * the card is complete (an aim, a domain, at least one accountability and a
- * term); a runbook ("Not counted yet" until the runbook lands in PR 7);
- * decisions recorded in the role's circle in the last three moons; and
- * someone ready to step in (a second holder, or a deputy or successor written
- * down as a covering relation).
+ * HANDOVER is the four checks Rye approved, read as "2 of 4 ready" and never
+ * as a percentage:
+ *   1. Card complete: `handoverChecks(role).cardComplete` (shared/roleHandover.ts),
+ *      with the five card parts listed under it as detail.
+ *   2. Runbook written: `handoverChecks(role).runbook`.
+ *   3. Decisions recorded in the role's circle over the last three moons.
+ *   4. Someone ready to step in: a second holder, or a deputy or successor
+ *      written down as a covering relation (`coveredSeatIds`).
+ * The first two come from the shared contract, so the card and the org chart
+ * cannot count a role's words two ways. A check whose input was not read
+ * says "Not counted yet".
  *
  * A fact whose input was not read is left out, never guessed: a stranger who
  * may not read a role's terms sees no review fact and no sign fact.
@@ -22,6 +27,7 @@
 import { formatDay, type Read } from "./roleSheet";
 import type { SignOut, Slot } from "./playerCard";
 import type { SeatSettings } from "./seatSettings";
+import { HANDOVER_CARD_KEYS, HANDOVER_CHECK_WORDS, handoverChecks, type HandoverCardKey } from "./roleHandover";
 
 export type HealthDot = "steady" | "look" | "act";
 
@@ -38,11 +44,21 @@ export interface HealthOut {
   dotWords: string;
 }
 
+/** One of the five card parts, under "Card complete". */
+export interface HandoverPart {
+  key: HandoverCardKey;
+  done: boolean;
+  /** HANDOVER_CHECK_WORDS: the done words or the missing words. */
+  words: string;
+}
+
 export interface HandoverCheck {
   key: "card" | "runbook" | "decisions" | "stepIn";
   label: string;
   state: "ready" | "not-yet" | "not-counted";
   words: string;
+  /** The card check only: each of the five parts, in card order. */
+  parts?: HandoverPart[];
 }
 
 export interface HandoverOut {
@@ -69,9 +85,9 @@ export const HEALTH_WORDS = {
   handover: "Ready to hand over",
   readyOf: (n: number, of: number) => `${n} of ${of} ready`,
   card: "Card complete",
-  cardDone: "Aim, domain, what it answers for and a term are written",
-  cardMissing: (what: string) => `Missing: ${what}`,
-  runbook: "How the work is done",
+  partsWritten: (n: number, of: number, missing: string) =>
+    missing ? `${n} of ${of} parts written: ${missing} missing` : `All ${of} parts written`,
+  runbook: "Runbook",
   decisions: "Decisions recorded in the circle, last 3 moons",
   decisionsN: (n: number) => (n === 1 ? "1 decision recorded" : `${n} decisions recorded`),
   noCircle: "The role sits in no circle",
@@ -141,46 +157,55 @@ export function roleHealth(role: HealthIn, signs: Slot<SignOut[]>, now: Date, ti
   return { facts, dot, dotWords: HEALTH_WORDS.dot[dot] };
 }
 
+/** What the meter reads about a role. Word field names match `/api/org`. */
 export interface HandoverIn {
   aim: string | null;
   domain: string | null;
   accountabilities: string[];
-  termEndsAt: Read<string | null>;
-  settings: Read<SeatSettings | null>;
+  bringMe: Read<string[] | null>;
+  notMine: Read<string[] | null>;
+  runbook: Read<string | null>;
+  circle: Read<{ id: string; name: string } | null>;
+  /** Decisions recorded in the role's circle over the last three moons. */
+  circleDecisions?: Read<number>;
   /** Live holders of the role, the owner included. */
   holderCount?: Read<number>;
   /** A deputy or successor relation covers the role (`coveredSeatIds`). */
   covered?: Read<boolean>;
-  circle: Read<{ id: string; name: string } | null>;
-  /** Decisions recorded in the role's circle over the last three moons. */
-  circleDecisions?: Read<number>;
 }
-
-const blank = (s: string | null | undefined) => !String(s ?? "").trim();
 
 /** The four checks. Never a percentage. */
 export function roleHandover(role: HandoverIn): HandoverOut {
+  const h = handoverChecks({
+    aim: role.aim,
+    domain: role.domain,
+    accountabilities: role.accountabilities,
+    bringMe: role.bringMe ?? null,
+    notMine: role.notMine ?? null,
+    runbook: role.runbook ?? null,
+  });
   const checks: HandoverCheck[] = [];
 
-  const hasTerm =
-    !!String(role.termEndsAt ?? "").trim() ||
-    !!role.settings?.term?.endsOn ||
-    !!role.settings?.term?.lengthMoons ||
-    role.settings?.term?.endsOn === null;
-  const missing = [
-    blank(role.aim) ? "aim" : null,
-    blank(role.domain) ? "domain" : null,
-    role.accountabilities.filter((a) => !blank(a)).length ? null : "what it answers for",
-    hasTerm ? null : "a term",
-  ].filter((s): s is string => s !== null);
+  const parts: HandoverPart[] = HANDOVER_CARD_KEYS.map((key) => ({
+    key,
+    done: h[key],
+    words: h[key] ? HANDOVER_CHECK_WORDS[key].done : HANDOVER_CHECK_WORDS[key].missing,
+  }));
+  const missing = parts.filter((p) => !p.done).map((p) => HANDOVER_CHECK_WORDS[p.key].label);
   checks.push({
     key: "card",
     label: HEALTH_WORDS.card,
-    state: missing.length ? "not-yet" : "ready",
-    words: missing.length ? HEALTH_WORDS.cardMissing(missing.join(", ")) : HEALTH_WORDS.cardDone,
+    state: h.cardComplete ? "ready" : "not-yet",
+    words: HEALTH_WORDS.partsWritten(parts.length - missing.length, parts.length, missing.join(", ")),
+    parts,
   });
 
-  checks.push({ key: "runbook", label: HEALTH_WORDS.runbook, state: "not-counted", words: HEALTH_WORDS.notCountedYet });
+  checks.push({
+    key: "runbook",
+    label: HEALTH_WORDS.runbook,
+    state: h.runbook ? "ready" : "not-yet",
+    words: h.runbook ? HANDOVER_CHECK_WORDS.runbook.done : HANDOVER_CHECK_WORDS.runbook.missing,
+  });
 
   if (role.circle === undefined || role.circleDecisions === undefined) {
     checks.push({ key: "decisions", label: HEALTH_WORDS.decisions, state: "not-counted", words: HEALTH_WORDS.notCountedYet });

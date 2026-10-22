@@ -219,7 +219,7 @@ describe.skipIf(!configured)("raise a tension with a role, on a real schema", ()
 
     // The card's feed agrees, and gives a guest nothing at all.
     const forDee = (await tensionsForRoles(pool, ["seat-water"], { userId: "m-dee", member: true })).get("seat-water");
-    expect(forDee).toEqual({ open: 1, answered: 0, broughtToCircle: 0, tensions: [{ id: raised, status: "open", raisedBy: "", text: "", broughtToCircle: false }] });
+    expect(forDee).toEqual({ open: 1, answered: 0, broughtToCircle: 0, tensions: [{ id: raised, status: "open", raisedBy: "", text: "", broughtToCircle: false, answeredAt: null }] });
     const forAna = (await tensionsForRoles(pool, ["seat-water"], { userId: "m-ana", member: true })).get("seat-water");
     expect(forAna?.tensions[0]).toMatchObject({ raisedBy: "m-ana", text: "The water rota leaves Sundays to whoever notices." });
     const forCai = (await tensionsForRoles(pool, ["seat-water"], { userId: "m-cai", member: true })).get("seat-water");

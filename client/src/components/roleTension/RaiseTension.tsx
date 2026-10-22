@@ -5,6 +5,9 @@
  *
  *   <RaiseTension roleId={role.id} roleName={role.name} />
  *
+ * A host that already knows the reader may raise one (the player card, whose
+ * batched read decided it) passes `mayRaise` and the control asks nothing.
+ *
  * It asks the role's tensions read once, and draws nothing at all unless that
  * read says this reader may raise one: a visitor, a guest and a failed read
  * all leave the page as it was. Before a word is written the box says who
@@ -26,9 +29,9 @@ const refusalOf = (body: unknown): string => {
   return said && /\s/.test(said) ? said : TENSION_COPY.sendFailed;
 };
 
-export default function RaiseTension({ roleId, roleName }: { roleId: string; roleName: string }) {
+export default function RaiseTension({ roleId, roleName, mayRaise: known }: { roleId: string; roleName: string; mayRaise?: boolean }) {
   const { user } = useAuth();
-  const [mayRaise, setMayRaise] = useState(false);
+  const [mayRaise, setMayRaise] = useState(known === true);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,6 +47,10 @@ export default function RaiseTension({ roleId, roleName }: { roleId: string; rol
       setMayRaise(false);
       return;
     }
+    if (known !== undefined) {
+      setMayRaise(known);
+      return;
+    }
     let live = true;
     void (async () => {
       try {
@@ -57,7 +64,7 @@ export default function RaiseTension({ roleId, roleName }: { roleId: string; rol
     return () => {
       live = false;
     };
-  }, [roleId, signedIn]);
+  }, [roleId, signedIn, known]);
 
   if (!signedIn || !mayRaise) return null;
 

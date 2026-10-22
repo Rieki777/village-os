@@ -23,14 +23,21 @@
  * is adopted. Only a live holder of the role may open one from here, and ten
  * in ten minutes is the most anybody may.
  *
- * Personal words have no route here. The two with a home today, the season
- * aim and the village goal it serves, save through `PUT /api/season-plans/mine`;
- * the rest arrive with the season plan migration (PR 6). Terms are never
- * edited on the card: they change through a new role application.
+ * Personal words have no route here. The aim saves through
+ * `PUT /api/season-plans/mine`, the goals served, seasonal goals and card
+ * words through `PUT /api/season-plans/mine/card`, and this moon's load
+ * through `PUT /api/season-plans/mine/load` (#530); the card reads them back
+ * here. Terms are never edited on the card: they change through a new role
+ * application.
+ *
+ * The role's handover words ("Bring me", "Not mine to hold", the runbook,
+ * #534) are role words like the purpose, and are proposed the same way.
  */
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
 import { hasCapability } from "../../shared/capabilities";
+import { GAME_CONFIG } from "../../shared/gameConfig";
+import { isAdmitted } from "../lib/admission";
 import type { ModuleLifecycle } from "../../shared/modules";
 import { roleWordPayload } from "../../shared/playerCardEdit";
 import type { AppDeps } from "../lib/appDeps";
@@ -40,6 +47,8 @@ import type { LapseContext } from "../lib/orgChart";
 import { addChange, createDraft } from "../lib/orgDrafts";
 import { buildPlayerCards, cardSeasons, type CardContext, type CardLevel, type CardTier } from "../lib/playerCardData";
 import { userIdForHandle } from "../lib/profile";
+import { villageClock } from "../lib/stewardship";
+import type { CycleClock } from "../../shared/cycleClock";
 import { mapShowsStructureTo, orgSeatTier } from "../lib/seatProjection";
 import { roleHeldBy } from "../repos/playerCard";
 
@@ -53,6 +62,8 @@ export type CardDeps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" 
   villageName(): string | null;
   /** Tests hand in a fixed instant. */
   now?: () => Date;
+  /** The village clock; the live `cycle.mode` by default, as the season plan routes read it. */
+  clock?: () => CycleClock;
 };
 
 type Deps = CardDeps & Pick<AppDeps, "overLimit">;
@@ -85,8 +96,13 @@ export async function cardSeatTier(
   });
 }
 
-/** The card's context for one request: the clock, the seasons, the village and its class names. */
-export async function cardContext(deps: CardDeps, viewerId: string | null): Promise<CardContext> {
+/**
+ * The card's context for one request: the clock, the seasons, the village and
+ * its class names, whether the reader is an admin (for the accomplishments
+ * rule), and this moon's id on the village clock (for the load read, the key
+ * `PUT /api/season-plans/mine/load` writes under).
+ */
+export async function cardContext(deps: CardDeps, viewerId: string | null, viewerAdmin = false, viewerMember = false): Promise<CardContext> {
   const now = deps.now ? deps.now() : new Date();
   const state = deps.seasonState();
   const archetypes = await listArchetypes(deps.getPool(), villageId());
@@ -94,6 +110,9 @@ export async function cardContext(deps: CardDeps, viewerId: string | null): Prom
     now,
     timeZone: state.timezone || "UTC",
     viewerUserId: viewerId,
+    viewerAdmin,
+    viewerMember,
+    moonId: (deps.clock ?? villageClock)().idFor(now),
     ...cardSeasons(state, now),
     villageName: deps.villageName(),
     lapse: deps.lapse(),
@@ -108,7 +127,7 @@ const PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
 
 export function register(app: Express, deps: Deps): void {
 
-  async function tierFor(req: any, ownerId: string): Promise<{ tier: CardTier; viewerId: string | null }> {
+  async function tierFor(req: any, ownerId: string): Promise<{ tier: CardTier; viewerId: string | null; admin: boolean; member: boolean }> {
     const viewer = await deps.authedUser(req);
     const ctx = viewer ? await deps.capabilityCtx(viewer) : null;
     const terms = ctx ? hasCapability("terms.read", ctx) : false;
@@ -116,7 +135,10 @@ export function register(app: Express, deps: Deps): void {
     const isSelf = viewerId !== null && viewerId === ownerId;
     const seat = await cardSeatTier(deps, req, viewer, { terms, isSelf });
     const level: CardLevel = isSelf ? "self" : terms ? "member" : "stranger";
-    return { tier: { level, seat }, viewerId };
+    const admin = viewer ? await deps.isAdmin(req) : false;
+    // A member for the tensions: admitted, or an admin, the rule the tension doors use.
+    const member = !!viewer && (isAdmitted(viewer, GAME_CONFIG.stages) || admin);
+    return { tier: { level, seat }, viewerId, admin, member };
   }
 
   app.get("/api/people/:handle/role-card", async (req, res) => {
@@ -129,8 +151,8 @@ export function register(app: Express, deps: Deps): void {
       ownerId = String(viewer.id);
     }
     if (!ownerId) return res.status(404).json({ error: "Not found" });
-    const { tier, viewerId } = await tierFor(req, ownerId);
-    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], await cardContext(deps, viewerId));
+    const { tier, viewerId, admin, member } = await tierFor(req, ownerId);
+    const cards = await buildPlayerCards(pool, [{ userId: ownerId, tier }], await cardContext(deps, viewerId, admin, member));
     const card = cards.get(ownerId);
     if (!card) return res.status(404).json({ error: "Not found" });
     res.json(card);

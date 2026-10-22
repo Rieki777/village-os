@@ -103,9 +103,12 @@ export interface PowerIn {
 }
 
 /**
- * A tension raised to the role. While it is open only the holder and the
- * raiser may read its words; once answered the card shows a count only, and
- * the words go public only when the holder brought it to the circle.
+ * A tension raised to the role. While it is open only the role's holders and
+ * the raiser may read its words; once answered the card shows a count only,
+ * and the words go to every member only when a holder brought it to the
+ * circle. The host blanks `text` (and `raisedBy`) wherever this reader may
+ * not read them (`tensionsForRoles`, server/lib/roleTensions.ts), and the card
+ * still counts the tension.
  */
 export interface TensionIn {
   id: string;
@@ -114,6 +117,8 @@ export interface TensionIn {
   raisedBy: string;
   text: string;
   broughtToCircle?: boolean;
+  /** When it was answered, ISO. Counts it as answered this moon; absent is counted without a moon. */
+  answeredAt?: string | null;
 }
 
 export interface PlayerRoleIn {
@@ -138,13 +143,18 @@ export interface PlayerRoleIn {
   archetypes: Read<string[] | null>;
   /** `org_roles.archetypes_suggested`: the seed guessed these tags. */
   archetypesSuggested: Read<boolean>;
-  /** Role fields that do not exist yet (Rye, 2026-10-21): unread until they do. */
+  /** `org_roles.bring_me`, `not_mine` and `runbook` (0268, #534): the role's handover words. */
   bringMe: Read<string[] | null>;
   notMine: Read<string[] | null>;
   runbook: Read<string | null>;
   worksWith: Read<WorksWithIn[]>;
   powers: Read<PowerIn[]>;
   tensions: Read<TensionIn[]>;
+  /**
+   * The reader holds this role too. A holder reads its open words and answers
+   * through Waiting on you, so a holder is never offered the raise control.
+   */
+  viewerHolds?: boolean;
   /** The role's terms (`shared/seatSettings.ts`); null when none were written. */
   settings: Read<SeatSettings | null>;
   /**
@@ -208,6 +218,11 @@ export interface PlayerCardInput {
   owner: { userId: string; displayName: string; avatar: string | null };
   /** Who is looking, for the tensions only. */
   viewerUserId: Read<string | null>;
+  /**
+   * The reader is a signed-in member (admitted, or an admin), the rule the
+   * tension doors use. Only a member is offered the raise control.
+   */
+  viewerMember?: boolean;
   /** The village's own name, from the brand overlay. */
   villageName: Read<string | null>;
   season: Read<{ id: string; name: string | null; startsOn: string | null; endsOn: string | null } | null>;
@@ -217,11 +232,7 @@ export interface PlayerCardInput {
   roles: Read<PlayerRoleIn[]>;
   /** The owner's filed season plan; null when none is filed. */
   plan: Read<{ aim: string | null; goals: GoalIn[] } | null>;
-  /**
-   * The owner's seasonal goals, 0 to 3. Input only for now: their storage
-   * arrives with the season plan migration (PR 6, `seasonal_goals_json`
-   * beside `serves_goals_json` and `card_words_json`).
-   */
+  /** The owner's seasonal goals, 0 to 3 (`season_plans.seasonal_goals_json`). */
   seasonalGoals: Read<SeasonalGoalIn[] | null>;
   /** This moon's tasks. Never capped. */
   tasks: Read<TaskIn[]>;
@@ -242,8 +253,8 @@ export interface PlayerCardInput {
   accomplished?: Read<AccomplishmentMoon[]>;
   /**
    * The owner's own read of this moon's load, 1 (Healthy) to 5 (Heavy).
-   * Self-reported, never computed. Null is "Not set this moon"; its storage
-   * arrives with the season plan migration (PR 6).
+   * Self-reported, never computed. Null is "Not set this moon"
+   * (`player_moon_load`, keyed by this moon's id on the village clock).
    */
   loadRead?: Read<LoadStep | null>;
   growingEdge?: Read<string | null>;
@@ -342,10 +353,30 @@ export interface RoleOut {
   notMine: { heading: string; items: Slot<string[]> };
   runbook: { heading: string; text: Slot<string> };
   powers: { heading: string; items: Slot<string[]> };
-  tensions: Slot<{ heading: string; open: string[]; answered: Figure; public: string[] }>;
+  tensions: Slot<TensionsOut>;
+  /**
+   * What this reader can do about a tension here: "raise" for a member who
+   * does not hold the role, "waiting" on the holder's own card (they answer
+   * through Waiting on you), null otherwise and always in proposal mode.
+   */
+  tensionDoor: TensionDoor;
   handover: HandoverOut;
   /** Role words a proposed change is waiting on consent for. */
   pending: RoleEditKey[];
+}
+
+export type TensionDoor = "raise" | "waiting" | null;
+
+export interface TensionsOut {
+  heading: string;
+  /** The counts in plain words, one line each: "1 open tension", "2 answered this moon". */
+  counts: string[];
+  /** The open words this reader may read. */
+  open: string[];
+  /** Every answered tension, any moon. */
+  answered: Figure;
+  /** Words brought to the circle, which every member may read. */
+  public: string[];
 }
 
 export type MarkerKind = "new-moon" | "full-moon" | "review" | "renewal" | "ends" | "invoice";
@@ -533,13 +564,22 @@ export function signSheetKey(key: string, circleId: string | null): string {
   return key === "circle-met" && circleId ? `${key}:${circleId}` : key;
 }
 
+/** Whether this reader holds the role: the owner of a live card does, and so does a co-holder. */
+function viewerHoldsRole(role: PlayerRoleIn, input: PlayerCardInput): boolean {
+  const viewer = input.viewerUserId ?? null;
+  if (viewer === null) return false;
+  return role.viewerHolds === true || (input.mode !== "proposal" && viewer === input.owner.userId);
+}
+
 function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensions"] {
   if (role.tensions === undefined) return UNREAD;
   if (input.mode === "proposal") return empty(W.startsOnceAdopted);
   const viewer = input.viewerUserId ?? null;
-  const isHolder = viewer !== null && viewer === input.owner.userId;
-  const open = role.tensions
-    .filter((t) => t.status === "open" && viewer !== null && (isHolder || t.raisedBy === viewer))
+  const holds = viewerHoldsRole(role, input);
+  const openAll = role.tensions.filter((t) => t.status === "open");
+  // Open words reach the role's holders and the raiser, and only where the host sent them.
+  const open = openAll
+    .filter((t) => viewer !== null && (holds || t.raisedBy === viewer))
     .map((t) => clean(t.text))
     .filter((s): s is string => s !== null);
   const answered = role.tensions.filter((t) => t.status === "answered");
@@ -547,13 +587,34 @@ function tensionsFor(role: PlayerRoleIn, input: PlayerCardInput): RoleOut["tensi
     .filter((t) => t.broughtToCircle === true)
     .map((t) => clean(t.text))
     .filter((s): s is string => s !== null);
-  if (!open.length && !answered.length) return empty(W.noTensions);
+  if (!openAll.length && !answered.length) return empty(W.noTensions);
+
+  const counts: string[] = [];
+  const withheld = holds ? 0 : openAll.length - open.length;
+  if (openAll.length) counts.push(withheld ? W.tensionsOpenPrivate(openAll.length, withheld) : W.tensionsOpen(openAll.length));
+  const moonFrom = LUNAR_CLOCK.boundsFor(input.now).startsAt.getTime();
+  const at = (t: TensionIn) => (t.answeredAt ? new Date(t.answeredAt).getTime() : NaN);
+  const thisMoon = answered.filter((t) => at(t) >= moonFrom).length;
+  const undated = answered.filter((t) => Number.isNaN(at(t))).length;
+  if (thisMoon) counts.push(W.tensionsAnsweredThisMoon(thisMoon));
+  if (undated) counts.push(W.tensionsAnswered(undated));
+  if (!counts.length) counts.push(W.noOpenTensions);
   return shown({
     heading: W.tensions,
+    counts,
     open,
     answered: { n: answered.length, source: "tensions.status" },
     public: pub,
   });
+}
+
+/** Raise for a member who does not hold the role; Waiting on you on the holder's own card. */
+function tensionDoorFor(role: PlayerRoleIn, input: PlayerCardInput): TensionDoor {
+  if (input.mode === "proposal" || role.tensions === undefined) return null;
+  const viewer = input.viewerUserId ?? null;
+  if (viewer === null || input.viewerMember !== true) return null;
+  if (viewerHoldsRole(role, input)) return viewer === input.owner.userId ? "waiting" : null;
+  return "raise";
 }
 
 function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
@@ -604,6 +665,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
     powers: { heading: anyShared ? W.powersShared : W.powers, items: powers },
     tensions: tensionsFor(role, input),
+    tensionDoor: tensionDoorFor(role, input),
     handover: roleHandover(role),
     pending: role.pendingWords ?? [],
   };

@@ -25,10 +25,26 @@
  *             person holds at all.
  *   member    (`terms.read`) also the terms, with pay small at the bottom, the
  *             season plan as filed, this moon's tasks, the applications and
- *             the signs, each with its sheet of rows, first names only.
- *   self      also the full text of their own open tensions, their newest plan
+ *             the signs, each with its sheet of rows, first names only; the
+ *             owner's own words (card words, seasonal goals, this moon's load)
+ *             and their accomplishments, kept to the tasks this reader may
+ *             read as cards (`accomplishmentsOfMany`, the rule of
+ *             `accomplishmentsOf`).
+ *   self      also their newest plan
  *             even before it is filed, the role words waiting on consent, and a
  *             link to their wallet.
+ *
+ * ── TENSIONS: ONE READ FOR THE WHOLE BATCH (PR 9) ────────────────────────
+ *
+ * `tensionsForRoles` (server/lib/roleTensions.ts) is asked once, over every
+ * role any live card in the batch carries, for this reader. It decides who
+ * reads the words: the raiser and the role's holders while a tension is open,
+ * every member once a holder brought it to the circle. Anywhere else the
+ * words arrive blank and the card counts them ("1 open tension, private to
+ * the role's holders"). A reader who is not a signed-in member gets an empty
+ * map, and a role missing from it is unread. The raise control is offered to
+ * a member who does not hold the role; the holder's own card links to
+ * Waiting on you instead.
  *
  * ── PROPOSAL MODE: THE CARD A ROLE APPLICATION ASKS FOR (PR 3) ───────────
  *
@@ -58,12 +74,14 @@ import { CAPABILITY_LABELS, type Capability } from "../../shared/capabilities";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
 import {
   buildPlayerCard,
+  LOAD_STEPS,
   type ApplicationIn,
+  type LoadStep,
   type PlayerCard,
   type PlayerCardInput,
   type PlayerRoleIn,
+  type SeasonalGoalIn,
   type TaskIn,
-  type TensionIn,
   type WorksWithIn,
 } from "../../shared/playerCard";
 import { roleWordsIn, type RoleEditKey } from "../../shared/playerCardEdit";
@@ -78,6 +96,10 @@ import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations
 import { projectSeat, type SeatTier } from "./seatProjection";
 import { readCardRows, readProposalRows, readSignTables, type SignTable } from "../repos/playerCard";
 import { applicationsOfCandidates, pastSeatingsWithoutApplication } from "../repos/seatApplications";
+import { latestCardWordsFor, moonLoadsFor } from "../repos/seasonPlans";
+import { accomplishmentsOfMany } from "./sessionTasks";
+import { tensionsForRoles } from "./roleTensions";
+import { CARD_WORD_LABELS, servedGoalsOf, type CardWordKey, type CardWords, type SeasonalGoal, type ServedGoal } from "../../shared/seasonPlanWords";
 
 import type { CardLevel, PlayerCardPayload, SignSheetOut } from "../../shared/playerCardPayload";
 
@@ -110,7 +132,22 @@ export interface CardContext {
   firstName: (name: string) => string;
   /** Seasons whose end has passed, for the "Past" applications. */
   endedSeasonIds?: readonly string[];
+  /** The reader is an admin: they read every accomplishment, by `accomplishmentsOf`'s rule. */
+  viewerAdmin?: boolean;
+  /** This moon's id on the village clock, the key a moon load is stored under. No id, no load read. */
+  moonId?: string | null;
+  /**
+   * The reader is a signed-in member: admitted, or an admin, the rule the
+   * tension doors use (server/routes/roleTensions.ts). Absent is not a member,
+   * so a host that never says reads no tensions.
+   */
+  viewerMember?: boolean;
 }
+
+/** The four card words drawn under "How I hold my roles". The other two have their own boxes. */
+const HOLD_KEYS: readonly CardWordKey[] = ["howIHold", "findMe", "decisions", "feedback"];
+
+const isLoadStep = (n: unknown): n is LoadStep => (LOAD_STEPS as readonly number[]).includes(Number(n)) && Number.isInteger(Number(n));
 
 /** The application a proposal card is drawn for. */
 export interface CardProposal {
@@ -268,11 +305,19 @@ export async function buildPlayerCards(
   const moonFrom = moonStart(ctx.now, 0);
   const memberIds = owners.filter((o) => o.tier.level !== "stranger").map((o) => o.userId);
   const selfIds = owners.filter((o) => o.tier.level === "self").map((o) => o.userId);
-  const [rows, prop, ownApps, pastHeld] = await Promise.all([
+  // Accomplishments are a live card's: a proposal card reads none.
+  const liveMemberIds = owners.filter((o) => o.tier.level !== "stranger" && !o.proposal).map((o) => o.userId);
+  const [rows, prop, ownApps, pastHeld, accomplished, cardWords, loads] = await Promise.all([
     readCardRows(pool, owners.map((o) => o.userId), { moonFrom, threeMoonsFrom: moonStart(ctx.now, 2) }),
     readProposalRows(pool, owners.flatMap((o) => o.proposal?.seatIds ?? [])),
     applicationsOfCandidates(pool, memberIds),
     pastSeatingsWithoutApplication(pool, selfIds),
+    // One batch, by accomplishmentsOf's viewer rule: the owner and an admin read every one.
+    accomplishmentsOfMany(pool, liveMemberIds, { lapseContext: () => ctx.lapse }, {
+      viewer: { userId: ctx.viewerUserId, admin: !!ctx.viewerAdmin },
+    }),
+    latestCardWordsFor(pool, memberIds),
+    ctx.moonId ? moonLoadsFor(pool, memberIds, ctx.moonId) : Promise.resolve(new Map<string, { level: number }>()),
   ]);
 
   const roles = new Map<string, OrgRole & { archetypesSuggested: boolean }>(
@@ -301,7 +346,15 @@ export async function buildPlayerCards(
     for (const k of roleWordsIn(json<unknown>(p.payload, {}))) set.add(k);
     pendingByRole.set(String(p.org_role_id), set);
   }
-  const tensionsByRole = groupBy(rows.tensions, (t) => String(t.owner_seat_id));
+  // Every role a live card in the batch carries, the tensions read once for all of them.
+  const liveOwnerIds = new Set(owners.filter((o) => !o.proposal && o.tier.level !== "stranger").map((o) => o.userId));
+  const tensionRoleIds = Array.from(
+    new Set(seatings.filter((s) => s.userId && liveOwnerIds.has(String(s.userId)) && s.holderKind === "member" && !s.isExample).map((s) => s.orgRoleId)),
+  );
+  const tensionsByRole = await tensionsForRoles(pool, tensionRoleIds, { userId: ctx.viewerUserId, member: ctx.viewerMember === true });
+  const viewerHolds = (roleId: string): boolean =>
+    ctx.viewerUserId !== null &&
+    (seatingsByRole.get(roleId) ?? []).some((s) => s.userId === ctx.viewerUserId && s.holderKind === "member" && !s.isExample);
   const doneThisMoon = new Set(rows.taskEvents.filter((e) => e.status === "done").map((e) => String(e.entry_id)));
   const tasksByRole = groupBy(rows.tasks, (t) => String(t.owner_seat_id));
 
@@ -357,12 +410,6 @@ export async function buildPlayerCards(
         if (!other || other === id) continue;
         worksWith.push({ roleId: other, roleName: roleName.get(other) ?? other, about: r.note });
       }
-      const tensions: TensionIn[] = (tensionsByRole.get(id) ?? []).map((t) => ({
-        id: String(t.id),
-        status: t.status === "done" ? "answered" : "open",
-        raisedBy: String(t.raised_by ?? ""),
-        text: String(t.text ?? ""),
-      }));
       return {
         id,
         name: String(p.name),
@@ -381,9 +428,10 @@ export async function buildPlayerCards(
               : undefined,
         archetypes: seat.structure ? ((p.archetypes as string[]) ?? []) : undefined,
         archetypesSuggested: role.archetypesSuggested,
-        bringMe: null,
-        notMine: null,
-        runbook: null,
+        // The role's own handover words (#534), off the same seat object /api/org sends.
+        bringMe: (p.bringMe as string[] | null) ?? null,
+        notMine: (p.notMine as string[] | null) ?? null,
+        runbook: (p.runbook as string | null) ?? null,
         worksWith: seat.structure ? worksWith : undefined,
         powers: seat.structure
           ? (grantsByRole.get(id) ?? []).map((g) => ({
@@ -391,7 +439,9 @@ export async function buildPlayerCards(
               label: CAPABILITY_LABELS[g.capability as Capability] ?? String(g.capability),
             }))
           : undefined,
-        tensions: memberUp ? (proposal ? [] : tensions) : undefined,
+        // A role missing from the map (a reader who is not a member) is unread, never empty.
+        tensions: memberUp ? (proposal ? [] : tensionsByRole.get(id)?.tensions) : undefined,
+        viewerHolds: viewerHolds(id),
         // A proposal is drawn on its own terms, never the offer on the role.
         settings: seat.terms ? (proposal ? proposalSettings : ownSettings ?? offer) : undefined,
         holderCount: Number(p.holderCount ?? held.length),
@@ -414,6 +464,8 @@ export async function buildPlayerCards(
         })),
     );
 
+    const words: CardWords | null = cardWords.get(owner.userId) ?? null;
+    const load = loads.get(owner.userId);
     const plans = rows.plans.filter((p) => String(p.user_id) === owner.userId);
     const plan = isSelf ? plans[plans.length - 1] : [...plans].reverse().find((p) => p.filed_at);
     const applications: ApplicationIn[] = ownApps
@@ -438,26 +490,35 @@ export async function buildPlayerCards(
       timeZone: ctx.timeZone,
       owner: { userId: owner.userId, displayName: String(user.name ?? ""), avatar: null },
       viewerUserId: ctx.viewerUserId,
+      viewerMember: ctx.viewerMember === true,
       villageName: ctx.villageName,
       season: ctx.season,
       nextSeasonId: ctx.nextSeasonId,
       archetypeNames: ctx.archetypeNames,
       roles: rolesVisible ? roleIns : undefined,
-      plan: memberUp ? (plan ? { aim: plan.aim ?? null, goals: plan.serves_goal ? [{ goal: String(plan.serves_goal), howItHelps: null }] : [] } : null) : undefined,
-      // Stored from the season plan migration (PR 6). Read and empty until then.
-      seasonalGoals: memberUp ? null : undefined,
+      plan: memberUp
+        ? plan
+          ? {
+              aim: plan.aim ?? null,
+              goals: servedGoalsOf(json<ServedGoal[] | null>(plan.serves_goals_json, null), plan.serves_goal ?? null),
+            }
+          : null
+        : undefined,
+      seasonalGoals: memberUp ? seasonalGoalsOf(plan?.seasonal_goals_json) : undefined,
       tasks: memberUp && rolesVisible ? tasks : undefined,
       signRows: memberUp ? {} : undefined,
-      howIHold: memberUp ? null : undefined,
+      howIHold: memberUp ? holdWords(words) : undefined,
+      accomplished: memberUp && !proposal ? accomplished.get(owner.userId) ?? [] : undefined,
       applications: memberUp ? applications : undefined,
       pastSeatings: isSelf ? pastSeatings : undefined,
       endedSeasonIds: ctx.endedSeasonIds ?? [],
       mode: proposal ? "proposal" : "live",
       roleNames: Object.fromEntries(roleName),
       bonusTokenName: null,
-      loadRead: memberUp ? null : undefined,
-      growingEdge: memberUp ? null : undefined,
-      whoCouldHoldNext: memberUp ? null : undefined,
+      // The owner's own words and this moon's read (PR 6, #530), whatever the season.
+      loadRead: memberUp ? (isLoadStep(load?.level) ? (Number(load!.level) as LoadStep) : null) : undefined,
+      growingEdge: memberUp ? words?.growingEdge ?? null : undefined,
+      whoCouldHoldNext: memberUp ? words?.nextHolder ?? null : undefined,
       signReader: (key, circleId) =>
         signs(key, circleId)?.reading ?? { kind: "not-counted", key: key ?? null, words: "Not counted yet" },
     };
@@ -498,6 +559,26 @@ export async function buildPlayerCards(
     });
   }
   return out;
+}
+
+/** A plan's stored seasonal goals, as the model reads them. Null when none are written. */
+function seasonalGoalsOf(raw: unknown): SeasonalGoalIn[] | null {
+  const list = json<SeasonalGoal[] | null>(raw, null);
+  if (!Array.isArray(list)) return null;
+  const goals = list
+    .filter((g) => g && typeof g.title === "string")
+    .map((g) => ({ title: g.title, doneWhen: typeof g.doneWhen === "string" ? g.doneWhen : null }));
+  return goals.length ? goals : null;
+}
+
+/** "How I hold my roles": the card words that have an answer, labelled as the plan form labels them. */
+function holdWords(words: CardWords | null): { label: string; text: string }[] | null {
+  if (!words) return null;
+  const items = HOLD_KEYS.flatMap((k) => {
+    const text = typeof words[k] === "string" ? words[k]!.trim() : "";
+    return text ? [{ label: CARD_WORD_LABELS[k], text }] : [];
+  });
+  return items.length ? items : null;
 }
 
 /** A role's terms on offer, parsed by the one parser, or null. */

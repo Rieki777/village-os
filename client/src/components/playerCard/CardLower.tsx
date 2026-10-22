@@ -70,7 +70,11 @@ export function HowIHold({ howIHold }: { howIHold: PlayerCard["howIHold"] }) {
           </div>
         )}
       </SlotView>
-      <EditInPlace target={{ kind: "personal", key: "howIHold" }} label={howIHold.heading} initial="" />
+      <EditInPlace
+        target={{ kind: "personal", key: "howIHold" }}
+        label={howIHold.heading}
+        initial={howIHold.items.kind === "shown" ? howIHold.items.value.find((h) => h.label === howIHold.heading)?.text ?? "" : ""}
+      />
     </section>
   );
 }

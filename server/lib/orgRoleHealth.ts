@@ -14,7 +14,8 @@
  *
  *   users                   the holders' handles, for the link (member tier)
  *   seat_applications       the terms each live holding was adopted on
- *   live_session_entries    open tensions per role, grouped in SQL
+ *   role_tensions           open tensions per role (`openTensionCountsFor`,
+ *                           the statement the player card counts by)
  *   the sign tables         through the card's memo, each table once
  *
  * `orgRoleHealth.queries.test.ts` holds a page of 40 holders to the count a
@@ -31,7 +32,8 @@
  * has no health: there is no holding to be healthy.
  */
 import type { Pool } from "mysql2/promise";
-import { applicationSettingsOf, handlesOf, openTensionCounts } from "../repos/orgRoleHealth";
+import { applicationSettingsOf, handlesOf } from "../repos/orgRoleHealth";
+import { openTensionCountsFor } from "./roleTensions";
 import { roleHealth, type HealthOut } from "../../shared/playerCardHealth";
 import type { SignOut, Slot } from "../../shared/playerCard";
 import { isSignKey, type SignKey } from "../../shared/roleSigns";
@@ -99,7 +101,7 @@ export async function orgRoleExtras(
   const [handles, apps, tensions] = await Promise.all([
     tier.people === "member" ? handlesOf(pool, memberIds) : Promise.resolve(none),
     tier.terms ? applicationSettingsOf(pool, appIds) : Promise.resolve(none),
-    tier.terms ? openTensionCounts(pool, heldRoles.map((r) => r.id)) : Promise.resolve(null),
+    tier.terms ? openTensionCountsFor(pool, heldRoles.map((r) => r.id)) : Promise.resolve(null),
   ]);
 
   const out: OrgRoleExtras = {};

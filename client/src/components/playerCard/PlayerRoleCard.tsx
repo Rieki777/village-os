@@ -5,7 +5,8 @@
  * Reference design: https://claude.ai/artifact/49Fh3tdkSoNYTmNDFv24D1
  * (version 15). The order is the design's: the header; one tile per role,
  * each linking down to its section; across all my roles; each role in full;
- * the moon timeline; how I hold my roles; my applications; and agreements in
+ * the moon timeline; what I accomplished, by moon; how I hold my roles; my
+ * applications; and agreements in
  * a small closed <details> at the bottom.
  *
  * DRAWN ONLY FROM THE MODEL. The server sends a `PlayerCard`
@@ -32,6 +33,7 @@ import { CardHeader, RoleTiles } from "./CardHeader";
 import { AcrossSection } from "./AcrossSection";
 import { RoleInFull } from "./RoleInFull";
 import { Agreements, HowIHold, MoonTimeline, MyApplications } from "./CardLower";
+import { AccomplishedSection } from "./AccomplishedSection";
 import { fetchApplicationCard, fetchCard } from "./playerCardApi";
 
 export const CARD_LOAD_WORDS = {
@@ -62,7 +64,7 @@ export function PlayerRoleCardView({
   const { card, sheets, links, viewer, timeZone } = data;
   const mayEdit = viewer.isSelf && mode === "live";
   return (
-    <CardEditContext.Provider value={{ editing: mayEdit && editing, reload, reviewHref: links.review ?? null }}>
+    <CardEditContext.Provider value={{ editing: mayEdit && editing, owner: mayEdit, reload, reviewHref: links.review ?? null }}>
       <div data-player-card data-card-mode={mode} className={`grid gap-4 sm:gap-6 ${className}`}>
         <div className={`${SECTION} grid gap-5`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,6 +90,7 @@ export function PlayerRoleCardView({
         ) : null}
 
         <MoonTimeline timeline={card.timeline} />
+        <AccomplishedSection accomplished={card.accomplished} />
         <HowIHold howIHold={card.howIHold} />
         <MyApplications applications={card.applications} />
         <Agreements agreements={card.agreements} newApplicationHref={links.newApplication} />

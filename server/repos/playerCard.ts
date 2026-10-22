@@ -45,7 +45,6 @@ export interface CardRows {
   plans: RowDataPacket[];
   tasks: RowDataPacket[];
   taskEvents: RowDataPacket[];
-  tensions: RowDataPacket[];
   circleDecisions: RowDataPacket[];
   pending: RowDataPacket[];
 }
@@ -66,7 +65,7 @@ export async function readCardRows(
   const q = async (sql: string, args: unknown[]) => (await pool.query<RowDataPacket[]>(sql, args))[0];
   const [
     users, seatings, roles, roleNames, circles, relations, relationTypes, grants,
-    applications, plans, tasks, taskEvents, tensions, circleDecisions, pending,
+    applications, plans, tasks, taskEvents, circleDecisions, pending,
   ] = await Promise.all([
     q(`SELECT id, name FROM users WHERE id IN (${marks(n)})`, ids),
     q(`SELECT ${ASSIGN_COLS} FROM org_role_assignments WHERE ended_at IS NULL AND org_role_id IN (${held}) ORDER BY started_at, id`, ids),
@@ -87,7 +86,7 @@ export async function readCardRows(
       ids,
     ),
     q(
-      "SELECT user_id, season_id, version, aim, serves_goal, filed_at, superseded_at, created_at " +
+      "SELECT user_id, season_id, version, aim, serves_goal, serves_goals_json, seasonal_goals_json, filed_at, superseded_at, created_at " +
         `FROM season_plans WHERE user_id IN (${marks(n)}) ORDER BY created_at, version`,
       ids,
     ),
@@ -103,12 +102,6 @@ export async function readCardRows(
       [...ids, window.moonFrom],
     ),
     q(
-      "SELECT e.id, e.status, e.text, e.owner_seat_id, m.user_id AS raised_by FROM live_session_entries e " +
-        "LEFT JOIN live_session_members m ON m.no = e.author_no " +
-        `WHERE e.kind = 'tension' AND e.owner_seat_id IN (${held})`,
-      ids,
-    ),
-    q(
       "SELECT s.circle_id, COUNT(*) AS n FROM live_session_entries e JOIN live_sessions s ON s.id = e.session_id " +
         `WHERE e.kind = 'decision' AND e.created_at >= ? AND s.circle_id IN (SELECT circle_id FROM org_roles WHERE id IN (${held})) ` +
         "GROUP BY s.circle_id",
@@ -122,7 +115,7 @@ export async function readCardRows(
   ]);
   return {
     users, seatings, roles, roleNames, circles, relations, relationTypes, grants,
-    applications, plans, tasks, taskEvents, tensions, circleDecisions, pending,
+    applications, plans, tasks, taskEvents, circleDecisions, pending,
   };
 }
 

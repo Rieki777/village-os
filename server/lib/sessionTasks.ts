@@ -710,18 +710,44 @@ export async function accomplishmentsOf(
   deps: Pick<TaskDeps, "lapseContext">,
   opts: { viewer?: { userId: string | null; admin: boolean } } = {},
 ): Promise<AccomplishmentMoon[]> {
-  const no = await memberNo(pool, ownerUserId);
-  if (no == null) return [];
-  let rows = await store.acceptedTaskRowsFor(pool, no);
-  if (!rows.length) return [];
+  return (await accomplishmentsOfMany(pool, [ownerUserId], deps, opts)).get(ownerUserId) ?? [];
+}
+
+/**
+ * `accomplishmentsOf` for several members at once, by the same viewer rule,
+ * for the player card's batched builder (server/lib/playerCardData.ts). The
+ * statements run once for the whole batch, never once per member: their
+ * numbers, the accepted tasks, the viewer's standing and the events. A member
+ * with nothing accepted, or no number, maps to an empty list.
+ */
+export async function accomplishmentsOfMany(
+  pool: Pool,
+  ownerUserIds: readonly string[],
+  deps: Pick<TaskDeps, "lapseContext">,
+  opts: { viewer?: { userId: string | null; admin: boolean } } = {},
+): Promise<Map<string, AccomplishmentMoon[]>> {
+  const out = new Map<string, AccomplishmentMoon[]>(ownerUserIds.map((id) => [id, []]));
+  const owners = Array.from(new Set(ownerUserIds));
+  if (!owners.length) return out;
   const viewer = opts.viewer;
-  if (viewer && viewer.userId !== ownerUserId && !viewer.admin) {
+  // The viewer's number rides in the same read as the owners'.
+  const asked = viewer?.userId && !owners.includes(viewer.userId) ? [...owners, viewer.userId] : owners;
+  const noOf = new Map((await repo.memberNoRowsFor(pool, asked)).map((r) => [String(r.user_id), Number(r.no)]));
+  const ownerNos = owners.map((id) => noOf.get(id)).filter((n): n is number => n != null);
+  if (!ownerNos.length) return out;
+  const rows = await store.acceptedTaskRowsForMany(pool, ownerNos);
+  if (!rows.length) return out;
+
+  // Anybody but the member themselves or an admin reads only the tasks they may read as cards.
+  const filtered = (ownerId: string) => !!viewer && viewer.userId !== ownerId && !viewer.admin;
+  let visible: Set<number> | null = null;
+  if (owners.some(filtered)) {
     const seatings = await seatingsNow(pool, deps);
-    const viewerNo = viewer.userId ? await memberNo(pool, viewer.userId) : null;
-    const seen = await seenBy(pool, { userId: viewer.userId, no: viewerNo, admin: false }, rows, seatings);
-    rows = rows.filter((r) => canSeeTask(stateOf(r), viewerFor(seen, r)));
-    if (!rows.length) return [];
+    const viewerNo = viewer!.userId ? noOf.get(viewer!.userId) ?? null : null;
+    const seen = await seenBy(pool, { userId: viewer!.userId, no: viewerNo, admin: false }, rows, seatings);
+    visible = new Set(rows.filter((r) => canSeeTask(stateOf(r), viewerFor(seen, r))).map((r) => Number(r.entry_id)));
   }
+
   const textOf = new Map(rows.map((r) => [Number(r.entry_id), String(r.text ?? "")]));
   const events: AccomplishmentEvent[] = (await store.eventRowsFor(pool, Array.from(textOf.keys()))).map((e) => ({
     entryId: Number(e.entry_id),
@@ -733,8 +759,19 @@ export async function accomplishmentsOf(
     at: toIso(e.created_at) ?? new Date(0).toISOString(),
     text: textOf.get(Number(e.entry_id)) ?? "",
   }));
-  const theirs = currentAccomplishments(events).filter((a) => a.ownerNo === no || (a.ownerNo == null && a.roleId != null && a.doneByNo === no));
-  return groupByMoon(theirs);
+  const all = currentAccomplishments(events);
+  for (const ownerId of owners) {
+    const no = noOf.get(ownerId);
+    if (no == null) continue;
+    const seeAll = !filtered(ownerId);
+    const theirs = all.filter(
+      (a) =>
+        (a.ownerNo === no || (a.ownerNo == null && a.roleId != null && a.doneByNo === no)) &&
+        (seeAll || (visible !== null && visible.has(a.entryId))),
+    );
+    out.set(ownerId, groupByMoon(theirs));
+  }
+  return out;
 }
 
 /** One task's card, as it stands now, for one asker. */

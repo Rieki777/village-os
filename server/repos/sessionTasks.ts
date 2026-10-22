@@ -244,12 +244,18 @@ export async function eventRows(q: Queryable, entryId: number): Promise<RowDataP
  * by the lib). Through the owner index for the first half.
  */
 export async function acceptedTaskRowsFor(q: Queryable, memberNo: number): Promise<RowDataPacket[]> {
+  return acceptedTaskRowsForMany(q, [memberNo]);
+}
+
+/** The same read for several members at once, so a batch of cards costs one statement. */
+export async function acceptedTaskRowsForMany(q: Queryable, memberNos: readonly number[]): Promise<RowDataPacket[]> {
+  if (memberNos.length === 0) return [];
   return rowsOf(
     q,
     `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'done' AND \`t\`.\`latest_kind\` = 'accepted' ` +
-      "AND (`t`.`owner_no` = ? OR ((`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) AND `t`.`owner_seat_id` IS NOT NULL AND `t`.`owner_seat_id` <> '')) " +
+      "AND (`t`.`owner_no` IN (?) OR ((`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) AND `t`.`owner_seat_id` IS NOT NULL AND `t`.`owner_seat_id` <> '')) " +
       "ORDER BY `t`.`entry_id`",
-    [memberNo],
+    [[...memberNos]],
   );
 }
 
