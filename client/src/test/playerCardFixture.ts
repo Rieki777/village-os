@@ -31,6 +31,11 @@ const READING: SignReading = {
 
 export const FIXTURE_ROLE_TITLE = (n: number) => `Steward of Circle Work Number ${n}`;
 
+/** One fixture role, for a test that needs to change a field before the model reads it. */
+export function fixtureRole(n: number): PlayerRoleIn {
+  return role(n);
+}
+
 function role(n: number): PlayerRoleIn {
   return {
     id: `r${n}`,
