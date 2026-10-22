@@ -263,7 +263,7 @@ const TIME_IN_TEXT = /(?<![\d:])(?:[01]?\d|2[0-3]):[0-5]\d(?![\d:])/g;
 const IBAN_SHAPE = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/i;
 
 /** A scoreboard measures the work. These words rank people. */
-const RANKS_PEOPLE =
+export const RANKS_PEOPLE =
   /\b(rank|ranks|ranked|ranking|leaderboard|league table|top \d+|best (?:member|person|people|holder)|worst|power level)\b/i;
 
 export const PAYMENT_DETAIL_MESSAGE =

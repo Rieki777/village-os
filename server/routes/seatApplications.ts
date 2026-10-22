@@ -2,7 +2,7 @@
  * THE MEMBER DOOR: APPLY TO HOLD SEATS, ON TERMS (seat settings PR4).
  *
  *   POST /api/governance/role-applications                    apply for 1 to 5 seats
- *   GET  /api/governance/role-applications                    every application (terms.read)
+ *   GET  /api/governance/role-applications                    every application (terms.read); ?candidate= one member's, grouped
  *   GET  /api/governance/role-applications/:id                one, with what the reader may do (terms.read)
  *   POST /api/governance/role-applications/:id/adopt          a live org.seat holder adopts it for the village
  *   POST /api/governance/role-applications/:id/put-to-village a live org.seat holder sends it to a vote
@@ -110,6 +110,7 @@ import {
 } from "../lib/alignmentSubjects";
 import { confirmedWithin } from "../lib/identityConfirm";
 import {
+  applicationsOfCandidates,
   holdingApplicationsLocked,
   inApplicationTransaction,
   insertApplication,
@@ -117,6 +118,7 @@ import {
   listApplications,
   liveSeatingsOf,
   openApplicationsOf,
+  pastSeatingsWithoutApplication,
   readApplication,
   seatingsEverHolding,
   seatsForUpdate,
@@ -126,10 +128,15 @@ import {
   type StoredApplication,
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
+import { groupApplications, groupingContext, PAST_SEATING_WORDS } from "../../shared/applicationGroups";
 import { registerJob } from "../lib/scheduler";
 import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
 import { openDraftBallot, ORG_DECIDE, publishDoorFor } from "../lib/orgDraftDecide";
 import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
+import { ACCEPTING_POWER } from "../../shared/sessionTasks";
+import { effectiveLifecycle } from "../lib/modules";
+import { tasksToAccept } from "../lib/sessionTasks";
+import { heldTensionsFor } from "../lib/roleTensions";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
@@ -652,27 +659,64 @@ export function register(app: Express, deps: Deps): void {
   });
 
   // ── Read ──────────────────────────────────────────────────────────────────
+  /*
+   * `?candidate=<userId>` (player card PR 3): one member's applications only,
+   * filtered in SQL on `candidate_user_id` (seat_applications_candidate_idx),
+   * with `groups` naming which are past, this season and next season by the
+   * rule the player card reads (shared/applicationGroups.ts). The list is the
+   * open book at `terms.read` either way, so the filter narrows and never
+   * widens. Old seatings with no application ride along for the reader's own
+   * id only: they are a person's history, and the card shows them to its owner.
+   */
   app.get("/api/governance/role-applications", async (req, res) => {
     const viewer = await reader(req, res);
     if (!viewer) return;
+    const rawCandidate = req.query.candidate;
+    if (rawCandidate !== undefined && (typeof rawCandidate !== "string" || !rawCandidate.trim() || rawCandidate.length > 64)) {
+      return res.status(400).json({ error: "That is not a member id.", field: "candidate" });
+    }
+    const candidate = typeof rawCandidate === "string" ? rawCandidate.trim() : null;
     const rule = await adoptionRule(viewer);
-    const all = await listApplications(getPool());
-    // A fixed number of reads for the whole list (red team D8): ballots, seats and texts once each.
     const pool = getPool();
+    const all = candidate ? await applicationsOfCandidates(pool, [candidate]) : await listApplications(pool);
+    const isSelf = candidate !== null && candidate === String(viewer.id);
+    const held = isSelf ? await pastSeatingsWithoutApplication(pool, [candidate]) : [];
+    // A fixed number of reads for the whole list (red team D8): ballots, seats and texts once each.
     const ballots = await latestBallotsFor(pool, all.map((a) => a.id));
-    const seats = await seatsForUpdate(pool, Array.from(new Set(all.flatMap((a) => a.seatIds))));
+    const seats = await seatsForUpdate(pool, Array.from(new Set([...all.flatMap((a) => a.seatIds), ...held.map((h) => h.roleId)])));
     const texts = await readTexts(pool, all.map((a) => a.textId).filter((t): t is string => !!t));
-    const views = await viewTexts(pool, texts, today(), seatCalendar().timezone || "UTC");
-    res.json({
-      applications: await Promise.all(
-        all.map((a) =>
-          served(a, String(viewer.id), rule, {
-            ballot: ballots.get(a.id) ?? null,
-            seats,
-            view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
-          }),
-        ),
+    const tz = seatCalendar().timezone || "UTC";
+    const views = await viewTexts(pool, texts, today(), tz);
+    const applications = await Promise.all(
+      all.map((a) =>
+        served(a, String(viewer.id), rule, {
+          ballot: ballots.get(a.id) ?? null,
+          seats,
+          view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
+        }),
       ),
+    );
+    if (candidate === null) return res.json({ applications });
+    const grouped = groupApplications(all, candidate, groupingContext(seatCalendar(), (d) => civilDateInstant(d, tz), new Date()));
+    res.set("Cache-Control", "no-store").json({
+      applications,
+      groups: {
+        past: grouped.past.map((a) => a.id),
+        thisSeason: grouped.thisSeason.map((a) => a.id),
+        nextSeason: grouped.nextSeason.map((a) => a.id),
+      },
+      ...(isSelf
+        ? {
+            pastSeatings: held.map((h) => ({
+              roleId: h.roleId,
+              roleName: seats.find((s) => s.id === h.roleId)?.name ?? h.roleId,
+              startedOn: h.startedAt ? civilDateKey(h.startedAt, tz) : null,
+              endedOn: h.endedAt ? civilDateKey(h.endedAt, tz) : null,
+              words: PAST_SEATING_WORDS.status,
+              href: `/roles?seat=${encodeURIComponent(h.roleId)}`,
+            })),
+          }
+        : {}),
     });
   });
 
@@ -691,7 +735,39 @@ export function register(app: Express, deps: Deps): void {
    * is voting on is frozen, so nobody is asked to publish it and it is left
    * off. Each row links its batch's structure page, which offers the same
    * door (server/routes/structureReview.ts).
+   *
+   * `toAccept` is the done tasks the reader may accept as accomplished
+   * (`tasksToAccept`, server/lib/sessionTasks.ts): a live holder of
+   * `org.seat`, never for their own work. Nothing is read while Live Sessions
+   * is off, and a task layer that cannot be read leaves the group empty
+   * rather than failing the applications beside it.
    */
+  /** The done tasks waiting on this reader to accept them, or none. */
+  const acceptsWaitingOn = async (viewerId: string) => {
+    if (effectiveLifecycle("sessions") === "off") return [];
+    try {
+      return await tasksToAccept(getPool(), viewerId, { acceptors: await liveHoldersOf(ACCEPTING_POWER), lapseContext: lapse });
+    } catch (e) {
+      console.error("[waiting] the tasks to accept could not be read", e);
+      return [];
+    }
+  };
+
+  /**
+   * `raisedWithYou` is the tensions raised with a role the reader holds live
+   * and nobody has answered (`heldTensionsFor`, server/lib/roleTensions.ts).
+   * A tension store that cannot be read leaves the group empty rather than
+   * failing the rows beside it, as the task layer does above.
+   */
+  const tensionsWaitingOn = async (viewerId: string) => {
+    try {
+      return await heldTensionsFor(getPool(), viewerId, { timeZone: seatCalendar().timezone || "UTC" });
+    } catch (e) {
+      console.error("[waiting] the tensions raised with the reader's roles could not be read", e);
+      return [];
+    }
+  };
+
   app.get(WAITING_URL, async (req, res) => {
     const viewer = await reader(req, res);
     if (!viewer) return;
@@ -707,6 +783,8 @@ export function register(app: Express, deps: Deps): void {
       drafts: (await publishDoorFor(pool, { userId: viewerId, isAdmin: ctx.isAdmin === true }, await liveHoldersOf(ORG_DECIDE)))
         ? await unfrozen(pool, await draftsWaiting(pool))
         : [],
+      toAccept: await acceptsWaitingOn(viewerId),
+      raisedWithYou: await tensionsWaitingOn(viewerId),
     };
     res.set("Cache-Control", "no-store").json(payload);
   });

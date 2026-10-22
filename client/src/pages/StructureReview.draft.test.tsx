@@ -303,3 +303,41 @@ describe("what stayed behind", () => {
     );
   });
 });
+
+describe("the role's words, before and after (0268)", () => {
+  it("lists Bring me, Not mine to hold and the runbook beside the aim, for a moved role and a new one", async () => {
+    const liveWithWords: PlanLiveSeat[] = [
+      { ...LIVE_SEATS[0], words: { aim: "Keep things running", domain: null, bringMe: ["A weekly note"], notMine: null, runbook: null } },
+    ];
+    const changes = [
+      {
+        op: "update_seat",
+        orgRoleId: "ops",
+        payload: { name: "Operations Steward", bringMe: ["A weekly note", "The key"], notMine: ["Bookkeeping"], runbook: "https://example.org/ops" },
+      },
+      { op: "create_seat", orgRoleId: "rec-9", payload: { name: "Hearth Keeper", circleId: "general", aim: "Keep the fire", notMine: ["The kitchen rota"] } },
+    ];
+    const { plan, decisions } = planFromDraft("draft-1", changes, LIVE_CIRCLES, liveWithWords);
+    answer = { ...answer, draft: { ...draftAnswer(), plan, decisions, counts: countDraft(changes) } };
+    await open();
+    const lists = screen.getAllByTestId("role-field-changes");
+    expect(lists).toHaveLength(2);
+    const moved = lists[0].textContent ?? "";
+    expect(moved).toContain("Bring me");
+    expect(moved).toContain("Before: A weekly note");
+    expect(moved).toContain("After: A weekly note; The key");
+    expect(moved).toContain("Not mine to hold");
+    expect(moved).toContain("Before: Not written yet");
+    expect(moved).toContain("After: Bookkeeping");
+    expect(moved).toContain("Runbook");
+    expect(moved).toContain("After: https://example.org/ops");
+    // The aim the payload does not name is not listed as a change.
+    expect(moved).not.toContain("Purpose");
+    const made = lists[1].textContent ?? "";
+    expect(made).toContain("Purpose");
+    expect(made).toContain("Keep the fire");
+    expect(made).toContain("Not mine to hold");
+    expect(made).toContain("The kitchen rota");
+    expect(made).not.toContain("Before:");
+  });
+});

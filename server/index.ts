@@ -136,6 +136,8 @@ import { register as registerSeatApplicationRoutes, ballotNamesItsCloser, closeN
 import { register as registerAlignmentRoutes, alignmentsForExport } from "./routes/alignments";
 import { register as registerMembershipLetterRoutes, legacySigningOf, letterSourceFrom } from "./routes/membershipLetter";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
+import { register as registerPlayerCardRoutes } from "./routes/playerCard";
+import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -150,6 +152,7 @@ import { exportMemberJournal, register as registerJournalRoutes } from "./routes
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
 import { register as registerSessionLibraryRoutes } from "./routes/sessionLibrary";
+import { register as registerRoleTensionRoutes } from "./routes/roleTensions";
 import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerModuleLibraryRoutes, moduleChangeReaders } from "./routes/moduleLibrary";
@@ -18495,8 +18498,9 @@ ${inner}
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
-  registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName });
+  registerSessionTasksRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, notifyAdmins, notifyDeps, commsPostOffice, lapseContext, deploymentOrigin, projectName: notifyDeps.projectName, liveHoldersOf });
   registerSessionLibraryRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, circlesRepo, notify, lapseContext });
+  registerRoleTensionRoutes(app, { authedUser, isAdmin, getPool, overLimit, notify, seasonState });
   registerDryRunRoutes(app, { authedUser, isAdmin, overLimit, getPool });
   /**
    * Put a redemption to the village, with the setup every village-wide vote
@@ -19178,6 +19182,7 @@ ${inner}
     }),
   });
   registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
+  registerPlayerCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, firstName, overLimit, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
@@ -24889,6 +24894,7 @@ ${inner}
   // requireModule("governance") mount, which is what keeps that gate in front of the door.
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
+  registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 
@@ -25216,7 +25222,7 @@ ${inner}
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined }), // heldTerms: red team U2, server/lib/heldTerms.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
     });
   });
 

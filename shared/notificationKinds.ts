@@ -424,20 +424,36 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} tasks sit with roles nobody holds.",
     celebrate: false,
   },
+  // A tension raised with a role you hold (server/lib/roleTensions.ts), and
+  // the one reminder after two business days. In the bell only: neither has
+  // a case in emailCadenceFor, because the words are private to the role's
+  // holders and whoever raised it, and neither notice carries them anyway.
+  role_tension_raised: {
+    group: "work",
+    blurb: "A member raised a tension with a role you hold. Only the role's holders and whoever raised it can read it.",
+    many: "{n} tensions were raised with roles you hold.",
+    celebrate: false,
+  },
+  role_tension_reminder: {
+    group: "work",
+    blurb: "A tension raised with a role you hold has waited 2 business days. Take it, answer it, or bring it to the circle.",
+    many: "{n} tensions with your roles have waited 2 business days.",
+    celebrate: false,
+  },
   // The agenda library (server/lib/sessionLibrary.ts): an item a member
   // brought for a circle went onto a session's agenda, and how it left that
   // session. Neither celebrates: each is an answer to somebody who raised
   // something, and it reads as one.
   session_item_taken: {
     group: "work",
-    blurb: "An item you brought for a circle is on a session's agenda now.",
-    many: "{n} items you brought are on an agenda.",
+    blurb: "An agenda item you added is on a session's agenda now.",
+    many: "{n} agenda items you added are on an agenda.",
     celebrate: false,
   },
   session_item_settled: {
     group: "work",
-    blurb: "A session that took up an item you brought has closed. The item says whether it was taken up or waits for next time.",
-    many: "{n} sessions closed with items you brought.",
+    blurb: "A session that took up an agenda item you added has closed. The item says whether it was taken up or waits for next time.",
+    many: "{n} sessions closed with agenda items you added.",
     celebrate: false,
   },
 

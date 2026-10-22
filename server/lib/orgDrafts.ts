@@ -47,6 +47,8 @@ import { canonicalJson } from "../../shared/canonicalJson";
 import { OFFER_WORDS, readTermsOffer } from "../../shared/seatTermsOffer";
 import { ORG_DRAFT } from "../../shared/ballotSubjects";
 import { openBallotFor } from "./ballots";
+import { ROLE_HANDOVER_COLUMNS, ROLE_HANDOVER_FIELDS } from "../../shared/roleHandover";
+import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHandoverParse";
 
 export type DraftOp =
   | "create_seat"
@@ -1088,6 +1090,9 @@ export function previewLoadedDraft(
       const reasons: string[] = [];
       if (existing) reasons.push("A role with that id already exists");
       reasons.push(...seatShapeBlocks(c.payload));
+      // 0268: the handover words, through the one parser the publish uses again.
+      const handover = roleHandoverProblem(c.payload);
+      if (handover) reasons.push(handover);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -1156,6 +1161,9 @@ export function previewLoadedDraft(
         reads = `Edit ${name}`;
         if (!blocked) blocked = circleNameBlock(c.payload, fromQueue);
         if (!blocked) blocked = seatShapeBlocks(c.payload)[0] ?? null;
+        // 0268: "Bring me", "Not mine to hold" and the runbook, checked by the
+        // parser the publish runs again, so the preview's line is its refusal.
+        if (!blocked) blocked = roleHandoverProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
@@ -1394,7 +1402,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
   return row ?? null;
@@ -1409,7 +1417,34 @@ const SEAT_FIELDS: Record<string, string> = {
   // else, and never through the generic loop below: `applyChange` reads it
   // through the one parser and stamps when and by whom.
   termsOffer: "terms_offer",
+  // 0268: the handover words (Rye, 2026-10-22). They change only here, by
+  // consent, like aim and domain. Never through the generic loop below either:
+  // `handoverColumns` parses each one and writes the lists as JSON.
+  bringMe: "bring_me",
+  notMine: "not_mine",
+  runbook: "runbook",
 };
+
+/**
+ * The handover words a change names, as column and value pairs ready to bind,
+ * and none for a change that names none. Parsed by the one parser the preview ran, and
+ * refused again here, so a draft built by hand cannot write what the preview
+ * would block. A list is stored as JSON; null clears the column.
+ */
+export function handoverColumns(p: Record<string, unknown>): Array<[string, string | null]> {
+  const out: Array<[string, string | null]> = [];
+  for (const f of ROLE_HANDOVER_FIELDS) {
+    if (p[f] === undefined) continue;
+    const r = parseRoleHandoverField(f, p[f]);
+    if (!r.ok) throw new Error(`This change cannot be published. ${r.problem}`);
+    const v = r.value;
+    out.push([ROLE_HANDOVER_COLUMNS[f], v === null ? null : Array.isArray(v) ? JSON.stringify(v) : v]);
+  }
+  return out;
+}
+
+/** Payload keys `applyChange` writes by hand, never through the generic loop. */
+const HAND_WRITTEN_FIELDS = new Set<string>(["termsOffer", ...ROLE_HANDOVER_FIELDS]);
 
 /**
  * A circle a publish set dormant, for the caller to hand to the dormancy hook
@@ -1508,13 +1543,16 @@ async function applyChange(
     // `previewDraft` has already blocked any criticality other than these two.
     // 0256: and the terms it offers, when a member wrote some.
     const offer = offerColumns(p, who) ?? [null, null, null];
+    // 0268: and its handover words, parsed and refused like an update's.
+    const words = new Map(handoverColumns(p));
     await conn.query(
-      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
-        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer],
+        p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
+        words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null],
     );
     return null;
   }
@@ -1585,7 +1623,7 @@ async function applyChange(
   const sets: string[] = [];
   const args: any[] = [];
   for (const [key, col] of Object.entries(SEAT_FIELDS)) {
-    if (p[key] === undefined || key === "termsOffer") continue;
+    if (p[key] === undefined || HAND_WRITTEN_FIELDS.has(key)) continue;
     sets.push(`\`${col}\` = ?`);
     args.push(p[key]);
   }
@@ -1593,6 +1631,10 @@ async function applyChange(
   if (offer) {
     sets.push("`terms_offer` = ?", "`terms_offer_at` = ?", "`terms_offer_by` = ?");
     args.push(...offer);
+  }
+  for (const [col, v] of handoverColumns(p)) {
+    sets.push("`" + col + "` = ?");
+    args.push(v);
   }
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
@@ -1718,6 +1760,10 @@ export async function revertDraft(
          * somebody made since, so the CASE leaves the columns as they stand.
          */
         const hadTerms = "terms_offer" in b ? 1 : 0;
+        // 0268: the handover words, on the same rule. A draft published before
+        // 0268 captured none, and its revert leaves words written since alone.
+        const hadWords = "bring_me" in b ? 1 : 0;
+        const asJson = (v: unknown) => (v === null || v === undefined ? null : typeof v === "string" ? v : JSON.stringify(v));
         const termsBack = b.terms_offer === null || b.terms_offer === undefined ? null
           : typeof b.terms_offer === "string" ? b.terms_offer : JSON.stringify(b.terms_offer);
         await conn.query(
@@ -1725,12 +1771,16 @@ export async function revertDraft(
              why_it_matters = ?, seats = ?, criticality = ?, active = ?, recruiting = ?,
              terms_offer = CASE WHEN ? = 1 THEN ? ELSE terms_offer END,
              terms_offer_at = CASE WHEN ? = 1 THEN ? ELSE terms_offer_at END,
-             terms_offer_by = CASE WHEN ? = 1 THEN ? ELSE terms_offer_by END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+             terms_offer_by = CASE WHEN ? = 1 THEN ? ELSE terms_offer_by END,
+             bring_me = CASE WHEN ? = 1 THEN ? ELSE bring_me END,
+             not_mine = CASE WHEN ? = 1 THEN ? ELSE not_mine END,
+             runbook = CASE WHEN ? = 1 THEN ? ELSE runbook END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
             b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
             hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
-            hadTerms, b.terms_offer_by ?? null, c.orgRoleId],
+            hadTerms, b.terms_offer_by ?? null,
+            hadWords, asJson(b.bring_me), hadWords, asJson(b.not_mine), hadWords, b.runbook ?? null, c.orgRoleId],
         );
       }
     }

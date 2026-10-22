@@ -133,12 +133,13 @@ async function call(who: string | null, method: string, path: string, body?: unk
   return { status: res.status, body: text ? JSON.parse(text) : null };
 }
 
-/** The six doors, each with a body it would accept. */
+/** Every door, each with a body it would accept. */
 const DOORS: [string, string, unknown?][] = [
   ["GET", "/api/sessions/tasks/mine"],
   ["GET", "/api/sessions/tasks/count"],
   ["PATCH", "/api/sessions/tasks/7", { op: "done", version: 1 }],
   ["POST", "/api/sessions/tasks/7/done", {}],
+  ["POST", "/api/sessions/tasks/7/accept", { note: "Holds water again" }],
   ["GET", "/api/sessions/12/task-record"],
   ["POST", "/api/sessions/12/task-emails", {}],
 ];
@@ -148,7 +149,7 @@ const lifecycle = async (value: string | null) =>
   loadModuleSettings({ query: async () => [value ? [{ module_id: "sessions", lifecycle: value, config: null, updated_at: null }] : [], []] } as any);
 
 describe("with the sessions module off", () => {
-  it("hides all six doors, the way the room's doors are hidden", async () => {
+  it("hides every door, the way the room's doors are hidden", async () => {
     await lifecycle(null);
     for (const [method, path, body] of DOORS) {
       expect(await call("m-ana", method, path, body), `${method} ${path}`).toEqual({ status: 404, body: { error: "module_disabled", module: "sessions" } });
@@ -219,6 +220,17 @@ describe("with the sessions module on", () => {
     hits.set("sessions-task-answer:m-ana", TASK_LIMITS.answersPerHour - 1);
     expect((await call("m-ana", "POST", "/api/sessions/tasks/7/done", {})).status).toBe(404);
     expect(await call("m-ana", "PATCH", "/api/sessions/tasks/7", { op: "done", version: 1 })).toEqual({ status: 429, body: { error: TASK_REFUSALS.tooMany } });
+  });
+
+  it("answers Accept as accomplished on a task that is not there, or not a number, with the task's own 404", async () => {
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/seed/accept", {})).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/accept", { note: "Fine" })).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/accept")).toEqual({ status: 404, body: { error: TASK_REFUSALS.notFound } });
+  });
+
+  it("counts Accept as accomplished against the same hour's answers", async () => {
+    hits.set("sessions-task-answer:m-ana", TASK_LIMITS.answersPerHour);
+    expect(await call("m-ana", "POST", "/api/sessions/tasks/7/accept", {})).toEqual({ status: 429, body: { error: TASK_REFUSALS.tooMany } });
   });
 
   it("refuses the task emails while the session is open, and to anybody who does not run it", async () => {

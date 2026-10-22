@@ -20,6 +20,8 @@ import {
   type Slot,
 } from "./playerCard";
 import { applicationHref } from "./seatApplications";
+import { LUNAR_CLOCK } from "./cycleClock";
+import { accomplishmentsFor } from "./taskAccomplishments";
 import type { SeatSettings } from "./seatSettings";
 
 const TZ = "America/Costa_Rica";
@@ -312,6 +314,75 @@ describe("tensions", () => {
   });
 });
 
+describe("tensions in plain words (PR 9)", () => {
+  const NOW = new Date("2026-10-22T18:00:00Z");
+  const moonFrom = LUNAR_CLOCK.boundsFor(NOW).startsAt;
+  const inMoon = new Date(moonFrom.getTime() + 60_000).toISOString();
+  const before = new Date(moonFrom.getTime() - 86_400_000).toISOString();
+  // As the server sends them to a member who neither raised nor holds: the open words blank.
+  const blanked = [
+    { id: "o1", status: "open" as const, raisedBy: "", text: "" },
+    { id: "a1", status: "answered" as const, raisedBy: "", text: "", answeredAt: inMoon },
+    { id: "a2", status: "answered" as const, raisedBy: "", text: "", answeredAt: inMoon },
+    { id: "a3", status: "answered" as const, raisedBy: "", text: "Brought words", broughtToCircle: true, answeredAt: before },
+  ];
+  const card = (over: Partial<PlayerCardInput>, r: Partial<PlayerRoleIn>) => buildPlayerCard(input({ viewerMember: true, ...over, roles: [role(1, r)] })).roles[0];
+
+  it("a member whose words are withheld reads the count, never No tensions raised", () => {
+    const r = card({}, { tensions: [{ id: "o1", status: "open", raisedBy: "", text: "" }] });
+    const t = value(r.tensions);
+    expect(t.counts).toEqual(["1 open tension, private to the role's holders"]);
+    expect(t.open).toEqual([]);
+    expect(JSON.stringify(r.tensions)).not.toContain("No tensions raised");
+  });
+
+  it("counts open and answered this moon, and shows the words brought to the circle", () => {
+    const t = value(card({}, { tensions: blanked }).tensions);
+    expect(t.counts).toEqual(["1 open tension, private to the role's holders", "2 answered this moon"]);
+    expect(t.public).toEqual(["Brought words"]);
+    expect(t.answered.n).toBe(3);
+  });
+
+  it("the raiser reads their own open words, and the rest still counts as private", () => {
+    const t = value(
+      card({ viewerUserId: "u-raiser" }, {
+        tensions: [
+          { id: "o1", status: "open", raisedBy: "u-raiser", text: "My words" },
+          { id: "o2", status: "open", raisedBy: "", text: "" },
+        ],
+      }).tensions,
+    );
+    expect(t.open).toEqual(["My words"]);
+    expect(t.counts).toEqual(["2 open tensions, 1 private to the role's holders"]);
+  });
+
+  it("a co-holder reads the open words on another holder's card, with no privacy line", () => {
+    const t = value(card({ viewerUserId: "u-co" }, { viewerHolds: true, tensions: [{ id: "o1", status: "open", raisedBy: "", text: "Held words" }] }).tensions);
+    expect(t.open).toEqual(["Held words"]);
+    expect(t.counts).toEqual(["1 open tension"]);
+  });
+
+  it("only older answered ones: No open tensions; none at all: No tensions raised", () => {
+    expect(value(card({}, { tensions: [blanked[3]] }).tensions).counts).toEqual(["No open tensions"]);
+    expect(card({}, { tensions: [] }).tensions).toEqual({ kind: "empty", words: "No tensions raised" });
+  });
+
+  it("the door: raise for a member who does not hold it, Waiting on you on the holder's own card, nothing for a guest", () => {
+    expect(card({}, { tensions: [] }).tensionDoor).toBe("raise");
+    expect(card({ viewerUserId: OWNER.userId }, { tensions: [] }).tensionDoor).toBe("waiting");
+    expect(card({ viewerUserId: "u-co" }, { viewerHolds: true, tensions: [] }).tensionDoor).toBeNull();
+    expect(card({ viewerMember: false }, { tensions: [] }).tensionDoor).toBeNull();
+    expect(card({ viewerUserId: null }, { tensions: [] }).tensionDoor).toBeNull();
+    expect(card({}, { tensions: undefined }).tensionDoor).toBeNull();
+  });
+
+  it("proposal mode: Starts once adopted and no door", () => {
+    const r = card({ mode: "proposal" }, { tensions: [] });
+    expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(r.tensionDoor).toBeNull();
+  });
+});
+
 describe("signs and load", () => {
   it("a counted sign prints n of m and its source; a measure with no sign reads Not counted yet", () => {
     const signs = value(buildPlayerCard(input()).roles[0].working.items);
@@ -373,6 +444,8 @@ describe("my applications", () => {
           app("sa-next", { term_season_id: "s3" }),
           app("sa-other", { candidate_user_id: "u-someone" }),
         ],
+        // Past is a season that has ended (PR 3): s1 ended before s2 began.
+        endedSeasonIds: ["s1"],
       }),
     );
     expect(value(card.applications.past).map((a) => a.id)).toEqual(["sa-old"]);
@@ -427,5 +500,94 @@ describe("copy rules", () => {
     expect(text).not.toMatch(/48 hours|\bhours\b/);
     expect(text).not.toMatch(/[–—]/);
     expect(text).not.toMatch(/scoreboard/i);
+  });
+});
+
+describe("accomplished", () => {
+  const moons = accomplishmentsFor([
+    { entryId: 9, kind: "done", byNo: 4, ownerNo: 4, ownerSeatId: "r1", note: null, at: "2026-10-12T16:00:00Z", text: "Write the welcome guide" },
+    { entryId: 9, kind: "accepted", byNo: 5, ownerNo: 4, ownerSeatId: "r1", note: "Clear and kind", at: "2026-10-14T16:00:00Z", text: "Write the welcome guide" },
+    { entryId: 8, kind: "done", byNo: 4, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-13T16:00:00Z", text: "Reopened task" },
+    { entryId: 8, kind: "accepted", byNo: 5, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-14T17:00:00Z", text: "Reopened task" },
+    { entryId: 8, kind: "reopened", byNo: 4, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-15T17:00:00Z", text: "Reopened task" },
+  ]);
+
+  it("is unread when the host left it out, and draws nothing", () => {
+    expect(buildPlayerCard(input()).accomplished).toEqual({ heading: CARD_WORDS.accomplished, moons: { kind: "unread" } });
+  });
+
+  it("says so when nothing was accepted yet", () => {
+    expect(buildPlayerCard(input({ accomplished: [] })).accomplished.moons).toEqual({ kind: "empty", words: CARD_WORDS.noAccomplished });
+  });
+
+  it("is fed straight from accomplishmentsFor: dated moons, the role by its full title, the accept's date and note", () => {
+    const out = value(buildPlayerCard(input({ accomplished: moons })).accomplished.moons);
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toContain(" to ");
+    // The reopened task is out of the list; the accepted one stays.
+    expect(out[0].items.map((i) => i.id)).toEqual(["9"]);
+    expect(out[0].items[0]).toMatchObject({ title: "Write the welcome guide", roleTitle: "Human Operations & Onboarding Lead Steward", note: "Clear and kind" });
+    expect(out[0].items[0].accepted).toBe("Accepted on 14 Oct");
+    expect(out[0].items[0].accepted).not.toMatch(/2026-10-14/);
+  });
+});
+
+describe("proposal mode (PR 3): the card a role application asks for", () => {
+  const roles5 = [1, 2, 3, 4, 5].map((n) => role(n, { termEndsAt: "2027-03-31T06:00:00Z" }));
+  const proposal = () => buildPlayerCard(input({ roles: roles5, mode: "proposal", viewerUserId: "u-reader" }));
+
+  it("one person applying for five roles is one card naming all five", () => {
+    const card = proposal();
+    expect(card.roles).toHaveLength(5);
+    expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
+    for (const r of roles5) expect(card.header.rolesLine).toContain(r.name);
+    expect(card.tiles.heading).toBe(CARD_WORDS.proposedRoles);
+  });
+
+  it("every live section reads Starts once adopted", () => {
+    const card = proposal();
+    expect(card.across.tasks).toEqual({ kind: "empty", words: "Starts once adopted" });
+    expect(card.across.signs).toEqual({ kind: "empty", words: "Starts once adopted" });
+    for (const r of card.roles) {
+      expect(r.working.items).toEqual({ kind: "empty", words: "Starts once adopted" });
+      expect(r.tensions).toEqual({ kind: "empty", words: "Starts once adopted" });
+    }
+    expect(card.across.load.openTasks).toBeNull();
+  });
+
+  it("a proposal holds nothing yet, so no tile reads a health dot", () => {
+    for (const t of value(proposal().tiles.items)) expect(t.health).toBeNull();
+  });
+
+  it("the terms are the application's own, money small and last", () => {
+    const rows = value(proposal().agreements.roles[0].rows);
+    expect(rows[0].label).toBe("Term");
+    expect(rows.slice(-3).every((r) => r.small)).toBe(true);
+  });
+
+  it("a live card is unchanged by the mode it does not ask for", () => {
+    const live = buildPlayerCard(input());
+    expect(live.across.tasks.kind).toBe("shown");
+    expect(live.tiles.heading).toBe(CARD_WORDS.myRoles);
+  });
+});
+
+describe("old seatings with no application join Past", () => {
+  it("in plain words, linked to the role, never to an application", () => {
+    const card = buildPlayerCard(
+      input({
+        applications: [],
+        roleNames: { r1: "Human Operations & Onboarding Lead Steward" },
+        pastSeatings: [{ roleId: "r1", startedAt: "2026-03-01T18:00:00Z", endedAt: "2026-06-01T18:00:00Z" }],
+      }),
+    );
+    const past = value(card.applications.past);
+    expect(past).toHaveLength(1);
+    expect(past[0]).toMatchObject({
+      title: "Human Operations & Onboarding Lead Steward",
+      status: "Held, with no application on file",
+      href: "/roles?seat=r1",
+    });
+    expect(past[0].filed).toMatch(/^Held from .+ to .+$/);
   });
 });

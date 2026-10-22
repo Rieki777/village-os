@@ -8,7 +8,9 @@
  *   THE HEADER       the season, its window, and how many have filed
  *   ONE CARD EACH    every present member, ordered by name and never by
  *                    progress: seats held and handed back, applications and
- *                    where they stand, aim, this moon's quest pips, measures
+ *                    where they stand, aim, the goals they serve with how
+ *                    each helps, their seasonal goals, this moon's quest
+ *                    pips, measures (all drawn by PlanCard)
  *   WAITING          a filter to the members with an application the village
  *                    has not answered yet
  *   NOT FILED YET    the members who have not filed, by name (Rye, 2026-10-09)

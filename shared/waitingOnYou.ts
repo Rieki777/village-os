@@ -14,6 +14,16 @@
  *                 so a candidate never sees their own application here.
  *   drafts        open org drafts a submitted proposal made, for a reader who
  *                 may publish them.
+ *   toAccept      done tasks the reader may accept as accomplished: they hold
+ *                 `org.seat` live, and neither hold the task, sit in its role,
+ *                 nor marked it done (`acceptRefusal`, shared/sessionTasks.ts).
+ *                 The row carries the control itself, since the task is not on
+ *                 the reader's own board. Done in the last three moons only.
+ *   raisedWithYou tensions a member raised with a role the reader holds live,
+ *                 not answered yet (shared/roleTensions.ts). The row carries
+ *                 the words, which only the role's holders and the raiser may
+ *                 read, and the controls: take it, answer it, or bring it to
+ *                 the circle. It never names who raised it.
  *
  * An application leaves the group the moment it leaves `awaiting-holder`:
  * adopted, put to the village or withdrawn. The read filters on the status,
@@ -27,6 +37,7 @@
  */
 import { seatList } from "./seatApplications";
 import { civilDayWords } from "./seasonPlans";
+import { readHeldTensions, type HeldTension } from "./roleTensions";
 
 export const WAITING_URL = "/api/governance/waiting-on-me";
 
@@ -55,9 +66,25 @@ export interface WaitingDraft {
   href: string;
 }
 
+/** One done task the reader may accept as accomplished. Names no person. */
+export interface WaitingAcceptance {
+  entryId: number;
+  /** The task's words as said in the call. */
+  text: string;
+  /** The role holding it, by full title, or null for a task a person holds. */
+  role: string | null;
+  circle: string | null;
+  /** The day it was marked done, a civil date in the village's zone. */
+  doneOn: string;
+}
+
 export interface WaitingPayload {
   applications: WaitingApplication[];
   drafts: WaitingDraft[];
+  /** Absent from a server before PR 4 of the player card: read as none. */
+  toAccept?: WaitingAcceptance[];
+  /** Absent from a server before PR 5 of the player card: read as none. */
+  raisedWithYou?: HeldTension[];
 }
 
 /** One gentle reminder, this long after an application was written, to a holder it still waits on. */
@@ -90,6 +117,15 @@ export const WAITING_COPY = {
     return `It adds ${plural(circles, "circle", "circles")} and ${plural(seats, "role", "roles")}`;
   },
   draftAction: "Read it and publish",
+  acceptLine: (text: string): string => `Done: ${text}`,
+  acceptWhere: (role: string | null, circle: string | null): string => [role, circle].filter(Boolean).join(" · "),
+  doneOn: (day: string): string => `Marked done ${civilDayWords(day)}`,
+  acceptAction: "Accept as accomplished",
+  acceptNote: "A word about the work, if you like",
+  acceptConfirm: "Accept as accomplished",
+  acceptCancel: "Not now",
+  accepted: "Accepted. It moves to Accomplished.",
+  acceptFailed: "That did not save. Try again.",
   /** The holder's notice body, beside its link to the application. */
   holderNoticeBody: "Open it to align for the village or put it to the village. It waits under Tasks on your profile too.",
   reminderTitle: (seats: readonly string[]): string => `Still waiting on a role holder: ${seatList(seats)}`,
@@ -121,5 +157,18 @@ export function readWaiting(v: unknown): WaitingPayload | null {
   const drafts = (p.drafts as any[]).filter(
     (d): d is WaitingDraft => !!d && typeof d.id === "string" && typeof d.title === "string" && typeof d.href === "string",
   );
-  return { applications, drafts };
+  // A server from before the accept group sends none: the group reads as empty.
+  const toAccept = (Array.isArray(p.toAccept) ? (p.toAccept as any[]) : []).filter(
+    (t): t is WaitingAcceptance =>
+      !!t && Number.isSafeInteger(t.entryId) && t.entryId > 0 && typeof t.text === "string" && typeof t.doneOn === "string",
+  ).map((t) => ({
+    entryId: t.entryId,
+    text: t.text,
+    role: typeof t.role === "string" && t.role.trim() ? t.role : null,
+    circle: typeof t.circle === "string" && t.circle.trim() ? t.circle : null,
+    doneOn: t.doneOn,
+  }));
+  // A server from before the tension group sends none: the group reads as empty.
+  const raisedWithYou = readHeldTensions(p.raisedWithYou);
+  return { applications, drafts, toAccept, raisedWithYou };
 }

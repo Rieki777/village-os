@@ -9,6 +9,17 @@
  *                 the terms stay in the drawer on that page.
  *   drafts        an open org draft a proposal made, for someone who may
  *                 publish it. Opens the structure page of its batch.
+ *   toAccept      a done task a live `org.seat` holder may accept as
+ *                 accomplished, never their own work. The task is not on the
+ *                 reader's board, so the row carries "Accept as accomplished"
+ *                 itself, with an optional note, and leaves once accepted. A
+ *                 server from before this group sends none (`readWaiting`).
+ *   raisedWithYou a tension raised with a role the reader holds, under its own
+ *                 heading, "Raised with your roles". The row carries the words
+ *                 and the holder's answers (roleTension/TensionRespondRow.tsx)
+ *                 and never names who raised it. Taking it keeps the row,
+ *                 answering it or bringing it to the circle removes it. A
+ *                 server from before this group sends none (`readWaiting`).
  *
  * NO COUNTS on the heading, as the rest of the board. The group draws nothing
  * at all when nothing waits, and nothing when the read is closed to the
@@ -18,12 +29,16 @@
  *
  * The server decides every row. This draws what it sent, in its order.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
-import { BTN_SECONDARY, HINT, LABEL_CAPS } from "@/components/sessions/roomUi";
-import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingPayload } from "@shared/waitingOnYou";
+import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, LABEL_CAPS } from "@/components/sessions/roomUi";
+import { TASK_NOTE_MAX, taskAcceptUrl } from "@shared/sessionTasks";
+import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingAcceptance, type WaitingPayload } from "@shared/waitingOnYou";
+import { TENSION_COPY, type TensionAction } from "@shared/roleTensions";
+import TensionRespondRow from "@/components/roleTension/TensionRespondRow";
 
 const ROW =
   "group block rounded-2xl border border-border bg-muted px-4 py-3.5 text-foreground hover:border-notice/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -33,6 +48,87 @@ const ROW_ARROW = "ml-1.5 inline-block h-4 w-4 align-[-3px] transition-transform
 
 /** Closed to this reader: not a failure, and nothing to draw. */
 const CLOSED = new Set([401, 403, 404]);
+
+/** The server's own sentence when it sent one, or the plain fallback. */
+const refusalOf = (body: unknown): string => {
+  const said = body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string" ? (body as { error: string }).error.trim() : "";
+  return said && /\s/.test(said) ? said : WAITING_COPY.acceptFailed;
+};
+
+/** One done task to accept: its words, where it sits, and the control, opened in place with an optional note. */
+export function AcceptRow({ task, onAccepted }: { task: WaitingAcceptance; onAccepted: (entryId: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const ids = useId();
+  const textId = `${ids}-text`;
+  const noteId = `${ids}-note`;
+  const where = [WAITING_COPY.acceptWhere(task.role, task.circle), WAITING_COPY.doneOn(task.doneOn)].filter(Boolean).join(" · ");
+
+  const accept = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const trimmed = note.trim();
+      const res = await gameFetch(taskAcceptUrl(task.entryId), { method: "POST", body: JSON.stringify(trimmed ? { note: trimmed } : {}) });
+      const reply = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(WAITING_COPY.accepted);
+        onAccepted(task.entryId);
+      } else setError(refusalOf(reply));
+    } catch {
+      setError(WAITING_COPY.acceptFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-muted px-4 py-3.5 text-foreground" data-to-accept={task.entryId}>
+      <p id={textId} className="font-semibold leading-snug">
+        {WAITING_COPY.acceptLine(task.text)}
+      </p>
+      {where && <p className={`${HINT} mt-0.5`}>{where}</p>}
+      {!open ? (
+        <button type="button" className={`${BTN_SECONDARY} mt-3`} aria-describedby={textId} onClick={() => setOpen(true)}>
+          {WAITING_COPY.acceptAction}
+        </button>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label htmlFor={noteId} className={LABEL}>
+              {WAITING_COPY.acceptNote}
+            </label>
+            <input
+              id={noteId}
+              type="text"
+              value={note}
+              maxLength={TASK_NOTE_MAX}
+              onChange={(e) => setNote(e.target.value)}
+              className={`${INPUT} mt-1`}
+              autoFocus
+            />
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={BTN_PRIMARY} disabled={busy} aria-describedby={textId} onClick={() => void accept()}>
+              {WAITING_COPY.acceptConfirm}
+            </button>
+            <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => setOpen(false)}>
+              {WAITING_COPY.acceptCancel}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** `onShown` hears whether the group draws anything: rows, or the failed line. */
 export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) => void }) {
@@ -54,7 +150,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
     try {
       const res = await gameFetch(WAITING_URL, { cache: "no-store" });
       if (!live.current) return;
-      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [] });
+      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [] });
       const next = res.ok ? readWaiting(await res.json().catch(() => null)) : null;
       if (!live.current) return;
       if (next) setData(next);
@@ -68,7 +164,18 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
     void load();
   }, [load]);
 
-  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0);
+  const toAccept = data?.toAccept ?? [];
+  const raised = data?.raisedWithYou ?? [];
+  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0);
+  const accepted = (entryId: number) =>
+    setData((d) => (d ? { ...d, toAccept: (d.toAccept ?? []).filter((t) => t.entryId !== entryId) } : d));
+  const responded = (id: string, action: TensionAction) =>
+    setData((d) => {
+      if (!d) return d;
+      const list = d.raisedWithYou ?? [];
+      const next = action === "take" ? list.map((t) => (t.id === id ? { ...t, status: "taken" as const, overdue: false } : t)) : list.filter((t) => t.id !== id);
+      return { ...d, raisedWithYou: next };
+    });
   // Told only once the read has answered, so the board never draws "nothing in
   // your hands" in the one render before a waiting row arrives.
   const settled = data !== null || failed;
@@ -121,7 +228,26 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
             </Link>
           </li>
         ))}
+        {toAccept.map((t) => (
+          <li key={`t-${t.entryId}`}>
+            <AcceptRow task={t} onAccepted={accepted} />
+          </li>
+        ))}
       </ul>
+      {raised.length > 0 && (
+        <div className="space-y-3 pt-2" data-raised>
+          <h4 id="task-board-raised" className={LABEL_CAPS}>
+            {TENSION_COPY.groupHeading}
+          </h4>
+          <ul className="space-y-3" aria-labelledby="task-board-raised">
+            {raised.map((t) => (
+              <li key={`r-${t.id}`}>
+                <TensionRespondRow tension={t} onResponded={responded} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

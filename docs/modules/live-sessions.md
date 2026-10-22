@@ -216,10 +216,12 @@ next poll and lands on the list, which says the session was discarded (`discardS
 Members bring what needs a circle's time before the circle meets, and the session that opens next
 takes it up. The code calls it the library, the founder's word. **A member never reads that word**:
 the village already has a Library (the shared material library) and a Module Library, so on
-/sessions the section is **Waiting for a circle**, and the start card and the room head their lists
-"Brought for the Garden circle".
+/sessions the section is **Agenda items**, under one plain line (Rye, 2026-10-22): "Add agenda items
+for future sessions. You can add anything: each session decides which topics to explore." The start
+card and the room head their lists "Agenda items for the Garden circle", a card says "Added by" and
+when, and its controls are "Remove it" and "Add it again".
 
-**Bringing an item.** Any admitted member, on /sessions: "Bring an item" opens the room's own add form
+**Bringing an item.** Any admitted member, on /sessions: "Add an agenda item" opens the room's own add form
 without the minutes (a title, the aim it needs from the circle, or "Not sure yet", and anything the
 circle should know first), and the circle it is for, which must be answered: one of the village's live
 circles, or "No circle in particular" as a deliberate last choice. It is chosen for a member who has
@@ -269,7 +271,7 @@ Each item becomes an ordinary agenda item added by whoever took it, presented by
 when they are in the room, with its aim (explore when they were not sure) and the minutes that aim
 usually gets (report 5, explore 10, decide 15); its note becomes the item's first note, written by
 whoever wrote the note as it stands (whoever brought it, unless a host or an admin reworded it), so the
-record keeps it as said and says whose words they are. The agenda row reads "Brought by" with their
+record keeps it as said and says whose words they are. The agenda row reads "Added by" with their
 name, in the room or not. Opening and bringing are **all or none, and every refusal comes before the
 first write** (the room's transactions commit whatever was written before a refusal returns): the items
 are locked after the session row and checked, the agenda's 30 and the entries' room are measured, and

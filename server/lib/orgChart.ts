@@ -30,6 +30,7 @@ import {
 } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
+import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -144,6 +145,17 @@ export interface OrgRole {
   valueMinor?: number | null;
   valueCurrency?: string | null;
   valueTokens?: TokenAmount[] | null;
+  /**
+   * THE HANDOVER WORDS (0268, Rye 2026-10-22). "Bring me" and "Not mine to
+   * hold" are short lists; the runbook is words or one https link. They live
+   * on the role and change only through an `update_seat` or `create_seat`
+   * draft, so they outlive whoever holds it (shared/roleHandover.ts).
+   * Optional for the reason the value fields above are: absent reads exactly
+   * as NULL, nothing written.
+   */
+  bringMe?: string[] | null;
+  notMine?: string[] | null;
+  runbook?: string | null;
 }
 
 export interface OrgAssignment {
@@ -199,7 +211,7 @@ export interface OrgAssignment {
   applicationId?: string;
 }
 
-const ROLE_COLS =
+export const ROLE_COLS =
   "id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, expires_each_season, status_override, status_override_expires_at, icon, color, sort_order, is_example, archetypes, " +
   // The recruitment pack. Written since 0049, selected by nobody until now, so
   // every one of them was a column the API accepted and then swallowed.
@@ -211,9 +223,11 @@ const ROLE_COLS =
   // `terms.read` tier (server/lib/seatProjection.ts).
   "terms_offer, terms_offer_at, terms_offer_by, " +
   // 0265: the value and the list. Projected at the `terms.read` tier.
-  "value_minor, value_currency, value_tokens";
+  "value_minor, value_currency, value_tokens, " +
+  // 0268: the handover words. Structure like aim and domain, in every tier's core.
+  "bring_me, not_mine, runbook";
 
-const ASSIGN_COLS =
+export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
   // missing here while `org_role_assignments` WAS registered with the
   // standing-examples machinery (examples.ts seeds rows with is_example = 1),
@@ -241,7 +255,7 @@ function asList(v: unknown): string[] {
   return [];
 }
 
-function rowToRole(r: any): OrgRole {
+export function rowToRole(r: any): OrgRole {
   return {
     id: r.id,
     circleId: r.circle_id ?? null,
@@ -277,10 +291,13 @@ function rowToRole(r: any): OrgRole {
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
+    bringMe: readStoredRoleList(r.bring_me),
+    notMine: readStoredRoleList(r.not_mine),
+    runbook: readStoredRunbook(r.runbook),
   };
 }
 
-function rowToAssignment(r: any): OrgAssignment {
+export function rowToAssignment(r: any): OrgAssignment {
   return {
     id: r.id,
     orgRoleId: r.org_role_id,

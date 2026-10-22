@@ -14,6 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { SESSION_COPY, SESSION_DISCARD_COPY, SESSION_LIST_COPY, SESSION_REFUSALS, type SessionListRow } from "@shared/sessions";
+import { LIBRARY_REFUSALS } from "@shared/sessionLibrary";
 import { clearRoomGone, leaveRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 
 const state = vi.hoisted(() => ({
@@ -336,7 +337,7 @@ describe("what members brought, on the start card", () => {
   it("reads the list again when an item went elsewhere a moment ago, and says so", async () => {
     answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
     answers["POST /api/sessions"] = () =>
-      json({ error: "One of those went onto another agenda or was withdrawn a moment ago. Here is the list as it stands now." }, 409);
+      json({ error: LIBRARY_REFUSALS.moved }, 409);
     renderPage();
     await screen.findByRole("region", { name: SESSION_COPY.openNow });
     fireEvent.click(screen.getByRole("checkbox", { name: /Picnic/ }));

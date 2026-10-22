@@ -13,7 +13,9 @@
  * agenda items for an upcoming session, and a library of them to choose from
  * when a session starts. The code calls it the library. A member never reads
  * that word, because the village already has a Library (the shared material
- * library) and a Module Library: on the page it is "Waiting for a circle".
+ * library) and a Module Library: on the page it is "Agenda items", and every
+ * word around it is the plain one the founder asked for (Rye, 2026-10-22: add
+ * agenda items for future sessions, add anything, each session decides).
  *
  * THE LIFE OF AN ITEM. A member brings it, for one circle or for no circle in
  * particular, and it waits. The person opening a session ticks the ones it will
@@ -439,17 +441,16 @@ export function offeredFor(items: readonly LibraryCard[], circleId: string | nul
 
 // ── Words ────────────────────────────────────────────────────────────────────
 
-/** "Brought for the Garden circle", or "Brought for any circle" for a session with no circle. */
+/** "Agenda items for the Garden circle", or "Agenda items for any circle" for a session with no circle. */
 export function broughtFor(circleName: string | null): string {
-  return circleName ? `Brought for the ${circleWords(circleName)}` : "Brought for any circle";
+  return circleName ? `Agenda items for the ${circleWords(circleName)}` : "Agenda items for any circle";
 }
 
 export const LIBRARY_COPY = {
-  sectionTitle: "Waiting for a circle",
-  sectionLede:
-    "Bring what needs a circle's time. When that circle next meets, it is offered for the agenda, and the room consents to the agenda together.",
-  bringButton: "Bring an item",
-  formTitle: "Bring an item",
+  sectionTitle: "Agenda items",
+  sectionLede: "Add agenda items for future sessions. You can add anything: each session decides which topics to explore.",
+  bringButton: "Add an agenda item",
+  formTitle: "Add an agenda item",
   titleLabel: ROOM_COPY.itemTitleLabel,
   titlePlaceholder: ROOM_COPY.itemTitlePlaceholder,
   aimLabel: SESSION_COPY.agendaAimLabel,
@@ -469,21 +470,22 @@ export const LIBRARY_COPY = {
   save: ROOM_COPY.save,
   saving: "Saving...",
   saved: (circleName: string | null): string =>
-    circleName ? `Thanks. It's waiting for the ${circleWords(circleName)}.` : "Thanks. It's waiting for any circle.",
-  empty: "Nothing is waiting yet. Bring what needs a circle's time, and it is offered when that circle next meets.",
-  broughtBy: (name: string, date: string): string => `Brought by ${name} · ${date}`,
-  /** On the room's agenda row, where whoever brought it may not be in the room. */
-  broughtByName: (name: string): string => `Brought by ${name}`,
-  broughtByYou: (date: string): string => `Brought by you · ${date}`,
+    circleName ? `Thanks. It's added for the ${circleWords(circleName)}.` : "Thanks. It's added for any circle.",
+  /** The lede above already says what this is for, so the empty list says only that. */
+  empty: "Nothing added yet.",
+  broughtBy: (name: string, date: string): string => `Added by ${name} · ${date}`,
+  /** On the room's agenda row, where whoever added it may not be in the room. */
+  broughtByName: (name: string): string => `Added by ${name}`,
+  broughtByYou: (date: string): string => `Added by you · ${date}`,
   changedBy: (name: string): string => `Words changed by ${name}`,
   takenUpLately: "Taken up lately",
-  withdraw: "Withdraw it",
-  withdrawConfirm: "Withdraw this item? The circle will no longer see it.",
-  withdrawOnAgenda: "Withdraw this item? It stays on the agenda it is on, and the circle will no longer see it here.",
+  withdraw: "Remove it",
+  withdrawConfirm: "Remove this item? The circle won't see it anymore.",
+  withdrawOnAgenda: "Remove this item? It stays on the agenda it's on, and the circle won't see it here anymore.",
   keep: "Keep it",
-  withdrawYes: "Withdraw",
-  withdrawing: "Withdrawing...",
-  bringAgain: "Bring it again",
+  withdrawYes: "Remove",
+  withdrawing: "Removing...",
+  bringAgain: "Add it again",
   /** The start card. */
   startHint: "Choose what this session takes up. You can add more and reorder them in the room.",
   startWith: (n: number): string => (n === 1 ? "Open the room with 1 item" : `Open the room with ${n} items`),
@@ -492,7 +494,7 @@ export const LIBRARY_COPY = {
   addToAgenda: ROOM_COPY.addToAgenda,
   showAll: "Show all",
   showLess: "Show less",
-  loadFailed: "The waiting items did not load. Try again in a moment.",
+  loadFailed: "The agenda items didn't load. Try again in a moment.",
   failed: "That did not go through. Try again in a moment.",
 } as const;
 
@@ -511,26 +513,26 @@ export const LIBRARY_STATUS_LINE: Record<LibraryStatus, (s: { title: string | nu
 export const LIBRARY_REFUSALS = {
   notFound: "That item isn't here.",
   /** Opening a room, or bringing items into one: one of them went elsewhere. Names no item. */
-  moved: "One of those went onto another agenda or was withdrawn a moment ago. Here is the list as it stands now.",
+  moved: "One of those went onto another agenda or was removed a moment ago. Here is the list as it stands now.",
   notWaiting: "It is on an agenda now, or taken up. Change it in the room.",
-  wordsNotYours: "Only the person who brought it, an admin, or the facilitator or secretary of this circle's open session can change it.",
-  circleNotYours: "Only the person who brought it, or an admin, can change which circle it is for.",
-  withdrawNotYours: "Only the person who brought it, or an admin, can withdraw it.",
-  againNotYours: "Only the person who brought it, or an admin, can bring it again.",
-  notTakenUp: "Only an item a session took up can be brought again.",
-  tooManyWaiting: `You have ${LIBRARY_LIMITS.waitingPerMember} items waiting. Withdraw one, or let a circle take some up first.`,
+  wordsNotYours: "Only the person who added it, an admin, or the facilitator or secretary of this circle's open session can change it.",
+  circleNotYours: "Only the person who added it, or an admin, can change which circle it is for.",
+  withdrawNotYours: "Only the person who added it, or an admin, can remove it.",
+  againNotYours: "Only the person who added it, or an admin, can add it again.",
+  notTakenUp: "Only an item a session took up can be added again.",
+  tooManyWaiting: `You have ${LIBRARY_LIMITS.waitingPerMember} items waiting. Remove one, or let a circle take some up first.`,
   idsNeeded: `Choose up to ${SESSION_LIMITS.maxAgenda} items.`,
   slowDown: SESSION_REFUSALS.slowDown,
 } as const;
 
-/** The words on the notices the person who brought an item receives. In the bell only. */
+/** The words on the notices the person who added an item receives. In the bell only. */
 export const LIBRARY_NOTICES = {
   /** A session took it onto its agenda. An open room's title is read by every member. */
   taken: (sessionTitle: string): string => `Your item is on the agenda of "${sessionTitle}"`,
   /** The session closed with it finished. Never names the closed session, whose title is its people's. */
-  takenUp: "An item you brought was taken up",
+  takenUp: "An agenda item you added was taken up",
   /** The session closed before reaching it, and it waits again. */
-  back: "An item you brought is waiting for next time",
+  back: "An agenda item you added is waiting for next time",
 } as const;
 
 /** The aims a member can choose, in the room's order, for the form's select. */
