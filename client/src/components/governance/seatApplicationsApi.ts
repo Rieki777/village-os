@@ -65,6 +65,8 @@ async function call<T>(path: string, method: "GET" | "POST" = "GET"): Promise<Ap
 const base = (id: string) => `/api/governance/role-applications/${encodeURIComponent(id)}`;
 
 export const fetchApplication = (id: string) => call<{ application: ServedApplication }>(base(id));
+/** Every application, for a reader holding terms.read. The profile keeps the reader's own open ones. */
+export const fetchApplications = () => call<{ applications: ServedApplication[] }>("/api/governance/role-applications");
 export const adoptApplication = (id: string) => call<{ status: ApplicationStatus; message?: string }>(`${base(id)}/adopt`, "POST");
 export const putApplicationToVillage = (id: string) =>
   call<{ status: ApplicationStatus; ballot: { id: string } }>(`${base(id)}/put-to-village`, "POST");

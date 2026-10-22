@@ -42,6 +42,9 @@ import {
   pledgedFloorParagraph,
   pledgedFloorTip,
   pledgedIsFloor,
+  loanWindow,
+  needLabel,
+  phaseLabel,
   pooledLine,
   ringTip,
 } from "./PoolPieces";
@@ -292,5 +295,76 @@ describe("a need counted in hours a week says so, in the caption and to a screen
     expect(meter(40, 50, 50, "hours_per_week").over).toBeNull();
     // And it still fires where it is true, on a need counting people.
     expect(meter(40, 50, 50).over).toContain("More arrived than were wanted");
+  });
+});
+
+/*
+ * BORROWED IS NOT GIVEN (hub contract 4).
+ *
+ * A thing the project would BORROW now arrives as `kind: "item"` with
+ * `acceptsLoan: 1`, and new needs never use `kind: "loan"` at all. A surface
+ * reading the kind alone prints "goods" on a need somebody meant to lend, and
+ * a member acting in good faith on that word offers to GIVE AWAY a chainsaw
+ * they meant to lend for a fortnight. That is a mistake about property made by
+ * somebody who read the card correctly, which is the worst kind.
+ *
+ * LEGACY ROWS KEEP `kind: "loan"` — verified with the hub session against its
+ * migration 0257, which sets the flags and never touches the kind — so the old
+ * word has to keep working too.
+ */
+describe("a need the project would borrow says so, whatever its kind", () => {
+  it("names a lendable item as a loan, not as goods", () => {
+    expect(needLabel({ kind: "item", acceptsLoan: 1 })).toBe("goods, on loan");
+  });
+
+  it("still names a legacy loan row a loan", () => {
+    expect(needLabel({ kind: "loan" })).toBe("a loan");
+    expect(needLabel({ kind: "loan", acceptsLoan: 1 })).toBe("a loan");
+  });
+
+  it("names a plain item goods, because a gift is not a loan", () => {
+    expect(needLabel({ kind: "item" })).toBe("goods");
+    expect(needLabel({ kind: "item", acceptsGift: 1 })).toBe("goods");
+    expect(needLabel({ kind: "item", acceptsLoan: 0 })).toBe("goods");
+  });
+
+  it("falls back to the raw kind it does not know, rather than to nothing", () => {
+    expect(needLabel({ kind: "seaweed" })).toBe("seaweed");
+    expect(needLabel({ kind: "seaweed", acceptsLoan: 1 })).toBe("seaweed, on loan");
+  });
+});
+
+describe("the custody window, which nothing showed before contract 4", () => {
+  it("reads both ends when the hub gave both", () => {
+    expect(loanWindow({ neededFrom: "2026-10-01", neededUntil: "2026-10-14" })).toMatch(/^Wanted .* to .*/);
+  });
+
+  it("reads one end when that is all there is", () => {
+    expect(loanWindow({ neededFrom: "2026-10-01" })).toMatch(/^Wanted from /);
+    expect(loanWindow({ neededUntil: "2026-10-14" })).toMatch(/^Wanted until /);
+  });
+
+  it("says NOTHING rather than something empty when the hub gave neither", () => {
+    // Every need from a hub older than contract 4. A blank line where a window
+    // would go reads as "no window", which is a claim we cannot make.
+    expect(loanWindow({})).toBeNull();
+    expect(loanWindow({ neededFrom: null, neededUntil: null })).toBeNull();
+    expect(loanWindow({ neededFrom: "  ", neededUntil: "" })).toBeNull();
+  });
+});
+
+/*
+ * HUB CONTRACT 5: `closed` is an ended campaign. phaseLabel falls through to a
+ * LIVE phrase for any status it does not know, so the new status has to be named
+ * or a closed campaign reads as still gathering.
+ */
+describe("a campaign the hub closed reads as ended", () => {
+  it("says Closed, never a live phase", () => {
+    expect(phaseLabel("closed", 10)).toBe("Closed");
+    expect(phaseLabel("closed", 90)).toBe("Closed");
+  });
+
+  it("and a status it has never heard of still falls through, which is why closed is named", () => {
+    expect(phaseLabel("something-new", 10)).toBe("Gathering the pool");
   });
 });

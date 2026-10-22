@@ -9,6 +9,7 @@
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { PlanCommitments, PlanWindowPayload } from "@shared/seasonPlans";
+import type { PartSuggestions } from "@shared/seasonPartSuggestions";
 
 export interface PlanSeasonOut {
   id: string;
@@ -53,6 +54,8 @@ export interface MinePayload {
   questsThisMoon: { done: number };
   /** False for a reader below the member rung: applying is not open to them yet. */
   mayApply?: boolean;
+  /** Quests a moon and measures from the member's seats. Shown as suggestions, never saved for them. */
+  suggestions?: PartSuggestions | null;
 }
 
 export interface PlanCard {

@@ -2,14 +2,16 @@
   {
     "id": "founders-circle",
     "name": "Founders Circle",
-    "description": "Holds the founding vision and final say while the village grows into governing itself. Can open and decide proposals, consent to quests, moderate the forum, and declare how the village and its circles hold power.",
+    "description": "Holds the founding vision and final say while the village grows into governing itself. Can open and decide proposals, consent to quests, moderate the forum, declare how the village and its circles hold power, seat people in the village's seats, and decide changes to the org chart.",
     "capabilities": [
       "proposal.open",
       "proposal.decide",
       "quest.consent",
       "forum.moderate",
       "forum.post",
-      "org.declare"
+      "org.declare",
+      "org.seat",
+      "org.decide"
     ],
     "minStage": null,
     "order": 1
