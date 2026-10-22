@@ -446,14 +446,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // something, and it reads as one.
   session_item_taken: {
     group: "work",
-    blurb: "An item you brought for a circle is on a session's agenda now.",
-    many: "{n} items you brought are on an agenda.",
+    blurb: "An agenda item you added is on a session's agenda now.",
+    many: "{n} agenda items you added are on an agenda.",
     celebrate: false,
   },
   session_item_settled: {
     group: "work",
-    blurb: "A session that took up an item you brought has closed. The item says whether it was taken up or waits for next time.",
-    many: "{n} sessions closed with items you brought.",
+    blurb: "A session that took up an agenda item you added has closed. The item says whether it was taken up or waits for next time.",
+    many: "{n} sessions closed with agenda items you added.",
     celebrate: false,
   },
 

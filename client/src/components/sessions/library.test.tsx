@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The agenda library on screen: the room's card in the agenda stage, the start
- * card's checklist, and the "Waiting for a circle" section on /sessions.
+ * card's checklist, and the "Agenda items" section on /sessions.
  *
  * What each case holds: the room offers what this viewer may bring and leaves
  * out what is already on its agenda; only somebody in the room gets the
@@ -252,7 +252,7 @@ describe("waiting for a circle, on /sessions", () => {
   });
 
   it("chooses the circle for a member who has standing in exactly one, and keeps the server's sentence when it refuses", async () => {
-    answers["POST /api/sessions/library"] = () => json({ error: "You have 50 items waiting. Withdraw one, or let a circle take some up first." }, 409);
+    answers["POST /api/sessions/library"] = () => json({ error: "You have 50 items waiting. Remove one, or let a circle take some up first." }, 409);
     render(<WaitingForCircle library={payload([], ["kitchen"])} circles={circles} onChanged={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.bringButton }));
     expect((screen.getByLabelText(LIBRARY_COPY.circleLabel) as HTMLSelectElement).value).toBe("kitchen");
@@ -274,7 +274,7 @@ describe("waiting for a circle, on /sessions", () => {
     const theirs = document.getElementById("brought-2")!;
     expect(within(theirs).queryByRole("button")).toBeNull();
     // The date is in the reader's own locale, so only the words around it are held here.
-    expect(within(mine).getByText(/^Brought by you · /)).toBeInTheDocument();
+    expect(within(mine).getByText(/^Added by you · /)).toBeInTheDocument();
 
     fireEvent.click(within(mine).getByRole("button", { name: LIBRARY_COPY.withdraw }));
     expect(within(mine).getByText(LIBRARY_COPY.withdrawConfirm)).toBeInTheDocument();
@@ -338,7 +338,7 @@ describe("waiting for a circle, after the review", () => {
     expect(screen.getByRole("textbox", { name: LIBRARY_COPY.titleLabel })).toHaveAttribute("placeholder", LIBRARY_COPY.titlePlaceholder);
   });
 
-  it("puts the focus back on Bring an item when the form goes away", async () => {
+  it("puts the focus back on the add button when the form goes away", async () => {
     render(<WaitingForCircle library={payload([])} circles={circles} onChanged={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.bringButton }));
     fireEvent.click(screen.getByRole("button", { name: LIBRARY_COPY.cancel }));
