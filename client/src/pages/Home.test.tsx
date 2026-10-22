@@ -41,6 +41,7 @@ import { Router } from "wouter";
 import type { ReactNode } from "react";
 
 const useBrandImagesMock = vi.fn();
+let gameConfig: { project: { tagline: string } } | null = { project: { tagline: "" } };
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -51,6 +52,7 @@ vi.mock("@/components/VillagePulse", () => ({ default: () => null }));
 vi.mock("@/components/MapPeek", () => ({ default: () => null }));
 vi.mock("@/lib/gameApi", () => ({
   useBrandImages: () => useBrandImagesMock(),
+  useGameConfig: () => gameConfig,
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
   altOr: (value: string | undefined, fallback: string) =>
     typeof value === "string" ? value : fallback,
@@ -71,6 +73,37 @@ const renderHome = () =>
 
 /** The hero is the first section on the page. */
 const hero = () => document.querySelector("section") as HTMLElement;
+
+describe("the homepage headline", () => {
+  beforeEach(() => {
+    useBrandImagesMock.mockReset();
+    useBrandImagesMock.mockReturnValue({ hero: "" });
+  });
+
+  it("is the village's own Tagline from the Setup Wizard", () => {
+    gameConfig = { project: { tagline: "Grow the village together" } };
+    renderHome();
+    gameConfig = { project: { tagline: "" } };
+
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("Grow the village together");
+    expect(h1).not.toHaveTextContent(/Co-Become/);
+  });
+
+  it("stays hidden until the config arrives, so the old words never flash", () => {
+    gameConfig = null;
+    renderHome();
+    gameConfig = { project: { tagline: "" } };
+
+    expect(screen.getByRole("heading", { level: 1, hidden: true })).toHaveClass("invisible");
+  });
+
+  it("carries no badge above it", () => {
+    renderHome();
+
+    expect(screen.queryByText(/co-create paradise/i)).toBeNull();
+  });
+});
 
 describe("the homepage hero when the village has added no art", () => {
   beforeEach(() => useBrandImagesMock.mockReset());

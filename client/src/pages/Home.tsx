@@ -3,7 +3,7 @@ import BuildProgress from "@/components/BuildProgress";
 import SeasonBanner from "@/components/SeasonBanner";
 import VillagePulse from "@/components/VillagePulse";
 import MapPeek from "@/components/MapPeek";
-import { altOr, useBrandImages, useVillageLinks } from "@/lib/gameApi";
+import { altOr, useBrandImages, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -140,6 +140,13 @@ export default function Home() {
   // omits the place rather than naming somebody else's.
   const location = useVillageLocation();
   const brand = useBrandImages();
+  // The headline is the village's own Tagline from the Setup Wizard. It was
+  // compiled in, so an admin could save a new one, see it served by
+  // /api/game/config, and watch the homepage keep the old words. Blank falls
+  // back to the original line. Null config is "unknown": the heading keeps
+  // its space and stays invisible so the old words never flash first.
+  const cfg = useGameConfig();
+  const tagline = String(cfg?.project?.tagline ?? "").trim();
   // R47: the hero holds one door forward, plus the map when this village has
   // one. An off module would only answer the door with its closed card.
   const mapOn = !!useModule("map");
@@ -219,23 +226,13 @@ export default function Home() {
               aria-hidden="true"
               className="absolute -inset-x-5 -inset-y-6 sm:-inset-x-8 sm:-inset-y-10 rounded-3xl bg-teal-band"
             />
-            <motion.div
-              className="relative"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-            >
-              <span className="inline-block px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-white text-sm font-medium mb-6">
-                Come co-create paradise
-              </span>
-            </motion.div>
-
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="relative font-display text-5xl md:text-7xl font-bold text-white leading-tight mb-6"
+              className={`relative font-display text-5xl md:text-7xl font-bold text-white leading-tight mb-6${cfg ? "" : " invisible"}`}
             >
+              {tagline ? tagline : (<>
               Co-Become the Most{" "}
               {/* text-amber-on-band, not text-primary. --primary is the seed
                   colour derived to clear 4.5:1 against WHITE, and this word has
@@ -245,6 +242,7 @@ export default function Home() {
                   moves the two toward each other until they clear 4.5:1 and
                   refuses to ship a village theme where they do not. */}
               <span className="text-amber-on-band">Beautiful</span> Village
+              </>)}
             </motion.h1>
 
             <motion.p
