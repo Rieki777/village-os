@@ -108,7 +108,7 @@ const buildJourneySteps = (villageName: string, tokenName: string) => [
     link: "/quests",
     linkText: "View Quests",
     external: false,
-    details: ["Browse available quests", "Choose quests matching your skills", "Submit your own quest proposal", `Earn ${tokenName} for contributions`]
+    details: ["Browse available quests", "Choose quests matching your skills", "Submit your own quest proposal", "Get paid what each quest's card says"]
   },
   {
     id: "passage",

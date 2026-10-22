@@ -57,8 +57,9 @@ const principles = (villageName: string, tokenName: string, valueName: string) =
  */
 const recognitionInfo = (tokenName: string, valueName: string, villageName: string, conversionNote: string) => [
   {
-    title: `Earn ${tokenName}`,
-    description: `Complete quests, fulfill roles, or receive revenue shares from community and private businesses. Every contribution is acknowledged with ${tokenName}, the recognition signal, with no financial value of its own, on purpose.`,
+    // Quests and roles pay in the village's own tokens, and Gratitude is thanks (Rye, 2026-10-21).
+    title: "Get paid for your work",
+    description: `Every quest and role says what it is worth and the tokens it pays, on its card. Revenue shares from community and private businesses are agreed with the village. ${tokenName} is something else: thanks members give each other, with no financial value of its own, on purpose.`,
     icon: "🤝",
   },
   {
