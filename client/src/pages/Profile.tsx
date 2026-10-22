@@ -824,9 +824,10 @@ export default function Profile() {
                 );
               })}
 
-              {/* The member's own token balances. Target of /profile#wallet from
-                  the account menu, and renders nothing when the exchange module
-                  is off. The village exchange itself stays on /tokens. */}
+              {/* The member's wallet: every token, what can be claimed toward
+                  Hypha, and what Base says. Target of /profile#wallet from the
+                  account menu, and shown whatever modules are on (0266). The
+                  village exchange itself stays on /tokens. */}
               <WalletCard />
 
               {/* 0092: sending credits to another member. Not module-gated: a
@@ -847,9 +848,10 @@ export default function Profile() {
                 * unrelated module is reachable by accident, not by design.
                 *
                 * IT IS NOT BESIDE `WalletCard` ON PURPOSE, and this is the
-                * load-bearing part. That card is gated on `useModule("exchange")`
-                * too, so putting the panel next to it would have closed the same
-                * door in a second place and looked like a fix. What makes this
+                * load-bearing part. That card was gated on `useModule("exchange")`
+                * too when this was written (it no longer is, since 0266), so
+                * putting the panel inside it would have closed the same door in a
+                * second place and looked like a fix. What makes this
                 * spot work is `SendTokensCard` directly above: it is deliberately
                 * ungated, which is what proves this section still renders with
                 * the exchange off. A fork that later gates this section takes the
