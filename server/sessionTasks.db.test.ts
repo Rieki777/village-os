@@ -28,6 +28,8 @@ import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { MIGRATIONS_DIR, splitStatements } from "./db/migrate";
 import { closeStaleRooms } from "./lib/liveSessions";
+import { lastTimeIn } from "./lib/circleStanding";
+import { lastMeetingInCircle, lastMeetingPerCircle } from "./repos/liveSessions";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerTasks } from "./routes/sessionTasks";
 import { TASK_REFUSALS, type TaskCard, type TaskCountPayload } from "../shared/sessionTasks";
@@ -532,6 +534,58 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     expect((await count("m-hal")).body).toEqual({ waiting: 1, nextDue: null });
     expect((await board("m-gil")).body.circleBack).toEqual([]);
     await forget([kOpen]);
+  });
+
+  it("counts only a meeting two or more people were in: a close made alone gives no standing, takes none, and is never last time (Rye, 2026-10-21)", async () => {
+    const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
+    const addItem = async (who: string, id: number, title: string) => {
+      const out = await as(who, "POST /api/sessions/:id/items", { params: { id: String(id) }, body: { title, aim: "explore", minutes: 10 } });
+      expect(out.status, JSON.stringify(out.body)).toBe(200);
+    };
+    const [{ session_id: k1 }] = await q("SELECT `session_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
+
+    // A real kitchen meeting: Ana and Gil, with an agenda item it never reached.
+    const km = await open("m-ana", "Kitchen circle, week 6", "c-kitchen");
+    await join("m-gil", km);
+    await addItem("m-ana", km, "Sharpen the knives");
+    expect((await close("m-ana", km)).status).toBe(200);
+    // Then Eve opens a kitchen room alone, puts her own item on it, and closes it. It is the plain last close.
+    const solo = await open("m-eve", "Eve, alone in the kitchen", "c-kitchen");
+    await addItem("m-eve", solo, "My own idea");
+    expect((await close("m-eve", solo)).status).toBe(200);
+    await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` + INTERVAL 1 MINUTE WHERE `id` = ?", [solo]);
+
+    // Her close gives her nothing in the kitchen.
+    expect((await record("m-eve", Number(k1))).status).toBe(403);
+    // It takes nothing from Gil, who was at the meeting, or from Hal, whose seat keeps him in without either.
+    expect((await record("m-gil", Number(k1))).status).toBe(200);
+    expect((await record("m-hal", Number(k1))).status).toBe(200);
+    // Ben was in no kitchen meeting and sits in no kitchen seat.
+    expect((await record("m-ben", Number(k1))).status).toBe(403);
+
+    // The next kitchen room carries from the meeting, never from Eve's close.
+    const kNext = await open("m-ana", "Kitchen circle, week 7", "c-kitchen");
+    const ana = (await roomAs("m-ana", kNext)).body;
+    const [{ closed_at: metAt }] = await q("SELECT `closed_at` FROM `live_sessions` WHERE `id` = ?", [km]);
+    expect(ana.circleLastMetAt).toBe(new Date(metAt).toISOString());
+    expect(ana.carried).toMatchObject({ sessionId: km });
+    expect(ana.carried.parkedItems.map((i: { title: string }) => i.title)).toEqual(["Sharpen the knives"]);
+    expect(ids((await roomAs("m-gil", kNext)).body.circleTasks)).toContain(pots);
+    // Eve reads no card of the kitchen there, and nothing carried.
+    const eve = (await roomAs("m-eve", kNext)).body;
+    expect(eve.circleTasks).toEqual([]);
+    expect(eve.carried).toBeNull();
+
+    // A meeting stays a meeting when one of its people later leaves the village
+    // and their row goes: the close kept its own count. Gil's row, gone a moment.
+    const gilNo = Number((await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-gil'"))[0].no);
+    const [gilRow] = await q("SELECT * FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [km, gilNo]);
+    await q("DELETE FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [km, gilNo]);
+    expect(Number((await lastMeetingInCircle(pool, "c-kitchen", 0))[0].id)).toBe(km);
+    expect((await lastMeetingPerCircle(pool, { circleIds: ["c-kitchen"] })).map((r: any) => Number(r.id))).toEqual([km]);
+    expect(Number((await lastTimeIn(pool, "c-kitchen", kNext))?.id)).toBe(km);
+    await q("INSERT INTO `live_session_people` SET ?", [gilRow]);
+    await forget([kNext]);
   });
 
   it("carries no member id, no email, and no count about a person, on any board, record or room", async () => {

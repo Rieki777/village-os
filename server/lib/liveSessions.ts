@@ -70,6 +70,7 @@ import * as repo from "../repos/liveSessions";
 import { deleteTaskRowsForSession, exportTaskRowsFor, forgetTaskRowsFor, seedStateForSession } from "../repos/sessionTasks";
 import { avatarFor } from "./characters";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
+import { keptSeat, lastTimeIn } from "./circleStanding";
 import { circleTasksFor, villageDate } from "./sessionTasks";
 import {
   broughtByItem,
@@ -437,7 +438,7 @@ export async function seatBook(pool: Pool | PoolConnection, circleId: string | n
   // A standing example seat holds nothing real, and an action left with one
   // would reach nobody, so the room offers live seats only, the same reading
   // the org chart's own seat map makes.
-  const active = roles.filter((r) => r.active && !r.isExample);
+  const active = roles.filter(keptSeat);
   const options: SeatOption[] = active.map((r) => ({ id: r.id, name: r.name, circleId: r.circleId }));
   if (circleId) options.sort((a, b) => Number(b.circleId === circleId) - Number(a.circleId === circleId));
   return { nameOf, options, active: new Set(active.map((r) => r.id)) };
@@ -1784,12 +1785,14 @@ export async function buildView(
           .map((r) => ({ value: r.value as FacilitationValue, text: r.text == null ? null : String(r.text) }))
       : null;
 
-  // What carries over, for a viewer who may read the earlier record.
+  // What carries over, for a viewer who may read the earlier record: from the
+  // circle's last meeting, so a session somebody closed alone never becomes its
+  // last time (`lastTimeIn`, server/lib/circleStanding.ts).
   let carriedFrom: { prev: SessionRec; items: ItemRec[]; entries: EntryRec[]; fromLibrary: Set<number> } | null = null;
   if (s.status === "open" && s.circleId) {
-    const prevRows = await repo.lastClosedInCircle(pool, s.circleId, s.id);
-    if (prevRows.length) {
-      const prev = mapSession(prevRows[0]);
+    const prevRow = await lastTimeIn(pool, s.circleId, s.id);
+    if (prevRow) {
+      const prev = mapSession(prevRow);
       const wasThere = viewer.no != null && (await repo.personRow(pool, prev.id, viewer.no)).length > 0;
       if (wasThere || viewer.admin) {
         carriedFrom = {

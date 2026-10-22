@@ -190,30 +190,6 @@ export async function sessionTitleRows(q: Queryable, sessionIds: readonly number
   return rowsOf(q, "SELECT `id`, `title`, `status` FROM `live_sessions` WHERE `id` IN (?)", [sessionIds]);
 }
 
-// ── Standing ────────────────────────────────────────────────────────────────
-
-/**
- * Every circle's last closed session that at least `minPeople` were in, one
- * row per circle, picked the way `lastClosedInCircle` in
- * server/repos/liveSessions.ts picks one (the latest `closed_at`, the higher id
- * on a tie), for all of them at once. With `minPeople` 2, a session somebody
- * opened and closed alone neither gives them standing in the circle nor takes
- * it from the people of the circle's last real meeting.
- */
-export async function lastClosedPerCircle(q: Queryable, minPeople = 2): Promise<RowDataPacket[]> {
-  const enough = (alias: string) =>
-    "(SELECT COUNT(*) FROM `live_session_people` `p_" + alias + "` WHERE `p_" + alias + "`.`session_id` = `" + alias + "`.`id`) >= ?";
-  return rowsOf(
-    q,
-    "SELECT `s`.`circle_id`, `s`.`id` FROM `live_sessions` `s` WHERE `s`.`status` = 'closed' AND `s`.`circle_id` IS NOT NULL " +
-      "AND " + enough("s") + " " +
-      "AND NOT EXISTS (SELECT 1 FROM `live_sessions` `t` WHERE `t`.`circle_id` = `s`.`circle_id` AND `t`.`status` = 'closed' " +
-      "AND " + enough("t") + " " +
-      "AND (`t`.`closed_at` > `s`.`closed_at` OR (`t`.`closed_at` = `s`.`closed_at` AND `t`.`id` > `s`.`id`)))",
-    [minPeople, minPeople],
-  );
-}
-
 // ── Taking, settling, releasing ─────────────────────────────────────────────
 
 /**
