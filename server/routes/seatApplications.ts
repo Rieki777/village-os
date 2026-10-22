@@ -136,6 +136,7 @@ import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/wai
 import { ACCEPTING_POWER } from "../../shared/sessionTasks";
 import { effectiveLifecycle } from "../lib/modules";
 import { tasksToAccept } from "../lib/sessionTasks";
+import { heldTensionsFor } from "../lib/roleTensions";
 import { runSeasonTurn, SEASON_TURN_EVERY_MS, SEASON_TURN_JOB, whenSeasonsSaved } from "../lib/seasonTurn";
 import { civilDayWords } from "../../shared/seasonPlans";
 import { isLapsed } from "../lib/orgChart";
@@ -752,6 +753,21 @@ export function register(app: Express, deps: Deps): void {
     }
   };
 
+  /**
+   * `raisedWithYou` is the tensions raised with a role the reader holds live
+   * and nobody has answered (`heldTensionsFor`, server/lib/roleTensions.ts).
+   * A tension store that cannot be read leaves the group empty rather than
+   * failing the rows beside it, as the task layer does above.
+   */
+  const tensionsWaitingOn = async (viewerId: string) => {
+    try {
+      return await heldTensionsFor(getPool(), viewerId, { timeZone: seatCalendar().timezone || "UTC" });
+    } catch (e) {
+      console.error("[waiting] the tensions raised with the reader's roles could not be read", e);
+      return [];
+    }
+  };
+
   app.get(WAITING_URL, async (req, res) => {
     const viewer = await reader(req, res);
     if (!viewer) return;
@@ -768,6 +784,7 @@ export function register(app: Express, deps: Deps): void {
         ? await unfrozen(pool, await draftsWaiting(pool))
         : [],
       toAccept: await acceptsWaitingOn(viewerId),
+      raisedWithYou: await tensionsWaitingOn(viewerId),
     };
     res.set("Cache-Control", "no-store").json(payload);
   });

@@ -14,6 +14,12 @@
  *                 reader's board, so the row carries "Accept as accomplished"
  *                 itself, with an optional note, and leaves once accepted. A
  *                 server from before this group sends none (`readWaiting`).
+ *   raisedWithYou a tension raised with a role the reader holds, under its own
+ *                 heading, "Raised with your roles". The row carries the words
+ *                 and the holder's answers (roleTension/TensionRespondRow.tsx)
+ *                 and never names who raised it. Taking it keeps the row,
+ *                 answering it or bringing it to the circle removes it. A
+ *                 server from before this group sends none (`readWaiting`).
  *
  * NO COUNTS on the heading, as the rest of the board. The group draws nothing
  * at all when nothing waits, and nothing when the read is closed to the
@@ -31,6 +37,8 @@ import { gameFetch } from "@/lib/gameApi";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, LABEL_CAPS } from "@/components/sessions/roomUi";
 import { TASK_NOTE_MAX, taskAcceptUrl } from "@shared/sessionTasks";
 import { readWaiting, WAITING_COPY, WAITING_URL, type WaitingAcceptance, type WaitingPayload } from "@shared/waitingOnYou";
+import { TENSION_COPY, type TensionAction } from "@shared/roleTensions";
+import TensionRespondRow from "@/components/roleTension/TensionRespondRow";
 
 const ROW =
   "group block rounded-2xl border border-border bg-muted px-4 py-3.5 text-foreground hover:border-notice/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -142,7 +150,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
     try {
       const res = await gameFetch(WAITING_URL, { cache: "no-store" });
       if (!live.current) return;
-      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [] });
+      if (CLOSED.has(res.status)) return setData({ applications: [], drafts: [], toAccept: [], raisedWithYou: [] });
       const next = res.ok ? readWaiting(await res.json().catch(() => null)) : null;
       if (!live.current) return;
       if (next) setData(next);
@@ -157,9 +165,17 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
   }, [load]);
 
   const toAccept = data?.toAccept ?? [];
-  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0);
+  const raised = data?.raisedWithYou ?? [];
+  const has = !!data && (data.applications.length > 0 || data.drafts.length > 0 || toAccept.length > 0 || raised.length > 0);
   const accepted = (entryId: number) =>
     setData((d) => (d ? { ...d, toAccept: (d.toAccept ?? []).filter((t) => t.entryId !== entryId) } : d));
+  const responded = (id: string, action: TensionAction) =>
+    setData((d) => {
+      if (!d) return d;
+      const list = d.raisedWithYou ?? [];
+      const next = action === "take" ? list.map((t) => (t.id === id ? { ...t, status: "taken" as const, overdue: false } : t)) : list.filter((t) => t.id !== id);
+      return { ...d, raisedWithYou: next };
+    });
   // Told only once the read has answered, so the board never draws "nothing in
   // your hands" in the one render before a waiting row arrives.
   const settled = data !== null || failed;
@@ -218,6 +234,20 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
           </li>
         ))}
       </ul>
+      {raised.length > 0 && (
+        <div className="space-y-3 pt-2" data-raised>
+          <h4 id="task-board-raised" className={LABEL_CAPS}>
+            {TENSION_COPY.groupHeading}
+          </h4>
+          <ul className="space-y-3" aria-labelledby="task-board-raised">
+            {raised.map((t) => (
+              <li key={`r-${t.id}`}>
+                <TensionRespondRow tension={t} onResponded={responded} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
