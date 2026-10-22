@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `e6de6206fc09304b`, which regenerating reproduces.
+It describes the sources at fingerprint `4de8395d9ee271cf`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -189,7 +189,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-11 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 44 settings above is one of them, so every governance dial takes effect the moment it is written.
+12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 44 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -805,7 +805,7 @@ Clans are a governance object nothing in the code knows about yet: groups within
 > I don't understand this fully.
 
 <!-- written by a person: ruling-19 -->
-Built: 11 dials wait for the next cycle close instead of applying at the close of the vote, a minting rule stamped for a coming cycle is promoted on its own by the hourly job at the true boundary, one routine applies everything due, and both its own job and the human close call it, so whichever runs first applies and the other finds nothing left. Withdrawn by his 2026-09-03 words: the part of this answer that stamped a proposal with a CYCLE NUMBER and showed a member "lands at cycle 331". A landing is a timestamp taken from the active clock, and the page reads the instant with the countdown beside it.
+Built: 12 dials wait for the next cycle close instead of applying at the close of the vote, a minting rule stamped for a coming cycle is promoted on its own by the hourly job at the true boundary, one routine applies everything due, and both its own job and the human close call it, so whichever runs first applies and the other finds nothing left. Withdrawn by his 2026-09-03 words: the part of this answer that stamped a proposal with a CYCLE NUMBER and showed a member "lands at cycle 331". A landing is a timestamp taken from the active clock, and the page reads the instant with the countdown beside it.
 
 ### 20. A late approval rolls to the following new moon
 
@@ -1053,7 +1053,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "e6de6206fc09304b",
+  "commit": "4de8395d9ee271cf",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1716,6 +1716,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
   "cycleApplyKeys": [
     "cycle.mode",
     "economy.voice_claim_threshold",
+    "economy.equity_claim_threshold",
     "economy.claims_week_days",
     "economy.claims_week_starts",
     "gratitude.base_budget",
@@ -2841,7 +2842,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 180 migration files in `drizzle/`.
+Checked against the 182 migration files in `drizzle/`.
 
 ## What this file is made from
 

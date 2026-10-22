@@ -35,13 +35,15 @@ let db: TestDb;
 let pool: mysql.Pool;
 
 /**
- * The five the migrations seed, written out so the assertion is a claim about
+ * The six the migrations seed, written out so the assertion is a claim about
  * the MIGRATIONS and not a restatement of whatever the query returned. If a
- * lane seeds a sixth upstream faucet, this list is the thing that goes red,
+ * lane seeds another upstream faucet, this list is the thing that goes red,
  * and the two cases below are what say the supply surfaces already handle it.
+ * It went red as designed when 0266 seeded `sys:equity-mint`.
  */
 const SEEDED_FAUCETS = [
   "sys:cycle-pool",
+  "sys:equity-mint",
   "sys:gratitude-pool",
   "sys:library-mint",
   "sys:mint",

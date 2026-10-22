@@ -161,6 +161,7 @@ import { register as registerCharacterPortraitRoutes } from "./routes/characterP
 import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./routes/stockAvatars";
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
+import { register as registerWalletRoutes } from "./routes/wallet";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
@@ -19636,6 +19637,7 @@ ${inner}
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in first" });
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
+  registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
 
   /**
    * Somebody else's sheet.

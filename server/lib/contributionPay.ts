@@ -90,9 +90,16 @@ export const LEDGER_SOURCE_PAYS_A_CONTRIBUTION: Readonly<Record<string, boolean>
   gratitude_received: false,
   heart_received: false,
   // Voice on its way to Hypha, or waning.
+  // (The voice and equity claim sources are written through the claim lanes in
+  // server/lib/voiceClaim.ts, so the source scan cannot read them off a
+  // `source:` key. They are listed here by hand for that reason.)
   voice_claim: false,
   voice_claim_settled: false,
   voice_decay: false,
+  // Earned equity on its way to Hypha (0266). The member already earned it; a
+  // claim moves what they hold and pays them nothing new.
+  equity_claim: false,
+  equity_claim_settled: false,
   // NOT A LEDGER SOURCE, listed because the scan cannot tell: the `source` of
   // an email permission (comms_permissions.source, a person confirming they
   // want letters, server/lib/comms/actions.ts). It moves no value, so it pays
