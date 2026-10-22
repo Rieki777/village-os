@@ -22,9 +22,10 @@
  *   A power goes from carried by nobody, to held by the village, and back
  *   again, with NO ADMIN ANYWHERE IN THE CHAIN.
  *
- * `library.keep` is the power on purpose. It is one of the five movable
- * powers that NO seeded role carries (`intake.moderate`, `library.keep`,
- * `story.tell`, `org.seat`, `dial.set`), so this file starts from the state
+ * `library.keep` is the power on purpose. It is one of the movable powers
+ * that NO seeded role carries (`intake.moderate`, `library.keep`,
+ * `story.tell`, `dial.set`; `org.seat` was one until the Founders Circle
+ * took it with `org.decide`, Rye 2026-10-20), so this file starts from the state
  * the runway exists for: a real, wired power that the village could not begin
  * on at all without asking an admin first. The other three movable powers are
  * already on seeded roles, which is why the transfer suite could drive

@@ -11,11 +11,15 @@
  * view says what the draft holds, runs its preview ("Nothing is live yet. 36
  * changes, none blocked."), and puts the next step on the page as buttons:
  *
- *   Publish to the live chart   only for a viewer the publish route admits
- *                               (`mayPublish`, the same `isAdmin` it asks),
+ *   Publish to the live chart   only for a viewer a publish route admits
+ *                               (`mayPublish`), through the door the read
+ *                               names (`publishDoor`: a holder of
+ *                               `org.decide` publishes by power, an admin
+ *                               before launch through the admin panel's),
  *                               behind a confirm that names what goes live;
  *   Withdraw the draft          the review queue's withdraw, which sends the
- *                               proposals back to the queue.
+ *                               proposals back to the queue, for whoever
+ *                               keeps the queue (`mayModerate`).
  *
  * A viewer who may not publish is told who can. Once published it says so,
  * with the way to the living map and the seats, and moves on to step four:
@@ -74,6 +78,8 @@ export default function StructureDraft({
   waiting,
   source,
   mayPublish,
+  publishDoor = "admin",
+  mayModerate = true,
   headers,
   onChanged,
   onReviewRest,
@@ -90,6 +96,10 @@ export default function StructureDraft({
   waiting: number;
   source: string;
   mayPublish: boolean;
+  /** Which publish route admits this viewer. An older server sends none, and its only door was the admin panel's. */
+  publishDoor?: "power" | "admin";
+  /** Whether this viewer keeps the review queue, which is what withdrawing asks. An older server sends none. */
+  mayModerate?: boolean;
   headers: () => Record<string, string>;
   /** Read the batch again after a publish or a withdraw, with a sentence to show. */
   onChanged: (notice: string) => void;
@@ -125,9 +135,10 @@ export default function StructureDraft({
     setBusy("publish");
     setFailure(null);
     try {
-      const r = await send(`/api/admin/org/drafts/${encodeURIComponent(draft.id)}/publish`);
+      const id = encodeURIComponent(draft.id);
+      const r = await send(publishDoor === "power" ? `/api/org/drafts/${id}/publish-by-power` : `/api/admin/org/drafts/${id}/publish`);
       if (!r.ok) {
-        setFailure(String(r.body?.error ?? "The draft did not publish. Nothing changed."));
+        setFailure(String(r.body?.message ?? r.body?.error ?? "The draft did not publish. Nothing changed."));
         return;
       }
       setConfirming(false);
@@ -201,16 +212,18 @@ export default function StructureDraft({
             Publish to the live chart
           </button>
         )}
-        <button type="button" className={secondary} disabled={busy !== null} onClick={() => void withdraw()}>
-          {busy === "withdraw" ? "Withdrawing" : "Withdraw the draft"}
-        </button>
+        {mayModerate && (
+          <button type="button" className={secondary} disabled={busy !== null} onClick={() => void withdraw()}>
+            {busy === "withdraw" ? "Withdrawing" : "Withdraw the draft"}
+          </button>
+        )}
       </div>
       {mayPublish && blocked > 0 && (
         <p className="text-[13px] text-muted-foreground">Publishing waits until no line is blocked. Withdraw it to change what it holds.</p>
       )}
       {!mayPublish && (
         <p className="text-[13px] text-muted-foreground" data-testid="who-publishes">
-          Publishing changes the live chart, so an admin of this village does it. Ask an admin to open this page and publish it.
+          Publishing changes the live chart, so whoever holds the power to change the village's structure does it. Ask one of them to open this page and publish it.
         </p>
       )}
     </>

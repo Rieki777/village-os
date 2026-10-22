@@ -168,9 +168,26 @@ describe("the structure review after the accept", () => {
     answer = { ...answer, mayPublish: false };
     await open();
     expect(screen.queryByRole("button", { name: "Publish to the live chart" })).toBeNull();
-    expect(screen.getByTestId("who-publishes").textContent).toContain("an admin of this village does it");
+    expect(screen.getByTestId("who-publishes").textContent).toContain("whoever holds the power to change the village's structure does it");
     // Withdrawing is the steward's own, so it stays.
     expect(screen.getByRole("button", { name: "Withdraw the draft" })).toBeEnabled();
+  });
+
+  it("publishes through the holder's door when the read names it, and says what that door refused", async () => {
+    answer = { ...answer, publishDoor: "power", mayModerate: true };
+    onPost = () => ({ ok: false, status: 403, body: { error: "not_a_holder", message: "Publishing a change to the structure straight onto the chart is for whoever holds the power." } });
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Publish to the live chart" }));
+    fireEvent.click(within(screen.getByTestId("publish-confirm")).getByRole("button", { name: "Yes, publish it now" }));
+    await screen.findByText("Publishing a change to the structure straight onto the chart is for whoever holds the power.");
+    expect(posts.map((p) => p.url)).toEqual(["/api/org/drafts/draft-1/publish-by-power"]);
+  });
+
+  it("offers a holder who does not keep the review queue the publish, and no withdraw", async () => {
+    answer = { ...answer, plan: null, waiting: 0, publishDoor: "power", mayModerate: false };
+    await open();
+    expect(screen.getByRole("button", { name: "Publish to the live chart" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Withdraw the draft" })).toBeNull();
   });
 
   it("publishes only through a confirm that names what goes live, then says it is live", async () => {

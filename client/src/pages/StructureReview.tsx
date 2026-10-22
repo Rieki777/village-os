@@ -73,8 +73,12 @@ interface PlanAnswer {
   waiting?: number;
   /** The draft this batch was accepted into, or null. Absent from an older server. */
   draft?: DraftAnswer | null;
-  /** Whether this viewer may publish that draft, as the publish route decides. */
+  /** Whether this viewer may publish that draft, as the publish routes decide. */
   mayPublish?: boolean;
+  /** Which publish route admits this viewer: a holder's, or the admin panel's. Absent from an older server. */
+  publishDoor?: "power" | "admin" | null;
+  /** Whether this viewer keeps the review queue. A holder who does not reads the draft only. Absent from an older server. */
+  mayModerate?: boolean;
   /** Once the draft is live: who still sits on the old chart. Absent from an older server. */
   carry?: CarryAnswer | null;
 }
@@ -187,6 +191,8 @@ export default function StructureReview() {
               waiting={data.waiting ?? 0}
               source={source}
               mayPublish={data.mayPublish === true}
+              publishDoor={data.publishDoor === "power" ? "power" : "admin"}
+              mayModerate={data.mayModerate !== false}
               carry={data.carry ?? null}
               batchId={batchId}
               headers={headers}

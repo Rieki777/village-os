@@ -424,6 +424,22 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} tasks sit with seats nobody holds.",
     celebrate: false,
   },
+  // The agenda library (server/lib/sessionLibrary.ts): an item a member
+  // brought for a circle went onto a session's agenda, and how it left that
+  // session. Neither celebrates: each is an answer to somebody who raised
+  // something, and it reads as one.
+  session_item_taken: {
+    group: "work",
+    blurb: "An item you brought for a circle is on a session's agenda now.",
+    many: "{n} items you brought are on an agenda.",
+    celebrate: false,
+  },
+  session_item_settled: {
+    group: "work",
+    blurb: "A session that took up an item you brought has closed. The item says whether it was taken up or waits for next time.",
+    many: "{n} sessions closed with items you brought.",
+    celebrate: false,
+  },
 
   // ── People ────────────────────────────────────────────────────────────────
   arrival: {
