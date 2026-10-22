@@ -155,7 +155,7 @@ describe("handoverChecks: the contract the player card's handover meter reads", 
   it("no word names a person, and none says seat or uses a long dash", () => {
     const all = [
       ...Object.values(HANDOVER_CHECK_WORDS).flatMap((w) => [w.label, w.done, w.missing]),
-      ...Object.values(W).filter((v): v is string => typeof v === "string"),
+      ...(Object.values(W) as unknown[]).filter((v): v is string => typeof v === "string"),
     ];
     for (const s of all) {
       expect(s, s).not.toMatch(/\bseats?\b/i);

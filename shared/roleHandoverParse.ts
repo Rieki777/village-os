@@ -29,7 +29,9 @@ const SCRIPT_SCHEME = /\b(?:javascript|data|vbscript|file):(?=\S)/i;
 /** The first problem with links in a piece of text, or null. */
 function linkProblem(text: string): string | null {
   if (SCRIPT_SCHEME.test(text)) return ROLE_HANDOVER_WORDS.httpsOnly;
-  for (const m of text.matchAll(SCHEME_LINK)) {
+  const re = new RegExp(SCHEME_LINK.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
     if (m[1].toLowerCase() !== "https") return ROLE_HANDOVER_WORDS.httpsOnly;
   }
   return null;
