@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `e6de6206fc09304b`, which regenerating reproduces.
+It describes the sources at fingerprint `16c729796510986f`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -161,7 +161,7 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.window_governance_mode` | When a change to how votes are counted can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_role_declare` | When declaring a role can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_role_seat` | When seating a role can go to the vote | `open` | `always_open` | text | when it is written |
-| `governance.window_role_unseat` | When taking a seat back can go to the vote | `open` | `always_open` | text | when it is written |
+| `governance.window_role_unseat` | When taking a role back can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_power_transfer` | When moving a power to a role can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_power_grant` | When granting a power can go to the vote | `open` | `always_open` | text | when it is written |
 | `governance.window_power_return` | When handing a power back can go to the vote | `open` | `always_open` | text | when it is written |
@@ -183,8 +183,8 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.highest_tier` | The tier a veto override is passed at | `open` | `constitutional` | `routine`, `structural`, `constitutional` | when it is written |
 | `governance.subject_mint_rule_quorum_pct` | Minting rule changes: quorum floor | `open` | `50` | 50 to 100 % | when it is written |
 | `governance.subject_mint_rule_unity_pct` | Minting rule changes: unity floor | `open` | `0` | 0 to 100 % | when it is written |
-| `governance.nonhuman_in_quorum` | Seats speaking for other beings count toward quorum | `open` | `false` | boolean | when it is written |
-| `governance.absent_cycles` | Cycles of silence before a seat leaves the count | `open` | `3` | 1 to 24 cycles | when it is written |
+| `governance.nonhuman_in_quorum` | Roles speaking for other beings count toward quorum | `open` | `false` | boolean | when it is written |
+| `governance.absent_cycles` | Cycles of silence before a role leaves the count | `open` | `3` | 1 to 24 cycles | when it is written |
 
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
@@ -210,7 +210,7 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 - `governance_mode`: This one changes how every vote in the village is counted, so it asks the constitutional bar: almost everybody present, and almost everybody in favour.
 - `cycle_settlement`: Settling a moon asks whatever this village asks of any decision. It happens every moon, so it is not priced above the village's own bar.
 - `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
-- `org_draft`: A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
+- `org_draft`: A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
@@ -336,7 +336,7 @@ A village may say WHEN a kind of proposal can be opened. Per proposal kind it ch
 | `governance.window_governance_mode` | When a change to how votes are counted can go to the vote | `always_open` |
 | `governance.window_role_declare` | When declaring a role can go to the vote | `always_open` |
 | `governance.window_role_seat` | When seating a role can go to the vote | `always_open` |
-| `governance.window_role_unseat` | When taking a seat back can go to the vote | `always_open` |
+| `governance.window_role_unseat` | When taking a role back can go to the vote | `always_open` |
 | `governance.window_power_transfer` | When moving a power to a role can go to the vote | `always_open` |
 | `governance.window_power_grant` | When granting a power can go to the vote | `always_open` |
 | `governance.window_power_return` | When handing a power back can go to the vote | `always_open` |
@@ -428,8 +428,8 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `ballot.vote` | Cast a vote on a ballot | `member` | **no** |
 | `member.vouch` | Vouch for an applicant | `contributor` | **no** |
 | `member.superVouch` | Admit a member outright | never by rung; a role or a badge grants it | **no** |
-| `org.seat` | Seat and unseat the holders of the village's seats | never by rung; a role or a badge grants it | yes |
-| `org.seatAgent` | Seat and unseat the software agents that hold seats | never by rung; a role or a badge grants it | yes |
+| `org.seat` | Seat and unseat the holders of the village's roles | never by rung; a role or a badge grants it | yes |
+| `org.seatAgent` | Seat and unseat the software agents that hold roles | never by rung; a role or a badge grants it | yes |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
 
@@ -1053,7 +1053,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "e6de6206fc09304b",
+  "commit": "16c729796510986f",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1192,7 +1192,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "abstainPolicy": null,
       "minYesHeads": null,
       "executesAtClose": false,
-      "why": "A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar."
+      "why": "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar."
     }
   ],
   "executingSubjectTypes": [
@@ -1436,7 +1436,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "governance.window_role_unseat",
-      "label": "When taking a seat back can go to the vote",
+      "label": "When taking a role back can go to the vote",
       "ring": "open",
       "type": "text",
       "default": "always_open",
@@ -1692,7 +1692,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "governance.nonhuman_in_quorum",
-      "label": "Seats speaking for other beings count toward quorum",
+      "label": "Roles speaking for other beings count toward quorum",
       "ring": "open",
       "type": "boolean",
       "default": "false",
@@ -1703,7 +1703,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "governance.absent_cycles",
-      "label": "Cycles of silence before a seat leaves the count",
+      "label": "Cycles of silence before a role leaves the count",
       "ring": "open",
       "type": "integer",
       "default": "3",
@@ -1806,13 +1806,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's seats",
+      "label": "Seat and unseat the holders of the village's roles",
       "unlocksAtStage": null,
       "deniableByBadge": true
     },
     {
       "key": "org.seatAgent",
-      "label": "Seat and unseat the software agents that hold seats",
+      "label": "Seat and unseat the software agents that hold roles",
       "unlocksAtStage": null,
       "deniableByBadge": true
     },
@@ -2342,7 +2342,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "governance.window_role_unseat",
-      "label": "When taking a seat back can go to the vote",
+      "label": "When taking a role back can go to the vote",
       "default": "always_open"
     },
     {
