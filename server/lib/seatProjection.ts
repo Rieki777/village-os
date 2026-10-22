@@ -26,6 +26,9 @@
  *     `isAgent` on a member-tier holder row. The route adds
  *     `village: { decidesBy, decidesByGloss }` (`villageWay`) beside
  *     `people` under the same rule.
+ *   - Both, in the CORE (0268): `bringMe`, `notMine` and `runbook`, the
+ *     role's handover words. They sit where `domain` sits, at every tier,
+ *     because they are the role's own words in the same sense.
  *
  * ── THE PRIVACY RULE FOR WHAT `/api/org` GAINED ────────────────────────────
  *
@@ -405,6 +408,12 @@ export function projectSeat(
     domain: role.domain ?? null,
     accountabilities: role.accountabilities ?? [],
     whyItMatters: role.whyItMatters ?? null,
+    // 0268: the handover words, beside the domain and at its tier, because
+    // they are the role's words in the same sense (Rye, 2026-10-22). Null is
+    // nothing written; a reader draws "not written".
+    bringMe: role.bringMe ?? null,
+    notMine: role.notMine ?? null,
+    runbook: role.runbook ?? null,
     seats: role.seats,
     criticality: role.criticality,
     recruiting: role.recruiting,
