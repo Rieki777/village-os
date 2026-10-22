@@ -122,6 +122,16 @@ export async function readCardRows(
   };
 }
 
+/** The role, when this person holds it live as a member, examples left out. */
+export async function roleHeldBy(pool: Pool, userId: string, roleId: string): Promise<{ id: string; name: string } | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT r.id, r.name FROM org_roles r WHERE r.id = ? AND r.is_example = 0 AND r.id IN (" +
+      "SELECT org_role_id FROM org_role_assignments WHERE ended_at IS NULL AND holder_kind = 'member' AND is_example = 0 AND user_id = ?) LIMIT 1",
+    [roleId, userId],
+  );
+  return rows[0] ? { id: String(rows[0].id), name: String(rows[0].name) } : null;
+}
+
 /** The tables a sign may read, named the way `SignRows` names them. */
 export type SignTable = Exclude<keyof SignRows, "season_id" | "circle_id">;
 
