@@ -53,10 +53,9 @@ import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import VillageAnswers from "@/components/admin/VillageAnswers";
-import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
+import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
-import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { parentChoicesFor } from "@shared/circleView";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
@@ -7318,38 +7317,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
   const needsSetup = useNeedsSetupObservation(password);
-  /**
-   * Which currency codes the daily rate table actually carries.
-   *
-   * Read live from the same route the member-facing picker reads, rather
-   * than from a list typed here, so this can never drift from what the
-   * village can really convert. Empty is a fine answer: the note below the
-   * field only speaks when it knows something.
-   *
-   * ABOVE THE EARLY RETURN, with the other hooks, and it has to stay there.
-   * A hook below `if (!brand || !defaults) return` is a hook the first render
-   * skips and the second runs, which is exactly the crash the Work With Us
-   * tab shipped with.
-   */
-  const [fxCovered, setFxCovered] = useState<string[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`${API_BASE}/fx/rates`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((t) => {
-        if (!alive) return;
-        // ONLY when rates actually arrived. Seeding from `t.base` alone made
-        // `known` true with one entry, so a village whose daily job had not run
-        // was told there is no rate for USD, which is false.
-        const rates = Object.keys(t?.rates ?? {});
-        if (!rates.length) return;
-        setFxCovered([t.base, ...rates].filter(Boolean).sort());
-      })
-      .catch(() => { /* No table is not an error here; the note stays quiet. */ });
-    return () => { alive = false; };
-  }, []);
-
   const load = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, { headers: authHeaders(password) });
@@ -7419,77 +7386,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
     </div>
   );
 
-  /**
-   * The currency this village's money is quoted in.
-   *
-   * IT HAD NO FIELD ANYWHERE, which is why every fork shipped declaring
-   * Costa Rican colones: `shared/gameConfig.ts` defaults `fiatCurrency` to
-   * "CRC" and no screen in client/src let a founder say otherwise.
-   * `scripts/check-identity-keys.mjs` has been counting down a pending list
-   * whose last entry is this key, and whose stated exit condition is that the
-   * founder sets it in Admin. This is that screen.
-   *
-   * A FREE TEXT BOX WITH SUGGESTIONS, and deliberately not a dropdown. The
-   * daily rate table carries fourteen codes; the world has rather more, and
-   * the first village to use this platform is itself on one the table does
-   * not carry. A closed list would have made this village's own currency
-   * unreachable from the screen built to set it.
-   *
-   * The note is the honest half. `server/lib/fxRates.ts` fetches the
-   * daily list, which does not carry CRC (measured 2026-08-21), so a village
-   * quoting in an uncovered currency shows amounts unconverted to anyone
-   * viewing in another until an admin records a manual rate. That is a real
-   * consequence of a choice made here, so it is said here, at the moment of
-   * choosing, rather than discovered later on a member's screen.
-   */
-  const currencyField = () => {
-    const raw = String(brand.project?.fiatCurrency ?? "");
-    const code = raw.trim().toUpperCase();
-    const problem = displayCurrencyProblem(raw.trim());
-    const known = fxCovered.length > 0;
-    const covered = known && fxCovered.includes(code);
-    return (
-      <div className="md:col-span-2">
-        <label className="text-xs font-medium text-gray-500 block mb-1" htmlFor="project-fiat-currency">
-          Currency your prices are in (three letter code)
-        </label>
-        <input
-          id="project-fiat-currency"
-          type="text"
-          // Tied to the box: a bare role="alert" is announced once and is then
-          // unreachable, so tabbing back gives the label and nothing about the
-          // problem. aria-invalid exposes a state the red text cannot.
-          aria-describedby="project-fiat-currency-note"
-          aria-invalid={problem ? true : undefined}
-          list="fiat-currency-options"
-          maxLength={3}
-          value={code}
-          // Uppercased on the way in, so "chf" and "CHF" cannot become two
-          // different villages' worth of stored value.
-          onChange={(e) => setField("project", "fiatCurrency", e.target.value.toUpperCase())}
-          placeholder={defaults.project?.fiatCurrency ?? ""}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg uppercase"
-        />
-        <datalist id="fiat-currency-options">
-          {fxCovered.map((c) => <option key={c} value={c} />)}
-        </datalist>
-        {problem ? (
-          <p id="project-fiat-currency-note" role="alert" className="text-[11px] text-red-600 mt-0.5">{problem}</p>
-        ) : code && known && !covered ? (
-          <p id="project-fiat-currency-note" className="text-[11px] text-amber-700 mt-0.5">
-            There is no daily rate for {code}, so anyone viewing in another currency sees your
-            amounts unconverted until an admin records a rate by hand. Prices themselves are unaffected.
-          </p>
-        ) : (
-          <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
-            Platform default: {defaults.project?.fiatCurrency ?? ""}. This sets what every price on the
-            site is quoted in, and what a member sees before choosing their own display currency.
-          </p>
-        )}
-        <CurrencyAnswerNote answered={!!code} />
-      </div>
-    );
-  };
 
   const imageField = (key: string, label: string, altUnavailable?: string) => (
     <BrandImageField
@@ -7555,7 +7451,12 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
               It is deliberately NOT one of the measured Identity fields in setupProgress.ts, because it ships with a
               working default and counting it would leave Identity unfinished forever for a village happy with it. */}
           {IDENTITY_WIZARD_FIELDS.map(([key, label]) => brandField("project", key, label, defaults.project[key] ?? ""))}
-          {currencyField()}
+          {/* Picked by name, so a founder never has to know the code (VillageCurrencyField.tsx). */}
+          <VillageCurrencyField
+            value={String(brand.project?.fiatCurrency ?? "")}
+            platformDefault={defaults.project?.fiatCurrency ?? ""}
+            onChange={(c) => setField("project", "fiatCurrency", c)}
+          />
           {/*
             THE TWO CURRENCY BOXES ARE GONE, and they were dead when they were
             here. `mergedConfig()` (server/index.ts) computes
