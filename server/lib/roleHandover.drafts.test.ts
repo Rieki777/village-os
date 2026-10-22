@@ -17,8 +17,8 @@
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
-import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import type mysql from "mysql2/promise";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { addChange, createDraft, previewDraft, publishDraft, revertDraft } from "./orgDrafts";
 import { listOrgRoles } from "./orgChart";
 
@@ -50,7 +50,7 @@ async function roleOf(id: string) {
 describe.skipIf(!configured)("the handover words change on the role, by draft", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 });
   });
 
   afterAll(async () => {
@@ -66,7 +66,7 @@ describe.skipIf(!configured)("the handover words change on the role, by draft", 
   });
 
   it("migration compat: three nullable columns, no default, and the old INSERT still writes a role", async () => {
-    const [cols] = await pool.query<any[]>(
+    const [cols] = await pool.query<any[]>( // module-review-ok: reading the scratch schema this suite provisioned
       "SELECT COLUMN_NAME AS name, IS_NULLABLE AS nullable, COLUMN_DEFAULT AS def, DATA_TYPE AS type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'org_roles' AND COLUMN_NAME IN ('bring_me','not_mine','runbook') ORDER BY COLUMN_NAME",
     );
     // MariaDB spells "no default" as the text NULL; MySQL as a real null.
@@ -77,7 +77,7 @@ describe.skipIf(!configured)("the handover words change on the role, by draft", 
     ]);
     expect(cols.find((c) => c.name === "runbook")?.type).toBe("text");
     // The previous release's create_seat INSERT, column for column. It names none of the three.
-    await pool.query(
+    await pool.query( // module-review-ok: the previous release's own statement, replayed against the migrated schema
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", // module-review-ok: the previous release's own statement, replayed against the migrated schema
       ["hand-old", "Old Release Role", null, null, null, "[]", 1, null, "normal", 0, null, null, null],
     );
