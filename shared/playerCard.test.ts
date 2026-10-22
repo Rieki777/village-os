@@ -20,6 +20,7 @@ import {
   type Slot,
 } from "./playerCard";
 import { applicationHref } from "./seatApplications";
+import { accomplishmentsFor } from "./taskAccomplishments";
 import type { SeatSettings } from "./seatSettings";
 
 const TZ = "America/Costa_Rica";
@@ -427,5 +428,34 @@ describe("copy rules", () => {
     expect(text).not.toMatch(/48 hours|\bhours\b/);
     expect(text).not.toMatch(/[–—]/);
     expect(text).not.toMatch(/scoreboard/i);
+  });
+});
+
+describe("accomplished", () => {
+  const moons = accomplishmentsFor([
+    { entryId: 9, kind: "done", byNo: 4, ownerNo: 4, ownerSeatId: "r1", note: null, at: "2026-10-12T16:00:00Z", text: "Write the welcome guide" },
+    { entryId: 9, kind: "accepted", byNo: 5, ownerNo: 4, ownerSeatId: "r1", note: "Clear and kind", at: "2026-10-14T16:00:00Z", text: "Write the welcome guide" },
+    { entryId: 8, kind: "done", byNo: 4, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-13T16:00:00Z", text: "Reopened task" },
+    { entryId: 8, kind: "accepted", byNo: 5, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-14T17:00:00Z", text: "Reopened task" },
+    { entryId: 8, kind: "reopened", byNo: 4, ownerNo: 4, ownerSeatId: null, note: null, at: "2026-10-15T17:00:00Z", text: "Reopened task" },
+  ]);
+
+  it("is unread when the host left it out, and draws nothing", () => {
+    expect(buildPlayerCard(input()).accomplished).toEqual({ heading: CARD_WORDS.accomplished, moons: { kind: "unread" } });
+  });
+
+  it("says so when nothing was accepted yet", () => {
+    expect(buildPlayerCard(input({ accomplished: [] })).accomplished.moons).toEqual({ kind: "empty", words: CARD_WORDS.noAccomplished });
+  });
+
+  it("is fed straight from accomplishmentsFor: dated moons, the role by its full title, the accept's date and note", () => {
+    const out = value(buildPlayerCard(input({ accomplished: moons })).accomplished.moons);
+    expect(out).toHaveLength(1);
+    expect(out[0].label).toContain(" to ");
+    // The reopened task is out of the list; the accepted one stays.
+    expect(out[0].items.map((i) => i.id)).toEqual(["9"]);
+    expect(out[0].items[0]).toMatchObject({ title: "Write the welcome guide", roleTitle: "Human Operations & Onboarding Lead Steward", note: "Clear and kind" });
+    expect(out[0].items[0].accepted).toBe("Accepted on 14 Oct");
+    expect(out[0].items[0].accepted).not.toMatch(/2026-10-14/);
   });
 });

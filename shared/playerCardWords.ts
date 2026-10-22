@@ -63,6 +63,18 @@ export const CARD_WORDS = {
   load: "Load this moon",
   loadRoles: (n: number) => plural(n, "role", "roles"),
   loadTasks: (n: number) => `${plural(n, "open task", "open tasks")} this moon`,
+  loadCaption: "My own read, set each moon.",
+  loadNotSet: "Not set this moon",
+  loadSlider: "How this moon feels, from Healthy to Heavy",
+  loadEnds: ["Healthy", "Heavy"] as const,
+  loadStep: { 1: "Healthy", 2: "Leaning healthy", 3: "Balanced", 4: "Leaning heavy", 5: "Heavy" } as Record<1 | 2 | 3 | 4 | 5, string>,
+  trend: { up: "Up on last moon", down: "Down on last moon", same: "Same as last moon" } as Record<"up" | "down" | "same", string>,
+  trendLater: "Trend from next moon",
+  openSheet: (sign: string) => `See what makes up: ${sign}`,
+  wallet: "My wallet",
+  pendingRoleWords: "Proposed, waiting for consent",
+  growingEdge: "Growing edge",
+  whoCouldHoldNext: "Who could hold this next",
 
   // One role in full
   keyRole: "Key role",
@@ -104,6 +116,11 @@ export const CARD_WORDS = {
   moonDates: (from: string, to: string) => `${from} to ${to}`,
   gathering: (label: string, weekday: number, time: string, fortnightly: boolean, role: string) =>
     `${label}, every ${fortnightly ? "other week" : "week"} on ${WEEKDAYS[weekday] ?? "a set day"} at ${time}, for ${role}`,
+
+  // Accomplished: tasks whose work was accepted, by moon
+  accomplished: "Accomplished",
+  noAccomplished: "Nothing accepted as accomplished yet",
+  acceptedOn: (day: string) => `Accepted on ${day}`,
 
   // How I hold my roles
   howIHold: "How I hold my roles",
