@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from "react";
 import { currencyExponent } from "@/lib/workPay";
+import { useTokenName } from "@/hooks/useTokenNames";
 import type { TokenAmount } from "@shared/workValue";
 
 /** One token the village lets work pay, as the options read sends it. */
@@ -139,6 +140,8 @@ export default function WorkValueEditor({
   /** The host's own input style, so the editor sits in Admin and on /review alike. */
   inputClassName: string;
 }) {
+  // The recognition token's live name: a village may call it something else.
+  const recognition = useTokenName("Recognition");
   return (
     <div className="space-y-2">
       <label className="block text-xs font-medium">
@@ -176,7 +179,7 @@ export default function WorkValueEditor({
               </span>
             </label>
           ))}
-          <p className="text-xs opacity-70">A token left at 0 is not paid. Gratitude is never paid for work.</p>
+          <p className="text-xs opacity-70">A token left at 0 is not paid. {recognition} is never paid for work.</p>
         </fieldset>
       )}
     </div>

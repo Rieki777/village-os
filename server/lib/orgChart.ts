@@ -925,9 +925,10 @@ function writableColumn(js: string, body: any): { col: string; value: unknown } 
   return { col, value: body[js] === "" ? null : body[js] };
 }
 
-export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<boolean> {
+export async function updateOrgRole(pool: Pool, id: string, body: any, value?: OrgRoleValueEdit): Promise<boolean> {
   const sets: string[] = [];
   const args: any[] = [];
+  valueSets(value, sets, args);
   for (const js of Object.keys(WRITABLE)) {
     const w = writableColumn(js, body);
     if (!w) continue;
@@ -956,18 +957,16 @@ export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<
 }
 
 /**
- * A role's value and its list (0265), written apart from `updateOrgRole` on
- * purpose: the route checks both against the village's rules and stamps the
- * currency before calling this, and nothing else may write them. A field that is
- * `undefined` is left alone; `null` clears it.
+ * A role's value and its list (0265). The route checks both against the
+ * village's rules and stamps the currency before handing them in, and nothing
+ * else may write them, so they arrive apart from the body and ride the same
+ * UPDATE as the rest of the row. A field that is `undefined` is left alone;
+ * `null` clears it.
  */
-export async function setOrgRoleValue(
-  pool: Pool,
-  id: string,
-  v: { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null },
-): Promise<boolean> {
-  const sets: string[] = [];
-  const args: unknown[] = [];
+export type OrgRoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
+
+function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
+  if (!v) return;
   if (v.valueMinor !== undefined) {
     const set = v.valueMinor !== null && !!v.valueCurrency;
     sets.push("`value_minor` = ?", "`value_currency` = ?");
@@ -977,10 +976,6 @@ export async function setOrgRoleValue(
     sets.push("`value_tokens` = ?");
     args.push(valueTokensToStore(v.valueTokens));
   }
-  if (!sets.length) return false;
-  args.push(id);
-  const [r]: any = await pool.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
-  return !!r?.affectedRows;
 }
 
 /**

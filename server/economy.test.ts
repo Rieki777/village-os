@@ -1222,7 +1222,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       } finally {
         // Clear it again: the rules table is shared by the tests below, and a
         // row left behind here rewrites their rule through the unique key.
-        await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'");
+        await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       }
     });
 

@@ -91,7 +91,7 @@ async function unitsOf(slug: string, human: number): Promise<number> {
 describe.skipIf(!configured)("what a quest and a role pay", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
     await loadTokenRegistry(pool);

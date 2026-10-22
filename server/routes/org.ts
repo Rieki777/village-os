@@ -68,7 +68,6 @@ import {
   listOrgRoles,
   orgRoleHistory,
   seatHolder,
-  setOrgRoleValue,
   statusOverrideProblem,
   unclaimedSeatingsFor,
   updateOrgRole,
@@ -841,7 +840,7 @@ export function register(app: Express, deps: Deps): void {
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
-    await setOrgRoleValue(getPool(), id, valued);
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined) await updateOrgRole(getPool(), id, {}, valued);
     // Anything made while a season runs joins that season's pattern, so a
     // village never sits down to author one. Nothing happens when the season
     // names no pattern, which is every village that has not opted in.
@@ -871,8 +870,7 @@ export function register(app: Express, deps: Deps): void {
     if (!valued) return;
     const changes = describeOrgChange(role, req.body ?? {});
     if (valued.valueMinor !== undefined || valued.valueTokens !== undefined) changes.push("what the role is worth and pays updated");
-    const valueSaved = await setOrgRoleValue(getPool(), req.params.id, valued);
-    const ok = (await updateOrgRole(getPool(), req.params.id, req.body ?? {})) || valueSaved;
+    const ok = await updateOrgRole(getPool(), req.params.id, req.body ?? {}, valued);
     if (ok && changes.length) {
       await recordEvent(getPool(), {
         kind: "org", text: `${role.name}: ${changes.join("; ")}`,
