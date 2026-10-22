@@ -32,7 +32,7 @@ describe("the player card, live", () => {
     const article = document.getElementById("role-r1")!;
     const text = article.textContent ?? "";
     expect(text.indexOf(FIXTURE_ROLE_TITLE(1))).toBeLessThan(text.indexOf("Purpose"));
-    expect(text).toContain("2 of 4 ready");
+    expect(text).toContain("5 of 6 ready");
     expect(text).not.toMatch(/\d+%/);
     expect(screen.getByText("Across my role")).toBeTruthy();
   });
@@ -104,14 +104,4 @@ describe("the player card, live", () => {
     expect(reload).toHaveBeenCalled();
   });
 
-  it("tells the owner a personal word with no home yet cannot be saved, and saves nothing", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    render(<PlayerRoleCardView data={fixturePayload(1)} />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit my card" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit: Growing edge" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText(/can't be saved yet/)).toBeTruthy();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
 });

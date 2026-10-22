@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildPlayerCard, type PlayerCardInput, type PlayerRoleIn, type SignOut, type Slot } from "./playerCard";
 import { roleHandover, roleHealth } from "./playerCardHealth";
-import { roleWordPayload, roleWordsIn, PERSONAL_EDIT_KEYS, PERSONAL_STORED_NOW, ROLE_EDIT_KEYS, ROLE_WORD_FIELD } from "./playerCardEdit";
+import { roleWordPayload, roleWordsIn, PERSONAL_EDIT_KEYS, ROLE_EDIT_KEYS, ROLE_WORD_FIELD } from "./playerCardEdit";
+import { HANDOVER_CHECK_WORDS, ROLE_HANDOVER_WORDS, handoverChecks } from "./roleHandover";
 import type { SignReading } from "./roleSigns";
 import type { SeatSettings } from "./seatSettings";
 
@@ -63,34 +64,44 @@ describe("a role's health: three facts and one dot, never a score", () => {
   });
 });
 
-describe("the handover meter: four checks, read as a count", () => {
+describe("the handover meter: the shared six checks, read as a count", () => {
   const base = {
     aim: "Keep the water clean.",
     domain: "The tanks.",
     accountabilities: ["Testing the spring"],
-    termEndsAt: "2026-12-31T06:00:00Z",
-    settings: null,
-    circle: { id: "c1", name: "Land" },
+    bringMe: null,
+    notMine: null,
+    runbook: null,
   };
 
-  it("reads 2 of 4 ready, never a percentage, and the runbook is Not counted yet", () => {
-    const h = roleHandover({ ...base, holderCount: 1, covered: false, circleDecisions: 3 });
-    expect(h.summary).toBe("2 of 4 ready");
-    expect(h.checks.find((c) => c.key === "runbook")).toMatchObject({ state: "not-counted", words: "Not counted yet" });
-    expect(JSON.stringify(h)).not.toContain("%");
+  it("is handoverChecks itself: the same count, the same keys, the same words", () => {
+    const role = { ...base, bringMe: ["Water readings"] };
+    const h = roleHandover(role);
+    const shared = handoverChecks(role);
+    expect(h.summary).toBe(`${shared.done} of ${shared.total} ready`);
+    expect(h.summary).toBe("4 of 6 ready");
+    expect(h.checks.map((c) => c.key)).toEqual(shared.checks.map((c) => c.key));
+    expect(h.checks.map((c) => c.words)).toEqual(shared.checks.map((c) => c.words));
+    expect(h.checks.map((c) => c.state)).toEqual(shared.checks.map((c) => (c.done ? "ready" : "not-yet")));
   });
 
-  it("counts a second holder, or a deputy or successor, as someone ready to step in", () => {
-    expect(roleHandover({ ...base, holderCount: 2, covered: false, circleDecisions: 0 }).checks.find((c) => c.key === "stepIn")?.state).toBe("ready");
-    expect(roleHandover({ ...base, holderCount: 1, covered: true, circleDecisions: 0 }).checks.find((c) => c.key === "stepIn")?.words).toBe(
-      "A deputy or successor is written down",
-    );
+  it("reads every check in HANDOVER_CHECK_WORDS, and never a percentage", () => {
+    const h = roleHandover({ ...base, aim: null, accountabilities: [] });
+    expect(h.summary).toBe("1 of 6 ready");
+    expect(h.checks.map((c) => c.words)).toEqual([
+      HANDOVER_CHECK_WORDS.purpose.missing,
+      HANDOVER_CHECK_WORDS.decide.done,
+      HANDOVER_CHECK_WORDS.countOnMe.missing,
+      HANDOVER_CHECK_WORDS.bringMe.missing,
+      HANDOVER_CHECK_WORDS.notMine.missing,
+      HANDOVER_CHECK_WORDS.runbook.missing,
+    ]);
+    expect(JSON.stringify(h)).not.toMatch(/%|percent/i);
   });
 
-  it("names what a card is missing", () => {
-    const h = roleHandover({ ...base, aim: null, accountabilities: [], termEndsAt: null, holderCount: 1, covered: false, circleDecisions: 0 });
-    expect(h.checks[0].words).toBe("Missing: aim, what it answers for, a term");
-    expect(h.summary).toBe("0 of 4 ready");
+  it("is 6 of 6 when the card and the runbook are written, and an unread word counts as not written", () => {
+    expect(roleHandover({ ...base, bringMe: ["a"], notMine: ["b"], runbook: "https://example.org/runbook" }).summary).toBe("6 of 6 ready");
+    expect(roleHandover({ ...base, bringMe: undefined, notMine: undefined, runbook: undefined }).summary).toBe("3 of 6 ready");
   });
 });
 
@@ -116,7 +127,6 @@ describe("the model carries health, handover, the load read and pending words", 
     settings: { v: 1, scoreboard: { measures: [{ measure: "Answered", countedBy: "applications-answered", targetCount: 5 }] } },
     holderCount: 1,
     covered: false,
-    circleDecisions: 2,
     pendingWords: ["purpose"],
   };
   const input: PlayerCardInput = {
@@ -160,28 +170,53 @@ describe("the model carries health, handover, the load read and pending words", 
 
   it("carries the handover meter and the words waiting on consent", () => {
     const card = buildPlayerCard(input);
-    expect(card.roles[0].handover.summary).toBe("2 of 4 ready");
+    expect(card.roles[0].handover.summary).toBe("3 of 6 ready");
+    expect(buildPlayerCard({ ...input, roles: [{ ...role, bringMe: ["x"], notMine: ["y"], runbook: "Notes in the shed." }] }).roles[0].handover.summary).toBe(
+      "6 of 6 ready",
+    );
     expect(card.roles[0].pending).toEqual(["purpose"]);
   });
 });
 
 describe("who owns each word on the card", () => {
-  it("splits personal and role words, and only the aim and the goal it serves are stored today", () => {
-    expect(PERSONAL_STORED_NOW).toEqual(["aim", "servesGoal"]);
+  it("splits personal and role words, and every role word has a home now", () => {
     expect(PERSONAL_EDIT_KEYS).toContain("loadRead");
-    expect(ROLE_EDIT_KEYS).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine"]);
+    expect(ROLE_EDIT_KEYS).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook"]);
+    expect(ROLE_WORD_FIELD).toEqual({
+      purpose: "aim",
+      decide: "domain",
+      countOnMe: "accountabilities",
+      bringMe: "bringMe",
+      notMine: "notMine",
+      runbook: "runbook",
+    });
   });
 
-  it("turns a role word into an update_seat payload on a column that exists, and refuses the rest", () => {
+  it("turns a role word into an update_seat payload, and refuses an unknown key", () => {
     expect(roleWordPayload({ key: "purpose", text: " Clean water. " })).toEqual({ ok: true, key: "purpose", payload: { aim: "Clean water." } });
     expect(roleWordPayload({ key: "countOnMe", text: "One\n\nTwo" })).toEqual({ ok: true, key: "countOnMe", payload: { accountabilities: ["One", "Two"] } });
-    expect(roleWordPayload({ key: "bringMe", text: "x" }).ok).toBe(false);
     expect(roleWordPayload({ key: "pay", text: "x" }).ok).toBe(false);
-    expect(ROLE_WORD_FIELD.notMine).toBeNull();
   });
 
-  it("reads back which role words an open draft would change", () => {
+  it("proposes the handover words through the one parser: lists per line, the runbook as text, blank clears", () => {
+    expect(roleWordPayload({ key: "bringMe", text: " Readings \n\n Questions " })).toEqual({ ok: true, key: "bringMe", payload: { bringMe: ["Readings", "Questions"] } });
+    expect(roleWordPayload({ key: "notMine", text: "Money" })).toEqual({ ok: true, key: "notMine", payload: { notMine: ["Money"] } });
+    expect(roleWordPayload({ key: "runbook", text: " https://example.org/run " })).toEqual({ ok: true, key: "runbook", payload: { runbook: "https://example.org/run" } });
+    expect(roleWordPayload({ key: "notMine", text: "  " })).toEqual({ ok: true, key: "notMine", payload: { notMine: null } });
+    expect(roleWordPayload({ key: "runbook", text: "" })).toEqual({ ok: true, key: "runbook", payload: { runbook: null } });
+  });
+
+  it("refuses with the parser's own sentences", () => {
+    expect(roleWordPayload({ key: "runbook", text: "http://example.org" })).toEqual({ ok: false, error: ROLE_HANDOVER_WORDS.httpsOnly });
+    expect(roleWordPayload({ key: "bringMe", text: Array.from({ length: 9 }, (_, i) => `Item ${i}`).join("\n") })).toEqual({
+      ok: false,
+      error: ROLE_HANDOVER_WORDS.tooMany,
+    });
+  });
+
+  it("reads back which role words an open draft would change, the handover words included", () => {
     expect(roleWordsIn({ aim: "x", accountabilities: ["y"] })).toEqual(["purpose", "countOnMe"]);
+    expect(roleWordsIn({ bringMe: ["a"], runbook: null })).toEqual(["bringMe", "runbook"]);
     expect(roleWordsIn({ termsOffer: {} })).toEqual([]);
   });
 });
