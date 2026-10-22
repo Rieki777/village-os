@@ -23,6 +23,14 @@
  * Steward rights page says it inside the recognition card. All five are here,
  * because a fix applied to one of a set is the defect this repository has
  * catalogued most (see the fix-one-twin note in CLAUDE.md's house traps).
+ *
+ * TWO OF THE FIVE NOW PUBLISH NO CONVERSION SENTENCE AT ALL (Rye, 2026-10-22:
+ * "every community will design their own rules for these and other tokens so
+ * don't mention what it does anywhere"). The Co-Creators Guide and How We
+ * Create name the tokens and link to /game-mechanics, generated from the rules
+ * the village set (cust-audit TOKEN_COPY_PROPOSAL rows 2, 4 and 13). For those
+ * two this suite now asserts the founder's sentence stays OFF the page, and
+ * that the token is still named; the other three keep the 2026-09-03 checks.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
@@ -50,10 +58,20 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   useBrandImages: () => ({}),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
-  useGameConfig: () => ({ project: { name: "Willowbrook", eventsUrl: "" }, stages: [] }),
+  // `currency` matches the token-name mocks below for the pages that read their
+  // words from a spec (usePageContent fills `{token}` from the config).
+  useGameConfig: () => ({
+    project: { name: "Willowbrook", eventsUrl: "" },
+    currency: { name: "Gratitude", value: { name: "Seeds" } },
+    stages: [],
+  }),
   fetchGameMe: async () => null,
 }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ user: null }),
+  // A visitor: the Hypha admin note (HyphaAdminNote) stays away.
+  useIsAdmin: () => false,
+}));
 vi.mock("@/modules/ModuleProvider", () => ({
   useHypha: () => ({ enabled: false, dhoSlug: "", tokens: [] }),
 }));
@@ -65,6 +83,8 @@ vi.mock("@/hooks/useTokenNames", () => ({
 
 const moneySection = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
 vi.mock("@/hooks/useVillageContent", () => ({
+  // A page that renders from a spec reads its saved words here; none are saved.
+  readVillageSection: () => Promise.resolve(null),
   useVillageContent: (section: string) =>
     section === "money"
       ? { content: moneySection.current, loading: false, isPlaceholder: !moneySection.current }
@@ -112,27 +132,36 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const PAGES = [
-  { name: "Quests", render: () => render(<Router><Quests /></Router>), anchor: /About Gratitude/ },
+  { name: "Quests", render: () => render(<Router><Quests /></Router>), anchor: /About Gratitude/, publishesConversion: true, names: /Seeds/ },
   {
     name: "ProsperityJourney",
     render: () => render(<Router><ProsperityJourney /></Router>),
     anchor: /Gratitude Economy/,
+    publishesConversion: true,
+    names: /Seeds/,
   },
   {
     name: "CoCreatorsGuide",
     render: () => render(<Router><CoCreatorsGuide /></Router>),
-    // Renamed 2026-10-21: quests and roles pay in tokens, and Gratitude is thanks.
-    anchor: /Pay, and Gratitude/,
+    // 2026-10-22: the section is "{token}" and the card of what work is worth stays.
+    anchor: /Get paid for your work/,
+    publishesConversion: false,
+    names: /Gratitude/,
   },
   {
     name: "HowWeCreate",
     render: () => render(<Router><HowWeCreate /></Router>),
-    anchor: /Gratitude Economy/,
+    // 2026-10-22: "The {token} Economy" became "Our Tokens".
+    anchor: /Our Tokens/,
+    publishesConversion: false,
+    names: /Gratitude/,
   },
   {
     name: "StewardRights",
     render: () => render(<Router><StewardRights /></Router>),
     anchor: /Voice in Governance/,
+    publishesConversion: true,
+    names: /Seeds/,
   },
 ] as const;
 
@@ -153,9 +182,29 @@ for (const page of PAGES) {
     it("keeps the surrounding sentences it did not put in question", async () => {
       page.render();
       await waitFor(() => expect(screen.queryAllByText(page.anchor).length).toBeGreaterThan(0));
-      expect(document.body.textContent ?? "").toMatch(/Seeds/);
+      // The two pages that only NAME their tokens since 2026-10-22 name the
+      // recognition token and no longer mention the value token at all.
+      expect(document.body.textContent ?? "").toMatch(page.names);
     });
   });
+
+  if (!page.publishesConversion) {
+    describe(`${page.name}, with the founder's own wording published`, () => {
+      it("leaves it off the page: a token is named here, never explained (Rye, 2026-10-22)", async () => {
+        moneySection.current = {
+          valueConversion:
+            "Converting {value} to cash or equity is arranged directly with {village}, off the platform.",
+        };
+        page.render();
+        await waitFor(() => expect(screen.queryAllByText(page.anchor).length).toBeGreaterThan(0));
+        const said = document.body.textContent ?? "";
+        expect(said).not.toContain("arranged directly with Willowbrook");
+        expect(said).not.toMatch(/to cash or equity/i);
+        expect(said).toMatch(/Gratitude/);
+      });
+    });
+    continue;
+  }
 
   describe(`${page.name}, with the founder's own wording published`, () => {
     it("publishes it verbatim, with the village and token names filled in", async () => {

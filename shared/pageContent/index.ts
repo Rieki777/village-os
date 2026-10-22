@@ -6,10 +6,13 @@
  * registry, so one page's words never ride in another page's bundle.
  */
 import { HOME_PAGE } from "./home";
+import { GOOD_NEIGHBOR_PAGE } from "./goodNeighbor";
+import { HOW_WE_CREATE_PAGE } from "./howWeCreate";
+import { CO_CREATORS_GUIDE_PAGE } from "./coCreatorsGuide";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, GOOD_NEIGHBOR_PAGE, HOW_WE_CREATE_PAGE, CO_CREATORS_GUIDE_PAGE];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;
