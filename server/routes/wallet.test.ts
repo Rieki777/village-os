@@ -16,7 +16,7 @@ import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { allowanceFor, EARNED_EQUITY, ensureVoiceToken, faucetFor, mint, toLedgerUnits } from "../lib/economy";
 import { balanceOf, loadTokenRegistry, memberAccount } from "../lib/ledger";
 import { loadVariables, numberVar, setVariable } from "../lib/variables";
@@ -80,7 +80,7 @@ const rowFor = (wallet: any, slug: string) => wallet.rows.find((r: any) => r.tok
 describe.skipIf(!configured)("GET /api/me/wallet and the claim door", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture pool on the S5 scratch schema
+    pool = testPool(db, { connectionLimit: 6 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");

@@ -45,10 +45,13 @@ describe.skipIf(!configured)("the test-database harness", () => {
   it("seeds the token registry the ledger code mirrors", async () => {
     const [rows] = await db.conn.query<any[]>("SELECT slug, kind, governance FROM tokens ORDER BY sort_order");
     const slugs = rows.map((r) => r.slug);
-    expect(slugs).toEqual(["gratitude", "equity", "voice", "credits"]);
+    // 0266 seeds earned-equity, the platform twin that accrues here and is
+    // claimed onto the Hypha mirror, the way Village Voice is to Voice.
+    expect(slugs).toEqual(["gratitude", "earned-equity", "equity", "voice", "credits"]);
     const byslug: Record<string, any> = Object.fromEntries(rows.map((r) => [r.slug, r]));
     expect(byslug.gratitude.governance).toBe("platform");
     expect(byslug.equity.governance).toBe("hypha");
+    expect(byslug["earned-equity"].governance).toBe("platform");
     expect(byslug.credits.kind).toBe("credit");
   });
 
@@ -61,11 +64,20 @@ describe.skipIf(!configured)("the test-database harness", () => {
    * data, and data is exactly the kind of thing that comes back when somebody
    * adds a row to make their own instance read right.
    */
-  it("names the seeded equity token after no village at all", async () => {
-    const [rows] = await db.conn.query<any[]>(
-      "SELECT slug, name, kind, governance, decimals, transferable FROM tokens WHERE kind = 'equity'",
+  it("names the seeded equity tokens after no village at all", async () => {
+    // Two equity tokens since 0266: the Hypha mirror, and the platform twin a
+    // village earns and claims onto it. Neither may carry a village's name.
+    const [both] = await db.conn.query<any[]>(
+      "SELECT slug, name, governance FROM tokens WHERE kind = 'equity' ORDER BY slug",
     );
-    expect(rows.length, "exactly one seeded equity token").toBe(1);
+    expect(both.map((r: any) => [r.slug, r.name, r.governance])).toEqual([
+      ["earned-equity", "Earned Equity", "platform"],
+      ["equity", "Village Equity", "hypha"],
+    ]);
+    const [rows] = await db.conn.query<any[]>(
+      "SELECT slug, name, kind, governance, decimals, transferable FROM tokens WHERE kind = 'equity' AND governance = 'hypha'",
+    );
+    expect(rows.length, "exactly one seeded equity mirror").toBe(1);
     expect(rows[0].slug).toBe("equity");
     expect(rows[0].name).toBe("Village Equity");
     // Unchanged by 0124, and named here so a future edit to the seed has to

@@ -37,7 +37,7 @@ import {
 import { balanceOf, loadTokenRegistry, memberAccount } from "./lib/ledger";
 import { loadVariables } from "./lib/variables";
 import { payableTokens, payLineProblem, questPay, rolePay } from "./lib/workPay";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { claimsRepo as makeClaimsRepo, questsRepo as makeQuestsRepo } from "./repos/quests";
 import { register as registerQuestRoutes } from "./routes/quests";
 import { GRATITUDE_NEVER_PAYS } from "../shared/workValue";
@@ -91,7 +91,7 @@ async function unitsOf(slug: string, human: number): Promise<number> {
 describe.skipIf(!configured)("what a quest and a role pay", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 });
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
     await loadTokenRegistry(pool);

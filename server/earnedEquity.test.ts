@@ -59,7 +59,7 @@ import {
   settleClaim,
   settleVoiceClaim,
 } from "./lib/voiceClaim";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 if (!configured) {
@@ -141,7 +141,7 @@ async function bothBooksBalance(): Promise<void> {
 describe.skipIf(!configured)("earned equity, claimed toward Hypha", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture pool on the S5 scratch schema
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
