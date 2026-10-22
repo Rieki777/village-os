@@ -57,6 +57,8 @@ export interface SeatApplicationRow {
   status: string;
   created_at: Stamp;
   decided_at: Stamp | null;
+  /** Read for the sign's sheet of rows only, which names a first name at the member tier. */
+  candidate_user_id?: string;
 }
 /** `season_plans` (0258). */
 export interface SeasonPlanRow {
@@ -84,6 +86,8 @@ export interface OrgRoleRow {
   aim: string | null;
   domain: string | null;
   accountabilities: string[] | string | null;
+  /** The role's full title, for the sign's sheet of rows. */
+  name?: string;
 }
 /** `org_role_assignments` (0049). */
 export interface OrgRoleAssignmentRow {
