@@ -2,6 +2,7 @@
  * The player card's three calls, and the client contract for the owner's edits.
  *
  *   fetchCard           GET  /api/people/:handle/role-card
+ *   fetchApplicationCard GET /api/governance/role-applications/:id/card (proposal mode)
  *   proposeRoleWords    POST /api/people/me/role-card/roles/:roleId/propose
  *   savePersonalWords   the season aim and the goal it serves, through the
  *                       existing season plan routes; every other personal word
@@ -46,6 +47,15 @@ export function isCardPayload(v: unknown): v is PlayerCardPayload {
 
 export async function fetchCard(handle: string): Promise<Answer<PlayerCardPayload>> {
   const r = await call<PlayerCardPayload>(cardPath(handle));
+  if (r.ok && !isCardPayload(r.data)) return { ok: false, status: 0, error: EDIT_WORDS.failed };
+  return r;
+}
+
+export const applicationCardPath = (id: string) => `/api/governance/role-applications/${encodeURIComponent(id)}/card`;
+
+/** The card a role application asks for, in proposal mode, at the reader's tier. */
+export async function fetchApplicationCard(id: string): Promise<Answer<PlayerCardPayload>> {
+  const r = await call<PlayerCardPayload>(applicationCardPath(id));
   if (r.ok && !isCardPayload(r.data)) return { ok: false, status: 0, error: EDIT_WORDS.failed };
   return r;
 }

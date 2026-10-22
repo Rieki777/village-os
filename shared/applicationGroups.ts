@@ -98,6 +98,30 @@ export function endedSeasons(
   return out;
 }
 
+/**
+ * The grouping context from the village's calendar (`seatCalendar()`): this
+ * season and its end, the next season to start, and the ended ones.
+ */
+export function groupingContext(
+  calendar: { seasons: ReadonlyArray<{ id: string; startsOn: string; endsOn?: string | null }>; currentSeasonId: string | null },
+  instant: (civil: string) => Date | null,
+  now: Date,
+): GroupingContext {
+  const current = calendar.seasons.find((s) => s.id === calendar.currentSeasonId) ?? null;
+  const later = calendar.seasons
+    .filter((s) => s.id !== current?.id)
+    .map((s) => ({ id: s.id, at: instant(s.startsOn)?.getTime() ?? null }))
+    .filter((s): s is { id: string; at: number } => s.at !== null && s.at > now.getTime())
+    .sort((a, b) => a.at - b.at);
+  return {
+    now,
+    seasonId: current ? String(current.id) : null,
+    seasonEndsAt: current?.endsOn ? instant(current.endsOn) : null,
+    nextSeasonId: later[0] ? String(later[0].id) : null,
+    endedSeasonIds: endedSeasons(calendar.seasons, instant, now),
+  };
+}
+
 /** An old seating that came through no application: a role held before applications were kept. */
 export interface PastSeating {
   roleId: string;

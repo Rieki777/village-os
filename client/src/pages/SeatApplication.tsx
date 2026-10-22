@@ -8,8 +8,12 @@
  *
  * What a member reads, in the order they ask it:
  *
- *   WHICH SEATS, ON WHAT TERMS   each seat as its live card, stacked, with the
- *                                Settings drawer OPEN on the application's terms
+ *   WHICH ROLES, ON WHAT TERMS   the candidate's player card in proposal mode
+ *                                (PR 3): one card for up to five roles, its
+ *                                live sections reading "Starts once adopted",
+ *                                then the Settings drawer OPEN on the terms.
+ *                                Should the card fail to load, each role as its
+ *                                live card, stacked, as before.
  *   IN THE MEMBER'S WORDS        what will be true at the season's end, and why them
  *   WHERE IT STANDS              waiting for a seat holder, the village voting
  *                                (with a link to the vote), adopted, held
@@ -33,6 +37,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatTermsDrawer from "@/components/power/SeatTermsDrawer";
+import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { loadOrg } from "@/components/governance/pickSources";
 import {
   fetchApplication,
@@ -76,22 +81,14 @@ export const APPLICATION_WORDS = {
   packageTerms: "One set of terms covers every role above.",
 } as const;
 
-function SeatCards({ app }: { app: ServedApplication }) {
-  const [org, setOrg] = useState<any | null>(null);
-  const season = useSeason();
+/**
+ * The application's terms in the Settings drawer, open. The card prints pay in
+ * words only, so the drawer is where a holder reads the figures they adopt.
+ */
+function TermsDrawer({ app }: { app: ServedApplication }) {
   const villagePresets = useVillagePresets();
-  useEffect(() => {
-    let alive = true;
-    void loadOrg().then((o) => {
-      if (alive) setOrg(o);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
   const parsed = parseSeatSettings(app.settings);
   const marks = app.alignment ? { state: app.alignment.state, sealed: app.alignment.sealed, parties: app.alignment.parties } : null;
-  const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
   const adopted =
     app.status === "adopted" && app.decidedAt
       ? {
@@ -108,7 +105,7 @@ function SeatCards({ app }: { app: ServedApplication }) {
    * the card's tray when there is one seat, under the cards when there are
    * more. Three identical drawers read as three sets of terms.
    */
-  const drawer = (
+  return (
     <SeatTermsDrawer
       settings={parsed.ok ? parsed.settings : null}
       unreadable={!parsed.ok}
@@ -118,6 +115,39 @@ function SeatCards({ app }: { app: ServedApplication }) {
       defaultOpen
     />
   );
+}
+
+/** The card the application asks for, then its terms. */
+function ApplicationCard({ app }: { app: ServedApplication }) {
+  return (
+    <PlayerRoleCard
+      applicationId={app.id}
+      mode="proposal"
+      fallback={<SeatCards app={app} />}
+      footer={
+        <div data-package-terms="" className="sheet-night mt-6 rounded-xl bg-card p-4 text-foreground">
+          {app.seats.length > 1 && <p className="mb-3 text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>}
+          <TermsDrawer app={app} />
+        </div>
+      }
+    />
+  );
+}
+
+function SeatCards({ app }: { app: ServedApplication }) {
+  const [org, setOrg] = useState<any | null>(null);
+  const season = useSeason();
+  useEffect(() => {
+    let alive = true;
+    void loadOrg().then((o) => {
+      if (alive) setOrg(o);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
+  const drawer = <TermsDrawer app={app} />;
   const single = app.seats.length === 1;
   return (
     <div className="space-y-6">
@@ -264,7 +294,7 @@ export default function SeatApplication() {
               </p>
             </header>
 
-            <SeatCards app={app} />
+            <ApplicationCard app={app} />
 
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}

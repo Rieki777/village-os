@@ -23,7 +23,7 @@
  * Phone first: one column with 16px gutters at 375px, every control at least
  * 44px, and no row wider than the screen.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { EDIT_WORDS } from "@shared/playerCardEdit";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
@@ -32,24 +32,42 @@ import { CardHeader, RoleTiles } from "./CardHeader";
 import { AcrossSection } from "./AcrossSection";
 import { RoleInFull } from "./RoleInFull";
 import { Agreements, HowIHold, MoonTimeline, MyApplications } from "./CardLower";
-import { fetchCard } from "./playerCardApi";
+import { fetchApplicationCard, fetchCard } from "./playerCardApi";
 
 export const CARD_LOAD_WORDS = {
   failed: "This card did not load.",
   retry: "Retry",
 } as const;
 
+/**
+ * "live" is a person's card as it stands. "proposal" is the card a role
+ * application asks for (PR 3): drawn the same way, never edited, and its live
+ * sections already read "Starts once adopted" in the model.
+ */
+export type CardViewMode = "live" | "proposal";
+
 /** The card itself, from a payload already read. Exported so tests draw it without a fetch. */
-export function PlayerRoleCardView({ data, reload = () => undefined, className = "" }: { data: PlayerCardPayload; reload?: () => void; className?: string }) {
+export function PlayerRoleCardView({
+  data,
+  reload = () => undefined,
+  className = "",
+  mode = "live",
+}: {
+  data: PlayerCardPayload;
+  reload?: () => void;
+  className?: string;
+  mode?: CardViewMode;
+}) {
   const [editing, setEditing] = useState(false);
   const { card, sheets, links, viewer, timeZone } = data;
+  const mayEdit = viewer.isSelf && mode === "live";
   return (
-    <CardEditContext.Provider value={{ editing: viewer.isSelf && editing, reload, reviewHref: links.review ?? null }}>
-      <div data-player-card className={`grid gap-4 sm:gap-6 ${className}`}>
+    <CardEditContext.Provider value={{ editing: mayEdit && editing, reload, reviewHref: links.review ?? null }}>
+      <div data-player-card data-card-mode={mode} className={`grid gap-4 sm:gap-6 ${className}`}>
         <div className={`${SECTION} grid gap-5`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <CardHeader header={card.header} walletHref={links.wallet} />
-            {viewer.isSelf ? (
+            <CardHeader header={card.header} walletHref={mode === "live" ? links.wallet : undefined} />
+            {mayEdit ? (
               <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className={QUIET_BUTTON}>
                 <Pencil className="h-4 w-4" aria-hidden="true" />
                 {editing ? EDIT_WORDS.doneEditing : EDIT_WORDS.editMyCard}
@@ -78,15 +96,34 @@ export function PlayerRoleCardView({ data, reload = () => undefined, className =
   );
 }
 
-/** Fetches the card for a handle (`me` for your own) and draws it. */
-export default function PlayerRoleCard({ handle = "me", className = "" }: { handle?: string; className?: string }) {
+/**
+ * Fetches a card and draws it: a person's by handle (`me` for your own), or,
+ * with `applicationId`, the card that application asks for in proposal mode.
+ * `fallback` draws instead of the failure line when the card cannot load, and
+ * `footer` draws under the card once it has.
+ */
+export default function PlayerRoleCard({
+  handle = "me",
+  applicationId,
+  mode = applicationId ? "proposal" : "live",
+  className = "",
+  fallback,
+  footer,
+}: {
+  handle?: string;
+  applicationId?: string;
+  mode?: CardViewMode;
+  className?: string;
+  fallback?: ReactNode;
+  footer?: ReactNode;
+}) {
   const [data, setData] = useState<PlayerCardPayload | null>(null);
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => {
     let alive = true;
     setFailed(false);
-    void fetchCard(handle).then((r) => {
+    void (applicationId ? fetchApplicationCard(applicationId) : fetchCard(handle)).then((r) => {
       if (!alive) return;
       if (r.ok) setData(r.data);
       else setFailed(true);
@@ -94,9 +131,19 @@ export default function PlayerRoleCard({ handle = "me", className = "" }: { hand
     return () => {
       alive = false;
     };
-  }, [handle]);
+  }, [handle, applicationId]);
   useEffect(() => load(), [load]);
 
+  // Arriving by a link to one role (`/profile/:handle#role-<id>`, from /roles):
+  // the section exists only once the card has loaded, so scroll to it then.
+  useEffect(() => {
+    if (!data || typeof window === "undefined") return;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id.startsWith("role-")) return;
+    document.getElementById(id)?.scrollIntoView?.({ block: "start" });
+  }, [data]);
+
+  if (failed && fallback !== undefined) return <>{fallback}</>;
   if (failed) {
     return (
       <p role="status" className="text-foreground">
@@ -108,5 +155,10 @@ export default function PlayerRoleCard({ handle = "me", className = "" }: { hand
     );
   }
   if (!data) return null;
-  return <PlayerRoleCardView data={data} reload={load} className={className} />;
+  return (
+    <>
+      <PlayerRoleCardView data={data} reload={load} className={className} mode={mode} />
+      {footer}
+    </>
+  );
 }
