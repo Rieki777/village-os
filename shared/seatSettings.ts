@@ -40,6 +40,7 @@
  * meant for the server alone.
  */
 import { canonicalJson } from "./canonicalJson";
+import { isSignKey, type SignKey } from "./roleSigns";
 
 export const SEAT_SETTINGS_VERSION = 1 as const;
 
@@ -155,6 +156,10 @@ export interface ScoreMeasure {
   measure: string;
   readFrom?: string;
   target?: string;
+  /** A key of the closed sign catalog (`shared/roleSigns.ts`). Absent reads "Not counted yet". */
+  countedBy?: SignKey;
+  /** A whole-number target for the counted sign. `target` stays the words. */
+  targetCount?: number;
 }
 export interface ScoreboardSettings {
   measures: ScoreMeasure[];
@@ -577,12 +582,15 @@ function readScoreboard(r: Reader, raw: unknown): ScoreboardSettings | undefined
     const at = `scoreboard.measures.${i}`;
     const m = r.group(at, row);
     if (!m) return [];
-    r.onlyKeys(at, m, ["measure", "readFrom", "target"]);
+    r.onlyKeys(at, m, ["measure", "readFrom", "target", "countedBy", "targetCount"]);
+    if (m.countedBy != null && !isSignKey(m.countedBy)) r.refuse(`${at}.countedBy`, "That is not a sign the platform can count.");
     const measure = r.text(`${at}.measure`, m.measure, LIMITS.measureChars, { required: true, ranks: true });
     const out = compact({
       measure,
       readFrom: r.text(`${at}.readFrom`, m.readFrom, LIMITS.measureChars, { ranks: true }),
       target: r.text(`${at}.target`, m.target, LIMITS.measureChars, { ranks: true }),
+      countedBy: isSignKey(m.countedBy) ? m.countedBy : undefined,
+      targetCount: r.whole(`${at}.targetCount`, m.targetCount, 0, 1_000_000),
     });
     return measure ? [out as ScoreMeasure] : [];
   });
