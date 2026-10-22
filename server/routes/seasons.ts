@@ -73,7 +73,7 @@ export function register(app: Express, deps: Deps): void {
     try {
       seatVoteLandsAt = deps.seatVoteLandsAt().toISOString();
     } catch (err) {
-      console.warn("[season] seat vote landing forecast failed:", (err as Error)?.message ?? err);
+      console.warn("[season] role vote landing forecast failed:", (err as Error)?.message ?? err);
     }
     // Season plans (2026-10-09): the season members plan now and its window,
     // so the banner can say "Plan your season" while it is open. Days only, and
@@ -134,10 +134,10 @@ export function register(app: Express, deps: Deps): void {
         notify,
       });
     } catch (e: any) {
-      console.error("[seasons] the season list saved and moving its seats failed:", e?.message ?? e);
+      console.error("[seasons] the season list saved and moving its roles failed:", e?.message ?? e);
       return res.status(500).json({
         ...after,
-        error: "The season list saved, and moving the seats that end with a season failed. Save again to retry moving them.",
+        error: "The season list saved, and moving the roles that end with a season failed. Save again to retry moving them.",
       });
     }
     // Seat applications waiting for the turn are seated now, not up to an hour later (season plans RC2).

@@ -165,7 +165,7 @@ export default function WorkValueEditor({
       ) : (
         <fieldset className="space-y-1.5">
           <legend className="text-xs font-medium">
-            {cadence === "cycle" ? "What it pays each seat, every cycle" : "What it pays when the work is confirmed"}
+            {cadence === "cycle" ? "What it pays each holder, every cycle" : "What it pays when the work is confirmed"}
           </legend>
           {offered.map((o) => (
             <label key={o.token} className="flex items-center gap-2 text-xs">

@@ -476,7 +476,7 @@ describe.skipIf(!DB_CONFIGURED)("the village gives it a power, and seats somebod
     expect(opened.json?.ballot?.binding).toBe(true);
     const doc = String(opened.json?.ballot?.docMarkdown);
     expect(doc).toContain("with no further vote");
-    expect(doc).toContain("The village can vote this seat back at any time");
+    expect(doc).toContain("The village can vote this role back at any time");
 
     const closed = await carry(String(opened.json.ballot.id), "Sol already does this. This makes it the village's decision.");
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
@@ -569,7 +569,7 @@ describe.skipIf(!DB_CONFIGURED)("voted in means voteable out", () => {
       body: { userId: solId, roleId: ROLE_ID, reason: "A second ask about a seat this village has already emptied by vote." },
     });
     expect(again.status).toBe(409);
-    expect(String(again.json?.error)).toContain("no seat to take back");
+    expect(String(again.json?.error)).toContain("no role to take back");
   });
 });
 

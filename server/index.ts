@@ -1959,7 +1959,7 @@ async function applyOrgRolesBackfill(): Promise<void> {
   }
   await circlesRepo.load();
   console.log(
-    `[MIGRATION] org chart as rows: ${report.seatsWritten} seat(s), ${report.circlesWritten} circle(s), ` +
+    `[MIGRATION] org chart as rows: ${report.seatsWritten} role(s), ${report.circlesWritten} circle(s), ` +
       `${report.councilsToForming} council(s) moved to forming, ${report.holdersWritten} documented holder(s)` +
       // Never silent: a looping parent in the seed would otherwise draw a
       // flat map nobody could tell from a village that IS flat.
@@ -9988,7 +9988,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to raise your hand" });
     // 0049: the map shows org seats, so this is the id a raised hand carries.
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
-    if (!role) return res.status(404).json({ error: "Seat not found" });
+    if (!role) return res.status(404).json({ error: "Role not found" });
     // Applying for an example seat writes a real submission into the
     // stewards' inbox for a role that will be deleted on retirement, leaving
     // the member's application pointing at nothing.
@@ -13492,7 +13492,7 @@ ${JSON.stringify({ members, roles: roles.map((r: any) => r.name), circles: circl
 
 ${shelf.length ? `REFERENCE, counsel only:\n${shelf.map((s) => `=== ${sectionCitation(s)} ===\n${s.body}`).join("\n\n")}\n` : ""}
 Rules:
-- ${memberCount} people can hold seats here. Propose the FEWEST roles that cover the aims they stated, and say which aim each one serves. If they ask for more structure than they have people for, say so plainly.
+- ${memberCount} people can hold roles here. Propose the FEWEST roles that cover the aims they stated, and say which aim each one serves. If they ask for more structure than they have people for, say so plainly.
 - At most ${cap} role drafts in one batch. Prioritize when there are more.
 - Ground every proposal in a brief section and name it. If the section you need is blank, ask for it instead of guessing.
 - Ask about their world, never about the software. No module choices, no settings.
@@ -14473,7 +14473,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     );
     // Seats vacate at the tombstone; the stewards hear which ones.
     for (const roleId of roleIds) {
-      await notifyAdmins("exit_opened", `A seat opened: ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
+      await notifyAdmins("exit_opened", `An opening in ${roleId} (departure resolved)`, `exit:${exit.id}:vacancy:${roleId}`);
     }
     res.json({ success: true, vacatedRoles: roleIds });
   });
@@ -14730,7 +14730,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(404).json({ error: "No such spending rule" });
     }
     if (!ruleAppliesTo(rule, viewer)) {
-      return res.status(403).json({ error: "This rule does not name a seat you hold" });
+      return res.status(403).json({ error: "This rule does not name a role you hold" });
     }
     if (rule.approval === "none") {
       return res.status(400).json({ error: "No approval is needed under this rule. Spend it well" });
@@ -14853,7 +14853,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // 0103: ACT. A spending rule says what this village's money may do.
     const { ctx: actCtx, verdict } = await resourcesDeclareAct(req, declareCtx);
     if (!mayDeclareResources(ruleDeclareTarget(req.body, orgRoles), actCtx)) {
-      return refuseDeclare(res, verdict, "Declaring here takes admin, org.declare, or this circle's speaking seat");
+      return refuseDeclare(res, verdict, "Declaring here takes admin, org.declare, or this circle's speaking role");
     }
     // An edit must clear the gate for the row it OVERWRITES, not only the
     // destination it names. Without this, a declarer for circle A could send
@@ -14872,7 +14872,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(400).json({ error: "No such circle" });
     }
     if (req.body.scope === "role" && !orgRoles.some((r) => r.id === String(req.body.scopeId))) {
-      return res.status(400).json({ error: "No such seat" });
+      return res.status(400).json({ error: "No such role" });
     }
     const id = await upsertRule(getPool(), req.body, adminActor(req)?.id ?? user?.id ?? null);
     // The first real declaration retires the module's standing examples.
@@ -22297,7 +22297,7 @@ ${inner}
           body:
             outcome === "no_quorum"
               ? "Nothing has changed and nothing is lost. The ask can go to the village again whenever it is more gathered."
-              : `${outcomeNote}\n\nThe seat is held by whoever held it before, and the village can ask again.`,
+              : `${outcomeNote}\n\nThe role is held by whoever held it before, and the village can ask again.`,
           link: ballotLink(b),
           actorUserId: actorId,
           dedupeKey: `bal:${b.id}:seat-not-carried`,
@@ -22307,7 +22307,7 @@ ${inner}
 
       const role = rolesRepo.all().find((r: any) => r.id === asked.roleId) as any;
       if (!role) {
-        out.held = `The role "${asked.roleId}" is no longer one of this village's roles, so there was no seat to fill.`;
+        out.held = `The role "${asked.roleId}" is no longer one of this village's roles, so there was no role to fill.`;
         await notifyAdmins("governance", `A carried seating could not land: ${b.title}`, `bal:${b.id}:seat-held`);
         return out;
       }
@@ -22443,7 +22443,7 @@ ${inner}
           body:
             outcome === "no_quorum"
               ? "Nothing has changed and nothing is lost. The ask can go to the village again whenever it is more gathered."
-              : `${outcomeNote}\n\nThe seat is held exactly as it was, and the village can ask again.`,
+              : `${outcomeNote}\n\nThe role is held exactly as it was, and the village can ask again.`,
           link: ballotLink(b),
           actorUserId: actorId,
           dedupeKey: `bal:${b.id}:unseat-not-carried`,
@@ -22470,7 +22470,7 @@ ${inner}
          * person left. The vote is not wrong and nothing is broken, so this is
          * a plain statement of where things stand and never a failure.
          */
-        out.held = "That seat was already empty when the vote closed, so there was nothing to take back.";
+        out.held = "That role was already empty when the vote closed, so there was nothing to take back.";
         return out;
       }
 
@@ -24906,7 +24906,7 @@ ${inner}
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     const ctx = await capabilityCtx(user);
-    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Taking a seat back")) return;
+    if (await refuseUnlessMemberMayOpen(req, res, ctx, "Taking a role back")) return;
 
     const userId = String(req.body?.userId ?? "").trim();
     const roleId = String(req.body?.roleId ?? "").trim();
@@ -24915,7 +24915,7 @@ ${inner}
     const role = rolesRepo.all().find((r: any) => r.id === roleId) as any;
     if (!role) return res.status(404).json({ error: "There is no role by that name." });
     if (!loadRoleHolders().some((h) => h.roleId === roleId && h.userId === userId)) {
-      return res.status(409).json({ error: "Nobody by that id sits in that role, so there is no seat to take back." });
+      return res.status(409).json({ error: "Nobody by that id sits in that role, so there is no role to take back." });
     }
     const member = await members.byId(userId);
     if (!member) {
@@ -24926,7 +24926,7 @@ ${inner}
        * sentence names the state instead of the lookup that failed.
        */
       return res.status(409).json({
-        error: "That seat is held by an account this village no longer has, so there is nobody for the village to vote about. An administrator can clear the seat.",
+        error: "That role is held by an account this village no longer has, so there is nobody for the village to vote about. An administrator can clear the role.",
       });
     }
     const subjectRef = `${userId}@${roleId}`;
@@ -24944,7 +24944,7 @@ ${inner}
 
     const can = roleConsequences(role);
     const who = role.name ?? roleId;
-    const title = `${who}: the village asks to take the seat back from ${firstName(member.name)}`;
+    const title = `${who}: the village asks to take the role back from ${firstName(member.name)}`;
     const doc = [
       `# ${title}`,
       "",
@@ -24982,14 +24982,14 @@ ${inner}
     });
     if (!result.ok) return res.status(409).json({ error: result.error, ballotId: result.alreadyOpen?.id ?? null });
 
-    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} keeps the seat in ${who}.`, {
+    await addActivity("governance", `The village is deciding whether ${firstName(member.name)} keeps the role in ${who}.`, {
       actorUserId: user.id,
       entityType: "ballot",
       entityRef: result.ballot.id,
     });
     void notifyRoll(result.ballot, {
       type: "ballot_opened",
-      title: `The village is asked whether ${firstName(member.name)} keeps the seat in ${who}`,
+      title: `The village is asked whether ${firstName(member.name)} keeps the role in ${who}`,
       body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
       keySuffix: "open",
       except: [user.id],
@@ -25651,10 +25651,10 @@ ${inner}
   app.get("/org/roles/:id.md", async (req, res) => {
     if (!orgExportLive()) return notPublished(res, DARK);
     const id = String(req.params.id ?? "");
-    if (!isSlug(id)) return notPublished(res, "No such seat");
+    if (!isSlug(id)) return notPublished(res, "No such role");
     const doc = await loadOrgExport();
     const seat = doc.seats.find((s) => s.id === id);
-    if (!seat) return notPublished(res, "No such seat");
+    if (!seat) return notPublished(res, "No such role");
     md(res, seatMarkdown(doc, seat));
   });
 

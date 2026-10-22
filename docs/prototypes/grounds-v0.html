@@ -1778,7 +1778,7 @@
 <div id="walkCard"></div>
 <div id="orgmap">
  <div id="orgHead"><h3>◎ The Circles</h3>
-  <span class="sub">the same village, drawn as its circles. Tap any node to walk to its door · drag to move, pinch or scroll to zoom · open seats pulse as open calls</span></div>
+  <span class="sub">the same village, drawn as its circles. Tap any node to walk to its door · drag to move, pinch or scroll to zoom · open roles pulse as open calls</span></div>
  <svg id="orgSvg" viewBox="0 0 1600 1050" preserveAspectRatio="xMidYMid meet"></svg>
 </div>
 <div id="skin">
@@ -5288,7 +5288,7 @@ function districtWord(s){if(!seedGeography())return 'the land';
 function showHover(s,anchor){const q=questsAt(s.key).length,st=seatsAt(s.key).filter(seatOpen).length;
   hc.innerHTML=`<h3>${escq(s.name)}</h3><div class="circ">${s.circle?escq(circleWords(s.circle)):'needs a steward'} · ${escq(districtWord(s))}</div>
   <div class="state">${STATE_LABEL[s.state]}${s.fund?` · pool ${Math.round(s.fund*100)}%`:''}</div>
-  <div class="row"><span>⚑ <b>${q}</b> quest${q===1?'':'s'}</span><span>⛨ <b>${st}</b> seat${st===1?'':'s'} open</span></div>
+  <div class="row"><span>⚑ <b>${q}</b> quest${q===1?'':'s'}</span><span>⛨ <b>${st}</b> role${st===1?'':'s'} open</span></div>
   ${s.event?`<div class="row"><span>✦ ${escq(s.event)}</span></div>`:''}
   ${(window.eventsAt&&eventsAt(s.key).length)?`<div class="row"><span>✦ ${escq(eventsAt(s.key)[0].when)}: ${escq(eventsAt(s.key)[0].title)}</span></div>`:''}
   ${(window.LOTS&&LOTS[s.key])?`<div class="row"><span>⌂ ${LOTS[s.key].sold} of ${LOTS[s.key].total} spoken for · ${LOTS[s.key].total-LOTS[s.key].sold} open</span></div>${housingTag(s.key)?`<div class="row"><span style="color:#a3703d">${housingTag(s.key)}</span></div>`:''}`:''}
@@ -5310,7 +5310,7 @@ function openPanel(key,tab,item){const s=BY[key];if(!s){toast('That place is no 
   travelTo(s.x,s.y,Math.max(cam.z,1.25));
   if(item)setHash('#/place/'+key+'?item='+item); // the badge you tapped, in the address bar
   panelHead(s);
-  const tabs=['Overview','Quests here','Seats here','Photos','Enter →'];
+  const tabs=['Overview','Quests here','Roles here','Photos','Enter →'];
   $('tabs').innerHTML=tabs.map((t,i)=>`<button data-i="${i}">${t}</button>`).join('');
   [...$('tabs').children].forEach(b=>b.onclick=()=>renderTab(+b.dataset.i));
   renderTab(tab||0);maiaContext(s);if(item)focusItem(item)}
@@ -5351,7 +5351,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     ${(window.LOTS&&LOTS[s.key])?`<p style="margin-top:6px;font-size:12px;color:#6b4d1e">⌂ <b>${LOTS[s.key].sold} of ${LOTS[s.key].total}</b> lots spoken for · ${LOTS[s.key].total-LOTS[s.key].sold} open${housingSet(s.key)?' · reserve through the door below':''}</p>${housingSet(s.key)?'':`<p style="margin:3px 0 0;font-size:11.5px;color:#a3703d">${housingNote(s.key)}</p>`}`:''}
     ${window.eventCard?eventCard(s):''}
     ${doorBtns(s)}
-    <p style="margin-top:8px;font-size:12px;color:#6b4d1e">⚑ ${q.length} quests · ⛨ ${st.filter(seatOpen).length} open seat${st.filter(seatOpen).length===1?'':'s'} · 💬 ${threadsAt(s.key).length} conversation${threadsAt(s.key).length===1?'':'s'}${s.event?' · ✦ '+escq(s.event):''}</p>
+    <p style="margin-top:8px;font-size:12px;color:#6b4d1e">⚑ ${q.length} quests · ⛨ ${st.filter(seatOpen).length} open role${st.filter(seatOpen).length===1?'':'s'} · 💬 ${threadsAt(s.key).length} conversation${threadsAt(s.key).length===1?'':'s'}${s.event?' · ✦ '+escq(s.event):''}</p>
     ${threadsAt(s.key).length?`<div style="margin-top:8px">${head('what people are saying here')}
       ${threadsAt(s.key).map(t=>`<button type="button" class="cvrow" data-item="${escq(itemAddr('talk',t))}" onclick="openDoor('forum',{at:'${escj(s.key)}'})"><span>💬</span><span><b>${escq(t.title)}</b><small>${escq(t.author)} · ${escq(t.replies)} replies · ${escq(t.last)} ago${t.src==='sample'?' · sample':''}</small></span></button>`).join('')}
       </div>`:''}
@@ -5390,8 +5390,8 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
     body.innerHTML=ordered.length?ordered.map(x=>{const full=roleState(x)==='full',unl=seatUnlisted(x);
       return `<div class="seatrow" data-item="${escq(itemAddr('seat',x))}"><div class="nm"><b>${escq(x.s)}</b><span>${escq(circleWords(x.c))}${x.note?' · '+escq(x.note):''}</span>${seatWho(x)}${unl?`<span class="why">Drawn on this map. Not one of the village's roles yet.</span>`:''}</div>
       ${full?`<span class="held">held</span>`:unl?'':`<a class="btn" href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">Raise a hand ↗</a>`}</div>`}).join('')+
-      `<div class="lastv">${any?'Raise a hand opens':'The village keeps its roles on'} <a href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">the circles view</a>${any?'. That is where the village keeps its roles, and where a member\'s raised hand reaches the seat.':'.'}</div>`
-    :`<p>No seats are drawn at this place.</p>`}
+      `<div class="lastv">${any?'Raise a hand opens':'The village keeps its roles on'} <a href="${escq(siteHref(circ))}" target="_blank" rel="noopener" onclick="return siteNav(event,'${circ}')">the circles view</a>${any?'. That is where the village keeps its roles, and where a member\'s raised hand reaches the role.':'.'}</div>`
+    :`<p>No roles are drawn at this place.</p>`}
   if(i===3){const ph=(window.PLACE_PHOTOS||{})[s.key]||[];
     /* Member-authored text reaching HTML for the first time in this file:
        alt, caption and the contributor's name all go through escq. */
@@ -5406,7 +5406,7 @@ function renderTab(i){const s=BY[panelKey];if(!s)return;[...$('tabs').children].
    is public wherever the map is. */
 function seatWho(x){if(!x||!x._live||x._held==null)return '';
   const names=x._holders||[],held=x._held||0,seats=x._seats||1;
-  if(!held)return `<span class="who">${seats>1?seats+' seats, all open':'Nobody holds this seat yet'}</span>`;
+  if(!held)return `<span class="who">${seats>1?seats+' openings':'Nobody holds this role yet'}</span>`;
   const left=Math.max(0,seats-held);
   return `<span class="who">${names.length?'Held by '+escq(names.join(', ')):held+' of '+seats+' held'}${left&&names.length?' · '+left+' open':''}</span>`}
 window.seatWho=seatWho;
@@ -5523,13 +5523,13 @@ function buildWall(){
   /* The same predicate the Seats tab and What needs hands ask. A held seat is
      not listed here, and a drawn seat the village does not keep is listed
      under its own heading, so the founder can still find it to fix it. */
-  `<div class="wallhead">open seats</div>`+
+  `<div class="wallhead">open roles</div>`+
   seatList().filter(x=>seatOpen(x)&&x.at&&BY[x.at]).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at].name)} · ${escq(circleWords(x.c))}</span></button>`).join('')+
   /* D3: the village's seats with no place on the land yet. Real roles, so
      they are listed; no place, so a row opens the circles view, where the
      village keeps them, and not a building. */
   wallUnplaced()+
-  (SCENE.seats.some(seatUnlisted)?`<div class="wallhead">seats on the map, not the village's roles yet</div>`+
+  (SCENE.seats.some(seatUnlisted)?`<div class="wallhead">roles on the map, not on the village's chart yet</div>`+
     SCENE.seats.filter(seatUnlisted).map(x=>`<button type="button" class="wallrow" onclick="wallGo('${escj(x.at)}',2)"><b>⛨ ${escq(x.s)}</b><span>${escq(BY[x.at]?BY[x.at].name:'?')} · drawn here, matched to no role</span></button>`).join(''):'')+
   `<div class="wallhead">open quests</div>`+
   SCENE.quests.map(x=>{const go=!!(x.at&&BY[x.at]),tag=go?'button':'div';
@@ -5538,7 +5538,7 @@ function buildWall(){
 function wallUnplaced(){if(typeof orgUnplaced!=='function'||!ORG_CIRCLES)return '';
   const u=orgUnplaced(),circ='/map/circles';
   const go=`href="${escq(siteHref(circ))}" onclick="return siteNav(event,'${circ}')"`;
-  return (u.seats.length?`<div class="wallhead">the village's seats, not placed on the land yet</div>`+
+  return (u.seats.length?`<div class="wallhead">the village's roles, not placed on the land yet</div>`+
     u.seats.map(x=>`<a class="wallrow" ${go}><b>⛨ ${escq(x.s)}</b><span>${escq(circleWords(x.c))} · ${seatOpen(x)?'open':'held'} · no place on the map yet</span></a>`).join(''):'')+
     (u.circles.length?`<div class="wallhead">circles with no home on the land yet</div>`+
     u.circles.map(c=>`<div class="wallrow"><b>◎ ${escq(c.name)}</b><span>${buildMode?'choose it as the circle of a place, in that place\'s inspect card':'a founder gives it a home in build mode'}</span></div>`).join(''):'')}
@@ -5631,7 +5631,7 @@ $('aiGo').onclick=()=>{const w=$('aiWords').value.trim();if(!w)return;
 /* attention cycle */
 let attnIdx=0;
 const attnItems=()=>[
-  ...seatList().filter(x=>x.at&&BY[x.at]&&seatOpen(x)).map(x=>({k:'seat',at:x.at,h:`⛨ Seat open: ${x.s}`,p:`${circleWords(x.c)} needs a steady hand.${x.note?' '+x.note.replace(/[.\s]+$/,'')+'.':''}`,tab:2})),
+  ...seatList().filter(x=>x.at&&BY[x.at]&&seatOpen(x)).map(x=>({k:'seat',at:x.at,h:`⛨ Role open: ${x.s}`,p:`${circleWords(x.c)} needs a steady hand.${x.note?' '+x.note.replace(/[.\s]+$/,'')+'.':''}`,tab:2})),
   ...SCENE.quests.filter(q=>/Saturday|tonight|Thu/.test(q.r+q.need)).filter(q=>!q.at||BY[q.at]).map(x=>({k:'quest',at:(x.at&&BY[x.at])?x.at:null,h:`⚑ ${x.q}`,p:`${x.r} · ${x.need}. Real hands, real soil.`,tab:1})),
 ];
 $('attnBadge').textContent=attnItems().length;
@@ -5976,7 +5976,7 @@ function maiaSay(html,from,say){const d=document.createElement('div');d.classNam
   if(from!=='me')mvSpeak(say==null?mvStrip(html):say);
   return d}
 function maiaContext(s){const q=questsAt(s.key),st=seatsAt(s.key).filter(seatOpen);
-  const bits=[];if(q.length)bits.push(`<b>${q.length}</b> quest${q.length>1?'s':''}`);if(st.length)bits.push(`<b>${st.length}</b> open seat${st.length>1?'s':''}`);
+  const bits=[];if(q.length)bits.push(`<b>${q.length}</b> quest${q.length>1?'s':''}`);if(st.length)bits.push(`<b>${st.length}</b> open role${st.length>1?'s':''}`);
   if(s.event)bits.push(`<b>${escq(s.event)}</b>`);
   maiaSay(`${escq(s.name)}: ${escq(s.blurb.split('.')[0].toLowerCase())}. ${bits.length?('Right now: '+bits.join(' · ')+'.'):''} ${s.state==='funding'?`The pool is at <b>${Math.round(s.fund*100)}%</b>, and every pledge raises real walls.`:''}`)}
 
@@ -6031,13 +6031,13 @@ const LEX=[
      same answer the drawer's cell gives. */
   {re:/help|contribute|hands|volunteer|do something/i,fn:()=>{
     if(document.body.classList.contains('pocket')){openWall();
-      maiaSay(`Get Involved lists every open seat and quest. Tap any row and I will take you there. Claim something small; the land loves small and steady.`);return}
+      maiaSay(`Get Involved lists every open role and quest. Tap any row and I will take you there. Claim something small; the land loves small and steady.`);return}
     $('attnBtn').click();maiaSay(`Here's what needs hands. I'll cycle you through; press <b>Space</b> or the banner button for the next one. Claim something small; the land loves small and steady.`)}},
   {re:/happen|alive|news|today|pulse/i,fn:()=>aliveNow()},
   {re:/vision|master ?plan|future|dream/i,fn:()=>{setMode('vision');$('lyVision').click&&null}},
   {re:/night|dark|moon/i,fn:()=>{dayAuto=false;dayPhase=1.85;showDayHeld();maiaSay(`Night on the land. Watch the windows: every lit one is a room where the game is real.`)}},
   {re:/quest/i,fn:()=>{openPanel('greenhouse',1);maiaSay(`The Greenhouse holds the friendliest first quests. The <b>seedling census</b> is a lovely way in.`)}},
-  {re:/seat|role|job/i,fn:()=>{openWall();maiaSay(`Get Involved lists every open seat and quest in one place, the map's honest sibling. Click any row and I'll take you there.`)}},
+  {re:/seat|role|job/i,fn:()=>{openWall();maiaSay(`Get Involved lists every open role and quest in one place, the map's honest sibling. Click any row and I'll take you there.`)}},
 ];
 /* WHAT IS ALIVE, SAID FROM WHAT THE MAP HOLDS. This was one fixed sentence,
    "Today so far: Sol finished the seedling census, the Ridge crowdpool
@@ -6057,7 +6057,7 @@ function aliveNow(){
   /* A phone has no Space key, and body.pocket hides the banner it would cycle,
      so there the way in is Get Involved, which its More drawer carries. */
   const next=document.body.classList.contains('pocket')?'<b>Get Involved</b> lists them all.':'Press <b>Space</b> to see what needs them most.';
-  return maiaSay(`No live feed of the village's day reaches this map yet, so I can tell you what the map holds right now. ${bits.length?'On the land: '+bits.join(', ')+'. ':''}<b>${q}</b> open quest${q===1?'':'s'} and <b>${st}</b> open seat${st===1?'':'s'} wait for hands. ${next}`)}
+  return maiaSay(`No live feed of the village's day reaches this map yet, so I can tell you what the map holds right now. ${bits.length?'On the land: '+bits.join(', ')+'. ':''}<b>${q}</b> open quest${q===1?'':'s'} and <b>${st}</b> open role${st===1?'':'s'} wait for hands. ${next}`)}
 window.aliveNow=aliveNow;
 window.CONCIERGE_LOG=window.CONCIERGE_LOG||[];
 function conciergeMatch(txt){const t=txt.toLowerCase();
@@ -6088,9 +6088,9 @@ function conciergeMatch(txt){const t=txt.toLowerCase();
   /* Tab 2 is Seats; 1 is Quests, which is where this used to open. And the
      seat is called open only when seatOpen says it is. */
   if(seat&&seat.at){done('role',seat.s);openPanel(seat.at,2);
-    return maiaSay(seatOpen(seat)?`The <b>${escq(seat.s)}</b> seat is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`
-      :seatUnlisted(seat)?`The <b>${escq(seat.s)}</b> seat is drawn at the <b>${escq(nameOf(seat.at))}</b>, and it is not one of the village's roles yet. The circles view holds the roles the village keeps.`
-      :`The <b>${escq(seat.s)}</b> seat at the <b>${escq(nameOf(seat.at))}</b> is held.`)}
+    return maiaSay(seatOpen(seat)?`The <b>${escq(seat.s)}</b> role is open, and it sits at the <b>${escq(nameOf(seat.at))}</b>. Raise a hand from its card.`
+      :seatUnlisted(seat)?`The <b>${escq(seat.s)}</b> role is drawn at the <b>${escq(nameOf(seat.at))}</b>, and it is not on the village's chart yet. The circles view holds the roles the village keeps.`
+      :`The <b>${escq(seat.s)}</b> role at the <b>${escq(nameOf(seat.at))}</b> is held.`)}
   for(const l of LEX)if(l.re.test(txt)){done('lex',null);return l.fn()}
   done('none',null);
   /* It used to end "unmatched asks teach the village which role or place is
@@ -7195,7 +7195,7 @@ function orgWhoOnto(x,r){
    and no rings on the land. A button, because what it names is a list. */
 function orgKeyLine(){const b=$('roleUnplaced');if(!b)return;
   const n=ORG_CIRCLES?orgUnplaced().seats.length:0;
-  b.hidden=!n;b.textContent=n?n+' '+(n===1?'seat':'seats')+' not placed yet':''}
+  b.hidden=!n;b.textContent=n?n+' '+(n===1?'role':'roles')+' not placed yet':''}
 window.orgKeyLine=orgKeyLine;
 /* An untagged row belongs to everyone, and "tagged for nobody" has to read
    the same way as "not tagged at all". That is the server's own law in
@@ -7727,8 +7727,8 @@ function inspCircleHelp(s){
   const c=orgCircle(s.circle);
   if(!c)return `Emblem ring and banner wear the ${escq(circleWords(s.circle))}'s color.`;
   const home=orgHome(c),n=orgSeats().filter(x=>x.c===c.name).length+SCENE.seats.filter(x=>orgFold(x.c)===orgFold(c.name)).length;
-  return home===s.key?`This is the ${escq(c.name)}'s home on the land. Its seats gather here${n?` (${n} now)`:''}, and move with the village's roles.`
-    :`The ${escq(c.name)} already lives at ${escq(BY[home]?BY[home].name:home)}, the first place that names it. Its seats gather there.`}
+  return home===s.key?`This is the ${escq(c.name)}'s home on the land. Its roles gather here${n?` (${n} now)`:''}, and move with the village's roles.`
+    :`The ${escq(c.name)} already lives at ${escq(BY[home]?BY[home].name:home)}, the first place that names it. Its roles gather there.`}
 function seatRowH(x,here){const si=SCENE.seats.indexOf(x);
   return `<label class="checkrow"><input type="checkbox" data-seat="${si}"${here?' checked':''}><span style="flex:1"><b style="font-weight:normal;color:#fff">⛨ ${escq(x.s)}</b><span style="display:block;font-size:10px;color:#b9cf9a">${escq(circleWords(x.c))} · ${escq(x.note)}${here?'':' · at '+escq(BY[x.at]?BY[x.at].name:'?')}</span></span></label>`}
 function questRowH(q){const qi=SCENE.quests.indexOf(q);
@@ -7986,7 +7986,7 @@ function renderInspect(){const s=BY[inspKey];if(!s){closeInspect();return}
    <h5>badges · what this place shows</h5>
    <div class="insp-help insp-h-badges" style="margin-bottom:5px">every kind shows unless you turn it off here. Nothing is hidden from the lists, only from the land.</div>
    <div class="irow" style="flex-wrap:wrap;gap:4px">${['quest','seat','event','talk'].map(k=>
-     `<button class="chip${badgeOn(s,k)?' on':''}" data-bkt="${k}">${({quest:'quests',seat:'seats',event:'events',talk:'conversations'})[k]}</button>`).join('')}</div>
+     `<button class="chip${badgeOn(s,k)?' on':''}" data-bkt="${k}">${({quest:'quests',seat:'roles',event:'events',talk:'conversations'})[k]}</button>`).join('')}</div>
    <h5>doors · what this place opens</h5>
    <div>${(s.modules||[]).map((m,i)=>doorRowH(m,i)).join('')||'<div style="color:#b9af8f;font-size:11.5px;padding:2px 0">No doors yet. This building opens nothing so far.</div>'}</div>
    <div class="irow" style="margin-top:4px"><input type="text" id="iDLabel" placeholder="door label"><input type="text" id="iDRoute" placeholder="/route" style="max-width:96px"><button class="xbtn" id="iDAdd" style="color:#8fd06a">＋</button></div>
@@ -8151,7 +8151,7 @@ function bindInspect(s){const B=$('inspBody'),H=$('inspHead');
       if(row){row.label=t||null;logEdit('housing-label','structure:'+s.key,{to:row.label});undoable({t:'housing',key:s.key,before})}
       housingClean(s.key);renderInspect()}})();
   B.querySelector('#iSeatAdd').onclick=()=>{const n=B.querySelector('#iSeatName').value.trim();if(!n)return;
-    const x={s:n,at:s.key,c:s.circle||'Community',note:B.querySelector('#iSeatNote').value.trim()||'a new seat, waiting for its steward'};
+    const x={s:n,at:s.key,c:s.circle||'Community',note:B.querySelector('#iSeatNote').value.trim()||'a new role, waiting for its steward'};
     SCENE.seats.push(x);
     logEdit('seat-add','seat:'+n,{at:s.key});undoable({t:'rowAdd',coll:'seats',obj:x});refreshWork();renderInspect()};
   B.querySelectorAll('[data-qaddr]').forEach(sel=>sel.onchange=()=>{const q=SCENE.quests[+sel.dataset.qaddr];if(!q)return;
@@ -8483,7 +8483,7 @@ function renderLoom(){
   if(F.kind.seat){const rows=SCENE.seats.map((x,i)=>({x,i,p:classify(x)}))
     .filter(r=>(LOOM_STAGED.has('seat:'+r.i)||F.prov[r.p])&&(!F.circle||r.x.c===F.circle))
     .sort((a,b)=>provRank[a.p]-provRank[b.p]);
-   html+=`<section class="lsec" data-sec="seat"><h4>⛨ Roles & seats<small>${rows.length} of ${SCENE.seats.length}</small></h4>`+
+   html+=`<section class="lsec" data-sec="seat"><h4>⛨ Roles<small>${rows.length} of ${SCENE.seats.length}</small></h4>`+
     rows.map(({x,i,p})=>`<div class="lcard pv-${p}">
      <span class="lgrip" data-conn="seat:${i}" title="drag onto a place">◉</span>
      <div class="lmain"><b>${escq(x.s)}</b><small>${x.c?escq(circleWords(x.c)):''}${x.note?' · '+escq(x.note):''}${x.src==='site'?' · from the live site':''}</small>
@@ -9079,7 +9079,7 @@ function jDeep(s){
     add('The pool sits at <b>'+pc+'%</b>, and every pledge here turns into wall.',
         'The pool sits at '+pc+' percent, and every pledge here turns into wall.')}
   if(q.length){const t=q.length+' quest'+(q.length>1?'s':'')+' waiting at this door';add(escq(t)+'.',t+'.')}
-  if(se.length){const t=se.length+' open seat'+(se.length>1?'s belong':' belongs')+' to this place';add(escq(t)+'.',t+'.')}
+  if(se.length){const t=se.length+' open role'+(se.length>1?'s belong':' belongs')+' to this place';add(escq(t)+'.',t+'.')}
   if(s.event)add('Coming up: <b>'+escq(s.event)+'</b>.','Coming up: '+s.event+'.');
   if(!html.length){const t='I have nothing else recorded here yet. Ask me and I will go and find out.';add(escq(t),t)}
   return{html:html.join(' '),say:say.join(' ')}}
@@ -10618,7 +10618,7 @@ window.topFit=topFit;
     lyFlows:'The village metabolism. Each kind of moving thing wears its own mark, and the line beneath it keeps that colour.',
     msLiving:'The land itself, every building a door.',
     msCircles:'The same village as an organism: circles, roles and quests in orbit.',
-    wallBtn:'Every open seat and quest in one list. Find somewhere to help.',
+    wallBtn:'Every open role and quest in one list. Find somewhere to help.',
     loomBtn:'Every connection in one snapshot. Drag a thread to rewire the land.',
     buildBtn:'The founder’s hand: place, move, draw and bind.',
     drawBtn:'Draw zones, paths and water onto the land. Everything measures itself.',
@@ -11108,7 +11108,7 @@ const EDIT_VERBS={
   'flow-endpoint':'rerouted a flow','flow-medium':'changed what flows through','flow-via':'rerouted a flow',
   'flow-style':'changed the flow styling','label-style':'changed the label styling',
   'quest-add':'created a quest','quest-address':'moved a quest to','quest-weight':'changed the weight of a quest',
-  'seat-add':'created a seat','seat-address':'moved a seat to','address-override':'set the place of',
+  'seat-add':'created a role','seat-address':'moved a role to','address-override':'set the place of',
   'public-unlock':'opened to the public','vision-boundary-seed':'drew the vision boundary',
   'vital-override':'set a village vital','sprite-approve':'approved artwork for',
   'sprite-reroll':'asked for new artwork for',skin:'restyled the map',

@@ -419,7 +419,7 @@ function settlementFindings(
     out.push({
       area: "settlement",
       outcome: "refused",
-      sentence: "No rule is set for holding a seat through a moon, so the settlement has nothing to pay.",
+      sentence: "No rule is set for holding a role through a moon, so the settlement has nothing to pay.",
     });
     return out;
   }
@@ -427,7 +427,7 @@ function settlementFindings(
     out.push({
       area: "settlement",
       outcome: "idle",
-      sentence: "Nobody holds a seat this moon, so the settlement thanks nobody. It has a rule ready when somebody does.",
+      sentence: "Nobody holds a role this moon, so the settlement thanks nobody. It has a rule ready when somebody does.",
     });
     return out;
   }
@@ -439,7 +439,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat reads its amount from the work, and a seat has no amount to read, so it pays nothing.`,
+        sentence: `The ${tokenName} rule for holding a role reads its amount from the work, and a role has no amount to read, so it pays nothing.`,
       });
       continue;
     }
@@ -447,7 +447,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat is set to ${r.amount}, so it pays nothing.`,
+        sentence: `The ${tokenName} rule for holding a role is set to ${r.amount}, so it pays nothing.`,
       });
       continue;
     }
@@ -456,7 +456,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `${tokenName} has no faucet, so the seat rule can never issue it. A token the ledger cannot mint needs a different rule.`,
+        sentence: `${tokenName} has no faucet, so the role rule can never issue it. A token the ledger cannot mint needs a different rule.`,
       });
       continue;
     }
@@ -464,7 +464,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The seat rule pays "${r.tokenSlug}", which is not a registered token here.`,
+        sentence: `The role rule pays "${r.tokenSlug}", which is not a registered token here.`,
       });
       continue;
     }
@@ -496,7 +496,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat cannot pay, because ${capped.refusal}.`,
+        sentence: `The ${tokenName} rule for holding a role cannot pay, because ${capped.refusal}.`,
       });
       continue;
     }
@@ -504,7 +504,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} seat rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
+        sentence: `The ${tokenName} role rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
       });
       continue;
     }
@@ -517,7 +517,7 @@ function settlementFindings(
       area: "settlement",
       outcome: "issued",
       sentence:
-        `${plural(snapshot.seatCount, "seat holder", "seat holders")} each thanked ` +
+        `${plural(snapshot.seatCount, "role holder", "role holders")} each thanked ` +
         `${each} ${tokenName}, which comes to ${moon} for the moon.`,
     });
   }
@@ -727,14 +727,14 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
       outcome: moonsToClaim <= moons ? "issued" : "refused",
       sentence:
         moonsToClaim <= moons
-          ? `A seat holder gathers ${voicePerMoon} voice a moon and reaches the claim threshold of ${threshold} after ${moonsToClaim} moons, inside this run.`
-          : `A seat holder gathers ${voicePerMoon} voice a moon, so reaching the claim threshold of ${threshold} takes ${moonsToClaim} moons. This run covers ${moons}.`,
+          ? `A role holder gathers ${voicePerMoon} voice a moon and reaches the claim threshold of ${threshold} after ${moonsToClaim} moons, inside this run.`
+          : `A role holder gathers ${voicePerMoon} voice a moon, so reaching the claim threshold of ${threshold} takes ${moonsToClaim} moons. This run covers ${moons}.`,
     });
   } else {
     runFindings.push({
       area: "claims",
       outcome: "refused",
-      sentence: `No rule issues voice for holding a seat, so a seat holder never reaches the claim threshold of ${threshold}.`,
+      sentence: `No rule issues voice for holding a role, so a role holder never reaches the claim threshold of ${threshold}.`,
     });
   }
 
@@ -818,7 +818,7 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
     jobs,
     refusals,
     covered: [
-      "The moon settlement: which rules pay, to how many seat holders, and how much.",
+      "The moon settlement: which rules pay, to how many role holders, and how much.",
       "Queued dial changes, and the moon each one lands in.",
       "Claims Week, and whether one opens inside the span you ran.",
       "The giving allowance and the per-person share, at every stage of the path.",

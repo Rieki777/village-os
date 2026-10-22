@@ -371,7 +371,7 @@ describe("people beside weight", () => {
     expect(fewestHoldersFor(concentrated, 0)).toBe(0);
   });
 
-  it("counts in heads when every seat weighs the same, which is what equal mode is", () => {
+  it("counts in heads when every vote weighs the same, which is what equal mode is", () => {
     expect(fewestHoldersFor(equalNine, 97)).toBe(9);
     expect(fewestHoldersFor(equalNine, 50)).toBe(5);
     expect(everySeatWeighsAlike(equalNine)).toBe(true);
@@ -405,7 +405,7 @@ describe("people beside weight", () => {
     const dials = { unityPct: 97, quorumPct: 97 };
     const sentence = thresholdSentence(dials, equalNine);
     expect(sentence).toContain("at least 9 of 9 people");
-    expect(sentence).toContain("every seat weighs the same");
+    expect(sentence).toContain("every vote weighs the same");
     expect(peopleAndWeightFor(dials, equalNine).needsEveryone).toBe(true);
     expect(peopleAndWeightFor(dials, concentrated).needsEveryone).toBe(false);
   });
@@ -561,7 +561,7 @@ describe("whose weight the quorum counts", () => {
     const warning = reachableQuorumWarning(dials, stranded);
     expect(warning).toContain("75% of the weight");
     expect(warning).toContain("asks for 90%");
-    expect(warning).toContain("2 seats hold");
+    expect(warning).toContain("2 votes hold");
   });
 
   it("stays quiet when the weight that votes can still reach the bar", () => {

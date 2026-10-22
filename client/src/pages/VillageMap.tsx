@@ -357,7 +357,7 @@ export default function VillageMap() {
         <div className="container text-center">
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2 sm:mb-3">How Power Is Held</h1>
           <p className="hidden sm:block text-muted-foreground max-w-xl mx-auto">
-            The village's shape, how each circle decides, who holds each seat, and the seats waiting
+            The village's shape, how each circle decides, who holds each role, and the roles waiting
             for someone like you.
           </p>
         </div>
@@ -803,17 +803,17 @@ function VillageSummary({
       <div>
         <h2 className="font-display text-lg font-bold text-foreground mb-1">The whole village</h2>
         <p className="text-xs text-muted-foreground">
-          {data.circles.length} circle{data.circles.length === 1 ? "" : "s"} · {data.roles.length} seat
+          {data.circles.length} circle{data.circles.length === 1 ? "" : "s"} · {data.roles.length} role
           {data.roles.length === 1 ? "" : "s"} · {filled} of {seats} held
         </p>
         {open > 0 && (
           <p className="text-xs text-amber-700 bg-amber/10 rounded-lg px-3 py-2 mt-3">
-            {open} open call{open === 1 ? "" : "s"}: the dashed seats are waiting for someone.
+            {open} open call{open === 1 ? "" : "s"}: the dashed openings are waiting for someone.
           </p>
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Tap a circle to step inside it. Tap a seat to meet whoever holds it, or to raise your hand.
+        Tap a circle to step inside it. Tap a role to meet whoever holds it, or to raise your hand.
       </p>
       {isAdmin && (
         <button
@@ -822,7 +822,7 @@ function VillageSummary({
           data-power-walk-launch
           className="w-full text-sm bg-amber/90 text-primary-foreground rounded-lg px-4 py-2 font-semibold"
         >
-          Walk the setup: seats, methods, shape
+          Walk the setup: roles, methods, shape
         </button>
       )}
       {mayDeclareVillage && (

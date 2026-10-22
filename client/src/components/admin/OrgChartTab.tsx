@@ -117,7 +117,7 @@ export function OrgChartTab({ password }: { password: string }) {
   const drawnSeatIds = new Set(circles.flatMap((c) => (byCircle.get(c.id) ?? []).map((r) => String(r.id))));
 
   const STATE_LABEL: Record<string, string> = {
-    filled: "Filled", partial: "Partially filled", open: "Open seat", forming: "Forming",
+    filled: "Filled", partial: "Partially filled", open: "Open role", forming: "Forming",
     // Held, and overdue. Nobody has been removed; the seat is asking to be
     // reassigned because a term ran out or the season it was filled in turned.
     expired: "Term ended, awaiting reassignment",
@@ -128,9 +128,9 @@ export function OrgChartTab({ password }: { password: string }) {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Circles, the seats inside them, and who holds each seat. This is what
+          Circles, the roles inside them, and who holds each role. This is what
           /roles, /circles and /team show, and edits are live immediately.
-          Whether a seat reads as filled or open is worked out from its holders,
+          Whether a role reads as filled or open is worked out from its holders,
           so it can never say filled with nobody in it.
         </p>
       </div>
@@ -152,7 +152,7 @@ export function OrgChartTab({ password }: { password: string }) {
               : "Mandates coming up"}
           </p>
           <p className="text-xs text-gray-600 mt-0.5">
-            Everyone here is still holding their seat and still doing the work. What has run out is the
+            Everyone here is still holding their role and still doing the work. What has run out is the
             agreement to keep doing it unasked.
           </p>
           <ul className="mt-2 space-y-1">
@@ -227,7 +227,7 @@ export function OrgChartTab({ password }: { password: string }) {
                         </select>
                       </label>
                       <div className="text-xs text-gray-400 pb-2">
-                        {c.grownFromOrgRoleId && <span>Grew from a seat. </span>}
+                        {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
                         {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
                       </div>
                     </div>
@@ -272,7 +272,7 @@ export function OrgChartTab({ password }: { password: string }) {
                   return (
                     <div key={r.id} className="border border-gray-100 rounded-lg p-3">
                       <div className="grid sm:grid-cols-4 gap-2 items-end">
-                        <label className="text-xs text-gray-500">Seat
+                        <label className="text-xs text-gray-500">Role
                           <input value={d.name ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, name: e.target.value } })} />
                         </label>
@@ -283,7 +283,7 @@ export function OrgChartTab({ password }: { password: string }) {
                             {circles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                           </select>
                         </label>
-                        <label className="text-xs text-gray-500">Seats
+                        <label className="text-xs text-gray-500">Holds up to
                           <input type="number" min={1} value={d.seats ?? 1} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, seats: Number(e.target.value) } })} />
                         </label>
@@ -325,12 +325,12 @@ export function OrgChartTab({ password }: { password: string }) {
                               [r.id]: { ...d, accountabilities: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) },
                             })} />
                           <span id={`${r.id}-accountabilities-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                            The ongoing work the circle counts on this seat to keep doing. Listed on /roles.
+                            The ongoing work the circle counts on this role to keep doing. Listed on /roles.
                           </span>
                         </label>
-                        <label className="text-xs text-gray-500">Why this seat matters
+                        <label className="text-xs text-gray-500">Why this role matters
                           <textarea rows={4} value={d.whyItMatters ?? ""} className={`${inputCls} w-full mt-1`}
-                            aria-label="Why this seat matters"
+                            aria-label="Why this role matters"
                             aria-describedby={`${r.id}-why-hint`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, whyItMatters: e.target.value } })} />
                           <span id={`${r.id}-why-hint`} className="block text-[11px] text-gray-400 mt-0.5">
@@ -388,7 +388,7 @@ export function OrgChartTab({ password }: { password: string }) {
                                 className="min-h-[44px] min-w-[44px] px-2 rounded-full text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-600"
                                 onClick={async () => {
                                   const typed = window.prompt(
-                                    `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this seat's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
+                                    `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this role's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
                                   );
                                   if (typed === null) return;
                                   if (typed.trim() !== String(h.name).trim()) { toast.error("That name did not match. Nothing was changed."); return; }
@@ -437,7 +437,7 @@ export function OrgChartTab({ password }: { password: string }) {
                             }, "PUT");
                             if (ok) { toast.success("Saved"); setDraft({ ...draft, [r.id]: undefined }); void load(); }
                           }}
-                        >Save seat</button>
+                        >Save role</button>
                       </div>
 
                       {/* What the seat offers whoever holds it, through a draft (PR3). */}
@@ -452,7 +452,7 @@ export function OrgChartTab({ password }: { password: string }) {
                         <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
                           {(journal[r.id] as any[]).length === 0 && (
                             <p className="text-xs text-gray-400">
-                              Nothing recorded against this seat yet. Changes from here on will show up.
+                              Nothing recorded against this role yet. Changes from here on will show up.
                             </p>
                           )}
                           {(journal[r.id] as any[]).map((e) => (
@@ -467,7 +467,7 @@ export function OrgChartTab({ password }: { password: string }) {
                     </div>
                   );
                 })}
-                {seats.length === 0 && <p className="text-xs text-gray-400">No seats in this circle yet.</p>}
+                {seats.length === 0 && <p className="text-xs text-gray-400">No roles in this circle yet.</p>}
                 {/*
                   Creating a seat. `POST /api/admin/org/roles` has existed since
                   the org chart shipped and nothing in the browser called it, so
@@ -475,7 +475,7 @@ export function OrgChartTab({ password }: { password: string }) {
                   never add one of its own.
                 */}
                 <div className="flex flex-wrap gap-2 items-end pt-2 border-t border-gray-50">
-                  <label className="text-xs text-gray-500">Add a seat to this circle
+                  <label className="text-xs text-gray-500">Add a role to this circle
                     <input value={newSeat[c.id] ?? ""} placeholder="Welcome Host"
                       className={`${inputCls} mt-1 min-h-[44px]`}
                       onChange={(e) => setNewSeat({ ...newSeat, [c.id]: e.target.value })} />
@@ -485,9 +485,9 @@ export function OrgChartTab({ password }: { password: string }) {
                     disabled={!String(newSeat[c.id] ?? "").trim()}
                     onClick={async () => {
                       const ok = await call("/admin/org/roles", { name: String(newSeat[c.id]).trim(), circleId: c.id, seats: 1 });
-                      if (ok) { toast.success("Seat added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
+                      if (ok) { toast.success("Role added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
                     }}
-                  >Add seat</button>
+                  >Add role</button>
                 </div>
               </div>
             </div>
@@ -496,7 +496,7 @@ export function OrgChartTab({ password }: { password: string }) {
 
         {(byCircle.get("") ?? []).length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-            <h3 className="font-semibold text-amber-900 mb-2">Seats with no circle</h3>
+            <h3 className="font-semibold text-amber-900 mb-2">Roles with no circle</h3>
             <p className="text-xs text-amber-800">
               {(byCircle.get("") ?? []).map((r) => r.name).join(", ")}
             </p>

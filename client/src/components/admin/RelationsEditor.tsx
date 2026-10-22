@@ -124,7 +124,7 @@ export default function RelationsEditor({
         key: `org_role:${r.id}`,
         kind: "org_role" as NodeKind,
         id: String(r.id),
-        label: r.circleId ? `${r.name} (seat in ${circleName.get(String(r.circleId)) ?? "a circle"})` : `${r.name} (seat)`,
+        label: r.circleId ? `${r.name} (role in ${circleName.get(String(r.circleId)) ?? "a circle"})` : `${r.name} (role)`,
       })),
   ];
   const byKey = new Map(options.map((o) => [o.key, o]));
@@ -193,7 +193,7 @@ export default function RelationsEditor({
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5">
       <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-        Links between circles and seats
+        Links between circles and roles
         <InfoTip
           tip="A link joins two nodes, never two people. It stays true when the holders change, which is why it can be published."
           label="What a link joins"
@@ -261,7 +261,7 @@ export default function RelationsEditor({
                   onChange={(e) => setFromKey(e.target.value)}
                   className={`${inputCls} w-full mt-1 min-h-[44px]`}
                 >
-                  <option value="">Choose a circle or seat</option>
+                  <option value="">Choose a circle or role</option>
                   {options.map((o) => (
                     <option key={o.key} value={o.key}>
                       {o.label}
@@ -293,7 +293,7 @@ export default function RelationsEditor({
                   onChange={(e) => setToKey(e.target.value)}
                   className={`${inputCls} w-full mt-1 min-h-[44px]`}
                 >
-                  <option value="">Choose a circle or seat</option>
+                  <option value="">Choose a circle or role</option>
                   {options.map((o) => (
                     <option key={o.key} value={o.key}>
                       {o.label}
@@ -318,7 +318,7 @@ export default function RelationsEditor({
               {from && to && typeId && !sameNode
                 ? `${from.label} ${types.find((t) => t.id === typeId)?.label ?? ""} ${to.label}.`
                 : sameNode
-                  ? "A circle or a seat cannot be linked to itself."
+                  ? "A circle or a role cannot be linked to itself."
                   : "Pick both ends and a relationship to see the sentence this will draw."}
             </p>
 

@@ -28,8 +28,8 @@ describe("PowerHandNote", () => {
     );
     expect(screen.getByText("Asks to keep the shared library and its loans. It suits The Architect, which they play.")).toBeTruthy();
     const next = screen.getByText(/Saying yes here gives them nothing yet/).textContent ?? "";
-    expect(next).toContain("seat them on a role that carries it under Game Roles");
-    expect(next).toContain("give the power to a role under The Handover");
+    expect(next).toContain("add them to a power group that carries it,");
+    expect(next).toContain("give the power to a group under The Handover");
   });
 
   it("leaves the note itself to the inbox table, which prints what the member typed", () => {

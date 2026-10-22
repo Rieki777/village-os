@@ -307,7 +307,7 @@ export async function sendTaskEmails(
         await deps.notify({ userId, type: "session_task_unheld", title, link, dedupeKey: `${key}:${userId}` });
       }
     } catch (e) {
-      console.error(`[sessions] nobody was told task ${r.entryId} sits with an empty seat`, e);
+      console.error(`[sessions] nobody was told task ${r.entryId} sits with an empty role`, e);
     }
   }
 

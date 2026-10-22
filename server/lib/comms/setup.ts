@@ -291,7 +291,7 @@ function recapItem(f: SetupFacts): Omit<SetupItem, "n" | "required"> {
 
 function holdersItem(f: SetupFacts): Omit<SetupItem, "n" | "required"> {
   const label = "Who runs comms";
-  const fix = "Give a role the power to run comms in Game Roles, and seat the people who will do it.";
+  const fix = "In Power groups, give a group the power to run comms, and add the people who will do it.";
   if (f.holders === null) {
     return { key: "who-runs-comms", label, done: false, detail: "Open Comms Settings to see who holds it.", fix };
   }

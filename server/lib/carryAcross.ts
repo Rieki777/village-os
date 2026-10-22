@@ -183,7 +183,7 @@ export async function carryOne(
   }
   const plan = await planFor(pool, input.circles, draft, input.personOf);
   const target = plan.newSeats.find((s) => s.id === input.toSeatId);
-  if (!target) return { ok: false, status: 409, error: "That seat is not part of the new chart." };
+  if (!target) return { ok: false, status: 409, error: "That role is not part of the new chart." };
   const roles = await listOrgRoles(pool);
   const seat = roles.find((r) => r.id === input.toSeatId)!;
 

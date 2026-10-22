@@ -181,10 +181,22 @@ Trail and Signal are where clarity wins.
 | One of the four ways in (Investor, Village Steward, Resident, Prosperity Creator) | a path ("Walk this path") | a character |
 | Who a member plays on their sheet | a character ("Play this character", "Add a character"). Characters fill roles. | a path |
 | A unit of community training | a lesson | a module |
+| A position on the org chart (the steward role, a founder role, an operations role) | a role, a role holder, "Apply for a role", "take the role back" | a seat |
+| Putting someone into a role | seat ("Seat someone", "seated", "unseat") | |
+| How many people a role takes | "Holds up to 3", "2 of 3 held", an opening ("1 opening") | seats, open seats |
+| The admin screen that gives people powers | Power groups | Game Roles |
+| A place at a gathering | a seat ("Save me a seat", "Seat fee") | |
 
 Path, character and lesson are the founder's rulings of 2026-10-09: "path is
 the investor, resident, etc. the others should be character and then
 characters fill roles", and "Lessons or learning journey's" for training.
+
+Role is the founder's ruling of 2026-10-21: "use the word 'role' instead of
+'seat' when talking about the sociocratic style roles". The verb stays, on his
+word the same day: "You can use 'seat someone' for that verb." A seat is still
+a seat at a gathering. `scripts/check-voice.mjs` enforces the noun (its rule 6,
+SEAT_RULE); stored ids such as `org.seat` and `role_seat` keep their spelling,
+because members never read them.
 
 Never XP, gold, loot or "level up": Gratitude is thanks, never pay. Growth
 words do the job instead: you grow into a stage, and a room opens.
@@ -202,3 +214,62 @@ words do the job instead: you grow into a stage, and a room opens.
   season, moon, room. A village's own flavour comes from its settings and its
   brochure pages.
 - Flavour can dress up a fact, but it never replaces or invents one.
+
+---
+
+# R48 - the blend: the founder's picks (2026-10-21)
+
+R48 builds on R47 and changes nothing in it. It sets how warm each kind of
+line runs.
+
+On 2026-10-21 the founder compared nine real lines, each written three ways:
+A Trail (clear and quiet), B Catalyst (his broadcast warmth) and C
+Quest-giver (in-world). He picked line by line, with no one style overall.
+Today's line was kept 3 times, A was picked once, B twice and C three times.
+Read together, the picks make one voice with four temperatures.
+
+## The four temperatures
+
+1. **Frames stay clear.** Page titles, ledes and emails keep today's line
+   where it already works. Change only machinery talk, inside phrases and
+   lexicon breaks.
+2. **Thanks are short and plain.** "Thanks." and then the outcome: "Thanks.
+   You're checked in."
+3. **Thresholds are warm.** When something finishes or opens, thank the
+   people and say what opens: "Beautiful work, circle." "Finish your lessons
+   and this Quest opens to you."
+4. **Quiet places speak in-world.** Empty states, private pages and the guide
+   speak from inside the world, then give one next step: "The board is quiet.
+   Post the first Quest."
+
+The Ledger keeps its own temperature: money, rights, privacy, deleting and
+leaving stay plain and exact in every case.
+
+One more rule comes from his own edit to the Module Library line, "one card at
+a time" to "one tool at a time": name a thing by what it is, never by the
+screen element that shows it.
+
+## The picks
+
+| Line | Picked | The line |
+|---|---|---|
+| Live sessions header | today's | Hold a working call together: arrive, set the agenda, decide by consent, and leave with every action in someone's hands. |
+| Session check-in, after | A | Thanks. You're checked in. |
+| Session closed | B | Beautiful work, circle. The session is closed, and the notes are saved for everyone who was here. |
+| A Quest you can't take yet | B | Opens at Member. Finish your lessons and this Quest opens to you. |
+| Empty Quest Board | C | The board is quiet. Post the first Quest. |
+| Journal lede | C | Your journal. A few good questions wait inside, and only you can read your answers. |
+| Module Library lede | today's, his edit | Everything this platform can be, one tool at a time. |
+| Work With Us email | today's | (unchanged) |
+| Maia's voice | C | Speak as the village's guide from inside its world. Name the place and the people, then offer one next step. |
+
+The session-closed line ships as picked. Asked whether "notes" should become
+"record" (Notes already names the note entries inside a session), the founder
+ruled on 2026-10-22: "leave it as notes". The close confirmation says the
+same.
+
+## Applied first
+
+The Sessions pilot, branch `wt/voice-sessions`: the list page, the room, the
+library of waiting items and the task board. Every other zone follows once
+the founder has seen the pilot live.

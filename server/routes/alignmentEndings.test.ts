@@ -276,7 +276,7 @@ describe.skipIf(!configured)("ending aligned terms, on a real schema", () => {
     // The village heard, through the holder who aligned for it, with the seat name and a link only.
     const told = h.notices.filter((x) => x.dedupeKey.startsWith(`alignment:${t.textId}:village:notice:`));
     expect(told.map((x) => [x.userId, x.title, x.link, x.body ?? null])).toEqual([
-      ["u-hal", "Notice given on the terms for Notice keeper", `/seat-applications/${t.appId}`, null],
+      ["u-hal", "Notice given on the terms for Notice keeper", `/role-applications/${t.appId}`, null],
     ]);
     // Ana gave it, so she is not told her own act.
     expect(h.notices.some((x) => x.userId === "u-ana" && x.dedupeKey.includes(":notice:"))).toBe(false);

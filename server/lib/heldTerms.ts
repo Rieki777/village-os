@@ -50,7 +50,7 @@ export async function heldTermsFor(
     const served = v ? await presentView(v, null, async (id) => opts.nameOf(id), false) : null;
     out.set(a.id, {
       applicationId: a.id,
-      href: `/seat-applications/${encodeURIComponent(a.id)}`,
+      href: `/role-applications/${encodeURIComponent(a.id)}`,
       settings: a.settings,
       adoptedVia: a.adoptedVia,
       decidedOn: a.decidedAt ? civilDateKey(a.decidedAt, opts.timezone || "UTC") : null,

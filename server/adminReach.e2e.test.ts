@@ -266,7 +266,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     });
     expect(again.status).toBe(200);
     const journal = await call("GET", `/api/org/roles/${seatId}/journal`);
-    expect(JSON.stringify(journal.json)).toContain("why this seat matters rewritten");
+    expect(JSON.stringify(journal.json)).toContain("why this role matters rewritten");
   });
 
   it("a circle's name, purpose and status reach /api/org, with the map module OFF", async () => {

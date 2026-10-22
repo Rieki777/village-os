@@ -369,7 +369,7 @@ describe("the Markdown mirror", () => {
     expect(index).toContain("(circles/land-circle.md)");
     expect(index).toContain("(roles/water-steward.md)");
     expect(index).toContain("1 of 3 held");
-    expect(index).toContain("Seats outside any circle");
+    expect(index).toContain("Roles outside any circle");
   });
 
   it("says a recruiting seat is open to anyone", () => {
@@ -424,14 +424,14 @@ describe("the fixes the recon pass found", () => {
     // And a reader is told where the claim came from.
     expect(seat.stateSource).toBe("declared");
     const page = seatMarkdown(doc, seat);
-    expect(page).not.toContain("Held. 0 of 1 seat(s) held.");
+    expect(page).not.toContain("Held. 0 of 1 held.");
     expect(page).toContain("No holder for it is written down here");
   });
 
   it("marks a state that the count DOES back up as read from the records", () => {
     const doc = build([role("seat")], [seating("seat")], []);
     expect(doc.seats[0].stateSource).toBe("records");
-    expect(seatMarkdown(doc, doc.seats[0])).toContain("Held. 1 of 1 seat(s) held.");
+    expect(seatMarkdown(doc, doc.seats[0])).toContain("Held. 1 of 1 held.");
   });
 
   it("ignores a statusOverride that has already expired", () => {

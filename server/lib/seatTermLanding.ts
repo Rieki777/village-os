@@ -113,7 +113,7 @@ export async function termForCarriedSeat(
   if (!frozen) {
     const t = resolveSeatTerm({ calendar, capAtSeasonEnd, now });
     if (!t.ok) {
-      return { ok: false, held: `This vote opened before every seat carried a term, and the season cannot give it one now. ${t.error}` };
+      return { ok: false, held: `This vote opened before every role carried a term, and the season cannot give it one now. ${t.error}` };
     }
     return { ok: true, endsAt: t.endsAt, endsOn: t.endsOn, seasonId: t.seasonId, followsSeason: t.followsSeason };
   }
@@ -128,7 +128,7 @@ export async function termForCarriedSeat(
   if (endsAt.getTime() <= now.getTime()) {
     return {
       ok: false,
-      held: `The term this vote gave the seat ended on ${civilDateKey(endsAt, tz)}, before the vote could land, so nobody was seated. The village can ask again with a later end date.`,
+      held: `The term this vote gave the role ended on ${civilDateKey(endsAt, tz)}, before the vote could land, so nobody was seated. The village can ask again with a later end date.`,
     };
   }
   return {
@@ -207,7 +207,7 @@ export async function restampSeatsToCalendar(deps: RestampDeps): Promise<{ permi
         userId: h.userId,
         type: "term_expiring",
         title: `Your term as ${deps.roleName(h.roleId)} now ends on ${civilDateKey(move.to, tz)}`,
-        body: `This seat ends with the season, and the season's end date moved, so the seat moved with it. It used to end on ${civilDateKey(move.from, tz)}.`,
+        body: `This role ends with the season, and the season's end date moved, so the role moved with it. It used to end on ${civilDateKey(move.from, tz)}.`,
         link: "/roles",
         dedupeKey: `seat-restamp:${move.id}:${move.to.toISOString().slice(0, 10)}`,
       });
@@ -229,7 +229,7 @@ export async function restampSeatsToCalendar(deps: RestampDeps): Promise<{ permi
       userId: a.userId,
       type: "term_expiring",
       title: `Your term on ${a.roleName} now ends on ${civilDateKey(move.to, tz)}`,
-      body: `This seat ends with the season, and the season's end date moved, so the seat moved with it. It used to end on ${civilDateKey(move.from, tz)}.`,
+      body: `This role ends with the season, and the season's end date moved, so the role moved with it. It used to end on ${civilDateKey(move.from, tz)}.`,
       link: "/roles",
       dedupeKey: `org-seat-restamp:${move.id}:${move.to.toISOString().slice(0, 10)}`,
     });

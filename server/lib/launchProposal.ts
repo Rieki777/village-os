@@ -136,8 +136,8 @@ export async function launchSlateProblem(
     return {
       ok: false,
       error:
-        `Only founding members can carry the steward's seat for this first season, and ${notFounding.length === 1 ? "one of the people named is not one" : `${notFounding.length} of the people named are not`}. ` +
-        `After this season anybody can raise their hand for the seat and the village votes them in.`,
+        `Only founding members can carry the steward role for this first season, and ${notFounding.length === 1 ? "one of the people named is not one" : `${notFounding.length} of the people named are not`}. ` +
+        `After this season anybody can raise their hand for the role and the village votes them in.`,
     };
   }
   const offTheRoll = ids.filter((id) => !onTheRoll.has(id));
@@ -145,7 +145,7 @@ export async function launchSlateProblem(
     return {
       ok: false,
       error:
-        `Everybody named as a founding steward has to be on this vote's roll, because accepting the seat is part of answering this vote, and ${offTheRoll.length === 1 ? "one of them is not" : `${offTheRoll.length} of them are not`}.`,
+        `Everybody named as a founding steward has to be on this vote's roll, because accepting the role is part of answering this vote, and ${offTheRoll.length === 1 ? "one of them is not" : `${offTheRoll.length} of them are not`}.`,
     };
   }
   /*
@@ -220,23 +220,23 @@ function stewardSection(input: LaunchProposalDocInput): string[] {
   const powers = HANDOVER_SET.length;
   if (input.slate.length === 0) {
     return [
-      "## The steward's seat",
+      "## The steward role",
       "",
-      `${input.openedBy} named nobody for the steward's seat, so the village starts with it empty. ` +
-        "That stops nothing: decisions land at their landing time either way, and the village can vote anybody into the seat whenever it likes.",
+      `${input.openedBy} named nobody for the steward role, so the village starts with it empty. ` +
+        "That stops nothing: decisions land at their landing time either way, and the village can vote anybody into the role whenever it likes.",
       "",
     ];
   }
   return [
-    "## Who carries the steward's seat",
+    "## Who carries the steward role",
     "",
     `${input.openedBy} opened this vote and chose who it puts forward. Voting yes is voting for this list as well as for starting the Game.`,
     "",
     ...input.slate.map((m) => `- ${m.name}`),
     "",
-    `Each of them answers for themselves. Carrying the seat for this first season means holding all ${powers} of the powers this village has to give, and being able to stop a decision the village has already carried inside the window before it lands. Anybody named can decline, and a decline is shown here beside the vote.`,
+    `Each of them answers for themselves. Carrying the role for this first season means holding all ${powers} of the powers this village has to give, and being able to stop a decision the village has already carried inside the window before it lands. Anybody named can decline, and a decline is shown here beside the vote.`,
     "",
-    "Whoever accepts is seated when this vote carries. If nobody accepts, the seat starts empty and the village votes somebody into it whenever it likes.",
+    "Whoever accepts is seated when this vote carries. If nobody accepts, the role starts empty and the village votes somebody into it whenever it likes.",
     "",
   ];
 }

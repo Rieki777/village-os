@@ -48,13 +48,13 @@ describe("the circle peek", () => {
     const region = screen.getByRole("region", { name: "The circle you are in" });
     expect(region.textContent).toContain("Development Circle");
     // Two circles inside it, and one of three seats held: only its OWN seats.
-    expect(region.textContent).toContain("2 circles inside · 1 of 3 seats held");
+    expect(region.textContent).toContain("2 circles inside · 1 of 3 held");
   });
 
   it("counts a circle with nothing inside and no seats in plain words", () => {
     const empty = { circles: [DEV], roles: [] } as unknown as PowerData;
-    expect(peekSummary(DEV, empty)).toBe("No seats yet");
-    expect(peekSummary({ ...DEV, id: "root" }, DATA)).toBe("1 circle inside · 1 of 1 seat held");
+    expect(peekSummary(DEV, empty)).toBe("No roles yet");
+    expect(peekSummary({ ...DEV, id: "root" }, DATA)).toBe("1 circle inside · 1 of 1 held");
   });
 
   it("opens the card on a tap", () => {

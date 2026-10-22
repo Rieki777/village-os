@@ -100,6 +100,10 @@ const ALLOWLIST = {
   // notifications already carry it (server/index.ts). A second door would be
   // advertising the spelling that is being retired.
   "/wallet": "a compatibility alias for /tokens; kept for URLs already issued",
+  // The same shape. Members say role, never seat (Rye, 2026-10-21), so the page
+  // moved to /role-applications/:id and every link points there. The old
+  // spelling redirects, and stays only for emails and notices already sent.
+  "/seat-applications/:id": "the old spelling of /role-applications/:id, which redirects; kept for links already sent",
 
   // Admin-only surfaces, reached from inside Village Settings by an admin who
   // is already there. The account menu carries /admin behind a role check;

@@ -41,7 +41,7 @@ export default function ProfileImportDoor({
         <div>
           <h3 className="font-semibold text-gray-900 leading-tight">Start from your ReGen Civics profile</h3>
           <p className="text-xs text-gray-600">
-            Bring in the needs, circles and seats your project designed in the Season, and read every part before
+            Bring in the needs, circles and roles your project designed in the Season, and read every part before
             anything is set.
           </p>
         </div>

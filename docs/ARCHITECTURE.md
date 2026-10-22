@@ -890,7 +890,16 @@ editing an org chart.
 | Answers | may this account press this button | what work exists, who holds it |
 | Payload | `capabilities[]` feeding the ONE gate | aim, domain, accountabilities, seats |
 | Rows a fork is born with | `founders-circle`, `steward-circle`, `treasury`, `practitioners` | the village's own seats |
-| Edited at | Admin, Game Roles | Admin, Org Chart |
+| Edited at | Admin, Power groups (the tab key is still `game-roles`) | Admin, Org Chart |
+| Members read it as | a role (an admin reads "power group") | a role |
+
+**In code, "seat" is the org-chart role; in copy it never is.** Rye ruled on
+2026-10-21 that members say role, never "a seat", and that the verb stays
+("seat someone", "seated", "unseat"). So `seatApplications.ts`, `OrgRole.seats`,
+`org.seat` and `role_seat` keep their names, because they are stored or
+because renaming them would touch every lane, while every string a member reads
+says role. `scripts/check-voice.mjs` holds that line (its SEAT_RULE). A seat in
+copy is a place at a gathering, nothing else.
 
 Nothing in `orgChart.ts` reads or writes `roles`, and no seat grants anyone a
 capability. The bridge that would let holding a seat grant a permission group

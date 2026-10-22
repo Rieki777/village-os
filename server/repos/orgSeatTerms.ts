@@ -42,7 +42,7 @@ export async function followingOrgSeatings(pool: Pool, after: Date): Promise<Fol
     id: String(r.id),
     userId: r.user_id ? String(r.user_id) : null,
     holderKind: String(r.holder_kind),
-    roleName: String(r.role_name ?? "a seat"),
+    roleName: String(r.role_name ?? "a role"),
     seasonId: r.season_id ? String(r.season_id) : null,
     termEndsAt: r.term_ends_at instanceof Date ? r.term_ends_at : new Date(String(r.term_ends_at)),
   }));

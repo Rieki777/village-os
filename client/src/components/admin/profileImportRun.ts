@@ -225,7 +225,7 @@ async function finish(password: string, plan: ImportPlan, choices: ImportChoices
 
 export async function revertImportDraft(password: string, draftId: string): Promise<StepResult> {
   const r = await send(password, `/admin/org/drafts/${encodeURIComponent(draftId)}/revert`, "POST", {});
-  return { kind: "revert", label: "The draft", ok: r.ok, message: r.ok ? "Reverted. What was there before it is back, and the seats it made are resting." : refusal(r.json, "The draft was not reverted.") };
+  return { kind: "revert", label: "The draft", ok: r.ok, message: r.ok ? "Reverted. What was there before it is back, and the roles it made are resting." : refusal(r.json, "The draft was not reverted.") };
 }
 
 export async function withdrawImportDraft(password: string, draftId: string): Promise<StepResult> {

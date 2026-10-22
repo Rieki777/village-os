@@ -33,7 +33,7 @@ export const WAITING_URL = "/api/governance/waiting-on-me";
 /** One application waiting on the reader. */
 export interface WaitingApplication {
   id: string;
-  /** `/seat-applications/:id`, where the adopt controls are. */
+  /** `/role-applications/:id`, where the adopt controls are. */
   href: string;
   seats: string[];
   /** The circles those seats sit in, each named once, in seat order. */
@@ -84,15 +84,15 @@ export const WAITING_COPY = {
   applicationAction: "Align for the village, or put it to the village",
   draftLine: (title: string): string => `A draft to publish: ${title}`,
   draftAdds: (circles: number, seats: number): string => {
-    if (circles === 0 && seats === 0) return "It changes seats already on the chart";
-    if (circles === 0) return `It adds ${plural(seats, "seat", "seats")}`;
+    if (circles === 0 && seats === 0) return "It changes roles already on the chart";
+    if (circles === 0) return `It adds ${plural(seats, "role", "roles")}`;
     if (seats === 0) return `It adds ${plural(circles, "circle", "circles")}`;
-    return `It adds ${plural(circles, "circle", "circles")} and ${plural(seats, "seat", "seats")}`;
+    return `It adds ${plural(circles, "circle", "circles")} and ${plural(seats, "role", "roles")}`;
   },
   draftAction: "Read it and publish",
   /** The holder's notice body, beside its link to the application. */
   holderNoticeBody: "Open it to align for the village or put it to the village. It waits under Tasks on your profile too.",
-  reminderTitle: (seats: readonly string[]): string => `Still waiting on a seat holder: ${seatList(seats)}`,
+  reminderTitle: (seats: readonly string[]): string => `Still waiting on a role holder: ${seatList(seats)}`,
   reminderBody: "This application has waited two days. Open it to align for the village or put it to the village.",
 } as const;
 

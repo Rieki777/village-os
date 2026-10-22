@@ -419,19 +419,19 @@ export function seasonRunningProblem(state: SeasonRunningState): string | null {
   if (state.currentId) return null;
   if (state.configuredCount === 0) {
     return (
-      "No season is running and none is configured. Seat terms that expire each season " +
-      "cannot come due, so every seat holds indefinitely. Add a season in the Game Mechanics " +
-      "section, or move the seats to terms counted in cycles."
+      "No season is running and none is configured. Role terms that expire each season " +
+      "cannot come due, so every role holds indefinitely. Add a season in the Game Mechanics " +
+      "section, or move the roles to terms counted in cycles."
     );
   }
   if (state.allEnded) {
     return (
       `All ${state.configuredCount} configured season(s) have ended and no new one has started. ` +
-      "Seat terms that expire each season cannot come due until one does."
+      "Role terms that expire each season cannot come due until one does."
     );
   }
   return (
     `No season covers today, though ${state.configuredCount} are configured. ` +
-    "There is a gap in the season dates. Seat terms that expire each season cannot come due inside it."
+    "There is a gap in the season dates. Role terms that expire each season cannot come due inside it."
   );
 }

@@ -29,7 +29,7 @@ const searchOf = (...args: Parameters<typeof applySeatsHref>) => {
   const href = applySeatsHref(...args);
   return href.slice(href.indexOf("?"));
 };
-const cardFor = () => screen.getByRole("button", { name: /Apply for a seat/ });
+const cardFor = () => screen.getByRole("button", { name: /Apply for a role/ });
 
 describe("role_application publishes", () => {
   it("is conductable on the server", () => {
@@ -105,7 +105,7 @@ describe("role_application publishes", () => {
 
   it("picks one to five seats", () => {
     expect(fieldsFor("role_application", "subject").map((f) => [f.key, f.kind])).toEqual([["seatIds", "seatPicks"]]);
-    expect(seatsProblem([])).toMatch(/Pick the seat/);
+    expect(seatsProblem([])).toMatch(/Pick the role/);
     expect(seatsProblem(["a"])).toBeNull();
     expect(seatsProblem(["a", "b", "c", "d", "e"])).toBeNull();
     expect(seatsProblem(["a", "b", "c", "d", "e", "f"])).toMatch(/at most 5/);
@@ -139,7 +139,7 @@ describe("a wizard opened from a seat", () => {
     const six = ["s1", "s2", "s3", "s4", "s5", "s6"];
     const start = roleApplicationStart(searchOf(six));
     expect(start?.answers.seatIds).toEqual(six);
-    expect(seatsProblem(start?.answers.seatIds)).toBe("One application holds at most 5 seats.");
+    expect(seatsProblem(start?.answers.seatIds)).toBe("One application holds at most 5 roles.");
     expect(seatsProblem(roleApplicationStart(searchOf(six.slice(0, 5)))?.answers.seatIds)).toBeNull();
   });
 

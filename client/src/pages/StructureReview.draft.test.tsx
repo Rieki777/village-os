@@ -138,11 +138,11 @@ describe("the structure review after the accept", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Your draft" })).toBeTruthy();
     expect(screen.getByTestId("draft-state").textContent).toBe("Nothing is live yet. 6 changes, none blocked.");
     expect(screen.getByTestId("draft-count-New circles").textContent).toBe("2");
-    expect(screen.getByTestId("draft-count-New seats").textContent).toBe("3");
-    expect(screen.getByTestId("draft-count-Moved seats").textContent).toBe("1");
+    expect(screen.getByTestId("draft-count-New roles").textContent).toBe("3");
+    expect(screen.getByTestId("draft-count-Moved roles").textContent).toBe("1");
     // The read-only list carries the draft's seats, and the moved one says its holder stays.
     expect(screen.getAllByText("Ventures Operations Steward").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Our existing seat moves here from General Circle\. 1 person keeps it\./)).toBeTruthy();
+    expect(screen.getByText(/Our existing role moves here from General Circle\. 1 person keeps it\./)).toBeTruthy();
     // No checkbox and no choice: it is read only.
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     // What stayed behind is named, with the way to the list.
@@ -194,8 +194,8 @@ describe("the structure review after the accept", () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Publish to the live chart" }));
     const confirm = screen.getByTestId("publish-confirm");
-    expect(confirm.textContent).toContain("This puts 2 new circles, 3 new seats and 1 moved seat on the live chart at once");
-    expect(confirm.textContent).toContain("People keep their seats");
+    expect(confirm.textContent).toContain("This puts 2 new circles, 3 new roles and 1 moved role on the live chart at once");
+    expect(confirm.textContent).toContain("People keep their roles");
     expect(posts).toHaveLength(0);
 
     fireEvent.click(within(confirm).getByRole("button", { name: "Not yet" }));
@@ -210,7 +210,7 @@ describe("the structure review after the accept", () => {
     expect(posts.map((p) => p.url)).toEqual(["/api/admin/org/drafts/draft-1/publish"]);
     expect(screen.getByTestId("notice").textContent).toContain("Published");
     expect(screen.getByRole("link", { name: "See the living map" }).getAttribute("href")).toBe("/map");
-    expect(screen.getByRole("link", { name: "See every seat" }).getAttribute("href")).toBe("/roles");
+    expect(screen.getByRole("link", { name: "See every role" }).getAttribute("href")).toBe("/roles");
     expect(screen.getByTestId("step-3").getAttribute("data-state")).toBe("done");
     expect(within(screen.getByTestId("step-3")).getByText("Live now")).toBeTruthy();
   });

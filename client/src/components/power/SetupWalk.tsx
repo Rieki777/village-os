@@ -219,7 +219,7 @@ export default function SetupWalk({
           <div>
             <h3 className="font-display text-lg font-bold text-foreground mb-2">Publish structure to the network?</h3>
             <p className="text-sm text-muted-foreground mb-3">
-              The published chart carries circle names, seat names and counts, never people: it is nameless
+              The published chart carries circle names, role names and counts, never people: it is nameless
               by construction. Visitors and peer villages read the same tier.
             </p>
             <div className="flex gap-2">

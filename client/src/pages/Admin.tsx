@@ -3404,7 +3404,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Season Shapes</h2>
         <p className="text-sm text-gray-500 mt-1">
-          A shape is the working setup of a season: which circles, seats, badges
+          A shape is the working setup of a season: which circles, roles, badges
           and quests are live while it runs. Anything in no shape at all is
           permanent and a season turn never touches it.
         </p>
@@ -3454,7 +3454,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
                   onChange={(e) => void toggle(r.kind, r.id, e.target.checked)} />
                 <span className={governed(r.kind, r.id) ? "" : "text-gray-500"}>{r.name}</span>
                 <span className="text-[11px] text-gray-400">
-                  {r.kind === "circle" ? "circle" : "seat"}
+                  {r.kind === "circle" ? "circle" : "role"}
                   {!governed(r.kind, r.id) && " · permanent"}
                 </span>
               </label>
@@ -3499,7 +3499,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
             ))}
             {plan.lapsing?.length > 0 && (
               <p className="text-xs text-gray-500">
-                {plan.lapsing.length} seat(s) would reopen for reassignment.
+                {plan.lapsing.length} role(s) would reopen for reassignment.
               </p>
             )}
           </div>
@@ -5751,7 +5751,7 @@ function ExitsAdminTab({ password }: { password: string }) {
                   <button onClick={async () => {
                     if (!window.confirm("Resolve this exit? The account becomes a tombstone: identity removed, contributions kept.")) return;
                     const d = await call(`/admin/exits/${openExit.id}/resolve`);
-                    if (d) { toast.success(`Resolved${d.vacatedRoles.length ? `. Seats opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
+                    if (d) { toast.success(`Resolved${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
                   }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve (tombstone)</button>
                   <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success("They're staying"); loadState(selectedUser); load(); } }}
                     className="text-sm text-gray-500 hover:text-gray-900 px-2">They're staying</button>

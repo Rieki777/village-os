@@ -366,7 +366,7 @@ describe.skipIf(!configured)("the membership letter, on a real schema", () => {
     const r = await call("GET", "/api/aligned");
     expect(r.status).toBe(200);
     expect(r.body.kinds).toEqual([
-      { id: "seat_terms", label: "Seat terms" },
+      { id: "seat_terms", label: "Role terms" },
       { id: "membership", label: "Membership letter" },
     ]);
     const letters = await call("GET", "/api/aligned?kind=membership");

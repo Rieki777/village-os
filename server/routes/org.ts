@@ -500,7 +500,7 @@ export function register(app: Express, deps: Deps): void {
     const maySeePeople =
       (await isAdmin(req)) ||
       (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
-    if (!maySeePeople) return res.status(401).json({ error: "auth_required", message: "Sign in to see who held this seat" });
+    if (!maySeePeople) return res.status(401).json({ error: "auth_required", message: "Sign in to see who held this role" });
     const allMembers = await members.all();
     const rows = await orgRoleHistory(getPool(), req.params.id);
     res.json(
@@ -547,7 +547,7 @@ export function register(app: Express, deps: Deps): void {
    */
   app.get("/api/org/roles/:id/needs", async (req, res) => {
     if (!(await authedUser(req))) {
-      return res.status(401).json({ error: "auth_required", message: "Sign in to see what this seat is held for" });
+      return res.status(401).json({ error: "auth_required", message: "Sign in to see what this role is held for" });
     }
     const needs = await linksForSubject(getPool(), "role", String(req.params.id));
     res.json({ needs });
@@ -635,13 +635,13 @@ export function register(app: Express, deps: Deps): void {
     const mine = await unclaimedSeatingsFor(getPool(), user.name);
     const wanted = mine.find((a) => a.id === req.params.id);
     if (!wanted) {
-      return res.status(403).json({ error: "That seat is not recorded under your name" });
+      return res.status(403).json({ error: "That role is not recorded under your name" });
     }
     const roles = await listOrgRoles(getPool());
     const seatName = roles.find((r) => r.id === wanted.orgRoleId)?.name ?? wanted.orgRoleId;
     if (openSeatClaims().some((s) => s.data?.assignmentId === req.params.id && s.userId === user.id)) {
       return res.status(409).json({
-        error: "You have already asked for this seat, and a steward has it in front of them",
+        error: "You have already asked for this role, and a steward has it in front of them",
       });
     }
     const entry = {
@@ -682,7 +682,7 @@ export function register(app: Express, deps: Deps): void {
     res.json({
       success: true,
       pending: true,
-      message: "Asked. A steward confirms it, and the seat keeps everything it already knew.",
+      message: "Asked. A steward confirms it, and the role keeps everything it already knew.",
     });
   });
 
@@ -733,13 +733,13 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
     const userId = String(req.body?.userId ?? "").trim();
-    if (!userId) return res.status(400).json({ error: "Name the member this seat is being confirmed for" });
+    if (!userId) return res.status(400).json({ error: "Name the member this role is being confirmed for" });
     // Read for the seat's NAME, before the flip, and never to decide the
     // outcome: `claimSeating`'s own WHERE clause is what refuses a seating
     // that has ended, is an example, belongs to an agent or is already held.
     const before = (await listOrgAssignments(getPool(), lapseContext())).find((a) => a.id === req.params.id);
     const roles = await listOrgRoles(getPool());
-    const seatName = roles.find((r) => r.id === before?.orgRoleId)?.name ?? "a seat";
+    const seatName = roles.find((r) => r.id === before?.orgRoleId)?.name ?? "a role";
     const ok = await claimSeating(getPool(), req.params.id, userId);
     if (!ok) return res.status(409).json({ error: "That seating has already been claimed or ended" });
     const actor = await authedUser(req);
@@ -781,7 +781,7 @@ export function register(app: Express, deps: Deps): void {
     const actor = await authedUser(req);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `declined: the seat stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
+      text: `declined: the role stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: String(closed.data?.roleId ?? ""),
@@ -846,7 +846,7 @@ export function register(app: Express, deps: Deps): void {
     // names no pattern, which is every village that has not opted in.
     await captureIntoCurrentPattern(getPool(), currentPatternId(), "org_role", id);
     await recordEvent(getPool(), {
-      kind: "org", text: `seat created: ${String(req.body?.name ?? id)}`,
+      kind: "org", text: `role created: ${String(req.body?.name ?? id)}`,
       actorUserId: (await authedUser(req))?.id ?? null,
       entityType: "org_role", entityRef: id, audience: "admin",
     });
@@ -856,7 +856,7 @@ export function register(app: Express, deps: Deps): void {
   app.put("/api/admin/org/roles/:id", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
-    if (!role) return res.status(404).json({ error: "Seat not found" });
+    if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     // Refused with a sentence, not a truncation error. `expired` is a SeatState
     // in TypeScript but is DERIVED, so it is not one of the states the 0049
@@ -902,7 +902,7 @@ export function register(app: Express, deps: Deps): void {
     const wantsAgent = !!req.body?.isAgent;
     if (wantsAgent && !(await guardCapability(req, res, "org.seatAgent"))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
-    if (!role) return res.status(404).json({ error: "Seat not found" });
+    if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     const actor = await authedUser(req);
     /*

@@ -316,7 +316,11 @@ export function useRoleWord(): CatalystLabel {
   return villageWord(useGameConfig()?.project?.roleName, ROLE_FALLBACK);
 }
 
-/** What this village calls one person's OCCUPANCY of a role. Default "Seat". */
+/**
+ * The village's verb for putting someone into a role. Default "Seat" ("Seat someone").
+ * The NOUN is always the role word: Rye ruled on 2026-10-21 that members say role,
+ * never "a seat", so this word labels the act and never the thing held.
+ */
 export function useSeatWord(): CatalystLabel {
   return villageWord(useGameConfig()?.project?.seatName, SEAT_FALLBACK);
 }

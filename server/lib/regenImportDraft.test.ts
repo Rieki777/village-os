@@ -111,7 +111,7 @@ describe.skipIf(!configured)("a village started from a real ReGen Civics card", 
     const reads = preview.lines.map((l) => l.reads);
     expect(reads).toContain('Create the circle "Living Water"');
     expect(reads).toContain('Create the circle "Kitchen"');
-    expect(reads).toContain('Create the seat "River voice"');
+    expect(reads).toContain('Create the role "River voice"');
     expect(reads).toContain("Put Ana in Water keeper");
     expect(reads).toContain(`Retire the circle "${SEED[0].name}", so it rests as dormant`);
   });
@@ -140,7 +140,7 @@ describe.skipIf(!configured)("a village started from a real ReGen Civics card", 
     expect(Number(keeper.recruiting)).toBe(0);
     expect(byId.get("cook-t1").circle_id).toBe("kitchen");
     expect(Number(byId.get("river-voice-t1").recruiting)).toBe(1);
-    expect(String(byId.get("river-voice-t1").why_it_matters)).toContain("A being holds this seat: The river.");
+    expect(String(byId.get("river-voice-t1").why_it_matters)).toContain("A being holds this role: The river.");
 
     const [holders] = await pool.query<any[]>( // module-review-ok: the suite seeds and reads back rows in the scratch schema it provisioned
       "SELECT org_role_id, holder_kind, user_id, display_name FROM org_role_assignments WHERE ended_at IS NULL ORDER BY org_role_id",

@@ -63,14 +63,14 @@ export default function GameRolesTab({ password }: { password: string }) {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Game Roles</h2>
+        <h2 className="text-xl font-bold text-gray-900">Power groups</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Appoint and remove role holders. Appointments respect each role's stage
-          floor; role grants are one of the two ways a member gains capabilities.
+          Add and remove the people in each power group. Each group's stage floor
+          still applies, and a group is one of the two ways a member gains capabilities.
         </p>
       </div>
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : roles.length === 0 ? (
-        <p className="text-sm text-gray-400">No roles defined yet.</p>
+        <p className="text-sm text-gray-400">No power groups yet.</p>
       ) : (
         <div className="space-y-4">
           {roles.map((r) => (
@@ -103,7 +103,7 @@ export default function GameRolesTab({ password }: { password: string }) {
                     {h.name}
                     <button
                       onClick={() => change(r.id, h.userId, "remove")}
-                      title="Remove from this role"
+                      title="Remove from this group"
                       className="w-4 h-4 rounded-full hover:bg-gray-300 text-gray-500 flex items-center justify-center"
                     >
                       ×

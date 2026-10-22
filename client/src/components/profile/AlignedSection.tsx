@@ -38,7 +38,7 @@ import { fetchMyAlignments, fetchTheirAlignments, type ServedAlignment } from "@
 export const ALIGNED_SECTION_WORDS = {
   heading: ALIGN_WORDS.sectionHeading,
   theirs: ALIGN_WORDS.theirHeading,
-  empty: "Nothing yet. When you align with the village's letter or apply for seats, the words you align with are kept here.",
+  empty: "Nothing yet. When you align with the village's letter or apply for roles, the words you align with are kept here.",
   readWords: "Read the application",
   /** A membership letter has no application page: its words open in place (PR9). */
   readLetter: "Read the words you aligned with",

@@ -114,7 +114,7 @@ describe("the org draft built from a real card", () => {
     const cook = changes.find((c) => c.orgRoleId === "cook-t1")!;
     expect(cook.payload).toMatchObject({ circleId: "kitchen", recruiting: true, accountabilities: ["The kitchen", "the pantry", "Contribution: two mornings a week"] });
     const river = changes.find((c) => c.orgRoleId === "river-voice-t1")!;
-    expect(river.payload).toMatchObject({ recruiting: true, whyItMatters: "Meets Vitality. A being holds this seat: The river. It is open for someone to speak for it." });
+    expect(river.payload).toMatchObject({ recruiting: true, whyItMatters: "Meets Vitality. A being holds this role: The river. It is open for someone to speak for it." });
     expect(changes.filter((c) => c.op === "seat_holder" && c.orgRoleId === "river-voice-t1")).toEqual([]);
   });
 
@@ -242,7 +242,7 @@ describe("a second seat of the same name", () => {
     if (!r.ok) throw new Error(r.error);
     const plan = planImport(r.profile, FRESH, { tag: "t1" });
     const dup = plan.seats.at(-1)!;
-    expect(dup.leftOut).toContain('A second seat called "Water keeper"');
+    expect(dup.leftOut).toContain('A second role called "Water keeper"');
     expect(draftChangesFor(plan, defaultChoices(plan)).filter((c) => c.op === "create_seat" && c.payload.name === "Water keeper")).toHaveLength(1);
   });
 });
@@ -300,7 +300,7 @@ describe("the 1.0 file's own sections", () => {
       key: "seats.nextHolder",
       label: "How the next holder of most seats is chosen",
       text: "The circle chooses",
-      where: "Org Chart, on each seat",
+      where: "Org Chart, in each role",
     });
     expect(plan.notes.find((n) => n.key === "identity.timezone")?.text).toBe("America/Costa_Rica");
     expect(plan.notes.find((n) => n.key === "identity.hemisphere")?.text).toBe("Northern hemisphere");

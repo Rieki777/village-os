@@ -23,12 +23,12 @@ export const SHEET_WORDS = {
   showingBack: "Showing what it does.",
   showingFront: "Showing the card.",
   proposed: "Proposed",
-  keySeat: "Key seat",
-  keySeatGloss: "The village marked this seat as key.",
+  keySeat: "Key role",
+  keySeatGloss: "The village marked this role as key.",
   recruiting: "Recruiting",
-  recruitingGloss: "The village is looking for someone to hold this seat.",
+  recruitingGloss: "The village is looking for someone to hold this role.",
   suggestedTag: "Suggested",
-  suitsGloss: "Guessed from the seat's own words. Nobody has confirmed it yet. The picture is stock art for this class.",
+  suitsGloss: "Guessed from the role's own words. Nobody has confirmed it yet. The picture is stock art for this class.",
   readyToBeRechosen: "ready to be re-chosen",
   agent: "An agent",
   seated: "Seated",
@@ -42,14 +42,14 @@ export const SHEET_WORDS = {
   unreachable: "Held, and not reachable through the map yet.",
   raise: "Raise your hand",
   raiseConsequence: "A raised hand reaches the founding team, who will be in touch.",
-  applyConsequence: "Opens your application for this seat and its terms. A seat holder or the village adopts it.",
+  applyConsequence: "Opens your application for this role and its terms. A role holder or the village adopts it.",
   raisePlaceholder: "Why this role calls to you (optional)",
-  raiseTermLabel: "End date for your seat (optional)",
+  raiseTermLabel: "End date for your role (optional)",
   raiseSubmit: "Raise my hand",
   cancel: "Cancel",
   raised: "Hand raised. The founding team will be in touch.",
   signInToRaise: "Sign in to raise your hand",
-  nobodyWroteThisSeat: "Nobody has written down what this seat is for yet.",
+  nobodyWroteThisSeat: "Nobody has written down what this role is for yet.",
   foundingTeamWrites: "The founding team writes these down.",
   setByHand: "This state was set by hand.",
   everyoneReady: "Everyone seated here is ready to be re-chosen.",
@@ -60,7 +60,7 @@ export const SHEET_WORDS = {
   villagesWay: "The village's way.",
   proposalLead: "A preview of the text below, read the way accepting reads it.",
   proposalInvalid: "The text below is not valid JSON yet, so there is nothing to preview.",
-  seatNeedsAName: "A seat needs a name",
+  seatNeedsAName: "A role needs a name",
   whatItDoes: "What it does",
   roleUnwritten: "Nobody has written down what this role does yet.",
   powersHeading: "Powers it carries",
@@ -73,16 +73,16 @@ export const SHEET_WORDS = {
 } as const;
 
 /**
- * The line under a seat's live preview. "Shows the role you picked." was wrong
- * twice over for a seat application with several seats: it is a seat, and the
- * card shows only the first (red team U11). No count: the line says which.
+ * The line under a role application's live preview. "Shows the role you picked."
+ * alone is wrong for an application with several roles, because the card shows
+ * only the first (red team U11). No count: the line says which.
  */
 export const seatPreviewSub = (picked: number): string =>
-  picked > 1 ? "Shows the first seat you picked. Your terms cover every seat you picked." : "Shows the seat you picked.";
+  picked > 1 ? "Shows the first role you picked. Your terms cover every role you picked." : "Shows the role you picked.";
 
 export const suitsLabel = (className: string): string => `Suits ${className}`;
 export const speaksForLabel = (circle: string): string => `Speaks for ${circle}`;
-export const speaksForGloss = (circle: string): string => `This seat speaks for ${circle} on how it decides.`;
+export const speaksForGloss = (circle: string): string => `This role speaks for ${circle} on how it decides.`;
 export const moreOpenLine = (n: number): string => `+${n} more open place${n === 1 ? "" : "s"}`;
 export const notReadLine = (keys: string[]): string | null => (keys.length ? `Not read: ${keys.join(", ")}.` : null);
 export const rungLine = (stageName: string): string =>
