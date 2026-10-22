@@ -41,7 +41,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
   let handler: Handler;
   let admin = false;
   let terms = true;
-  const q = (sql: string, params: unknown[] = []) => pool.query(sql, params);
+  const q = (sql: string, params: unknown[] = []) => pool.query(sql, params); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, never a production table
 
   async function read(id: string): Promise<{ status: number; body: any }> {
     const out: { status: number; body: any } = { status: 200, body: undefined };

@@ -96,7 +96,7 @@ describe("the circle card model", () => {
         ],
       }),
     );
-    const a = find(card.sections, "adoption");
+    const a = find(card.sections, "adoption") as Extract<CircleSection, { kind: "adoption" }>;
     expect(a.slot.kind === "shown" && a.slot.value.latest).toBe("Adopted by a direct decision on 1 Oct 2026");
     expect(a.slot.kind === "shown" && a.slot.value.lines.map((l) => l.how)).toEqual([
       "Adopted by a direct decision on 1 Oct 2026",
