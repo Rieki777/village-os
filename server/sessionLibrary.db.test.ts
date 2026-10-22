@@ -12,7 +12,7 @@
  *
  * WHAT THIS PROVES THAT THE PURE TESTS CANNOT: who may add, change, withdraw
  * and take an item, measured through the real standing rule (the circle's last
- * closed session, or a live seat now); that a member with no standing in a
+ * meeting of two or more, or a live seat now); that a member with no standing in a
  * circle can neither read nor take its items, and that a refusal never says an
  * item exists; that opening a room with items is all or none and leaves no room
  * behind when it refuses; that both closes settle what they took; that a
@@ -28,8 +28,7 @@ import { forgetMemberSessions } from "./lib/liveSessions";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerTasks } from "./routes/sessionTasks";
 import { register as registerLibrary } from "./routes/sessionLibrary";
-import { lastClosedInCircle } from "./repos/liveSessions";
-import { lastClosedPerCircle } from "./repos/sessionLibrary";
+import { lastClosedInCircle, lastMeetingInCircle, lastMeetingPerCircle } from "./repos/liveSessions";
 import { SESSION_LIMITS, SESSION_REFUSALS } from "../shared/sessions";
 import { LIBRARY_NOTICES, LIBRARY_REFUSALS, type LibraryCard } from "../shared/sessionLibrary";
 
@@ -238,7 +237,7 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
   it("shows a circle's items to the people with standing in it, the bringer and admins, and to nobody else", async () => {
     // Eve: no standing anywhere. Her own item, and the one for no circle.
     expect(await titles("m-eve")).toEqual(["Compost rota", "Village picnic"]);
-    // Ben was in the garden's last closed session.
+    // Ben was in the garden's last meeting.
     expect(await titles("m-ben")).toEqual(["Seed order", "Shed roof", "Village picnic"]);
     // Cai sits in a garden seat and has never joined a session.
     const cai = await list("m-cai");
@@ -307,12 +306,15 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
   it("gives no standing for a session somebody opened and closed alone, and takes none from the circle", async () => {
     const solo = await opened("m-eve", "Eve, alone in the garden", "c-garden");
     await close("m-eve", solo);
-    // The room's own rule now reads Eve's session as the garden's last; the library reads the last real meeting.
+    // The plain last close is Eve's session; the circle's last meeting is still week 1.
     expect(Number((await lastClosedInCircle(pool, "c-garden", 0))[0].id)).toBe(solo);
+    expect(Number((await lastMeetingInCircle(pool, "c-garden", 0))[0].id)).toBe(week1);
     expect(await titles("m-eve")).toEqual(["Compost rota", "Village picnic"]);
     expect((await change("m-eve", shed, { title: "Eve's roof" })).status).toBe(404);
     expect(await titles("m-ben")).toEqual(["Seed order", "Shed roof, phase one", "Village picnic"]);
-    expect((await lastClosedPerCircle(pool)).map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
+    // Cai was in no meeting at all: his seat keeps him in the garden.
+    expect((await list("m-cai")).library.myCircleIds).toEqual(["c-garden"]);
+    expect((await lastMeetingPerCircle(pool)).map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
     // Opening a second room after it changes nothing either: she still may not take the garden's items.
     expect((await openRoom("m-eve", "Eve takes the garden", "c-garden", [shed])).status).toBe(409);
   });
@@ -488,15 +490,21 @@ describe.skipIf(!configured)("the agenda library against a real schema", () => {
     expect(await takes(seed)).toEqual([]);
   });
 
-  it("reads each circle's last closed session the way the room does, when anybody but one was in it", async () => {
-    // With no floor it is the room's own reading, circle by circle.
-    const per = await lastClosedPerCircle(pool, 0);
+  it("reads each circle's last meeting the same way for one circle and for all of them, and passes over a close one person was in", async () => {
+    // With no floor it is the plain last close, circle by circle.
+    const plain = await lastMeetingPerCircle(pool, { minPeople: 0 });
+    const met = await lastMeetingPerCircle(pool);
     for (const circleId of ["c-garden", "c-kitchen"]) {
       const one = await lastClosedInCircle(pool, circleId, 0);
-      expect(per.filter((r: any) => r.circle_id === circleId).map((r: any) => Number(r.id))).toEqual(one.map((r: any) => Number(r.id)));
+      expect(plain.filter((r: any) => r.circle_id === circleId).map((r: any) => Number(r.id))).toEqual(one.map((r: any) => Number(r.id)));
+      // With the floor, the one-circle read and the every-circle read agree.
+      const meeting = await lastMeetingInCircle(pool, circleId, 0);
+      expect(met.filter((r: any) => r.circle_id === circleId).map((r: any) => Number(r.id)), circleId).toEqual(meeting.map((r: any) => Number(r.id)));
     }
-    // With the library's floor of two, the solo and older-release closes above are passed over.
-    expect((await lastClosedPerCircle(pool)).map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
+    // The solo and older-release closes above are passed over.
+    expect(met.map((r: any) => [r.circle_id, Number(r.id)])).toEqual([["c-garden", week1]]);
+    expect(await lastMeetingPerCircle(pool, { circleIds: ["c-kitchen"] })).toEqual([]);
+    expect((await lastMeetingPerCircle(pool, { circleIds: ["c-garden"] })).map((r: any) => Number(r.id))).toEqual([week1]);
   });
 
   it("exports what a member brought, and takes it with them when they leave", async () => {

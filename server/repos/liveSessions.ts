@@ -166,13 +166,100 @@ export async function closedSessionRows(q: Queryable, limit: number): Promise<Ro
   return rowsOf(q, `SELECT ${SESSION_COLUMNS} FROM \`live_sessions\` WHERE \`status\` = 'closed' ORDER BY \`closed_at\` DESC, \`id\` DESC LIMIT ?`, [limit]);
 }
 
-/** The most recent closed session of a circle, other than this one. */
+/**
+ * The most recent closed session of a circle, other than this one, however
+ * many people were in it. The circle's last MEETING is `lastMeetingInCircle`.
+ */
 export async function lastClosedInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
     `SELECT ${SESSION_COLUMNS} FROM \`live_sessions\` WHERE \`circle_id\` = ? AND \`status\` = 'closed' AND \`id\` <> ? ` +
       "ORDER BY `closed_at` DESC, `id` DESC LIMIT 1",
     [circleId, exceptId],
+  );
+}
+
+/**
+ * A closed session is one of its circle's MEETINGS when at least this many
+ * people were in it (Rye, 2026-10-21). Any member may open a room for any
+ * circle and close it alone, so a session one person was in is never a
+ * circle's last meeting: it gives nobody standing, takes it from nobody, and
+ * never becomes the circle's "last time". The floor lives here and only here;
+ * server/lib/circleStanding.ts reads every meeting through the two functions
+ * below.
+ */
+export const MEETING_MIN_PEOPLE = 2;
+
+/**
+ * SQL for "session `alias` had at least ? people in it": one `?`, the floor.
+ * The count is the larger of the people still on its record and the count the
+ * close stored (`summary`.`counts`.`people`, server/lib/liveSessions.ts), so a
+ * meeting stays a meeting after one of its people leaves the village and their
+ * row goes. A session closed before the count was kept reads its rows alone.
+ */
+const heldWithAtLeast = (alias: string): string =>
+  `GREATEST((SELECT COUNT(*) FROM \`live_session_people\` \`p_${alias}\` WHERE \`p_${alias}\`.\`session_id\` = \`${alias}\`.\`id\`), ` +
+  `CASE WHEN JSON_VALID(\`${alias}\`.\`summary\`) ` +
+  `THEN COALESCE(CAST(JSON_EXTRACT(\`${alias}\`.\`summary\`, '$.counts.people') AS UNSIGNED), 0) ELSE 0 END) >= ?`;
+
+/**
+ * One circle's last meeting, other than this session: its latest closed
+ * session at least `MEETING_MIN_PEOPLE` people were in, picked the way
+ * `lastClosedInCircle` picks (the latest `closed_at`, the higher id on a tie).
+ */
+export async function lastMeetingInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${SESSION_COLUMNS.split(", ").map((c) => `\`s\`.${c}`).join(", ")} FROM \`live_sessions\` \`s\` ` +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`id\` <> ? AND ${heldWithAtLeast("s")} ` +
+      "ORDER BY `s`.`closed_at` DESC, `s`.`id` DESC LIMIT 1",
+    [circleId, exceptId, MEETING_MIN_PEOPLE],
+  );
+}
+
+/**
+ * The session an open room of this circle carries from ("From last time"):
+ * its latest closed session other than this one, passing over a session fewer
+ * than `MEETING_MIN_PEOPLE` people were in that left nothing behind, no agenda
+ * item and no entry. That is the shape of a room opened by mistake or as a
+ * test. A one-person session that did leave something stays last time: passing
+ * over it would hide what it parked, and offer again what it brought over from
+ * the meeting before it and dealt with.
+ */
+export async function lastTimeInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${SESSION_COLUMNS.split(", ").map((c) => `\`s\`.${c}`).join(", ")} FROM \`live_sessions\` \`s\` ` +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`id\` <> ? AND (${heldWithAtLeast("s")} ` +
+      "OR EXISTS (SELECT 1 FROM `live_session_items` `i` WHERE `i`.`session_id` = `s`.`id`) " +
+      "OR EXISTS (SELECT 1 FROM `live_session_entries` `e` WHERE `e`.`session_id` = `s`.`id`)) " +
+      "ORDER BY `s`.`closed_at` DESC, `s`.`id` DESC LIMIT 1",
+    [circleId, exceptId, MEETING_MIN_PEOPLE],
+  );
+}
+
+/**
+ * Every circle's last meeting at once, one row (`circle_id`, `id`) per circle
+ * that has one, picked the way `lastMeetingInCircle` picks. `circleIds` reads
+ * only those circles. `minPeople` is the floor's own lever for the tests that
+ * hold the two readings together: 0 is the plain last close of each circle.
+ */
+export async function lastMeetingPerCircle(
+  q: Queryable,
+  opts: { circleIds?: readonly string[]; minPeople?: number } = {},
+): Promise<RowDataPacket[]> {
+  if (opts.circleIds && none(opts.circleIds)) return [];
+  const floor = opts.minPeople ?? MEETING_MIN_PEOPLE;
+  const only = opts.circleIds ? "AND `s`.`circle_id` IN (?) " : "";
+  return rowsOf(
+    q,
+    "SELECT `s`.`circle_id`, `s`.`id` FROM `live_sessions` `s` WHERE `s`.`status` = 'closed' AND `s`.`circle_id` IS NOT NULL " +
+      only +
+      `AND ${heldWithAtLeast("s")} ` +
+      "AND NOT EXISTS (SELECT 1 FROM `live_sessions` `t` WHERE `t`.`circle_id` = `s`.`circle_id` AND `t`.`status` = 'closed' " +
+      `AND ${heldWithAtLeast("t")} ` +
+      "AND (`t`.`closed_at` > `s`.`closed_at` OR (`t`.`closed_at` = `s`.`closed_at` AND `t`.`id` > `s`.`id`)))",
+    [...(opts.circleIds ? [[...opts.circleIds]] : []), floor, floor],
   );
 }
 

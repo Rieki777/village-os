@@ -32,13 +32,13 @@
  * `mayTakeInto` adds the one rule of the room: an item fits a session of its
  * own circle, and an item for no circle fits any session.
  *
- * THE STANDING RULE is the task layer's (shared/sessionTasks.ts
- * `hostsOpenRoomInCircle`) one step tighter: a member has standing in a circle
- * when they were in its last closed session that at least two people were in,
- * or sit in one of its seats now. A session somebody opened and closed alone
- * neither gives them a circle's waiting items nor takes them from the people
- * of its last real meeting. The server measures it; the functions here read
- * the set.
+ * THE STANDING RULE is the task layer's, measured by one function for both
+ * (`standingIn`, server/lib/circleStanding.ts): a member has standing in a
+ * circle when they were in its last meeting, a closed session at least two
+ * people were in, or sit in one of its seats now. A session somebody opened
+ * and closed alone neither gives them a circle's waiting items nor takes them
+ * from the people of its last real meeting. The server measures it; the
+ * functions here read the set.
  *
  * THE PRIVACY LINE. A circle's waiting items are read by the people with
  * standing in it, by whoever brought each one, and by admins. An item for no
@@ -225,8 +225,9 @@ export interface LibrarySubject {
 /**
  * Who is asking, as the server measured it.
  *
- *   standing  the circles they were in the last closed session of, or sit in
- *             a seat of now (the task layer's rule).
+ *   standing  the circles they were in the last meeting of (two or more
+ *             people in the room), or sit in a seat of now: the task layer's
+ *             rule, from the same function.
  *   hostsIn   the circles where they facilitate or keep notes for an open
  *             session AND have standing. A session with no circle never puts
  *             anybody here: any member can open one with a title, so hosting

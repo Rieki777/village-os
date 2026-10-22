@@ -23,14 +23,13 @@
  *   broughtByItem, libraryItemIdsFor   what the room's view reads.
  *   exportLibraryFor, forgetLibraryFor  the member's own.
  *
- * ── STANDING IS THE TASK LAYER'S RULE, FOR EVERY CIRCLE AT ONCE ──────────
+ * ── STANDING IS ONE MEASURE, SHARED WITH THE TASK LAYER ──────────────────
  *
- * A member has standing in a circle when they were in its last closed session,
- * or sit in one of its seats now: a seating live and not lapsed, in a seat that
- * is active and not a standing example (the task layer's measure in
- * server/lib/sessionTasks.ts, which asks it of one circle at a time, and
- * `seatBook`'s reading of a live seat). The list asks it of every circle in one
- * read (`lastClosedPerCircle`), one step tighter (`libraryViewer` says why).
+ * A member has standing in a circle when they were in its last meeting (a
+ * closed session two or more people were in), or sit in one of its seats now:
+ * a seating live and not lapsed, in a seat the circle still keeps.
+ * `standingIn` in server/lib/circleStanding.ts measures it for the library and
+ * the task layer alike, so the two can never read a circle differently.
  *
  * ── EVERY REFUSAL COMES BEFORE THE FIRST WRITE ───────────────────────────
  *
@@ -50,7 +49,8 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import * as room from "../repos/liveSessions";
 import * as store from "../repos/sessionLibrary";
-import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
+import { listOrgAssignments, type LapseContext } from "./orgChart";
+import { standingIn } from "./circleStanding";
 import { ensureMemberNo, memberNo, namesFor, type MemberLookup, type Outcome, type Refusal } from "./liveSessions";
 import { SESSION_SOMEONE, isItemAim, type ItemAim } from "../../shared/sessions";
 import { liveSeatIdsFor } from "../../shared/sessionTasks";
@@ -134,42 +134,22 @@ export function mapLibrary(r: RowDataPacket | Record<string, unknown>): LibraryR
 
 /**
  * The asker as the contract's rights read them. Admins see everything, so
- * their standing is not measured. `hostsIn` is the circles of the open
- * sessions they facilitate or keep notes for, where they also have standing.
- *
- * ONE STEP TIGHTER THAN THE TASK LAYER, on purpose: the circle's last closed
- * session counts only when at least two people were in it
- * (`lastClosedPerCircle`). Any member may open a room for any circle and
- * close it alone, and under the plain rule that one close would hand them
- * every waiting item of the circle, with the words of the people who brought
- * them, and take the list from everybody who was at the circle's last real
- * meeting. The task layer reads only task cards through the same rule; whether
- * it should take the same step is the founder's to say.
+ * their standing is not measured. `standing` is every circle where they have
+ * it (`standingIn`, server/lib/circleStanding.ts: the circle's last meeting
+ * two or more people were in, or a live seat in a seat the circle keeps).
+ * `hostsIn` is the circles of the open sessions they facilitate or keep notes
+ * for, where they also have standing.
  */
 export async function libraryViewer(
   pool: Pool | PoolConnection,
   who: { userId: string | null; no: number | null; admin: boolean },
   deps: Pick<LibraryDeps, "lapseContext">,
 ): Promise<LibraryViewer> {
-  const standing = new Set<string>();
   const hostsIn = new Set<string>();
-  if (who.admin) return { no: who.no, admin: true, standing, hostsIn };
-  if (who.userId) {
-    const seats = liveSeatIdsFor(await listOrgAssignments(pool as Pool, deps.lapseContext?.()), who.userId);
-    if (seats.length) {
-      // A rested seat, or a standing example, puts nobody in its circle.
-      for (const role of await listOrgRoles(pool as Pool)) {
-        if (role.circleId && role.active && !role.isExample && seats.includes(role.id)) standing.add(String(role.circleId));
-      }
-    }
-  }
-  if (who.no != null && who.no > 0) {
-    const last = await store.lastClosedPerCircle(pool);
-    const circleOf = new Map(last.map((r) => [Number(r.id), String(r.circle_id)]));
-    for (const r of await room.joinedRows(pool, who.no, Array.from(circleOf.keys()))) {
-      const circleId = circleOf.get(Number(r.session_id));
-      if (circleId) standing.add(circleId);
-    }
+  if (who.admin) return { no: who.no, admin: true, standing: new Set<string>(), hostsIn };
+  const liveSeatIds = who.userId ? liveSeatIdsFor(await listOrgAssignments(pool as Pool, deps.lapseContext?.()), who.userId) : [];
+  const standing = await standingIn(pool, { no: who.no, liveSeatIds });
+  if (who.no != null && who.no > 0 && standing.size) {
     for (const r of await room.openSessionRows(pool, 50)) {
       const hosts = Number(r.facilitator_no) === who.no || (r.secretary_no != null && Number(r.secretary_no) === who.no);
       if (hosts && r.circle_id != null && standing.has(String(r.circle_id))) hostsIn.add(String(r.circle_id));

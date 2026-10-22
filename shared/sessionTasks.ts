@@ -323,9 +323,10 @@ export type TaskSubject = Pick<TaskState, "status" | "ownerNo" | "ownerSeatId" |
  * open session of the task's circle.
  *
  * STANDING in a circle is one measure on the server (`standingIn`,
- * server/lib/sessionTasks.ts): they were in the circle's last closed session,
- * or they sit in one of its seats now. Both flags below that name a circle
- * read it.
+ * server/lib/circleStanding.ts, which the agenda library reads too): they were
+ * in the circle's last meeting, a closed session two or more people were in,
+ * or they sit in one of its seats now. A session somebody closed alone is never
+ * a meeting. Both flags below that name a circle read it.
  */
 export interface TaskViewer {
   /** Their number in `live_session_members`, or null when they have never touched a session. */
@@ -339,8 +340,8 @@ export interface TaskViewer {
   hostsSource: boolean;
   /**
    * They facilitate or keep notes for an open session of the same circle, and
-   * have standing there: they were in the circle's last closed session, or
-   * they sit in one of its seats now. The server measures both.
+   * have standing there: they were in the circle's last meeting, or they sit
+   * in one of its seats now. The server measures both.
    */
   hostsOpenRoomInCircle: boolean;
   /**
