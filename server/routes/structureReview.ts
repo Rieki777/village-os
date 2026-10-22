@@ -11,7 +11,8 @@
  *
  * Registered by server/routes/review.ts and behind the same key as the review
  * queue, `intake.moderate`: the read asks `mayStillSee` (looking has no
- * break-glass), the accept asks `guardCapability`. What accepting produces is
+ * break-glass), the accept asks `guardCapability`. A live holder of
+ * `org.decide` may also read a batch once it has a draft, to publish it. What accepting produces is
  * a DRAFT, and nothing here publishes; see the header of review.ts for why
  * that boundary is load-bearing.
  *
@@ -21,6 +22,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { draftChangeCap } from "../lib/orgDrafts";
+import { openDraftBallot, ORG_DECIDE, publishDoorFor } from "../lib/orgDraftDecide";
 import { acceptStructure, batchHeader, draftForBatch, readDecisions, readStructure, type RepoCircle } from "../lib/structureReview";
 import { carryAnswer, register as registerCarry, type CarryDeps } from "./carryAcross";
 
@@ -37,7 +39,7 @@ const idList = (v: unknown): string[] | null => {
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo } = deps;
+  const { isAdmin, authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo, liveHoldersOf } = deps;
 
   /*
    * AFTER THE ACCEPT THIS ANSWERS WITH THE DRAFT. A batch accepted whole has
@@ -45,26 +47,44 @@ export function register(app: Express, deps: Deps): void {
    * has nothing to decide; both used to read as an empty batch with no word
    * about the draft just made. `draft` is the draft its proposals went into
    * (through `created_ref`), with its preview; `plan` is null when nothing
-   * waits. `mayPublish` asks the question the publish route asks, `isAdmin`.
+   * waits.
+   *
+   * `publishDoor` is the question the two publish routes ask
+   * (`publishDoorFor`, server/lib/orgDraftDecide.ts): "power" for a live holder
+   * of `org.decide`, "admin" for an admin until a launch vote has carried, and
+   * null for anybody else or for a draft the village is voting on. A holder of
+   * `org.decide` who does not keep the review queue may still read the page
+   * once the batch has a draft, because "Waiting on you" sends them here to
+   * publish it. They read the draft only: `plan` and `waiting` are the queue's
+   * leftovers and stay with whoever keeps it (`mayModerate`).
    */
   app.get("/api/review/batches/:batchId/structure", async (req, res) => {
-    if (!(await mayStillSee(req, "intake.moderate"))) return res.status(401).json({ error: "auth_required" });
+    const moderates = await mayStillSee(req, "intake.moderate");
+    const viewer = await authedUser(req);
+    const deciders = await liveHoldersOf(ORG_DECIDE);
+    if (!moderates && !(viewer && deciders.includes(String(viewer.id)))) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
     const circles = circlesRepo.all() as RepoCircle[];
     const batchId = String(req.params.batchId);
     const [read, draft] = await Promise.all([
-      readStructure(pool, circles, batchId, idList(req.query.ids)),
+      moderates ? readStructure(pool, circles, batchId, idList(req.query.ids)) : Promise.resolve(null),
       draftForBatch(pool, circles, batchId),
     ]);
     const header = read?.header ?? (draft ? await batchHeader(pool, batchId) : null);
     if (!header) return res.status(404).json({ error: "Nothing in that batch is waiting for a decision" });
+    const publishDoor =
+      draft?.status === "open" && !(await openDraftBallot(pool, draft.id))
+        ? await publishDoorFor(pool, { userId: viewer ? String(viewer.id) : null, isAdmin: await isAdmin(req) }, deciders)
+        : null;
     res.json({
       ...header,
       plan: read?.plan ?? null,
       waiting: read?.rows.length ?? 0,
       proposalChangeLimit: draftChangeCap(),
       draft,
-      mayPublish: draft?.status === "open" ? await isAdmin(req) : false,
+      mayPublish: publishDoor !== null,
+      publishDoor,
+      mayModerate: moderates,
       carry: draft?.status === "published" ? await carryAnswer(req, deps, draft.id) : null,
     });
   });
