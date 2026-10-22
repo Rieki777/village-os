@@ -218,6 +218,27 @@ export async function lastMeetingInCircle(q: Queryable, circleId: string, except
 }
 
 /**
+ * The session an open room of this circle carries from ("From last time"):
+ * its latest closed session other than this one, passing over a session fewer
+ * than `MEETING_MIN_PEOPLE` people were in that left nothing behind, no agenda
+ * item and no entry. That is the shape of a room opened by mistake or as a
+ * test. A one-person session that did leave something stays last time: passing
+ * over it would hide what it parked, and offer again what it brought over from
+ * the meeting before it and dealt with.
+ */
+export async function lastTimeInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${SESSION_COLUMNS.split(", ").map((c) => `\`s\`.${c}`).join(", ")} FROM \`live_sessions\` \`s\` ` +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`id\` <> ? AND (${heldWithAtLeast("s")} ` +
+      "OR EXISTS (SELECT 1 FROM `live_session_items` `i` WHERE `i`.`session_id` = `s`.`id`) " +
+      "OR EXISTS (SELECT 1 FROM `live_session_entries` `e` WHERE `e`.`session_id` = `s`.`id`)) " +
+      "ORDER BY `s`.`closed_at` DESC, `s`.`id` DESC LIMIT 1",
+    [circleId, exceptId, MEETING_MIN_PEOPLE],
+  );
+}
+
+/**
  * Every circle's last meeting at once, one row (`circle_id`, `id`) per circle
  * that has one, picked the way `lastMeetingInCircle` picks. `circleIds` reads
  * only those circles. `minPeople` is the floor's own lever for the tests that

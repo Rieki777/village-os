@@ -346,7 +346,8 @@ or secretary of an open session in the same circle, and admins. Standing is one 
 with the agenda library (`standingIn` in `server/lib/circleStanding.ts`): they were in the circle's
 last meeting, a closed session **at least two people were in** (a session somebody opened and
 closed alone gives nobody standing and takes it from nobody; the count is the one the close kept, so
-a meeting stays one after a member leaves the village), or they sit in one of its seats now,
+a meeting that has closed stays one after a member later leaves the village), or they sit in one of
+its seats now,
 with a term that has not lapsed, in a seat the circle still keeps (active and not a standing
 example). A seat holder who has never joined a session has standing
 too: every door reads their seats by their own id. Rye ruled on 2026-10-21 that the
@@ -457,12 +458,13 @@ and the admins.
   last met, each with its latest answer, for an action check; and the backlog of its last meeting
   (parked items, parked entries and tensions), each one a tap from this session's agenda. Something
   brought over is offered no more, and a second copy of it from the same session is refused. "Last
-  time" is the circle's last meeting, a closed session two or more people were in (`lastTimeIn` in
-  `server/lib/circleStanding.ts`), so a session somebody opened and closed alone, a test or a room
-  opened by mistake, never takes its place. A circle that has never met with two people in the room
-  carries from its last close of any size. A task is never lost this way: the action check reads
-  every open task of the circle whatever session it came from. What a one-person session parked is
-  not offered while an earlier meeting stands, and it stays on that session's record.
+  time" is the circle's last close, passing over a session one person was in that left nothing
+  behind, no agenda item and no entry (`lastTimeIn` in `server/lib/circleStanding.ts`): a test room
+  or a room opened by mistake never stands between a circle and its last meeting. A one-person
+  session that did leave something stays last time, even though it gives nobody standing: passing
+  over it would hide what it parked, and offer again what it brought over from the meeting before it
+  and dealt with. The action check reads every open task of the circle whatever session it came
+  from, so no task depends on which session is last time.
 - **The feedback inbox.** An idea for the tool, given at close, lands in the village's feedback
   inbox as an idea and stays in the village. The close form promises the inbox only, so the idea is
   recorded as not relayable (`may_relay` 0) and the feedback relay never sends it to the platform

@@ -8,7 +8,8 @@
  *   the library      server/lib/sessionLibrary.ts: who reads and rewords the
  *                    items waiting for a circle's next call
  *   the room         server/lib/liveSessions.ts and sessionTasks.ts: which
- *                    earlier session "From last time" reads
+ *                    earlier session "From last time" reads (the same floor,
+ *                    read one step looser: below)
  *
  * ── STANDING ─────────────────────────────────────────────────────────────
  *
@@ -18,18 +19,23 @@
  * Rye, 2026-10-21): any member may open a room for any circle and close it
  * alone, and that close must neither hand them the circle's work nor take it
  * from the people who were at its last real meeting. The count is the one the
- * close kept, so a meeting stays a meeting after one of its people leaves the
- * village and their row goes. A seat counts when its seating is live and its
+ * close kept, so a meeting that has closed stays one after one of its people
+ * later leaves the village and their row goes. A seat counts when its seating is live and its
  * term has not lapsed (`liveSeatIdsFor`), in a seat the circle still keeps
  * (`keptSeat`).
  *
  * ── THE CIRCLE'S LAST TIME ───────────────────────────────────────────────
  *
- * An open room carries from the circle's last meeting: its backlog and parked
+ * An open room carries from the circle's last close: its backlog and parked
  * items (`carried`), and the moment the action check groups by (`lastMetAt`).
- * A circle that has never met with two people in the room carries from its
- * last close of any size instead, so a circle of one still carries from one
- * call to the next.
+ * It passes over a session one person was in that left nothing behind, no
+ * agenda item and no entry, the shape of a room opened by mistake or as a
+ * test, so that room never stands between a circle and its last meeting. It
+ * does NOT pass over every one-person session, though standing does: a
+ * one-person session that left something behind stays last time, because
+ * passing over it would hide what it parked and offer again what it brought
+ * over from the meeting before it and dealt with
+ * (`lastTimeInCircle` in server/repos/liveSessions.ts).
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
@@ -73,14 +79,11 @@ export async function standingIn(
 }
 
 /**
- * The session an open room of this circle carries from: the circle's last
- * meeting other than `exceptId`, or, when the circle has never met with two
- * people in the room, its last close of any size. Null when it has never
- * closed a session at all.
+ * The session an open room of this circle carries from: its last close other
+ * than `exceptId`, passing over a one-person session that left nothing behind.
+ * Null when it has no such close.
  */
 export async function lastTimeIn(pool: Pool | PoolConnection, circleId: string, exceptId: number): Promise<RowDataPacket | null> {
-  const [met] = await repo.lastMeetingInCircle(pool, circleId, exceptId);
-  if (met) return met;
-  const [closed] = await repo.lastClosedInCircle(pool, circleId, exceptId);
-  return closed ?? null;
+  const [last] = await repo.lastTimeInCircle(pool, circleId, exceptId);
+  return last ?? null;
 }

@@ -1786,8 +1786,8 @@ export async function buildView(
       : null;
 
   // What carries over, for a viewer who may read the earlier record: from the
-  // circle's last meeting, so a session somebody closed alone never becomes its
-  // last time (`lastTimeIn`, server/lib/circleStanding.ts).
+  // circle's last close, passing over a session one person was in that left
+  // nothing behind (`lastTimeIn`, server/lib/circleStanding.ts).
   let carriedFrom: { prev: SessionRec; items: ItemRec[]; entries: EntryRec[]; fromLibrary: Set<number> } | null = null;
   if (s.status === "open" && s.circleId) {
     const prevRow = await lastTimeIn(pool, s.circleId, s.id);

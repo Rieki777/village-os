@@ -536,7 +536,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     await forget([kOpen]);
   });
 
-  it("counts only a meeting two or more people were in: a close made alone gives no standing, takes none, and is never last time (Rye, 2026-10-21)", async () => {
+  it("counts only a meeting two or more people were in: a close made alone gives no standing and takes none (Rye, 2026-10-21)", async () => {
     const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
     const addItem = async (who: string, id: number, title: string) => {
       const out = await as(who, "POST /api/sessions/:id/items", { params: { id: String(id) }, body: { title, aim: "explore", minutes: 10 } });
@@ -549,9 +549,8 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     await join("m-gil", km);
     await addItem("m-ana", km, "Sharpen the knives");
     expect((await close("m-ana", km)).status).toBe(200);
-    // Then Eve opens a kitchen room alone, puts her own item on it, and closes it. It is the plain last close.
+    // Then Eve opens a kitchen room alone and closes it with nothing in it, the way a test room goes. It is the plain last close.
     const solo = await open("m-eve", "Eve, alone in the kitchen", "c-kitchen");
-    await addItem("m-eve", solo, "My own idea");
     expect((await close("m-eve", solo)).status).toBe(200);
     await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` + INTERVAL 1 MINUTE WHERE `id` = ?", [solo]);
 
@@ -563,7 +562,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     // Ben was in no kitchen meeting and sits in no kitchen seat.
     expect((await record("m-ben", Number(k1))).status).toBe(403);
 
-    // The next kitchen room carries from the meeting, never from Eve's close.
+    // The next kitchen room carries from the meeting: an empty room one person was in never stands in front of it.
     const kNext = await open("m-ana", "Kitchen circle, week 7", "c-kitchen");
     const ana = (await roomAs("m-ana", kNext)).body;
     const [{ closed_at: metAt }] = await q("SELECT `closed_at` FROM `live_sessions` WHERE `id` = ?", [km]);
@@ -586,6 +585,30 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     expect(Number((await lastTimeIn(pool, "c-kitchen", kNext))?.id)).toBe(km);
     await q("INSERT INTO `live_session_people` SET ?", [gilRow]);
     await forget([kNext]);
+  });
+
+  it("keeps a one-person session that left something behind as last time, so nothing it parked is lost, and still gives it no standing", async () => {
+    const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
+    const [{ session_id: k1 }] = await q("SELECT `session_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
+    // Ana works alone in the kitchen and parks one thing for next time.
+    const alone = await open("m-ana", "Kitchen, Ana alone", "c-kitchen");
+    const hinges = await as("m-ana", "POST /api/sessions/:id/items", { params: { id: String(alone) }, body: { title: "Oil the hinges", aim: "report", minutes: 5 } });
+    expect(hinges.status, JSON.stringify(hinges.body)).toBe(200);
+    expect((await close("m-ana", alone)).status).toBe(200);
+    await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` + INTERVAL 2 MINUTE WHERE `id` = ?", [alone]);
+
+    // Her next room carries from it: what she parked is offered, and the check groups from its close.
+    const next = await open("m-ana", "Kitchen circle, week 8", "c-kitchen");
+    const ana = (await roomAs("m-ana", next)).body;
+    const [{ closed_at: aloneAt }] = await q("SELECT `closed_at` FROM `live_sessions` WHERE `id` = ?", [alone]);
+    expect(ana.carried).toMatchObject({ sessionId: alone });
+    expect(ana.carried.parkedItems.map((i: { title: string }) => i.title)).toEqual(["Oil the hinges"]);
+    expect(ana.circleLastMetAt).toBe(new Date(aloneAt).toISOString());
+    // It is still no meeting: Gil keeps his standing from the last one, and Eve gains none.
+    expect(Number((await lastMeetingInCircle(pool, "c-kitchen", next))[0].id)).not.toBe(alone);
+    expect((await record("m-gil", Number(k1))).status).toBe(200);
+    expect((await record("m-eve", Number(k1))).status).toBe(403);
+    await forget([next]);
   });
 
   it("carries no member id, no email, and no count about a person, on any board, record or room", async () => {

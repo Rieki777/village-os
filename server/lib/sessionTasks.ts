@@ -556,10 +556,9 @@ async function userIdOf(pool: Pool | PoolConnection, no: number | null): Promise
  * sits in one of the circle's seats reads the cards before they have joined a
  * session and been given a number.
  *
- * `lastMetAt` is the close of the circle's last meeting (`lastTimeIn`: a
- * session somebody closed alone is passed over), the line the check groups
- * by. A task finished after that meeting is read as new even when a one-person
- * session closed since, because nobody heard it there. It comes only with cards, so a viewer who may see none of the
+ * `lastMetAt` is the close of the session the room carries from (`lastTimeIn`:
+ * a session one person was in that left nothing behind is passed over), the
+ * line the check groups by. It comes only with cards, so a viewer who may see none of the
  * circle's tasks learns nothing about when it met.
  *
  * Best effort. The room is the thing a viewer came for, so a task layer that
@@ -575,7 +574,7 @@ export async function circleTasksFor(
   const none = { cards: [], lastMetAt: null };
   if (s.status !== "open" || !s.circleId) return none;
   try {
-    // The circle's last meeting, never a session somebody closed alone (server/lib/circleStanding.ts).
+    // The circle's last time: never a session one person was in that left nothing behind (server/lib/circleStanding.ts).
     const prev = await lastTimeIn(pool, s.circleId, s.id);
     const lastMet = prev?.closed_at ? new Date(prev.closed_at) : null;
     const metAt = lastMet && Number.isFinite(lastMet.getTime()) ? lastMet : null;

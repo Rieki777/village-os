@@ -791,9 +791,8 @@ export interface SessionView {
   /** After close: the arrival round as numbers only. */
   arrival: ArrivalSummary | null;
   /**
-   * From the circle's last meeting (a closed session two or more people were
-   * in; a circle that never met with two carries from its last close): its
-   * open actions and its backlog.
+   * From the circle's last close, passing over a session one person was in
+   * that left nothing behind: its open actions and its backlog.
    */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
   /**
@@ -804,9 +803,9 @@ export interface SessionView {
    */
   circleTasks: TaskCard[];
   /**
-   * When the circle last met: the close of its last meeting, the session
-   * `carried` comes from, which the action check groups by. Null when there are
-   * no `circleTasks`, or the circle has never closed a session.
+   * When the circle last met: the close of the session `carried` comes from,
+   * which the action check groups by. Null when there are no `circleTasks`, or
+   * the circle has never closed a session.
    */
   circleLastMetAt: string | null;
   me: { userId: number; joined: boolean; facilitates: boolean; secretary: boolean; admin: boolean };
