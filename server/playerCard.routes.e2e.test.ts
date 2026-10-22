@@ -11,6 +11,10 @@
  * an org draft (`update_seat`) and changes nothing on the role until it is
  * adopted. Somebody who does not hold the role is refused.
  *
+ * PR 8: the accomplishments (by accomplishmentsOf's viewer rule), the role's
+ * handover words and the six-check meter, the owner's card words and this
+ * moon's load, each read back through the card.
+ *
  * Boots the BUILT `dist/index.js` against a throwaway schema, so run
  * `pnpm build` first. Skips loudly without TEST_DATABASE_URL. In order.
  */
@@ -35,6 +39,9 @@ const ADMIN = "player-card-admin";
 const PASSWORD = "PlayerCard123!";
 const ROLE = "card-water-keeper";
 const TENSION = "The tank valve sticks on cold mornings";
+const ACCOMPLISHED = "Mend the spring cover";
+const ACCEPT_NOTE = "Done well, and early.";
+const RUNBOOK = "https://example.org/lower-tanks";
 
 let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
@@ -148,6 +155,26 @@ beforeAll(async () => {
     "INSERT INTO live_session_entries (session_id, kind, text, status, author_no, owner_seat_id) VALUES (?, 'tension', ?, 'open', ?, ?)",
     [s.insertId, TENSION, m.insertId, ROLE],
   );
+
+  // PR 8: a task the owner held in person, done and accepted, in a session the reader was never in.
+  const [task]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "INSERT INTO live_session_entries (session_id, kind, text, status, author_no) VALUES (?, 'action', ?, 'done', ?)",
+    [s.insertId, ACCOMPLISHED, m.insertId],
+  );
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "INSERT INTO live_session_task_state (entry_id, session_id, circle_id, status, owner_no, latest_kind, changed_by_no, done_at) VALUES (?, ?, NULL, 'done', ?, 'accepted', 999, UTC_TIMESTAMP())",
+    [task.insertId, s.insertId, m.insertId],
+  );
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "INSERT INTO live_session_task_events (entry_id, session_id, kind, by_no, status, owner_no, note) VALUES (?, ?, 'done', ?, 'done', ?, NULL), (?, ?, 'accepted', 999, 'done', ?, ?)",
+    [task.insertId, s.insertId, m.insertId, m.insertId, task.insertId, s.insertId, m.insertId, ACCEPT_NOTE],
+  );
+  // PR 8: the role's handover words (#534), and the owner's card words from an earlier season (#530).
+  await pool.query("UPDATE org_roles SET bring_me = ?, runbook = ? WHERE id = ?", [JSON.stringify(["Readings from the spring"]), RUNBOOK, ROLE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    "INSERT INTO season_plans (id, user_id, season_id, version, card_words_json) VALUES ('sp-card-words', ?, 'season-before', 1, ?)",
+    [ownerId, JSON.stringify({ howIHold: "In the open, one moon at a time.", growingEdge: "Asking for help early." })],
+  );
 }, E2E_BOOT_DEADLINE_MS + 60_000);
 
 afterAll(async () => {
@@ -202,8 +229,6 @@ describe.skipIf(!DB_CONFIGURED)("the player role card at three tiers", () => {
   it("lets the holder propose new words, which wait for consent and change nothing yet", async () => {
     const refused = await call("POST", `/api/people/me/role-card/roles/${ROLE}/propose`, { body: { key: "purpose", text: "Water for all." }, token: readerToken });
     expect(refused.status).toBe(403);
-    const noColumn = await call("POST", `/api/people/me/role-card/roles/${ROLE}/propose`, { body: { key: "bringMe", text: "x" }, token: ownerToken });
-    expect(noColumn.status).toBe(400);
     const ok = await call("POST", `/api/people/me/role-card/roles/${ROLE}/propose`, { body: { key: "purpose", text: "Water for all." }, token: ownerToken });
     expect(ok.status, JSON.stringify(ok.json)).toBe(200);
     const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
@@ -216,5 +241,86 @@ describe.skipIf(!DB_CONFIGURED)("the player role card at three tiers", () => {
     expect(self.json.card.roles[0].purpose.text.value).toBe("Clean water for every house.");
     const member = await card(readerToken);
     expect(member.json.card.roles[0].pending).toEqual([]);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("PR 8: the pieces wired onto the live card", () => {
+  it("carries the owner's accomplishments, by accomplishmentsOf's viewer rule", async () => {
+    const own = await card(ownerToken);
+    const moons = own.json.card.accomplished.moons;
+    expect(moons.kind, JSON.stringify(own.json.card.accomplished)).toBe("shown");
+    const items = moons.value.flatMap((m: any) => m.items);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ title: ACCOMPLISHED, note: ACCEPT_NOTE });
+    expect(items[0].accepted).toMatch(/^Accepted on /);
+    expect(moons.value[0].label).toMatch(/ to /);
+    // An admin reads every one.
+    const admin = await call("GET", "/api/people/wren-card/role-card");
+    expect(admin.json.card.accomplished.moons.kind).toBe("shown");
+    // A member who was never in the session reads none of it.
+    const member = await card(readerToken);
+    expect(member.json.card.accomplished.moons).toEqual({ kind: "empty", words: "Nothing accepted as accomplished yet" });
+    expect(JSON.stringify(member.json)).not.toContain(ACCOMPLISHED);
+    // A stranger reads no tasks at all.
+    expect((await card(null)).json.card.accomplished.moons).toEqual({ kind: "unread" });
+  });
+
+  it("reads the role's handover words and counts the meter from the shared six checks", async () => {
+    for (const token of [null, readerToken, ownerToken]) {
+      const role = (await card(token)).json.card.roles[0];
+      expect(role.bringMe.items).toEqual({ kind: "shown", value: ["Readings from the spring"] });
+      expect(role.runbook).toEqual({ heading: "Runbook", text: { kind: "shown", value: RUNBOOK } });
+      expect(role.notMine.items).toEqual({ kind: "empty", words: "Not written yet" });
+      // Purpose, decide, count on me, bring me and the runbook: five of six, never a percentage.
+      expect(role.handover.summary).toBe("5 of 6 ready");
+      expect(role.handover.checks.map((c: any) => c.key)).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook"]);
+      expect(role.handover.checks.find((c: any) => c.key === "notMine").words).toBe("Not mine to hold is not written yet");
+      expect(JSON.stringify(role.handover)).not.toContain("%");
+    }
+  });
+
+  it("feeds the owner's card words to the card, whatever the season, at the member tier and up", async () => {
+    const own = (await card(ownerToken)).json.card;
+    expect(own.across.growingEdge.text).toEqual({ kind: "shown", value: "Asking for help early." });
+    expect(own.howIHold.items).toEqual({ kind: "shown", value: [{ label: "How I hold my roles", text: "In the open, one moon at a time." }] });
+    const member = (await card(readerToken)).json.card;
+    expect(member.across.growingEdge.text.kind).toBe("shown");
+    const stranger = (await card(null)).json.card;
+    expect(stranger.across.growingEdge.text).toEqual({ kind: "unread" });
+    expect(JSON.stringify(stranger)).not.toContain("Asking for help early.");
+  });
+
+  it("saves the load from the card's route and reads it back; the card's words say no season with a 409", async () => {
+    const on = await call("PUT", "/api/admin/modules/governance/lifecycle", { body: { lifecycle: "members", examples: false } });
+    expect(on.status, "governance must be on for the season plan routes").toBe(200);
+    expect((await card(ownerToken)).json.card.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
+    const load = await call("PUT", "/api/season-plans/mine/load", { body: { level: 4 }, token: ownerToken });
+    expect(load.status, JSON.stringify(load.json)).toBe(200);
+    expect((await card(ownerToken)).json.card.across.load.own).toEqual({ kind: "shown", value: { step: 4, words: "Leaning heavy" } });
+    expect((await card(readerToken)).json.card.across.load.own.kind).toBe("shown");
+    // No season is set up in this suite, so the planning window is closed.
+    const words = await call("PUT", "/api/season-plans/mine/card", { body: { cardWords: { growingEdge: "x" } }, token: ownerToken });
+    expect(words.status).toBe(409);
+    expect(words.json.error).toBe("no_season");
+  });
+
+  it("proposes the handover words as one update_seat change, and refuses a link that is not https", async () => {
+    const bad = await call("POST", `/api/people/me/role-card/roles/${ROLE}/propose`, { body: { key: "runbook", text: "http://example.org/run" }, token: ownerToken });
+    expect(bad.status).toBe(400);
+    expect(bad.json.error).toBe("Links need to start with https://.");
+    const ok = await call("POST", `/api/people/me/role-card/roles/${ROLE}/propose`, { body: { key: "notMine", text: "Money\nHiring" }, token: ownerToken });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(200);
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT c.op, c.org_role_id, c.payload FROM org_draft_changes c WHERE c.draft_id = ?",
+      [ok.json.draftId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ op: "update_seat", org_role_id: ROLE });
+    const payload = typeof rows[0].payload === "string" ? JSON.parse(rows[0].payload) : rows[0].payload;
+    expect(payload).toEqual({ notMine: ["Money", "Hiring"] });
+    const self = await card(ownerToken);
+    expect(self.json.card.roles[0].pending).toContain("notMine");
+    // Nothing changes on the role until the draft is adopted.
+    expect(self.json.card.roles[0].notMine.items).toEqual({ kind: "empty", words: "Not written yet" });
   });
 });
