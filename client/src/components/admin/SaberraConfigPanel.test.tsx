@@ -249,7 +249,11 @@ describe("the connection", () => {
     lifecycle = "preview";
     renderPanel();
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeInTheDocument();
-    expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0);
+    // The button renders from the lifecycle alone, so it can be on screen before
+    // the status fetch is recorded: this assertion read 0 on one CI shard while
+    // the identical tree passed on another. The outbox line below always waited;
+    // this one did not, and that was the whole difference.
+    await waitFor(() => expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0));
     // The outbox listing sits behind the same gate and is asked for the same way.
     expect(await screen.findByText("What Saberra would receive")).toBeInTheDocument();
     await waitFor(() => expect(callsTo("/api/saberra/outbox").length).toBeGreaterThan(0));
