@@ -6,7 +6,9 @@
  * (version 12). Its order is this file's order: the header; one tile per
  * role; what runs across every role; each role in full, title first and its
  * purpose straight after; the moon timeline; how I hold my roles; my
- * applications; my agreements, with pay small at the bottom.
+ * applications; my agreements, with pay small at the bottom. Accomplished
+ * (PR 4) follows the moon timeline: the tasks whose work was accepted, by
+ * the moon the work was done in.
  *
  * Pure and node-tested (`playerCard.test.ts`), the same pattern as
  * `shared/roleSheet.ts`, whose rules it keeps:
@@ -39,6 +41,7 @@ import { formatDay, joinList, type Read } from "./roleSheet";
 import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleSigns";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
+import type { AccomplishmentMoon } from "./taskAccomplishments";
 
 export * from "./playerCardWords";
 export type { Read } from "./roleSheet";
@@ -219,6 +222,13 @@ export interface PlayerCardInput {
   roleNames: Read<Record<string, string>>;
   /** The equity token's name, for the bonus words. */
   bonusTokenName: Read<string | null>;
+  /**
+   * The owner's accepted tasks by moon, straight from `accomplishmentsFor`
+   * (shared/taskAccomplishments.ts), which `accomplishmentsOf` on the server
+   * reads for one member. Optional, so a host written before it compiles:
+   * left out is unread, and draws nothing.
+   */
+  accomplished?: Read<AccomplishmentMoon[]>;
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -334,12 +344,28 @@ export interface AgreementsOut {
   roles: { roleId: string; title: string; rows: Slot<AgreementRow[]> }[];
 }
 
+export interface AccomplishedItemOut {
+  id: string;
+  title: string;
+  /** The role it was done for, by full title, when the card knows it. */
+  roleTitle: string | null;
+  /** "Accepted on 3 November". */
+  accepted: string;
+  note: string | null;
+}
+
+export interface AccomplishedOut {
+  heading: string;
+  moons: Slot<{ label: string; startsAt: string; items: AccomplishedItemOut[] }[]>;
+}
+
 export interface PlayerCard {
   header: HeaderOut;
   tiles: { heading: string; items: Slot<TileOut[]> };
   across: AcrossOut;
   roles: RoleOut[];
   timeline: TimelineOut;
+  accomplished: AccomplishedOut;
   howIHold: { heading: string; items: Slot<{ label: string; text: string }[]> };
   applications: ApplicationsOut;
   agreements: AgreementsOut;
@@ -756,6 +782,36 @@ function agreements(input: PlayerCardInput, roles: PlayerRoleIn[]): AgreementsOu
   };
 }
 
+// ── Accomplished ───────────────────────────────────────────────────────────
+
+function accomplished(input: PlayerCardInput, roles: PlayerRoleIn[]): AccomplishedOut {
+  const heading = W.accomplished;
+  const moons = input.accomplished;
+  if (moons === undefined) return { heading, moons: UNREAD };
+  const tz = input.timeZone;
+  const titleOf = new Map(roles.map((r) => [r.id, r.name]));
+  const names = input.roleNames ?? {};
+  const out = moons
+    .map((m) => {
+      const lastDay = new Date(Date.parse(m.endsAt) - 1).toISOString();
+      return {
+        label: W.moonDates(formatDay(m.startsAt, false, tz) ?? "", formatDay(lastDay, false, tz) ?? ""),
+        startsAt: m.startsAt,
+        items: m.items
+          .filter((a) => clean(a.text))
+          .map((a) => ({
+            id: String(a.entryId),
+            title: clean(a.text)!,
+            roleTitle: a.roleId ? (titleOf.get(a.roleId) ?? clean(names[a.roleId]) ?? null) : null,
+            accepted: W.acceptedOn(formatDay(a.acceptedAt, false, tz) ?? ""),
+            note: clean(a.note),
+          })),
+      };
+    })
+    .filter((m) => m.items.length > 0);
+  return { heading, moons: out.length ? shown(out) : empty(W.noAccomplished) };
+}
+
 // ── The card ───────────────────────────────────────────────────────────────
 
 export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
@@ -777,6 +833,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
     across: across(input, roles, roleOuts),
     roles: roleOuts,
     timeline: timeline(input, list),
+    accomplished: accomplished(input, list),
     howIHold: {
       heading: W.howIHold,
       items:

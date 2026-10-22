@@ -105,6 +105,11 @@ export const CARD_WORDS = {
   gathering: (label: string, weekday: number, time: string, fortnightly: boolean, role: string) =>
     `${label}, every ${fortnightly ? "other week" : "week"} on ${WEEKDAYS[weekday] ?? "a set day"} at ${time}, for ${role}`,
 
+  // Accomplished: tasks whose work was accepted, by moon
+  accomplished: "Accomplished",
+  noAccomplished: "Nothing accepted as accomplished yet",
+  acceptedOn: (day: string) => `Accepted on ${day}`,
+
   // How I hold my roles
   howIHold: "How I hold my roles",
 

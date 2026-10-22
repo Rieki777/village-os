@@ -10,6 +10,13 @@
  *   6. what you can answer         only the buttons the server's rights allow
  *   7. Open the record             only for people who were in the room, and admins
  *
+ * A DONE TASK CAN BE ACCEPTED AS ACCOMPLISHED. Its chip then reads
+ * Accomplished and a line says "Accepted on Friday 6 November". Whoever may
+ * accept it (`canAccept`: a live holder of the power that seats people, never
+ * for their own work) gets "Accept as accomplished", which opens the answer
+ * sheet with an optional note. A done task nobody may accept reads "Waiting
+ * to be accepted".
+ *
  * The server decides every right (`taskRights` in shared/sessionTasks.ts) and
  * sends it as three flags. These only keep a button off the screen where the
  * server would refuse it. A card still in an open session has no buttons at
@@ -27,7 +34,7 @@
 import { useId, useState } from "react";
 import { Link } from "wouter";
 import { SESSION_SOMEONE } from "@shared/sessions";
-import { TASK_COPY, type TaskCard as TaskCardData, type TaskOp } from "@shared/sessionTasks";
+import { TASK_COPY, taskDateWords, type TaskCard as TaskCardData, type TaskOp } from "@shared/sessionTasks";
 import {
   BTN_PRIMARY,
   BTN_QUIET,
@@ -59,7 +66,7 @@ export interface TaskCardProps {
 /** The status a card wears: Holding, Done, Let go, Back with the circle, or Holding, new date. */
 export function taskStatusLabel(task: Pick<TaskCardData, "status" | "heldAs" | "latest">): string {
   const L = TASK_COPY.statusLabels;
-  if (task.status === "done") return L.done;
+  if (task.status === "done") return task.latest?.kind === "accepted" ? L.accepted : L.done;
   if (task.status === "let_go") return L.let_go;
   if (task.heldAs === "circle") return L.circle;
   return task.latest?.kind === "not_yet" ? L.newDate : L.open;
@@ -87,6 +94,16 @@ export function latestWords(task: Pick<TaskCardData, "latest">): string | null {
   return task.latest?.byFacilitator ? TASK_COPY.latestByFacilitator(note) : TASK_COPY.latest(note);
 }
 
+/** The acceptance line a done task carries: when it was accepted, or that it waits for someone who may. */
+export function acceptanceWords(task: Pick<TaskCardData, "status" | "latest" | "acceptedOn" | "waitingToBeAccepted">, today: string): string | null {
+  if (task.status !== "done") return null;
+  if (task.latest?.kind === "accepted") {
+    const on = task.acceptedOn ? taskDateWords(task.acceptedOn, today) : "";
+    return on ? TASK_COPY.acceptedOn(on) : TASK_COPY.statusLabels.accepted;
+  }
+  return task.waitingToBeAccepted === true ? TASK_COPY.waitingToBeAccepted : null;
+}
+
 /** The buttons this card offers, in reading order, each with how strongly it is drawn. */
 function buttonsFor(task: TaskCardData): { op: TaskOp; look: string }[] {
   if (task.inSessionNow) return [];
@@ -98,6 +115,7 @@ function buttonsFor(task: TaskCardData): { op: TaskOp; look: string }[] {
     out.push({ op: "let_go", look: BTN_SECONDARY });
     if (task.heldAs !== "circle") out.push({ op: "handed_back", look: BTN_QUIET });
   }
+  if (task.canAccept === true && task.status === "done" && task.latest?.kind !== "accepted") out.push({ op: "accepted", look: BTN_PRIMARY });
   if (task.canReopen && task.status !== "open") out.push({ op: "reopened", look: BTN_SECONDARY });
   return out;
 }
@@ -113,6 +131,7 @@ export default function TaskCard({ task, today, onAnswered, compact = false, hid
   const shown = answered && answered.entryId === task.entryId && answered.version >= task.version ? answered : task;
   const due = dueWords(shown, today);
   const latest = latestWords(shown);
+  const acceptance = acceptanceWords(shown, today);
   const buttons = buttonsFor(shown);
   const Glyph = ENTRY_GLYPH.action;
   // The room's own entry tile. On the profile it breathes a little more from `sm` up.
@@ -144,6 +163,11 @@ export default function TaskCard({ task, today, onAnswered, compact = false, hid
         <p className={`mt-1 text-sm ${due.passed ? "text-foreground" : "text-muted-foreground"}`} data-passed={due.passed || undefined}>
           {due.text}
         </p>
+        {acceptance && (
+          <p className="mt-1 text-sm text-foreground" data-acceptance>
+            {acceptance}
+          </p>
+        )}
         {latest && <p className="mt-1 break-words text-sm text-muted-foreground">{latest}</p>}
 
         {shown.inSessionNow ? (
