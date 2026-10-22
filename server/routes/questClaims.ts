@@ -625,6 +625,9 @@ export function register(app: Express, deps: Deps): void {
           userId: c.userId,
           granted,
           stay: stayReward > 0 ? { reward: stayReward, questTitle: c.questTitle } : undefined,
+          // What the quest itself says it pays (0265), priced under the rules'
+          // ceilings. Absent, the village's standard rules price it.
+          valueTokens: consentedQuest?.valueTokens ?? null,
         });
         if (priced.skipped) console.log(`[economy] claim ${c.id}: no rule priced (${priced.skipped})`);
         await recordOwed(conn, c.id, priced.owed);

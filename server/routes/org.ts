@@ -53,7 +53,7 @@
  * feature is one ordered read with a limit. That is why `getPool` is in the
  * slice.
  */
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { hasCapability } from "../../shared/capabilities";
 import { recordEvent } from "../lib/events";
@@ -68,6 +68,7 @@ import {
   listOrgRoles,
   orgRoleHistory,
   seatHolder,
+  setOrgRoleValue,
   statusOverrideProblem,
   unclaimedSeatingsFor,
   updateOrgRole,
@@ -92,6 +93,12 @@ import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { submissionStatusNotice } from "../lib/submissionNotices";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
+import { payLineProblem, rolePayRules } from "../lib/workPay";
+import { defaultDisplayCurrency } from "../../shared/money";
+import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
+
+/** A role's checked value edit. `undefined` leaves a field alone. */
+type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
 
 type Deps = Pick<
   AppDeps,
@@ -109,6 +116,7 @@ type Deps = Pick<
   | "circlesRepo"
   | "notifyAdmins"
   | "submissionsRepo"
+  | "projectCurrency"
 > & {
   /** Who holds a power live, the gate's own count (`liveHoldersOf` in server/index.ts). */
   liveHoldersOf(capability: string): Promise<string[]>;
@@ -131,6 +139,7 @@ export function register(app: Express, deps: Deps): void {
     notifyAdmins,
     submissionsRepo,
     liveHoldersOf,
+    projectCurrency,
   } = deps;
 
   /*
@@ -794,10 +803,45 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
+  /**
+   * A role's value and list (0265), checked against the village's `role.cycle`
+   * rules before anything is written. Answers the request itself with a
+   * sentence when something is wrong, and returns null then.
+   */
+  const checkedRoleValue = async (
+    body: Record<string, unknown>,
+    res: Response,
+  ): Promise<RoleValueEdit | null> => {
+    const rules = await rolePayRules(getPool());
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug, 0));
+    if (!input.ok) {
+      res.status(400).json({ error: input.error });
+      return null;
+    }
+    for (const t of input.tokens ?? []) {
+      const problem = payLineProblem(rules, t.token, t.amount);
+      if (problem) {
+        res.status(400).json({ error: problem });
+        return null;
+      }
+    }
+    const out: RoleValueEdit = {};
+    if (input.valueMinor !== undefined) {
+      out.valueMinor = input.valueMinor;
+      // Stamped here, never read from the body (0265 says why it rides the row).
+      out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    return out;
+  };
+
   // ── Admin: the org chart is edited here, and the edits are live ──────────
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const valued = await checkedRoleValue(req.body ?? {}, res);
+    if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
+    await setOrgRoleValue(getPool(), id, valued);
     // Anything made while a season runs joins that season's pattern, so a
     // village never sits down to author one. Nothing happens when the season
     // names no pattern, which is every village that has not opted in.
@@ -823,8 +867,12 @@ export function register(app: Express, deps: Deps): void {
     // Described BEFORE the write, while the old values still exist. The
     // generic admin audit records "PUT /api/admin/org/roles/x", which cannot
     // answer "what has already been tried with this seat".
+    const valued = await checkedRoleValue(req.body ?? {}, res);
+    if (!valued) return;
     const changes = describeOrgChange(role, req.body ?? {});
-    const ok = await updateOrgRole(getPool(), req.params.id, req.body ?? {});
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined) changes.push("what the role is worth and pays updated");
+    const valueSaved = await setOrgRoleValue(getPool(), req.params.id, valued);
+    const ok = (await updateOrgRole(getPool(), req.params.id, req.body ?? {})) || valueSaved;
     if (ok && changes.length) {
       await recordEvent(getPool(), {
         kind: "org", text: `${role.name}: ${changes.join("; ")}`,

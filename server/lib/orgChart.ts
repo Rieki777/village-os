@@ -29,6 +29,7 @@ import {
   shapeProblem,
 } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
+import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -130,6 +131,17 @@ export interface OrgRole {
   termsOfferAt: Date | null;
   /** The member who published the offer. */
   termsOfferBy: string | null;
+  /**
+   * WHAT THE ROLE IS WORTH EACH CYCLE AND WHAT IT PAYS EACH SEAT (0265).
+   * The value is minor units of `valueCurrency`, NULL when nobody has set one.
+   * The list is human token amounts, NULL when the role has no list of its own
+   * and the village's standard `role.cycle` rules pay it. Unlike the terms above,
+   * the list IS read to pay: the cycle settlement prices each seat from it,
+   * under the rules' ceilings (`quoteWorkPay`, server/lib/economy.ts).
+   */
+  valueMinor: number | null;
+  valueCurrency: string | null;
+  valueTokens: TokenAmount[] | null;
 }
 
 export interface OrgAssignment {
@@ -195,7 +207,9 @@ const ROLE_COLS =
   "represents_circle, how_chosen, how_chosen_gloss, " +
   // 0256: the terms on offer. Selected here and projected only at the
   // `terms.read` tier (server/lib/seatProjection.ts).
-  "terms_offer, terms_offer_at, terms_offer_by";
+  "terms_offer, terms_offer_at, terms_offer_by, " +
+  // 0265: the value and the list. Projected at the `terms.read` tier.
+  "value_minor, value_currency, value_tokens";
 
 const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -258,6 +272,9 @@ function rowToRole(r: any): OrgRole {
     termsOffer: r.terms_offer ?? null,
     termsOfferAt: r.terms_offer_at ?? null,
     termsOfferBy: r.terms_offer_by ?? null,
+    valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
+    valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
+    valueTokens: readValueTokens(r.value_tokens),
   };
 }
 
@@ -929,6 +946,34 @@ export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<
         ? new Date(Date.now() + Number(body.statusOverrideDays) * 86400000)
         : null,
     );
+  }
+  if (!sets.length) return false;
+  args.push(id);
+  const [r]: any = await pool.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
+  return !!r?.affectedRows;
+}
+
+/**
+ * A role's value and its list (0265), written apart from `updateOrgRole` on
+ * purpose: the route checks both against the village's rules and stamps the
+ * currency before calling this, and nothing else may write them. A field that is
+ * `undefined` is left alone; `null` clears it.
+ */
+export async function setOrgRoleValue(
+  pool: Pool,
+  id: string,
+  v: { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null },
+): Promise<boolean> {
+  const sets: string[] = [];
+  const args: unknown[] = [];
+  if (v.valueMinor !== undefined) {
+    const set = v.valueMinor !== null && !!v.valueCurrency;
+    sets.push("`value_minor` = ?", "`value_currency` = ?");
+    args.push(set ? Math.trunc(Number(v.valueMinor)) : null, set ? String(v.valueCurrency).toUpperCase() : null);
+  }
+  if (v.valueTokens !== undefined) {
+    sets.push("`value_tokens` = ?");
+    args.push(valueTokensToStore(v.valueTokens));
   }
   if (!sets.length) return false;
   args.push(id);
