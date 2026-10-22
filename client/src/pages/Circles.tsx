@@ -35,6 +35,10 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import { circleCardHref } from "@shared/circleCard";
+
+/** The link from a circle's panel to its own card (`/circles/:id`). */
+const OPEN_CARD = "Open this circle's card";
 
 interface CircleEntry {
   id: string;
@@ -140,6 +144,14 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
           >
             <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-4">
               {circle.description && <p className="text-foreground">{circle.description}</p>}
+              {/* The circle's own card: its words, its roles and who agreed to them. */}
+              <Link
+                href={circleCardHref(circle.id)}
+                className="inline-flex min-h-11 items-center gap-1.5 font-medium text-foreground underline underline-offset-2"
+              >
+                {OPEN_CARD}
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
 
               <div className="grid md:grid-cols-2 gap-6">
                 {circle.domain && (

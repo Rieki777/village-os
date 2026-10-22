@@ -136,6 +136,7 @@ import { register as registerAlignmentRoutes, alignmentsForExport } from "./rout
 import { register as registerMembershipLetterRoutes, legacySigningOf, letterSourceFrom } from "./routes/membershipLetter";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerPlayerCardRoutes } from "./routes/playerCard";
+import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
@@ -19180,6 +19181,7 @@ ${inner}
   });
   registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
   registerPlayerCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, firstName, overLimit, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerCircleCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, circles: () => circlesRepo.all() as any[], seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the
