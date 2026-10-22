@@ -22,28 +22,28 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 191 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 192 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 210 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 210 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-236 dials in 35 categories. 140 carry a minimum and a maximum. By type: 103 integer, 20 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
+237 dials in 35 categories. 141 carry a minimum and a maximum. By type: 104 integer, 20 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
-| The Mint | 6 | 5 | 1 |
+| The Mint | 7 | 6 | 1 |
 | Progression | 29 | 29 | 0 |
 | Quests | 5 | 5 | 0 |
 | Governance | 44 | 40 | 4 |
@@ -114,6 +114,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
 | Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
+| Earned equity needed before a member can claim | `economy.equity_claim_threshold` | The Mint | integer | `1` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
 | When each Claims Week begins | `economy.claims_week_starts` | The Mint | text | `03-21,06-21,09-23,12-21` | the whole village |
 | Your Hypha space | `economy.hypha_space` | The Mint | text | blank | the founder or an admin |
@@ -794,7 +795,7 @@ Counted across every member's requests in a lunar cycle, the ones still waiting 
 
 ## The Mint
 
-6 dials. 5 for the whole village, 1 for the founder or an admin.
+7 dials. 6 for the whole village, 1 for the founder or an admin.
 
 ### Voice needed before a member can claim
 
@@ -807,6 +808,21 @@ How much voice someone gathers before their chip turns claimable. What this real
 | Default | `100` |
 | Range | 1 to 100000 |
 | Counted in | voice |
+| Who may change it | the whole village |
+| A change takes effect | at the next cycle close |
+| What it costs to change | a routine vote |
+
+### Earned equity needed before a member can claim
+
+How much earned equity someone gathers before they can carry it across to Hypha. Each claim becomes one proposal in your Hypha space and takes the member's whole balance, and claims open only in Claims Week, so each member raises at most one equity proposal a window. The default of 1 means any equity a member has earned can be claimed. Raise it if your circle would sooner consider fewer, larger claims. Nothing pays earned equity until your village turns on a rule that pays it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `economy.equity_claim_threshold` |
+| Type | integer, a whole number |
+| Default | `1` |
+| Range | 1 to 100000 |
+| Counted in | equity |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
 | What it costs to change | a routine vote |
