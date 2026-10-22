@@ -97,16 +97,22 @@ export async function untakenOlderThan(q: Queryable, before: Date): Promise<Tens
   return rows.map(mapRow);
 }
 
-/** Move one tension. The caller has decided the move is allowed and holds the row's lock. */
+/**
+ * Move one tension. The caller has decided the move is allowed and holds the
+ * row's lock. A move with no note keeps an earlier note AND its author, so
+ * `answered_by` always names whoever wrote `answer_note` when there is one,
+ * which is what erasure clears by.
+ */
 export async function writeResponse(
   q: Queryable,
   id: string,
   row: { status: TensionStatus; answeredBy: string; answerNote: string | null; answeredAt: Date | null; circleEntryId: number | null },
 ): Promise<void> {
   await q.query(
-    "UPDATE `role_tensions` SET `status` = ?, `answered_by` = ?, `answer_note` = COALESCE(?, `answer_note`), " +
+    "UPDATE `role_tensions` SET `status` = ?, " +
+      "`answered_by` = IF(? IS NULL AND `answer_note` IS NOT NULL, `answered_by`, ?), `answer_note` = COALESCE(?, `answer_note`), " +
       "`answered_at` = COALESCE(?, `answered_at`), `circle_entry_id` = COALESCE(?, `circle_entry_id`) WHERE `id` = ?",
-    [row.status, row.answeredBy, row.answerNote, row.answeredAt, row.circleEntryId, id],
+    [row.status, row.answerNote, row.answeredBy, row.answerNote, row.answeredAt, row.circleEntryId, id],
   );
 }
 
