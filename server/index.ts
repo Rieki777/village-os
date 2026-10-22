@@ -165,6 +165,7 @@ import { register as registerStockAvatarRoutes, STOCK_AVATAR_DIR } from "./route
 import { register as registerArchetypeAdminRoutes } from "./routes/archetypes";
 import { register as registerPowerAffinityRoutes, powersForClass, withPowerAffinity } from "./routes/powerAffinity";
 import { register as registerWalletRoutes } from "./routes/wallet";
+import { register as registerTokenJobRoutes } from "./routes/tokenJobs";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
@@ -19643,6 +19644,7 @@ ${inner}
     res.json({ claims: await claimHistory(getPool(), user.id) });
   });
   registerWalletRoutes(app, { authedUser, getPool, gratitudeAllowance });
+  registerTokenJobRoutes(app, { isAdmin, getPool });
 
   /**
    * Somebody else's sheet.
