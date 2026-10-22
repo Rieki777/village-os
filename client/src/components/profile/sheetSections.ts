@@ -99,6 +99,8 @@ export const SHEET_SECTIONS: SheetSection[] = [
   { id: "vessel", band: "now", quiet: "" },
   // Your season: the seats you keep, hand back or ask for, and your part.
   { id: "season", band: "now", quiet: "" },
+  // Your roles: the seats you hold, Apply for a seat, Plan your season, your open applications.
+  { id: "roles", band: "now", quiet: "" },
   { id: "aboutYou", band: "now", quiet: "" },
   { id: "paths", band: "now", quiet: "" },
 

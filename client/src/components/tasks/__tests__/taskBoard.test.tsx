@@ -212,9 +212,32 @@ describe("waiting on you", () => {
     // whenever the waiting reply landed a few milliseconds after the board.
     // What the case promises is the settled board, so wait for the board to
     // load and then for the line to be gone; a board that kept the line fails.
+    // The one-commit flash itself is gone since the waiting group reports only
+    // once its read answers; the next case holds that read open to prove it.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("region", { name: TASK_COPY.heading })).toHaveAttribute("aria-busy", "false"));
     await waitFor(() => expect(screen.queryByText(TASK_COPY.empty)).toBeNull());
+  });
+
+  it("never says nothing is in your hands before the waiting read answers, even when the board answers first", async () => {
+    let answer: (r: Response) => void = () => {};
+    waitingMock.mockImplementation(() => new Promise<Response>((resolve) => { answer = resolve; }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // The board has its (empty) answer; the waiting read has not answered yet.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(TASK_COPY.empty)).toBeNull();
+    answer(reply(200, { applications: WAITING.applications, drafts: [] }) as unknown as Response);
+    await screen.findByRole("region", { name: WAITING_COPY.heading });
+    expect(screen.queryByText(TASK_COPY.empty)).toBeNull();
+  });
+
+  it("says nothing is in your hands once both reads answer empty", async () => {
+    waitingMock.mockImplementation(async () => reply(200, { applications: [], drafts: [] }));
+    fetchMock.mockResolvedValueOnce(reply(200, makeBoard()));
+    render(<TaskBoard />);
+    expect(await screen.findByText(TASK_COPY.empty)).toBeInTheDocument();
   });
 
   it("says when it did not load, and tries again", async () => {

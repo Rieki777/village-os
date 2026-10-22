@@ -112,7 +112,7 @@ const cardShell = (entryId: number, ringed: number | null): string =>
 
 export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
   const [board, setBoard] = useState<TaskBoardPayload | null>(null);
-  const [waiting, setWaiting] = useState(false);
+  const [waiting, setWaiting] = useState<boolean | null>(null);
   const [failed, setFailed] = useState(false);
   const [earlier, setEarlier] = useState<TaskCardData[] | null>(null);
   const [earlierFailed, setEarlierFailed] = useState(false);
@@ -300,7 +300,7 @@ export default function TaskBoard({ sessions = true }: { sessions?: boolean }) {
     );
   };
 
-  const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0 && !waiting;
+  const nothingHeld = !!board && board.holding.length === 0 && board.seatsHold.length === 0 && waiting === false;
   // A task opened again from Earlier moves up on the next read; it is shown once, where it now stands.
   const onBoard = new Set(board ? [...board.holding, ...board.seatsHold, ...board.circleBack, ...board.finished].map((c) => c.entryId) : []);
   const earlierShown = (earlier ?? []).filter((c) => !onBoard.has(c.entryId));
