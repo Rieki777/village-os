@@ -20,7 +20,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { provisionTestDb, testDbConfigured, testPool, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -74,7 +74,11 @@ beforeAll(async () => {
   if (!fs.existsSync(DIST)) throw new Error(`${DIST} is missing. Run \`pnpm build\` before the player card test.`);
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-player-card-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
+  // testPool rather than createPool: it sets the same timezone AND pins the
+  // session zone, which is the property check-test-pool-timezone holds a total
+  // for. The hand-rolled form read green locally and took the ratchet from 187
+  // to 188 on CI, in a test file that never mentions a timezone.
+  pool = testPool(testDb, { connectionLimit: 4 });
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
     env: {
