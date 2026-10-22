@@ -334,7 +334,9 @@ export function register(app: Express, deps: Deps): void {
   async function mineOut(userId: string, termsReadable: boolean) {
     const at = now();
     const target = targetAt(at);
-    if (!target) return { season: null, window: null, plan: null, filed: null, heldSeats: [], applications: [], questsThisMoon: { done: 0 }, suggestions: null };
+    // No season to plan still has seats in it: the profile's "Your roles" lists what the member holds either way.
+    // No suggestions here: with no season there is no plan form to fill.
+    if (!target) return { season: null, window: null, plan: null, filed: null, heldSeats: (await heldSeats()).get(userId) ?? [], applications: [], questsThisMoon: { done: 0 }, suggestions: null };
     const pool = getPool();
     const tz = seasonState().timezone || "UTC";
     const seasonId = target.season.id;

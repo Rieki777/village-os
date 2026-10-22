@@ -358,6 +358,15 @@ describe.skipIf(!configured)("planning a season, on a real schema", () => {
     expect((await h.call("GET", "/api/season-plans/mine")).body.season).toBeNull();
   });
 
+  it("with no season to plan, the seats a member holds are still listed for the profile's Your roles", async () => {
+    h.state.seasons = [{ id: "s-far", name: "Far Season", startsOn: "2028-01-01", endsOn: "2028-04-01" }];
+    const r = await h.call("GET", "/api/season-plans/mine");
+    expect(r.status).toBe(200);
+    expect(r.body.season).toBeNull();
+    expect(r.body.heldSeats.map((s: { id: string }) => s.id)).toEqual(["seat-host"]);
+    expect(r.body.applications).toEqual([]);
+  });
+
   it("the erasure step takes the member's words and leaves the seats handed back", async () => {
     await eraseSeasonPlanWords(pool, "u-zed");
     const rows = await planVersions(pool, "u-zed", "s-next");
