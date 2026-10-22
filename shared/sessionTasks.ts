@@ -953,7 +953,7 @@ export const TASK_COPY = {
       hint: null,
       datePrompt: null,
       confirm: "Mark it done",
-      toast: "Marked done. The circle sees it at the next action check.",
+      toast: "Beautiful work. The circle sees it at the next action check.",
     },
     not_yet: {
       lede: null,
@@ -1039,7 +1039,7 @@ export const TASK_COPY = {
     doneLabel: (what: string): string => `It's done: ${what}`,
     openLabel: (what: string): string => `Open it on your task board: ${what}`,
     working: "Saving",
-    marked: "Done. The circle sees it at the next action check.",
+    marked: "Beautiful work. The circle sees it at the next action check.",
     undo: "Open it again",
     undoLabel: (what: string): string => `Open it again: ${what}`,
     reopened: "Open again. It is back on your task board.",
