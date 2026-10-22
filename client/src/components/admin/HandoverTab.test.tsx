@@ -179,14 +179,14 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
   it("says nothing when the server sent no count, because no number is not zero", async () => {
     fakeServer();
     await choose("older");
-    await screen.findByRole("button", { name: "Give this role the power" });
+    await screen.findByRole("button", { name: "Give this group the power" });
     expect(screen.queryByText(/Nobody holds/)).not.toBeInTheDocument();
   });
 
   it("still grants the power to a role nobody holds", async () => {
     const server = fakeServer();
     const user = await choose("steward-circle");
-    await user.click(screen.getByRole("button", { name: "Give this role the power" }));
+    await user.click(screen.getByRole("button", { name: "Give this group the power" }));
     await waitFor(() => expect(server.writes()).toHaveLength(1));
     const [put] = server.writes();
     expect(put.method).toBe("PUT");
@@ -207,13 +207,13 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
     }));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = await choose("steward-circle");
-    await user.click(screen.getByRole("button", { name: "Give this role the power" }));
+    await user.click(screen.getByRole("button", { name: "Give this group the power" }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
     const question = String(confirm.mock.calls[0][0]);
     expect(question).toContain("Steward Circle would be the first");
     expect(question).toContain("Anyone in it could let somebody in.");
-    expect(question).toContain("OK gives Steward Circle the power. Cancel leaves the role as it is.");
+    expect(question).toContain("OK gives Steward Circle the power. Cancel leaves the group as it is.");
     expect(question).toContain("Nobody holds Steward Circle yet.");
     expect(question).not.toMatch(/\btick\b/i);
     // Cancel on the question: the first, unanswered PUT is the only write.

@@ -424,7 +424,7 @@ describe("the fixes the recon pass found", () => {
     // And a reader is told where the claim came from.
     expect(seat.stateSource).toBe("declared");
     const page = seatMarkdown(doc, seat);
-    expect(page).not.toContain("Held. 0 of 1 seat(s) held.");
+    expect(page).not.toContain("Held. 0 of 1 held.");
     expect(page).toContain("No holder for it is written down here");
   });
 

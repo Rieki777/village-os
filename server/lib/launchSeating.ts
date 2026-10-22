@@ -295,10 +295,10 @@ export function stewardsHeld(refusal: string): string {
 export function nobodyStood(named: number, declined: number): string {
   const opening =
     named === 0
-      ? `The village started its Game, and its proposal named nobody for the ${STEWARD_ROLE_NAME}'s role.`
+      ? `The village started its Game, and its proposal named nobody for the ${STEWARD_ROLE_NAME} role.`
       : declined >= named
-        ? `The village started its Game, and everybody its proposal named for the ${STEWARD_ROLE_NAME}'s role declined it.`
-        : `The village started its Game, and nobody its proposal named for the ${STEWARD_ROLE_NAME}'s role accepted it.`;
+        ? `The village started its Game, and everybody its proposal named for the ${STEWARD_ROLE_NAME} role declined it.`
+        : `The village started its Game, and nobody its proposal named for the ${STEWARD_ROLE_NAME} role accepted it.`;
   return (
     `${opening} ` +
     `The role stands empty, which stops nothing: decisions land at their landing time either way. ` +
@@ -331,7 +331,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
     const held = stewardsHeld(term.error);
     await deps.addActivity(held, STEWARD_ROLE_ID);
     await deps.notifyAdmins(
-      `The Game started with nobody in the ${STEWARD_ROLE_NAME}'s role`,
+      `The Game started with nobody in the ${STEWARD_ROLE_NAME} role`,
       `bal:${deps.ballotId}:launch-seating-held`,
     );
     return { ...nothing, held };
@@ -359,7 +359,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
     const held = stewardsHeld(String(report.error ?? ""));
     await deps.addActivity(held, STEWARD_ROLE_ID);
     await deps.notifyAdmins(
-      `The Game started with nobody in the ${STEWARD_ROLE_NAME}'s role`,
+      `The Game started with nobody in the ${STEWARD_ROLE_NAME} role`,
       `bal:${deps.ballotId}:launch-seating-held`,
     );
     return { ...nothing, held, report };
@@ -423,7 +423,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
    */
   if (!report.holdingMoved) {
     await deps.notifyAdmins(
-      `The ${STEWARD_ROLE_NAME}'s role was filled, and the village's powers did not all cross to it`,
+      `The ${STEWARD_ROLE_NAME} role was filled, and the village's powers did not all cross to it`,
       `bal:${deps.ballotId}:launch-veto-uncrossed`,
     );
   }
@@ -432,7 +432,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
     await deps.notify({
       userId,
       type: "role_appointed",
-      title: `The village started its Game, and you hold the ${STEWARD_ROLE_NAME}'s role`,
+      title: `The village started its Game, and you hold the ${STEWARD_ROLE_NAME} role`,
       body:
         `The launch proposal named you for this role, you accepted, and the village started its Game, so you hold it. ` +
         `You can stop a decision the village has already carried, inside the window before it lands, and you have to say why. ` +
@@ -449,7 +449,7 @@ export async function seatFoundersAtLaunch(deps: LaunchSeatingDeps): Promise<Lau
 
   if (report.seated.length > 0) {
     await deps.addActivity(
-      `The founders this village named and who accepted hold the ${STEWARD_ROLE_NAME}'s role until ${term.endsOn}, with every power this village has to give, by the vote that started the Game.`,
+      `The founders this village named and who accepted hold the ${STEWARD_ROLE_NAME} role until ${term.endsOn}, with every power this village has to give, by the vote that started the Game.`,
       STEWARD_ROLE_ID,
     );
   }

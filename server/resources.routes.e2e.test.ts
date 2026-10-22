@@ -332,7 +332,7 @@ describe.skipIf(!DB_CONFIGURED)("the resources module", () => {
       omarToken,
     );
     expect(notYours.status).toBe(403);
-    expect(String(notYours.json?.error)).toContain("seat");
+    expect(String(notYours.json?.error)).toContain("role");
 
     // Above the ceiling is a sentence, not a thread.
     const tooMuch = await call(

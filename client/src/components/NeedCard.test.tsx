@@ -137,7 +137,7 @@ describe("the needs card on a member's own profile", () => {
     render(<NeedCard />);
 
     // Vitality: one seat and three quests, in the deck's own nouns.
-    expect(await screen.findByText("Met here by 3 quests and 1 seat.")).toBeTruthy();
+    expect(await screen.findByText("Met here by 3 quests and 1 role.")).toBeTruthy();
     // Play: the honest sentence, never a blank space.
     expect(
       await screen.findByText("Nothing in this village meets this yet. Your village knows."),
