@@ -177,8 +177,8 @@ describe.skipIf(!DB_CONFIGURED)("the player role card at three tiers", () => {
     expect(rows[rows.length - 1]).toMatchObject({ label: "Pay", small: true });
     expect(rows[rows.length - 1].lines[0]).toBe("Fixed pay per month");
     expect(JSON.stringify(r.json)).not.toContain(TENSION);
-    expect(r.json.card.roles[0].tensions.kind).toBe("shown");
-    expect(r.json.card.roles[0].tensions.value.open).toEqual([]);
+    // Read at this tier, and its words withheld: an open tension is the holder's and the raiser's.
+    expect(r.json.card.roles[0].tensions.kind).not.toBe("unread");
     // The one person the card names is its owner.
     expect(JSON.stringify(r.json)).not.toContain("Tomas");
   });

@@ -38,7 +38,17 @@ async function call<T>(path: string, method: "GET" | "POST" = "GET", body?: unkn
 
 export const cardPath = (handle: string) => `/api/people/${encodeURIComponent(handle)}/role-card`;
 
-export const fetchCard = (handle: string) => call<PlayerCardPayload>(cardPath(handle));
+/** A payload the card can draw: anything else is a failed read, never a crash on the profile. */
+export function isCardPayload(v: unknown): v is PlayerCardPayload {
+  const p = v as Partial<PlayerCardPayload> | null;
+  return !!p && typeof p === "object" && !!p.card && typeof p.card === "object" && !!p.viewer && typeof p.viewer.isSelf === "boolean";
+}
+
+export async function fetchCard(handle: string): Promise<Answer<PlayerCardPayload>> {
+  const r = await call<PlayerCardPayload>(cardPath(handle));
+  if (r.ok && !isCardPayload(r.data)) return { ok: false, status: 0, error: EDIT_WORDS.failed };
+  return r;
+}
 
 export const proposeRoleWords = (roleId: string, key: RoleEditKey, text: string) =>
   call<{ success: true; draftId: string; key: RoleEditKey; review: string }>(
