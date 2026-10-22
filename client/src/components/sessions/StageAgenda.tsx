@@ -1,6 +1,7 @@
 /**
  * BUILD THE AGENDA. From last time first (actions to check in on, the
- * backlog, parked items), then the agenda itself, what it asks for against the
+ * backlog, parked items), then what members brought for this circle from the
+ * agenda library (RoomBrought), then the agenda itself, what it asks for against the
  * time the session has left, and the consent to it, which makes the agenda the
  * circle's and not only the facilitator's.
  *
@@ -12,6 +13,7 @@ import { ROOM_COPY, SESSION_COPY, STAGE_DEFS, agendaFit } from "@shared/sessions
 import AgendaList, { AddItem } from "./AgendaList";
 import ConsentRound from "./ConsentRound";
 import FromLastTime from "./FromLastTime";
+import RoomBrought from "./RoomBrought";
 import { CARD, H3, HERO_CONTENT, HERO_INNER, HERO_SHELL, HINT, type StageProps } from "./roomUi";
 
 export default function StageAgenda({ view, now, actions }: StageProps) {
@@ -19,6 +21,8 @@ export default function StageAgenda({ view, now, actions }: StageProps) {
   return (
     <div className="space-y-5">
       <FromLastTime view={view} actions={actions} />
+
+      <RoomBrought view={view} actions={actions} />
 
       <section className={CARD} aria-labelledby="agenda-title">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

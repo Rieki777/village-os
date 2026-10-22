@@ -3,8 +3,8 @@
  * time. Every door is the "Doors" list in shared/sessions.ts, which is the
  * contract, and every rule behind a door is server/lib/liveSessions.ts:
  *
- *   GET    /api/sessions                          { open, recent, circles }
- *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
+ *   GET    /api/sessions                          { open, recent, circles, library }
+ *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      { title } -> { ok }
  *   DELETE /api/sessions/:id                      { ok }: discard an open session, or delete a closed record
@@ -82,6 +82,7 @@ import {
   maySee,
   memberNo,
   noticesAfterClose,
+  openSession,
   parseId,
   patchEntry,
   patchItem,
@@ -93,13 +94,13 @@ import {
   sessionEtag,
   sessionForViewer,
   setHosts,
-  startSession,
   type Actor,
   type MemberLookup,
   type Outcome,
   type Viewer,
 } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
+import { libraryFor, noticesAfterTakes, reconcileLibrary } from "../lib/sessionLibrary";
 import { queueCloseMail } from "../lib/sessionTaskMail";
 import {
   SESSION_COPY,
@@ -286,13 +287,22 @@ export function register(app: Express, deps: Deps): void {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
-    const viewer = { no: await memberNo(pool, String(user.id)), admin: await isAdmin(req) };
+    const admin = await isAdmin(req);
+    const viewer = { no: await memberNo(pool, String(user.id)), admin };
     // A room nobody closed closes now, so the list never offers its arrival round to a late joiner.
     await closeStaleRooms(pool, ctx, notices);
+    // And an item a session left on its agenda without settling it is mended before the list is read.
+    await reconcileLibrary(pool);
     const lists = await listSessions(pool, viewer, ctx);
-    res.json({ ...lists, circles: circles(), defaultMinutes: defaultDuration() });
+    const library = await libraryFor(pool, { userId: String(user.id), admin }, ctx);
+    res.json({ ...lists, circles: circles(), defaultMinutes: defaultDuration(), library });
   });
 
+  /**
+   * Open a room. `libraryIds`, when sent, are the agenda library's items to
+   * put on its agenda in that order, all or none (`openSession`). Whoever
+   * brought each one hears it is on the agenda, after the commit.
+   */
   app.post("/api/sessions", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
@@ -302,8 +312,10 @@ export function register(app: Express, deps: Deps): void {
     if (!input.ok) return res.status(input.status).json({ error: input.error });
     const pool = getPool();
     const no = await ensureMemberNo(pool, uid);
-    const id = await startSession(pool, no, input.value);
-    res.json({ id });
+    const out = await openSession(pool, { no, userId: uid, admin: await isAdmin(req) }, input.value, req.body?.libraryIds, ctx);
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    await noticesAfterTakes(pool, { notify }, { sessionTitle: input.value.title, takerNo: no, taken: out.value.taken });
+    res.json({ id: out.value.id });
   });
 
   // ── The room ──────────────────────────────────────────────────────────────

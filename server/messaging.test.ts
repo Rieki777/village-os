@@ -491,10 +491,31 @@ describe.skipIf(!configured)("messaging repo (MySQL)", () => {
     await sendMessage(pool, { conversationId: a.id, authorId: ANA, body: "a" });
     await sendMessage(pool, { conversationId: b.id, authorId: ANA, body: "b" });
 
+    // THE TIE MUST COVER EVERY KEY THE COMPARATOR READS FIRST, and since 0074
+    // that includes last_message_seq. This test forces a tie to prove the FINAL
+    // fallback `c.id DESC` decides - but the order by is
+    //
+    //   (c.last_message_seq IS NULL), c.last_message_seq DESC, c.created_at DESC, c.id DESC
+    //
+    // and last_message_seq comes from a global AUTO_INCREMENT, so b's message
+    // always takes a higher seq than a's. Tying only the timestamps left seq
+    // deciding every read, `c.id DESC` never reached, and the expectation
+    // `[a.id, b.id].sort().reverse()` agreeing with the actual order only when the
+    // random id suffix fell the right way: a COIN FLIP that failed main roughly
+    // half the time, and failed batch 36.
+    //
+    // 0074's own comment says "last_message_seq cannot tie at all", which is true
+    // of real traffic and is exactly why this test has to make one by hand. A
+    // fallback no test can reach is a fallback nobody has checked.
+    //
+    // last_message_at is tied too, though since 0074 it is not in the ORDER BY at
+    // all - it is the value the row DISPLAYS. Leaving it untied would make this
+    // fixture quietly disagree with the row it renders.
     const stamp = "2026-08-11 12:00:00.000";
-    await pool.query("UPDATE conversations SET last_message_at = ?, created_at = ? WHERE id IN (?, ?)", [
-      stamp, stamp, a.id, b.id,
-    ]);
+    await pool.query( // module-review-ok: a fixture forcing an exact tie on a scratch schema, not a product read path
+      "UPDATE conversations SET last_message_at = ?, created_at = ?, last_message_seq = ? WHERE id IN (?, ?)",
+      [stamp, stamp, 999999, a.id, b.id],
+    );
 
     const expected = [a.id, b.id].sort().reverse(); // c.id DESC
     for (let i = 0; i < 5; i++) {

@@ -274,3 +274,85 @@ describe("the gates", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("what members brought, on the start card", () => {
+  const brought = (id: number, title: string, circleId: string | null, broughtAt = "2026-10-01T10:00:00.000Z") => ({
+    id,
+    title,
+    aim: null,
+    note: null,
+    circleId,
+    circleName: circleId === "garden" ? "Garden" : null,
+    broughtBy: "Dee",
+    mine: false,
+    broughtAt,
+    status: "waiting",
+    session: null,
+    settledAt: null,
+    backAt: null,
+    changedBy: null,
+    canEdit: false,
+    canMoveCircle: false,
+    canWithdraw: false,
+    canBringAgain: false,
+  });
+  const WITH_LIBRARY = {
+    ...LIST,
+    defaultMinutes: 60,
+    library: {
+      items: [brought(21, "Shed roof", "garden", "2026-10-02T10:00:00.000Z"), brought(22, "Picnic", null), brought(23, "Seed order", "garden")],
+      myCircleIds: ["garden"],
+    },
+  };
+
+  it("offers the chosen circle's items, drops a tick that no longer fits, and opens the room with the rest in order", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    answers["POST /api/sessions"] = () => json({ id: 45 });
+    const memory = renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    // No circle chosen yet: only the item for no circle is offered.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "garden" } });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Picnic/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Shed roof/ }));
+    // A tick on a garden item goes when the circle changes away from the garden.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seed order/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "kitchen" } });
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "garden" } });
+    expect((screen.getByRole("checkbox", { name: /Seed order/ }) as HTMLInputElement).checked).toBe(false);
+    // The kitchen dropped both garden ticks and kept the picnic's.
+    expect((screen.getByRole("checkbox", { name: /Shed roof/ }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: /Picnic/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seed order/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_LIST_COPY.titleLabel), { target: { value: "Garden, week 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Open the room with 2 items" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    // The order the checklist shows: the garden's oldest first, then the one for no circle.
+    expect(writes()[0].body).toEqual({ title: "Garden, week 2", circleId: "garden", durationMin: 60, libraryIds: [23, 22] });
+    await waitFor(() => expect(memory.history).toContain("/sessions/45"));
+  });
+
+  it("reads the list again when an item went elsewhere a moment ago, and says so", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    answers["POST /api/sessions"] = () =>
+      json({ error: "One of those went onto another agenda or was withdrawn a moment ago. Here is the list as it stands now." }, 409);
+    renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Picnic/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_LIST_COPY.titleLabel), { target: { value: "Open call" } });
+    const reads = calls.filter((c) => c.method === "GET").length;
+    fireEvent.click(screen.getByRole("button", { name: "Open the room with 1 item" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("went onto another agenda");
+    await waitFor(() => expect(calls.filter((c) => c.method === "GET").length).toBeGreaterThan(reads));
+  });
+
+  it("lists what waits between the rooms open now and the records", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
+    expect(regions.indexOf("sessions-waiting-heading")).toBeGreaterThan(regions.indexOf("sessions-open-heading"));
+    expect(regions.indexOf("sessions-waiting-heading")).toBeLessThan(regions.indexOf("sessions-recent-heading"));
+  });
+});
