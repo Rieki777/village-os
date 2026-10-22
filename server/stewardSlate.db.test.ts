@@ -301,7 +301,7 @@ describe.skipIf(!configured)("a launch proposal that names nobody", () => {
      * act and no way back through the product.
      */
     expect(r.holdingMoved).toBe(false);
-    expect(String(r.holdingHeld)).toContain("Nobody holds the steward's seat");
+    expect(String(r.holdingHeld)).toContain("Nobody holds the steward role");
     const [rows]: any = await emptyPool.query("SELECT COUNT(*) AS n FROM capability_holding"); // module-review-ok: fixture SQL against the S5 scratch schema
     expect(Number(rows[0].n), "not one power crossed to the village").toBe(0);
     // The role still exists carrying all nineteen, which is what the village

@@ -54,7 +54,7 @@ export const GATE_LINES: Record<string, string> = {
   journal:
     "Your own morning and evening pages, a weekly pulse, call debriefs, and a kind road for feedback. Only you read what you write.",
   library: "The village's shared tools and goods, and what is on the shelf today.",
-  map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
+  map: "The living org chart: the circles, the roles that orbit them, and who holds each role.",
   messaging: "Private conversations between members, one to one or in a named group.",
   network: "The needs and offers this village shares with the villages it listens to.",
   sessions:
@@ -70,7 +70,7 @@ export const GATE_LINES: Record<string, string> = {
 export const PAGE_GATE_LINES = {
   places: "Every place on this land somebody has photographed, and the pictures they took of it.",
   propose: "The walk that takes a proposal from its first sentence to a ballot the village can vote on.",
-  seasonPlans: "Each member's plan for the season: the seats they keep, hand back or ask for, and what they will do.",
+  seasonPlans: "Each member's plan for the season: the roles they keep, hand back or ask for, and what they will do.",
 } as const;
 
 /** The line for a module, or null when there is nothing true to say. */

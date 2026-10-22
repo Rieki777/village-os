@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkSpan, isTest, SCAN_ROOTS } from "./check-voice.mjs";
+import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS } from "./check-voice.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./check-voice.mjs", import.meta.url));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -77,6 +77,70 @@ check("leaves plain prose alone", () => {
 
 check("hyphens are fine, only em/en dashes trip rule 1", () => {
   assert.deepStrictEqual(checkSpan("a well-being check and decision-making time"), []);
+});
+
+// ── Rule 6: a role is a role (Rye, 2026-10-21) ──────────────────────────────
+// Literals arrive here as the voice guard reads them: quotes and all.
+
+const seatFlags = (s) => seatNounHits(s).length > 0;
+
+check("seat rule: flags the noun for a role", () => {
+  for (const s of [
+    '"Apply for a seat"',
+    '"Decline the steward\'s seat"',
+    '"Who has held this seat"',
+    '"Choose the seats you keep, hand back or apply for"',
+    '"a seat you would hold this season"',
+    '"A power entrusted to a seat nobody sits in"',
+    "} seat${",
+    "Nobody holds a seat here yet.",
+  ]) assert.ok(seatFlags(s), `should flag: ${s}`);
+});
+
+check("seat rule: the verb stays (Rye: \"You can use 'seat someone' for that verb\")", () => {
+  for (const s of [
+    '"Seat someone in a role"',
+    '"Ask the village to seat a member in one of its roles"',
+    '"You hold the power that seats people."',
+    '"Could not seat them"',
+    '"The people who seat roles read your offer"',
+    '"seat software agents in the village\'s roles, and take them out again"',
+    '"Seat and unseat the holders of the village\'s roles"',
+    '"Everybody named has declined, so this vote seats nobody and the role starts empty."',
+    '"nobody was seated"',
+    "Seat",
+  ]) assert.ok(!seatFlags(s), `should pass: ${s} -> ${JSON.stringify(seatNounHits(s))}`);
+});
+
+check("seat rule: a chair at a gathering is a seat", () => {
+  for (const s of [
+    '"Save me a seat"',
+    '"Your seat at {{gathering.title}} is saved."',
+    '"A seat fee is a whole number, or zero for free"',
+    '"We\'ll write the moment a seat opens."',
+    '"A seat opened at {{gathering.title}}"',
+    '"Fees, donations, deposits, waitlist seats"',
+  ]) assert.ok(!seatFlags(s), `should pass: ${s}`);
+  // A sentence that names a gathering does not excuse a role seat beside it.
+  assert.ok(seatFlags('"Say hello at the gathering, and ask the people who hold seats now"'));
+  assert.ok(SEAT_GATHERING_FILES.some((re) => re.test("client/src/components/calendar/CommunityCalendarCard.tsx")));
+  assert.ok(SEAT_GATHERING_FILES.some((re) => re.test("server/lib/comms/cantMakeIt.ts")));
+  assert.ok(!SEAT_GATHERING_FILES.some((re) => re.test("client/src/pages/Roles.tsx")));
+});
+
+check("seat rule: ids, keys, class names and SQL are machinery", () => {
+  for (const s of [
+    '"org.seat"',
+    '"seats"',
+    "`/seat-applications/${",
+    "`sheet-night seat-card-foil relative w-full rounded-[20px] ${",
+    '"SELECT seat_price, seat_token FROM events WHERE id = ?"',
+    '"id, circle_id, name, aim, domain, seats, criticality, active"',
+    "`seats: [${",
+    '"re-seats it each season"',
+    '"seats - holderCount"',
+  ]) assert.ok(!seatFlags(s), `should pass: ${s}`);
+  assert.ok(SEAT_EXEMPT_DIRS.some((re) => re.test("shared/__fixtures__/regen-village-riverbend.json")));
 });
 
 // ── The two carve-outs, as tested facts rather than prose ───────────────────

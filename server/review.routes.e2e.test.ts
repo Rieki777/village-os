@@ -462,7 +462,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect([...first.json.ignored[0].keys].sort()).toEqual(["rationale", "vendor_rank"]);
     // The reason itself reaches the steward, and it names the recovery walked below.
     expect(first.json.blockedLines).toEqual([
-      { reads: 'Create the seat "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
+      { reads: 'Create the role "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
     ]);
     expect(first.json.blockedLines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
 
@@ -550,7 +550,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(taken.status, taken.text).toBe(200);
     expect(taken.json.blocked).toBe(1);
     expect(taken.json.blockedLines[0].blocked).toContain("Criticality is normal or high");
-    expect(taken.json.blockedLines[0].blocked).toContain("A seat holds between 1 and 50 people");
+    expect(taken.json.blockedLines[0].blocked).toContain("A role holds between 1 and 50 people");
     expect((await stuckOn()).map((d) => d.draftId)).toContain(taken.json.createdRef);
   });
 

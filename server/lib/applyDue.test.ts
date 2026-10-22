@@ -1203,7 +1203,7 @@ describe.skipIf(!configured)("the window notice and the veto route give the same
     expect(landing.executesAtClose, "it no longer carries at the close").toBe(false);
     expect(landing.landsAt, "it has an instant the village can read").not.toBeNull();
     expect(landing.vetoable, "and no steward can stop it").toBe(false);
-    expect(landing.because).toContain("the seat itself");
+    expect(landing.because).toContain("the role itself");
   });
 });
 

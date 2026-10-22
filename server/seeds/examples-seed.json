@@ -126,7 +126,7 @@
       {
         "id": "ex-role-welcome-host",
         "name": "Welcome Host",
-        "description": "Meets arrivals, runs the first-week orientation, and checks in at day thirty. The seat most villages under-staff and most regret under-staffing.",
+        "description": "Meets arrivals, runs the first-week orientation, and checks in at day thirty. The role most villages under-staff and most regret under-staffing.",
         "capabilities": [],
         "minStage": "member",
         "circleId": "ex-circle-welcome",
@@ -137,7 +137,7 @@
       {
         "id": "ex-role-tool-keeper",
         "name": "Tool Keeper",
-        "description": "Knows where every shared tool is, what condition it is in, and who had it last. If the Material Library module is on, this is the seat that signs items in and out.",
+        "description": "Knows where every shared tool is, what condition it is in, and who had it last. If the Material Library module is on, this is the role that signs items in and out.",
         "capabilities": [],
         "minStage": "member",
         "circleId": "ex-circle-build",

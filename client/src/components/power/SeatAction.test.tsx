@@ -105,7 +105,7 @@ async function openTheForm() {
 describe("raising a hand", () => {
   it("sends the end date the member picked, after saying when the seat would end", async () => {
     await openTheForm();
-    fireEvent.change(screen.getByLabelText("End date for your seat (optional)"), { target: { value: ASKED } });
+    fireEvent.change(screen.getByLabelText("End date for your role (optional)"), { target: { value: ASKED } });
     expect(await screen.findByText(new RegExp(`Ends on ${ASKED}\\.`))).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Raise my hand" }));
     await waitFor(() => expect(posted).toHaveLength(1));
@@ -209,7 +209,7 @@ describe("a member who reads terms", () => {
     render(<SeatTradingCard input={fromMapSeat(OPEN, DATA, { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" applyHref={href} />} />);
     const door = screen.getByRole("link", { name: "Raise your hand for Water Keeper" });
     expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water");
-    expect(screen.getByText("Opens your application for this seat and its terms. A seat holder or the village adopts it.")).toBeTruthy();
+    expect(screen.getByText("Opens your application for this role and its terms. A role holder or the village adopts it.")).toBeTruthy();
     fireEvent.click(door);
     expect(posted).toHaveLength(0);
   });

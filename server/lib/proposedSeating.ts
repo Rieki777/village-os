@@ -120,10 +120,10 @@ export function refusalSentence(r: SeatingRefusal): string {
     case "named-a-person":
       return `This proposal carried a field called ${r.key}, which names a person. A proposal references a member and never names one, so the whole record was refused.`;
     case "no-subject-ref":
-      return "This proposal says a seat should be filled and does not say by whom.";
+      return "This proposal says a role should be filled and does not say by whom.";
     case "malformed-subject-ref":
       return "This proposal references a member in a shape this village does not issue.";
     case "no-seat":
-      return "This proposal says somebody should hold a seat and does not say which seat.";
+      return "This proposal says somebody should hold a role and does not say which role.";
   }
 }

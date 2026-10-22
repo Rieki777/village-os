@@ -103,7 +103,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
     lede: "One item at a time, each with its own clock and its own page. Notes, ideas and actions land on the item they belong to.",
     cues: [
       "Start the item's clock and say its aim out loud.",
-      "Catch every action as it comes, with a name or a seat on it.",
+      "Catch every action as it comes, with a name or a role on it.",
       "Close each item with what we learned, in one sentence for the record.",
     ],
     glyph: "sprout",
@@ -111,7 +111,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
   actions: {
     title: "Who does what",
     short: "Actions",
-    lede: "Every action leaves with a person or a seat on it, claimed here and now. Anything nobody can hold goes to the backlog.",
+    lede: "Every action leaves with a person or a role on it, claimed here and now. Anything nobody can hold goes to the backlog.",
     cues: [
       "Read each action out, then wait for a claim.",
       "No action leaves without an owner. Park it if nobody can hold it.",
@@ -872,7 +872,7 @@ export function unownedActions(entries: Pick<SessionEntry, "id" | "kind" | "stat
     .map((e) => e.id);
 }
 
-export const CLOSE_REFUSAL = "Every action needs a person or a seat before the session closes. Claim it, name a seat, or park it.";
+export const CLOSE_REFUSAL = "Every action needs a person or a role before the session closes. Claim it, name a role, or park it.";
 
 // ── Minutes ──────────────────────────────────────────────────────────────────
 
@@ -1033,7 +1033,7 @@ export const SESSION_COPY = {
   addDecision: "Write the proposal",
   claim: "I'll take it",
   release: "Hand it back",
-  nameSeat: "Name a seat",
+  nameSeat: "Name a role",
   park: "Park it",
   unownedLeft: "still need someone",
   everyoneHolds: "Every action has someone holding it.",
@@ -1087,7 +1087,7 @@ export const SESSION_REFUSALS = {
   entryUnknown: "That entry is not in this session.",
   entriesFull: `This session holds ${SESSION_LIMITS.maxEntries} entries, and that is all it can hold.`,
   yoursFull: `One person can add ${SESSION_LIMITS.maxEntriesPerPerson} entries to a session, and you have.`,
-  seatUnknown: "That seat is not an active seat in this village.",
+  seatUnknown: "That role is not an active role in this village.",
   dueOn: "A due date reads like 2026-10-31.",
   notAction: "Only an action can be claimed or handed back.",
   heldAlready: "Someone already holds this action.",
@@ -1285,8 +1285,8 @@ export const ROOM_COPY = {
   decidedBadge: "Decided",
   seedSave: "Add to the record",
   dueLabel: "Due by",
-  seatLabel: "A seat holds it",
-  noSeat: "No seat",
+  seatLabel: "A role holds it",
+  noSeat: "No role",
   remove: "Remove",
   heldBy: "Held by",
   nobodyHolds: "Nobody holds this yet",

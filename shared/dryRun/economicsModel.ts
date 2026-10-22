@@ -1416,7 +1416,7 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
       severity: "warning",
       cycle,
       sentence: "This village has not started its Game, so every posting out of a faucet is refused and no token is issued at all.",
-      actionable: "Carry the launch vote. Until it does, quest rewards, seat payouts and the value pool all pay nothing.",
+      actionable: "Carry the launch vote. Until it does, quest rewards, role payouts and the value pool all pay nothing.",
     });
   }
 
@@ -1594,8 +1594,8 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
         cycle,
         sentence: `${top[0].id} holds ${percent(top[0].share)} of this village's ${VOICE_SLUG} after cycle ${cycle}, which is above the third of the whole this preview calls out. The three largest holders are ${named}, out of ${humanUnits(memo.voiceTotal, decimals)} held across the roll.`,
         actionable: alsoVotes
-          ? `The weight mode is token and the weight token is ${VOICE_SLUG}, so this share is also voting power. Spread the seats, lower the seat payout, or move governance.weight_mode off token.`
-          : `Nothing here blocks, and nothing here is wrong on its own. Watch it: spread the seats the role.cycle rules pay, or lower what a seat pays, if the village wants Voice spread wider.`,
+          ? `The weight mode is token and the weight token is ${VOICE_SLUG}, so this share is also voting power. Spread the roles, lower the role payout, or move governance.weight_mode off token.`
+          : `Nothing here blocks, and nothing here is wrong on its own. Watch it: spread the roles the role.cycle rules pay, or lower what a role pays, if the village wants Voice spread wider.`,
       });
     }
   }

@@ -103,15 +103,15 @@ describe("the structure review page", () => {
     expect(accept()).toBeDisabled();
     expect(screen.getByRole("button", { name: "Preview as a draft" })).toBeDisabled();
     expect(count("Need your call")).toBe("2");
-    expect(screen.getByTestId("bar-status").textContent).toContain("2 seats need your call");
+    expect(screen.getByTestId("bar-status").textContent).toContain("2 roles need your call");
 
     const [first, second] = [screen.getByTestId("conflict-xp-structure#0"), screen.getByTestId("conflict-xp-structure#1")];
-    fireEvent.click(within(first).getByRole("button", { name: "Use our existing seat here" }));
+    fireEvent.click(within(first).getByRole("button", { name: "Use our existing role here" }));
     expect(accept()).toBeDisabled();
     // The live seat can move once: the second match may not take it too.
-    expect(within(second).getByRole("button", { name: "Use our existing seat here" })).toBeDisabled();
+    expect(within(second).getByRole("button", { name: "Use our existing role here" })).toBeDisabled();
 
-    fireEvent.click(within(second).getByRole("button", { name: "Keep both seats" }));
+    fireEvent.click(within(second).getByRole("button", { name: "Keep both roles" }));
     // A second seat needs a name of its own before anything goes ahead.
     expect(accept()).toBeDisabled();
     fireEvent.change(within(second).getByRole("textbox"), { target: { value: "Ventures Operations Steward" } });
@@ -123,14 +123,14 @@ describe("the structure review page", () => {
   it("moves the counts when something is left out, and takes a left-out circle's seats with it", async () => {
     await ready();
     expect(count("New circles")).toBe("2");
-    expect(count("New seats")).toBe("2");
+    expect(count("New roles")).toBe("2");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Include Marketing Lead" }));
-    expect(count("New seats")).toBe("1");
+    expect(count("New roles")).toBe("1");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Include the circle Regenerative Business" }));
     expect(count("New circles")).toBe("1");
-    expect(count("New seats")).toBe("0");
+    expect(count("New roles")).toBe("0");
     expect(screen.getByRole("checkbox", { name: "Include Events Manager" })).not.toBeChecked();
     // The match inside it left with it, so only one call is still owed.
     expect(count("Need your call")).toBe("1");
@@ -153,7 +153,7 @@ describe("the structure review page", () => {
 
   it("previews, then accepts, sending exactly the decisions on screen", async () => {
     await ready();
-    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Use our existing seat here" }));
+    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Use our existing role here" }));
     fireEvent.click(within(screen.getByTestId("conflict-xp-structure#1")).getByRole("button", { name: "Skip this one" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Retire the old chart/ }));
 

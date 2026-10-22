@@ -116,7 +116,7 @@ export const DECIDES_BY: DecidesByDef[] = [
  */
 export const DOMAINS: DomainDef[] = [
   { id: "money", label: "Money", gloss: "Who decides about spending and budgets here." },
-  { id: "people", label: "People", gloss: "Who decides about seats, joining and leaving here." },
+  { id: "people", label: "People", gloss: "Who decides about roles, joining and leaving here." },
   { id: "space_land", label: "Space and land", gloss: "Who decides about buildings, ground and use of space here." },
   { id: "rules", label: "Rules", gloss: "Who decides about agreements and how they change here." },
 ];
@@ -125,7 +125,7 @@ export const DOMAINS: DomainDef[] = [
 export const HOW_CHOSEN: HowChosenDef[] = [
   { id: "appointed_by_lead", label: "Appointed by the lead", gloss: "The circle's lead names the next holder." },
   { id: "elected_by_circle", label: "Elected by the circle", gloss: "The circle chooses its next holder together." },
-  { id: "rotates", label: "Rotates", gloss: "The seat passes around the circle on a rhythm." },
+  { id: "rotates", label: "Rotates", gloss: "The role passes around the circle on a rhythm." },
   { id: "volunteers", label: "Volunteers", gloss: "Whoever raises a hand and is welcomed takes it up." },
   { id: "founder_appoints", label: "Founder appoints", gloss: "The founder names the next holder." },
   { id: "other", label: "Other", gloss: "A way of this village's own, said in its own line." },

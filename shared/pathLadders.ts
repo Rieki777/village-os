@@ -145,7 +145,7 @@ export const PATH_LADDERS = {
       {
         id: "seated",
         name: "Seated",
-        meaning: "You hold a seat in this village's chart of who does what.",
+        meaning: "You hold a role in this village's chart of who does what.",
         column: "org_role_assignments.ended_at IS NULL",
       },
       {
@@ -157,15 +157,15 @@ export const PATH_LADDERS = {
       {
         id: "speaks",
         name: "Speaks for its circle",
-        meaning: "One of your seats carries its circle's pen, so you may say how that circle decides.",
+        meaning: "One of your roles carries its circle's pen, so you may say how that circle decides.",
         column: "org_roles.represents_circle",
       },
     ],
     empty: {
       mechanic:
-        "No seat yet. A rung lights here when the village seats you on one of the seats it has named.",
+        "No role yet. A rung lights here when the village seats you on one of the roles it has named.",
       doorHref: "/roles",
-      doorLabel: "The seats this village names",
+      doorLabel: "The roles this village names",
     },
   },
 

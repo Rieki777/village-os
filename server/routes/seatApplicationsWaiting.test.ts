@@ -270,7 +270,7 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
     (
       await pool.query<any[]>( // module-review-ok: reads back the scratch schema's notifications
         "SELECT user_id FROM notifications WHERE type = 'seat_application_reminder' AND link = ? ORDER BY user_id",
-        [`/seat-applications/${applicationId}`],
+        [`/role-applications/${applicationId}`],
       )
     )[0].map((r: any) => String(r.user_id));
 
@@ -283,7 +283,7 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
     const waiting = h.notices.filter((x) => x.dedupeKey.startsWith(`sa:${app.id}:waiting:`));
     expect(waiting.map((x) => x.userId).sort()).toEqual([B, C]);
     for (const x of waiting) {
-      expect(x.link).toBe(`/seat-applications/${app.id}`);
+      expect(x.link).toBe(`/role-applications/${app.id}`);
       expect(x.body).toContain("Tasks on your profile");
     }
 
@@ -295,7 +295,7 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
       expect(row!.seats).toEqual(["Ledger Keeper"]);
       expect(row!.circles).toEqual(["Orchard Circle"]);
       expect(row!.applicant).toBe("Ana");
-      expect(row!.href).toBe(`/seat-applications/${app.id}`);
+      expect(row!.href).toBe(`/role-applications/${app.id}`);
       expect(row!.appliedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       // No money on the row, though the terms carry it, and no surname.
       expect(w.raw).not.toMatch(/XTS|4321000|amountMinor|Quillfeather/);
@@ -356,8 +356,8 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
     expect(await reminders(decided.id)).toEqual([]);
     // Not yet 48 hours.
     expect(await reminders(fresh.id)).toEqual([]);
-    const sent = h.notices.filter((x) => x.type === "seat_application_reminder" && x.link === `/seat-applications/${idle.id}`);
-    expect(sent[0]?.title).toBe("Still waiting on a seat holder: Well Tender");
+    const sent = h.notices.filter((x) => x.type === "seat_application_reminder" && x.link === `/role-applications/${idle.id}`);
+    expect(sent[0]?.title).toBe("Still waiting on a role holder: Well Tender");
   });
 
   it("a candidate who is the only holder goes to the vote, and sees no adopt row for their own application", async () => {

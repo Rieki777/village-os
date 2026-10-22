@@ -130,7 +130,7 @@ describe("MaturityLadder", () => {
 describe("PowersMap", () => {
   const catalogue: ProgressionCapability[] = [
     cap("forum.post", "Start a thread in the forum", true, { via: "stage", stage: "member" }),
-    cap("map.viewPeople", "See who holds seats", true, { via: "stage", stage: "guest" }),
+    cap("map.viewPeople", "See who holds roles", true, { via: "stage", stage: "guest" }),
     cap("member.vouch", "Vouch for an applicant", false, { via: "stage", stage: "quest-seeker" }),
     cap("proposal.open", "Open a governance decision", false, { via: "stage", stage: "co-creator" }),
     cap("org.seat", "Seat and unseat holders", false, { via: "appointment" }),
@@ -155,7 +155,7 @@ describe("PowersMap", () => {
     const { container } = render(<PowersMap catalogue={catalogue} stages={stages} stageIndex={3} />);
     const rung = (name: string) =>
       Array.from(container.querySelectorAll("ol > li")).find((li) => li.textContent?.startsWith(name)) as HTMLElement;
-    expect(within(rung("Guest")).getByText("See who holds seats")).toBeTruthy();
+    expect(within(rung("Guest")).getByText("See who holds roles")).toBeTruthy();
     expect(within(rung("Member")).getByText("Start a thread in the forum")).toBeTruthy();
     expect(within(rung("Co-Creator")).getByText("Open a governance decision")).toBeTruthy();
     // A rung that opens nothing renders, and carries no power list.
@@ -270,7 +270,7 @@ describe("PowersMap", () => {
     // Held, on a rung three above this member. It must survive the filter.
     expect(screen.getByText("Record a decision's outcome")).toBeTruthy();
     expect(screen.getByText("Start a thread in the forum")).toBeTruthy();
-    expect(screen.getByText("See who holds seats")).toBeTruthy();
+    expect(screen.getByText("See who holds roles")).toBeTruthy();
     // And nothing closed is left anywhere, on any rung.
     expect(screen.queryByText("Vouch for an applicant")).toBeNull();
     expect(screen.queryByText("Open a governance decision")).toBeNull();

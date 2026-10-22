@@ -103,7 +103,7 @@ export default function SeatTermField({
         className={look.input}
       />
       <div id={lineId} aria-live="polite" className="mt-1 space-y-1">
-        {capAtSeasonEnd && <p className={look.line}>A steward's seat ends with the season at the latest.</p>}
+        {capAtSeasonEnd && <p className={look.line}>A steward role ends with the season at the latest.</p>}
         {preview?.state === "ok" && (
           <p className={look.line}>
             {preview.line}{" "}

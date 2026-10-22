@@ -104,26 +104,26 @@ export const POWERS: readonly PowerEntry[] = [
   },
   {
     capability: "org.seat",
-    title: "The village's seats",
-    surface: "Seating somebody in a seat, and taking them out of it",
+    title: "The village's roles",
+    surface: "Seating somebody in a role, and taking them out of it",
     routes: ["/api/admin/org/roles/:id/holders", "/api/admin/org/seatings/:id"],
   },
   {
     capability: "org.seatAgent",
-    title: "The village's software seats",
-    surface: "Seating a software agent in a seat, and taking it out of it",
+    title: "The village's software roles",
+    surface: "Seating a software agent in a role, and taking it out of it",
     routes: ["/api/admin/org/roles/:id/holders"],
   },
   {
     capability: "org.decide",
     title: "The village's structure",
-    surface: "Publishing a reorganisation of the circles and seats, or putting it to the village",
+    surface: "Publishing a reorganisation of the circles and roles, or putting it to the village",
     routes: ["/api/org/drafts/:id/publish-by-power", "/api/admin/org/drafts/:id/publish"],
   },
   {
     capability: "org.declare",
     title: "The village's own shape",
-    surface: "Declaring the circles, the seats, and how each one decides",
+    surface: "Declaring the circles, the roles, and how each one decides",
     /*
      * CORRECTED IN 0103. This entry named `/api/admin/org/drafts/:id/publish`
      * and `/api/circles`, and neither one asks this key: the first is behind

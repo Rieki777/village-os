@@ -294,8 +294,8 @@ export function portraitFor(
       src: `/images/avatars/${file}.webp`,
       framed: FRAMED_PORTRAITS.has(file),
       alt: className
-        ? `Stock art for ${className}, a class suggested for this seat`
-        : "Stock art for a class suggested for this seat",
+        ? `Stock art for ${className}, a class suggested for this role`
+        : "Stock art for a class suggested for this role",
     };
   }
   return { kind: "sigil", letter: (Array.from(seat.name.trim())[0] ?? "").toUpperCase() };

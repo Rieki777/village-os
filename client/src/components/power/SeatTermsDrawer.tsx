@@ -58,7 +58,7 @@ const GROUP_ICONS: Record<SettingsGroup, LucideIcon> = {
 
 export const DRAWER_WORDS = {
   trigger: "Settings",
-  triggerSub: "Terms for whoever holds this seat",
+  triggerSub: "Terms for whoever holds this role",
   notSetLead: "Not set yet",
   customised: "customised",
   fromPreset: "Started from",
@@ -68,7 +68,7 @@ export const DRAWER_WORDS = {
   none: OFFER_WORDS.none,
   propose: OFFER_WORDS.propose,
   changed: OFFER_WORDS.changed,
-  changeLater: "Changing the terms of a seat somebody holds comes later.",
+  changeLater: "Changing the terms of a role somebody holds comes later.",
 } as const;
 
 export interface DrawerAdoption {

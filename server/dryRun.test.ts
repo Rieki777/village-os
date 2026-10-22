@@ -112,7 +112,7 @@ describe("what a settlement would pay", () => {
     const r = dryRun(snapshot({ seatCount: 3 }), { moons: 2, from: FROM });
     const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
     expect(paid).toHaveLength(1);
-    expect(paid[0].sentence).toContain("3 seat holders");
+    expect(paid[0].sentence).toContain("3 role holders");
     expect(paid[0].sentence).toContain("20 Gratitude");
     expect(paid[0].sentence).toContain("60 for the moon");
   });
@@ -180,7 +180,7 @@ describe("what a settlement would pay", () => {
       snapshot({ rules: [seatRule({ trigger: "quest.completed" })] }),
       { moons: 2, from: FROM },
     );
-    expect(sentences(r)).toMatch(/No rule is set for holding a seat/i);
+    expect(sentences(r)).toMatch(/No rule is set for holding a role/i);
   });
 
   it("names a village with no enabled rule at all", () => {

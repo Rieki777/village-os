@@ -122,8 +122,8 @@ describe("what one bad entry becomes", () => {
     expect(p.card.circles.filter((c) => c.key === "water")).toHaveLength(1);
     expect(p.card.circles.find((c) => c.key === "water")?.decidesBy).toBeNull();
     expect(p.leftOut.join(" ")).toContain('A need keyed "Not A Key" was left out.');
-    expect(p.leftOut).toContain("A seat with no name was left out.");
-    expect(p.leftOut.join(" ")).toContain('The seat "Floater" was left out');
+    expect(p.leftOut).toContain("A role with no name was left out.");
+    expect(p.leftOut.join(" ")).toContain('The role "Floater" was left out');
     expect(p.leftOut.join(" ")).toContain('A circle keyed "attic" was left out');
     expect(p.leftOut.join(" ")).toContain('"coin_toss" is not a way of deciding Village OS knows');
   });

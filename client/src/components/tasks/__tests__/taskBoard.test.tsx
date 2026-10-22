@@ -184,7 +184,7 @@ describe("waiting on you", () => {
     expect(within(group).getByText("In Garden circle · Applied 18 October 2026")).toBeInTheDocument();
     const draft = within(group).getByText("A draft to publish: The water circle").closest("a");
     expect(draft?.getAttribute("href")).toBe("/review/structure/batch-1");
-    expect(within(group).getByText("It adds 1 circle and 2 seats")).toBeInTheDocument();
+    expect(within(group).getByText("It adds 1 circle and 2 roles")).toBeInTheDocument();
     // First of the groups, and no number in its heading.
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(headings[0]).toBe(WAITING_COPY.heading);

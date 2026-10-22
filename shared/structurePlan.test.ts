@@ -154,7 +154,7 @@ describe("decideStructure", () => {
     const d = decideStructure(plan(), {});
     expect(d.counts.matched).toBe(4);
     expect(d.counts.unsettled).toBe(4);
-    expect(d.problems).toContain("4 seats already exist here. Choose what happens to each one.");
+    expect(d.problems).toContain("4 roles already exist here. Choose what happens to each one.");
   });
 
   it("refuses two seats moving onto one live seat", () => {
@@ -196,11 +196,11 @@ describe("decideStructure", () => {
     const taken = decideStructure(plan(), {
       conflicts: { ...settled, "xprop-structure#1": { choice: "rename", name: "land liaison" } },
     });
-    expect(taken.problems).toContain('A live seat is already called "land liaison". Type a name of its own.');
+    expect(taken.problems).toContain('A live role is already called "land liaison". Type a name of its own.');
     const twice = decideStructure(plan(), {
       conflicts: { ...settled, "xprop-structure#1": { choice: "rename", name: "Events Manager" } },
     });
-    expect(twice.problems).toContain('Two seats in this change would be called "Events Manager".');
+    expect(twice.problems).toContain('Two roles in this change would be called "Events Manager".');
     const blank = decideStructure(plan(), { conflicts: { ...settled, "xprop-structure#1": { choice: "rename", name: "  " } } });
     expect(blank.problems[0]).toContain("Type a new name");
   });

@@ -417,7 +417,7 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(seatNotices.map((r) => r.userId).sort()).toEqual(["cat-1", "cat-2"]);
     expect(seatNotices[0].dedupeKey).toBe(`role:${stewardHoldingId(seatNotices[0].userId)}`);
     expect(String(seatNotices[0].body)).toContain(SEASON_ENDS_ON);
-    expect(String(seatNotices[0].body), "and how they came to hold it").toContain("named you for this seat");
+    expect(String(seatNotices[0].body), "and how they came to hold it").toContain("named you for this role");
     expect(String(seatNotices[0].body), "and that they said yes to it").toContain("you accepted");
     expect(String(seatNotices[0].title)).toContain("Steward");
   });

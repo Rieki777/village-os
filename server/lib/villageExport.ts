@@ -661,9 +661,9 @@ export function buildOrgExport(input: OrgExportInput): OrgExport {
     seats,
     relations,
     omits: [
-      "Who holds a seat. This document is unauthenticated, so it carries counts and never people.",
+      "Who holds a role. This document is unauthenticated, so it carries counts and never people.",
       "Standing example rows. They are demo data, so this document drops them instead of flagging them.",
-      "Retired seats.",
+      "Retired roles.",
       "The village's own glosses on its shape and ways of deciding. Ids only here; the words stay on the map.",
     ],
   };
@@ -732,10 +732,10 @@ const STATE_WORD: Record<string, string> = {
  */
 function seatSentence(s: ExportSeat): string {
   const word = STATE_WORD[s.state] ?? s.state;
-  const counted = `${s.filled} of ${s.seats} seat(s) held`;
+  const counted = `${s.filled} of ${s.seats} held`;
   const backed = s.state === "open" ? s.filled === 0 : s.filled > 0;
   if (s.stateSource === "declared" && !backed) {
-    return `The village records this seat as: ${word.toLowerCase()}. No holder for it is written down here (${counted}).`;
+    return `The village records this role as: ${word.toLowerCase()}. No holder for it is written down here (${counted}).`;
   }
   return `${word}. ${counted}.`;
 }
@@ -749,8 +749,8 @@ export function orgIndexMarkdown(doc: OrgExport): string {
     "",
     `# ${doc.name}`,
     "",
-    "The circles this village organises itself into and the seats inside them.",
-    "This document carries no names: it says how many hold each seat, never who.",
+    "The circles this village organises itself into and the roles inside them.",
+    "This document carries no names: it says how many hold each role, never who.",
     "",
   ];
 
@@ -768,7 +768,7 @@ export function orgIndexMarkdown(doc: OrgExport): string {
 
   const loose = byCircle.get("") ?? [];
   if (loose.length) {
-    lines.push("## Seats outside any circle", "");
+    lines.push("## Roles outside any circle", "");
     for (const s of loose) lines.push(`- [${linkText(s.name)}](roles/${s.id}.md): ${s.filled} of ${s.seats} held`);
     lines.push("");
   }
@@ -791,7 +791,7 @@ export function circleMarkdown(doc: OrgExport, circle: ExportCircle): string {
     `Part of [${linkText(doc.name)}](../index.md).`,
   ];
   if (parent) lines.push("", `Inside [${linkText(parent.name)}](${parent.id}.md).`);
-  if (grown) lines.push("", `Grew out of the [${linkText(grown.name)}](../roles/${grown.id}.md) seat as it outgrew one person.`);
+  if (grown) lines.push("", `Grew out of the [${linkText(grown.name)}](../roles/${grown.id}.md) role as it outgrew one person.`);
   if (circle.status !== "active") lines.push("", `Status: ${circle.status}.`);
   // 0083: the platform LABEL for the id, never the village's gloss. The label
   // is our vocabulary; the gloss is their free text and stays home.
@@ -802,7 +802,7 @@ export function circleMarkdown(doc: OrgExport, circle: ExportCircle): string {
   if (circle.purpose) lines.push("", "## Purpose", "", prose(circle.purpose));
 
   if (seats.length) {
-    lines.push("", "## Seats", "");
+    lines.push("", "## Roles", "");
     for (const s of seats) {
       lines.push(`- [${linkText(s.name)}](../roles/${s.id}.md): ${seatSentence(s)}`);
     }
@@ -821,11 +821,11 @@ export function seatMarkdown(doc: OrgExport, seat: ExportSeat): string {
     "",
     `# ${seat.name}`,
     "",
-    circle ? `A seat in [${linkText(circle.name)}](../circles/${circle.id}.md).` : `A seat in [${linkText(doc.name)}](../index.md).`,
+    circle ? `A role in [${linkText(circle.name)}](../circles/${circle.id}.md).` : `A role in [${linkText(doc.name)}](../index.md).`,
     "",
     seatSentence(seat),
   ];
-  if (seat.recruiting) lines.push("", "This seat is open to anyone who wants to take it up.");
+  if (seat.recruiting) lines.push("", "This role is open to anyone who wants to take it up.");
   if (seat.aim) lines.push("", "## Aim", "", prose(seat.aim));
   if (seat.domain) lines.push("", "## Domain", "", prose(seat.domain));
   if (seat.accountabilities.length) {

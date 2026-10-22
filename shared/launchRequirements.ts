@@ -432,7 +432,7 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     id: "village-timezone",
     group: "brand",
     title: "Say which timezone the village keeps",
-    why: "A day here starts at midnight somewhere, and the platform ships Costa Rica's. Season turns, seat terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on somebody else's clock.",
+    why: "A day here starts at midnight somewhere, and the platform ships Costa Rica's. Season turns, role terms, the claims window, every time on the calendar and the weekly brief all read it, so a village that never says lives on somebody else's clock.",
     severity: "recommended",
     checkKey: "village:timezone",
     fixAt: "/admin?tab=season&setting=season.timezone",

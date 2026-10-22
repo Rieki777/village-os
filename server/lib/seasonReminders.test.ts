@@ -157,7 +157,7 @@ describe("the words and the link", () => {
     expect(copy.title).toBe("Spring turns in 6 days, on 1 October 2026");
     expect(copy.body).toContain("record what this season did");
     expect(copy.body).toContain("seat people for the next season");
-    expect(copy.body).toContain("Seats end with the season by default");
+    expect(copy.body).toContain("Roles end with the season by default");
     expect(copy.link).toBe(SEASON_REMINDER_LINKS.member);
   });
 

@@ -256,9 +256,9 @@ export const STAT_SOURCES: Record<StatSourceKey, StatSourceDef> = {
   },
   seats_open: {
     group: "Roles and circles",
-    label: "Open seats",
-    sub: "seats waiting for someone",
-    how: "Places on the village's live roles that nobody holds. A seat whose holder's term ran out counts as open.",
+    label: "Openings",
+    sub: "openings waiting for someone",
+    how: "Places on the village's live roles that nobody holds. A place whose holder's term ran out counts as open.",
     unit: "",
     icon: "seats",
     link: "/roles",

@@ -299,7 +299,7 @@ describe.skipIf(!configured)("planning a season, on a real schema", () => {
     const r = await h.call("GET", "/api/season-plans");
     const byId = new Map(r.body.people.map((p: any) => [p.userId, p]));
     expect((byId.get("u-ana") as any).applications.map((a: any) => [a.id, a.status, a.href])).toEqual([
-      ["sa-00000000000000a1", "voting", "/seat-applications/sa-00000000000000a1"],
+      ["sa-00000000000000a1", "voting", "/role-applications/sa-00000000000000a1"],
     ]);
     expect((byId.get("u-ana") as any).waiting).toBe(true);
     expect((byId.get("u-mo") as any).applications.map((a: any) => a.statusWords)).toEqual(["Adopted"]);

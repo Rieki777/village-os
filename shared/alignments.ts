@@ -127,7 +127,7 @@ export function renderSeatTermsText(seatNames: readonly string[], settings: Seat
   const lines = [
     title,
     "",
-    seatNames.length === 1 ? "THE SEAT" : "THE SEATS",
+    seatNames.length === 1 ? "THE ROLE" : "THE ROLES",
     ...seatNames.map((n) => `  ${n.trim()}`),
     "",
     "THE TERMS",
@@ -263,7 +263,7 @@ export const ENDINGS_WORDS = {
   giveNotice: "Give notice",
   giveNoticeFor: "Give notice for the village",
   noticeLine: (days: number) =>
-    `Giving notice ends these terms ${days === 0 ? "at once" : `in ${days} ${days === 1 ? "day" : "days"}`}. Nothing unseats anybody: the seat ends through the village's own doors. You can take it back until it takes effect.`,
+    `Giving notice ends these terms ${days === 0 ? "at once" : `in ${days} ${days === 1 ? "day" : "days"}`}. Nothing unseats anybody: the role ends through the village's own doors. You can take it back until it takes effect.`,
   confirmNotice: "Give notice now",
   takeBackNotice: "Take back the notice",
   endByAgreement: "End by agreement",
@@ -372,7 +372,7 @@ export function deriveAlignmentState(s: StateInput): DerivedState {
   if (s.seatings) {
     if (s.seatings.open > 0) return out("in-force", null);
     if (s.seatings.total > 0) return out("ended", "The seating these terms were held on has ended.", "seating");
-    return out("pending", "Aligned, and waiting for the seats to be taken up.");
+    return out("pending", "Aligned, and waiting for the roles to be taken up.");
   }
   return out("in-force", null);
 }

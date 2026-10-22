@@ -216,7 +216,7 @@ export interface RouteRefusal {
  * teaches nobody where the door is.
  */
 export const STEWARD_SEAT_REFUSAL =
-  "The steward's veto is not an administrator's to give or take. A village fills this seat with a " +
+  "The steward's veto is not an administrator's to give or take. A village fills this role with a " +
   "role_seat ballot and empties it with a role_unseat ballot, so the record shows the village doing it. " +
   "Open one of those instead.";
 

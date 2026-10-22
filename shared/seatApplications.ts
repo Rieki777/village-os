@@ -53,17 +53,17 @@ export const OPEN_STATUSES: readonly ApplicationStatus[] = ["awaiting-holder", "
 
 /** What each status reads as, on the page and in a list. Keyed by the union, so a new status cannot render blank. */
 export const STATUS_WORDS: Record<ApplicationStatus, string> = {
-  "awaiting-holder": "Waiting for a seat holder",
+  "awaiting-holder": "Waiting for a role holder",
   voting: "The village is voting",
   adopted: "Adopted",
   "not-adopted": "Not adopted",
   withdrawn: "Withdrawn",
-  "held-full": "Held, the seat is full",
+  "held-full": "Held, the role is full",
 };
 
 /** Where an application is read. Members only. */
 export function applicationHref(id: string): string {
-  return `/seat-applications/${encodeURIComponent(id)}`;
+  return `/role-applications/${encodeURIComponent(id)}`;
 }
 
 /** An application id: `sa-` and sixteen hex characters. */
@@ -111,12 +111,12 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const raw = Array.isArray(b.seatIds) ? b.seatIds : b.orgRoleId !== undefined && b.orgRoleId !== null && b.orgRoleId !== "" ? [b.orgRoleId] : [];
   const seatIds = raw.map((s) => String(s ?? "").trim()).filter((s) => s !== "");
-  if (seatIds.length < MIN_SEATS) return { ok: false, field: "seatIds", error: "Pick the seat you are applying for." };
+  if (seatIds.length < MIN_SEATS) return { ok: false, field: "seatIds", error: "Pick the role you are applying for." };
   if (seatIds.length > MAX_SEATS) {
-    return { ok: false, field: "seatIds", error: `One application holds at most ${MAX_SEATS} seats. Apply for the rest in a second one.` };
+    return { ok: false, field: "seatIds", error: `One application holds at most ${MAX_SEATS} roles. Apply for the rest in a second one.` };
   }
-  if (new Set(seatIds).size !== seatIds.length) return { ok: false, field: "seatIds", error: "Each seat appears once in an application." };
-  if (seatIds.some((s) => s.length > 64)) return { ok: false, field: "seatIds", error: "That seat id is longer than any seat this village has." };
+  if (new Set(seatIds).size !== seatIds.length) return { ok: false, field: "seatIds", error: "Each role appears once in an application." };
+  if (seatIds.some((s) => s.length > 64)) return { ok: false, field: "seatIds", error: "That role id is longer than any role this village has." };
 
   const note = words(b.note ?? b.fitStatement);
   const deliverables = words(b.deliverables);
@@ -208,7 +208,7 @@ export interface BallotSeat {
 /** "A, B and C". */
 export function seatList(names: readonly string[]): string {
   const clean = names.map((n) => n.trim()).filter(Boolean);
-  if (clean.length <= 1) return clean[0] ?? "a seat";
+  if (clean.length <= 1) return clean[0] ?? "a role";
   return `${clean.slice(0, -1).join(", ")} and ${clean[clean.length - 1]}`;
 }
 
@@ -228,12 +228,12 @@ export function applicationBallotDoc(seats: readonly BallotSeat[], applicationId
   const lines = [
     applicationBallotTitle(seats),
     "",
-    seats.length === 1 ? "THE SEAT" : "THE SEATS",
+    seats.length === 1 ? "THE ROLE" : "THE ROLES",
     ...seats.flatMap((s) => [`  ${s.name.trim()}`, ...(s.aim && s.aim.trim() ? [`    ${s.aim.trim()}`] : [])]),
     "",
     "WHAT THE VILLAGE DECIDES",
-    "  Whether a member's application to hold these seats, on the terms it sets, is adopted.",
-    "  If it carries, the member holds every seat it names on those terms, from the day it lands or a later first day the application sets.",
+    "  Whether a member's application to hold these roles, on the terms it sets, is adopted.",
+    "  If it carries, the member holds every role it names on those terms, from the day it lands or a later first day the application sets.",
     "",
     "Members read the application on its page.",
     `  ${applicationHref(applicationId)}`,
@@ -249,13 +249,13 @@ export function applicationNoticeTitle(kind: "opened" | "waiting" | "adopted" | 
     case "opened":
       return `The village is asked who holds ${seats}`;
     case "waiting":
-      return `An application waits for a seat holder: ${seats}`;
+      return `An application waits for a role holder: ${seats}`;
     case "adopted":
       return `Adopted: your application for ${seats}`;
     case "not-adopted":
       return `Not adopted: your application for ${seats}`;
     case "held-full":
-      return `Held, a seat is full: your application for ${seats}`;
+      return `Held, a role is full: your application for ${seats}`;
   }
 }
 

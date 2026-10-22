@@ -501,7 +501,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
                           >
                             {(options ?? []).map((o) => (
                               <option key={o} value={o}>
-                                {o === "open" ? "Open Seat" : o === "filled" ? "Filled" : o === "partial" ? "Partially Filled" : o === "forming" ? "Forming" : o}
+                                {o === "open" ? "Open Role" : o === "filled" ? "Filled" : o === "partial" ? "Partially Filled" : o === "forming" ? "Forming" : o}
                               </option>
                             ))}
                           </select>

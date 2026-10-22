@@ -35,8 +35,9 @@ describe("lazyRoutesFromApp, against the real App.tsx", () => {
 
   it("finds nearly every route, so a change in App.tsx's shape cannot silently empty the table", () => {
     const declared = [...APP.matchAll(/<Route\s+path=/g)].length;
-    // Everything except the eager three (/, /login, /404) is lazy today.
-    expect(routes.length).toBeGreaterThanOrEqual(declared - 3);
+    // Everything except the eager three (/, /login, /404) and the /seat-applications/:id redirect
+    // to /role-applications/:id (members say role, 2026-10-21) is lazy today.
+    expect(routes.length).toBeGreaterThanOrEqual(declared - 4);
     expect(routes.length).toBeGreaterThan(60);
   });
 

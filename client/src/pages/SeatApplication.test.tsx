@@ -48,7 +48,7 @@ const SERVED = {
   id: ID,
   href: `/seat-applications/${ID}`,
   status: "awaiting-holder",
-  statusWords: "Waiting for a seat holder",
+  statusWords: "Waiting for a role holder",
   candidate: { id: "u-ana", name: "Ana Quillfeather" },
   seats: [
     { id: "seat-lead", name: "Lead steward", aim: "Hold the whole picture." },
@@ -108,16 +108,16 @@ describe("who reads an application", () => {
   it("a visitor gets the sign-in doors, and nothing is fetched", () => {
     signedIn = null;
     render(<SeatApplication />);
-    expect(screen.getByText("Members read seat applications.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toContain(`/seat-applications/${ID}`);
+    expect(screen.getByText("Members read role applications.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toContain(`/role-applications/${ID}`);
     expect(asked.filter((a) => a.includes("role-applications"))).toEqual([]);
   });
 
   it("a guest answered 401 reads the members line and no terms", async () => {
     signedIn = { id: "u-guest" };
-    answer = () => json({ error: "auth_required", message: "Members read seat applications." }, 401);
+    answer = () => json({ error: "auth_required", message: "Members read role applications." }, 401);
     render(<SeatApplication />);
-    expect(await screen.findByText("Members read seat applications.")).toBeTruthy();
+    expect(await screen.findByText("Members read role applications.")).toBeTruthy();
     expect(screen.queryByText(/Recorded here/)).toBeNull();
     expect(screen.queryByText(/orchard ledger/)).toBeNull();
   });
@@ -127,7 +127,7 @@ describe("a member reading one", () => {
   it("shows every seat, the terms with the money line, and the member's words", async () => {
     render(<SeatApplication />);
     expect(await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" })).toBeTruthy();
-    expect(screen.getByText("Waiting for a seat holder")).toBeTruthy();
+    expect(screen.getByText("Waiting for a role holder")).toBeTruthy();
     expect(await screen.findAllByText("Recorded here. Paid outside the platform.")).not.toHaveLength(0);
     expect(screen.getByText("I kept the orchard ledger last season.")).toBeTruthy();
     // The civil day in words, never raw ISO (red team U6).
@@ -141,7 +141,7 @@ describe("a member reading one", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(2));
     expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
     expect(document.querySelector("[data-package-terms]")).not.toBeNull();
-    expect(screen.getByText("One set of terms covers every seat above.")).toBeTruthy();
+    expect(screen.getByText("One set of terms covers every role above.")).toBeTruthy();
     expect(screen.queryByText("Proposed")).toBeNull();
   });
 

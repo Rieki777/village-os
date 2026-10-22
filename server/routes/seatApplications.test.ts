@@ -279,7 +279,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     await pool.query("UPDATE org_roles SET is_example = 1 WHERE id = ?", [example]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const ex = await apply({ seatIds: [example] });
     expect(ex.status).toBe(409);
-    expect(ex.body.error).toMatch(/example seats/);
+    expect(ex.body.error).toMatch(/example roles/);
 
     const full = await seat("Full seat");
     await seatHolder(pool, full, { userId: "u-ivo", seasonId: "s-now", termEndsAt: new Date("2029-06-01T00:00:00Z") });
@@ -290,7 +290,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     const six = await Promise.all(["a", "b", "c", "d", "e", "f"].map((x) => seat(`Six ${x}`)));
     const over = await apply({ seatIds: six });
     expect(over.status).toBe(400);
-    expect(over.body.error).toMatch(/at most 5 seats/);
+    expect(over.body.error).toMatch(/at most 5 roles/);
     // Control: five of them is one application.
     expect((await apply({ seatIds: six.slice(0, 5) })).status).toBe(201);
   });
@@ -320,7 +320,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     const told = h.notices.filter((x) => x.userId === "u-hal");
     expect(told).toHaveLength(1);
     expect(told[0].title).toContain("Holder path");
-    expect(told[0].link).toBe(`/seat-applications/${a.body.id}`);
+    expect(told[0].link).toBe(`/role-applications/${a.body.id}`);
     // The body is one fixed sentence pointing at the task board: nothing the member wrote, no name, no money.
     expect(told[0].body).toBe(WAITING_COPY.holderNoticeBody);
     expect(JSON.stringify(told[0])).not.toMatch(/Ana|XTS|43,?210|orchard/);
@@ -391,7 +391,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect(routed.applied).toEqual([]);
     expect((await readApplication(pool, a.body.id))!.status).toBe("held-full");
     expect(await seatingsOf("u-ana", s)).toHaveLength(0);
-    expect(h.notices.some((x) => x.userId === "u-ana" && /Held, a seat is full/.test(x.title))).toBe(true);
+    expect(h.notices.some((x) => x.userId === "u-ana" && /Held, a role is full/.test(x.title))).toBe(true);
   });
 
   it("CONTROL: the same landing with the place still free seats the candidate on the stored term", async () => {
@@ -533,7 +533,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     // What it does carry: the seat and its aim, and where members read the rest.
     expect(ballot.title).toBe("Who holds Orchard steward");
     expect(ballot.docMarkdown).toContain("Keep the orchard bearing and the ledger true.");
-    expect(ballot.docMarkdown).toContain(`/seat-applications/${a.body.id}`);
+    expect(ballot.docMarkdown).toContain(`/role-applications/${a.body.id}`);
     // Plain lines: the decision page prints the document as written.
     expect(ballot.docMarkdown).not.toMatch(/^#|\*\*/m);
   });

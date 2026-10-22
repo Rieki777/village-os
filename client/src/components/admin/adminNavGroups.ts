@@ -64,7 +64,7 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       title: "Who runs this village",
       items: [
         { key: "players", label: "Players", icon: Users },
-        { key: "game-roles", label: "Game Roles", icon: Users2 },
+        { key: "game-roles", label: "Power groups", icon: Users2 },
         { key: "org-chart", label: "Org Chart", icon: Users2 },
         { key: "handover", label: "The Handover", icon: KeyRound },
         { key: "governance-weights", label: "Voting Weights", icon: Scale },

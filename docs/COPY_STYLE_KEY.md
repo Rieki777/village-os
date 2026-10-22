@@ -181,10 +181,22 @@ Trail and Signal are where clarity wins.
 | One of the four ways in (Investor, Village Steward, Resident, Prosperity Creator) | a path ("Walk this path") | a character |
 | Who a member plays on their sheet | a character ("Play this character", "Add a character"). Characters fill roles. | a path |
 | A unit of community training | a lesson | a module |
+| A position on the org chart (the steward role, a founder role, an operations role) | a role, a role holder, "Apply for a role", "take the role back" | a seat |
+| Putting someone into a role | seat ("Seat someone", "seated", "unseat") | |
+| How many people a role takes | "Holds up to 3", "2 of 3 held", an opening ("1 opening") | seats, open seats |
+| The admin screen that gives people powers | Power groups | Game Roles |
+| A place at a gathering | a seat ("Save me a seat", "Seat fee") | |
 
 Path, character and lesson are the founder's rulings of 2026-10-09: "path is
 the investor, resident, etc. the others should be character and then
 characters fill roles", and "Lessons or learning journey's" for training.
+
+Role is the founder's ruling of 2026-10-21: "use the word 'role' instead of
+'seat' when talking about the sociocratic style roles". The verb stays, on his
+word the same day: "You can use 'seat someone' for that verb." A seat is still
+a seat at a gathering. `scripts/check-voice.mjs` enforces the noun (its rule 6,
+SEAT_RULE); stored ids such as `org.seat` and `role_seat` keep their spelling,
+because members never read them.
 
 Never XP, gold, loot or "level up": Gratitude is thanks, never pay. Growth
 words do the job instead: you grow into a stage, and a room opens.

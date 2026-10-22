@@ -26,6 +26,8 @@
  *   3. No AI filler vocabulary.
  *   4. No rhetorical-question openers used as filler.
  *   5. No passive inspiration. Say something specific.
+ *   6. A role is a role. Never "a seat" for a role on the org chart. The verb
+ *      stays: "seat someone", "seated", "unseat". See SEAT_RULE below.
  *
  * A genuine false positive takes an inline `voice-ok: <reason>` on the line.
  * Waivers are counted and printed so they stay honest.
@@ -113,6 +115,75 @@ export const PASSIVE = [
 ];
 
 export const RHETORICAL = /^\s*(what if we could|have you ever|imagine if|ever wondered)/i;
+
+/**
+ * SEAT_RULE. Rye, 2026-10-21: "use the word 'role' instead of 'seat' when
+ * talking about the sociocratic style roles". The NOUN is the rule: "Apply for
+ * a role", "the steward role", "Who has held this role". The VERB stays, on his
+ * word the same day ("You can use 'seat someone' for that verb"), so "seat them
+ * in", "the power that seats people", "seated" and "unseat" all pass. How many
+ * people a role takes is "Holds up to 3", "2 of 3 held", "1 opening".
+ *
+ * "Seat" is still right in three places, and the rule leaves them alone:
+ *  - A place at a gathering. Those files are exempt whole (SEAT_GATHERING_FILES),
+ *    and a sentence elsewhere that is about a gathering passes (SEAT_GATHERING_LINE).
+ *  - docs/knowledge, which describes the outside world: a land trust's board
+ *    has seats, and an authentic-relating game is called Hot Seat.
+ *  - Machinery. A word glued to "-", "_", "/" or a dotted id is part of an id
+ *    (`org.seat`, `/seat-applications/`, `seat-card-foil`); a quoted literal
+ *    with no space in it is a key or a value, never a sentence; SQL is SQL.
+ *    Seed JSON keys that start with "_" are developer notes, and
+ *    `shared/__fixtures__` holds copies of files another system writes, which
+ *    tests read and members never do.
+ * A lone "Seat" is the button that seats someone, which is the verb.
+ */
+export const SEAT_EXEMPT_DIRS = [/^shared\/__fixtures__\//];
+export const SEAT_GATHERING_FILES = [
+  /^client\/src\/components\/calendar\//, /^client\/src\/components\/EventsAdminPanel\.tsx$/,
+  /^client\/src\/pages\/(Events|Contribute)\.tsx$/,
+  /^server\/lib\/comms\/(cantMakeIt|recaps|guests)\.ts$/, /^shared\/comms\/(guests|mergeFields)\.ts$/,
+  /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|calendarProviders|failedActions|spending)\.ts$/,
+];
+// Phrases about a chair at a gathering, never the bare word "gathering": a sentence can name both.
+export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|give (my|your|the) seat back|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat/i;
+const SEAT_PERSON = "them|him|her|you|people|somebody|someone|anybody|anyone|nobody|no one|a member|members|the member|the stewards|stewards|a voice|software agents|the software agents|software|yourself|themselves|whoever|a software|an agent|agents|the people|a person|the person|roles|a role";
+const SEAT_VERB_AFTER = new RegExp(`^\\s+(${SEAT_PERSON})\\b`, "i");
+// "a seat you hold", "a seat nobody sits in": the person is the subject of a clause, so seat is a noun.
+const SEAT_NOUN_CLAUSE = new RegExp(`^\\s+(${SEAT_PERSON})\\s+(holds|hold|held|sits|sit|keep|keeps|picked|pick|have|has|had|are|is|were|was|holding|wanted|want|wants|asked|ask|applied|choose|chose|named|took|take|carry|carries|already)\\b`, "i");
+// "seat them in", "seats people for", "Could not seat them": the person is the object.
+const SEAT_VERB_FOLLOW = new RegExp(`^\\s+(${SEAT_PERSON})(\\s*$|\\s*[.,;:!?)"'\`]|\\s+(in|on|as|for|after|with|into|to|at|again|back|now|here|there|yet|before|until|from|and|or|who|live|by|over|onto|through)\\b)`, "i");
+// "to seat", "can seat", "the people who seat roles": a bare "seat" after these is the verb.
+const SEAT_VERB_BEFORE = /\b(to|can|can't|cannot|will|would|may|must|could|should|never|who)\s+$/i;
+// SQL, or a span that is nothing but a column list ("id, circle_id, name, seats, ...").
+const SEAT_SQL = /\b(SELECT|INSERT|UPDATE|DELETE FROM|WHERE|VALUES|JOIN|ORDER BY)\b|^[\s`'"]*`?\w+`?(\s*,\s*`?\w+`?){3,}/;
+
+/** Every "seat" in a span that is the noun for a role. Empty when the span is clean. */
+export function seatNounHits(text) {
+  const quoted = /^[`'"}]/.test(text);
+  // A template part keeps its leading "}" so `${n} seat${s}` still reads as a sentence.
+  const inner = text.replace(/^[`'"]|[`'"]$|\$\{$/g, "");
+  const prose = inner.replace(/^\}/, "");
+  if (quoted && !/\s/.test(inner.trim())) return [];
+  if (/^\s*Seat\s*$/.test(prose)) return [];
+  // A formula over field names ("seats - holderCount") is a source id on a figure, not a sentence.
+  if (/^\s*[a-z]\w*(\s*[-+*/]\s*[a-z]\w*)+\s*$/.test(prose)) return [];
+  if (SEAT_SQL.test(prose) || SEAT_GATHERING_LINE.test(prose)) return [];
+  const hits = [];
+  for (const m of text.matchAll(/\b(seat|seats)\b('s|s')?/gi)) {
+    const before = text.slice(0, m.index);
+    const after = text.slice(m.index + m[0].length);
+    if (/[-_/.]$/.test(before) || /^[-_/]/.test(after) || /^[.:]\w/.test(after)) continue;
+    // `seats: [...]` opening a literal is a key in a data format, not a sentence.
+    if (/^[`'"]$/.test(before) && /^:/.test(after)) continue;
+    if (!m[2]) {
+      if (/^\s+(and|or) unseat/i.test(after)) continue;
+      if (SEAT_VERB_AFTER.test(after) && !SEAT_NOUN_CLAUSE.test(after) && SEAT_VERB_FOLLOW.test(after)) continue;
+      if (!/s$/i.test(m[1]) && SEAT_VERB_BEFORE.test(before)) continue;
+    }
+    hits.push(["seat-noun", m[0], m.index]);
+  }
+  return hits;
+}
 
 function walkFiles(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -223,7 +294,10 @@ if (isMain) {
   function checkJson(value, key, rel, lines, out) {
     if (typeof value === "string") {
       if (key !== null && NON_COPY_JSON_KEYS.has(key)) return;
-      for (const [kind, hit] of checkSpan(value)) {
+      // A "_" key is a developer's note beside the data; the seat rule is about what members read.
+      const seatFree = (key !== null && key.startsWith("_")) || SEAT_EXEMPT_DIRS.some((re) => re.test(rel));
+      const seat = seatFree ? [] : seatNounHits(value);
+      for (const [kind, hit] of [...checkSpan(value), ...seat]) {
         const idx = lines.findIndex((l) => l.includes(value.slice(0, 60)));
         out.push({
           file: rel, line: idx >= 0 ? idx + 1 : 1, kind, hit,
@@ -272,8 +346,9 @@ if (isMain) {
       file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
     const lines = text.split("\n");
+    const seatScope = ![...SEAT_GATHERING_FILES, ...SEAT_EXEMPT_DIRS].some((re) => re.test(rel));
     for (const span of copySpans(sf)) {
-      const hits = checkSpan(span.text);
+      const hits = [...checkSpan(span.text), ...(seatScope ? seatNounHits(span.text) : [])];
       if (!hits.length) continue;
       for (const [kind, hit, offset] of hits) {
         const { line } = sf.getLineAndCharacterOfPosition(span.pos + (offset || 0));

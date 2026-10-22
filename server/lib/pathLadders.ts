@@ -190,8 +190,8 @@ function assemble(pathId: LadderPathId, rungs: LadderRung[]): PathLadder {
  * that it is ready to be re-chosen.
  */
 const LAPSE_WORDS: Record<"term" | "season", string> = {
-  term: "Your term on this seat has run out, and the village has not re-chosen it yet.",
-  season: "The season you were seated in has turned, and the village has not re-chosen this seat yet.",
+  term: "Your term in this role has run out, and the village has not re-chosen it yet.",
+  season: "The season you were seated in has turned, and the village has not re-chosen this role yet.",
 };
 
 export function stewardLadder(

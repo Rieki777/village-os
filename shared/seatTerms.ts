@@ -215,7 +215,7 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
       return {
         ok: false,
         code: "unreadable_date",
-        error: "That end date could not be read. Send a date like 2027-03-21, or leave it out and the seat ends with the season.",
+        error: "That end date could not be read. Send a date like 2027-03-21, or leave it out and the role ends with the season.",
       };
     }
     endsOn = raw;
@@ -229,8 +229,8 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
         ok: false,
         code: "no_next_season",
         error: capAtSeasonEnd
-          ? "A steward's seat ends with the season at the latest, and this season ends before the vote could land with no next season set. Add the next season in Admin first."
-          : "This season ends before the vote could land, and no next season is set, so there is no season end for this seat to end with. Add the next season in Admin, or give the seat its own end date.",
+          ? "A steward role ends with the season at the latest, and this season ends before the vote could land with no next season set. Add the next season in Admin first."
+          : "This season ends before the vote could land, and no next season is set, so there is no season end for this role to end with. Add the next season in Admin, or give the role its own end date.",
       };
     }
     if (!current) {
@@ -238,8 +238,8 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
         ok: false,
         code: "no_season",
         error: capAtSeasonEnd
-          ? "A steward's seat ends with the season at the latest, and no season is running. Start the next season in Admin first."
-          : "No season is running, so there is no season end for this seat to end with. Start the next season in Admin, or give the seat its own end date.",
+          ? "A steward role ends with the season at the latest, and no season is running. Start the next season in Admin first."
+          : "No season is running, so there is no season end for this role to end with. Start the next season in Admin, or give the role its own end date.",
       };
     }
     if (!seasonEnd) {
@@ -247,8 +247,8 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
         ok: false,
         code: "open_ended_season",
         error: capAtSeasonEnd
-          ? "A steward's seat ends with the season at the latest, and the running season has no end date. Give the season an end date in Admin first."
-          : "The running season has no end date, so there is no season end for this seat to end with. Give the season an end date in Admin, or give the seat its own end date.",
+          ? "A steward role ends with the season at the latest, and the running season has no end date. Give the season an end date in Admin first."
+          : "The running season has no end date, so there is no season end for this role to end with. Give the season an end date in Admin, or give the role its own end date.",
       };
     }
   }
@@ -263,7 +263,7 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
     return {
       ok: false,
       code: "past_season_end",
-      error: `A steward's seat ends with the season at the latest. This season ends on ${seasonEndsOn}, so pick that date or an earlier one.`,
+      error: `A steward role ends with the season at the latest. This season ends on ${seasonEndsOn}, so pick that date or an earlier one.`,
     };
   }
   if (end.getTime() > RECORD_LIMIT.getTime()) {
@@ -271,8 +271,8 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
       ok: false,
       code: "past_record_limit",
       error: asked
-        ? `Seat records can hold an end date up to ${RECORD_LIMIT_DATE}, and this one is later. Pick an earlier date.`
-        : `The season this seat would end with ends after ${RECORD_LIMIT_DATE}, and seat records can only hold an end date up to then. Give the seat its own earlier end date, or move the season's end in Admin.`,
+        ? `Role records can hold an end date up to ${RECORD_LIMIT_DATE}, and this one is later. Pick an earlier date.`
+        : `The season this role would end with ends after ${RECORD_LIMIT_DATE}, and role records can only hold an end date up to then. Give the role its own earlier end date, or move the season's end in Admin.`,
     };
   }
   if (end.getTime() <= now.getTime()) {
@@ -283,7 +283,7 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
     return {
       ok: false,
       code: "ends_before_it_starts",
-      error: `This seat would end on ${endsOn}, before the vote could seat anybody (the earliest it can land is ${starts.toISOString().slice(0, 10)}). Pick a later end date.`,
+      error: `This role would end on ${endsOn}, before the vote could seat anybody (the earliest it can land is ${starts.toISOString().slice(0, 10)}). Pick a later end date.`,
     };
   }
 
@@ -291,8 +291,8 @@ export function resolveSeatTerm(ask: SeatTermAsk): SeatTerm {
   const caution =
     end.getTime() > line.at.getTime()
       ? line.measure === "seasons"
-        ? `This seat runs until ${endsOn}, past the end of the fourth season from now. Seats usually come back to the village every season, so make sure this length is intended.`
-        : `This seat runs until ${endsOn}, more than thirteen moons from now. Seats usually come back to the village every season, so make sure this length is intended.`
+        ? `This role runs until ${endsOn}, past the end of the fourth season from now. Roles usually come back to the village every season, so make sure this length is intended.`
+        : `This role runs until ${endsOn}, more than thirteen moons from now. Roles usually come back to the village every season, so make sure this length is intended.`
       : null;
 
   return {
