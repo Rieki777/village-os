@@ -61,7 +61,9 @@ import { coveredSeatIds, type Relation, type RelationType } from "./orgRelations
 import { projectSeat, type SeatTier } from "./seatProjection";
 import { readCardRows, readSignTables, type SignTable } from "../repos/playerCard";
 
-export type CardLevel = "stranger" | "member" | "self";
+import type { CardLevel, PlayerCardPayload, SignSheetOut } from "../../shared/playerCardPayload";
+
+export type { CardLevel, PlayerCardPayload };
 
 /** What one reader may read about one owner's card. */
 export interface CardTier {
@@ -88,22 +90,6 @@ export interface CardContext {
   /** The village's class names, read once (`listArchetypes`). */
   archetypeNames: Record<string, string>;
   firstName: (name: string) => string;
-}
-
-/** A sign's sheet: the rows behind the count, at the reader's tier. */
-export interface SignSheetOut {
-  title: string;
-  countedFrom: string;
-  rows: { at: string | null; words: string; who: string | null }[];
-  note: string;
-}
-
-export interface PlayerCardPayload {
-  card: PlayerCard;
-  viewer: { level: CardLevel; isSelf: boolean };
-  /** Sheets by `SignOut.sheetKey`. Empty below the member tier. */
-  sheets: Record<string, SignSheetOut>;
-  links: { wallet?: string; apply: string; plan: string; newApplication?: string; review?: string };
 }
 
 // ── The sign memo ──────────────────────────────────────────────────────────
@@ -435,6 +421,7 @@ export async function buildPlayerCards(
     out.set(owner.userId, {
       card,
       viewer: { level, isSelf },
+      timeZone: ctx.timeZone,
       sheets,
       links: {
         apply: "/roles",

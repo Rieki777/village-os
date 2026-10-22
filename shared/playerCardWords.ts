@@ -68,6 +68,11 @@ export const CARD_WORDS = {
   loadSlider: "How this moon feels, from Healthy to Heavy",
   loadEnds: ["Healthy", "Heavy"] as const,
   loadStep: { 1: "Healthy", 2: "Leaning healthy", 3: "Balanced", 4: "Leaning heavy", 5: "Heavy" } as Record<1 | 2 | 3 | 4 | 5, string>,
+  trend: { up: "Up on last moon", down: "Down on last moon", same: "Same as last moon" } as Record<"up" | "down" | "same", string>,
+  trendLater: "Trend from next moon",
+  openSheet: (sign: string) => `See what makes up: ${sign}`,
+  wallet: "My wallet",
+  pendingRoleWords: "Proposed, waiting for consent",
   growingEdge: "Growing edge",
   whoCouldHoldNext: "Who could hold this next",
 
