@@ -85,6 +85,12 @@ export async function memberNoRows(q: Queryable, userId: string): Promise<RowDat
   return rowsOf(q, "SELECT `no` FROM `live_session_members` WHERE `user_id` = ? LIMIT 1", [userId]);
 }
 
+/** The numbers of several members in one read. Members with none are simply absent. */
+export async function memberNoRowsFor(q: Queryable, userIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (none(userIds)) return [];
+  return rowsOf(q, "SELECT `no`, `user_id` FROM `live_session_members` WHERE `user_id` IN (?)", [[...userIds]]);
+}
+
 /** Give the member a number. A second call for the same member changes nothing. */
 export async function insertMemberNo(q: Queryable, userId: string, now: Date): Promise<void> {
   await q.query("INSERT IGNORE INTO `live_session_members` (`user_id`, `created_at`) VALUES (?, ?)", [userId, now]);

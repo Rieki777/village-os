@@ -6,22 +6,23 @@
  * (Rye, 2026-10-22):
  *
  *   PERSONAL  the person's own words. They save straight to the person's own
- *             record. Today only the season aim and the village goal it serves
- *             have a home (`season_plans.aim` and `serves_goal`, written
- *             through the existing `PUT /api/season-plans/mine`). The rest
- *             have their edit control and this contract, and their storage
- *             arrives with the season plan migration (PR 6).
+ *             record: the season aim through `PUT /api/season-plans/mine`; the
+ *             goals served with how each helps, the seasonal goals and the
+ *             card words through `PUT /api/season-plans/mine/card`; and this
+ *             moon's load through `PUT /api/season-plans/mine/load` (#530).
  *   ROLE      the role's words. They change by consent, so an edit opens a
  *             proposed change to the role: a one-change org draft
  *             (`update_seat`), decided the way every org draft is. The card
- *             says "Proposed, waiting for consent" until it is adopted. Only
- *             the fields `org_roles` stores can be proposed today; "Bring me"
- *             and "Not mine to hold" have no column yet.
+ *             says "Proposed, waiting for consent" until it is adopted.
+ *             "Bring me", "Not mine to hold" and the runbook live on the role
+ *             since #534 and pass the one parser (shared/roleHandoverParse.ts)
+ *             before they are proposed.
  *   TERMS     agreements are never edited on the card. They change through a
  *             new role application.
  *
  * Pure. The client reads this table and decides nothing else about owners.
  */
+import { parseRoleWordList, parseRunbook } from "./roleHandoverParse";
 
 export const PERSONAL_EDIT_KEYS = [
   "aim",
@@ -35,19 +36,17 @@ export const PERSONAL_EDIT_KEYS = [
 ] as const;
 export type PersonalEditKey = (typeof PERSONAL_EDIT_KEYS)[number];
 
-export const ROLE_EDIT_KEYS = ["purpose", "decide", "countOnMe", "bringMe", "notMine"] as const;
+export const ROLE_EDIT_KEYS = ["purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook"] as const;
 export type RoleEditKey = (typeof ROLE_EDIT_KEYS)[number];
 
-/** Personal words with a home today. Everything else waits for PR 6's storage. */
-export const PERSONAL_STORED_NOW: readonly PersonalEditKey[] = ["aim", "servesGoal"];
-
-/** The `org_roles` field each role word is proposed into, or null where no column exists yet. */
-export const ROLE_WORD_FIELD: Record<RoleEditKey, "aim" | "domain" | "accountabilities" | null> = {
+/** The `update_seat` payload key each role word is proposed into. */
+export const ROLE_WORD_FIELD: Record<RoleEditKey, "aim" | "domain" | "accountabilities" | "bringMe" | "notMine" | "runbook"> = {
   purpose: "aim",
   decide: "domain",
   countOnMe: "accountabilities",
-  bringMe: null,
-  notMine: null,
+  bringMe: "bringMe",
+  notMine: "notMine",
+  runbook: "runbook",
 };
 
 export function isRoleEditKey(v: unknown): v is RoleEditKey {
@@ -66,17 +65,19 @@ export const EDIT_WORDS = {
   roleWordsNote: "These words belong to the role, so a change goes to the circle for consent.",
   termsNote: "Terms change through a new role application.",
   newApplication: "Start a new application",
-  notStoredYet: "This part of the card can't be saved yet. It is stored from the next season plan update.",
-  noColumnYet: "This part of a role can't be proposed yet. The role card gains it in a later update.",
+  noSeason: "There is no season to plan yet, so this part of the card cannot be saved. Planning opens one moon before the next season starts.",
   failed: "That did not save. Try again.",
   onePerLine: "One per line",
   seeProposal: "See it in review",
+  seasonalGoalsHint: "One goal per line. Add when it is done after a colon.",
+  servesGoalsHint: "One of this season's goals per line, as the village wrote it.",
+  loadSaved: "Saved for this moon",
 } as const;
 
 /** One proposed edit to a role's words, as the card's route accepts it. */
 export interface RoleWordProposal {
   key: RoleEditKey;
-  /** Text for purpose and decide; one item per line for countOnMe. */
+  /** Text for purpose, decide and the runbook; one item per line for countOnMe, bringMe and notMine. */
   text: string;
 }
 
@@ -88,8 +89,19 @@ export function roleWordPayload(p: unknown): { ok: true; payload: Record<string,
   const b = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
   if (!isRoleEditKey(b.key)) return { ok: false, error: "Pick one of the role's words to change." };
   const field = ROLE_WORD_FIELD[b.key];
-  if (!field) return { ok: false, error: EDIT_WORDS.noColumnYet };
   if (typeof b.text !== "string") return { ok: false, error: "The change needs to be words." };
+  // The handover words pass the one parser, so the card refuses with the same
+  // sentence the draft preview and the publish would. Blank clears them.
+  if (field === "bringMe" || field === "notMine") {
+    const r = parseRoleWordList(b.text, field);
+    if (!r.ok) return { ok: false, error: r.problem };
+    return { ok: true, payload: { [field]: r.value }, key: b.key };
+  }
+  if (field === "runbook") {
+    const r = parseRunbook(b.text);
+    if (!r.ok) return { ok: false, error: r.problem };
+    return { ok: true, payload: { runbook: r.value }, key: b.key };
+  }
   const text = b.text.trim();
   if (text.length > ROLE_WORD_MAX) return { ok: false, error: `Keep it to ${ROLE_WORD_MAX} characters.` };
   if (field === "accountabilities") {
@@ -108,8 +120,5 @@ export function roleWordPayload(p: unknown): { ok: true; payload: Record<string,
 /** Which role words an open draft's update_seat payload would change. Pure. */
 export function roleWordsIn(payload: unknown): RoleEditKey[] {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
-  return ROLE_EDIT_KEYS.filter((k) => {
-    const field = ROLE_WORD_FIELD[k];
-    return field !== null && p[field] !== undefined;
-  });
+  return ROLE_EDIT_KEYS.filter((k) => p[ROLE_WORD_FIELD[k]] !== undefined);
 }

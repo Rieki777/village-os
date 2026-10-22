@@ -2,7 +2,9 @@
  * One role in full: its full title first, then its purpose in a highlighted
  * block, then what it decides, what to bring it, what it answers for, how
  * we'll know it's working, who it works with, what is not its to hold, its
- * powers, tensions, and how ready it is to hand over.
+ * runbook, its powers, tensions, and how ready it is to hand over: the six
+ * checks of shared/roleHandover.ts, read as "N of 6 ready", never a
+ * percentage.
  *
  * Role words carry the owner's edit control in edit mode; saving one opens a
  * proposed change that waits for consent. Other roles are named by their full
@@ -11,19 +13,34 @@
 import { CARD_WORDS as W, type RoleOut } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { SignSheetOut } from "@shared/playerCardPayload";
-import { BOX, EditInPlace, Eyebrow, ListSlot, PendingNote, SlotView } from "./cardParts";
+import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
+import { BOX, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
 import { SignList } from "./SignList";
 
 const asText = (slot: { kind: string; value?: unknown }): string =>
   slot.kind !== "shown" ? "" : Array.isArray(slot.value) ? (slot.value as string[]).join("\n") : String(slot.value ?? "");
 
-function RoleWord({ role, k, heading, children, initial }: { role: RoleOut; k: RoleEditKey; heading: string; children: React.ReactNode; initial: string }) {
+function RoleWord({
+  role,
+  k,
+  heading,
+  children,
+  initial,
+  hint,
+}: {
+  role: RoleOut;
+  k: RoleEditKey;
+  heading: string;
+  children: React.ReactNode;
+  initial: string;
+  hint?: string;
+}) {
   return (
     <div className={BOX}>
       <Eyebrow>{heading}</Eyebrow>
       <div className="mt-1">{children}</div>
       <PendingNote show={role.pending.includes(k)} />
-      <EditInPlace target={{ kind: "role", key: k, roleId: role.id }} label={`${heading}, ${role.title}`} initial={initial} />
+      <EditInPlace target={{ kind: "role", key: k, roleId: role.id }} label={`${heading}, ${role.title}`} initial={initial} hint={hint} />
     </div>
   );
 }
@@ -69,7 +86,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           <SlotView slot={role.decide.text}>{(t) => <p className="text-sm">{t}</p>}</SlotView>
         </RoleWord>
         {role.bringMe.items.kind !== "unread" && (
-          <RoleWord role={role} k="bringMe" heading={role.bringMe.heading} initial={asText(role.bringMe.items)}>
+          <RoleWord role={role} k="bringMe" heading={role.bringMe.heading} initial={asText(role.bringMe.items)} hint={ROLE_HANDOVER_WORDS.bringMeHint}>
             <ListSlot slot={role.bringMe.items} />
           </RoleWord>
         )}
@@ -106,8 +123,24 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
       </div>
 
       {role.notMine.items.kind !== "unread" && (
-        <RoleWord role={role} k="notMine" heading={role.notMine.heading} initial={asText(role.notMine.items)}>
+        <RoleWord role={role} k="notMine" heading={role.notMine.heading} initial={asText(role.notMine.items)} hint={ROLE_HANDOVER_WORDS.notMineHint}>
           <ListSlot slot={role.notMine.items} />
+        </RoleWord>
+      )}
+
+      {role.runbook.text.kind !== "unread" && (
+        <RoleWord role={role} k="runbook" heading={role.runbook.heading} initial={asText(role.runbook.text)} hint={ROLE_HANDOVER_WORDS.runbookHint}>
+          <SlotView slot={role.runbook.text}>
+            {(t) =>
+              runbookIsLink(t) ? (
+                <a href={t} target="_blank" rel="noopener noreferrer" className={`${LINK} break-all`}>
+                  {t}
+                </a>
+              ) : (
+                <p className="whitespace-pre-line break-words text-sm">{t}</p>
+              )
+            }
+          </SlotView>
         </RoleWord>
       )}
 
@@ -132,10 +165,12 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           <Eyebrow>{role.handover.heading}</Eyebrow>
           <span className="text-sm font-semibold">{role.handover.summary}</span>
         </div>
-        <ul className="mt-2 grid gap-1 text-sm">
+        <ul className="mt-2 grid gap-1 text-sm" data-handover-checks>
           {role.handover.checks.map((c) => (
-            <li key={c.key} className="flex flex-wrap gap-x-2">
-              <span className="font-medium">{c.label}:</span>
+            <li key={c.key} data-ready={c.state === "ready" ? "true" : "false"} className="flex items-start gap-2">
+              <span aria-hidden="true" className={c.state === "ready" ? "text-notice" : "text-muted-foreground"}>
+                {c.state === "ready" ? "✓" : "○"}
+              </span>
               <span className={c.state === "ready" ? "text-card-foreground" : "text-muted-foreground"}>{c.words}</span>
             </li>
           ))}

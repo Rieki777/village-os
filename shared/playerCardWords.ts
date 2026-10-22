@@ -89,7 +89,7 @@ export const CARD_WORDS = {
   working: "How we'll know it's working",
   worksWith: "Works closely with",
   notMine: "Not mine to hold",
-  runbook: "How the work is done",
+  runbook: "Runbook",
   powers: "Powers",
   powersShared: "Powers, shared",
   sharedWith: (label: string, roles: string) => `${label}, with ${roles}`,

@@ -296,6 +296,28 @@ export async function latestCardWords(db: Db, userId: string): Promise<CardWords
   return rows.length ? wordsOf(rows[0].card_words_json) : null;
 }
 
+/**
+ * `latestCardWords` for several members in one read, for the player card's
+ * batched builder. Every version with words is read, newest first, and the
+ * first per member wins, so the answer is the one `latestCardWords` gives.
+ * A member with none is absent.
+ */
+export async function latestCardWordsFor(db: Db, userIds: readonly string[]): Promise<Map<string, CardWords>> {
+  const out = new Map<string, CardWords>();
+  if (!userIds.length) return out;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT user_id, card_words_json FROM season_plans WHERE user_id IN (?) AND card_words_json IS NOT NULL ORDER BY created_at DESC, version DESC",
+    [[...userIds]],
+  );
+  for (const r of rows) {
+    const id = String(r.user_id);
+    if (out.has(id)) continue;
+    const w = wordsOf(r.card_words_json);
+    if (w) out.set(id, w);
+  }
+  return out;
+}
+
 // ── This moon's load (0267) ─────────────────────────────────────────────────
 
 export interface MoonLoad {
@@ -321,6 +343,16 @@ export async function setMoonLoad(db: Db, userId: string, cycleId: string, level
 export async function moonLoadOf(db: Db, userId: string, cycleId: string): Promise<MoonLoad | null> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT cycle_id, level, set_at FROM player_moon_load WHERE user_id = ? AND cycle_id = ?", [userId, cycleId]);
   return rows.length ? toLoad(rows[0]) : null;
+}
+
+/** `moonLoadOf` for several members and one moon, in one read. A member with no read is absent. */
+export async function moonLoadsFor(db: Db, userIds: readonly string[], cycleId: string): Promise<Map<string, MoonLoad>> {
+  if (!userIds.length) return new Map();
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT user_id, cycle_id, level, set_at FROM player_moon_load WHERE user_id IN (?) AND cycle_id = ?",
+    [[...userIds], cycleId],
+  );
+  return new Map(rows.map((r) => [String(r.user_id), toLoad(r)]));
 }
 
 /** Every moon read a member set, oldest first. */

@@ -138,7 +138,7 @@ export interface PlayerRoleIn {
   archetypes: Read<string[] | null>;
   /** `org_roles.archetypes_suggested`: the seed guessed these tags. */
   archetypesSuggested: Read<boolean>;
-  /** Role fields that do not exist yet (Rye, 2026-10-21): unread until they do. */
+  /** `org_roles.bring_me`, `not_mine` and `runbook` (0268, #534): the role's handover words. */
   bringMe: Read<string[] | null>;
   notMine: Read<string[] | null>;
   runbook: Read<string | null>;
@@ -156,8 +156,6 @@ export interface PlayerRoleIn {
   holderCount?: Read<number>;
   /** A deputy or successor relation covers the role (`coveredSeatIds`). */
   covered?: Read<boolean>;
-  /** Decisions recorded in the role's circle over the last three moons. */
-  circleDecisions?: Read<number>;
   /** Role words an open org draft would change: "Proposed, waiting for consent". */
   pendingWords?: Read<RoleEditKey[]>;
 }
@@ -217,11 +215,7 @@ export interface PlayerCardInput {
   roles: Read<PlayerRoleIn[]>;
   /** The owner's filed season plan; null when none is filed. */
   plan: Read<{ aim: string | null; goals: GoalIn[] } | null>;
-  /**
-   * The owner's seasonal goals, 0 to 3. Input only for now: their storage
-   * arrives with the season plan migration (PR 6, `seasonal_goals_json`
-   * beside `serves_goals_json` and `card_words_json`).
-   */
+  /** The owner's seasonal goals, 0 to 3 (`season_plans.seasonal_goals_json`). */
   seasonalGoals: Read<SeasonalGoalIn[] | null>;
   /** This moon's tasks. Never capped. */
   tasks: Read<TaskIn[]>;
@@ -242,8 +236,8 @@ export interface PlayerCardInput {
   accomplished?: Read<AccomplishmentMoon[]>;
   /**
    * The owner's own read of this moon's load, 1 (Healthy) to 5 (Heavy).
-   * Self-reported, never computed. Null is "Not set this moon"; its storage
-   * arrives with the season plan migration (PR 6).
+   * Self-reported, never computed. Null is "Not set this moon"
+   * (`player_moon_load`, keyed by this moon's id on the village clock).
    */
   loadRead?: Read<LoadStep | null>;
   growingEdge?: Read<string | null>;

@@ -13,6 +13,7 @@ import { Link } from "wouter";
 import { Pencil } from "lucide-react";
 import type { Slot } from "@shared/playerCard";
 import { EDIT_WORDS, type PersonalEditKey, type RoleEditKey } from "@shared/playerCardEdit";
+import { parseRoleWordList, parseRunbook } from "@shared/roleHandoverParse";
 import { proposeRoleWords, savePersonalWords } from "./playerCardApi";
 
 export const SECTION = "rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8";
@@ -54,14 +55,32 @@ export function ListSlot({ slot }: { slot: Slot<string[]> }) {
 export interface CardEditState {
   /** The owner has "Edit my card" switched on. */
   editing: boolean;
+  /** The reader is the card's owner, on their live card: their own controls (the load slider) draw. */
+  owner?: boolean;
   /** Read the card again after a save. */
   reload: () => void;
   reviewHref: string | null;
 }
 
-export const CardEditContext = createContext<CardEditState>({ editing: false, reload: () => undefined, reviewHref: null });
+export const CardEditContext = createContext<CardEditState>({ editing: false, owner: false, reload: () => undefined, reviewHref: null });
 
-type Target = { kind: "personal"; key: PersonalEditKey } | { kind: "role"; key: RoleEditKey; roleId: string };
+type Target = { kind: "personal"; key: PersonalEditKey; goal?: string } | { kind: "role"; key: RoleEditKey; roleId: string };
+
+/**
+ * The handover words checked in the browser by the one parser before they are
+ * proposed, so the refusal reads the same as the draft preview's. Null is fine.
+ */
+export function roleWordProblem(key: RoleEditKey, text: string): string | null {
+  if (key === "bringMe" || key === "notMine") {
+    const r = parseRoleWordList(text, key);
+    return r.ok ? null : r.problem;
+  }
+  if (key === "runbook") {
+    const r = parseRunbook(text);
+    return r.ok ? null : r.problem;
+  }
+  return null;
+}
 
 /**
  * The owner's edit control, in place beside a text block. Draws nothing until
@@ -91,10 +110,17 @@ export function EditInPlace({
   if (!editing) return null;
 
   const save = async () => {
+    if (target.kind === "role") {
+      const problem = roleWordProblem(target.key, text);
+      if (problem) {
+        setSaid(problem);
+        return;
+      }
+    }
     setBusy(true);
     const r =
       target.kind === "personal"
-        ? await savePersonalWords(target.key, text)
+        ? await savePersonalWords(target.key, text, { goal: target.goal })
         : await proposeRoleWords(target.roleId, target.key, text);
     setBusy(false);
     if (r.ok) {

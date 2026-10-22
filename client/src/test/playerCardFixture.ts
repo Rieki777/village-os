@@ -44,21 +44,20 @@ function role(n: number): PlayerRoleIn {
     termEndsAt: "2026-12-31T06:00:00Z",
     archetypes: null,
     archetypesSuggested: false,
-    bringMe: null,
+    bringMe: ["The newcomer list for the week."],
     notMine: null,
-    runbook: null,
+    runbook: "https://example.org/intake-runbook",
     worksWith: [{ roleId: "r-ops", roleName: "Operations & Platform Steward", about: "the intake agent" }],
     powers: [],
     tensions: [{ id: "t1", status: "open", raisedBy: "u-owner", text: "Intake is slow on weekends." }],
     settings: SETTINGS,
     holderCount: 1,
     covered: false,
-    circleDecisions: 2,
     pendingWords: n === 1 ? ["purpose"] : [],
   };
 }
 
-export function fixturePayload(rolesN: number, level: CardLevel = "self"): PlayerCardPayload {
+export function fixturePayload(rolesN: number, level: CardLevel = "self", extra: Partial<PlayerCardInput> = {}): PlayerCardPayload {
   const input: PlayerCardInput = {
     now: new Date("2026-10-22T18:00:00Z"),
     timeZone: "America/Costa_Rica",
@@ -80,6 +79,8 @@ export function fixturePayload(rolesN: number, level: CardLevel = "self"): Playe
     loadRead: null,
     growingEdge: null,
     whoCouldHoldNext: null,
+    accomplished: [],
+    ...extra,
     signReader: (key) => (key === "applications-answered" ? READING : { kind: "not-counted", key, words: "Not counted yet" }),
   };
   return {

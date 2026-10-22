@@ -46,19 +46,17 @@ export interface CardRows {
   tasks: RowDataPacket[];
   taskEvents: RowDataPacket[];
   tensions: RowDataPacket[];
-  circleDecisions: RowDataPacket[];
   pending: RowDataPacket[];
 }
 
 /**
  * One batch for these people. `moonFrom` starts this moon (tasks done this
- * moon and their events); `threeMoonsFrom` starts the window decisions are
- * counted over.
+ * moon and their events).
  */
 export async function readCardRows(
   pool: Pool,
   userIds: readonly string[],
-  window: { moonFrom: Date; threeMoonsFrom: Date },
+  window: { moonFrom: Date },
 ): Promise<CardRows> {
   const ids = [...userIds];
   const n = ids.length;
@@ -66,7 +64,7 @@ export async function readCardRows(
   const q = async (sql: string, args: unknown[]) => (await pool.query<RowDataPacket[]>(sql, args))[0];
   const [
     users, seatings, roles, roleNames, circles, relations, relationTypes, grants,
-    applications, plans, tasks, taskEvents, tensions, circleDecisions, pending,
+    applications, plans, tasks, taskEvents, tensions, pending,
   ] = await Promise.all([
     q(`SELECT id, name FROM users WHERE id IN (${marks(n)})`, ids),
     q(`SELECT ${ASSIGN_COLS} FROM org_role_assignments WHERE ended_at IS NULL AND org_role_id IN (${held}) ORDER BY started_at, id`, ids),
@@ -87,7 +85,7 @@ export async function readCardRows(
       ids,
     ),
     q(
-      "SELECT user_id, season_id, version, aim, serves_goal, filed_at, superseded_at, created_at " +
+      "SELECT user_id, season_id, version, aim, serves_goal, serves_goals_json, seasonal_goals_json, filed_at, superseded_at, created_at " +
         `FROM season_plans WHERE user_id IN (${marks(n)}) ORDER BY created_at, version`,
       ids,
     ),
@@ -109,12 +107,6 @@ export async function readCardRows(
       ids,
     ),
     q(
-      "SELECT s.circle_id, COUNT(*) AS n FROM live_session_entries e JOIN live_sessions s ON s.id = e.session_id " +
-        `WHERE e.kind = 'decision' AND e.created_at >= ? AND s.circle_id IN (SELECT circle_id FROM org_roles WHERE id IN (${held})) ` +
-        "GROUP BY s.circle_id",
-      [window.threeMoonsFrom, ...ids],
-    ),
-    q(
       "SELECT c.org_role_id, c.payload, c.draft_id FROM org_draft_changes c JOIN org_drafts d ON d.id = c.draft_id " +
         `WHERE d.status = 'open' AND c.op = 'update_seat' AND c.org_role_id IN (${held})`,
       ids,
@@ -122,7 +114,7 @@ export async function readCardRows(
   ]);
   return {
     users, seatings, roles, roleNames, circles, relations, relationTypes, grants,
-    applications, plans, tasks, taskEvents, tensions, circleDecisions, pending,
+    applications, plans, tasks, taskEvents, tensions, pending,
   };
 }
 

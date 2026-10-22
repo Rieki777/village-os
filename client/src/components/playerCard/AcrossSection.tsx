@@ -2,18 +2,101 @@
  * "Across all N roles": my aim, my seasonal goals, the village goals I serve
  * with how each helps, this moon's tasks, the signs, and the load: the counted
  * fact, my own read of it, my growing edge and who could hold this next.
+ *
+ * The load read is the owner's own slider, saved on change through
+ * `PUT /api/season-plans/mine/load`; every other reader sees it read only.
  */
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { Link } from "wouter";
-import { CARD_WORDS as W, LOAD_STEPS, type AcrossOut } from "@shared/playerCard";
+import { CARD_WORDS as W, LOAD_STEPS, type AcrossOut, type LoadStep } from "@shared/playerCard";
+import { EDIT_WORDS } from "@shared/playerCardEdit";
 import type { SignSheetOut } from "@shared/playerCardPayload";
-import { BOX, EditInPlace, Eyebrow, H2, LINK, SECTION, SlotView } from "./cardParts";
+import { BOX, CardEditContext, EditInPlace, Eyebrow, H2, LINK, SECTION, SlotView } from "./cardParts";
+import { savePersonalWords } from "./playerCardApi";
 import { SignList } from "./SignList";
 
 const textOf = <T,>(slot: { kind: string; value?: T }, pick: (v: T) => string) => (slot.kind === "shown" ? pick(slot.value as T) : "");
 
+/** The seasonal goals back as the editor's lines: "Title: done when". */
+const DONE_WHEN_PREFIX = "Done when ";
+const goalLines = (goals: { title: string; doneWhen: string | null }[]) =>
+  goals
+    .map((g) => {
+      const when = g.doneWhen?.startsWith(DONE_WHEN_PREFIX) ? g.doneWhen.slice(DONE_WHEN_PREFIX.length) : g.doneWhen;
+      return when ? `${g.title}: ${when}` : g.title;
+    })
+    .join("\n");
+
+/** How long the slider waits after the last change before it saves, so a drag is one save. */
+export const LOAD_SAVE_DELAY_MS = 400;
+
+/**
+ * The owner's own slider: saves on change (`PUT /api/season-plans/mine/load`),
+ * once the hand settles, and says so. Every other reader sees the meter.
+ */
+function LoadSlider({ step }: { step: number | null }) {
+  const { reload } = useContext(CardEditContext);
+  const [value, setValue] = useState<number>(step ?? 3);
+  const [said, setSaid] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const id = useId();
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const change = (n: number) => {
+    setValue(n);
+    setSaid(null);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      void savePersonalWords("loadRead", String(n)).then((r) => {
+        setSaid(r.ok ? EDIT_WORDS.loadSaved : r.error);
+        if (r.ok) reload();
+      });
+    }, LOAD_SAVE_DELAY_MS);
+  };
+  const words = W.loadStep[value as LoadStep] ?? "";
+  return (
+    <div className="grid gap-1">
+      <label htmlFor={id} className="text-sm font-medium">
+        {W.loadSlider}
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={1}
+        max={5}
+        step={1}
+        value={value}
+        aria-valuetext={words}
+        onChange={(e) => change(Number(e.target.value))}
+        className="h-11 w-full min-w-0 cursor-pointer accent-notice"
+      />
+      <div className="flex justify-between text-xs text-muted-foreground" aria-hidden="true">
+        <span>{W.loadEnds[0]}</span>
+        <span>{W.loadEnds[1]}</span>
+      </div>
+      <p className="text-sm">{step === null && value === 3 && !said ? W.loadNotSet : words}</p>
+      {said ? (
+        <p role="status" className="text-sm text-card-foreground">
+          {said}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function LoadRead({ load }: { load: AcrossOut["load"] }) {
+  const { owner } = useContext(CardEditContext);
   if (load.own.kind === "unread") return null;
   const step = load.own.kind === "shown" ? load.own.value.step : null;
+  if (owner) {
+    return (
+      <div className="grid gap-1">
+        <LoadSlider step={step} />
+        <p className="text-xs text-muted-foreground">{load.caption}</p>
+      </div>
+    );
+  }
   return (
     <div className="grid gap-1">
       {step !== null ? (
@@ -41,7 +124,6 @@ function LoadRead({ load }: { load: AcrossOut["load"] }) {
         <p className="text-sm text-muted-foreground">{load.own.kind === "empty" ? load.own.words : null}</p>
       )}
       <p className="text-xs text-muted-foreground">{load.caption}</p>
-      <EditInPlace target={{ kind: "personal", key: "loadRead" }} label={W.loadSlider} initial={step ? String(step) : "3"} multiline={false} hint="1 is Healthy, 5 is Heavy" />
     </div>
   );
 }
@@ -90,7 +172,12 @@ export function AcrossSection({ across, sheets, timeZone }: { across: AcrossOut;
                   </ul>
                 )}
               </SlotView>
-              <EditInPlace target={{ kind: "personal", key: "seasonalGoals" }} label={across.seasonalGoals.heading} initial="" />
+              <EditInPlace
+                target={{ kind: "personal", key: "seasonalGoals" }}
+                label={across.seasonalGoals.heading}
+                initial={textOf(across.seasonalGoals.items, goalLines)}
+                hint={EDIT_WORDS.seasonalGoalsHint}
+              />
             </div>
           )}
 
@@ -106,7 +193,11 @@ export function AcrossSection({ across, sheets, timeZone }: { across: AcrossOut;
                         <p className="text-sm text-muted-foreground">
                           {W.howItHelps}: {g.howItHelps}
                         </p>
-                        <EditInPlace target={{ kind: "personal", key: "howItHelps" }} label={W.howItHelps} initial="" />
+                        <EditInPlace
+                          target={{ kind: "personal", key: "howItHelps", goal: g.goal }}
+                          label={`${W.howItHelps}, ${g.goal}`}
+                          initial={g.howItHelps === W.howItHelpsMissing ? "" : g.howItHelps}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -115,9 +206,8 @@ export function AcrossSection({ across, sheets, timeZone }: { across: AcrossOut;
               <EditInPlace
                 target={{ kind: "personal", key: "servesGoal" }}
                 label={W.goals}
-                initial={textOf(across.goals, (g: { goal: string }[]) => g[0]?.goal ?? "")}
-                multiline={false}
-                hint="One of this season's goals, as the village wrote it."
+                initial={textOf(across.goals, (g: { goal: string }[]) => g.map((x) => x.goal).join("\n"))}
+                hint={EDIT_WORDS.servesGoalsHint}
               />
             </div>
           )}
