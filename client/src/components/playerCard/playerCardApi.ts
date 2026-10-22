@@ -58,6 +58,49 @@ export const proposeRoleWords = (roleId: string, key: RoleEditKey, text: string)
   );
 
 /**
+ * THE REQUEST EACH PERSONAL WORD BECOMES ONCE PR 6 (#530) LANDS, matched to
+ * its save contract: `PUT /api/season-plans/mine/card` (an omitted group is
+ * kept) and `PUT /api/season-plans/mine/load` ({ level: 1..5 }). Nothing calls
+ * these paths until the key moves into `PERSONAL_STORED_NOW`; wiring it is
+ * this file alone. Null for a key that saves another way.
+ */
+export function pr6Request(key: PersonalEditKey, value: string): { path: string; body: unknown } | null {
+  const card = (cardWords: Record<string, string | null>) => ({ path: "/api/season-plans/mine/card", body: { cardWords } });
+  const text = value.trim() || null;
+  switch (key) {
+    case "loadRead": {
+      const level = Number(value);
+      return { path: "/api/season-plans/mine/load", body: { level: Number.isInteger(level) ? level : null } };
+    }
+    case "seasonalGoals":
+      return {
+        path: "/api/season-plans/mine/card",
+        body: {
+          seasonalGoals: value
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .map((l) => {
+              const [title, ...rest] = l.split(":");
+              return { title: title.trim(), doneWhen: rest.join(":").trim() || null };
+            }),
+        },
+      };
+    case "howIHold":
+      return card({ howIHold: text });
+    case "growingEdge":
+      return card({ growingEdge: text });
+    case "whoCouldHoldNext":
+      return card({ nextHolder: text });
+    default:
+      // aim and servesGoal save through PUT /mine today; howItHelps rides
+      // with its goal in `servesGoals` once the card reads that list.
+      return null;
+  }
+}
+
+/**
  * Save one personal word to the owner's own record. The aim and the goal it
  * serves write a new version of the season plan, keeping everything else in
  * it, and file it again when the version before was filed.
