@@ -139,9 +139,11 @@ export interface OrgRole {
    * the list IS read to pay: the cycle settlement prices each seat from it,
    * under the rules' ceilings (`quoteWorkPay`, server/lib/economy.ts).
    */
-  valueMinor: number | null;
-  valueCurrency: string | null;
-  valueTokens: TokenAmount[] | null;
+  // Optional so a fixture written before 0265 still describes a role: absent
+  // reads exactly as NULL does, no value and no list of its own.
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: TokenAmount[] | null;
 }
 
 export interface OrgAssignment {

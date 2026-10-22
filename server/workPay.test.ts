@@ -181,7 +181,6 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
         id: "wp-claim-1",
         questId: "wp-q-1",
         userId: u,
-        granted: 1,
         valueTokens: [{ token: CREDITS, amount: 40 }, { token: VILLAGE_VOICE, amount: 5 }],
       });
       expect(out.skipped).toBeUndefined();
@@ -195,7 +194,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
 
     it("owes an unvalued quest the flat amounts, as it always did", async () => {
       const u = await makeMember("wp-consent-2");
-      const out = await owedForClaim(pool, { id: "wp-claim-2", questId: "wp-q-2", userId: u, granted: 1 });
+      const out = await owedForClaim(pool, { id: "wp-claim-2", questId: "wp-q-2", userId: u });
       expect(out.owed.map((o) => [o.tokenSlug, o.units])).toEqual([
         [CREDITS, await unitsOf(CREDITS, 25)],
         [VILLAGE_VOICE, await unitsOf(VILLAGE_VOICE, 10)],
@@ -207,7 +206,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       const ruleRows = await rulesFor(pool, "quest.completed");
       const card = questPay(quest, ruleRows);
       const u = await makeMember("wp-consent-3");
-      const owed = await owedForClaim(pool, { id: "wp-claim-3", questId: "wp-q-3", userId: u, granted: 1, valueTokens: quest.valueTokens });
+      const owed = await owedForClaim(pool, { id: "wp-claim-3", questId: "wp-q-3", userId: u, valueTokens: quest.valueTokens });
       expect(card.value).toEqual({ minor: 2500000, currency: "CRC" });
       expect(card.lines.map((l) => [l.token, l.amount])).toEqual([[CREDITS, 40]]);
       expect(owed.owed.map((o) => [o.tokenSlug, o.units])).toEqual([[CREDITS, await unitsOf(CREDITS, 40)]]);

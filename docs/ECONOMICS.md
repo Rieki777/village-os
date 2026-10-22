@@ -91,8 +91,8 @@ subtlety in this system; see section 7.
 
 | Trigger | Path | Notes |
 |---|---|---|
-| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | Gratitude is posted by the route inside the claim's own commit; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice. What else the consent owes is priced and recorded in that same commit and posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
-| A moon closes | `runSettlement` | Pays seat holders per `mint_rules` on `role.cycle` |
+| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | A consent is a yes and posts no Gratitude (Rye, 2026-10-21). The quest pays its own list, or the standard rules when it has none, priced by `quoteWorkPay` (see "What a quest and a role pay" in section 4) and recorded in the claim's own commit, then posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
+| A moon closes | `runSettlement` | Pays each seat its role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay` under the `role.cycle` ceilings |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
@@ -162,7 +162,6 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `pp:<purchaseId>:reversal:manual` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:pi_<payment_intent>` | `server/index.ts` |
 | `proposal_accepted:<id>` | `server/index.ts` |
-| `quest_consent:<id>` | `server/routes/questClaims.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
 | `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
@@ -179,7 +178,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 57 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+50 distinct shapes across 56 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -392,9 +391,58 @@ credits rule, watched the Mint panel publish it, and was never paid by it: the
 faucet switch returned null for `credits` and both mint paths did `if (!faucet)
 continue`.
 
+### What a quest and a role pay (0265)
+
+Rye, 2026-10-21: every quest carries a value from the moment it is created, and quest
+and role cards show every token assigned to them, or "inquire for payment details" when
+no value is set. Gratitude is never one of them: its only job is sharing out the cycle
+pool (section 5).
+
+A quest and a role each carry three columns. `value_minor` and `value_currency` are what
+the work is worth, in minor units of the village's own currency at the moment it was set;
+NULL is "nobody has set a value". `value_tokens` is the list of token amounts the platform
+pays for it: once at consent for a quest, to each seat every cycle for a role. NULL means
+the work has no list of its own; an empty list means it pays no tokens. The value is shown
+and never paid. The tokens are how the platform pays it, and a role's cash is stated from
+its terms and never paid either.
+
+**One function prices every piece of work**: `quoteWorkPay` in `server/lib/economy.ts`.
+The consent prices from it, `runSettlement` pays each seat from it, the Mint panel's
+settlement preview sums it seat by seat, and the cards render from it
+(`server/lib/workPay.ts`), so a card cannot promise a figure the engine would not post.
+
+| The work carries | What it is paid |
+|---|---|
+| its own list | each line it names, at its own amount, clamped to the ceiling of the village's enabled rule on that token. A token it does not name pays nothing, so a valued quest is never also paid the flat amounts |
+| no list | every enabled rule's fixed amount, exactly as before 0265 |
+| a line on a token with no enabled rule | nothing. Nothing caps it, so it is refused at the save and reported if it is ever reached |
+| a line on Gratitude | nothing. Refused at the save, and a rule on Gratitude for quests or roles is reported and skipped |
+
+**The rule is still the ceiling.** A steward types how much a piece of work pays; the
+village's rules decide which tokens work may pay at all and the most any one occurrence
+may pay. A rule that reads its amount from the work (`amount` NULL) now pays the work that
+names one, under its ceiling, and is quiet on work that names none. Until 0265 it could
+never pay anything, because the only amount a quest posted was its Gratitude range.
+
+**The double-pay trap this closes.** A quest valued at 40 credits while the flat 25-credit
+rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a list
+replaces the flat amounts for that piece of work, so turning values on needs no flag day
+and no rule change: the flat rules go on paying the quests nobody has valued yet.
+
+**Who the pool follows.** Before 2026-10-21 a member who finished many quests earned
+Gratitude for each, and so a share of the cycle pool. Now the pool follows peer thanks
+alone, and the same member is paid for each quest directly, in its own tokens. A member who
+does a great deal of work and is rarely thanked sees less from the pool and more from
+direct pay. Peer Gratitude is unaffected: it comes from each member's cycle allowance, never
+from a balance quests filled.
+
 ---
 
 ## 5. The gratitude cycle
+
+**Gratitude's only job is sharing out the cycle pool** (Rye, 2026-10-21). No quest and no
+role pays it: members give it to each other from their allowance, and the pool follows what
+each member received. Quests and roles are paid in the village's own tokens (section 4).
 
 Gratitude is recognition and is not meant to accumulate. Every member receives an
 allowance at the start of each lunar cycle to give away, and what they do not
@@ -2158,6 +2206,12 @@ unlimited mode advertised a ceiling it had voted away. The mode and its multipli
 the same rules read, each setting states its own sentence, and nothing is promised while the
 rules have not arrived.
 
+**Retired 2026-10-21, with the grant.** A consent no longer carries a Gratitude amount, so the
+three consent dials and the sentences above left together. The quest page now states what the
+quest pays from the same function the consent prices from (section 4, "What a quest and a role
+pay"), which closes this class of defect by construction: there is one answer, not two to keep in
+step.
+
 **One twin is deliberately left open.** The exchange buy route refuses with the same literal the
 wallet used to print, three lines under its capability check. It sits inside a ledger-capability
 call site another lane holds this wave, so it is named here rather than fixed quietly: whoever
@@ -3084,39 +3138,40 @@ person is `shareCapFor(100) = max(1, floor(100 x 25 / 100)) = 25`.
 
 ### 15.2 Ash confirms Wren's quest
 
-One human act, **three** ledger rows, from three different faucets. `canConfirm`
-refuses first if Ash and Wren are the same person.
+One human act. `canConfirm` refuses first if Ash and Wren are the same person. A
+consent is a yes (Rye, 2026-10-21): Ash types no amount, and no Gratitude moves.
+What the quest pays is decided by `quoteWorkPay` before Ash presses, and the claims
+read (`GET /api/admin/quest-claims`) shows Ash the same `pay` the quest's card shows.
 
-Ash's amount is checked where Ash types it, before the route sees it. Each claim in
-the steward's claims read (`GET /api/admin/quest-claims`) carries its `bounds`, which
-`consentBounds` states from the same dials `checkConsentAmount` enforces, so the
-consent queue opens on the quest's floor where it has one and will not send an
-amount the route would refuse. That read moves no value, and nothing in this table
-changes with it.
+**The well quest has no list of its own**, so the seeded rules pay it, **two** ledger
+rows from two faucets:
 
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
-| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 1 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 2 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+
+**Had a steward valued it** at 25,000 colones with a list of 40 credits, it would post
+**one** row, `credits` **4000** (40) under the same key shape, and no Village Voice: a
+list replaces the flat amounts for that piece of work. Had the list named 500 Village
+Voice, it would post the rule's ceiling of 100 and the card would have said so.
 
 Five things this table is showing:
 
-- **Row 1 is not a mint rule.** The consent route has posted recognition since S7
-  from the range the quest advertises. The pricing behind `owedForClaim` explicitly skips
-  the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
-  cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
-  rule: a disabled one would look like the obvious thing to switch on.
-- **Rows 2 and 3 end in the token slug.** `keys.questCompleted` builds that segment,
+- **There is no Gratitude row.** Until 2026-10-21 the consent route posted recognition
+  from the range the quest advertised, keyed `quest_consent:<claimId>`, inside the
+  claim's commit. A quest pays the village's own tokens now, and Gratitude only shares
+  out the cycle pool. `quest_claims.amount` is written NULL. Older claims keep the
+  figure their witness granted, and their `quest_consent` rows stand.
+- **Rows 1 and 2 end in the token slug.** `keys.questCompleted` builds that segment,
   escaped like the rest of the key. Without it the second rule would collide with
   the first, read as a duplicate, and Wren would be quietly paid in one token
   instead of two.
 - **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
   `decimals`, which is 2 for both Village Voice and credits since `0202`.
-- **Row 1 posts in the consent's commit, and rows 2 and 3 are recorded there.**
-  Recognition posts inside `consentOnce`'s transaction, as it always has. Rows 2
-  and 3, and any stay-credit reward the quest carries, are priced by `owedForClaim`
-  on the same connection and written to `quest_owed_postings` (0210) before that
+- **Both rows are recorded in the consent's commit and posted after it.** They, and
+  any stay-credit reward the quest carries, are priced by `owedForClaim` on the
+  consent's own connection and written to `quest_owed_postings` (0210) before that
   commit. `settleOwedPosting` pays each one straight after it, in a transaction
   that marks the row posted in the same commit. A payment that does not go through
   stays owed, with the ledger's reason, and a steward pays it from /review
@@ -3130,12 +3185,10 @@ Five things this table is showing:
   beside it does, so two members who share a first name cannot be confused at the
   moment a steward pays one of them. That is the read only: no posting, key,
   amount or order above changes with it.
-- **A consent at 0 posts none of the three.** A zero is the witness saying the work
-  earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
-  for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by
-  any token (`governance.weight_token`), so a rule token minted at 0 would be voting
-  weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
-  itself carries is still owed and paid, keyed `queststay:<claimId>`.
+- **Before the launch vote carries, a consent that would pay is refused** and the
+  claim stays submitted, where a consent after launch finds it and pays it in full.
+  A quest that pays nothing can be witnessed at any time. A stay-credit reward the
+  quest carries is owed and paid, keyed `queststay:<claimId>`.
 
 Nothing in this table changes when the audit trail does. The row a founder's own
 consent leaves (`quest:self-consent:solo-founder:<claim>`) is written after the
@@ -3144,8 +3197,8 @@ uses of that window and not attempts at it. No faucet, key, amount or order
 above moves with it, and a founder who declines their own claim now leaves no
 row at all, which is what declining always meant.
 
-Wren's balances after: 25 credits, 10 voice, and whatever recognition the
-quest advertised.
+Wren's balances after: 25 credits and 10 voice. Wren's Gratitude is what members
+gave Wren, and nothing else.
 
 ### 15.3 Wren thanks Ash, 5 gratitude
 

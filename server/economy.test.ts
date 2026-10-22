@@ -118,15 +118,9 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  * (`server/routes/questClaims.ts`), so these take the two steps and this
  * reports the three fields the old return value carried.
  *
- * IT IS A TRANSLATION AND NOT A MOVE. Three things differ, and each one is a
+ * IT IS A TRANSLATION AND NOT A MOVE. Two things differ, and each one is a
  * way a case could go green while proving nothing:
  *
- *  - `granted` is REQUIRED on `OwedClaim`, and `priceClaim`'s `noRules` is
- *    true whenever it is zero or less. A case that left it out would price
- *    NOTHING, and "posted no more than the ceiling" would then pass over an
- *    empty set: a test defending the absence of the thing it checks. A grant
- *    above zero is passed on every call, and `owedPostings.test.ts` passes one
- *    for the same reason.
  *  - `owedForClaim` answers rows PRICED AND NOT YET POSTED, so `minted` here
  *    is the rows whose posting came back `posted`, which is what the old field
  *    meant.
@@ -141,7 +135,7 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  */
 async function payClaim(
   p: mysql.Pool,
-  claim: { id: string; questId: string; userId: string; granted?: number },
+  claim: { id: string; questId: string; userId: string },
 ): Promise<{
   priced: string[];
   considered: number;
@@ -149,7 +143,7 @@ async function payClaim(
   unpayable: Array<{ token: string; reason: string }>;
   skipped?: string;
 }> {
-  const out = await owedForClaim(p, { granted: 1, ...claim });
+  const out = await owedForClaim(p, claim);
   const minted: Array<{ token: string; units: number; decimals: number }> = [];
   const unpayable = [...out.unpayable];
   for (const row of out.owed) {
@@ -1221,7 +1215,6 @@ describe.skipIf(!configured)("the village economy engine", () => {
           id: "claim-fromsource-2",
           questId: "q-fromsource",
           userId: u,
-          granted: 1,
           valueTokens: [{ token: "library-credit", amount: 70 }],
         });
         expect(named.owed.map((o) => o.tokenSlug)).toEqual(["library-credit"]);

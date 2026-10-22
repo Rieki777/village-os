@@ -2,7 +2,7 @@
 
 Provenance: platform
 
-<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/questConsent.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts server/repos/questOwedPostings.ts client/src/components/review/OwedPostings.tsx -->
+<!-- describes: server/routes/quests.ts server/routes/questClaims.ts server/lib/workPay.ts shared/workValue.ts server/repos/quests.ts server/index.ts shared/modules.ts shared/gameVariables.ts shared/questRewards.ts client/src/pages/Admin.tsx client/src/pages/QuestDetail.tsx client/src/components/QuestActions.tsx server/lib/capabilityRegistry.ts server/lib/crews.ts server/lib/questProposals.ts server/lib/calendarProviders.ts server/repos/questOwedPostings.ts client/src/components/review/OwedPostings.tsx -->
 
 > The contribution board. A quest is posted by an admin or by a `quest.approve` holder, claimed by
 > a member, submitted with evidence, and consented to by somebody who is not the claimant. Consent
@@ -50,8 +50,12 @@ from a neighbouring path, the public Propose a Quest form. A full list of the ta
 modules own that a quest write touches sits at the end of this section.
 
 **`quests`** (`drizzle/0001_init.sql`, extended by 0004, 0012, 0021, 0046, 0060, 0062, 0068, 0069,
-0085, 0088). The reward is the interesting column. `gratitude` is a **varchar holding the label a
-human wrote**, verbatim: `50-100`, `50 to 100`, `75`. It was an `int` on day one and 0004 changed
+0085, 0088, 0265). The reward is the interesting column, and since 0265 it is three columns:
+`value_minor` and `value_currency`, what the quest is worth in the village's own currency, and
+`value_tokens`, the JSON list of token amounts it pays at consent (NULL is no list of its own, so
+the village's standard rules pay it). What a consent pays from them is under What a consent pays
+below. `gratitude` is the older reward, read by nothing that pays since 2026-10-21, when quests
+stopped paying Gratitude. It is a **varchar holding the label a human wrote**, verbatim: `50-100`, `50 to 100`, `75`. It was an `int` on day one and 0004 changed
 it, because the int coerced all fourteen seeded quests to 0 while a row-count verification passed.
 `gratitude_min` and `gratitude_max` are integers **derived** from that label by
 `parseRewardRange` in `shared/questRewards.ts`. Nothing **authors** them: every writer parses the
@@ -84,8 +88,8 @@ is permanently silent about an inherited board and speaks only about quests post
 **`quest_claims`** (0001, extended by 0055 and 0070). One row per member per quest attempt.
 `status` is a MySQL enum with four values: `claimed`, `submitted`, `consented`, `declined`. 0070
 records why they were not renamed to the build document's words: the enum is ordinal, it is live
-in production data, and around forty hand-written string comparisons read it. `amount` is what the
-witness granted. `consented_by` (0070) is who witnessed it, which is the column that makes the
+in production data, and around forty hand-written string comparisons read it. `amount` is the Gratitude the
+witness granted, and NULL on every consent since 2026-10-21, when a consent stopped granting any. `consented_by` (0070) is who witnessed it, which is the column that makes the
 no-self-consent rule checkable after the request is over. `confidence`, `confidence_note` and
 `confidence_at` (0055) are the claimant's own account of how it is going, deliberately excluded
 from the repo's generic `update()` SET list so no other write path can clobber them.
@@ -207,7 +211,7 @@ that file alphabetically would make `field` a quest id that does not exist.
 | `POST /api/game/quests/:id/claim` | signed-in member | Enforces `min_stage` and `requires_role`, refuses an example, refuses a closed quest, refuses a second non-declined claim (under the quest's row lock, via `claimsRepo.openClaim`). |
 | `POST /api/game/quests/:id/submit` | signed-in member | Needs a link or a note. Accepts a second submit on an already-submitted claim, and refuses with 409 a claim a steward resolved first (`claimsRepo.submitOnce`, under the claim's row lock). Notifies everyone who may consent, and nobody on a refusal. |
 | `PUT /api/game/quest-claims/:id/confidence` | the claim's holder | Only while the claim is `claimed` or `submitted`. Only `at_risk` and `stuck` ring a bell. |
-| `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `bounds` from `consentBounds` (`server/lib/questConsent.ts`): the floor, the ceiling, whether 0 passes and whether the label is readable, as the consent route will enforce them under the dials in force, or `null` when the claim's quest is gone. |
+| `GET /api/admin/quest-claims` | `mayStillSee("quest.consent")` | A read, so it asks the see-path and never `mayAct`. There is no break-glass on a GET. Each claim carries `pay`, what saying yes will release: the quest's value and the token lines `questPay` (`server/lib/workPay.ts`) states from the rules in force, the same answer the quest's card gives, or `null` when the claim's quest is gone. |
 | `POST /api/admin/quest-claims/:id/consent` | `mayAct("quest.consent")` | The whole of Mechanics below. |
 | `GET /api/admin/quest-claims/owed` | `mayStillSee("quest.consent")` | What consents recorded as owed and have not paid: rows still owed, with the ledger's last reason, and rows refused for good. A read, so it asks the see-path. `/review` renders it as `OwedPostings`. |
 | `POST /api/admin/quest-claims/:id/owed/pay` | `mayAct("quest.consent")` | Pays what one consent still owes, each row in its own transaction that marks it posted in the same commit. It decides nothing, because the amounts and keys were fixed when the consent recorded them, and a second press finds nothing owed. A steward's press writes an admin audit row naming the tokens paid. |
@@ -306,7 +310,7 @@ pass `audience: "admin"` and are not.
 
 **No self-consent, and it is enforced in exactly one place.** The `claim.userId === actor.userId`
 branch in `POST /api/admin/quest-claims/:id/consent` is the whole of it. There is no backstop
-underneath: `owedForClaim` is handed `{ id, questId, userId, granted, stay }` and is never
+underneath: `owedForClaim` is handed `{ id, questId, userId, stay, valueTokens }` and is never
 told who the confirmer is, so it cannot check; `postTransfer` on the recognition leg does not
 check either. `canConfirm` in `server/lib/economy.ts` does exist and does enforce this rule, but on
 two other paths, the event check-in and the intake-proposal reward, and neither one runs here.
@@ -336,24 +340,18 @@ what runs first:
    A claim that is already `declined` is the exception: the row and the request agree, so the
    route answers the row with 200 and writes nothing, which is what a second press and a
    retried request both want. Every other resolution, `consented` above all, is still 409.
-6. A consent of 0 is refused unless `quest.allow_zero_consent` is on or the quest itself
-   advertises 0.
-7. If the cap mode is not `unlimited` and the label is unreadable, 409.
-8. The range comparison: a floor and a ceiling under both capping modes, skipped for a zero that
-   step 6 allowed. Steps 6 to 8 are `checkConsentAmount` in `server/lib/questConsent.ts`.
-9. `issuanceRefusal`: the launch vote must have carried before any token issues. Asked here as a
-   cheap first ask that hands back the ledger's own sentence before a multiplier lookup and a
-   transaction are spent finding out. It is no longer the thing standing between a member and a
-   lost consent, because `postTransferOn` asks the same question inside the transaction below.
-10. The badge reward multiplier, and `payoutFor`, which lifts the grant toward the cap and never
-    past it.
-11. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
-    flips the row, posts the credit, and records what else the consent owes (`owedForClaim` into
-    `quest_owed_postings`) on the same connection.
-12. After it commits: the balance cache, paying what the consent owes (`settleOwedForClaim`), the
-    stay credits' notification, the activity line, the notification and the stage event.
+6. `issuanceRefusal`, asked only when the consent would pay something (a token line on the quest's
+   card, or stay credits): the launch vote must have carried before any token issues. A refusal
+   leaves the claim at `submitted`, where a consent after launch finds it and pays it in full. A
+   quest that pays nothing can be witnessed before launch, because refusing that would withhold an
+   acknowledgement that costs no tokens.
+7. `claimsRepo.consentOnce`: one transaction that locks the claim row, re-checks the status,
+   flips the row, and records what the consent owes (`owedForClaim` into `quest_owed_postings`) on
+   the same connection.
+8. After it commits: paying what the consent owes (`settleOwedForClaim`), the stay credits'
+   notification, the activity line, the notification naming what posted, and the stage event.
 
-**Step 11 is one commit**, and `quest.require_submission_before_consent` is enforced inside it
+**Step 7 is one commit**, and `quest.require_submission_before_consent` is enforced inside it
 rather than as a separate read: the variable decides which statuses `consentOnce` accepts
 (`submitted` alone when it is on, `claimed` or `submitted` when it is off), and the status is
 re-read under the claim's own row lock. Both of the gaps this used to have are closed by the same
@@ -411,54 +409,45 @@ Note what a warmed connection pool has to do with any of this: mysql2 opens conn
 an unwarmed fan-out is serialised by the driver and every one of these races is invisible. The same
 five taps left one row unwarmed and five rows warmed, on identical code.
 
-**The cap.** `quest.consent_cap_mode` reads the quest's advertised label through
-`parseRewardRange` and compares it to the amount in the request body. The comparisons are
-`checkConsentAmount` in `server/lib/questConsent.ts`, and every combination of the three dials is a
-row in `server/lib/questConsent.test.ts`:
+**What a consent pays (0265, Rye 2026-10-21).** A consent is a yes. The witness confirms the work
+was done, and the quest pays what it says: no amount is typed, and an `amount` in the request body
+is read by nothing. Gratitude is never paid for a quest, because its only job is sharing out the
+cycle pool. Every figure comes from `quoteWorkPay` in `server/lib/economy.ts`, the same function the
+quest's card renders from (`questPay` in `server/lib/workPay.ts`), so the board can never promise a
+token amount the consent would not post:
 
-- `posted` (the shipped default) refuses `requested < range.min || requested > range.max`.
-- `capped` computes a ceiling of `Math.round(range.max * quest.consent_cap_multiplier)` and refuses
-  `requested < range.min || requested > ceiling`. The floor holds here too (Rye, 2026-09-14). It
-  used to test only the ceiling, so a village raising the ceiling to allow a bonus also allowed a
-  consent of 1 on a quest advertising 200. A multiplier that is not a number, or is below 1, reads
-  as 1.
-- `unlimited` compares nothing, and is the only mode exempt from the unreadable-label refusal.
-- Any other stored value reads as `posted`, so the cap fails closed. The route used to compare the
-  raw string, and an unrecognised value applied no cap at all.
+- **A quest with its own list** (`quests.value_tokens`, human amounts) is paid that list. Each line
+  pays the quest's own figure, clamped to the ceiling of the village's enabled `quest.completed`
+  rule on that token, whatever amount the rule itself carries. A token the list does not name pays
+  nothing, so a valued quest is never also paid the flat amounts. A token with no enabled rule
+  behind it cannot pay, because nothing caps it; the admin save refuses it before it is stored, and
+  the pricing reports it if it is ever reached. An empty list pays no tokens.
+- **A quest with no list** is paid every enabled rule's fixed amount, exactly as before 0265. A rule
+  that reads its amount from the work (`amount` NULL) pays the quests that name an amount for its
+  token, and is quiet on one that names none.
+- **The quest's stay credits** (`stay_credit_reward`) are its own payment and release on every
+  consent, keyed `queststay:<claimId>`.
 
-**Zero has two doors.** `quest.allow_zero_consent` on allows a consent of 0 on any quest, in any
-mode, meaning acknowledged with no recognition. With the dial off, a quest that itself advertises 0
-(`0`, `0-50`) can still be consented at 0. That second door is new: under the default dials a quest
-paying in stay credits alone could not be consented at any amount, since 0 was refused as "at least
-1" and 1 as outside 0 to 0. Every amount above 0 still sits inside the range. A zero consent still
-releases any stay credits, and mints no `quest.completed` rule token: `owedForClaim`
-prices no rule at a grant of 0. Economics and governance agreed that on 2026-09-14. A zero
-is the witness saying the work earned no recognition, and any rule token, voice or credits, can be
-weight on a ballot through `governance.weight_token`. Stay credits still release because a person
-set that payment on the quest, so in a village that weights votes by stay credits a zero-consent
-work-exchange quest still moves weight.
+The value itself (`quests.value_minor` and `value_currency`) is what the work is worth in the
+village's currency. It is shown on the card and converted for display there, and it is not paid by
+the platform: the token amounts are how the platform pays it. `POST /api/admin/quests` refuses a
+new quest without a value, and both quest saves stamp the village's currency on the server rather
+than reading one from the body.
 
-Both sides of every one of those comparisons are whole tokens. `gratitude` is seeded with
-`decimals` at the column default of 0 in `drizzle/0006_token_registry.sql`, and `registerToken` in
-`server/lib/ledger.ts` deliberately omits `decimals` from its upsert's update list, so neither a
-boot nor an admin write can re-denominate it. See Sharp edges for why that matters.
+The three dials that bounded a Gratitude grant (`quest.consent_cap_mode`,
+`quest.consent_cap_multiplier`, `quest.allow_zero_consent`) left the registry with the grant, and so
+did the module that held their arithmetic. A village's stored row for one is harmless and read by nothing.
+A standing badge's reward multiplier lifted that grant and now has nothing to lift;
+`rewardMultiplierFor` in `server/lib/seasonPatterns.ts` stays, read by nothing, until the founder
+says whether a badge should lift a quest's token pay instead.
 
-**What the ledger records.** A single posting of the payout, through `postTransferOn` inside
-`consentOnce`, from `RECOGNITION_FAUCET` to the member's
-account, `source = "quest_consent"`, `sourceRef` the claim id, `idempotencyKey`
-`quest_consent:<claimId>`. The member's `recognitionBalance` column is **recomputed** from the
-post's returned balance rather than incremented. At `granted === 0` there is nothing to post and
-the cache write is skipped entirely; an earlier version assigned the failed post's `toBalance` of
-0 and wiped the member.
-
-**On top of the ledger post**, in order: `owedForClaim` prices any `quest.completed` rule on a
-token that is not recognition (nothing at all on a consent at 0) and the quest's own
-`stay_credit_reward` under its key `queststay:<claimId>`; `recordOwed` writes both into the
-consent's commit and `settleOwedForClaim` posts them after it. The last two
-are best-effort. A rule mint that throws is logged and the response is unaffected; a stay-credit
-failure is logged and the recognition still stands. `drizzle/0021_stays_and_payments.sql` describes
-the stay credit as released "in the same consent transaction", which is the intent and not the
-implementation: these are separate posts made after the claim has already flipped.
+**What the ledger records.** No posting from `RECOGNITION_FAUCET`, and `quest_claims.amount` is
+written NULL: a consent grants no recognition, and the column keeps what older consents granted.
+`owedForClaim` prices the list or the rules and the stay on the consent's own connection,
+`recordOwed` writes them into `quest_owed_postings` (0210) in the consent's commit, and
+`settleOwedForClaim` posts each one after it, under its occurrence key. The member's notification
+names what actually posted, read off the settled rows: "Your quest was consented: <title> (+40
+Village Credits)".
 
 **Progression.** `computeStage` in `server/index.ts` has a rule type `quests` that compares
 `claimsRepo.consentedCount(userId)` against `progression.quests_for.<stage>`. Those keys belong to
@@ -529,10 +518,7 @@ generated tables; what follows is what each one **does** in the code.
 
 | Key | Default | What the code does with it |
 | --- | --- | --- |
-| `quest.consent_cap_mode` | `posted` | Selects one of the three comparison branches above, and so the cap a badge lift stops at. |
-| `quest.consent_cap_multiplier` | `2` | Read only under `capped`, as `Math.round(range.max * value)`: the ceiling for the grant and for a badge lift. Inert under the other two modes. |
 | `quest.require_submission_before_consent` | `true` | Blocks the approve branch when the claim is not `submitted`. Never blocks a decline. |
-| `quest.allow_zero_consent` | `false` | On, allows a consent of 0 on any quest in any mode. Off, 0 is allowed only on a quest that advertises 0. Either way, a consent at 0 mints no `quest.completed` rule token and still releases stay credits. |
 | `quest.self_consent_until_members` | `6` | The living-member count below which an admin may witness their own claim. `0` means never. |
 
 The registry entry in `shared/modules.ts` declares only the first three under `variableKeys`, and
@@ -583,12 +569,10 @@ anybody claims it.
 
 What this module reads that it does not own:
 
-- **The ledger** (`server/lib/ledger.ts`, `server/lib/economy.ts`) for the recognition post, the
-  faucet, and `questCreditsFor`.
-- **`gameStart`** for `issuanceRefusal`. No consent above zero can pay before the launch vote
-  carries.
-- **`badges`** for `rewardMultiplierFor` in `server/lib/seasonPatterns.ts`, skipped entirely when
-  the badges module is off.
+- **The ledger** (`server/lib/ledger.ts`, `server/lib/economy.ts`) for `quoteWorkPay`, the owed
+  rows, the faucets, and `questCreditsFor`, which still reads the recognition older consents posted.
+- **`gameStart`** for `issuanceRefusal`. No consent that would pay anything can land before the
+  launch vote carries.
 - **`stays`** for `mintStayCredits`, when a quest carries `stay_credit_reward`.
 - **`messaging`** for crew conversations. Every call is best-effort, because failing to open a
   chat must never fail the act of forming a crew, and a village that turns messaging off later
@@ -629,30 +613,21 @@ two different ways.
 
 ## Sharp edges
 
-**The cap bounds the payout as well as the grant** (Rye, 2026-09-14: "Badges are what help get to
-the upper range/ all the way to a cap - Never past the cap."). After the range comparison passes,
-`payoutFor` in `server/lib/questConsent.ts` lifts the grant by every standing badge the member holds,
-compounding and clamped to `MAX_REWARD_MULTIPLIER = 3` in `server/lib/seasonPatterns.ts`, and stops
-it at the cap: `range.max` under `posted`, the ceiling under `capped`. A badge helps a consent reach
-the top and adds nothing at the top. Under `unlimited` the grant has no ceiling, and the lift still
-stops at the top the quest advertises: a grant already at or above it gets none, and a quest naming
-no readable top gets none. That is the economics lane's reading of the ruling, for a reason worth
-keeping: quest recognition posts from a faucet the issuance cap does not count, and recognition is
-the default voting-weight token, so a lift bounded only by the 3x clamp could triple the voting
-weight a steward granted.
-Before the ruling the multiplier ran after the cap with nothing else bounding it, so a village on the
-shipped `posted` mode could pay 300 for a quest advertising 100. `quest_claims.amount` is still what
-the witness decided, which can be less than what moved: `GET /api/game/me` joins the ledger through
-`questCreditsFor` and returns `credited` beside `amount`, and the member's notification names the
-credited figure, mentioning a badge only when one actually lifted it. Anything reading
-`quest_claims.amount` as a payout is reading the wrong column for a badge holder.
-`client/src/pages/QuestDetail.tsx` reads the cap mode and multiplier from `GET /api/game/rules` and
-opens its payment paragraph with one sentence per setting: inside the range, and "What a quest
-advertises is what it pays", under `posted`; at least the range's floor and up to the multiplier
-times its top under `capped`; the range as a suggestion under `unlimited`. Until the rules name a
-setting it knows, it promises nothing mode-specific.
-`server/routes/questConsentPayout.test.ts` drives each of these through the real handler into the
-real ledger.
+**The card and the consent read one function** (0265). `QuestCard` and `QuestDetail` render the
+`pay` that `GET /api/quests` and `GET /api/quests/:id` attach, which is `questPay` over
+`quoteWorkPay`, the function `owedForClaim` prices from. A rule change between the card and the
+consent can still change what posts, so the member's notification names what the settled rows
+posted, never what the card said. The card never converts a token into money: a token only has a
+price when the exchange posts one, and "no price set" is not "worth nothing". It converts the
+value, which is held in money, through the daily rates (`shared/money.ts`).
+
+**A badge's reward multiplier lifts nothing now.** It lifted a Gratitude grant toward the consent
+cap (Rye, 2026-09-14), and a consent grants none since 2026-10-21. `rewardMultiplierFor` stays in
+`server/lib/seasonPatterns.ts`, read by nothing, until the founder says whether a badge should lift
+a quest's token pay instead. `quest_claims.amount` on an older consent is still what that witness
+decided, and `GET /api/game/me` still joins the ledger through `questCreditsFor` for it.
+`server/routes/questConsentPayout.test.ts` drives what a consent moves through the real handler
+into the real ledger.
 
 **The only way to put a claim back needs three things, and a village is unlikely to have any of
 them.** `claimsRepo.remove` has exactly one caller, the `POST /api/map/promise` handler.

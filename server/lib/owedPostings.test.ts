@@ -76,7 +76,6 @@ async function stayRowFor(claimId: string, userId: string, reward = 3): Promise<
     id: claimId,
     questId: `q-${claimId}`,
     userId,
-    granted: 60,
     stay: { reward, questTitle: "Fixing the fence" },
   });
   const row = priced.owed.find((o) => o.tokenSlug === STAY);
@@ -109,7 +108,6 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
       id: "claim-owed-no-stay-token",
       questId: "quest-owed-no-stay-token",
       userId: u,
-      granted: 60,
       stay: { reward: 3, questTitle: "Fixing the fence" },
     });
     expect(priced.owed.some((o) => o.tokenSlug === STAY)).toBe(false);
@@ -134,7 +132,6 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
           id: "claim-owed-price",
           questId: "quest-owed-price",
           userId: u,
-          granted: 60,
           stay: { reward: 3, questTitle: "Fixing the fence" },
         });
         await conn.commit();
@@ -172,7 +169,6 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
         id: "claim-owed-zero",
         questId: "quest-owed-zero",
         userId: u,
-        granted: 60,
         stay: { reward: 0, questTitle: "Nothing extra" },
       });
       expect(priced.owed.some((o) => o.tokenSlug === STAY)).toBe(false);
@@ -180,20 +176,18 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
     });
 
     /**
-     * A GRANT OF 0 OWES THE STAY AND NO RULE (economics and governance, 2026-09-14). A
-     * zero is the witness saying the work earned no recognition, and any rule token priced
-     * for it could be ballot weight farmed through `quest.allow_zero_consent`. The stay is
-     * the quest's own payment and is owed at any grant. The control beside it, the same
-     * claim shape at a grant of 60, owes the seeded rules, so the zero case cannot pass on
-     * a village whose rules price nothing at all.
+     * A QUEST'S OWN LIST REPLACES THE SEEDED RULES, AND THE STAY STILL RIDES WITH IT
+     * (0265). The grant that used to gate the rules is gone (Rye, 2026-10-21): a consent
+     * is a yes, and the quest pays what it says. The control beside it, the same claim
+     * with no list of its own, owes the seeded rules, so the list case cannot pass on a
+     * village whose rules price nothing at all.
      */
-    it("prices no rule for a grant of 0, and still owes the stay", async () => {
-      const u = await seatAMember("owed-granted-zero");
+    it("prices a quest's own list instead of the seeded rules, and still owes the stay", async () => {
+      const u = await seatAMember("owed-own-list");
       const control = await owedForClaim(pool, {
-        id: "claim-owed-granted-sixty",
-        questId: "quest-owed-granted-sixty",
+        id: "claim-owed-standard",
+        questId: "quest-owed-standard",
         userId: u,
-        granted: 60,
         stay: { reward: 3, questTitle: "Fixing the fence" },
       });
       const controlTokens = control.owed.map((o) => o.tokenSlug);
@@ -201,16 +195,17 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
       expect(controlTokens).toContain(VILLAGE_VOICE);
       expect(controlTokens).toContain(STAY);
 
-      const zero = await owedForClaim(pool, {
-        id: "claim-owed-granted-zero",
-        questId: "quest-owed-granted-zero",
+      const own = await owedForClaim(pool, {
+        id: "claim-owed-own",
+        questId: "quest-owed-own",
         userId: u,
-        granted: 0,
         stay: { reward: 3, questTitle: "Fixing the fence" },
+        valueTokens: [{ token: CREDITS, amount: 7 }],
       });
-      expect(zero.owed.map((o) => o.tokenSlug)).toEqual([STAY]);
-      expect(zero.owed[0]?.idempotencyKey).toBe("queststay:claim-owed-granted-zero");
-      expect(zero.unpayable).toEqual([]);
+      expect(own.owed.map((o) => o.tokenSlug)).toEqual([CREDITS, STAY]);
+      expect(own.owed[0]?.units).toBe(toLedgerUnits(CREDITS, 7));
+      expect(own.owed[1]?.idempotencyKey).toBe("queststay:claim-owed-own");
+      expect(own.unpayable).toEqual([]);
     });
 
     /**
@@ -232,7 +227,6 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
           id: "claim-owed-no-rules",
           questId: "quest-owed-no-rules",
           userId: u,
-          granted: 60,
           stay: { reward: 3, questTitle: "Fixing the fence" },
         });
         expect(priced.skipped).toMatch(/no enabled mint rules/);

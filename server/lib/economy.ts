@@ -2234,18 +2234,13 @@ export interface OwedClaim {
   id: string;
   questId: string;
   userId: string;
-  /**
-   * What the witness granted, in whole recognition, before any badge lifted it.
-   *
-   * A GRANT OF 0 PRICES NO RULE (economics and governance, 2026-09-14). A zero
-   * is the witness saying the work earned no recognition, and the
-   * `quest.completed` rules are recognition paid in other tokens. Carving out
-   * voice alone was not enough: a village can weight its ballots by any token
-   * (`governance.weight_token`), so any rule token priced at 0 would be voting
-   * weight farmed through `quest.allow_zero_consent`. The stay below is the
-   * quest's own payment, typed onto it by a person, and is owed at any grant.
+  /*
+   * NO GRANT ANY MORE (Rye, 2026-10-21). The witness used to type a Gratitude
+   * amount, and a grant of 0 priced no rule (economics and governance,
+   * 2026-09-14), because a zero could farm voting weight through
+   * `quest.allow_zero_consent`. No quest pays Gratitude now, a consent is a
+   * yes, and that dial is gone, so every consent prices what the quest pays.
    */
-  granted: number;
   /**
    * The quest's stay-credit reward in WHOLE credits, and the title its posting
    * is described by. Absent, or a reward of zero, owes no stay credits.
@@ -2456,23 +2451,15 @@ export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim):
   return ready.ready ? priced : { ...priced, skipped: ready.reason };
 }
 
-/**
- * The pricing both entry points share. Reports nothing; each caller reports once.
- *
- * `granted` is required on `owedForClaim` and optional here. A consent's own
- * pricing must say what the witness granted; the removed direct path
- * stated no grant and priced every rule. Nothing reaches that branch today,
- * because `owedForClaim` is the only caller and a grant is required on it.
- */
+/** The pricing `owedForClaim` does. Reports nothing; the caller reports once. */
 async function priceClaim(
   db: Pool | PoolConnection,
-  claim: Omit<OwedClaim, "granted"> & { granted?: number },
+  claim: OwedClaim,
   opts: { rules: boolean } = { rules: true },
 ): Promise<{ owed: OwedPosting[]; unpayable: Array<{ token: string; reason: string }> }> {
-  // No rule prices for a grant of 0 (`OwedClaim.granted` says why), nor while the
-  // rules are not ready (`owedForClaim` says why). The stay below prices either way.
-  const noRules = !opts.rules || (claim.granted !== undefined && !(claim.granted > 0));
-  const rules = noRules ? [] : await rulesFor(db, "quest.completed");
+  // No rule prices while the rules are not ready (`owedForClaim` says why).
+  // The stay below prices either way.
+  const rules = opts.rules ? await rulesFor(db, "quest.completed") : [];
   const owed: OwedPosting[] = [];
   const unpayable: Array<{ token: string; reason: string }> = [];
   // Every rule the work answers to, priced by the one function the cards read

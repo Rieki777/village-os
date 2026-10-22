@@ -25047,7 +25047,6 @@ ${inner}
         hyphaThreshold: numberVar("governance.hypha_threshold"),
         sensingDays: numberVar("governance.sensing_days"),
       },
-      quests: { consentCapMode: stringVar("quest.consent_cap_mode"), consentCapMultiplier: numberVar("quest.consent_cap_multiplier") },
       // The rung that opens buying, so /wallet names the village's own rung.
       exchange: { buyOpensAt: stringVar("progression.unlock.exchange.buy") },
       tokens: {
@@ -25696,7 +25695,7 @@ ${inner}
   // gates. NOT under /api/admin: a steward who is not an admin is exactly who
   // this is for, so it is capability-gated all the way down.
   registerReviewRoutes(app, {
-    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf,
+    isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser });

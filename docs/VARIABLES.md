@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 191 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 188 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 210 of them as soon as it is saved, and 26 of them at the next cycle close.
+Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 26 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-236 dials in 35 categories. 140 carry a minimum and a maximum. By type: 103 integer, 20 decimal, 18 percentage, 27 boolean, 30 choice, 37 text, 1 longtext.
+233 dials in 35 categories. 139 carry a minimum and a maximum. By type: 103 integer, 19 decimal, 18 percentage, 26 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ Each dial also says WHEN a change lands. 210 of them as soon as it is saved, and
 | Ledger | 17 | 9 | 8 |
 | The Mint | 6 | 5 | 1 |
 | Progression | 29 | 29 | 0 |
-| Quests | 5 | 5 | 0 |
+| Quests | 2 | 2 | 0 |
 | Governance | 44 | 40 | 4 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
@@ -148,10 +148,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: ballot.vote | `progression.unlock.ballot.vote` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: member.vouch | `progression.unlock.member.vouch` | Progression | choice | `contributor` | the whole village |
 | Stage that unlocks: map.photograph | `progression.unlock.map.photograph` | Progression | choice | `member` | the whole village |
-| How much can be released at consent | `quest.consent_cap_mode` | Quests | choice | `posted` | the whole village |
-| Bonus ceiling multiplier | `quest.consent_cap_multiplier` | Quests | decimal | `2` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
-| Allow consenting at zero | `quest.allow_zero_consent` | Quests | boolean | `false` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
 | The proposer bar: earned recognition to propose | `governance.hypha_threshold` | Governance | integer | `0` | the whole village |
@@ -1544,42 +1541,7 @@ What it may be set to:
 
 ## Quests
 
-5 dials. 5 for the whole village.
-
-### How much can be released at consent
-
-Controls what a steward may award when consenting to finished work, and the most a consent can pay. A standing badge can lift a consent toward that top and never past it, so under the posted amount what a quest advertises is what it pays.
-
-| Fact | Value |
-| --- | --- |
-| Key | `quest.consent_cap_mode` |
-| Type | choice, one of a fixed list |
-| Default | `posted` |
-| Range | one of the choices below |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-What it may be set to:
-
-- `posted` Exactly the posted amount. Safest. The board is the contract.
-- `capped` The posted range, with a bonus ceiling above it. Never below the posted floor. Exceptional work can earn up to a multiple of the posted top.
-- `unlimited` Any amount. No ceiling. Only sensible with a very small, very trusted admin group.
-
-### Bonus ceiling multiplier
-
-When the cap mode allows a bonus ceiling, this is that ceiling as a multiple of the top of the posted range. 2 means a quest posted at 50-100 can pay at most 200, badges included.
-
-| Fact | Value |
-| --- | --- |
-| Key | `quest.consent_cap_multiplier` |
-| Type | decimal, a number, fractions allowed |
-| Default | `2` |
-| Range | 1 to 100 |
-| Counted in | x posted |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+2 dials. 2 for the whole village.
 
 ### Require submitted work before consent
 
@@ -1590,20 +1552,6 @@ When on, value can only be released for work that was actually filed. Turning th
 | Key | `quest.require_submission_before_consent` |
 | Type | boolean, on or off |
 | Default | `true` |
-| Range | on or off |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-### Allow consenting at zero
-
-When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes with no recognition, and no token the village's quest-completion rules would pay moves either, voice and credits included. A stay-credit reward the quest itself carries still releases, because a person set that payment on the quest, so in a village that weights votes by stay credits such a quest still moves weight. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.
-
-| Fact | Value |
-| --- | --- |
-| Key | `quest.allow_zero_consent` |
-| Type | boolean, on or off |
-| Default | `false` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
