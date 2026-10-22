@@ -172,7 +172,7 @@ beforeAll(async () => {
   // PR 8: the role's handover words (#534), and the owner's card words from an earlier season (#530).
   await pool.query("UPDATE org_roles SET bring_me = ?, runbook = ? WHERE id = ?", [JSON.stringify(["Readings from the spring"]), RUNBOOK, ROLE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    "INSERT INTO season_plans (id, user_id, season_id, version, card_words_json) VALUES ('sp-card-words', ?, 'season-before', 1, ?)",
+    "INSERT INTO season_plans (id, user_id, season_id, version, card_words_json, created_at) VALUES ('sp-card-words', ?, 'season-before', 1, ?, NOW() - INTERVAL 1 DAY)",
     [ownerId, JSON.stringify({ howIHold: "In the open, one moon at a time.", growingEdge: "Asking for help early." })],
   );
 }, E2E_BOOT_DEADLINE_MS + 60_000);
@@ -290,7 +290,7 @@ describe.skipIf(!DB_CONFIGURED)("PR 8: the pieces wired onto the live card", () 
     expect(JSON.stringify(stranger)).not.toContain("Asking for help early.");
   });
 
-  it("saves the load from the card's route and reads it back; the card's words say no season with a 409", async () => {
+  it("saves the load and the card words through the season plan routes, and the card reads both back", async () => {
     const on = await call("PUT", "/api/admin/modules/governance/lifecycle", { body: { lifecycle: "members", examples: false } });
     expect(on.status, "governance must be on for the season plan routes").toBe(200);
     expect((await card(ownerToken)).json.card.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
@@ -298,10 +298,25 @@ describe.skipIf(!DB_CONFIGURED)("PR 8: the pieces wired onto the live card", () 
     expect(load.status, JSON.stringify(load.json)).toBe(200);
     expect((await card(ownerToken)).json.card.across.load.own).toEqual({ kind: "shown", value: { step: 4, words: "Leaning heavy" } });
     expect((await card(readerToken)).json.card.across.load.own.kind).toBe("shown");
-    // No season is set up in this suite, so the planning window is closed.
-    const words = await call("PUT", "/api/season-plans/mine/card", { body: { cardWords: { growingEdge: "x" } }, token: ownerToken });
-    expect(words.status).toBe(409);
-    expect(words.json.error).toBe("no_season");
+    // The card's own editor sends the whole group, merged; the newest words win on the card.
+    const mine = await call("GET", "/api/season-plans/mine", { token: ownerToken });
+    expect(mine.status).toBe(200);
+    if (mine.json.season === null) {
+      // No planning window: the route says so with a 409 the card puts in a plain sentence.
+      const words = await call("PUT", "/api/season-plans/mine/card", { body: { cardWords: { growingEdge: "x" } }, token: ownerToken });
+      expect(words.status).toBe(409);
+      expect(words.json.error).toBe("no_season");
+      return;
+    }
+    const words = await call("PUT", "/api/season-plans/mine/card", {
+      body: { cardWords: { ...(mine.json.cardWords ?? {}), growingEdge: "Saying no kindly." }, seasonalGoals: [{ title: "Clean water for all", doneWhen: "every house tested" }] },
+      token: ownerToken,
+    });
+    expect(words.status, JSON.stringify(words.json)).toBe(200);
+    const after = (await card(ownerToken)).json.card;
+    expect(after.across.growingEdge.text).toEqual({ kind: "shown", value: "Saying no kindly." });
+    expect(after.howIHold.items.value[0].text).toBe("In the open, one moon at a time.");
+    expect(after.across.seasonalGoals.items).toEqual({ kind: "shown", value: [{ title: "Clean water for all", doneWhen: "Done when every house tested" }] });
   });
 
   it("proposes the handover words as one update_seat change, and refuses a link that is not https", async () => {
