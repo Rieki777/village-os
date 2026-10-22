@@ -235,7 +235,7 @@ export default function WaitingOnYou({ onShown }: { onShown?: (shown: boolean) =
         ))}
       </ul>
       {raised.length > 0 && (
-        <div className="space-y-3 pt-2" data-raised-with-you>
+        <div className="space-y-3 pt-2" data-raised>
           <h4 id="task-board-raised" className={LABEL_CAPS}>
             {TENSION_COPY.groupHeading}
           </h4>

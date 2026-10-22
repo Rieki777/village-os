@@ -119,7 +119,7 @@ describe.skipIf(!configured)("raise a tension with a role, on a real schema", ()
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
-    await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')");
+    await q("INSERT INTO `module_settings` (`module_id`, `lifecycle`) VALUES ('sessions', 'members')"); // module-review-ok: turns Live Sessions on in the scratch schema this suite provisioned, so a bring to the circle has a backlog
     await loadModuleSettings(pool);
     const c = collect();
     const deps = {
