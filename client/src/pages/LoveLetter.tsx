@@ -1,13 +1,22 @@
 import Layout from "@/components/Layout";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, CheckCircle2, ArrowRight, Users, Home, TrendingUp, Sparkles, Send } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { authToken, gameFetch, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { useOptionalAuth } from "@/contexts/AuthContext";
-import { LETTER_WORDS, letterSourceFrom, renderMembershipLetter, type ServedLetter } from "@shared/membershipLetter";
+import {
+  LETTER_PAGE_SECTION,
+  LETTER_WORDS,
+  letterSourceFrom,
+  renderMembershipLetter,
+  type ServedLetter,
+} from "@shared/membershipLetter";
 import { useVillageContent } from "@/hooks/useVillageContent";
 import { useVillageName } from "@/hooks/useVillageName";
+import { usePageVars } from "@/hooks/usePageContent";
+import { LETTER_PATH_IDS, LOVE_LETTER_PAGE } from "@shared/pageContent/loveLetter";
+import { resolvePage } from "@shared/pageContent/resolve";
 
 /**
  * S2 brochure lane, 2026-08-30: this page used to state, nine times, that
@@ -122,16 +131,22 @@ function NextStep({ children }: { children: React.ReactNode }) {
   );
 }
 
-const pathOptions = [
-  { id: "investor", label: "Investor / Capital Contributor", icon: TrendingUp, color: "border-amber text-amber" },
-  { id: "steward", label: "Village Steward / Co-Creator", icon: Users, color: "border-sage text-sage" },
-  { id: "resident", label: "Resident / Future Villager", icon: Home, color: "border-teal text-teal" },
-  { id: "prosperity", label: "Prosperity Creator / Business Builder", icon: Sparkles, color: "border-teal-light text-teal-light" },
-];
+/** What each path choice needs that is not words. Its label is the village's (Admin, Pages, Membership letter). */
+const PATH_LOOK: Record<(typeof LETTER_PATH_IDS)[number], { icon: typeof Users; color: string }> = {
+  investor: { icon: TrendingUp, color: "border-amber text-amber" },
+  steward: { icon: Users, color: "border-sage text-sage" },
+  resident: { icon: Home, color: "border-teal text-teal" },
+  prosperity: { icon: Sparkles, color: "border-teal-light text-teal-light" },
+};
 
 export default function LoveLetter() {
   const { content: legal } = useVillageContent<LegalContent>("legal");
   const { content: covenant } = useVillageContent<CovenantContent>("covenant");
+  // The village's own words for this page and for the letter itself (Admin,
+  // Pages, Membership letter), stored as `page-love-letter`. The server reads
+  // the same section to render the letter it serves, so the two agree.
+  const { content: pageDoc, loading: pageLoading } = useVillageContent<Record<string, unknown>>(LETTER_PAGE_SECTION);
+  const pageVars = usePageVars();
   const villageName = useVillageName();
   const cfg = useGameConfig();
   const user = useOptionalAuth()?.user ?? null;
@@ -146,6 +161,18 @@ export default function LoveLetter() {
   const footerNote =
     membership?.footerNote?.trim() ||
     "Ask your community how membership contributions are structured, and whether any part is tax-deductible where you live.";
+  // This page's words, `{entity}` included. Null until the saved words have
+  // arrived, so the defaults never flash first.
+  const page = useMemo(
+    () => (pageVars && !pageLoading ? resolvePage(LOVE_LETTER_PAGE, pageDoc, { ...pageVars, entity: entityName }) : null),
+    [pageVars, pageLoading, pageDoc, entityName],
+  );
+  const hero = page?.hero.fields;
+  const words = page?.form;
+  const contribution = page?.contribution;
+  // A level with no amount or no label cannot be picked honestly, so it is not offered.
+  const tiers = (contribution?.lists.tiers ?? []).filter((t) => (t.value ?? "").trim() !== "" && (t.label ?? "").trim() !== "");
+  const suggestedLine = [contributionShortNote, contribution?.fields.suggested].filter(Boolean).join(" ");
 
   // The server's letter once it lands; until then the same rendering from
   // this page's own config and content. A member aligns only with the
@@ -166,7 +193,7 @@ export default function LoveLetter() {
     void readLetter();
   }, [readLetter]);
   // Neither fallback inside states a fact about any particular place or plan (shared/membershipLetter.ts).
-  const local = renderMembershipLetter(letterSourceFrom(cfg, { covenant, legal }));
+  const local = renderMembershipLetter(letterSourceFrom(cfg, { covenant, legal, [LETTER_PAGE_SECTION]: pageDoc }));
   const parts = letter?.parts ?? local.parts;
   const letterTitle = letter?.title ?? local.title;
 
@@ -352,9 +379,11 @@ export default function LoveLetter() {
                   )}
                 </div>
               </div>
-              <p className="text-lg font-accent text-primary italic mb-8">
-                "You are not just joining a place. You are becoming part of something alive."
+              {page?.thanks.fields.quote && (
+              <p className="text-lg font-accent text-primary italic mb-8 break-words">
+                "{page.thanks.fields.quote}"
               </p>
+              )}
               <a
                 href="/"
                 className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-full font-semibold hover:bg-teal-deep-dark transition"
@@ -383,11 +412,11 @@ export default function LoveLetter() {
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
               <Heart className="w-8 h-8 text-primary" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              The {villageName} Love Letter
+            <h1 className={`font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words${hero ? "" : " invisible"}`}>
+              {hero?.headline || "\u00a0"}
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Our founding covenant, and your official membership in {entityName}.
+            <p className={`text-xl text-muted-foreground max-w-2xl mx-auto break-words${hero ? "" : " invisible"}`}>
+              {hero?.lede}
               {user ? ` ${LETTER_WORDS.readReflect}` : " Read. Reflect. Sign."}
             </p>
           </motion.div>
@@ -405,16 +434,21 @@ export default function LoveLetter() {
 
             <p className="mb-6 text-muted-foreground">{parts.joining}</p>
 
-            <p className="mb-4 text-foreground font-semibold">{parts.commitLead}</p>
+            {/* With no commitments the line leading into them goes too, as it does in the stored words. */}
+            {parts.commitments.length > 0 && (
+              <>
+                <p className="mb-4 text-foreground font-semibold">{parts.commitLead}</p>
 
-            <ul className="space-y-3 mb-8">
-              {parts.commitments.map((commitment, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <Heart className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                  <span className="text-muted-foreground">{commitment}</span>
-                </li>
-              ))}
-            </ul>
+                <ul className="space-y-3 mb-8">
+                  {parts.commitments.map((commitment, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <Heart className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                      <span className="text-muted-foreground min-w-0 break-words">{commitment}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
             <p className="mb-6 text-muted-foreground">{parts.inReturn}</p>
 
@@ -430,20 +464,19 @@ export default function LoveLetter() {
             </p>
           </motion.div>
 
-          {/* Membership Form */}
+          {/* Membership Form. Drawn once this page's words have arrived. */}
+          {page && words && contribution && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
             className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12"
           >
-            <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2">
-              {user ? LETTER_WORDS.heading(letterTitle) : "Sign Your Membership"}
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2 break-words">
+              {user ? LETTER_WORDS.heading(letterTitle) : words.fields.visitorHeading}
             </h2>
-            <p className="text-muted-foreground mb-8">
-              {user
-                ? LETTER_WORDS.lede(villageName)
-                : `Fill in your details below to officially join the ${villageName} Family and become a member of ${entityName}.`}
+            <p className="text-muted-foreground mb-8 break-words">
+              {user ? LETTER_WORDS.lede(villageName) : words.fields.visitorLede}
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -515,35 +548,42 @@ export default function LoveLetter() {
                 </label>
                 <p className="text-sm text-muted-foreground mb-4">Select all that apply, you can walk multiple paths.</p>
                 <div className="grid md:grid-cols-2 gap-3">
-                  {pathOptions.map(path => (
+                  {words.lists.paths.map(path => {
+                    const id = path.id ?? "";
+                    const look = PATH_LOOK[id as keyof typeof PATH_LOOK];
+                    if (!look) return null;
+                    return (
                     <button
-                      key={path.id}
+                      key={id}
                       type="button"
-                      onClick={() => togglePath(path.id)}
+                      onClick={() => togglePath(id)}
                       className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                        form.paths.includes(path.id)
-                          ? `${path.color} bg-primary/5`
+                        form.paths.includes(id)
+                          ? `${look.color} bg-primary/5`
                           : "border-border text-muted-foreground hover:border-primary/30"
                       }`}
                     >
-                      <path.icon className="w-5 h-5 flex-shrink-0" />
-                      <span className="text-sm font-medium">{path.label}</span>
-                      {form.paths.includes(path.id) && (
+                      <look.icon className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm font-medium min-w-0 break-words">{path.label}</span>
+                      {form.paths.includes(id) && (
                         <CheckCircle2 className="w-4 h-4 ml-auto flex-shrink-0" />
                       )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Monthly contribution */}
               <div>
-                <label htmlFor="letter-contribution" className="block text-sm font-medium text-foreground mb-2">
-                  Monthly Membership Contribution
+                <label htmlFor="letter-contribution" className="block text-sm font-medium text-foreground mb-2 break-words">
+                  {contribution.fields.heading}
                 </label>
-                <p className="text-sm text-muted-foreground mb-3">
-                  {contributionShortNote ? `${contributionShortNote} ` : ""}Suggested: $33-$108/month.
+                {suggestedLine && (
+                <p className="text-sm text-muted-foreground mb-3 break-words">
+                  {suggestedLine}
                 </p>
+                )}
                 <select
                   id="letter-contribution"
                   value={form.contribution}
@@ -551,17 +591,18 @@ export default function LoveLetter() {
                   className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   <option value="">Select contribution level</option>
-                  <option value="33">$33/month, Seed level</option>
-                  <option value="55">$55/month, Sprout level</option>
-                  <option value="88">$88/month, Grove level</option>
-                  <option value="108">$108/month, Forest level</option>
-                  <option value="custom">I'd like to discuss a custom amount</option>
+                  {tiers.map((tier, i) => (
+                    <option key={`${i}-${tier.value}`} value={tier.value}>
+                      {tier.label}
+                    </option>
+                  ))}
+                  <option value="custom">{contribution.fields.customLabel}</option>
                 </select>
                 {form.contribution === "custom" && (
                   <input
                     type="text"
                     aria-label="Your custom monthly contribution"
-                    placeholder="Tell us what works for you (e.g. $20/month, in-kind, barter)"
+                    placeholder={contribution.fields.customPlaceholder}
                     value={form.customAmount}
                     onChange={e => setForm(p => ({ ...p, customAmount: e.target.value }))}
                     className="mt-3 w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -597,7 +638,7 @@ export default function LoveLetter() {
                   <span className="text-sm text-muted-foreground">
                     I have read and agree to the{" "}
                     <a href="/good-neighbor" className="text-primary underline" target="_blank">
-                      Good Neighbor Criteria
+                      {words.fields.standardsLabel}
                     </a>{" "}
                     and understand the community standards expected of all members. <span className="text-destructive">*</span>
                   </span>
@@ -610,8 +651,8 @@ export default function LoveLetter() {
                     onChange={e => setForm(p => ({ ...p, commitmentAck: e.target.checked }))}
                     className="mt-1 h-4 w-4 flex-shrink-0 accent-teal-deep"
                   />
-                  <span className="text-sm text-muted-foreground">
-                    I have read the Love Letter above and commit to the values and agreements of the {villageName} community as a member of {entityName}. <span className="text-destructive">*</span>
+                  <span className="text-sm text-muted-foreground min-w-0 break-words">
+                    {words.fields.ackLabel} <span className="text-destructive">*</span>
                   </span>
                 </label>
               </div>
@@ -649,7 +690,7 @@ export default function LoveLetter() {
                 ) : (
                   <>
                     <Send className="w-5 h-5" />
-                    {user ? LETTER_WORDS.button(villageName) : <>Sign the Love Letter &amp; Join the {villageName} Family</>}
+                    <span className="min-w-0 break-words">{user ? LETTER_WORDS.button(villageName) : words.fields.submitLabel}</span>
                   </>
                 )}
               </button>
@@ -663,6 +704,7 @@ export default function LoveLetter() {
               <p className="text-xs text-center text-muted-foreground">{footerNote}</p>
             </form>
           </motion.div>
+          )}
         </div>
       </section>
     </Layout>
