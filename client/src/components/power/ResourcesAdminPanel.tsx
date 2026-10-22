@@ -554,11 +554,11 @@ export default function ResourcesAdminPanel({ password }: { password: string }) 
             Scope
             <select className={input} value={rule.scope} onChange={(e) => setRule({ ...rule, scope: e.target.value, scopeId: "" })}>
               <option value="circle">A circle</option>
-              <option value="role">A seat</option>
+              <option value="role">A role</option>
             </select>
           </label>
           <label className={label}>
-            {rule.scope === "circle" ? "Which circle" : "Which seat"}
+            {rule.scope === "circle" ? "Which circle" : "Which role"}
             <select className={input} value={rule.scopeId} onChange={(e) => setRule({ ...rule, scopeId: e.target.value })}>
               <option value="">Pick one</option>
               {(rule.scope === "circle"

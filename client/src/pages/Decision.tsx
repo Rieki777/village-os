@@ -689,7 +689,7 @@ export default function Decision() {
                   the application itself, terms and all, on its own page. */}
               {ballot.subjectType === ROLE_APPLICATION && (
                 <Link
-                  href={`/seat-applications/${encodeURIComponent(ballot.subjectRef)}`}
+                  href={`/role-applications/${encodeURIComponent(ballot.subjectRef)}`}
                   className="mt-3 flex min-h-[44px] items-center text-sm font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                 >
                   Read the application

@@ -306,7 +306,7 @@ describe.skipIf(!configured)("org.decide: who adopts a reorganisation", () => {
         expect(text, word).not.toContain(word);
       }
       expect(ballot!.docMarkdown).toContain(`Create the circle "${d.circle}"`);
-      expect(ballot!.docMarkdown).toContain(`Create the seat "${d.seat}" in "${d.circle}"`);
+      expect(ballot!.docMarkdown).toContain(`Create the role "${d.seat}" in "${d.circle}"`);
       expect(ballot!.docMarkdown).toContain(`Seat somebody in "${d.seat}"`);
       // Shown as written inside a <pre>, so no Markdown marks.
       expect(ballot!.docMarkdown).not.toMatch(/^#|\*\*/m);

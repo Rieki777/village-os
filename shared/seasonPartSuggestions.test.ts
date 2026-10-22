@@ -38,12 +38,12 @@ describe("quests a moon from the member's seats", () => {
     ]);
     expect(q).toMatchObject({ min: 3, max: 7, from: "terms" });
     expect(q.source.map((s) => s.seat)).toEqual(["Front-End", "Kitchen"]);
-    expect(questHint(q)).toBe("From your seats' terms: Front-End 3 to 5, Kitchen 2 to 7");
+    expect(questHint(q)).toBe("From your roles' terms: Front-End 3 to 5, Kitchen 2 to 7");
   });
 
   it("one seat's hint reads as the brief says", () => {
     const q = suggestQuests([seat({ seatId: "fe", name: "Front-End", terms: [{ rank: "adopted", settings: quests(3, 5) }] })]);
-    expect(questHint(q)).toBe("From your seats' terms: Front-End 3 to 5");
+    expect(questHint(q)).toBe("From your roles' terms: Front-End 3 to 5");
   });
 
   it("adopted terms beat applied terms, which beat the seat's offer", () => {
@@ -60,7 +60,7 @@ describe("quests a moon from the member's seats", () => {
       seat({ seatId: "b", terms: [{ rank: "adopted", settings: quests(undefined, 3) }] }),
     ]);
     expect(q).toMatchObject({ min: 5, max: 5 });
-    expect(questHint(q)).toBe("From your seats' terms: a at least 5, b up to 3");
+    expect(questHint(q)).toBe("From your roles' terms: a at least 5, b up to 3");
   });
 
   it("with no quests group anywhere, starts from the platform preset and says so", () => {
@@ -68,7 +68,7 @@ describe("quests a moon from the member's seats", () => {
     for (const seats of [[], [seat({ seatId: "a", terms: [{ rank: "offer", settings: board({ measure: "Beds weeded" }) }] })]]) {
       const q = suggestQuests(seats);
       expect(q).toEqual({ min: preset.perMoonMin, max: preset.perMoonMax, from: "default", source: [] });
-      expect(questHint(q)).toBe("A starting point. Change it if your seats ask for more.");
+      expect(questHint(q)).toBe("A starting point. Change it if your roles ask for more.");
     }
     expect(preset).toMatchObject({ perMoonMin: 3, perMoonMax: 5 });
   });

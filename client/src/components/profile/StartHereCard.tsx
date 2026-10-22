@@ -200,7 +200,7 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
     step = "Bring the village a quest";
     lines = ["Say what you want to do and what you would need, in a few lines."];
     primary = questDoor;
-    others = handsOpen ? [{ href: "/roles", label: "Raise your hand for an open seat", after: HAND_AFTER }] : [];
+    others = handsOpen ? [{ href: "/roles", label: "Raise your hand for an open role", after: HAND_AFTER }] : [];
   } else {
     // Which door a guest has, and whether they already went through it, are
     // both facts the card waits for. Guessing either one is how a person who

@@ -144,7 +144,7 @@ describe("a seat somebody holds on adopted terms (red team U2, U4)", () => {
     mount({ ...BASE, holderCount: 1, state: "partial", termsOffer: null });
     fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
     expect(screen.queryByRole("link", { name: "Propose terms" })).toBeNull();
-    expect(screen.getByText("Changing the terms of a seat somebody holds comes later.")).toBeInTheDocument();
+    expect(screen.getByText("Changing the terms of a role somebody holds comes later.")).toBeInTheDocument();
   });
 });
 

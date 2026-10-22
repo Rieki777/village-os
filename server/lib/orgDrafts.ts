@@ -239,9 +239,9 @@ export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: str
 /** A neutral line for an objective, from platform vocabulary, never a village's. */
 export function neutralObjectiveText(metric: string | null): string {
   if (!metric) return "An objective the village has set";
-  if (metric === "seats_filled") return "Seats filled";
+  if (metric === "seats_filled") return "Roles filled";
   if (metric === "seasons_completed") return "Seasons completed";
-  if (metric.startsWith("seats_filled_in:")) return "Seats filled in a circle";
+  if (metric.startsWith("seats_filled_in:")) return "Roles filled in a circle";
   if (metric.startsWith("members_at_stage:")) return "Members at a stage";
   return "An objective the village is measuring";
 }
@@ -684,7 +684,7 @@ function circleNameBlock(
     : "then withdraw this draft and make it again";
   if (circleName === "" && unread.length) {
     const keys = unread.map((k) => `"${k}"`).join(", ");
-    const fact = `This seat gave its circle under ${keys} in a form this village cannot read`;
+    const fact = `This role gave its circle under ${keys} in a form this village cannot read`;
     return fromQueue
       ? `${fact}. Withdraw this draft. ` +
           `Its proposals go back in the review queue, where you can write the circle's name under "circle" and accept again`
@@ -763,7 +763,7 @@ function seatShapeBlocks(payload: Record<string, any> | null | undefined): strin
   for (const [key, words] of Object.entries(SEAT_TEXT_FIELDS)) {
     const v = payload?.[key];
     if (v !== undefined && v !== null && typeof v !== "string" && typeof v !== "number") {
-      out.push(`This seat's ${words} is not text, so the chart cannot hold it`);
+      out.push(`This role's ${words} is not text, so the chart cannot hold it`);
     }
   }
   const r = payload?.recruiting;
@@ -941,7 +941,7 @@ export function previewLoadedDraft(
      * and how many changes one of them may carry is the village's own setting.
      */
     if (machine && (c.op === "seat_holder" || c.op === "end_holding")) {
-      blocked = "A proposal never names who holds a seat. Structure can be proposed; occupancy is a human act";
+      blocked = "A proposal never names who holds a role. Structure can be proposed; occupancy is a human act";
     } else if (machine && carriesTerms(c.payload)) {
       // TERMS NEVER CROSS THE BRIDGE (seat settings PR3). What a seat offers
       // whoever holds it is the village's own economics, written by a member.
@@ -951,7 +951,7 @@ export function previewLoadedDraft(
     } else if (machine && index > cap) {
       blocked = `This proposal is past this village's limit of ${cap} changes in one reorganisation`;
     } else if (machine && c.op === "rest_seat" && !stewardChose(c)) {
-      blocked = "A proposal never rests an existing seat. Removing a seat from the chart is a human decision";
+      blocked = "A proposal never rests an existing role. Removing a role from the chart is a human decision";
     } else if (machine && c.op === "rest_circle" && !stewardChose(c)) {
       blocked = "A proposal never retires a circle. Retiring one is a human decision";
     }
@@ -1026,7 +1026,7 @@ export function previewLoadedDraft(
       else if (target.isExample) blocked = "A standing example is not retired. Publish your own circles and it is removed";
       else if (target.status === "dormant") blocked = "That circle is already dormant";
       else if (seatsLeft > 0) {
-        blocked = `${seatsLeft === 1 ? "A seat still sits" : `${seatsLeft} seats still sit`} in this circle. Retire or move them first`;
+        blocked = `${seatsLeft === 1 ? "A role still sits" : `${seatsLeft} roles still sit`} in this circle. Retire or move them first`;
       } else if (childLeft) blocked = `"${childLeft.name}" still sits inside this circle. Retire or move it first`;
       lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads, blocked });
       continue;
@@ -1072,7 +1072,7 @@ export function previewLoadedDraft(
     }
 
     if (c.op === "create_seat") {
-      reads = `Create the seat "${primitiveText(c.payload?.name) ?? c.orgRoleId}"`;
+      reads = `Create the role "${primitiveText(c.payload?.name) ?? c.orgRoleId}"`;
       /*
        * ── EVERY REASON, AND THE CIRCLE LAST ───────────────────────────────
        *
@@ -1086,7 +1086,7 @@ export function previewLoadedDraft(
        * need no circle first, joined into the one sentence a line carries.
        */
       const reasons: string[] = [];
-      if (existing) reasons.push("A seat with that id already exists");
+      if (existing) reasons.push("A role with that id already exists");
       reasons.push(...seatShapeBlocks(c.payload));
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
@@ -1110,11 +1110,11 @@ export function previewLoadedDraft(
       const nameIsText = rawName === undefined || rawName === null || typeof rawName === "string" || typeof rawName === "number";
       // Converted only when it is text, since String() on some objects throws (primitiveText).
       const proposed = nameIsText ? String(rawName ?? "").trim() : "";
-      if (nameIsText && proposed === "") reasons.push("A seat needs a name");
-      else if (nameIsText && proposed.length > 120) reasons.push("That seat name is longer than a seat name can be");
+      if (nameIsText && proposed === "") reasons.push("A role needs a name");
+      else if (nameIsText && proposed.length > 120) reasons.push("That role name is longer than a role name can be");
       else if (nameIsText && liveNames.has(proposed.toLowerCase())) {
         reasons.push(
-          `This village already has a live seat called "${proposed}". ` +
+          `This village already has a live role called "${proposed}". ` +
             (fromQueue
               ? "Withdraw this draft. Its proposals go back in the review queue, where you can reject this one or give it a name of its own"
               : "Withdraw this draft and make it again with a name of its own"),
@@ -1123,7 +1123,7 @@ export function previewLoadedDraft(
       const seats = c.payload?.seats;
       if (seats !== undefined && seats !== null) {
         const n = primitiveNumber(seats);
-        if (!Number.isInteger(n) || n < 1 || n > 50) reasons.push("A seat holds between 1 and 50 people");
+        if (!Number.isInteger(n) || n < 1 || n > 50) reasons.push("A role holds between 1 and 50 people");
       }
       const crit = c.payload?.criticality;
       if (crit !== undefined && crit !== null && !["normal", "high"].includes(primitiveText(crit) ?? "")) {
@@ -1147,10 +1147,10 @@ export function previewLoadedDraft(
       if (terms) reasons.push(terms);
       blocked = reasons.length ? reasons.join(". ") : null;
     } else {
-      if (!existing && !willExist.has(c.orgRoleId)) blocked = "That seat no longer exists";
+      if (!existing && !willExist.has(c.orgRoleId)) blocked = "That role no longer exists";
       // Standing examples are inert everywhere else and must be here too, or a
       // draft becomes the one door that edits demo data into the real chart.
-      else if (existing?.is_example) blocked = "That is a standing example seat";
+      else if (existing?.is_example) blocked = "That is a standing example role";
 
       if (c.op === "update_seat") {
         reads = `Edit ${name}`;
@@ -1162,12 +1162,12 @@ export function previewLoadedDraft(
         // list, and left a reader believing something happened.
         const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS);
         if (!blocked && touched.length === 0) {
-          blocked = "This names no field this village can change on a seat";
+          blocked = "This names no field this village can change on a role";
         }
         const n2 = c.payload?.seats;
         if (!blocked && n2 !== undefined && n2 !== null) {
           const v = primitiveNumber(n2);
-          if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A seat holds between 1 and 50 people";
+          if (!Number.isInteger(v) || v < 1 || v > 50) blocked = "A role holds between 1 and 50 people";
         }
         if (!blocked && hasCircleId(circleIdOf(c.payload)) && !circleKnown(primitiveText(circleIdOf(c.payload)) ?? "")) {
           blocked = "That circle does not exist, and this draft does not create it";
@@ -1179,7 +1179,7 @@ export function previewLoadedDraft(
         // at preview, and so again inside the publish transaction, so a seating
         // made after the accept still holds the seat.
         if (!blocked && stewardChose(c) && context.heldSeatIds?.has(c.orgRoleId)) {
-          blocked = "Somebody holds this seat. Give them a seat in the new chart before it is retired";
+          blocked = "Somebody holds this role. Give them a role in the new chart before it is retired";
         }
       }
       if (c.op === "seat_holder") reads = `Put ${primitiveText(c.payload?.displayName) ?? "a member"} in ${name}`;

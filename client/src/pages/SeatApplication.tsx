@@ -1,5 +1,6 @@
 /**
- * `/seat-applications/:id`: ONE APPLICATION TO HOLD SEATS, ON TERMS (seat settings PR4).
+ * `/role-applications/:id`: ONE APPLICATION TO HOLD ROLES, ON TERMS (seat settings PR4).
+ * `/seat-applications/:id` is its old spelling and redirects here (App.tsx).
  *
  * Members only. The read behind it answers 401 to a visitor and to a signed-in
  * guest (terms.read opens at the member rung), and this page says so in a
@@ -51,7 +52,7 @@ import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { call as alignCall } from "@/components/alignment/alignmentsApi";
 
 export const APPLICATION_WORDS = {
-  membersOnly: "Members read seat applications.",
+  membersOnly: "Members read role applications.",
   membersOnlyLine: "An application carries its terms, money included, so it opens at the member rung.",
   signIn: "Sign in to read this application",
   wordsHeading: "In their words",
@@ -71,8 +72,8 @@ export const APPLICATION_WORDS = {
   amends: "These terms amend earlier ones. The earlier terms stay in force until these are.",
   readEarlier: "Read the earlier terms",
   readTheVote: "Read the vote",
-  laterLine: "Adopted. The seats are taken up on the first day it names.",
-  packageTerms: "One set of terms covers every seat above.",
+  laterLine: "Adopted. The roles are taken up on the first day it names.",
+  packageTerms: "One set of terms covers every role above.",
 } as const;
 
 function SeatCards({ app }: { app: ServedApplication }) {
@@ -224,7 +225,7 @@ export default function SeatApplication() {
             <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
-                <SignInDoors next={`/seat-applications/${encodeURIComponent(id)}`} />
+                <SignInDoors next={`/role-applications/${encodeURIComponent(id)}`} />
               </div>
             )}
           </div>

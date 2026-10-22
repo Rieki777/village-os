@@ -256,18 +256,18 @@ export function proposeStructure(
 function rationaleFor(count: number, emptyCircles: string[], sourceName: string, circles: CircleReading): string {
   const parts = [
     count === 1
-      ? `${sourceName} suggests one seat.`
-      : `${sourceName} suggests ${count} seats.`,
+      ? `${sourceName} suggests one role.`
+      : `${sourceName} suggests ${count} roles.`,
     "Nothing here is part of this village's chart until you accept it.",
-    "Who holds each seat is not included and stays with this village.",
+    "Who holds each role is not included and stays with this village.",
   ];
   if (emptyCircles.length === 1) {
-    parts.push(`The circle ${emptyCircles[0]} has no seats in this suggestion.`);
+    parts.push(`The circle ${emptyCircles[0]} has no roles in this suggestion.`);
   } else if (emptyCircles.length > 1) {
-    parts.push(`These circles have no seats in this suggestion: ${emptyCircles.join(", ")}.`);
+    parts.push(`These circles have no roles in this suggestion: ${emptyCircles.join(", ")}.`);
   }
   const lost = circles.unresolved + circles.absent;
-  if (lost === 1) parts.push("One seat arrived with no circle this village could read.");
-  else if (lost > 1) parts.push(`${lost} seats arrived with no circle this village could read.`);
+  if (lost === 1) parts.push("One role arrived with no circle this village could read.");
+  else if (lost > 1) parts.push(`${lost} roles arrived with no circle this village could read.`);
   return parts.join(" ");
 }

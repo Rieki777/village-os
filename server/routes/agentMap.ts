@@ -128,7 +128,7 @@ export function exampleDraft(): Record<string, unknown> {
 export const DRAFT_RULES: readonly string[] = [
   "Draw only what the masterplan shows. Every building, road, water line, zone and the property line comes from the plan; nothing is added because a village of this kind usually has one.",
   "Names come from the plan's own labels. A thing the plan does not name gets a plain descriptive name (\"Building 4\"), never an invented one.",
-  "Leave every village record empty: quests, seats, threads, journeys, gatherings and vitals belong to the people who keep them.",
+  "Leave every village record empty: quests, roles, threads, journeys, gatherings and vitals belong to the people who keep them.",
   "Leave origin stories, funding and gatherings empty on every building. They are things that happened to a place.",
   "Never draw a coast, a river, a road or a landmark off the plan. Ground past the plan is the village's own picture, never yours.",
   "Positions are world units: 0 to 2400 across, 0 to 1600 down, north up. The frame is the village's land record: `ground.spanM` metres across, centred on its centre.",

@@ -429,7 +429,7 @@ export default function Review() {
         const blocked = Number(d.blocked ?? 0);
         if (blocked > 0 && draftId) {
           setStuck((s) => ({ ...s, [draftId]: { blocked, lines: blockedReasons(d.blockedLines) } }));
-          toast.error("Accepted, and this seat cannot apply yet. The reason is on this page, beside a way to withdraw it.");
+          toast.error("Accepted, and this role cannot apply yet. The reason is on this page, beside a way to withdraw it.");
         } else {
           toast.success("Accepted");
         }
@@ -559,7 +559,7 @@ export default function Review() {
       }
       if (blocked > 0) {
         toast.error(
-          `${body.accepted} accepted, and ${blocked} of the seats cannot apply. This draft will not publish ` +
+          `${body.accepted} accepted, and ${blocked} of the roles cannot apply. This draft will not publish ` +
             `until those are dealt with. The reasons are on this page, beside a way to withdraw it and put ` +
             `these proposals back in the queue.`,
         );
@@ -775,7 +775,7 @@ export default function Review() {
             <p className="text-sm text-muted-foreground mt-2">
               {s.unpreviewable
                 ? "This draft could not be checked. Withdrawing puts its proposals back in the queue, so you can accept them again."
-                : `${s.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.`}
+                : `${s.blocked} of its roles are blocked. Withdrawing puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.`}
             </p>
             {s.lines.length > 0 && (
               <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -821,11 +821,11 @@ export default function Review() {
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
               {notRead.published
-                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a seat, ${
+                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a role, ${
                     // The Org Chart is an admin screen, and a steward is often no admin: same signal as the limit's button.
                     queue?.mayChangeProposalLimit === true ? "write it" : "ask an admin to write it"
-                  } onto that seat in the Org Chart. If none of them belongs on a seat, there is nothing to do.`
-                : "The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the seat has and accept again. If none of them belongs on a seat, there is nothing to do."}
+                  } onto that role in the Org Chart. If none of them belongs on a role, there is nothing to do.`
+                : "The draft publishes without them. If one belongs on a role, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the role has and accept again. If none of them belongs on a role, there is nothing to do."}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               {notRead.lines.map((n, i) => (

@@ -326,7 +326,7 @@ export function guideSystemPrompt(villageName: string, practice: JournalPractice
   const pulseCraft =
     practice === "pulse"
       ? `
-For the weekly pulse: when they name a tension in their role, work nobody holds, or an opportunity the village is missing, help them make it concrete. Ask what exactly it is, which seat it touches, and the smallest next step. If it is theirs to act on, ask what they will do. If it belongs to someone else or to nobody, ask whether they want to raise it with the village as a tension or propose it as a quest. You only ask; you never raise or propose anything yourself.
+For the weekly pulse: when they name a tension in their role, work nobody holds, or an opportunity the village is missing, help them make it concrete. Ask what exactly it is, which role it touches, and the smallest next step. If it is theirs to act on, ask what they will do. If it belongs to someone else or to nobody, ask whether they want to raise it with the village as a tension or propose it as a quest. You only ask; you never raise or propose anything yourself.
 `
       : "";
   return `You are the journal guide in ${villageName || "the village"}. You sit with one member while they write in their own journal, which nobody else in the village can read.

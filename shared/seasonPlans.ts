@@ -265,7 +265,7 @@ export function planOpenCopy(seasonName: string, closesOn: string): { title: str
   const name = seasonName.trim() || "the next season";
   return {
     title: `Plan your season: ${name}`,
-    body: `Choose your seats and what you will do. Open until ${civilDayWords(closesOn)}.`,
+    body: `Choose your roles and what you will do. Open until ${civilDayWords(closesOn)}.`,
   };
 }
 
@@ -327,7 +327,7 @@ export function parsePlanInput(body: unknown, ctx: { goals: readonly string[] })
   if (typeof c !== "object" || Array.isArray(c)) return { ok: false, field: "commitments", error: "Your commitments arrive as a set of groups." };
   for (const key of Object.keys(c as object)) {
     if (!(COMMITMENT_GROUPS as readonly string[]).includes(key)) {
-      return { ok: false, field: `commitments.${key}`, error: "Your season holds quests and measures. Terms belong on a seat application." };
+      return { ok: false, field: `commitments.${key}`, error: "Your season holds quests and measures. Terms belong in a role application." };
     }
   }
   const raw = c as Record<string, unknown>;
@@ -345,10 +345,10 @@ export function parsePlanInput(body: unknown, ctx: { goals: readonly string[] })
   if (parsed.settings.scoreboard && parsed.settings.scoreboard.measures.length > 0) commitments.scoreboard = parsed.settings.scoreboard;
 
   const back = b.handingBack === undefined || b.handingBack === null ? [] : b.handingBack;
-  if (!Array.isArray(back)) return { ok: false, field: "handingBack", error: "Seats handed back arrive as a list." };
+  if (!Array.isArray(back)) return { ok: false, field: "handingBack", error: "Roles handed back arrive as a list." };
   const handingBack = Array.from(new Set(back.map((s) => String(s ?? "").trim()).filter((s) => s !== "")));
   if (handingBack.length > HANDING_BACK_MAX || handingBack.some((s) => s.length > 64)) {
-    return { ok: false, field: "handingBack", error: "That list names seats this village does not have." };
+    return { ok: false, field: "handingBack", error: "That list names roles this village does not have." };
   }
 
   return { ok: true, plan: { aim, servesGoal, commitments, handingBack } };

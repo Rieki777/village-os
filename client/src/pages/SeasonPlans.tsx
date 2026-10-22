@@ -32,7 +32,7 @@ import { civilDayWords } from "@shared/seasonPlans";
 export const SEASON_PLANS_WORDS = {
   title: "The village's season",
   membersOnly: "Members read the village's season plans.",
-  membersOnlyLine: "Each plan names the seats people hold and ask for, so this page opens at the member rung.",
+  membersOnlyLine: "Each plan names the roles people hold and ask for, so this page opens at the member rung.",
   noSeason: "There is no season to plan yet.",
   noSeasonLine: "Planning opens one moon before the next season starts.",
   filed: (n: number, of: number) => `${n} of ${of} have filed`,

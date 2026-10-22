@@ -30,14 +30,14 @@ import { civilDayWords } from "@shared/seasonPlans";
 
 export const YOUR_ROLES_WORDS = {
   heading: "Your roles",
-  holding: "The seats you hold.",
-  noSeats: "You hold no seats yet.",
+  holding: "The roles you hold.",
+  noSeats: "You hold no roles yet.",
   until: (on: string) => `Until ${civilDayWords(on)}`,
   ended: "Its term has ended",
-  apply: "Apply for a seat",
+  apply: "Apply for a role",
   plan: "Plan your season",
-  applyLine: "Pick up to five seats in one application. The village adopts it, or a seat holder does.",
-  membersOnly: "Applying for a seat opens at the member rung. Once you reach it, you can apply here.",
+  applyLine: "Pick up to five roles in one application. The village adopts it, or a role holder does.",
+  membersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
   openHeading: "Your open applications",
   fits: "Find roles that fit your character",
   every: "See every role",
@@ -150,7 +150,7 @@ export default function YourRolesSection() {
                 {apps.map((a) => (
                   <li key={a.id}>
                     <Link
-                      href={a.href || `/seat-applications/${encodeURIComponent(a.id)}`}
+                      href={a.href || `/role-applications/${encodeURIComponent(a.id)}`}
                       className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 rounded-lg border border-border/60 px-3 py-2 text-card-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       <span className="font-semibold">{a.seats.map((s) => s.name).join(", ")}</span>

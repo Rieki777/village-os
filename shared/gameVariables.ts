@@ -292,9 +292,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "arrival.greeter_role",
     category: "Membership",
-    label: "The seat that greets a new arrival",
+    label: "The role that greets a new arrival",
     description:
-      "The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
+      "The role whose holders are told the moment somebody joins. Greeting belongs to a role, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the role is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
     type: "text",
     default: "",
   },
@@ -649,7 +649,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The Mint",
     label: "Voice needed before a member can claim",
     description:
-      "How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a seat, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.",
+      "How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a role, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.",
     type: "integer",
     default: "100",
     min: 1,
@@ -712,7 +712,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The Mint",
     label: "How much Voice wanes each cycle",
     description:
-      "How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a seat or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the seat and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.",
+      "How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a role or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the role and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.",
     type: "percentage",
     default: "1",
     min: 0,
@@ -867,9 +867,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.reassignment_cadence",
     category: "Progression",
-    label: "How often every seat reopens",
+    label: "How often every role reopens",
     description:
-      "A season can end with every seat vacated and offered again. Reopening on a rhythm is how a village keeps seats from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A seat can opt out on its own card, and a term can always end sooner.",
+      "A season can end with every role vacated and offered again. Reopening on a rhythm is how a village keeps roles from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A role can opt out on its own card, and a term can always end sooner.",
     type: "choice",
     default: "season_turn",
     choices: [
@@ -881,10 +881,10 @@ export const VARIABLES: VariableDef[] = [
       {
         value: "pattern_change",
         label: "When the season's shape changes",
-        hint: "A founding season can run across several turns without reopening every seat each time.",
+        hint: "A founding season can run across several turns without reopening every role each time.",
       },
       { value: "annual", label: "Once a year", hint: "One reopening a year, whatever the seasons did." },
-      { value: "never", label: "Never", hint: "Seats end only on their own term date, or when somebody steps down." },
+      { value: "never", label: "Never", hint: "Roles end only on their own term date, or when somebody steps down." },
     ],
   },
   {
@@ -901,7 +901,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Progression",
     label: "Most changes one outside batch can propose",
     description:
-      "How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
+      "How many roles one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
     type: "integer",
     default: "500",
     min: 1,
@@ -1075,7 +1075,7 @@ export const VARIABLES: VariableDef[] = [
     label: "Which decisions a steward can stop",
     criticality: "constitutional",
     description:
-      "A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the seat can never stop its own removal.",
+      "A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the role can never stop its own removal.",
     type: "text",
     default: "all",
   },
@@ -1104,7 +1104,7 @@ export const VARIABLES: VariableDef[] = [
     label: "Which sizes of decision a steward can stop",
     criticality: "constitutional",
     description:
-      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the role can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a role that could veto an edit to its own limits would have none.",
     type: "text",
     default: "constitutional",
   },
@@ -1139,7 +1139,7 @@ export const VARIABLES: VariableDef[] = [
     label: "A veto needs a majority of the stewards",
     criticality: "constitutional",
     description:
-      "Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated seats, so one seat alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+      "Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated roles, so one role alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a role that could veto an edit to its own limits would have none.",
     type: "boolean",
     default: "false",
   },
@@ -1275,17 +1275,17 @@ export const VARIABLES: VariableDef[] = [
     label: "When seating a role can go to the vote",
     criticality: "structural",
     description:
-      "The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a seat nobody can be asked to fill is a seat that stays empty until the calendar allows it.",
+      "The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a role nobody can be asked to fill is a role that stays empty until the calendar allows it.",
     type: "text",
     default: "always_open",
   },
   {
     key: "governance.window_role_unseat",
     category: "Governance",
-    label: "When taking a seat back can go to the vote",
+    label: "When taking a role back can go to the vote",
     criticality: "structural",
     description:
-      "The window a proposal that takes a seat back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.",
+      "The window a proposal that takes a role back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.",
     type: "text",
     default: "always_open",
   },
@@ -1615,20 +1615,20 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "governance.nonhuman_in_quorum",
     category: "Governance",
-    label: "Seats speaking for other beings count toward quorum",
+    label: "Roles speaking for other beings count toward quorum",
     criticality: "constitutional",
     description:
-      "Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that seat and casts its vote. This says whether the weight on such a seat is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the seat still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.",
+      "Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that role and casts its vote. This says whether the weight on such a role is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the role still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.",
     type: "boolean",
     default: "false",
   },
   {
     key: "governance.absent_cycles",
     category: "Governance",
-    label: "Cycles of silence before a seat leaves the count",
+    label: "Cycles of silence before a role leaves the count",
     criticality: "constitutional",
     description:
-      "When seats speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a seat's weight drops out of the count. A seat nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.",
+      "When roles speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a role's weight drops out of the count. A role nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.",
     type: "integer",
     default: "3",
     min: 1,
@@ -2097,7 +2097,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Village map",
     label: "Show the map's structure to visitors",
     description:
-      "When the map module is public, anonymous visitors see circles, role titles and seat counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.",
+      "When the map module is public, anonymous visitors see circles, role titles and holder counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.",
     type: "boolean",
     default: "true",
   },
@@ -2144,8 +2144,8 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "map.vacant_highlight",
     category: "Village map",
-    label: "Highlight vacant seats",
-    description: "Vacant roles pulse gently as an open call. Off renders them as plain grey rings.",
+    label: "Highlight openings",
+    description: "Openings pulse gently as an open call. Off renders them as plain grey rings.",
     type: "boolean",
     default: "true",
   },
@@ -2251,9 +2251,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.public_people",
     category: "The village's people",
-    label: "Show who holds each seat to visitors",
+    label: "Show who holds each role to visitors",
     description:
-      "On, anyone can read the first names of the people holding each seat on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every seat, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
+      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
     type: "boolean",
     default: "true",
     ring: "founder",

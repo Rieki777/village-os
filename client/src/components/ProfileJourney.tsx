@@ -184,7 +184,7 @@ function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: s
   const rows = [
     { key: "vote", label: "The first time you voted", at: firsts?.vote },
     { key: "objection", label: "The first objection you named", at: firsts?.objection },
-    { key: "seat", label: "The first seat you held", at: firsts?.seat },
+    { key: "seat", label: "The first role you held", at: firsts?.seat },
   ].filter((r) => !!r.at);
   if (rows.length === 0) return null;
   return (

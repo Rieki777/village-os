@@ -348,7 +348,7 @@ describe("/map", () => {
  * to sign in, drawn without asking, which is the known positive each case
  * waits on before it reads the requests.
  */
-const SIGN_IN_FOR_HISTORY = "Sign in to see who has held this seat before.";
+const SIGN_IN_FOR_HISTORY = "Sign in to see who has held this role before.";
 const seatAsks = () => asked.filter((u) => u.startsWith("/api/org/roles/"));
 
 class NoopIntersectionObserver {

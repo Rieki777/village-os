@@ -654,13 +654,13 @@ export default function NeedsPanel({
           </p>
           <p className={`${HINT} mb-2`}>
             That sentence is a description of what you have ticked and saved. The dial that would take this
-            figure and size the economy around it is not built. No quest payout, no seat payout and no
+            figure and size the economy around it is not built. No quest payout, no role payout and no
             allowance reads it today, so changing your ticks changes what this village SAYS and nothing
             about what it pays.
           </p>
           <p className={`${HINT} mb-4`}>
             The more needs you take on, the more roles the economy needs to meet them. Screen 5 counts the
-            seats you have tagged and how many of them are held.
+            roles you have tagged and how many of them are held.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setScreen(3)} className={QUIET}>
@@ -682,7 +682,7 @@ export default function NeedsPanel({
             <Recap drafts={drafts} order={order} upTo={3} />
           </div>
           <p className="text-sm text-foreground mb-2">
-            Now say what does the meeting. A quest, a seat, a place a member can spend, a stay, an event or
+            Now say what does the meeting. A quest, a role, a place a member can spend, a stay, an event or
             a place on the map can each be tagged with the needs it meets. A need with nothing tagged to it
             is an intention, and no economy answers it.
           </p>
@@ -720,8 +720,8 @@ export default function NeedsPanel({
                 <p className={HINT}>The coverage read has not come back, so no count is shown here.</p>
               ) : report.seatings.every((s) => !seatLineWorthSaying(s)) ? (
                 <p className={HINT}>
-                  No seat is tagged to any of these needs, so there is no seat count to give. The more
-                  needs a village takes on, the more seats its economy needs to meet them.
+                  No role is tagged to any of these needs, so there is no role count to give. The more
+                  needs a village takes on, the more roles its economy needs to meet them.
                 </p>
               ) : null}
             </div>
@@ -744,7 +744,7 @@ export default function NeedsPanel({
               <label className="grid gap-1">
                 <span className={HINT}>What meets it</span>
                 <select value={tagSubject} onChange={(e) => setTagSubject(e.target.value)} className={FIELD}>
-                  <option value="">Pick a quest or a seat</option>
+                  <option value="">Pick a quest or a role</option>
                   {quests.map((q) => (
                     <option key={`quest:${q.id}`} value={`quest:${q.id}`}>
                       {q.title}
@@ -762,7 +762,7 @@ export default function NeedsPanel({
               </button>
             </div>
             <p className={`${HINT} mt-2`}>
-              Quests and seats are edited on their own screens. Nothing here changes a quest or a seat: it
+              Quests and roles are edited on their own screens. Nothing here changes a quest or a role: it
               only records that the one meets the other.
             </p>
             {onOpenTab ? (
@@ -857,13 +857,13 @@ export default function NeedsPanel({
           {report && report.seatings.some((s) => s.seatsNeeded > 0) ? (
             <p className="text-sm text-foreground mb-3">
               {report.seatings.reduce((n, s) => n + s.seatsFilled, 0)} of the{" "}
-              {report.seatings.reduce((n, s) => n + s.seatsNeeded, 0)} seats tagged to these needs are
-              held. The more needs a village takes on, the more seats its economy needs to meet them.
+              {report.seatings.reduce((n, s) => n + s.seatsNeeded, 0)} roles tagged to these needs are
+              held. The more needs a village takes on, the more roles its economy needs to meet them.
             </p>
           ) : (
             <p className={`${HINT} mb-3`}>
-              No seat is tagged to any of these needs, so there is no seat count to give. Screen 5 is where
-              a seat is tagged.
+              No role is tagged to any of these needs, so there is no role count to give. Screen 5 is where
+              a role is tagged.
             </p>
           )}
 

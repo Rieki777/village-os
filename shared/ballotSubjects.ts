@@ -445,7 +445,7 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minQuorumPct: 0,
     minElectorate: 0,
     criticality: "routine",
-    why: "A change to the village's circles and seats asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
+    why: "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
   },
 };
 
@@ -1408,7 +1408,7 @@ export function rerunOffer(input: RerunInput): RerunOffer {
   if (proven.length === 0 && unvotable.length === 0) {
     return no(
       "nobody_left",
-      "Nothing on the membership record shows that a seat on this roll has left the village, and every seat on it can still answer, so there is no re-run to offer.",
+      "Nothing on the membership record shows that anybody on this roll has left the village, and everybody on it can still answer, so there is no re-run to offer.",
     );
   }
   /*
@@ -1419,7 +1419,7 @@ export function rerunOffer(input: RerunInput): RerunOffer {
   if (proven.some((seat) => seat.choice === "no") || unvotable.some((seat) => seat.choice === "no")) {
     return no(
       "departed_voted_against",
-      "A seat that can no longer answer already voted against this. A re-run would erase that vote, so it is not offered here.",
+      "Someone who can no longer answer already voted against this. A re-run would erase that vote, so it is not offered here.",
     );
   }
   const total = Math.max(0, Number(input.totalWeight) || 0);
@@ -1457,7 +1457,7 @@ export function rerunOffer(input: RerunInput): RerunOffer {
   const silent =
     unvotable.length === 0
       ? ""
-      : `${unvotable.length === 1 ? "One seat" : `${unvotable.length} seats`} on this roll holds weight that cannot answer`;
+      : `${unvotable.length === 1 ? "One vote on this roll holds" : `${unvotable.length} votes on this roll hold`} weight that cannot answer`;
   const who = [left, silent].filter(Boolean).join(", and ");
   const carried =
     carryForward.length === 0

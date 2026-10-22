@@ -166,7 +166,7 @@ export function register(app: Express, deps: Deps): void {
     const kind = String(req.query.kind ?? "");
     const id = String(req.query.id ?? "");
     if (kind === "" || id === "") {
-      res.status(400).json({ error: "Say which seat or circle to read." });
+      res.status(400).json({ error: "Say which role or circle to read." });
       return;
     }
     try {

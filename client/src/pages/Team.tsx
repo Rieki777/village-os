@@ -142,7 +142,7 @@ export default function Team() {
               {config?.project?.name ? `The ${config.project.name} Team` : "The Team"}
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              The people holding seats here, and the circles they hold them in.
+              The people holding roles here, and the circles they hold them in.
             </p>
           </motion.div>
 
@@ -176,7 +176,7 @@ export default function Team() {
                 on a fork's very first day. */}
             {team !== null && team.length === 0 && people?.visible ? (
               <p className="text-center text-muted-foreground max-w-xl mx-auto">
-                Nobody holds a seat here yet. Seats and the people in them appear on this
+                Nobody holds a role here yet. Roles and the people in them appear on this
                 page as the village fills them.
               </p>
             ) : null}
@@ -231,10 +231,10 @@ export default function Team() {
               className="text-center mt-10"
             >
               <p className="text-muted-foreground text-sm max-w-xl mx-auto mb-4">
-                The team is growing, and several leadership seats and steward roles are open right now.
+                The team is growing, and several leadership roles and steward roles are open right now.
               </p>
               <Link href="/roles" className="inline-flex items-center gap-2 text-sage font-semibold hover:underline">
-                See the open seats <ArrowRight className="w-4 h-4" />
+                See the open roles <ArrowRight className="w-4 h-4" />
               </Link>
             </motion.div>
           </div>

@@ -103,10 +103,10 @@ export default function SeatPicksField({
         </p>
       )}
       {options === null ? (
-        <p className="mt-2 text-sm text-stone-600">Loading the seats</p>
+        <p className="mt-2 text-sm text-stone-600">Loading the roles</p>
       ) : listed.length === 0 && strays.length === 0 ? (
         <p className="mt-2 text-sm text-stone-600">
-          This village has no seats in its org chart yet, so there is nothing to apply for.
+          This village has no roles in its org chart yet, so there is nothing to apply for.
         </p>
       ) : (
         <ul className="mt-2 space-y-1">

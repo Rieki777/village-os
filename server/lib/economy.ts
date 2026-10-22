@@ -3100,7 +3100,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
     if (r.amount === null) {
       ruleProblems.push({
         token: r.tokenSlug,
-        reason: "this rule reads its amount from the work, and a seat posts no amount in this token",
+        reason: "this rule reads its amount from the work, and a role posts no amount in this token",
       });
       return false;
     }
@@ -3176,7 +3176,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
         from: faucet,
         source: "role_cycle",
         sourceRef: seatId,
-        description: `Thanks for holding a seat through ${cycleKey}`,
+        description: `Thanks for holding a role through ${cycleKey}`,
         // Two seats are two thanks, and the same seat next moon is another.
         idempotencyKey: keys.roleCycle(villageId(), cycleKey, seatId, userId, r.tokenSlug),
       });
@@ -3354,7 +3354,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     const when: Record<string, string> = {
       "quest.completed": "when a steward confirms finished work",
       "gratitude.given": "when a member thanks another",
-      "role.cycle": "each moon, to everyone holding a seat",
+      "role.cycle": "each moon, to everyone holding a role",
       "journey.stage_reached": "on reaching a stage of the journey",
       "welcome_aboard.quest": "on a welcome quest",
       "library.contributed": "on lending something to the library",

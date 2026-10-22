@@ -18,7 +18,7 @@ function Card() {
         Suits The Builder
       </GlossChip>
       <Gloss id="g-key" open={g.isOpen("key")}>
-        The village marked this seat as key.
+        The village marked this role as key.
       </Gloss>
       <Gloss id="g-suits" open={g.isOpen("suits")}>
         Guessed from the seat's own words.
@@ -47,7 +47,7 @@ describe("GlossChip", () => {
     fireEvent.click(key);
     expect(key.getAttribute("aria-expanded")).toBe("true");
     expect(gloss("g-key").hidden).toBe(false);
-    expect(screen.getByText("The village marked this seat as key.")).toBeVisible();
+    expect(screen.getByText("The village marked this role as key.")).toBeVisible();
     fireEvent.click(key);
     expect(key.getAttribute("aria-expanded")).toBe("false");
     expect(gloss("g-key").hidden).toBe(true);

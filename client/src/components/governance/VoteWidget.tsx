@@ -226,7 +226,7 @@ export default function VoteWidget({
               className="mt-0.5 h-5 w-5 shrink-0 rounded border-stone-400 text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
             />
             <span>
-              <strong className="font-semibold text-stone-900">I accept the steward's seat.</strong> This proposal names
+              <strong className="font-semibold text-stone-900">I accept the steward role.</strong> This proposal names
               you for it. Carrying it for this first season means holding all {nomination.powerCount} of the powers this
               village has to give, and being able to stop a decision the village has already carried inside the window
               before it lands.
@@ -242,7 +242,7 @@ export default function VoteWidget({
 
       {nomination?.answer === "declined" && (
         <p className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700 leading-relaxed">
-          You declined the steward's seat, so nothing here can seat you. Change your mind below and the acceptance comes
+          You declined the steward role, so nothing here can seat you. Change your mind below and the acceptance comes
           back to this vote.
         </p>
       )}

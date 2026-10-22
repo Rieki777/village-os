@@ -127,7 +127,7 @@ export function pathNameOf(pathId: string): string {
 const NEXT_STEPS: Readonly<Record<string, { step: string; route: string }>> = {
   resident: { step: "tell us what you're looking for", route: "/reserve" },
   investor: { step: "ask for the investor packet", route: "/investor" },
-  steward: { step: "see the seats that are open and raise a hand", route: "/steward" },
+  steward: { step: "see the roles that are open and raise a hand", route: "/steward" },
   "prosperity-creator": { step: "tell us what you'd like to build", route: "/work-with-us" },
 };
 

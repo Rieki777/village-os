@@ -261,7 +261,7 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 
 ### Live Sessions
 
-A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.
+A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a role. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.
 
 | Fact | Value |
 | --- | --- |
@@ -422,7 +422,7 @@ How the village understands itself: conversations, decisions, power, health.
 
 ### How Power Is Held
 
-The living org chart: circles, the roles that orbit them, who holds each seat, which seats are open calls, plus a concierge that routes 'I want to help with X' to the right person.
+The living org chart: circles, the roles that orbit them, who holds each role, which roles are open calls, plus a concierge that routes 'I want to help with X' to the right person.
 
 | Fact | Value |
 | --- | --- |
@@ -894,7 +894,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     {
       "id": "map",
       "name": "How Power Is Held",
-      "description": "The living org chart: circles, the roles that orbit them, who holds each seat, which seats are open calls, plus a concierge that routes 'I want to help with X' to the right person.",
+      "description": "The living org chart: circles, the roles that orbit them, who holds each role, which roles are open calls, plus a concierge that routes 'I want to help with X' to the right person.",
       "core": false,
       "tier": "included",
       "dataClass": "member-pii",
@@ -1387,7 +1387,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     {
       "id": "sessions",
       "name": "Live Sessions",
-      "description": "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+      "description": "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a role. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
       "core": false,
       "tier": "included",
       "dataClass": "member-pii",

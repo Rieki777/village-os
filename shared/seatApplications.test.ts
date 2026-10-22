@@ -111,7 +111,7 @@ describe("the ballot's words", () => {
     const doc = applicationBallotDoc(seats, "sa-00112233445566aa");
     expect(doc).toContain("  Lead steward\n    Hold the village's whole picture.");
     expect(doc).toContain("  Platform steward\n");
-    expect(doc).toContain("/seat-applications/sa-00112233445566aa");
+    expect(doc).toContain("/role-applications/sa-00112233445566aa");
     expect(doc).not.toMatch(/^#|\*\*/m);
   });
 
@@ -125,7 +125,7 @@ describe("the ballot's words", () => {
   it("lists names the way a sentence does", () => {
     expect(seatList(["A"])).toBe("A");
     expect(seatList(["A", "B"])).toBe("A and B");
-    expect(seatList([])).toBe("a seat");
+    expect(seatList([])).toBe("a role");
   });
 });
 

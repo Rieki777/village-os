@@ -127,7 +127,7 @@ export const IDENTITY_WIZARD_FIELDS = [
   // Both singular, because gameApi.ts derives the plural and the article. A
   // village types "Hat" and reads "Hats", "a Hat", "A Hat" everywhere.
   ["roleName", "What a position somebody can hold is called"],
-  ["seatName", "What one person's turn holding it is called"],
+  ["seatName", "What putting someone into a role is called"],
   // What a member signs (Rye, 2026-09-08). Amora says "Love Letter"; the
   // platform says "membership agreement". Defaulted like the three above,
   // so it is a rename rather than a blank and stays out of `fields`. The
@@ -222,7 +222,7 @@ export const SETUP_CONTENT_EDITORS: readonly { tab: string; label: string; hint:
    * First in the list on purpose: people are the thing a visitor looks for
    * first and the thing a village is most answerable for.
    */
-  { tab: "org-chart", label: "Org Chart", hint: "Your circles, your seats, and who holds them. This is what /roles and /team show." },
+  { tab: "org-chart", label: "Org Chart", hint: "Your circles, your roles, and who holds them. This is what /roles and /team show." },
   { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
   { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
   { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },

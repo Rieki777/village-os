@@ -168,7 +168,7 @@ async function rows(pool: Pool, sql: string, args: unknown[] = []): Promise<RowD
 export const READERS: VillageReader[] = [
   {
     key: "roles.all",
-    describe: "Every role this village has defined, with its purpose and how many seats it carries.",
+    describe: "Every role this village has defined, with its purpose and how many people it holds.",
     module: "progression",
     audience: "member",
     maxTokens: 700,
@@ -184,7 +184,7 @@ export const READERS: VillageReader[] = [
   },
   {
     key: "seats.vacant",
-    describe: "Roles with fewer holders than seats: where this village is short-handed right now.",
+    describe: "Roles with fewer holders than they take: where this village is short-handed right now.",
     module: "map",
     audience: "member",
     maxTokens: 400,
@@ -240,7 +240,7 @@ export const READERS: VillageReader[] = [
   {
     key: "concierge.gaps",
     describe:
-      "Questions members asked that nothing in the village could answer. The clearest signal of which seat is missing.",
+      "Questions members asked that nothing in the village could answer. The clearest signal of which role is missing.",
     module: "map",
     requiresVar: "map.concierge_enabled",
     audience: "admin",

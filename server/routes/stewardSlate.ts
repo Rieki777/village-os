@@ -175,7 +175,7 @@ export function register(app: Express, deps: Deps): void {
     const ballot = await ballotById(getPool(), req.params.id);
     if (!ballot) return res.status(404).json({ error: "Not found" });
     if (ballot.subjectType !== VILLAGE_LAUNCH) {
-      return res.status(409).json({ error: "This vote has no steward's seat to accept or decline." });
+      return res.status(409).json({ error: "This vote has no steward role to accept or decline." });
     }
     if (!(ballot.status === "open" && Date.parse(ballot.closesAt) > Date.now())) {
       return res.status(409).json({
@@ -187,7 +187,7 @@ export function register(app: Express, deps: Deps): void {
     if (!row) {
       return res.status(409).json({
         error:
-          "This proposal did not name you for the steward's seat, so there is nothing here for you to accept or decline.",
+          "This proposal did not name you for the steward role, so there is nothing here for you to accept or decline.",
       });
     }
     res.json({ success: true, answer: answerOf(row.declinedAt, row.accepted) });

@@ -203,8 +203,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // to a seat holder an application still waits on (shared/waitingOnYou.ts).
   seat_application_reminder: {
     group: "decisions",
-    blurb: "An application for a seat still waits on a seat holder, and you hold that power.",
-    many: "{n} applications still wait on a seat holder.",
+    blurb: "An application for a role still waits on a role holder, and you hold that power.",
+    many: "{n} applications still wait on a role holder.",
     celebrate: false,
   },
   // How much your vote weighs is power, and the weight routes moved it for a
@@ -222,13 +222,13 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   role_appointed: {
     group: "decisions",
-    blurb: "A seat is yours to hold. The role page says what it is accountable for.",
-    many: "{n} seats came to you.",
+    blurb: "A role is yours to hold. The role page says what it is accountable for.",
+    many: "{n} roles came to you.",
     celebrate: false,
   },
   season: {
     group: "decisions",
-    blurb: "No season is running, so the calendar every term is measured against has stopped. Every mandate in the village hangs on it, the steward's seat included, so it says so until somebody starts the next one.",
+    blurb: "No season is running, so the calendar every term is measured against has stopped. Every mandate in the village hangs on it, the steward role included, so it says so until somebody starts the next one.",
     many: "The calendar has been stopped for {n} sweeps.",
     celebrate: false,
   },
@@ -241,7 +241,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // Season plans (2026-10-09). Quiet, both: planning is an ask, never a moment.
   season_plan_open: {
     group: "decisions",
-    blurb: "Planning is open for the season. Choose the seats you keep, hand back or apply for, and what you will do.",
+    blurb: "Planning is open for the season. Choose the roles you keep, hand back or apply for, and what you will do.",
     many: "{n} notices that planning is open.",
     celebrate: false,
   },
@@ -253,14 +253,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   term_expiring: {
     group: "decisions",
-    blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
+    blurb: "The agreement to keep holding your role is running out. In a role that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
     many: "{n} of your terms are running out.",
     celebrate: false,
   },
   submission: {
     group: "decisions",
-    blurb: "Somebody raised a hand for a seat or a power, and the village owes them an answer.",
-    many: "{n} people raised a hand for a seat or a power.",
+    blurb: "Somebody raised a hand for a role or a power, and the village owes them an answer.",
+    many: "{n} people raised a hand for a role or a power.",
     celebrate: false,
   },
   submission_status: {
@@ -398,8 +398,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // it left with is held by you, or by a seat you sit in.
   session_action_held: {
     group: "work",
-    blurb: "A live session closed with an action held by you or by a seat you sit in. The notice says what it is and by when.",
-    many: "{n} actions from live sessions are held by you or your seats.",
+    blurb: "A live session closed with an action held by you or by a role you sit in. The notice says what it is and by when.",
+    many: "{n} actions from live sessions are held by you or your roles.",
     celebrate: false,
   },
   // The task layer (server/lib/sessionTaskMail.ts, server/lib/sessionTasks.ts):
@@ -420,8 +420,8 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   session_task_unheld: {
     group: "work",
-    blurb: "A task from a live session sits with a seat nobody holds now. Give it to someone at the next call.",
-    many: "{n} tasks sit with seats nobody holds.",
+    blurb: "A task from a live session sits with a role nobody holds now. Give it to someone at the next call.",
+    many: "{n} tasks sit with roles nobody holds.",
     celebrate: false,
   },
   // The agenda library (server/lib/sessionLibrary.ts): an item a member
@@ -512,7 +512,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   contact_request: {
     group: "people",
-    blurb: "Somebody wants to reach you about a seat you hold. They see a relay, never your address.",
+    blurb: "Somebody wants to reach you about a role you hold. They see a relay, never your address.",
     many: "{n} people want to reach you.",
     celebrate: false,
   },

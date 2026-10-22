@@ -49,7 +49,7 @@ import {
 import SeatSettingsFields from "./SeatSettingsFields";
 
 export const EDITOR_WORDS = {
-  wholeLead: "Start from a whole seat",
+  wholeLead: "Start from a whole role",
   wholeSub: "Fills every group at once. Change any of them after.",
   change: "Change",
   edit: "Edit",

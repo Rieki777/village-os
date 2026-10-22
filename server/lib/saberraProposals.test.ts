@@ -120,9 +120,9 @@ describe("suggesting a structure", () => {
   it("leads with what it is and what it is not, because that is read before anything is accepted", () => {
     const r = proposeStructure([role("r-1", { "Role Name": "Water Steward" })], { sourceName: SOURCE });
     expect(r.payload.title).toBe("Structure suggested by Saberra");
-    expect(r.payload.rationale).toContain("one seat");
+    expect(r.payload.rationale).toContain("one role");
     expect(r.payload.rationale).toContain("Nothing here is part of this village's chart until you accept it.");
-    expect(r.payload.rationale).toContain("Who holds each seat is not included");
+    expect(r.payload.rationale).toContain("Who holds each role is not included");
   });
 
   it("does not quietly drop a record kind it was not built for", () => {
@@ -195,7 +195,7 @@ describe("the shape the service actually sends", () => {
     expect(r.payload.seats[0]).not.toHaveProperty("circleName");
     expect(r.payload.seats[0].sourceCircleUnresolved).toBe(true);
     expect(r.circles.unresolved).toBe(1);
-    expect(r.payload.rationale).toContain("One seat arrived with no circle this village could read.");
+    expect(r.payload.rationale).toContain("One role arrived with no circle this village could read.");
   });
 
   it("carries the aim from a rich-text Body, and leaves it out when Body is absent", () => {

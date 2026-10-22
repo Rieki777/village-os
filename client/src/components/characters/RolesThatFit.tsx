@@ -43,16 +43,16 @@ import { applySeatsHref } from "@shared/seatApplyLinks";
 
 export const ROLES_FIT_WORDS = {
   heading: "Roles that fit this character",
-  line: (name: string) => `Open seats on the chart that suit ${name}. Add the ones you want, then propose them in one application.`,
-  loading: "Finding the seats.",
-  failed: "The seats did not load.",
+  line: (name: string) => `Open roles on the chart that suit ${name}. Add the ones you want, then propose them in one application.`,
+  loading: "Finding the roles.",
+  failed: "The roles did not load.",
   retry: "Retry",
-  none: "No open seat on the chart fits this character yet.",
+  none: "No open role on the chart fits this character yet.",
   add: (seat: string) => `Add ${seat}`,
   picked: (n: number) => `${n} of at most ${MAX_SEATS} picked.`,
   propose: "Propose these",
-  pickFirst: "Pick a seat to propose it.",
-  membersOnly: "Applying for a seat opens at the member rung. Once you reach it, you can apply here.",
+  pickFirst: "Pick a role to propose it.",
+  membersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
   every: "See every role",
   places: (n: number) => (n === 1 ? "1 place open" : `${n} places open`),
 } as const;

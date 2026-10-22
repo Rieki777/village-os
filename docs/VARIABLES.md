@@ -84,7 +84,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | --- | --- | --- | --- | --- | --- |
 | Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
 | Joining is by invitation | `membership.invite_only` | Membership | boolean | `true` | the whole village |
-| The seat that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
+| The role that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -119,7 +119,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Your Hypha space | `economy.hypha_space` | The Mint | text | blank | the founder or an admin |
 | How much Voice wanes each cycle | `economy.voice_decay_pct` | The Mint | percentage | `1` | the whole village |
 | Which Voice wanes | `economy.voice_decay_basis` | The Mint | choice | `all` | the whole village |
-| How often every seat reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
+| How often every role reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
 | Most changes one outside batch can propose | `org.proposal_change_limit` | Progression | integer | `500` | the whole village |
 | Sending-budget multiplier: Visitor | `progression.multiplier.visitor` | Progression | decimal | `0` | the whole village |
 | Sending-budget multiplier: Guest | `progression.multiplier.guest` | Progression | decimal | `1` | the whole village |
@@ -173,7 +173,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | When a change to how votes are counted can go to the vote | `governance.window_governance_mode` | Governance | text | `always_open` | the whole village |
 | When declaring a role can go to the vote | `governance.window_role_declare` | Governance | text | `always_open` | the whole village |
 | When seating a role can go to the vote | `governance.window_role_seat` | Governance | text | `always_open` | the whole village |
-| When taking a seat back can go to the vote | `governance.window_role_unseat` | Governance | text | `always_open` | the whole village |
+| When taking a role back can go to the vote | `governance.window_role_unseat` | Governance | text | `always_open` | the whole village |
 | When moving a power to a role can go to the vote | `governance.window_power_transfer` | Governance | text | `always_open` | the whole village |
 | When granting a power can go to the vote | `governance.window_power_grant` | Governance | text | `always_open` | the whole village |
 | When handing a power back can go to the vote | `governance.window_power_return` | Governance | text | `always_open` | the whole village |
@@ -195,8 +195,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The tier a veto override is passed at | `governance.highest_tier` | Governance | choice | `constitutional` | the whole village |
 | Minting rule changes: quorum floor | `governance.subject_mint_rule_quorum_pct` | Governance | percentage | `50` | the whole village |
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
-| Seats speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
-| Cycles of silence before a seat leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
+| Roles speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
+| Cycles of silence before a role leaves the count | `governance.absent_cycles` | Governance | integer | `3` | the whole village |
 | Equity token contract address on Base | `tokens.equity_address` | Tokens | text | blank | the founder or an admin |
 | Governance token contract address on Base | `tokens.voice_address` | Tokens | text | blank | the founder or an admin |
 | Show the economics section | `tokens.show_economics_section` | Tokens | boolean | `false` | the whole village |
@@ -242,14 +242,14 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Contact requests a member may send per day | `map.contact_daily_cap` | Village map | integer | `5` | the whole village |
 | Contact requests one person receives per day | `map.contact_recipient_daily_cap` | Village map | integer | `3` | the whole village |
 | Show open quests on the map | `map.show_quests` | Village map | boolean | `true` | the whole village |
-| Highlight vacant seats | `map.vacant_highlight` | Village map | boolean | `true` | the whole village |
+| Highlight openings | `map.vacant_highlight` | Village map | boolean | `true` | the whole village |
 | Keep contact message bodies for | `map.contact_retention_days` | Village map | integer | `180` | the founder or an admin |
 | Largest photograph a member may upload | `map.photo_max_mb` | Village map | integer | `8` | the founder or an admin |
 | Photographs one place may hold | `map.photos_per_place` | Village map | integer | `60` | the whole village |
 | Photographs one member may add per day | `map.photos_per_member_daily` | Village map | integer | `12` | the whole village |
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
-| Show who holds each seat to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
+| Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
@@ -352,9 +352,9 @@ When on, an account can only be made with an invitation link a member sent, by e
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
 
-### The seat that greets a new arrival
+### The role that greets a new arrival
 
-The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
+The role whose holders are told the moment somebody joins. Greeting belongs to a role, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the role is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.
 
 | Fact | Value |
 | --- | --- |
@@ -798,7 +798,7 @@ Counted across every member's requests in a lunar cycle, the ones still waiting 
 
 ### Voice needed before a member can claim
 
-How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a seat, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.
+How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a role, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.
 
 | Fact | Value |
 | --- | --- |
@@ -856,7 +856,7 @@ The DHO slug that voice claims are raised into, from app.hypha.earth. Until this
 
 ### How much Voice wanes each cycle
 
-How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a seat or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the seat and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.
+How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a role or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the role and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.
 
 | Fact | Value |
 | --- | --- |
@@ -891,9 +891,9 @@ What it may be set to:
 
 29 dials. 29 for the whole village.
 
-### How often every seat reopens
+### How often every role reopens
 
-A season can end with every seat vacated and offered again. Reopening on a rhythm is how a village keeps seats from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A seat can opt out on its own card, and a term can always end sooner.
+A season can end with every role vacated and offered again. Reopening on a rhythm is how a village keeps roles from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A role can opt out on its own card, and a term can always end sooner.
 
 | Fact | Value |
 | --- | --- |
@@ -908,13 +908,13 @@ A season can end with every seat vacated and offered again. Reopening on a rhyth
 What it may be set to:
 
 - `season_turn` Every season turn. Recommended while a village is young: three months is short enough to learn fast and change what is not working.
-- `pattern_change` When the season's shape changes. A founding season can run across several turns without reopening every seat each time.
+- `pattern_change` When the season's shape changes. A founding season can run across several turns without reopening every role each time.
 - `annual` Once a year. One reopening a year, whatever the seasons did.
-- `never` Never. Seats end only on their own term date, or when somebody steps down.
+- `never` Never. Roles end only on their own term date, or when somebody steps down.
 
 ### Most changes one outside batch can propose
 
-How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.
+How many roles one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.
 
 | Fact | Value |
 | --- | --- |
@@ -1737,7 +1737,7 @@ When on, a proposal verified as passed on-chain applies itself: instantly for in
 
 ### Which decisions a steward can stop
 
-A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the seat can never stop its own removal.
+A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the role can never stop its own removal.
 
 | Fact | Value |
 | --- | --- |
@@ -1751,7 +1751,7 @@ A steward can stop a decision the village has already carried, inside the window
 
 ### Which sizes of decision a steward can stop
 
-Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.
+Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the role can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a role that could veto an edit to its own limits would have none.
 
 | Fact | Value |
 | --- | --- |
@@ -1779,7 +1779,7 @@ A payout the village votes through is sent the moment it passes. Above this amou
 
 ### A veto needs a majority of the stewards
 
-Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated seats, so one seat alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.
+Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated roles, so one role alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a role that could veto an edit to its own limits would have none.
 
 | Fact | Value |
 | --- | --- |
@@ -1909,7 +1909,7 @@ The window a proposal that declares a new role opens in, in the same words as th
 
 ### When seating a role can go to the vote
 
-The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a seat nobody can be asked to fill is a seat that stays empty until the calendar allows it.
+The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a role nobody can be asked to fill is a role that stays empty until the calendar allows it.
 
 | Fact | Value |
 | --- | --- |
@@ -1921,9 +1921,9 @@ The window a proposal that asks somebody to sit in a role opens in, in the same 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
 
-### When taking a seat back can go to the vote
+### When taking a role back can go to the vote
 
-The window a proposal that takes a seat back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.
+The window a proposal that takes a role back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.
 
 | Fact | Value |
 | --- | --- |
@@ -2262,9 +2262,9 @@ The least share of the votes cast for or against that must be in favour before a
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
 
-### Seats speaking for other beings count toward quorum
+### Roles speaking for other beings count toward quorum
 
-Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that seat and casts its vote. This says whether the weight on such a seat is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the seat still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.
+Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that role and casts its vote. This says whether the weight on such a role is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the role still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.
 
 | Fact | Value |
 | --- | --- |
@@ -2276,9 +2276,9 @@ Your village can seat a voice for a being that is not a person: a mountain, a ri
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
 
-### Cycles of silence before a seat leaves the count
+### Cycles of silence before a role leaves the count
 
-When seats speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a seat's weight drops out of the count. A seat nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.
+When roles speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a role's weight drops out of the count. A role nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.
 
 | Fact | Value |
 | --- | --- |
@@ -2913,7 +2913,7 @@ Recordings that have a transcript and no synthesis are sent to the model in one 
 
 ### Show the map's structure to visitors
 
-When the map module is public, anonymous visitors see circles, role titles and seat counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.
+When the map module is public, anonymous visitors see circles, role titles and holder counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.
 
 | Fact | Value |
 | --- | --- |
@@ -2983,9 +2983,9 @@ Open quests orbit their circle as small satellites, capped for legibility.
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Highlight vacant seats
+### Highlight openings
 
-Vacant roles pulse gently as an open call. Off renders them as plain grey rings.
+Openings pulse gently as an open call. Off renders them as plain grey rings.
 
 | Fact | Value |
 | --- | --- |
@@ -3091,9 +3091,9 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 1 dial. 1 for the founder or an admin.
 
-### Show who holds each seat to visitors
+### Show who holds each role to visitors
 
-On, anyone can read the first names of the people holding each seat on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every seat, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
+On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.
 
 | Fact | Value |
 | --- | --- |

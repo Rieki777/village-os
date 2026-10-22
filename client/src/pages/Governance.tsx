@@ -218,7 +218,7 @@ export default function Governance() {
               A veto is answerable. It is recorded with the steward's name and their stated reason, both visible to every member, so stopping a decision costs a steward something and cannot be done quietly.
             </p>
             <p>
-              The community checks the stewards. Members who put a steward in can vote that steward out, and the settings governing stewards are the one thing no steward may veto, so a seat can never defend itself against the village that granted it.
+              The community checks the stewards. Members who put a steward in can vote that steward out, and the settings governing stewards are the one thing no steward may veto, so a role can never defend itself against the village that granted it.
             </p>
             <p>
               These are training wheels. Stewards exist while the systems are young and still being proven, and the village can lower or retire the role by vote once it no longer needs them.

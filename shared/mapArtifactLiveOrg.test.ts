@@ -201,7 +201,7 @@ const config = (scene: unknown, sceneVersion = 7) => ({ type: "config", scene, s
 
 /* Fixed expressions, read once per state. */
 const SEATS_AT_HOME = "seatsAt('greenhouse').map(x=>x.s)";
-const ATTN = "attnItems().map(x=>x.h).filter(h=>h.includes('Seat'))";
+const ATTN = "attnItems().map(x=>x.h).filter(h=>h.includes('Role open'))";
 const HALOS = "roleHomes('now').map(h=>({k:h.k,circles:h.circles}))";
 const SATS = "(()=>{const m=roleSeatsBy(),o={};for(const k of Object.keys(m))o[k]=m[k].map(x=>x.s);return o})()";
 
@@ -317,7 +317,7 @@ describe("the village's org, pushed into a map whose greenhouse the founder gave
 
   it("says who holds a seat, and offers a hand only on an open one", () => {
     expect(first.rows.find((r) => r.name === "Seed Keeper")).toMatchObject({ who: "Held by Ana", held: true, hand: false });
-    expect(first.rows.find((r) => r.name === "Land Steward")).toMatchObject({ who: "Nobody holds this seat yet", held: false, hand: true });
+    expect(first.rows.find((r) => r.name === "Land Steward")).toMatchObject({ who: "Nobody holds this role yet", held: false, hand: true });
   });
 
   it("names the circle the way the village names it, on the place and on its seats", () => {
@@ -326,16 +326,16 @@ describe("the village's org, pushed into a map whose greenhouse the founder gave
   });
 
   it("offers an open placed seat in What needs hands, and never one with no place", () => {
-    expect(first.attn).toContain("⛨ Seat open: Land Steward");
+    expect(first.attn).toContain("⛨ Role open: Land Steward");
     expect(first.attn.some((h) => h.includes("Marketing Steward"))).toBe(false);
   });
 
   it("lists a seat whose circle has no home, and that circle, as not placed yet", () => {
-    expect(first.wall).toContain("the village's seats, not placed on the land yet");
+    expect(first.wall).toContain("the village's roles, not placed on the land yet");
     expect(first.wall).toContain("Marketing Steward");
     expect(first.wall).toContain("circles with no home on the land yet");
     expect(first.wall).toContain(OUTREACH.name);
-    expect(first.key).toEqual({ hidden: false, text: "1 seat not placed yet" });
+    expect(first.key).toEqual({ hidden: false, text: "1 role not placed yet" });
   });
 
   it("never writes a live seat into the scene a publish sends", () => {
@@ -350,13 +350,13 @@ describe("the village's org, pushed into a map whose greenhouse the founder gave
     expect(second.rows).toContain("Compost Lead");
     expect(second.rows).not.toContain("Land Steward");
     expect(second.tab, "the reader is still on Seats").toBe(2);
-    expect(second.attn).toContain("⛨ Seat open: Compost Lead");
+    expect(second.attn).toContain("⛨ Role open: Compost Lead");
     expect(second.attn.some((h) => h.includes("Land Steward"))).toBe(false);
   });
 
   it("moves a circle's seats onto the land the moment a published scene gives it a home, by name as well as by id", () => {
     expect(third.gateHome).toContain("Marketing Steward");
-    expect(third.wall).not.toContain("the village's seats, not placed on the land yet");
+    expect(third.wall).not.toContain("the village's roles, not placed on the land yet");
     expect(third.wall).not.toContain("circles with no home on the land yet");
     expect(third.halos).toEqual(expect.arrayContaining([HOME, "gate"]));
   });

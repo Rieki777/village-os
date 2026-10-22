@@ -106,7 +106,7 @@ export default function CircleCard({
         {circle.isExample && <ExampleChip className="ml-2 align-middle" />}
       </h3>
       {circle.status === "forming" && (
-        <p className="text-xs text-muted-foreground mb-2">Still forming. Be one of the first to hold a seat here.</p>
+        <p className="text-xs text-muted-foreground mb-2">Still forming. Be one of the first to hold a role here.</p>
       )}
 
       <dl className="space-y-2.5 my-3">
@@ -129,7 +129,7 @@ export default function CircleCard({
               </ul>
               {domains.length > DOMAIN_CAP && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  and {domains.length - DOMAIN_CAP} more, on the seats below.
+                  and {domains.length - DOMAIN_CAP} more, on the roles below.
                 </p>
               )}
             </dd>
@@ -147,14 +147,13 @@ export default function CircleCard({
       </dl>
 
       <p className="text-xs text-muted-foreground mb-1">
-        {seats.length} role{seats.length === 1 ? "" : "s"}, {held} of {places} seat
-        {places === 1 ? "" : "s"} held
+        {seats.length} role{seats.length === 1 ? "" : "s"}, {held} of {places} held
         {children.length > 0 && `, ${children.length} circle${children.length === 1 ? "" : "s"} inside`}
       </p>
       {open > 0 && (
         <p className="text-xs text-amber-700 mb-3 flex items-center gap-1.5">
           <Hand className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          {open} open call{open === 1 ? "" : "s"}. Tap a dashed seat to raise your hand.
+          {open} open call{open === 1 ? "" : "s"}. Tap a dashed opening to raise your hand.
         </p>
       )}
 

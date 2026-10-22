@@ -134,7 +134,7 @@ describe("StartHereCard: a member", () => {
 
     expect(within(card()).getAllByRole("heading")).toHaveLength(1);
     expect(link(/Propose a quest/)).toHaveAttribute("href", "/propose-quest");
-    expect(link("Raise your hand for an open seat")).toHaveAttribute("href", "/roles");
+    expect(link("Raise your hand for an open role")).toHaveAttribute("href", "/roles");
     // Every door says what happens after it.
     expect(within(card()).getByText(/A steward reads it, and if it goes on the board/)).toBeInTheDocument();
     expect(within(card()).getByText(/read your offer and answer\. You get a notice when they do\./)).toBeInTheDocument();

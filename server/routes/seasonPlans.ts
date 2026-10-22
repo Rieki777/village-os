@@ -404,7 +404,7 @@ export function register(app: Express, deps: Deps): void {
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     const held = new Set((await heldSeats()).get(userId)?.map((s) => s.id) ?? []);
     const stray = parsed.plan.handingBack.find((id) => !held.has(id));
-    if (stray) return res.status(400).json({ error: "You can only hand back a seat you hold.", field: "handingBack", seatId: stray });
+    if (stray) return res.status(400).json({ error: "You can only hand back a role you hold.", field: "handingBack", seatId: stray });
     await insertPlanVersion(getPool(), userId, target.season.id, parsed.plan);
     res.json(await mineOut(userId, await readsTerms(user)));
   });

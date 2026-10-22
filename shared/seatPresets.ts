@@ -57,7 +57,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     id: "platform:until-season-end",
     group: "term",
     label: "Until the season ends",
-    blurb: "The seat runs to the end of the season it starts in.",
+    blurb: "The role runs to the end of the season it starts in.",
     version: 1,
     values: { endsOn: null, noticeDays: 14 },
   }),
@@ -73,7 +73,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     id: "platform:one-moon-trial",
     group: "term",
     label: "One moon trial",
-    blurb: "One moon to try the seat on, with a short notice either way.",
+    blurb: "One moon to try the role on, with a short notice either way.",
     version: 1,
     values: { lengthMoons: 1, noticeDays: 7 },
   }),
@@ -130,7 +130,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     id: "platform:unpaid",
     group: "pay",
     label: "Unpaid",
-    blurb: "The seat is held for the love of it. Nothing is owed.",
+    blurb: "The role is held for the love of it. Nothing is owed.",
     version: 1,
     values: { kind: "none" },
   }),
@@ -179,7 +179,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     id: "platform:flat-monthly-allowance",
     group: "allowance",
     label: "Flat monthly allowance",
-    blurb: "One amount each month for the costs of the seat.",
+    blurb: "One amount each month for the costs of the role.",
     version: 1,
     values: { kind: "flat", per: "month" },
   }),
@@ -211,7 +211,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     // editor shows the hint as a placeholder.
     values: {
       kind: "equity",
-      ratedBy: "the people who fund the seat",
+      ratedBy: "the people who fund the role",
       cadence: "Rated each month",
     },
   }),
@@ -236,7 +236,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     values: {
       measures: [
         { measure: "Quests done", target: "every agreed quest done by the moon's end", readFrom: "the quest board" },
-        { measure: "Handoffs written", target: "one handoff note each moon", readFrom: "the seat's notes" },
+        { measure: "Handoffs written", target: "one handoff note each moon", readFrom: "the role's notes" },
       ],
     },
   }),
@@ -255,7 +255,7 @@ export const WHOLE_PRESETS: readonly WholeSeatPreset[] = [
   {
     id: "platform:whole-volunteer-seat",
     group: "whole",
-    label: "Volunteer seat",
+    label: "Volunteer role",
     blurb: "Unpaid, async first, a few quests a moon, until the season ends.",
     version: 1,
     picks: {
@@ -273,7 +273,7 @@ export const WHOLE_PRESETS: readonly WholeSeatPreset[] = [
   {
     id: "platform:whole-stipend-seat",
     group: "whole",
-    label: "Stipend seat",
+    label: "Stipend role",
     blurb: "A fixed monthly stipend and allowance for three moons, with a weekly rhythm.",
     version: 1,
     picks: {
@@ -291,7 +291,7 @@ export const WHOLE_PRESETS: readonly WholeSeatPreset[] = [
   {
     id: "platform:whole-core-team-seat",
     group: "whole",
-    label: "Core team seat",
+    label: "Core team role",
     blurb: "A stipend range, costs reimbursed and a rated equity bonus, for the season.",
     version: 1,
     picks: {
@@ -310,7 +310,7 @@ export const WHOLE_PRESETS: readonly WholeSeatPreset[] = [
     id: "platform:whole-trial-moon",
     group: "whole",
     label: "Trial moon",
-    blurb: "One honorary moon to try the seat on before anything else is set.",
+    blurb: "One honorary moon to try the role on before anything else is set.",
     version: 1,
     picks: {
       term: "platform:one-moon-trial",

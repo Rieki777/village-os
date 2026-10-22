@@ -168,7 +168,7 @@ export function register(app: Express, deps: Deps): void {
     const seatsHere = (await listOrgRoles(getPool())).filter((r) => r.circleId === req.params.id);
     const stillHere = referencing.length + seatsHere.length;
     if (stillHere) {
-      return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
+      return res.status(409).json({ error: `${stillHere} role(s) still orbit this circle, reassign them first` });
     }
     // The same refusal as the seats above, one level up: deleting a circle
     // with circles inside it would leave each of them pointing at a parent that

@@ -200,7 +200,7 @@ describe.skipIf(!configured)("the structure change review", () => {
     delete (conflicts as any)[`${structureId}#1`];
     const r = await call("POST", `/api/review/batches/${BATCH}/structure/accept`, { conflicts });
     expect(r.status).toBe(409);
-    expect(r.json.error).toBe("One seat already exists here. Choose what happens to it.");
+    expect(r.json.error).toBe("One role already exists here. Choose what happens to it.");
     expect(await openDrafts()).toEqual([]);
     expect((await statusOf(structureId)).status).toBe("proposed");
   });
@@ -248,7 +248,7 @@ describe.skipIf(!configured)("the structure change review", () => {
     expect((await seatHolder(pool, "potluck-host", { displayName: "Late Arrival" })).ok).toBe(true);
     const raced = await previewDraft(pool, r.json.draftId, draftChangeCap());
     expect(raced.lines.filter((l) => l.blocked).map((l) => [l.orgRoleId, l.blocked])).toEqual([
-      ["potluck-host", "Somebody holds this seat. Give them a seat in the new chart before it is retired"],
+      ["potluck-host", "Somebody holds this role. Give them a role in the new chart before it is retired"],
     ]);
     await pool.query("UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP WHERE org_role_id = 'potluck-host'"); // module-review-ok: ending the fixture seating on the scratch schema this suite provisioned
 

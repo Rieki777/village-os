@@ -92,7 +92,7 @@ subtlety in this system; see section 7.
 | Trigger | Path | Notes |
 |---|---|---|
 | A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | Gratitude is posted by the route inside the claim's own commit; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice. What else the consent owes is priced and recorded in that same commit and posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
-| A moon closes | `runSettlement` | Pays seat holders per `mint_rules` on `role.cycle` |
+| A moon closes | `runSettlement` | Pays role holders per `mint_rules` on `role.cycle` |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
@@ -2829,7 +2829,7 @@ forever. Re-running it moves nothing.
 - **Only an admin can resolve**, and resolve refuses while any blocking domain is
   outstanding: unsettled library loans, requested or active stays, pending or
   disputed stay purchases, pending or disputed exchange orders, and any NEGATIVE
-  balance. Resolution anonymises the member and vacates their seats. Value rows
+  balance. Resolution anonymises the member and vacates their roles. Value rows
   are never deleted, so conservation holds through every departure.
 
 ### What the village owes
@@ -3017,7 +3017,7 @@ and both learned it the same way.
 | Who decides the amount | the village's dials, applied to whatever is there | the member, in the request |
 | What the member gets | nothing is decided. `DEFAULT_EXIT_POLICY` ships `placeholder: true` and the code declines to say | a named thing, off platform, agreed before confirmation |
 | Consent | can be INVOLUNTARY: `POST /api/admin/exits` opens one for somebody else | always the member's own act |
-| Afterwards | resolution anonymises the member and vacates their seats. Terminal for the person | the member stays, and will do it again next moon |
+| Afterwards | resolution anonymises the member and vacates their roles. Terminal for the person | the member stays, and will do it again next moon |
 | A refused posting | the sweep collects the error and CONTINUES, because one bad token must not strand the rest | stops everything and rolls the state claim back. There is one posting and it is the whole act |
 
 **That last row alone forbids shared code.** `sweepBalances`' error discipline is
@@ -3258,7 +3258,7 @@ and section 14 walks that case:
 | `sweepBalances` | `mem:<wren>` | `sys:exit-settlement` | `village-voice` | **60000** (60) | `exit_settlement` | `exit:<exitId>:sweep:village-voice` |
 | `sweepBalances` | `mem:<wren>` | `sys:exit-settlement` | `gratitude` | whatever recognition they hold | `exit_settlement` | `exit:<exitId>:sweep:gratitude` |
 
-Then resolve anonymises the account and vacates the seat. Wren's contributions
+Then resolve anonymises the account and vacates the role. Wren's contributions
 stay part of the village record; every ledger row stays exactly where it is, and
 conservation holds.
 
