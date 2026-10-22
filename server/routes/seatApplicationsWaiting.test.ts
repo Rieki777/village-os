@@ -17,8 +17,12 @@
  *   - the reminder is in the bell only: it has no email cadence;
  *   - a candidate who is the only holder goes to the vote, and nobody is
  *     offered an adopt row for their own application;
- *   - the drafts half: an open draft a proposal made, for an admin only, with
- *     what it adds and its batch's structure page.
+ *   - the drafts half: an open draft a proposal made, with what it adds and
+ *     its batch's structure page, for whoever may publish it the way the
+ *     publish routes decide (`publishDoorFor`): a live holder of `org.decide`
+ *     sees it and a member who holds nothing does not; an admin sees it until
+ *     a launch vote carries, and after that only by holding the power; a
+ *     draft the village is voting on is nobody's to publish, so it is off.
  *
  * The notices go through the real spine (`insertNotification`) on the scratch
  * schema, so "once" is the dedupe key's answer and not a fake's.
@@ -35,6 +39,7 @@ import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole } from "../lib/orgChart";
 import { addChange, createDraft } from "../lib/orgDrafts";
 import { emailCadenceFor, insertNotification, resolveNotifyPrefs, type NotifyInput } from "../lib/notify";
+import { recordLaunchCarried } from "../lib/launch";
 import { remindWaitingHolders } from "../lib/seatApplicationWaiting";
 import { register } from "./seatApplications";
 
@@ -67,6 +72,8 @@ function harness() {
   const state = {
     viewer: null as { id: string; stage: string; admin?: boolean } | null,
     holders: [] as string[],
+    /** Live holders of `org.decide`, kept apart from the seat holders so each half is driven on its own. */
+    deciders: [] as string[],
     pool: (): any => {
       throw new Error("the database was read before the gate answered");
     },
@@ -136,7 +143,7 @@ function harness() {
       overLimit: async () => false,
       members: { byId: async (id: string) => PEOPLE[id] ?? null, all: async () => Object.values(PEOPLE) } as any,
       firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
-      liveHoldersOf: async () => [...state.holders],
+      liveHoldersOf: async (cap: string) => (cap === "org.decide" ? [...state.deciders] : [...state.holders]),
       rolesCarrying: () => [{ id: "role-stewards", name: "Stewards" }],
       loadRoleHolders: () => state.holders.map((userId) => ({ roleId: "role-stewards", userId })),
       roleBallotSetup: async () => ({
@@ -220,6 +227,7 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
   beforeEach(() => {
     h.state.viewer = { id: A, stage: "member" };
     h.state.holders = [A, B, C];
+    h.state.deciders = [];
     h.notices.length = 0;
   });
 
@@ -366,33 +374,87 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
     expect(await rowIds(B)).toContain(next.id);
   });
 
-  it("an open draft a proposal made waits on an admin, with what it adds and its batch's page", async () => {
+  /** A queue-made draft with one circle and two seats, plus an orphan and one typed by hand. */
+  const draftFixtures = async (tag: string) => {
+    const proposal = `xp-wait-${tag}`;
     await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
       "INSERT INTO external_proposals (id, village_id, module_id, batch_id, kind, payload, dedupe_key, identity_key) " +
-        "VALUES ('xp-wait-1', 'v-test', 'mod-test', 'batch-wait-1', 'role.proposed', ?, ?, ?)",
-      [JSON.stringify({ title: "A new water circle" }), "d".repeat(64), "i".repeat(64)],
+        "VALUES (?, 'v-test', 'mod-test', ?, 'role.proposed', ?, ?, ?)",
+      [proposal, `batch-wait-${tag}`, JSON.stringify({ title: "A new water circle" }), tag.padEnd(64, "d"), tag.padEnd(64, "i")],
     );
-    const fromQueue = await createDraft(pool, { title: "The water circle", createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: "xp-wait-1" });
-    const orphan = await createDraft(pool, { title: "An older proposal", createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: "xp-gone" });
-    const byHand = await createDraft(pool, { title: "My own sketch", createdBy: B });
+    const fromQueue = await createDraft(pool, { title: `The water circle ${tag}`, createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: proposal });
+    const orphan = await createDraft(pool, { title: `An older proposal ${tag}`, createdBy: B, sourceKind: "agent", sourceModuleId: "mod-test", sourceProposalId: `xp-gone-${tag}` });
+    const byHand = await createDraft(pool, { title: `My own sketch ${tag}`, createdBy: B });
     if (!fromQueue.ok || !orphan.ok || !byHand.ok) throw new Error("a draft fixture was refused");
     for (const c of [
-      { op: "create_circle" as const, orgRoleId: "wc-water", payload: { name: "Water Circle" } },
-      { op: "create_seat" as const, orgRoleId: "wseat-spring", payload: { name: "Spring Keeper", circleId: "wc-water" } },
-      { op: "create_seat" as const, orgRoleId: "wseat-rain", payload: { name: "Rain Keeper", circleId: "wc-water" } },
+      { op: "create_circle" as const, orgRoleId: `wc-water-${tag}`, payload: { name: `Water Circle ${tag}` } },
+      { op: "create_seat" as const, orgRoleId: `wseat-spring-${tag}`, payload: { name: "Spring Keeper", circleId: `wc-water-${tag}` } },
+      { op: "create_seat" as const, orgRoleId: `wseat-rain-${tag}`, payload: { name: "Rain Keeper", circleId: `wc-water-${tag}` } },
     ]) {
       const added = await addChange(pool, fromQueue.id, c);
       expect(added.ok, JSON.stringify(added)).toBe(true);
     }
+    return { fromQueue: fromQueue.id, orphan: orphan.id, byHand: byHand.id, batch: `batch-wait-${tag}` };
+  };
 
-    const admin = await waitingFor(C, true);
-    const row = admin.drafts.find((d) => d.id === fromQueue.id);
-    expect(row).toEqual({ id: fromQueue.id, title: "The water circle", circles: 1, seats: 2, href: "/review/structure/batch-wait-1" });
+  /** An open `org_draft` vote on a draft, the row `openBallot` would write. */
+  const voteOn = (draftId: string) =>
+    pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO ballots (id, subject_type, subject_ref, open_key, title, doc_markdown, method, " +
+        "weight_mode, unity_pct, quorum_pct, total_weight, electorate_count, opened_by, opens_at, closes_at, status) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP() + INTERVAL 7 DAY,'open')",
+      [`bal-${draftId}`, "org_draft", draftId, `org_draft:${draftId}`, "Adopt the draft", "the draft", "majority", "equal", 50, 0, 3, 3, B],
+    );
+
+  const draftIds = async (id: string, admin = false) => (await waitingFor(id, admin)).drafts.map((d) => d.id);
+
+  it("an open draft a proposal made waits on a holder of org.decide, with what it adds and its batch's page", async () => {
+    const d = await draftFixtures("hold");
+    h.state.deciders = [B];
+
+    const holder = await waitingFor(B);
+    const row = holder.drafts.find((x) => x.id === d.fromQueue);
+    expect(row).toEqual({ id: d.fromQueue, title: "The water circle hold", circles: 1, seats: 2, href: `/review/structure/${d.batch}` });
     // A batch nobody can find falls back to the review queue.
-    expect(admin.drafts.find((d) => d.id === orphan.id)?.href).toBe("/review");
+    expect(holder.drafts.find((x) => x.id === d.orphan)?.href).toBe("/review");
     // A draft typed by hand waits on nobody.
-    expect(admin.drafts.map((d) => d.id)).not.toContain(byHand.id);
-    // A member who may not publish sees none.
-    expect((await waitingFor(B)).drafts).toEqual([]);
+    expect(holder.drafts.map((x) => x.id)).not.toContain(d.byHand);
+
+    // A member who holds nothing sees none, though the same draft waits on B.
+    expect(await draftIds(C)).toEqual([]);
+    // The seat power is not this one: A, B and C all hold org.seat here.
+    h.state.deciders = [];
+    expect(await draftIds(B)).toEqual([]);
+  });
+
+  it("a draft the village is voting on is nobody's to publish, so it waits on nobody", async () => {
+    const d = await draftFixtures("vote");
+    h.state.deciders = [B];
+    expect(await draftIds(B)).toContain(d.fromQueue);
+    await voteOn(d.fromQueue);
+    expect(await draftIds(B)).not.toContain(d.fromQueue);
+    expect(await draftIds(C, true)).not.toContain(d.fromQueue);
+  });
+
+  it("an admin sees it before a launch vote carries, and after it only by holding the power", async () => {
+    const d = await draftFixtures("launch");
+    try {
+      // Before launch: the admin panel's door is the admin's, holding nothing.
+      expect(await draftIds(C, true)).toContain(d.fromQueue);
+      // Control in the same state: the same person without the account role sees none.
+      expect(await draftIds(C)).toEqual([]);
+
+      await recordLaunchCarried(pool, { ballotId: "bal-launch-wait", closedBy: B });
+
+      // After launch an admin is not the decider by being an admin.
+      expect(await draftIds(C, true)).toEqual([]);
+      // Holding the power puts it back.
+      h.state.deciders = [C];
+      expect(await draftIds(C, true)).toContain(d.fromQueue);
+      expect(await draftIds(C)).toContain(d.fromQueue);
+    } finally {
+      // The launch is this case's alone: the cases above it read a village that has not launched.
+      await pool.query("DELETE FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: resets a fixture row on the scratch schema
+    }
   });
 });

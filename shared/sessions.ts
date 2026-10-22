@@ -717,6 +717,14 @@ export interface SessionItem {
   usedSeconds: number;
   /** When it came over from an earlier session's backlog. */
   fromSessionId: number | null;
+  /**
+   * When it was taken from the agenda library (shared/sessionLibrary.ts): the
+   * library item's id, and the name of whoever brought it, who may not be in
+   * the room. Optional so older fixtures still type; the room's view always
+   * sends both, null for an item added in the room.
+   */
+  libraryId?: number | null;
+  broughtBy?: string | null;
 }
 
 export interface SessionEntry {
@@ -824,8 +832,9 @@ export interface SessionListRow {
  * Every door, so the page and the routes agree. A refusal is `{ error: <a
  * sentence> }` with a 4xx status.
  *
- *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[] }
- *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
+ *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[], library }
+ *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
+ *          (the agenda library's own doors are listed in shared/sessionLibrary.ts)
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }
  *   DELETE /api/sessions/:id                      { ok } (discard an open session, or delete a closed record)

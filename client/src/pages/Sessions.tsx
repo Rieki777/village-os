@@ -1,12 +1,20 @@
 /**
  * LIVE SESSIONS, at /sessions: the front door to a circle's working calls.
  *
- * Three things on one page. The rooms open right now, to join. The closed
- * sessions this member can read (the ones they were in; an admin reads every
- * one). And a short form to open a new room: a title, which circle is
- * meeting, and how long. Opening a room or joining one moves straight into it
- * at /sessions/:id (pages/SessionRoom.tsx), and only once the server has said
- * yes.
+ * Four things on one page. The rooms open right now, to join. What members
+ * brought for a circle's next session (components/sessions/WaitingForCircle,
+ * the agenda library in shared/sessionLibrary.ts). The closed sessions this
+ * member can read (the ones they were in; an admin reads every one). And a
+ * short form to open a new room: a title, which circle is meeting, how long,
+ * and which of the brought items this session takes up (StartChecklist).
+ * Opening a room or joining one moves straight into it at /sessions/:id
+ * (pages/SessionRoom.tsx), and only once the server has said yes.
+ *
+ * THE TICKS FOLLOW THE CIRCLE. A tick on an item that no longer fits (the
+ * circle changed, or the list was read again and the item went elsewhere) is
+ * dropped, never kept out of sight. An item that went elsewhere between the
+ * read and the press refuses the open with one sentence, and the page reads
+ * the list again so what it shows is what can be taken.
  *
  * Behind the `sessions` module and a session token. Members only, no guests:
  * a signed-out visitor gets the sign-in card and nothing is fetched for them.
@@ -41,11 +49,14 @@ import {
   cleanLine,
   type SessionListRow,
 } from "@shared/sessions";
+import { LIBRARY_COPY, LIBRARY_REFUSALS, offeredFor, type LibraryCard, type LibraryPayload } from "@shared/sessionLibrary";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
+import StartChecklist from "@/components/sessions/StartChecklist";
+import WaitingForCircle from "@/components/sessions/WaitingForCircle";
 import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,6 +86,8 @@ interface ListPayload {
   recent: SessionListRow[];
   circles: CircleOption[];
   defaultMinutes: number | null;
+  /** What members brought for a circle's next session. Empty from a server before the library. */
+  library: LibraryPayload;
 }
 
 type LoadState =
@@ -95,7 +108,12 @@ function readPayload(body: unknown): ListPayload {
     ? (b.circles as CircleOption[]).filter((c) => c && typeof c.id === "string" && typeof c.name === "string")
     : [];
   const dm = typeof b.defaultMinutes === "number" && inRange(b.defaultMinutes) ? b.defaultMinutes : null;
-  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm };
+  const lib = (b.library && typeof b.library === "object" ? b.library : {}) as Record<string, unknown>;
+  const library: LibraryPayload = {
+    items: Array.isArray(lib.items) ? (lib.items as LibraryCard[]).filter((c) => c && typeof c.id === "number" && typeof c.title === "string") : [],
+    myCircleIds: Array.isArray(lib.myCircleIds) ? (lib.myCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+  };
+  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library };
 }
 
 /** The server's own sentence when it sent one (`{ error: <a sentence> }`), or the fallback. */
@@ -131,6 +149,8 @@ export default function Sessions() {
   const [durationTouched, setDurationTouched] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // The brought items this session will take up, in the order the checklist shows them.
+  const [picked, setPicked] = useState<number[]>([]);
 
   // A poll that answers after the page has gone must not set state on it.
   const alive = useRef(true);
@@ -191,6 +211,14 @@ export default function Sessions() {
     if (villageMinutes != null && !durationTouched) setDuration(String(villageMinutes));
   }, [villageMinutes, durationTouched]);
 
+  // A tick that no longer fits the circle chosen, or an item that went elsewhere, is dropped.
+  const brought = load.kind === "ready" ? load.data.library.items : null;
+  useEffect(() => {
+    if (!brought) return;
+    const fits = new Set(offeredFor(brought, circleId || null).map((c) => c.id));
+    setPicked((prev) => (prev.every((id) => fits.has(id)) ? prev : prev.filter((id) => fits.has(id))));
+  }, [brought, circleId]);
+
   const onJoin = useCallback(
     async (id: number) => {
       setJoin({ joiningId: id, error: null });
@@ -234,7 +262,12 @@ export default function Sessions() {
     try {
       res = await gameFetch(SESSIONS_API, {
         method: "POST",
-        body: JSON.stringify({ title: clean, circleId: circleId || undefined, durationMin: minutes ?? undefined }),
+        body: JSON.stringify({
+          title: clean,
+          circleId: circleId || undefined,
+          durationMin: minutes ?? undefined,
+          libraryIds: picked.length ? picked : undefined,
+        }),
       });
     } catch {
       if (alive.current) {
@@ -249,6 +282,8 @@ export default function Sessions() {
         setStarting(false);
         setStartError(text);
       }
+      // A ticked item went elsewhere a moment ago: read the list again, so the ticks left are ones that can be taken.
+      if (text === LIBRARY_REFUSALS.moved) void fetchList();
       return;
     }
     let id: unknown = null;
@@ -280,6 +315,9 @@ export default function Sessions() {
   if (!user) return <SignInToSee moduleId="sessions" name={SESSION_LIST_COPY.moduleName} />;
 
   const circles = load.kind === "ready" ? load.data.circles : [];
+  // The length the checklist weighs its minutes against: what the field shows, or the village's usual one.
+  const typed = duration.trim() === "" ? null : Number(duration);
+  const plannedLength = typed != null && inRange(typed) ? typed : villageMinutes;
 
   return (
     <Layout>
@@ -326,12 +364,17 @@ export default function Sessions() {
             {load.kind === "ready" && (
               <>
                 <OpenSessions rows={load.data.open} join={join} onJoin={(id) => void onJoin(id)} />
+                <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
                 <RecentSessions rows={load.data.recent} />
               </>
             )}
           </div>
 
-          <section aria-labelledby="sessions-start-heading" className={`${LIST_UI.card} md:sticky md:top-24`}>
+          <section
+            aria-labelledby="sessions-start-heading"
+            /* Sticky, and never taller than the window, so "Open the room" is always one scroll inside the card away. */
+            className={`${LIST_UI.card} md:sticky md:top-24 md:max-h-[calc(100dvh-7rem)] md:overflow-y-auto`}
+          >
             <h2 id="sessions-start-heading" className={LIST_UI.heading}>
               {SESSION_COPY.startTitle}
             </h2>
@@ -390,13 +433,23 @@ export default function Sessions() {
                   }}
                 />
               </div>
+              {brought && (
+                <StartChecklist
+                  items={brought}
+                  circleId={circleId || null}
+                  circleName={circles.find((c) => c.id === circleId)?.name ?? null}
+                  picked={picked}
+                  onPicked={setPicked}
+                  durationMin={plannedLength}
+                />
+              )}
               {startError && (
                 <p role="alert" className="text-sm font-medium text-destructive">
                   {startError}
                 </p>
               )}
               <button type="submit" className={`w-full ${LIST_UI.primary}`} disabled={starting}>
-                {starting ? SESSION_LIST_COPY.opening : SESSION_COPY.startButton}
+                {starting ? SESSION_LIST_COPY.opening : picked.length ? LIBRARY_COPY.startWith(picked.length) : SESSION_COPY.startButton}
               </button>
             </form>
           </section>

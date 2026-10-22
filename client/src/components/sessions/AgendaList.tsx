@@ -35,6 +35,7 @@ import {
   type ItemAim,
   type SessionItem,
 } from "@shared/sessions";
+import { LIBRARY_COPY } from "@shared/sessionLibrary";
 import GrowingText from "./GrowingText";
 import {
   BTN_ICON,
@@ -292,7 +293,11 @@ function ItemRow({
             {item.minutes} {ROOM_COPY.minutesShort}
           </span>
           {item.status !== "waiting" && <span>· {ROOM_COPY.itemStatus[item.status]}</span>}
-          {nameOf(view, item.addedBy) && <span>· {nameOf(view, item.addedBy)}</span>}
+          {item.broughtBy ? (
+            <span>· {LIBRARY_COPY.broughtByName(item.broughtBy)}</span>
+          ) : (
+            nameOf(view, item.addedBy) && <span>· {nameOf(view, item.addedBy)}</span>
+          )}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-1">

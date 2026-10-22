@@ -347,12 +347,36 @@ describe("which bell rows carry the buttons", () => {
     const panel = await openBell();
     fireEvent.click(within(panel).getByRole("button", { name: B.doneLabel(WHAT) }));
     expect(await within(panel).findByText(B.marked)).toBeInTheDocument();
+    // Focus is already on the undo when the line shows, with no later move
+    // left to pull it back into the panel once Escape has closed it.
+    expect(document.activeElement).toBe(within(panel).getByRole("button", { name: B.undoLabel(WHAT) }));
     expect(screen.getByRole("group", { name: "Notifications" })).toBeInTheDocument();
     expect(env.markRead).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("group", { name: "Notifications" })).toBeNull();
     expect(env.markRead).toHaveBeenCalledWith(["1"]);
     // Escape hands focus back to the bell, as it always has.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Notifications/ }));
+  });
+
+  it("keeps focus on the bell when Escape lands the moment the answer shows", async () => {
+    env.items = [notice("1")];
+    fetchMock.mockResolvedValueOnce(reply(200, { task: makeTask({ entryId: 12, status: "done", canReopen: true }) }));
+    const panel = await openBell();
+    // Escape inside the same turn as the commit that shows the answer, before
+    // any effect React would otherwise run a frame later. On CI this was the
+    // one-in-many timing where focus fell to the page.
+    let escaped = false;
+    const seen = new MutationObserver(() => {
+      if (escaped || !panel.textContent?.includes(B.marked)) return;
+      escaped = true;
+      seen.disconnect();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    seen.observe(panel, { childList: true, subtree: true, characterData: true });
+    fireEvent.click(within(panel).getByRole("button", { name: B.doneLabel(WHAT) }));
+    await waitFor(() => expect(escaped).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Notifications" })).toBeNull());
     expect(document.activeElement).toBe(screen.getByRole("button", { name: /^Notifications/ }));
   });
 
