@@ -41,6 +41,7 @@ import { addChange, createDraft } from "../lib/orgDrafts";
 import { emailCadenceFor, insertNotification, resolveNotifyPrefs, type NotifyInput } from "../lib/notify";
 import { recordLaunchCarried } from "../lib/launch";
 import { remindWaitingHolders } from "../lib/seatApplicationWaiting";
+import { insertTension } from "../repos/roleTensions";
 import { register } from "./seatApplications";
 
 const LADDER = ["visitor", "guest", "member"];
@@ -456,5 +457,21 @@ describe.skipIf(!configured)("waiting on you, on a real schema", () => {
       // The launch is this case's alone: the cases above it read a village that has not launched.
       await pool.query("DELETE FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: resets a fixture row on the scratch schema
     }
+  });
+
+  it("a tension raised with a role B holds waits on B, with its words and no raiser, and on nobody else", async () => {
+    const roleId = await seat("Water keeper");
+    await pool.query( // module-review-ok: a fixture seating on the scratch schema this suite provisioned
+      "INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES (?, ?, 'member', ?, ?)",
+      [`ora-${roleId}`, roleId, B, B],
+    );
+    await insertTension(pool, { id: "rt-00000000000000aa", roleId, raisedBy: C, text: "The rota leaves Sundays empty.", now: new Date() });
+    const b = await waitingFor(B);
+    expect(b.raisedWithYou).toEqual([
+      expect.objectContaining({ id: "rt-00000000000000aa", roleId, role: "Water keeper", circle: "Orchard Circle", text: "The rota leaves Sundays empty.", status: "open", overdue: false }),
+    ]);
+    expect(b.raw).not.toContain(C);
+    expect((await waitingFor(A)).raisedWithYou).toEqual([]);
+    expect((await waitingFor(C)).raisedWithYou).toEqual([]);
   });
 });
