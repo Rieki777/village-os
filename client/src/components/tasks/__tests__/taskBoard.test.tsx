@@ -212,6 +212,8 @@ describe("waiting on you", () => {
     // whenever the waiting reply landed a few milliseconds after the board.
     // What the case promises is the settled board, so wait for the board to
     // load and then for the line to be gone; a board that kept the line fails.
+    // The one-commit flash itself is gone since the waiting group reports only
+    // once its read answers; the next case holds that read open to prove it.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("region", { name: TASK_COPY.heading })).toHaveAttribute("aria-busy", "false"));
     await waitFor(() => expect(screen.queryByText(TASK_COPY.empty)).toBeNull());
