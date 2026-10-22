@@ -204,6 +204,14 @@ describe("the page's grouping", () => {
 });
 
 describe("the words", () => {
+  it("says the section once: the empty list never repeats the lede", () => {
+    expect(LIBRARY_COPY.sectionTitle).toBe("Agenda items");
+    expect(LIBRARY_COPY.empty).toBe("Nothing added yet.");
+    for (const word of LIBRARY_COPY.empty.replace(/\.$/, "").toLowerCase().split(" ")) {
+      if (word.length > 4) expect(LIBRARY_COPY.sectionLede.toLowerCase(), word).not.toContain(word);
+    }
+  });
+
   it("never says library to a member", () => {
     const strings: string[] = [];
     const walk = (v: unknown) => {
@@ -226,9 +234,9 @@ describe("the words", () => {
   });
 
   it("heads each list by the circle in the room's own words", () => {
-    expect(broughtFor("Garden")).toBe("Brought for the Garden circle");
-    expect(broughtFor("Garden circle")).toBe("Brought for the Garden circle");
-    expect(broughtFor(null)).toBe("Brought for any circle");
+    expect(broughtFor("Garden")).toBe("Agenda items for the Garden circle");
+    expect(broughtFor("Garden circle")).toBe("Agenda items for the Garden circle");
+    expect(broughtFor(null)).toBe("Agenda items for any circle");
     expect(LIBRARY_COPY.startWith(1)).toBe("Open the room with 1 item");
     expect(LIBRARY_COPY.startWith(3)).toBe("Open the room with 3 items");
   });
