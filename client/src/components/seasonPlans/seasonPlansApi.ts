@@ -10,6 +10,7 @@ import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { PlanCommitments, PlanWindowPayload } from "@shared/seasonPlans";
 import type { PartSuggestions } from "@shared/seasonPartSuggestions";
+import type { CardWords, SeasonalGoal, ServedGoal } from "@shared/seasonPlanWords";
 
 export interface PlanSeasonOut {
   id: string;
@@ -43,6 +44,9 @@ export interface MinePayload {
     version: number;
     aim: string | null;
     servesGoal: string | null;
+    /** Every goal served, with how it helps. Absent from a server before the player card. */
+    servesGoals?: ServedGoal[];
+    seasonalGoals?: SeasonalGoal[];
     commitments: PlanCommitments;
     handingBack: string[];
     savedOn: string;
@@ -56,6 +60,15 @@ export interface MinePayload {
   mayApply?: boolean;
   /** Quests a moon and measures from the member's seats. Shown as suggestions, never saved for them. */
   suggestions?: PartSuggestions | null;
+  /** The newest card words, carried from an earlier season until this one has its own. */
+  cardWords?: CardWords | null;
+  /** This moon's load, 1 (Healthy) to 5 (Heavy), or null when not set. */
+  moonLoad?: MoonLoadOut | null;
+}
+
+export interface MoonLoadOut {
+  cycleId: string;
+  level: number;
 }
 
 export interface PlanCard {
@@ -71,6 +84,8 @@ export interface PlanCard {
   waiting: boolean;
   aim: string | null;
   servesGoal: string | null;
+  servesGoals?: ServedGoal[];
+  seasonalGoals?: SeasonalGoal[];
   questsThisMoon: { done: number; min: number | null; max: number | null };
   measures: Array<{ measure: string; target: string | null }>;
 }
@@ -87,6 +102,8 @@ export interface VillagePayload {
 export interface PlanBody {
   aim: string;
   servesGoal: string | null;
+  servesGoals?: ServedGoal[] | null;
+  seasonalGoals?: SeasonalGoal[] | null;
   commitments: PlanCommitments;
   handingBack: string[];
 }
@@ -113,6 +130,18 @@ async function call<T>(path: string, method: "GET" | "PUT" | "POST" = "GET", bod
 
 export const fetchMine = () => call<MinePayload>("/api/season-plans/mine");
 export const saveMine = (body: PlanBody) => call<MinePayload>("/api/season-plans/mine", "PUT", body);
+/**
+ * The card's own editor: only the groups it names are saved, everything else
+ * carries from the newest version. Leave a group out to keep it; null clears it.
+ */
+export interface CardBody {
+  servesGoals?: ServedGoal[] | null;
+  seasonalGoals?: SeasonalGoal[] | null;
+  cardWords?: CardWords | null;
+}
+export const saveCard = (body: CardBody) => call<MinePayload>("/api/season-plans/mine/card", "PUT", body);
+/** This moon's load, a whole number from 1 (Healthy) to 5 (Heavy). */
+export const saveMoonLoad = (level: number) => call<{ moonLoad: MoonLoadOut }>("/api/season-plans/mine/load", "PUT", { level });
 export const fileMine = () => call<MinePayload>("/api/season-plans/mine/file", "POST");
 export const fetchVillage = (handle?: string) =>
   call<VillagePayload>(handle ? `/api/season-plans?handle=${encodeURIComponent(handle)}` : "/api/season-plans");
