@@ -11,6 +11,10 @@
  *     village" and "Put it to the village";
  *   - a holder who is the candidate gets "Your own terms go to the village to
  *     adopt." and no adopt button.
+ *
+ * The card route answers nothing drawable here, so every case below reads the
+ * stacked role cards the page falls back to. The player card in proposal mode
+ * is `SeatApplication.card.test.tsx`.
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -295,7 +299,8 @@ describe("the words every party aligns with (PR5)", () => {
     render(<SeatApplication />);
     await screen.findByText("You aligned on 9 Oct 2026");
     // One stamp in the package's one drawer tray and one on the card (red team U11: one drawer, not one per seat).
-    expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(2);
+    // The drawer draws once the player card has answered (PR 3), so it is waited for.
+    await waitFor(() => expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(2));
     expect(screen.getAllByText("Ana Quillfeather, aligned").length).toBe(2);
     expect(screen.queryByRole("button", { name: "Align" })).toBeNull();
   });
