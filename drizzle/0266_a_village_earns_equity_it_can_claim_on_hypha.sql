@@ -18,9 +18,12 @@
 -- carries no village's word.
 --
 -- THE SHAPE, and each column is a decision:
---   kind 'equity'         the exit levers already key a share on it
---                         (`exit.keep_pct.equity`), and the exchange refuses
---                         every kind but credit, so it can never be sold.
+--   kind 'equity'         the exchange refuses every kind but credit, so it
+--                         can never be sold. The exit sweep reads
+--                         `exit.keep_pct.equity` for it, and a save-time
+--                         refusal written for the mirror holds that share at
+--                         0, so a member who leaves takes none of it with
+--                         them until the founder rules otherwise.
 --   governance 'platform' this ledger mints it. That is the whole point.
 --   transferable 0        nothing share-like moves between members, and the
 --                         boot invariant refuses any non-credit token marked

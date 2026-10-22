@@ -313,7 +313,12 @@ is `Village Equity` and two balances under one name are a balance nobody can rea
 (`tokenNameClash` refuses an exact match for the same reason). A village renames it
 like any platform token; the slug never moves. Its kind is `equity`, which keeps it
 off the exchange (only credits trade) and puts it under `exit.keep_pct.equity` when
-a member leaves. Section 6 has its claim.
+a member leaves. **That share is held at 0** by the save-time refusal in
+`server/lib/exitPolicy.ts`, which was written when the only equity token was the
+mirror and says so ("this platform never moves it"). So today a departing member's
+unclaimed earned equity goes with the rest of the exit sweep to
+`exit.remainder_account`. Whether a leaver keeps it is a founder's ruling and is not
+made here. Section 6 has its claim.
 
 `credits` is the only token a member can send to another member. Section 13 has
 the sentence a member reads for each of the others.

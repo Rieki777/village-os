@@ -106,9 +106,11 @@ export const VILLAGE_VOICE = "village-voice";
  * `voice` mirror. The mirror is governed on Hypha and `validateLeg` refuses to
  * move it, which is what makes the on-chain figure trustworthy, so equity has
  * to accrue in a platform token before it can be claimed. This is that token.
- * Its kind is `equity`, so the exchange refuses to list it and the exit levers
- * read `exit.keep_pct.equity` for it. Its display name is the village's to
- * change; the slug never moves.
+ * Its kind is `equity`, so the exchange refuses to list it and the exit sweep
+ * reads `exit.keep_pct.equity` for it. That share is held at 0 by a save-time
+ * refusal written for the mirror (server/lib/exitPolicy.ts), so a leaver's
+ * earned equity goes with the rest of the sweep until the founder rules
+ * otherwise. Its display name is the village's to change; the slug never moves.
  */
 export const EARNED_EQUITY = "earned-equity";
 /**

@@ -37,7 +37,7 @@ import { waitForHealth } from "./db/e2eBoot";
 import { HAND_MINT_SOURCES, MINT_CAP_KEY, mintCycleStart, readCycleIssuance } from "./lib/mintCap";
 import { CIRCLE_BONUS_SOURCE, payCircleBonus } from "./lib/circleBonus";
 import { CYCLE_POOL_FAUCET, MINT_FAUCET, RECOGNITION_FAUCET, loadTokenRegistry } from "./lib/ledger";
-import { LIBRARY_MINT, VOICE_MINT, toLedgerUnits } from "./lib/economy";
+import { EQUITY_MINT, LIBRARY_MINT, VOICE_MINT, toLedgerUnits } from "./lib/economy";
 import { setVariable } from "./lib/variables";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -483,7 +483,11 @@ describe.skipIf(!DB_CONFIGURED)("the per-cycle cap counts issuance, net, from ev
       "SELECT id FROM ledger_accounts WHERE faucet = 1 ORDER BY id",
     );
     const inDatabase = rows.map((r: any) => String(r.id)).sort();
-    const byHand = [RECOGNITION_FAUCET, VOICE_MINT, MINT_FAUCET, LIBRARY_MINT, CYCLE_POOL_FAUCET].sort();
+    // The sixth faucet, sys:equity-mint, arrived with 0266 and tripped this as
+    // designed. Both supply surfaces derive their set through `faucetAccounts`
+    // since ECONOMICS.md 10.33, so it reached them with no edit; it joins the
+    // list here so the next faucet trips it too.
+    const byHand = [RECOGNITION_FAUCET, VOICE_MINT, MINT_FAUCET, LIBRARY_MINT, CYCLE_POOL_FAUCET, EQUITY_MINT].sort();
     expect(inDatabase, "a faucet the hand-kept list does not know about is invisible to two supply surfaces").toEqual(byHand);
   }, 60_000);
 
