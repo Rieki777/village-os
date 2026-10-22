@@ -23,6 +23,12 @@
  * Steward rights page says it inside the recognition card. All five are here,
  * because a fix applied to one of a set is the defect this repository has
  * catalogued most (see the fix-one-twin note in CLAUDE.md's house traps).
+ *
+ * THE STEWARD RIGHTS PAGE LEFT THE LOOP ON 2026-10-22. Rye ruled that day that
+ * a token may be named and no sentence may say what it does, and approved the
+ * new pay card word for word (cust-audit TOKEN_COPY_PROPOSAL row 18). The card
+ * no longer explains tokens at all, so it no longer publishes the founder's
+ * conversion wording either. Its own block below holds it to that.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
@@ -65,6 +71,8 @@ vi.mock("@/hooks/useTokenNames", () => ({
 
 const moneySection = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
 vi.mock("@/hooks/useVillageContent", () => ({
+  // Pages on a page spec (shared/pageContent) read their saved words here.
+  readVillageSection: () => Promise.resolve(null),
   useVillageContent: (section: string) =>
     section === "money"
       ? { content: moneySection.current, loading: false, isPlaceholder: !moneySection.current }
@@ -129,12 +137,41 @@ const PAGES = [
     render: () => render(<Router><HowWeCreate /></Router>),
     anchor: /Gratitude Economy/,
   },
-  {
-    name: "StewardRights",
-    render: () => render(<Router><StewardRights /></Router>),
-    anchor: /Voice in Governance/,
-  },
 ] as const;
+
+describe("StewardRights, after the token ruling of 2026-10-22", () => {
+  const renderSteward = () => render(<Router><StewardRights /></Router>);
+  const ready = () => screen.findByText("Voice in Governance");
+
+  it("makes no claim that the value token converts to anything, with nothing written", async () => {
+    renderSteward();
+    await ready();
+    const said = document.body.textContent ?? "";
+    expect(said).not.toMatch(/converts? to cash/i);
+    expect(said).not.toMatch(/cash, equity, or community currency/i);
+    expect(said).not.toMatch(/future conversion/i);
+  });
+
+  it("does not publish the founder's conversion wording either, because the pay card no longer explains tokens", async () => {
+    moneySection.current = {
+      valueConversion: "Converting {value} to cash or equity is arranged directly with {village}, off the platform.",
+    };
+    renderSteward();
+    await ready();
+    const said = document.body.textContent ?? "";
+    expect(said).not.toContain("arranged directly with Willowbrook");
+    expect(said).not.toMatch(/Seeds|Gratitude/);
+  });
+
+  it("keeps the pay card, in the words Rye approved", async () => {
+    renderSteward();
+    await ready();
+    expect(screen.getByText("Get Paid for Your Contribution")).toBeInTheDocument();
+    expect(
+      screen.getByText("Every role you hold and every quest you complete shows what it is worth on its own card."),
+    ).toBeInTheDocument();
+  });
+});
 
 for (const page of PAGES) {
   describe(`${page.name}, with nothing written about conversion`, () => {

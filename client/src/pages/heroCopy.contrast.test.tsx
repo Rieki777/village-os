@@ -154,13 +154,15 @@ describe.each(HEROES)("the $page hero copy, light", ({ Page, eyebrow: eyebrowTex
 });
 
 describe("the /steward-rights eyebrow, light", () => {
-  it("clears 4.5:1 on the page ground", () => {
+  it("clears 4.5:1 on the page ground", async () => {
     render(
       <Router>
         <StewardRights />
       </Router>,
     );
-    const eyebrow = screen.getByText("Your Path Forward");
+    // The page draws its sections once its saved words (here: none, so the
+    // spec's defaults) have arrived.
+    const eyebrow = await screen.findByText("Your Path Forward");
     const [measured] = lines(measureText(eyebrow.parentElement!, "light"), [ownText(eyebrow)]);
     expect(measured.ratio, `${measured.fg} on ${measured.bg}`).toBeGreaterThanOrEqual(4.5);
   });
