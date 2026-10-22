@@ -127,6 +127,14 @@ export interface SeatProjectionCtx {
    * only: what a role pays is money, and it sits beside the terms it belongs to.
    */
   payRules?: readonly MintRule[];
+  /**
+   * Each role's health, read once for the page by `orgRoleExtras`
+   * (server/lib/orgRoleHealth.ts), at the tier that function was handed.
+   * `/api/org` only.
+   */
+  health?: ReadonlyMap<string, unknown>;
+  /** A member holder's handle, for the link to their card. Member tier, `/api/org` only. */
+  handleOf?: (userId: string) => string | null;
 }
 
 /**
@@ -310,7 +318,13 @@ function memberHolder(h: OrgAssignment, tier: SeatTier, ctx: SeatProjectionCtx):
       termEndsAt: h.termEndsAt ? h.termEndsAt.toISOString() : null,
     };
   }
-  return { ...row, note: h.note, lapsedReason: h.lapsedReason ?? null };
+  return {
+    ...row,
+    note: h.note,
+    lapsedReason: h.lapsedReason ?? null,
+    // The holder's handle at the member tier, so /roles can link "See their card".
+    ...(ctx.handleOf && h.holderKind === "member" && h.userId ? { handle: ctx.handleOf(h.userId) } : {}),
+  };
 }
 
 function projectHolders(held: OrgAssignment[], tier: SeatTier, ctx: SeatProjectionCtx): Array<Record<string, unknown>> {
@@ -425,6 +439,8 @@ export function projectSeat(
     ...(tier.terms && ctx.payRules ? { pay: rolePay(role, ctx.payRules, statedCash(role)) } : {}),
     // The terms each live holder is seated on, beside what the seat offers (red team U2).
     ...(tier.terms && ctx.heldTerms ? { heldTerms: heldTermsOf(held, ctx.heldTerms, ctx) } : {}),
+    // Three facts and a dot per role, never a score (PR 3 of the player card).
+    ...(ctx.route === "org" && ctx.health ? { health: ctx.health.get(role.id) ?? null } : {}),
   };
   const holders = projectHolders(held, tier, ctx);
   if (ctx.route === "map") {
