@@ -15,15 +15,35 @@
  * `sys:voice-bridge` holds it in between, and is deliberately NOT a faucet:
  * voice held against a claim came from a member, and a faucet there would let a
  * claim create the voice it claims.
+ *
+ * TWO TOKENS CROSS HERE NOW, THROUGH ONE PIECE OF CODE (0266). Earned equity
+ * accrues in this ledger the way voice does and is claimed toward the `equity`
+ * mirror on Hypha the way voice is claimed toward the `voice` mirror. Each token
+ * is a LANE below: its own bridge, its own settled account, its own threshold
+ * dial and its own key prefix, and everything else shared. The debit, the
+ * compare-and-set, the refund by reversal, the window, the Hypha space and the
+ * bridge gate are written once. A copied twin is how a fix lands in one and not
+ * the other, so there is no `equityClaim.ts`.
+ *
+ * `voice_claims` already carried a `token_slug` column from 0072, which is what
+ * makes one table enough. Every read below now filters on it, because before
+ * there were two lanes "this member's open claim" and "what the bridge owes"
+ * never had to say which token they meant.
+ *
+ * A SETTLEMENT FINDS ITS LANE FROM THE ROW, never from the caller. The webhook
+ * and the cancel route name a claim id and nothing else, and the token comes
+ * back out of the stored row exactly as the village, member and amount do.
  */
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { numberVar, stringVar } from "./variables";
 import { zonedTimeToUtc } from "../../shared/lunar";
 import { villageTimezone } from "./villageReaders";
-import { memberAccount, postTransfer } from "./ledger";
+import { memberAccount, postTransfer, tokenDef } from "./ledger";
 import {
   canSettleClaim,
   claimRefunds,
+  EARNED_EQUITY,
+  EQUITY_BRIDGE,
   fromLedgerUnits,
   keys,
   reverse,
@@ -41,6 +61,80 @@ import {
  * `bridgeReconciliation` has something true to compare against. Seeded by 0076.
  */
 export const VOICE_SETTLED = "sys:voice-settled";
+
+/** Where earned equity sits once Hypha has executed a claim. Seeded by 0266, and not a faucet either. */
+export const EQUITY_SETTLED = "sys:equity-settled";
+
+/** Which lane a claim travels in. A closed set: a third token is a third entry here, read on purpose. */
+export type ClaimLaneId = "voice" | "equity";
+
+/**
+ * Everything that differs between one claimable token and another.
+ *
+ * Nothing here is a dial. The bridge, the settled account and the sources are
+ * facts the migrations and the ledger already agree on, so a village cannot
+ * point a claim at a different account by typing in a panel.
+ */
+export interface ClaimLane {
+  id: ClaimLaneId;
+  /** The platform token that accrues in this ledger. */
+  token: string;
+  /** The read-only Hypha mirror it is claimed toward, on Base. */
+  mirror: string;
+  /** Holds the amount against an open claim. NOT a faucet. */
+  bridge: string;
+  /** Where the amount goes once Hypha confirms. NOT a faucet. */
+  settled: string;
+  /** The dial that says how much a member gathers before claiming. */
+  thresholdKey: string;
+  /** Ledger source of the debit at request. */
+  debitSource: string;
+  /** Ledger source of the move from the bridge to the settled account. */
+  settledSource: string;
+  /** First segment of a claim row id, so a row says which lane it is at a glance. */
+  idPrefix: string;
+  /** The intent the bridge dispatches under. UNIQUE in 0072. */
+  intentKey: (village: string, claimRowId: string) => string;
+}
+
+export const VOICE_LANE: ClaimLane = {
+  id: "voice",
+  token: VILLAGE_VOICE,
+  mirror: "voice",
+  bridge: VOICE_BRIDGE,
+  settled: VOICE_SETTLED,
+  thresholdKey: "economy.voice_claim_threshold",
+  debitSource: "voice_claim",
+  settledSource: "voice_claim_settled",
+  idPrefix: "vc",
+  intentKey: (v, id) => keys.voiceClaim(v, id),
+};
+
+export const EQUITY_LANE: ClaimLane = {
+  id: "equity",
+  token: EARNED_EQUITY,
+  mirror: "equity",
+  bridge: EQUITY_BRIDGE,
+  settled: EQUITY_SETTLED,
+  thresholdKey: "economy.equity_claim_threshold",
+  debitSource: "equity_claim",
+  settledSource: "equity_claim_settled",
+  idPrefix: "ec",
+  intentKey: (v, id) => keys.equityClaim(v, id),
+};
+
+/** Every lane, in the order a member's wallet lists them. */
+export const CLAIM_LANES: readonly ClaimLane[] = [EQUITY_LANE, VOICE_LANE];
+
+/** The lane a token is claimed through, or null when it never crosses. */
+export function laneForToken(slug: string): ClaimLane | null {
+  return CLAIM_LANES.find((l) => l.token === slug) ?? null;
+}
+
+/** The word a member reads for a lane's token, from the live registry. */
+function laneName(lane: ClaimLane): string {
+  return tokenDef(lane.token)?.name?.trim() || lane.token;
+}
 
 /**
  * IS THERE ANYTHING AT THE OTHER END OF THE CROSSING YET?
@@ -141,6 +235,8 @@ export function claimsWindow(
 }
 
 export interface ClaimReadiness {
+  /** The token this answer is about. */
+  token: string;
   balance: number;
   threshold: number;
   claimable: boolean;
@@ -155,32 +251,44 @@ export interface ClaimReadiness {
 }
 
 /**
- * What a member's voice chip should say, and whether it may be pressed.
+ * What a member's chip for one claimable token should say, and whether it may
+ * be pressed.
  *
  * The order of the messages is the contract: tell somebody the nearest true
  * thing. Being under the threshold is more useful than being told the window is
  * shut, when they could not have claimed either way.
+ *
+ * The sentences name no token on purpose. Every surface that shows one already
+ * names the token beside it, from the registry, so a rename never leaves an old
+ * word inside a sentence.
  */
-export async function claimReadiness(
+export async function claimReadinessFor(
   pool: Pool,
   userId: string,
+  lane: ClaimLane,
   bridgeReady: boolean = BRIDGE_DISPATCH_BUILT,
 ): Promise<ClaimReadiness> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ?",
-    [memberAccount(userId), VILLAGE_VOICE],
+    [memberAccount(userId), lane.token],
   );
   const units = Number(rows[0]?.balance ?? 0);
-  const balance = fromLedgerUnits(VILLAGE_VOICE, units);
-  const threshold = numberVar("economy.voice_claim_threshold");
+  const balance = fromLedgerUnits(lane.token, units);
+  const threshold = numberVar(lane.thresholdKey);
   const { open, nextOpens } = claimsWindow();
   const space = String(stringVar("economy.hypha_space") ?? "").trim();
-  const enough = balance >= threshold;
+  // `balance > 0` as well as the threshold, so a dial somebody set below one
+  // can never offer a claim on nothing.
+  const enough = balance > 0 && balance >= threshold;
 
+  // ONE OPEN CLAIM PER MEMBER PER TOKEN. A voice claim and an equity claim are
+  // two proposals about two different balances, and neither is sized against
+  // the other, so the rule that stops a balance being spoken for twice is a
+  // rule about one token.
   const [pending] = await pool.query<RowDataPacket[]>(
     "SELECT `id`, `amount`, `created_at` FROM `voice_claims` " +
-      "WHERE `village_id` = ? AND `user_id` = ? AND `state` = 'requested' LIMIT 1",
-    [villageId(), userId],
+      "WHERE `village_id` = ? AND `user_id` = ? AND `token_slug` = ? AND `state` = 'requested' LIMIT 1",
+    [villageId(), userId, lane.token],
   );
   const openClaim = pending.length
     ? {
@@ -205,6 +313,7 @@ export async function claimReadiness(
             : `${balance} ready to claim.`;
 
   return {
+    token: lane.token,
     balance,
     threshold,
     claimable: enough && open && !!space && bridgeReady && !openClaim,
@@ -217,24 +326,50 @@ export async function claimReadiness(
   };
 }
 
+/** The voice chip, which is the profile's `voice` block. */
+export async function claimReadiness(
+  pool: Pool,
+  userId: string,
+  bridgeReady: boolean = BRIDGE_DISPATCH_BUILT,
+): Promise<ClaimReadiness> {
+  return claimReadinessFor(pool, userId, VOICE_LANE, bridgeReady);
+}
+
 export type ClaimOutcome =
   | { ok: true; claimId: string; amount: number }
   | { ok: false; status: number; error: string };
 
-const debitKeyFor = (claimId: string) => `voice-claim-debit:${villageId()}:${claimId}`;
+/**
+ * The two ledger keys a claim owns, built HERE and spelled out per lane.
+ *
+ * A conditional and not `${lane.prefix}`, so the key table in docs/ECONOMICS.md
+ * (scripts/generate-economics-doc.mjs reads every `idempotencyKey:` site) can
+ * print both real shapes, and so the voice keys stay byte for byte what they
+ * were before there was a second lane. A claim that already posted under the
+ * old key must come back as a duplicate on a retry, never as a second debit.
+ */
+const debitKeyFor = (lane: ClaimLane, claimId: string) =>
+  lane.id === "voice"
+    ? `voice-claim-debit:${villageId()}:${claimId}`
+    : `equity-claim-debit:${villageId()}:${claimId}`;
+const settledKeyFor = (lane: ClaimLane, claimId: string) =>
+  lane.id === "voice"
+    ? `voice-claim-settled:${villageId()}:${claimId}`
+    : `equity-claim-settled:${villageId()}:${claimId}`;
 
 /**
- * Ask to carry accrued voice to Hypha.
+ * Ask to carry an accrued balance to Hypha, in one lane.
  *
  * Serializable, with the member's row locked, for the same reason a gift is: a
  * balance read outside the write is a check somebody can stand between.
  */
-export async function requestVoiceClaim(
+export async function requestClaim(
   pool: Pool,
   userId: string,
+  lane: ClaimLane,
   bridgeReady: boolean = BRIDGE_DISPATCH_BUILT,
 ): Promise<ClaimOutcome> {
-  const ready = await claimReadiness(pool, userId, bridgeReady);
+  const ready = await claimReadinessFor(pool, userId, lane, bridgeReady);
   // FIRST, and as a hard refusal: taking the debit with nothing able to raise
   // the proposal would strand the voice at the bridge with no event coming to
   // release it. The member's balance would read zero and only they could undo
@@ -252,7 +387,7 @@ export async function requestVoiceClaim(
   if (ready.openClaim) {
     return { ok: false, status: 409, error: "You already have a claim waiting on Hypha." };
   }
-  if (!ready.windowOpen || ready.balance < ready.threshold) {
+  if (!ready.windowOpen || ready.balance <= 0 || ready.balance < ready.threshold) {
     return { ok: false, status: 409, error: ready.says };
   }
 
@@ -272,12 +407,14 @@ export async function requestVoiceClaim(
       return { ok: false, status: 404, error: "no such member" };
     }
 
-    // ONE open claim per member. Two pending proposals for one person's voice
-    // would each be sized against a balance the other has already spoken for.
-    // Re-read inside the lock: the readiness check above decides what to SAY.
+    // ONE open claim per member per token. Two pending proposals for one
+    // person's balance would each be sized against what the other has already
+    // spoken for. Re-read inside the lock: the readiness check above decides
+    // what to SAY.
     const [open] = await conn.query<RowDataPacket[]>(
-      "SELECT `id` FROM `voice_claims` WHERE `village_id` = ? AND `user_id` = ? AND `state` = 'requested' LIMIT 1",
-      [villageId(), userId],
+      "SELECT `id` FROM `voice_claims` WHERE `village_id` = ? AND `user_id` = ? AND `token_slug` = ? " +
+        "AND `state` = 'requested' LIMIT 1",
+      [villageId(), userId, lane.token],
     );
     if (open.length) {
       await conn.rollback();
@@ -286,15 +423,15 @@ export async function requestVoiceClaim(
 
     const [bal] = await conn.query<RowDataPacket[]>(
       "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ? FOR UPDATE",
-      [memberAccount(userId), VILLAGE_VOICE],
+      [memberAccount(userId), lane.token],
     );
     amountUnits = Number(bal[0]?.balance ?? 0);
-    if (amountUnits < toLedgerUnits(VILLAGE_VOICE, ready.threshold)) {
+    if (amountUnits <= 0 || amountUnits < toLedgerUnits(lane.token, ready.threshold)) {
       await conn.rollback();
-      return { ok: false, status: 409, error: "There is less voice here than the claim needs." };
+      return { ok: false, status: 409, error: `There is less ${laneName(lane)} here than the claim needs.` };
     }
 
-    claimId = `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    claimId = `${lane.idPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await conn.query(
       "INSERT INTO `voice_claims` (`id`, `village_id`, `user_id`, `token_slug`, `amount`, `state`, " +
         "`debit_key`, `intent_key`, `hypha_space`) VALUES (?,?,?,?,?,'requested',?,?,?)",
@@ -302,10 +439,10 @@ export async function requestVoiceClaim(
         claimId,
         villageId(),
         userId,
-        VILLAGE_VOICE,
-        fromLedgerUnits(VILLAGE_VOICE, amountUnits),
-        debitKeyFor(claimId),
-        keys.voiceClaim(villageId(), claimId),
+        lane.token,
+        fromLedgerUnits(lane.token, amountUnits),
+        debitKeyFor(lane, claimId),
+        lane.intentKey(villageId(), claimId),
         String(stringVar("economy.hypha_space") ?? "").trim(),
       ],
     );
@@ -335,12 +472,12 @@ export async function requestVoiceClaim(
   try {
     res = await postTransfer(pool, {
       from: memberAccount(userId),
-      to: VOICE_BRIDGE,
-      tokenType: VILLAGE_VOICE,
+      to: lane.bridge,
+      tokenType: lane.token,
       // ALREADY MINOR. DO NOT CONVERT. `amountUnits` is assigned once, from
       // `SELECT balance FROM token_balances ... FOR UPDATE` above, and nothing
       // between there and here multiplies or divides it. The threshold check
-      // converts the OTHER side (`toLedgerUnits(VILLAGE_VOICE, ready.threshold)`),
+      // converts the OTHER side (`toLedgerUnits(lane.token, ready.threshold)`),
       // which is the correct direction, and the INSERT writes a SEPARATE human
       // value with `fromLedgerUnits` without rebinding this one.
       //
@@ -349,10 +486,10 @@ export async function requestVoiceClaim(
       // hundred times the member's voice at the two decimals Voice now carries,
       // and would be invisible at zero.
       amount: amountUnits,
-      source: "voice_claim",
+      source: lane.debitSource,
       sourceRef: claimId,
-      description: "Voice claimed toward Hypha",
-      idempotencyKey: debitKeyFor(claimId),
+      description: `${laneName(lane)} claimed toward Hypha`,
+      idempotencyKey: debitKeyFor(lane, claimId),
     });
   } catch (err: any) {
     res = { ok: false, duplicate: false, error: String(err?.message ?? err) };
@@ -361,7 +498,7 @@ export async function requestVoiceClaim(
     // The row exists and the debit did not. The claim is marked rather than
     // deleted: a claim with no debit behind it is repairable, and one that
     // vanished is not even findable. `rejected` refunds, and reversing a debit
-    // that never posted is a no-op, so this cannot hand back voice.
+    // that never posted is a no-op, so this cannot hand back anything.
     await pool.query(
       "UPDATE `voice_claims` SET `state` = 'rejected', `settled_at` = CURRENT_TIMESTAMP, " +
         "`note` = ? WHERE `id` = ? AND `state` = 'requested'",
@@ -369,11 +506,26 @@ export async function requestVoiceClaim(
     );
     return { ok: false, status: 500, error: res.error ?? "the ledger refused the debit" };
   }
-  return { ok: true, claimId, amount: fromLedgerUnits(VILLAGE_VOICE, amountUnits) };
+  return { ok: true, claimId, amount: fromLedgerUnits(lane.token, amountUnits) };
+}
+
+/** Ask to carry accrued voice to Hypha. The voice lane of `requestClaim`. */
+export async function requestVoiceClaim(
+  pool: Pool,
+  userId: string,
+  bridgeReady: boolean = BRIDGE_DISPATCH_BUILT,
+): Promise<ClaimOutcome> {
+  return requestClaim(pool, userId, VOICE_LANE, bridgeReady);
 }
 
 /**
- * End a claim, and give the voice back unless Hypha confirmed it.
+ * End a claim, and give the balance back unless Hypha confirmed it.
+ *
+ * ANY LANE. The token, and therefore the bridge and the settled account, is read
+ * off the stored row, so the webhook and the member's cancel need to name only
+ * the claim. A row naming a token no lane carries is refused BEFORE its state
+ * moves, because a claim closed with nowhere to refund it would be a balance
+ * stranded by the code meant to release it.
  *
  * THE STATE MOVES FIRST, AS A COMPARE-AND-SET, AND THE REFUND FOLLOWS IT. A
  * cancel and a confirm can arrive at the same instant from two directions: the
@@ -386,9 +538,9 @@ export async function requestVoiceClaim(
  * passed and cannot become a way to make voice. `reverse` is idempotent on its
  * mirror key, so a retry after a crash between the two steps settles correctly.
  */
-export type SettleFailure = "missing" | "terminal" | "raced" | "refund-failed";
+export type SettleFailure = "missing" | "terminal" | "raced" | "refund-failed" | "unknown-token";
 
-export async function settleVoiceClaim(
+export async function settleClaim(
   pool: Pool,
   claimId: string,
   to: ClaimState,
@@ -400,6 +552,14 @@ export async function settleVoiceClaim(
   );
   const claim = rows[0];
   if (!claim) return { ok: false, reason: "missing", error: "no such claim" };
+  const lane = laneForToken(String(claim.token_slug));
+  if (!lane) {
+    return {
+      ok: false,
+      reason: "unknown-token",
+      error: `that claim is for "${String(claim.token_slug)}", which no claim lane in this build carries`,
+    };
+  }
 
   const verdict = canSettleClaim(String(claim.state) as ClaimState, to);
   if (!verdict.ok) {
@@ -419,7 +579,7 @@ export async function settleVoiceClaim(
 
   if (!claimRefunds(to)) {
     /*
-     * A confirmation. The voice has settled on Hypha, so it moves OFF the
+     * A confirmation. The balance has settled on Hypha, so it moves OFF the
      * bridge and onto the account that means "gone, and it went there".
      *
      * 0072 left it at the bridge and called that the truthful record. It was
@@ -434,32 +594,32 @@ export async function settleVoiceClaim(
      * retry against a terminal claim.
      */
     const moved = await postTransfer(pool, {
-      from: VOICE_BRIDGE,
-      to: VOICE_SETTLED,
-      tokenType: VILLAGE_VOICE,
+      from: lane.bridge,
+      to: lane.settled,
+      tokenType: lane.token,
       // ALREADY CONVERTED. DO NOT CONVERT AGAIN. `voice_claims.amount` is
       // `decimal(18,4)` and holds a HUMAN number, written once at the INSERT in
-      // `requestVoiceClaim` as `fromLedgerUnits(VILLAGE_VOICE, amountUnits)`.
+      // `requestClaim` as `fromLedgerUnits(lane.token, amountUnits)`.
       // This is the matching multiply, and `toLedgerUnits` reads the registry's
       // `decimals` at CALL TIME, so this line is right at 0, 3 or 4 with no
       // edit. Headroom note: `decimal(18,4)` is exact at 4 decimals and
       // silently rounds at 5, so a ruling above 4 changes the column too.
-      amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
-      source: "voice_claim_settled",
+      amount: toLedgerUnits(lane.token, Number(claim.amount)),
+      source: lane.settledSource,
       sourceRef: claimId,
       description: `Settled on Hypha: ${claimId}`,
-      idempotencyKey: `voice-claim-settled:${villageId()}:${claimId}`,
+      idempotencyKey: settledKeyFor(lane, claimId),
     }).catch((err: any) => ({ ok: false, duplicate: false, error: String(err?.message ?? err) }));
     if (!moved.ok && !moved.duplicate) {
-      console.error(`[voice claim] ${claimId} confirmed but did not leave the bridge: ${moved.error}`);
+      console.error(`[${lane.id} claim] ${claimId} confirmed but did not leave the bridge: ${moved.error}`);
     }
     return { ok: true, refunded: false };
   }
 
   const back = await reverse(pool, String(claim.debit_key), {
-    from: VOICE_BRIDGE,
+    from: lane.bridge,
     to: memberAccount(String(claim.user_id)),
-    tokenSlug: VILLAGE_VOICE,
+    tokenSlug: lane.token,
     // ALREADY CONVERTED, and it is an ASSERTION rather than an instruction.
     // `reverse` never posts this number: it reads the original row out of
     // `token_ledger` and mirrors THAT (see `reverse` in `server/lib/economy.ts`,
@@ -470,18 +630,18 @@ export async function settleVoiceClaim(
     // Keep the assertion. It is the one place a registry flip done without
     // rescaling `token_ledger` surfaces as a failure somebody can read,
     // instead of a refund that silently moves the wrong amount.
-    amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
-    note: note ?? `Voice returned: ${to}`,
+    amount: toLedgerUnits(lane.token, Number(claim.amount)),
+    note: note ?? `${laneName(lane)} returned: ${to}`,
   });
   if (!back.ok) {
-    // The claim is terminal and the voice is still at the bridge. Re-entering
+    // The claim is terminal and the balance is still at the bridge. Re-entering
     // through this function cannot fix it, because `canSettleClaim` refuses
     // every transition out of a terminal state: that is what `retryRefund`
     // below is for, and the note is written so a human reading the row knows
     // the money is still here.
     await pool
       .query("UPDATE `voice_claims` SET `note` = ? WHERE `id` = ? AND `village_id` = ?", [
-        `refund failed, voice still held: ${String(back.error).slice(0, 200)}`,
+        `refund failed, ${lane.id} still held: ${String(back.error).slice(0, 200)}`,
         claimId,
         villageId(),
       ])
@@ -494,7 +654,14 @@ export async function settleVoiceClaim(
 }
 
 /**
- * Give back voice that a refunding claim closed over without releasing.
+ * The name every caller already used, from when voice was the only lane. It
+ * settles a claim in ANY lane, because the lane comes off the row: the Hypha
+ * receiver and the member's cancel route both reach earned equity through it.
+ */
+export const settleVoiceClaim = settleClaim;
+
+/**
+ * Give back a balance that a refunding claim closed over without releasing.
  *
  * The repair path for `refund-failed`. It deliberately does NOT go through
  * `canSettleClaim`, because the claim is already in the state it should be in
@@ -516,20 +683,22 @@ export async function retryRefund(
   );
   const claim = rows[0];
   if (!claim) return { ok: false, error: "no such claim" };
+  const lane = laneForToken(String(claim.token_slug));
+  if (!lane) return { ok: false, error: `no claim lane carries "${String(claim.token_slug)}"` };
   const state = String(claim.state) as ClaimState;
   if (!claimRefunds(state)) {
     return { ok: false, error: `a ${state} claim is not owed a refund` };
   }
   const back = await reverse(pool, String(claim.debit_key), {
-    from: VOICE_BRIDGE,
+    from: lane.bridge,
     to: memberAccount(String(claim.user_id)),
-    tokenSlug: VILLAGE_VOICE,
-    // ALREADY CONVERTED, and an ASSERTION, exactly as in `settleVoiceClaim`
+    tokenSlug: lane.token,
+    // ALREADY CONVERTED, and an ASSERTION, exactly as in `settleClaim`
     // above. Worth knowing for the runbook: this is the repair path for the
     // failure that assertion produces, and it fails in the same place for the
     // same reason. The repair tool does not repair a units mismatch.
-    amount: toLedgerUnits(VILLAGE_VOICE, Number(claim.amount)),
-    note: `Voice returned on repair: ${state}`,
+    amount: toLedgerUnits(lane.token, Number(claim.amount)),
+    note: `${laneName(lane)} returned on repair: ${state}`,
   });
   if (!back.ok) return { ok: false, error: back.error };
   return { ok: true, refunded: !back.duplicate };
@@ -558,31 +727,37 @@ export async function retryRefund(
  * individually rounded postings. At `decimal(18,4)` storage and decimals 4
  * every term is exact and the two agree. At 5 they diverge and `drift`
  * reports a number nothing did wrong.
+ *
+ * PER LANE, and the token filter on the claims is the whole of that. Without it
+ * an open equity claim would count as voice the voice bridge owes, and the
+ * check would report a drift in the one place nothing went wrong.
  */
 export async function bridgeReconciliation(
   pool: Pool,
+  lane: ClaimLane = VOICE_LANE,
 ): Promise<{ held: number; owed: number; drift: number; openClaims: number }> {
   const [balRows] = await pool.query<RowDataPacket[]>(
     "SELECT `balance` FROM `token_balances` WHERE `account_id` = ? AND `token_type` = ?",
-    [VOICE_BRIDGE, VILLAGE_VOICE],
+    [lane.bridge, lane.token],
   );
   const held = Number(balRows[0]?.balance ?? 0);
 
   const [openRows] = await pool.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n, COALESCE(SUM(`amount`),0) AS total FROM `voice_claims` " +
-      "WHERE `village_id` = ? AND `state` = 'requested'",
-    [villageId()],
+      "WHERE `village_id` = ? AND `token_slug` = ? AND `state` = 'requested'",
+    [villageId(), lane.token],
   );
-  const owed = toLedgerUnits(VILLAGE_VOICE, Number(openRows[0]?.total ?? 0));
+  const owed = toLedgerUnits(lane.token, Number(openRows[0]?.total ?? 0));
   return { held, owed, drift: held - owed, openClaims: Number(openRows[0]?.n ?? 0) };
 }
 
-/** Every claim a member has made, newest first. For the profile. */
-export async function claimHistory(pool: Pool, userId: string, limit = 20) {
+/** Every claim a member has made in one lane, newest first. For the profile. */
+export async function claimHistory(pool: Pool, userId: string, limit = 20, lane: ClaimLane = VOICE_LANE) {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT `id`, `amount`, `state`, `hypha_ref`, `created_at`, `settled_at`, `note` " +
-      "FROM `voice_claims` WHERE `village_id` = ? AND `user_id` = ? ORDER BY `created_at` DESC LIMIT ?",
-    [villageId(), userId, Math.min(100, Math.max(1, limit))],
+      "FROM `voice_claims` WHERE `village_id` = ? AND `user_id` = ? AND `token_slug` = ? " +
+      "ORDER BY `created_at` DESC LIMIT ?",
+    [villageId(), userId, lane.token, Math.min(100, Math.max(1, limit))],
   );
   return rows.map((r) => ({
     id: String(r.id),

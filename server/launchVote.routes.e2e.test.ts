@@ -368,7 +368,7 @@ describe.skipIf(!DB_CONFIGURED)("a village sets itself up alone, and can issue n
      * that: the refusal, and the claim still standing at `submitted`.
      */
     const quest = await call("POST", "/api/admin/quests", {
-      body: { title: "Clear the beck", gratitude: "10" },
+      body: { title: "Clear the beck", valueMinor: 1000000 },
     });
     expect(quest.status, JSON.stringify(quest.json)).toBe(200);
     const claimed = await call("POST", `/api/game/quests/${quest.json.id}/claim`, { token: wrenToken, body: {} });

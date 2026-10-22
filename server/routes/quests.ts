@@ -72,6 +72,9 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { payLineProblem, payableTokens, questPay, questPayRules, recognitionName, rolePayRules } from "../lib/workPay";
+import { defaultDisplayCurrency } from "../../shared/money";
+import { readWorkValueInput } from "../../shared/workValue";
 
 /** The share-card raster. 1200x630 is what every major unfurler crops to. */
 export const OG_WIDTH = 1200;
@@ -97,6 +100,7 @@ type Deps = Pick<
   | "questConsentRecipients"
   | "overLimit"
   | "clientIp"
+  | "projectCurrency"
 > & {
   /**
    * The guard's THREE answers, for the one route that needs the third.
@@ -130,12 +134,90 @@ export function register(app: Express, deps: Deps): void {
     overLimit,
     clientIp,
     limitState,
+    projectCurrency,
   } = deps;
 
   // Quests: public list
+  /*
+   * EVERY QUEST SAYS WHAT IT PAYS (Rye, 2026-10-21), worked out by the same
+   * function the consent pays from (server/lib/workPay.ts), so a card can never
+   * promise a token amount the engine would not post. One rules read for the
+   * whole board. `pay.value` is null on a quest nobody has valued, and the card
+   * then says to inquire.
+   */
   app.get("/api/quests", async (_req, res) => {
-    res.json(await questsRepo.all());
+    const [quests, rules] = await Promise.all([questsRepo.all(), questPayRules(getPool())]);
+    res.json(quests.map((q) => ({ ...q, pay: questPay(q, rules) })));
   });
+
+  /*
+   * WHAT A STEWARD MAY PUT ON A QUEST OR A ROLE: the currency a value is
+   * stamped in, and for each kind of work the tokens the village has an
+   * enabled rule for, with the ceiling and the standard amount. The editor
+   * prefills a new quest's list from the standard amounts, so what the steward
+   * sees is what the quest pays.
+   *
+   * PUBLIC, because every figure in it already is: the rules feed
+   * (`publicRules`) states each rule's amount and ceiling to anyone, and a
+   * steward accepting a proposal holds `quest.approve`, which is not an admin.
+   * Registered before `/api/quests/:id` so the literal path wins.
+   */
+  app.get("/api/quests/pay-options", async (_req, res) => {
+    const [quest, role] = await Promise.all([questPayRules(getPool()), rolePayRules(getPool())]);
+    res.json({
+      currency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),
+      // The recognition token's live name, for the sentence saying it pays no work.
+      recognition: recognitionName(),
+      quest: payableTokens(quest),
+      role: payableTokens(role),
+    });
+  });
+
+  /**
+   * A steward's value and list for a quest, checked against the village's own
+   * rules before anything is written, and stripped off the body so the raw
+   * fields never reach the record. Returns the fields to merge, or answers the
+   * request itself with a sentence.
+   */
+  const checkedQuestValue = async (
+    body: Record<string, unknown>,
+    res: express.Response,
+    opts: { required: boolean },
+  ): Promise<Record<string, unknown> | null> => {
+    const rules = await questPayRules(getPool());
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug, 0));
+    delete body.valueMinor;
+    delete body.valueCurrency;
+    delete body.valueTokens;
+    // `pay` is what this route SENDS. A client that posts a quest back as it
+    // received it must not have the projection written onto the row.
+    delete body.pay;
+    if (!input.ok) {
+      res.status(400).json({ error: input.error });
+      return null;
+    }
+    // Every quest carries a value from the moment it is created (Rye, 2026-10-21).
+    if (opts.required && (input.valueMinor === undefined || input.valueMinor === null)) {
+      res.status(400).json({ error: "Every quest says what it is worth. Set a value before you publish it." });
+      return null;
+    }
+    for (const t of input.tokens ?? []) {
+      const problem = payLineProblem(rules, t.token, t.amount);
+      if (problem) {
+        res.status(400).json({ error: problem });
+        return null;
+      }
+    }
+    const out: Record<string, unknown> = {};
+    if (input.valueMinor !== undefined) {
+      out.valueMinor = input.valueMinor;
+      // Stamped here, never read from the body: the village's own currency at
+      // the moment of the save (0265 says why it is kept on the row).
+      out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    return out;
+  };
 
   /**
    * Life signs for the quest board (public): how many members hold each quest
@@ -224,10 +306,14 @@ export function register(app: Express, deps: Deps): void {
      * a screen can say "nothing yet" about. A stranger gets no key at all, so
      * the two facts never arrive looking the same.
      */
+    // What each quest pays, the same answer the board gives (see `/api/quests`).
+    const rules = await questPayRules(getPool());
+    const priced = { ...quest, pay: questPay(quest, rules) };
+    const pricedRelated = related.map((q) => ({ ...q, pay: questPay(q, rules) }));
     const viewer = await authedUser(req);
-    if (!viewer) return res.json({ quest, related });
+    if (!viewer) return res.json({ quest: priced, related: pricedRelated });
     const needs = await linksForSubject(getPool(), "quest", id);
-    res.json({ quest, related, needs });
+    res.json({ quest: priced, related: pricedRelated, needs });
   });
 
   /**
@@ -535,6 +621,9 @@ export function register(app: Express, deps: Deps): void {
     const { title } = req.body ?? {};
     if (!title) return res.status(400).json({ error: "Missing title" });
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: true });
+    if (!valued) return;
     const count = (await questsRepo.all()).length;
     const entry = {
       id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -544,8 +633,9 @@ export function register(app: Express, deps: Deps): void {
       difficulty: "Beginner",
       tags: [],
       gratitude: "",
-      ...req.body,
-    };
+      ...body,
+      ...valued,
+    } as any;
     await questsRepo.add(entry);
     onRealItemPublished(getPool(), "quests", adminActor(req)?.id ?? null);
     // A quest posted during a season belongs to that season's pattern, so it
@@ -562,8 +652,14 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    // A save that does not carry the value leaves it alone; one that does is
+    // checked first. Clearing a value on an existing quest is allowed, and its
+    // card then says to inquire.
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: false });
+    if (!valued) return;
     const updated = await questsRepo.update(req.params.id, (q: any) => {
-      Object.assign(q, req.body, { id: q.id });
+      Object.assign(q, body, valued, { id: q.id });
     });
     if (!updated) return res.status(404).json({ error: "Not found" });
     res.json(updated);

@@ -889,6 +889,8 @@ const SENTENCES = {
     "The village's own money. It is what the cycle pool shares out when a moon closes, and what a member spends on a night, a seat or a shelf.",
   "village-voice":
     "Earned say. It accrues here as work is confirmed and seats are held, and a member claims it across to Base once they hold enough.",
+  "earned-equity":
+    "Earned ownership. It accrues here from whichever rules the village turns on, and a member claims it across to the equity mirror on Base. Nothing pays it until the village decides what does.",
   "stay-credit":
     "A claim on a night in one of the village's rooms, issued by the stays module against its own beds.",
   "library-credit":
@@ -1194,13 +1196,22 @@ function issuance(t, f, paid, off = []) {
     // here because a payout that does not happen is the one thing a founder
     // must not read as a payout that does.
     if (off.length) {
+      // Counted, because 0266 seeds two switched-off rules for one token and
+      // "One rule ships" over a list of two is a sentence the table beside it
+      // contradicts.
+      const one = off.length === 1;
       bits.push(
-        `One rule ships switched OFF and pays nobody until the village turns it on: ` +
+        (one
+          ? "One rule ships switched OFF and pays nobody until the village turns it on: "
+          : `${["Two", "Three", "Four", "Five"][off.length - 2] ?? off.length} rules ship switched OFF and pay nobody until the village turns them on: `) +
           off
             .map((r) => `${r.amount} on \`${r.trigger}\` to the ${r.recipient}`)
             .join("; ") +
-          ". It is seeded off rather than left out because no route creates a mint rule, so a village that " +
-          "wanted it back would have no way to add it.",
+          (one
+            ? ". It is seeded off rather than left out because no route creates a mint rule, so a village that " +
+              "wanted it back would have no way to add it."
+            : ". They are seeded off rather than left out because no route creates a mint rule, so a village that " +
+              "wanted one back would have no way to add it."),
       );
     }
   } else {

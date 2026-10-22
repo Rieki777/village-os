@@ -101,14 +101,9 @@ async function seatAMember(id: string): Promise<string> {
 /**
  * The live path: price what the consent owes, then post each row. The same two
  * steps `server/routes/questClaims.ts` takes across its commit.
- *
- * `granted` is passed above zero because `OwedClaim` requires it and
- * `priceClaim` prices no rule at zero or less. Without it these cases would
- * price nothing and their balance assertions would read an empty ledger, which
- * is the same shape of false green this file was written about.
  */
 async function payClaim(id: string, questId: string, userId: string): Promise<string[]> {
-  const priced = await owedForClaim(pool, { id, questId, userId, granted: 1 });
+  const priced = await owedForClaim(pool, { id, questId, userId });
   for (const row of priced.owed) await postOwed(pool, row);
   return priced.owed.map((o) => o.tokenSlug);
 }

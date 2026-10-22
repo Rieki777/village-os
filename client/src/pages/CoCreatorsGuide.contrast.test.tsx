@@ -56,6 +56,8 @@ vi.mock("@/modules/ModuleProvider", () => ({
 }));
 vi.mock("@/lib/gameApi", () => ({
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+  // What quests and roles pay is read from the work (EarningsFromTheWork); nothing answers here.
+  gameFetch: async () => ({ ok: false, status: 404, json: async () => null }),
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
 vi.mock("@/hooks/useTokenNames", () => ({

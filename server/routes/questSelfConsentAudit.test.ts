@@ -12,8 +12,8 @@
  * THE DEFECT THIS PINS. The row was written the moment the window was found
  * open, which is a whole decline branch and five refusals before anything
  * happens. So the record of the exception said a founder had witnessed their
- * own claim when the founder had DECLINED it, when the dials refused the
- * amount, when they were a steward the window was never open to, and when
+ * own claim when the founder had DECLINED it, when a later gate refused the
+ * consent, when they were a steward the window was never open to, and when
  * another steward had already resolved the claim. A record of uses that did not
  * happen is worse than no record, because somebody auditing it cannot tell
  * which of the rows means anything.
@@ -80,10 +80,10 @@ const consent = async (claimId: string, body: unknown) => {
 };
 
 /** A quest, and the founder's own submitted claim on it. Answers the claim id. */
-const ownClaim = async (key: string, label = "50-100") => {
+const ownClaim = async (key: string, label = "50-100", extra: { stayCreditReward?: number } = {}) => {
   const questId = `q-${key}`;
   const claimId = `claim-${key}`;
-  await quests.add({ id: questId, title: `Quest ${key}`, gratitude: label, status: "Open", tags: [], order: 1 });
+  await quests.add({ id: questId, title: `Quest ${key}`, gratitude: label, status: "Open", tags: [], order: 1, ...extra });
   await claims.add({
     id: claimId,
     questId,
@@ -186,7 +186,7 @@ describe.skipIf(!configured)("what the solo-founder window records (MySQL)", () 
     expect(rows[0]!.audience).toBe("admin");
   });
 
-  it("records nothing for a decline, a refused amount, a steward, or a claim already resolved", async () => {
+  it("records nothing for a decline, a consent the launch gate refuses, a steward, or a claim already resolved", async () => {
     const before = refs(await windowRows());
 
     // A founder handing back their own stale claim. Nothing is witnessed and
@@ -194,9 +194,24 @@ describe.skipIf(!configured)("what the solo-founder window records (MySQL)", () 
     const declined = await ownClaim("declined");
     expect((await consent(declined, { approve: false })).status).toBe(200);
 
-    // An amount the dials refuse. The claim is untouched.
-    const refusedAmount = await ownClaim("refused-amount");
-    expect((await consent(refusedAmount, { approve: true, amount: 0 })).status).toBe(400);
+    // A consent refused after the window was found open: this quest releases
+    // stay credits and the Game has not started, so the launch gate refuses it.
+    // The claim is untouched. (This case was a Gratitude amount the dials
+    // refused, until a consent stopped carrying one.)
+    const refusedLaunch = await ownClaim("refused-launch", "", { stayCreditReward: 2 });
+    const [saved] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT `value` FROM `app_config` WHERE `config_key` = 'game-start'",
+    );
+    await pool.query("DELETE FROM `app_config` WHERE `config_key` = 'game-start'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    try {
+      expect((await consent(refusedLaunch, { approve: true })).status).toBe(409);
+    } finally {
+      const value = saved[0].value;
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `app_config` (`config_key`, `value`) VALUES ('game-start', ?)",
+        [typeof value === "string" ? value : JSON.stringify(value)],
+      );
+    }
 
     // Role authority is not founder authority, however small the village is.
     const forSteward = await ownClaim("steward");

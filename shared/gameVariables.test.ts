@@ -69,7 +69,7 @@ describe("generated progression defs", () => {
 describe("ring resolution", () => {
   it("game rules are open, infrastructure and guards are founder-held", () => {
     expect(ringOf(VARIABLES_BY_KEY["gratitude.base_budget"])).toBe("open");
-    expect(ringOf(VARIABLES_BY_KEY["quest.consent_cap_mode"])).toBe("open");
+    expect(ringOf(VARIABLES_BY_KEY["governance.voice_weighting"])).toBe("open");
     expect(ringOf(VARIABLES_BY_KEY["progression.multiplier.guest"])).toBe("open");
     expect(ringOf(VARIABLES_BY_KEY["abuse.register_per_ip_hourly"])).toBe("founder");
     expect(ringOf(VARIABLES_BY_KEY["tokens.base_rpc_url"])).toBe("founder");
@@ -80,7 +80,7 @@ describe("ring resolution", () => {
   it("settlement-basis variables apply at cycle close; the rest instantly", () => {
     expect(applyTimingOf(VARIABLES_BY_KEY["gratitude.pool_per_cycle"])).toBe("cycle-close");
     expect(applyTimingOf(VARIABLES_BY_KEY["progression.multiplier.member"])).toBe("cycle-close");
-    expect(applyTimingOf(VARIABLES_BY_KEY["quest.consent_cap_mode"])).toBe("instant");
+    expect(applyTimingOf(VARIABLES_BY_KEY["governance.voice_weighting"])).toBe("instant");
     // The waning dials carry their timing on the DEF rather than in
     // CYCLE_APPLY_KEYS, which two sessions edit at once, and a def-level
     // override cannot be lost in a merge.
