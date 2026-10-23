@@ -465,8 +465,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
      *
      * Most identity here is a join: forum posts, quest claims and messages
      * carry only an author id, so once the user row becomes a tombstone they
-     * read as "a departed member" for free. The steps below are the ones that do NOT work
-     * that way. They either restate the person independently of the users
+     * read as "a departed member" for free. The steps below are the ones that
+     * do NOT work that way. They either restate the person independently of the users
      * table, or they keep a live channel open to them after they have gone.
      *
      * Value rows stay, as always: the ledger, gratitude, claims, loans, orders
