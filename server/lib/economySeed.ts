@@ -33,7 +33,7 @@ import { CREDITS, EARNED_EQUITY, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from 
  * seeded, disabled, only because villages already hold that row and the
  * tests read it; switched on, it pays nobody, because `quoteWorkPay` refuses
  * Gratitude and the Mint panel says so. No quest consent mints Gratitude
- * either (41512d9), and no rule on it for quests or proposals is seeded.
+ * either (41512d9), and no Gratitude rule is seeded for quests or proposals.
  *
  * Every ceiling is a real number, and none of them binds work since
  * 2026-10-22 (`ceilingBinds` in shared/workValue.ts): work is paid in full.
