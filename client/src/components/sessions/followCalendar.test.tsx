@@ -4,10 +4,13 @@
  * address for a calendar app.
  *
  * What each case holds: the circles are read when the panel opens, with how
- * each meets; a save sends what is ticked, or every circle as one choice; the
- * address shows once, with Google's page, the subscription link and a copy;
- * an address made earlier is described, never shown, and can be stopped; a
- * refusal is said in the server's words; and closing gives the focus back.
+ * each meets, and the focus goes to the panel; a save sends what is ticked, or
+ * every circle as one choice, and unsaved ticks say so; making an address
+ * saves unsaved ticks first; the address shows once, takes the focus and is
+ * read out, with Google's page, the subscription link and a copy; an address
+ * made earlier is described, never shown, and can be stopped; in preview the
+ * panel says the address shows nothing yet; a refusal is said in the server's
+ * words; and closing gives the focus back.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -33,6 +36,7 @@ const payload = (over: Partial<FollowPayload> = {}): FollowPayload => ({
   ],
   all: false,
   address: null,
+  serving: true,
   ...over,
 });
 
@@ -61,6 +65,28 @@ describe("follow the calendar", () => {
     expect((screen.getByRole("checkbox", { name: /Kitchen/ }) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText("Every Thursday at 18:00")).toBeInTheDocument();
     expect(screen.getByText(CALENDAR_COPY.noRhythm)).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: CALENDAR_COPY.title })));
+    expect(screen.queryByText(CALENDAR_COPY.notSaved)).toBeNull();
+  });
+
+  it("saves unsaved ticks before it makes an address, so the address carries them", async () => {
+    answers["PUT /api/sessions/circles/following"] = () => json(payload({ circles: payload().circles.map((c) => ({ ...c, followed: true })) }));
+    answers["POST /api/sessions/circles/following/key"] = () => json({ url: URL_ });
+    render(<FollowCalendar />);
+    await openPanel();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Kitchen/ }));
+    expect(screen.getByText(CALENDAR_COPY.notSaved)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: CALENDAR_COPY.makeAddress }));
+    await waitFor(() => expect(calls.map((c) => `${c.method} ${c.path}`).slice(1)).toEqual(["PUT /api/sessions/circles/following", "POST /api/sessions/circles/following/key"]));
+    expect(calls[1].body).toEqual({ all: false, circleIds: ["garden", "kitchen"] });
+    expect(screen.queryByText(CALENDAR_COPY.notSaved)).toBeNull();
+  });
+
+  it("says in preview that the address shows nothing yet", async () => {
+    answers["GET /api/sessions/circles/following"] = () => json(payload({ serving: false }));
+    render(<FollowCalendar />);
+    await openPanel();
+    expect(screen.getByText(CALENDAR_COPY.notServing)).toBeInTheDocument();
   });
 
   it("saves what is ticked, and every circle as one choice", async () => {
@@ -86,6 +112,8 @@ describe("follow the calendar", () => {
     fireEvent.click(screen.getByRole("button", { name: CALENDAR_COPY.makeAddress }));
     const box = (await screen.findByLabelText(CALENDAR_COPY.addressLabel)) as HTMLInputElement;
     expect(box.value).toBe(URL_);
+    await waitFor(() => expect(document.activeElement).toBe(box));
+    expect(screen.getByText(CALENDAR_COPY.ready)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: CALENDAR_COPY.addGoogle })).toHaveAttribute("href", googleAddUrl(URL_));
     expect(screen.getByRole("link", { name: CALENDAR_COPY.addApple })).toHaveAttribute("href", webcalUrl(URL_));
     fireEvent.click(screen.getByRole("button", { name: CALENDAR_COPY.copy }));
@@ -102,7 +130,7 @@ describe("follow the calendar", () => {
     expect(screen.getByText(new RegExp(CALENDAR_COPY.notReadYet))).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: CALENDAR_COPY.stopAddress }));
     expect(await screen.findByText(CALENDAR_COPY.stopped)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: CALENDAR_COPY.makeAddress })).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: CALENDAR_COPY.makeAddress })));
   });
 
   it("says a refusal in the server's words, and gives the focus back on close", async () => {

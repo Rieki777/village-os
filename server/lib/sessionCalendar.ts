@@ -50,8 +50,8 @@ import { effectiveLifecycle } from "./modules";
 import { isAdmitted } from "./admission";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
-import type { YearAnchor } from "../../shared/lunar";
-import { comingLink, meetingAt, rhythmWords, type StoredRhythm } from "../../shared/sessionRhythm";
+import { civilParts, type YearAnchor } from "../../shared/lunar";
+import { addDays, comingLink, meetingAt, nextMeetings, rhythmWords, type StoredRhythm } from "../../shared/sessionRhythm";
 import {
   CALENDAR_COPY,
   EVERY_CIRCLE,
@@ -76,6 +76,11 @@ const DAY_MS = 86_400_000;
 
 const hashKey = (raw: string): string => createHash("sha256").update(raw).digest("hex");
 
+/** The rate bucket of one address: named by a piece of its hash, never by the key. */
+export function feedKeyBucket(raw: string): string {
+  return `sessions-feed-key:${hashKey(raw).slice(0, 16)}`;
+}
+
 /** What the rules need: the live circles, and for a test the module's lifecycle. */
 export interface CalendarDeps {
   circles: () => { id: string; name: string }[];
@@ -90,16 +95,42 @@ export interface FeedDeps extends CalendarDeps {
 }
 
 /** Open to members: in preview the room is the admins' own, and off is off. */
-function openToMembers(deps: CalendarDeps): boolean {
+export function openToMembers(deps: CalendarDeps): boolean {
   const lifecycle = deps.lifecycle ?? (() => effectiveLifecycle("sessions"));
   return (LIFECYCLE_RANK[lifecycle() as ModuleLifecycle] ?? 0) >= LIFECYCLE_RANK.members;
 }
 
 // ── One calendar ────────────────────────────────────────────────────────────
 
+/** Does this village date have the rhythm's wall-clock time at all? Not in the hour the clocks skip. */
+const wallTimeHolds = (key: string, time: string, zone: string): boolean => {
+  const p = civilParts(meetingAt(key, time, zone), zone);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}` === time;
+};
+
+/**
+ * The first meeting the village calendar counts from. The calendar reads
+ * every meeting's time of day from this one instant, so it must be a date
+ * where the rhythm's wall-clock time exists: a first meeting in the hour the
+ * clocks skip would set every meeting an hour off. Such a date is stepped
+ * past, by whole rhythms (a weekly one keeps its week), so only that one
+ * meeting moves, the way it moves in Coming up.
+ */
+function mirrorBase(r: StoredRhythm, zone: string): string {
+  if (!r.recurrence || wallTimeHolds(r.startsOn, r.time, zone)) return r.startsOn;
+  if (r.recurrence.freq === "weekly") {
+    const step = 7 * Math.max(1, r.recurrence.interval ?? 1);
+    for (let k = 1, day = addDays(r.startsOn, step); k <= 60; k += 1, day = addDays(day, step)) if (wallTimeHolds(day, r.time, zone)) return day;
+    return r.startsOn;
+  }
+  const from = meetingAt(r.startsOn, "00:00", zone);
+  const held = nextMeetings({ ...r, recurrence: { ...r.recurrence, exceptions: [] } }, from, zone, 12).find((m) => wallTimeHolds(m.key, r.time, zone));
+  return held?.key ?? r.startsOn;
+}
+
 /** A circle's rhythm as the village calendar holds it. */
 export function mirrorInput(r: StoredRhythm, circleName: string, zone: string): Omit<CalendarUpsertInput, "sourceModule"> {
-  const startsAt = meetingAt(r.startsOn, r.time, zone);
+  const startsAt = meetingAt(mirrorBase(r, zone), r.time, zone);
   return {
     sourceId: r.circleId,
     kind: "call",
@@ -152,12 +183,27 @@ function asCalendarRow(input: Omit<CalendarUpsertInput, "sourceModule">, updated
 }
 
 /**
+ * One mirror at a time. A mirror reads every rhythm, writes each, then retires
+ * the rest, in separate statements; two at once could retire a rhythm the
+ * other had just written, or write an older one back over it. So each run
+ * waits for the one before, in this process, which is the only one a village
+ * runs.
+ */
+let mirrorQueue: Promise<unknown> = Promise.resolve();
+
+/**
  * Every live circle's rhythm into the village calendar, and every mirrored
  * row whose rhythm or circle has gone retired. Nothing stays mirrored while
  * the module is off or in preview. Idempotent, safe every hour and after
- * every change.
+ * every change, and never two at once.
  */
-export async function mirrorRhythms(pool: Pool, deps: CalendarDeps): Promise<{ written: number; retired: number }> {
+export function mirrorRhythms(pool: Pool, deps: CalendarDeps): Promise<{ written: number; retired: number }> {
+  const run = mirrorQueue.then(() => mirrorOnce(pool, deps));
+  mirrorQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function mirrorOnce(pool: Pool, deps: CalendarDeps): Promise<{ written: number; retired: number }> {
   if (!openToMembers(deps)) return { written: 0, retired: await calendarRemoveMissing(pool, MIRROR_SOURCE, []) };
   const zone = villageTimezone();
   const live = new Map(deps.circles().map((c) => [c.id, c]));
@@ -194,6 +240,7 @@ export async function followFor(pool: Pool, who: { userId: string }, deps: Calen
     circles: deps.circles().map((c) => ({ id: c.id, name: c.name, followed: all || ids.has(c.id), rhythm: words.get(c.id) ?? null })),
     all,
     address: key ? { madeAt: toIso(key.created_at) ?? "", lastReadAt: toIso(key.last_used_at) } : null,
+    serving: openToMembers(deps),
   };
 }
 

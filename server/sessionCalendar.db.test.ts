@@ -170,7 +170,7 @@ describe.skipIf(!configured)("circle meetings on a calendar against a real schem
       ["c-kitchen", false],
     ]);
     expect(ana.circles[0].rhythm).toMatch(/^Every 2 weeks on \w+day at 18:00$/);
-    expect(ana).toMatchObject({ all: false, address: null });
+    expect(ana).toMatchObject({ all: false, address: null, serving: true });
     expect((await as(null, "GET /api/sessions/circles/following")).status).toBe(401);
   });
 
@@ -185,11 +185,12 @@ describe.skipIf(!configured)("circle meetings on a calendar against a real schem
   });
 
   it("makes an address shown once, and the calendar app reads only the circles followed", async () => {
-    const made = await as("m-ana", "POST /api/sessions/circles/following/key");
+    // The address sits on the origin this request came in on (FRONTEND_URL is not set here).
+    const made = await as("m-ana", "POST /api/sessions/circles/following/key", { headers: { host: "garden.example.test", "x-forwarded-proto": "https" } });
     expect(made.status).toBe(200);
     expect(made.headers["cache-control"]).toBe("no-store");
     const url = new URL(made.body.url);
-    expect(url.origin + url.pathname).toBe(`https://village.example.test${CIRCLE_FEED_PATH}`);
+    expect(url.origin + url.pathname).toBe(`https://garden.example.test${CIRCLE_FEED_PATH}`);
     anaKey = url.searchParams.get("key") ?? "";
     // Only its hash is kept.
     const [row] = await q("SELECT `key_hash` FROM `live_session_feed_keys`");
@@ -227,6 +228,9 @@ describe.skipIf(!configured)("circle meetings on a calendar against a real schem
       await lifecycle(value);
       expect((await feed(anaKey)).status, value).toBe(404);
     }
+    // An admin trying the module in preview is told the address shows nothing yet.
+    await lifecycle("preview");
+    expect((await following("m-founder")).serving).toBe(false);
     await lifecycle("members");
     expect((await feed(anaKey)).status).toBe(200);
     // A new address retires the old one.

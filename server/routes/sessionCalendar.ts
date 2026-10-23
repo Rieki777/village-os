@@ -17,23 +17,30 @@
  * `circles`, and no room door takes a second segment as a parameter.
  *
  * THE FEED STANDS OUTSIDE THEM, because a calendar app reads it with no
- * sign-in. It is bounded per network address before anything else, and
- * `feedFor` measures the module's state and the key holder itself; anything
+ * sign-in. It is bounded twice before anything else: generously per network
+ * address (Google reads every subscriber's calendar from a shared pool of its
+ * own) and tightly per address (one member's calendar), and `feedFor`
+ * measures the module's state and the key holder itself; anything
  * it will not serve is one bare 404, the same for a wrong key as for a module
  * that is off, so the door says nothing about either.
  *
  * THE MIRROR'S JOB REGISTERS HERE, hourly, beside the doors that read what
  * it mirrors; every change to a rhythm mirrors at once too
  * (server/routes/sessionRhythm.ts).
+ *
+ * THE ADDRESS SITS ON THE VILLAGE'S OWN SITE: FRONTEND_URL when it is set,
+ * otherwise the origin this request came in on, the way the village feed
+ * builds its own. Never the first host the server happened to see, which can
+ * be a health check's.
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import type { Outcome } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import { registerJob } from "../lib/scheduler";
-import { feedFor, followFor, makeAddress, mirrorRhythms, setFollow, stopAddress } from "../lib/sessionCalendar";
+import { feedFor, feedKeyBucket, followFor, makeAddress, mirrorRhythms, setFollow, stopAddress } from "../lib/sessionCalendar";
 import { liveCircles } from "./sessionRhythm";
-import { CALENDAR_LIMITS, CALENDAR_REFUSALS, CIRCLE_FEED_PATH, FOLLOW_API, FOLLOW_KEY_API } from "../../shared/sessionCalendar";
+import { CALENDAR_LIMITS, CALENDAR_REFUSALS, CIRCLE_FEED_PATH, FOLLOW_API, FOLLOW_KEY_API, looksLikeFeedKey } from "../../shared/sessionCalendar";
 
 /**
  * What this module touches, and why. `circlesRepo` says which circles are
@@ -45,6 +52,15 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members" | "
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+
+/** The village's own site for an address: FRONTEND_URL, or this request's origin. */
+function originOf(req: Request): string {
+  const configured = String(process.env.FRONTEND_URL ?? "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const proto = String(req.headers?.["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim();
+  const host = String(req.headers?.["x-forwarded-host"] ?? req.headers?.host ?? "").split(",")[0].trim();
+  return host ? `${proto}://${host}` : "";
+}
 
 /** The mirror's job: every circle's rhythm into the village calendar, hourly. */
 export const MIRROR_JOB = "session-calendar-mirror";
@@ -95,7 +111,7 @@ export function register(app: Express, deps: Deps): void {
     const who = await signedIn(req, res, { name: "sessions-feed-key", max: CALENDAR_LIMITS.keysPerDay, windowMs: DAY_MS, error: CALENDAR_REFUSALS.tooManyAddresses });
     if (!who) return;
     res.setHeader("Cache-Control", "no-store");
-    res.json({ url: await makeAddress(getPool(), who, deps.deploymentOrigin()) });
+    res.json({ url: await makeAddress(getPool(), who, originOf(req) || deps.deploymentOrigin()) });
   });
 
   app.delete(FOLLOW_KEY_API, async (req, res) => {
@@ -106,14 +122,15 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.get(CIRCLE_FEED_PATH, async (req, res) => {
-    if (await overLimit(`sessions-feed:${clientIp(req)}`, CALENDAR_LIMITS.feedReadsPerHour, HOUR_MS)) {
-      return res.status(429).type("text/plain").send("Too many requests. Try again in an hour.");
-    }
-    const body = await feedFor(getPool(), req.query.key, {
+    const tooMany = () => res.status(429).type("text/plain").send("Too many requests. Try again in an hour.");
+    if (await overLimit(`sessions-feed:${clientIp(req)}`, CALENDAR_LIMITS.feedReadsPerAddressPerHour, HOUR_MS)) return tooMany();
+    const key = req.query.key;
+    if (looksLikeFeedKey(key) && (await overLimit(feedKeyBucket(key), CALENDAR_LIMITS.feedReadsPerKeyPerHour, HOUR_MS))) return tooMany();
+    const body = await feedFor(getPool(), key, {
       ...calendar,
       member: (userId) => members.byId(userId),
       villageName: deps.projectName,
-      origin: deps.deploymentOrigin,
+      origin: () => originOf(req) || deps.deploymentOrigin(),
     });
     if (body == null) return res.status(404).type("text/plain").send("Not found");
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");

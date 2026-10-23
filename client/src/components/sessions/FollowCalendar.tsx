@@ -7,10 +7,15 @@
  * again when a circle changes its rhythm, skips a meeting, or begins.
  *
  * The circles are the live ones, read from the village when the panel opens.
- * The address is shown once, the moment it is made, and the server keeps only
- * its hash; later the panel says when it was made and last read, and offers a
- * new one or none. Every write reads `res.ok` before it says anything, and
- * what landed is read out in one polite line. The contract and every word are
+ * Ticks wait for "Save my circles", and the panel says so while they do;
+ * making an address saves them first, so an address never starts out empty by
+ * mistake. The address is shown once, the moment it is made, and the server
+ * keeps only its hash; later the panel says when it was made and last read,
+ * and offers a new one or none. While the module is in preview the panel says
+ * the address shows nothing yet. Every write reads `res.ok` before it says
+ * anything, what landed is read out in one polite line, and the focus goes
+ * where the next step is: the heading on open, the address once made, the
+ * button that makes one once it is stopped. The contract and every word are
  * shared/sessionCalendar.ts.
  */
 import { useEffect, useRef, useState } from "react";
@@ -58,6 +63,13 @@ export default function FollowCalendar() {
   const openButton = useRef<HTMLButtonElement>(null);
   const backToButton = useRef(false);
   const addressBox = useRef<HTMLInputElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const makeButton = useRef<HTMLButtonElement>(null);
+  const focusNext = useRef<"heading" | "address" | "make" | null>(null);
+
+  // What is ticked differs from what is saved.
+  const dirty =
+    !!data && (all !== data.all || (!all && data.circles.some((c) => (c.followed && !data.all) !== picked.has(c.id))));
 
   const take = (p: FollowPayload) => {
     setData(p);
@@ -71,6 +83,7 @@ export default function FollowCalendar() {
     let live = true;
     void call<FollowPayload>(FOLLOW_API, "GET").then((out) => {
       if (!live) return;
+      focusNext.current = "heading";
       if (out.ok) take(out.body);
       else setError(out.error);
     });
@@ -78,6 +91,16 @@ export default function FollowCalendar() {
       live = false;
     };
   }, [open]);
+
+  // The focus goes where the next step is, once what it lands on is drawn.
+  useEffect(() => {
+    const target = focusNext.current;
+    if (!target) return;
+    const el = target === "heading" ? heading.current : target === "address" ? addressBox.current : makeButton.current;
+    if (!el) return;
+    focusNext.current = null;
+    el.focus();
+  });
 
   // Back from the panel, the focus returns to the button that opened it.
   useEffect(() => {
@@ -106,21 +129,31 @@ export default function FollowCalendar() {
     after(out.body);
   };
 
-  const save = () =>
-    void run(
-      () => call<FollowPayload>(FOLLOW_API, "PUT", { all, circleIds: all ? [] : Array.from(picked) }),
-      (p) => {
-        take(p);
-        setSaid(CALENDAR_COPY.saved(p.circles.filter((c) => c.followed).length, p.all));
-      },
-    );
+  const saveFollows = () => call<FollowPayload>(FOLLOW_API, "PUT", { all, circleIds: all ? [] : Array.from(picked) });
+  const savedLine = (p: FollowPayload) => CALENDAR_COPY.saved(p.circles.filter((c) => c.followed).length, p.all);
 
+  const save = () =>
+    void run(saveFollows, (p) => {
+      take(p);
+      setSaid(savedLine(p));
+    });
+
+  // Unsaved ticks are saved first, so a new address carries what the member chose.
   const makeAddress = () =>
     void run(
-      () => call<{ url: string }>(FOLLOW_KEY_API, "POST"),
+      async () => {
+        if (dirty) {
+          const saved = await saveFollows();
+          if (!saved.ok) return saved;
+          take(saved.body);
+        }
+        return call<{ url: string }>(FOLLOW_KEY_API, "POST");
+      },
       (b) => {
         setAddress(b.url);
         setData((d) => (d ? { ...d, address: { madeAt: new Date().toISOString(), lastReadAt: null } } : d));
+        setSaid(CALENDAR_COPY.ready);
+        focusNext.current = "address";
       },
     );
 
@@ -131,6 +164,7 @@ export default function FollowCalendar() {
         setAddress(null);
         setData((d) => (d ? { ...d, address: null } : d));
         setSaid(CALENDAR_COPY.stopped);
+        focusNext.current = "make";
       },
     );
 
@@ -144,13 +178,15 @@ export default function FollowCalendar() {
     }
   };
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    setSaid("");
     setPicked((p) => {
       const next = new Set(p);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
 
   return (
     <div className="mt-3">
@@ -168,7 +204,7 @@ export default function FollowCalendar() {
         </button>
       ) : (
         <section className={PANEL} aria-labelledby="follow-calendar-heading">
-          <h3 id="follow-calendar-heading" className={LABEL_CAPS}>
+          <h3 ref={heading} tabIndex={-1} id="follow-calendar-heading" className={`${LABEL_CAPS} outline-none`}>
             {CALENDAR_COPY.title}
           </h3>
           <p className={`${HINT} mt-2 max-w-2xl`}>{CALENDAR_COPY.lede}</p>
@@ -176,7 +212,15 @@ export default function FollowCalendar() {
             <fieldset className="mt-4 space-y-1" disabled={busy}>
               <legend className="sr-only">{CALENDAR_COPY.title}</legend>
               <label className="flex min-h-11 items-center gap-3 font-semibold text-foreground">
-                <input type="checkbox" className="size-5 accent-current" checked={all} onChange={(e) => setAll(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="size-5 accent-current"
+                  checked={all}
+                  onChange={(e) => {
+                    setSaid("");
+                    setAll(e.target.checked);
+                  }}
+                />
                 {CALENDAR_COPY.everyCircle}
               </label>
               {data.circles.map((c) => (
@@ -194,10 +238,12 @@ export default function FollowCalendar() {
             <button type="button" className={BTN_PRIMARY} disabled={busy || !data} onClick={save}>
               {busy ? CALENDAR_COPY.saving : CALENDAR_COPY.save}
             </button>
+            {dirty && <span className={HINT}>{CALENDAR_COPY.notSaved}</span>}
           </div>
 
           <h4 className={`${LABEL_CAPS} mt-6`}>{CALENDAR_COPY.addressTitle}</h4>
           <p className={`${HINT} mt-2 max-w-2xl`}>{CALENDAR_COPY.addressPrivate}</p>
+          {data && !data.serving && <p className="mt-2 max-w-2xl text-sm font-medium text-foreground">{CALENDAR_COPY.notServing}</p>}
           {address ? (
             <div className="mt-3 space-y-3">
               <div>
@@ -237,7 +283,7 @@ export default function FollowCalendar() {
             </div>
           ) : (
             <div className={`mt-3 ${UNDER_BOX}`}>
-              <button type="button" className={BTN_SECONDARY} disabled={busy || !data} onClick={makeAddress}>
+              <button ref={makeButton} type="button" className={BTN_SECONDARY} disabled={busy || !data} onClick={makeAddress}>
                 {CALENDAR_COPY.makeAddress}
               </button>
             </div>

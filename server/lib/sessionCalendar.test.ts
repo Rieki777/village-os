@@ -11,7 +11,8 @@
 import { describe, expect, it } from "vitest";
 import { expandOccurrences } from "./calendar";
 import { buildIcs } from "./icsFeed";
-import { calendarRowFor, mirrorInput } from "./sessionCalendar";
+import { calendarRowFor, mirrorInput, mirrorRhythms } from "./sessionCalendar";
+import { civilParts } from "../../shared/lunar";
 import { nextMeetings, type StoredRhythm } from "../../shared/sessionRhythm";
 
 const DAY_MS = 86_400_000;
@@ -57,10 +58,46 @@ describe("the village calendar and Coming up give the same meetings", () => {
     expect(calendar).toEqual(sessions);
   });
 
+  it("when the first meeting falls in the hour the clocks skip, every later meeting keeps the chosen time", () => {
+    // 14 March 2027 in New York has no 02:30. The calendar counts from the next meeting that has one.
+    const NY = "America/New_York";
+    const r = stored({ recurrence: { freq: "weekly", byWeekday: [0], interval: 1 }, startsOn: "2027-03-14", time: "02:30" });
+    const row = calendarRowFor(r, "Garden", NY, new Date("2027-03-01T00:00:00.000Z"));
+    const later = expandOccurrences(row, new Date("2027-03-15T00:00:00.000Z"), new Date("2027-04-15T00:00:00.000Z"), NY);
+    expect(later.length).toBeGreaterThanOrEqual(4);
+    for (const o of later) expect(civilParts(o.startsAt, NY).hour, o.startsAt.toISOString()).toBe(2);
+    // An every-other-week rhythm steps by whole rhythms, so it keeps its week.
+    const fortnight = stored({ recurrence: { freq: "weekly", byWeekday: [0], interval: 2 }, startsOn: "2027-03-14", time: "02:30" });
+    expect(mirrorInput(fortnight, "Garden", NY).startsAt).toEqual(new Date("2027-03-28T06:30:00.000Z"));
+  });
+
   it("for a single meeting", () => {
     const { calendar, sessions } = both(stored({ kind: "once", recurrence: null, startsOn: "2026-10-30" }), from, "UTC");
     expect(sessions).toEqual(["2026-10-30T18:00:00.000Z"]);
     expect(calendar).toEqual(sessions);
+  });
+});
+
+describe("the mirror", () => {
+  it("runs one at a time, so two at once never retire what the other just wrote", async () => {
+    // A pool that records the order statements arrive in, and holds each rhythm read a moment.
+    const order: string[] = [];
+    let reads = 0;
+    const pool = {
+      query: async (sql: string) => {
+        if (/FROM `live_session_rhythms`/.test(sql)) {
+          const n = ++reads;
+          order.push(`read ${n}`);
+          await new Promise((r) => setTimeout(r, n === 1 ? 30 : 0));
+          return [[]];
+        }
+        order.push(/removed_at = UTC_TIMESTAMP/.test(sql) ? `retire after read ${reads}` : "write");
+        return [{ affectedRows: 0 }];
+      },
+    } as never;
+    const deps = { circles: () => [], lifecycle: () => "members" };
+    await Promise.all([mirrorRhythms(pool, deps), mirrorRhythms(pool, deps)]);
+    expect(order).toEqual(["read 1", "retire after read 1", "read 2", "retire after read 2"]);
   });
 });
 

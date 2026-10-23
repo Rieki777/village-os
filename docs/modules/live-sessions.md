@@ -298,7 +298,8 @@ by one, through the calendar's own writer (`buildIcs`).
 **The address is a credential**: 32 random bytes in the address, stored only as a sha256, shown once
 the moment it is made. Later the panel says when it was made and last read, and offers a new one (the
 old one stops working) or none. `GET /api/calendar/circles.ics?key=` lives outside `/api/sessions`
-because a calendar app reads it with no sign-in. It is bounded per network address, and it answers one
+because a calendar app reads it with no sign-in. It is bounded generously per network address (Google
+reads every subscriber's calendar from a shared pool of its own) and tightly per address, and it answers one
 bare 404 to a key that does not read or is not live, a module off or in preview, or a member who has
 left, been anonymized or is no longer admitted; a gone member's key is stopped on the way out.
 
@@ -308,7 +309,7 @@ left, been anonymized or is no longer admitted; a gone member's key is stopped o
 | `PUT /api/sessions/circles/following` | a signed-in member | 60 an hour |
 | `POST /api/sessions/circles/following/key` | a signed-in member | 10 a day |
 | `DELETE /api/sessions/circles/following/key` | a signed-in member | none |
-| `GET /api/calendar/circles.ics?key=` | whoever holds the key | 60 an hour per network address |
+| `GET /api/calendar/circles.ics?key=` | whoever holds the key | 30 an hour per address, 600 an hour per network address |
 
 ## Before the call: the agenda library
 

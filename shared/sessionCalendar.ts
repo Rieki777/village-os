@@ -68,8 +68,14 @@ export const CALENDAR_LIMITS = {
   keysPerDay: 10,
   /** Saves of the circles followed, per member, per hour. */
   followsPerHour: 60,
-  /** Reads of the feed, per network address, per hour. A calendar app reads a few times a day. */
-  feedReadsPerHour: 60,
+  /**
+   * Reads of the feed per network address per hour. Generous on purpose:
+   * Google reads every subscriber's address from a shared pool of its own,
+   * so one of its addresses can carry many members' calendars at once.
+   */
+  feedReadsPerAddressPerHour: 600,
+  /** Reads of one address per hour. A calendar app reads a few times a day. */
+  feedReadsPerKeyPerHour: 30,
 } as const;
 
 // ── Wire shapes ──────────────────────────────────────────────────────────────
@@ -89,6 +95,8 @@ export interface FollowPayload {
   all: boolean;
   /** The member's address, when they hold one: when it was made and last read. Never the key. */
   address: { madeAt: string; lastReadAt: string | null } | null;
+  /** Whether an address answers now: false while the module is in preview, the admins' own. */
+  serving: boolean;
 }
 
 export interface FollowInput {
@@ -148,12 +156,15 @@ export const CALENDAR_COPY = {
   noRhythm: "No meeting rhythm yet",
   save: "Save my circles",
   saving: "Saving...",
+  notSaved: "Not saved yet.",
   saved: (n: number, all: boolean): string =>
     all ? "Saved. Your calendar follows every circle." : n === 0 ? "Saved. Your calendar follows no circle now." : n === 1 ? "Saved. Your calendar follows 1 circle." : `Saved. Your calendar follows ${n} circles.`,
   addressTitle: "Your calendar address",
   makeAddress: "Make my calendar address",
   addressPrivate: "This address is yours. Anyone who has it can see the meetings of the circles you follow, so keep it to yourself.",
   shownOnce: "It shows only this once. If you lose it, make a new one.",
+  ready: "Your calendar address is ready. It shows only this once.",
+  notServing: "Live Sessions is in preview, so this address shows nothing until members can use it.",
   addGoogle: "Add to Google Calendar",
   addApple: "Add to Apple or Outlook",
   copy: "Copy the address",
