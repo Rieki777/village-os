@@ -1,8 +1,24 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useVillageName } from "@/hooks/useVillageName";
 import { authToken, useCatalyst } from "@/lib/gameApi";
-import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
+import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
+import { usePageVars } from "@/hooks/usePageContent";
+import { withoutUntouchedNew } from "@/lib/planEdits";
+import { DecisionsEditor, PlanEditBar, PlanWeeksEditor } from "@/components/commandCentre/PlanEditor";
 import { villageMoonLabel } from "@shared/villageMoon";
+import { fillVars } from "@shared/pageContent/resolve";
+import {
+  DELIVERY_STATUSES,
+  isDeliveryStatus,
+  PLAN_LIMITS,
+  planIds,
+  planProblems,
+  VILLAGE_OWNED,
+  visibleTasks,
+  type CommandCentrePlan,
+  type DeliveryStatus,
+  type PlanTask,
+} from "@shared/commandCentrePlan";
 import { useState, useEffect, FormEvent } from "react";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -52,166 +68,28 @@ interface ResourceLink {
   url: string;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── The plan ─────────────────────────────────────────────────────────────────
 
 /*
- * The two parties on every row: the build side and the VILLAGE side.
+ * THE BUILD PLAN IS DATA NOW (Rye, 2026-10-22: the Command Centre is to be
+ * "editable").
  *
- * "collab" = both working on it together; "amora" = the village's own action.
+ * Six dated weeks, 71 tasks, ten decisions, the build partner's name and the
+ * intro line were compiled into this file. They now arrive from
+ * `GET /api/journey/state` as `plan`, and an admin edits them in place on
+ * this page (components/commandCentre/PlanEditor.tsx). The default is the
+ * plan this file used to carry, with the same ids, so every tick, card, note
+ * and decision already stored keeps matching: shared/commandCentrePlan.ts
+ * holds the rules, server/lib/commandCentrePlanDefault.ts the default.
  *
- * THE STORED VALUE STAYS `"amora"` DELIBERATELY. It is a persisted status,
- * written into `app_config['journey-state']` by every press of the dropdown,
- * so renaming the token would silently reclassify every saved row as the
- * default. What a founder READS is their own village's name, resolved at
- * render; what the server STORES is this id, forever.
+ * The default lives on the server on purpose. Compiled in, it shipped inside
+ * this page's chunk, which any visitor can download whatever the route gate
+ * says (see the working-documents note above).
+ *
+ * The village-side owner keeps the stored id `"amora"` (VILLAGE_OWNED): every
+ * owner choice writes it, so renaming it would reclassify every saved row.
+ * What a founder reads is their own village's name, resolved at render.
  */
-type DeliveryStatus = "done" | "amora" | "collab" | "pending";
-
-interface Deliverable {
-  id: string;
-  text: string;
-  status: DeliveryStatus;
-}
-
-interface Week {
-  id: string;
-  label: string;
-  goal: string;
-  deliverables: Deliverable[];
-}
-
-// ─── Timeline Data ────────────────────────────────────────────────────────────
-
-/*
- * The build plan this village is working through.
- *
- * Still one specific engagement's six weeks, with its own dates and its own
- * deliverables, and still compiled in: see the S3 pages lane report for why
- * moving the PLAN itself to runtime content is a bigger job than moving its
- * NAME (every `id` here is a key the server stores checkbox, kanban and
- * decision state against, so the list cannot change shape without carrying
- * that state with it). What is fixed here is the name: a founder reading
- * this tracker sees their own village named, not the platform's first one.
- */
-const buildWeeks = (villageName: string): Week[] => [
-  {
-    id: "w1",
-    label: "Week 1 | Mar 17-23",
-    goal: "Build the Village Steward and Resident co-creator journeys from end to end. Get all linked pages, CTAs, and interactive elements working.",
-    deliverables: [
-      { id: "w1-1", text: "Landing page - full copy and structure (welcome section, 5 journey paths)", status: "done" },
-      { id: "w1-2", text: "Landing page - Attend, Experience, Co-Create, Integrate, Commit flow written and laid out", status: "done" },
-      { id: "w2-17", text: "Pages: Investor, Village Steward, Resident, How We Create, Quests - copy delivered", status: "done" },
-      { id: "w2-1", text: "Village Steward Space - Rights and Responsibilities page linked and drafted", status: "done" },
-      { id: "w2-2", text: "Village Steward Journey - Community Connection Calls CTA live", status: "pending" },
-      { id: "w2-3", text: "Village Steward Journey - Potluck, Events, Workshops, Village Weaving links live", status: "pending" },
-      { id: "w2-6", text: "Village Steward Journey - Explore Quests section linked", status: "pending" },
-      { id: "w2-7", text: `Village Steward Journey - ${villageName} Game Guide linked (Roles, Co-Creator criteria)`, status: "pending" },
-      { id: "w2-8", text: "Village Steward Journey - Role Application for Upcoming Season CTA live", status: "pending" },
-      { id: "w2-9", text: "Resident Space - Rights and Responsibilities page linked and drafted", status: "done" },
-      { id: "w2-10", text: "Resident Journey - Community Call and Discovery Call CTA live", status: "pending" },
-      { id: "wt-1", text: "Decision needed - name the community contribution token (currently 'Gratitude'): tracks contributions to be resolved as debt, equity, or community currency, with a percentage split for early contributors", status: "amora" },
-      // The "AMORA:" prefix these three carried said the same thing as their
-      // own `status: "amora"`, which already draws the village's name as the
-      // owner pill next to the row. One of the two was a village's brand
-      // welded into the text; the other follows the config. Kept the pill.
-      { id: "w1-6", text: "Provide brand kit assets (colors, fonts, logos)", status: "amora" },
-    ],
-  },
-  {
-    id: "w2",
-    label: "Week 2 | Mar 24-30",
-    goal: `Build the Roles and Circles infrastructure. Publish the ${villageName} Game Guide as a navigable resource. Wire all governance links and role application flows.`,
-    deliverables: [
-      { id: "w4-11", text: "Pages: Governance Roles, Circles, Team - copy delivered", status: "done" },
-      { id: "w4-1", text: `${villageName} Game Guide - published as linked resource with Co-Creator criteria section`, status: "pending" },
-      { id: "w4-2", text: "Roles section - all initial roles documented (Community Engagement, Land Liaison, Marketing, Operations, Visionary, Financial Mgmt)", status: "pending" },
-      { id: "w4-3", text: "Investor Journey - Request Investor Pack drop-down and Pack created", status: "pending" },
-      { id: "w4-4", text: "Circles section - Explore Roles page complete", status: "pending" },
-      { id: "w2-18", text: "Circles cards - all role titles, descriptions, and links accurate", status: "pending" },
-      { id: "w4-5", text: "Co-Creator Right of Passage - description and process documented and live", status: "pending" },
-      { id: "w4-6", text: "Seasonal Festivals - description page live", status: "pending" },
-      { id: "w4-7", text: "Guide and Sage progression - criteria and Voice gains documented", status: "pending" },
-      { id: "w4-8", text: "Resident progression stages - documented with year thresholds", status: "pending" },
-      { id: "w4-10", text: "All internal hyperlinks audit - every bold link in all 4 journeys verified as working", status: "pending" },
-      { id: "w1-4", text: "Roles section - role application workflow live", status: "pending" },
-      { id: "am-7", text: "Add Hypha page link to How We Create and Co-Creators Guide", status: "pending" },
-      { id: "am-8", text: "Launch all Hypha tools - governance platform live and linked from site", status: "pending" },
-      { id: "w4-12", text: "Finalize Role descriptions and Season structure for publication", status: "collab" },
-      { id: "am-2", text: "Complete the investor memo for the landholder - terms, vision, and deal structure written and ready to share", status: "collab" },
-      { id: "am-3", text: "Establish the ministry - 508(c)(1)(a) structure formalised and membership framework confirmed", status: "collab" },
-    ],
-  },
-  {
-    id: "w3",
-    label: "Week 3 | Mar 31-Apr 6",
-    goal: "Deliver and wire the community identity pages - Love Letter, Co-Creators Guide, Good Neighbor, and Seasonal Festivals. Get all membership flows and CTAs live.",
-    deliverables: [
-      { id: "w1-5", text: "Pages: Home, Love Letter, Co-Creators Guide, Good Neighbor - copy delivered", status: "done" },
-      { id: "w1-3", text: "Investor Journey - Schedule a Call drop-down and CTA button wired up", status: "pending" },
-      { id: "w2-4", text: "Village Steward Journey - Village Weaving Immersion description and CTA live", status: "pending" },
-      { id: "w2-12", text: "Love Letter membership page linked (Steward and Resident journeys)", status: "pending" },
-      { id: "w2-15", text: "Resident Journey - Good Neighbor criteria linked", status: "pending" },
-    ],
-  },
-  {
-    id: "w4",
-    label: "Week 4 | Apr 7-13",
-    goal: "Complete the Investor and Prosperity Creator journeys with all supporting content, interactive elements, and linked resources in place.",
-    deliverables: [
-      { id: "w3-5", text: "Pages: Prosperity Journey - copy delivered", status: "done" },
-      { id: "w3-1", text: "Investor Journey - full financial details and CTA flow complete", status: "pending" },
-      { id: "w3-2", text: "Investor Journey - Request Investor Pack drop-down and CTA wired up", status: "pending" },
-      { id: "w3-3", text: "Prosperity Journey - full ARI tier details and business paths documented", status: "pending" },
-      { id: "w3-4", text: "Prosperity Journey - business proposal submission flow live", status: "pending" },
-      { id: "w3-6", text: "Confirm ARI tiers and Voice allocations for Prosperity journey", status: "collab" },
-      { id: "w3-7", text: "Confirm Investor Pack structure and financial projections", status: "collab" },
-      { id: "am-1", text: "Complete token design - name, function, and economic rules for the community contribution token (currently 'Gratitude') finalised", status: "collab" },
-      { id: "am-4", text: "Secure the land + clear agreement with the landholder - ownership or access terms signed and confirmed", status: "collab" },
-      { id: "am-5", text: "Regen Development Fund path clear - funding vehicle, terms, and first close strategy confirmed", status: "collab" },
-      { id: "am-6", text: "Business plan clear and complete - full plan covering operations, revenue model, and development phases ready to share", status: "collab" },
-      { id: "w2-19", text: "Deliver Investor Pack content (terms, structure, documents)", status: "collab" },
-    ],
-  },
-  {
-    id: "w5",
-    label: "Week 5 | Apr 14-20",
-    goal: `Polish all pages, complete event CTAs. If the retainer is confirmed, begin scoping the backend and CRM integration. Final content review with the ${villageName} team.`,
-    deliverables: [
-      { id: "w5-10", text: "Pages: Master Plan, Opportunities, Housing - copy delivered", status: "done" },
-      { id: "w2-11", text: "Resident Journey - Housing Options page linked", status: "pending" },
-      { id: "w2-13", text: "Resident Journey - Waitlist sign-up and $NNN/month fee placeholder live", status: "pending" },
-      { id: "w2-14", text: "Resident Journey - Children's Play Day CTA live", status: "pending" },
-      { id: "w2-16", text: "Resident Journey - Land Share Agreement page linked", status: "pending" },
-      { id: "w5-1", text: "Events section - Potluck, Village Weaving, Land Tour, Children's Play Day CTAs live", status: "pending" },
-      { id: "w5-2", text: "Webinar section - slide show, email flow, recording share process documented", status: "pending" },
-      { id: "w5-3", text: "Email nurture flow - basic flow outlined and handed off or implemented in CRM", status: "pending" },
-      { id: "w5-4", text: "Social media - post structure and follow-up structure documented", status: "pending" },
-      { id: "w5-5", text: "Love Letter page - final design and membership dues confirmed", status: "pending" },
-      { id: "w5-6", text: "Waitlist page - final design and fee structure confirmed", status: "pending" },
-      { id: "w5-7", text: "Mobile responsiveness - full site tested on mobile", status: "pending" },
-      { id: "w5-8", text: `Content audit - all placeholder values resolved by ${villageName}`, status: "pending" },
-      { id: "w5-9", text: "Backend and CRM scoping - if retainer confirmed, spec document drafted", status: "pending" },
-      { id: "w5-11", text: "Final content approval pass (all journeys, roles, game guide)", status: "amora" },
-      { id: "w5-12", text: "Confirm retainer decision for ongoing updates and CRM build", status: "amora" },
-    ],
-  },
-  {
-    id: "w6",
-    label: "Week 6 | Apr 21-28",
-    goal: `Complete final quality checks, fix any remaining issues, and deliver a fully functional site. If not on retainer, make sure ${villageName} has full admin access before the engagement ends.`,
-    deliverables: [
-      { id: "w6-1", text: "Full site QA - all pages, links, forms, and drop-downs tested", status: "pending" },
-      { id: "w6-2", text: "Bug fixes - all outstanding visual and functional issues resolved", status: "pending" },
-      { id: "w6-3", text: "Cross-browser test - Chrome, Safari, Firefox verified", status: "pending" },
-      { id: "w6-4", text: `${villageName} admin access - site control transferred if not on retainer`, status: "pending" },
-      { id: "w6-5", text: `Handoff documentation - editing guide delivered to the ${villageName} team`, status: "pending" },
-      { id: "w6-6", text: "LAUNCH - site goes live for interested parties", status: "pending" },
-      { id: "w6-7", text: "Post-launch check-in call scheduled", status: "pending" },
-      { id: "w6-8", text: "Retainer and next-phase agreement signed (if continuing)", status: "pending" },
-    ],
-  },
-];
 
 // ─── Quick Links ──────────────────────────────────────────────────────────────
 
@@ -229,10 +107,13 @@ const buildWeeks = (villageName: string): Week[] => [
  * What survives is the part that always worked: a link to each live page.
  * The old list also hid /seasonal-festivals behind a filter saying the route
  * did not exist yet. It exists (App.tsx), so it is here with the rest.
+ *
+ * The membership page's link reads the village's own commitment name, the
+ * word its page and its journeys use, rather than one village's.
  */
-const buildQuickLinks = (villageName: string): { emoji: string; title: string; url: string }[] => [
+const buildQuickLinks = (villageName: string, commitmentName: string): { emoji: string; title: string; url: string }[] => [
   { emoji: "🏠", title: "Home", url: "/" },
-  { emoji: "💌", title: "Love Letter", url: "/love-letter" },
+  { emoji: "💌", title: commitmentName.charAt(0).toUpperCase() + commitmentName.slice(1), url: "/love-letter" },
   { emoji: "📖", title: `${villageName} Game Guide`, url: "/co-creators-guide" },
   { emoji: "🤝", title: "Good Neighbor", url: "/good-neighbor" },
   { emoji: "💰", title: "Investor Journey", url: "/investor" },
@@ -252,78 +133,12 @@ const buildQuickLinks = (villageName: string): { emoji: string; title: string; u
   { emoji: "🏘️", title: "Housing", url: "/housing" },
 ];
 
-// ─── Decision Log Data ────────────────────────────────────────────────────────
-
-const buildDecisions = (villageName: string): DecisionDef[] => [
-  {
-    id: "dec-token-name",
-    title: "Name the community contribution token",
-    description: "The token currently called 'Gratitude' needs a final name. It tracks contributions that will later be resolved as debt, equity, or community currency, with a percentage split for early contributors.",
-    linkedItem: "wt-1",
-    suggestedOptions: ["Gratitude", "Seeds", "Roots", "Sparks", "Threads", "Commons"],
-  },
-  {
-    id: "dec-token-design",
-    title: "Token economic design",
-    description: "Define the full economic rules: percentage splits for debt vs equity vs community currency, conversion ratios, and how tokens will be distributed to early contributors.",
-    linkedItem: "am-1",
-  },
-  {
-    id: "dec-ministry",
-    title: "Ministry structure and membership framework",
-    description: "Confirm the 508(c)(1)(a) structure details, membership tiers, and how the ministry framework integrates with village governance and the legal entity.",
-    linkedItem: "am-3",
-  },
-  {
-    id: "dec-investor-memo",
-    title: "Investor memo structure and terms",
-    description: "Finalize the investor memo for the landholder: investment structure, debt vs equity ratios, interest rates, IRR projections, and Phase 1 raise target.",
-    linkedItem: "am-2",
-  },
-  /*
-   * This entry's id changed. It used to be the landholder's first name, which
-   * put a private counterparty into every downloaded copy of this page's
-   * chunk. Anything already recorded under the old id is NOT lost: the
-   * Decisions view below renders any stored entry whose id this list no
-   * longer ships, under "Carried over", with whatever was written in it.
-   */
-  {
-    id: "dec-land-agreement",
-    title: "Land agreement with the landholder",
-    description: "Confirm the ownership or access terms with the landholder, including conditions, timelines, and contingencies that affect the development plan.",
-    linkedItem: "am-4",
-  },
-  {
-    id: "dec-regen-fund",
-    title: "Regen Development Fund vehicle",
-    description: "Confirm the legal vehicle, contribution terms, and first close strategy for the Regen Development Fund.",
-    linkedItem: "am-5",
-  },
-  {
-    id: "dec-ari-tiers",
-    title: "ARI tier names and criteria",
-    description: `Define the ${villageName} Regenerative Impact tier system: names, specific metrics, Voice allocations, and how businesses progress through tiers.`,
-    linkedItem: "w3-6",
-  },
-  {
-    id: "dec-roles",
-    title: "Role descriptions and Season structure",
-    description: "Finalize all initial role descriptions (Community Engagement, Land Liaison, Marketing, Operations, Visionary, Financial Management) and the Season structure.",
-    linkedItem: "w4-12",
-  },
-  {
-    id: "dec-resident-dues",
-    title: "Monthly resident dues amount",
-    description: "Confirm the monthly dues amount that covers HOA, utilities, maintenance, and community services (currently shown as $NNN/month on site).",
-    linkedItem: "w2-13",
-  },
-  {
-    id: "dec-retainer",
-    title: "Retainer and next-phase agreement",
-    description: "Decide whether to continue on retainer for ongoing updates and CRM build after the initial 6-week engagement.",
-    linkedItem: "w5-12",
-  },
-];
+/**
+ * The key the owner dropdown used to save under, in this browser only. Read
+ * once, sent to the server to fill whatever it does not already hold, and
+ * cleared when that lands.
+ */
+const LOCAL_OWNERS_KEY = "amora-timeline-overrides";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -340,14 +155,6 @@ interface DecisionEntry {
   notes: string;
 }
 
-interface DecisionDef {
-  id: string;
-  title: string;
-  description: string;
-  linkedItem?: string; // timeline deliverable id
-  suggestedOptions?: string[];
-}
-
 type ViewId = "timeline" | "kanban" | "decisions" | "discussion" | "economics";
 
 const API_BASE = "";
@@ -359,15 +166,22 @@ interface JourneyState {
   decisions: Record<string, DecisionEntry>;
   /** The founding team's own working documents, written here, never shipped. */
   resources: ResourceLink[];
+  /** The plan, resolved by the server: the village's own, or today's default. */
+  plan: CommandCentrePlan;
+  /** Owner choices from each row's dropdown, by task id. */
+  owners: Record<string, DeliveryStatus>;
 }
 
-function getDefaultCheckboxState(d: Deliverable): 0 | 1 | 2 {
+/** Before the server answers. Nothing renders from it: the page shows Loading. */
+const EMPTY_PLAN: CommandCentrePlan = { revision: 0, intro: "", partnerName: "", weeks: [], decisions: [] };
+
+function getDefaultCheckboxState(d: PlanTask): 0 | 1 | 2 {
   return d.status === "done" ? 1 : 0;
 }
 
 function getEffectiveState(
   id: string,
-  d: Deliverable,
+  d: PlanTask,
   serverCheckboxes: Record<string, 0 | 1 | 2>
 ): 0 | 1 | 2 {
   return id in serverCheckboxes ? serverCheckboxes[id] : getDefaultCheckboxState(d);
@@ -375,21 +189,22 @@ function getEffectiveState(
 
 type BucketId = "urgent" | "in-motion" | "completed" | "amora-call";
 
+/** The owner a row reads as: the dropdown's choice when one was made. */
 function getEffectiveStatus(
-  d: Deliverable,
-  overrides: Record<string, DeliveryStatus>
+  d: PlanTask,
+  owners: Record<string, DeliveryStatus>
 ): DeliveryStatus {
-  return overrides[d.id] ?? d.status;
+  return owners[d.id] ?? d.status;
 }
 
 function getBucket(
-  d: Deliverable,
+  d: PlanTask,
   state: 0 | 1 | 2,
-  overrides: Record<string, DeliveryStatus>
+  owners: Record<string, DeliveryStatus>
 ): BucketId {
   if (state === 2) return "completed";
-  const s = getEffectiveStatus(d, overrides);
-  if (s === "amora" || s === "collab") return "amora-call";
+  const s = getEffectiveStatus(d, owners);
+  if (s === VILLAGE_OWNED || s === "collab") return "amora-call";
   if (s === "done" || state === 1) return "in-motion";
   return "urgent";
 }
@@ -403,10 +218,11 @@ const buildBuckets = (villageName: string): { id: BucketId; emoji: string; label
 
 // Two axes, read at a glance: WHO owns an item (from the status dropdown) and
 // WHAT STAGE it's at (from the checkbox). The pills below derive from those.
-function ownerMeta(status: DeliveryStatus, villageName: string): { label: string; cls: string } {
-  if (status === "amora") return { label: villageName, cls: "bg-amber/20 text-amber-800 border-amber/40" };
+// The build side is named by the plan's `partnerName`, which an admin edits.
+function ownerMeta(status: DeliveryStatus, villageName: string, partnerName: string): { label: string; cls: string } {
+  if (status === VILLAGE_OWNED) return { label: villageName, cls: "bg-amber/20 text-amber-800 border-amber/40" };
   if (status === "collab") return { label: "Both", cls: "bg-violet-100 text-violet-700 border-violet-200" };
-  return { label: "ReGen", cls: "bg-teal-deep/10 text-teal-deep border-teal-deep/20" };
+  return { label: partnerName, cls: "bg-teal-deep/10 text-teal-deep border-teal-deep/20" };
 }
 function stageMeta(state: 0 | 1 | 2, status: DeliveryStatus): { label: string; cls: string } {
   if (state === 2) return { label: "Confirmed", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" };
@@ -685,10 +501,11 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
 export default function ProjectHistory() {
   const catalyst = useCatalyst();
   const villageName = useVillageName();
+  const pageVars = usePageVars();
+  /** `{village}` and the other words, filled for reading. The editor shows them raw. */
+  const fill = (text: string) => fillVars(text, pageVars ?? { village: villageName });
   const buckets = buildBuckets(villageName);
-  const WEEKS = buildWeeks(villageName);
-  const QUICK_LINKS = buildQuickLinks(villageName);
-  const DECISIONS = buildDecisions(villageName);
+  const QUICK_LINKS = buildQuickLinks(villageName, pageVars?.commitment ?? "membership agreement");
   const [authenticated, setAuthenticated] = useState(false);
   const [journeyPassword, setJourneyPassword] = useState<string>("");
   const journeyHeaders = (extra: Record<string, string> = {}): Record<string, string> => ({
@@ -697,10 +514,21 @@ export default function ProjectHistory() {
     ...extra,
   });
   const [activeView, setActiveView] = useState<ViewId>("timeline");
-  const [serverState, setServerState] = useState<JourneyState>({ checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] });
+  const [serverState, setServerState] = useState<JourneyState>({
+    checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [], plan: EMPTY_PLAN, owners: {},
+  });
+  /** Every task a reader sees, in plan order, carrying its week. */
+  const TASKS = visibleTasks(serverState.plan);
+  /** Every decision a reader sees, in plan order. */
+  const DECISIONS = serverState.plan.decisions.filter((dec) => !dec.hidden);
   /** What the last journey write actually did. Empty while everything lands. */
   const [writeNote, setWriteNote] = useState("");
   const [loadingState, setLoadingState] = useState(true);
+  /** True once the server has answered with a plan, which editing needs. */
+  const [planLoaded, setPlanLoaded] = useState(false);
+  /** The plan being edited, or null when nobody is editing. Saved whole. */
+  const [planDraft, setPlanDraft] = useState<CommandCentrePlan | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -709,25 +537,14 @@ export default function ProjectHistory() {
   const [editingResources, setEditingResources] = useState(false);
   const [resourceDraft, setResourceDraft] = useState<ResourceLink[]>([]);
 
-  // Command Centre additions: status overrides and discussion topics (localStorage)
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, DeliveryStatus>>({});
+  // Discussion topics stay in this browser, and the Discussion view says so.
   const [discussions, setDiscussions] = useState<DiscussionTopic[]>([]);
   const [newTopic, setNewTopic] = useState("");
 
   useEffect(() => {
-    // Read separately: one corrupted value used to skip the other.
-    const overrides = readStoredJson("local", "amora-timeline-overrides");
     const disc = readStoredJson("local", "amora-discussions");
-    const ov = overrides.status === "value" ? overrides.value : null;
-    if (ov && typeof ov === "object") setStatusOverrides(ov as Record<string, DeliveryStatus>);
     if (disc.status === "value" && Array.isArray(disc.value)) setDiscussions(disc.value as DiscussionTopic[]);
   }, []);
-
-  const setItemStatus = (id: string, status: DeliveryStatus) => {
-    const next = { ...statusOverrides, [id]: status };
-    setStatusOverrides(next);
-    writeStoredJson("local", "amora-timeline-overrides", next);
-  };
 
   const saveDiscussions = (next: DiscussionTopic[]) => {
     setDiscussions(next);
@@ -762,8 +579,9 @@ export default function ProjectHistory() {
   useEffect(() => {
     if (!authenticated) return;
     fetch(`${API_BASE}/api/journey/state`, { headers: journeyHeaders() })
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data: Partial<JourneyState>) => {
+        const owners = data.owners && typeof data.owners === "object" ? data.owners : {};
         setServerState({
           checkboxes: data.checkboxes ?? {},
           copy: data.copy ?? {},
@@ -772,13 +590,49 @@ export default function ProjectHistory() {
           // A village that has written no links has none, rather than
           // inheriting the ones this page used to carry in its own code.
           resources: Array.isArray(data.resources) ? data.resources : [],
+          plan: data.plan ?? EMPTY_PLAN,
+          owners,
         });
+        setPlanLoaded(!!data.plan);
         setLoadingState(false);
+        void importLocalOwners(owners);
       })
-      .catch(() => setLoadingState(false));
+      .catch(() => {
+        setWriteNote("The tracker could not load from the server. Reload the page to try again.");
+        setLoadingState(false);
+      });
     // journeyPassword is set together with `authenticated`, so this re-fires
     // exactly once, when the gate opens.
   }, [authenticated]);
+
+  /**
+   * THE ONE-TIME MOVE OF THIS BROWSER'S OWNER CHOICES TO THE SERVER.
+   *
+   * The owner dropdown used to save only here, in localStorage, under a page
+   * sentence saying everything was synced to the server. So each admin's
+   * browser may hold choices nobody else ever saw. They go up once, filling
+   * only the rows the server has no choice for (the server's answer is what
+   * every other admin has been reading), and the local copy is cleared when
+   * that lands. A refused import leaves it in place for the next load.
+   */
+  const importLocalOwners = async (serverOwners: Record<string, DeliveryStatus>) => {
+    const local = readStoredJson("local", LOCAL_OWNERS_KEY);
+    if (local.status !== "value" || !local.value || typeof local.value !== "object" || Array.isArray(local.value)) return;
+    const owners = Object.fromEntries(
+      Object.entries(local.value as Record<string, unknown>).filter(
+        (entry): entry is [string, DeliveryStatus] => isDeliveryStatus(entry[1]) && !(entry[0] in serverOwners),
+      ),
+    );
+    if (Object.keys(owners).length === 0) {
+      removeStored("local", LOCAL_OWNERS_KEY);
+      return;
+    }
+    const answer = await journeyPost("/api/journey/owners/import", { owners });
+    if (!answer.ok) return;
+    const merged = answer.body?.owners;
+    if (merged && typeof merged === "object") setServerState((prev) => ({ ...prev, owners: merged }));
+    removeStored("local", LOCAL_OWNERS_KEY);
+  };
 
   /**
    * A journey write that reports what the server actually said.
@@ -800,21 +654,19 @@ export default function ProjectHistory() {
    * four handlers below clear the slot as they start, which is one clean slate
    * per thing a person does, and a failure from either write survives.
    */
-  const journeyWrite = async (path: string, body: unknown): Promise<boolean> => {
+  const journeyPost = async (path: string, body: unknown): Promise<{ ok: boolean; body: any }> => {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
         headers: journeyHeaders(),
         body: JSON.stringify(body),
       });
-      if (res.ok) return true;
+      const answer = await res.json().catch(() => null);
+      if (res.ok) return { ok: true, body: answer };
       // A refusal often says exactly what was wrong with it. Reporting only
       // the status number throws that sentence away and leaves somebody
       // guessing at a form they could have fixed in one edit.
-      const said = await res
-        .json()
-        .then((body: any) => String(body?.error ?? "").trim())
-        .catch(() => "");
+      const said = String(answer?.error ?? "").trim();
       setWriteNote(
         res.status === 401
           ? "The tracker did not save that. Your journey password is no longer accepted, so reload the page and sign in again."
@@ -825,10 +677,74 @@ export default function ProjectHistory() {
     } catch {
       setWriteNote("The tracker did not reach the server. What you see is back to what the server holds.");
     }
-    return false;
+    return { ok: false, body: null };
   };
 
-  const cycleCheckbox = async (d: Deliverable) => {
+  /** Whether a journey write landed; most callers need nothing else. */
+  const journeyWrite = async (path: string, body: unknown): Promise<boolean> => (await journeyPost(path, body)).ok;
+
+  /**
+   * One row's owner, from its dropdown. Saved to the server like every other
+   * mark on this page, and rolled back if the server refuses it.
+   */
+  const setItemStatus = async (id: string, status: DeliveryStatus) => {
+    setWriteNote("");
+    const before = serverState.owners[id];
+    setServerState((prev) => ({ ...prev, owners: { ...prev.owners, [id]: status } }));
+    if (!(await journeyWrite("/api/journey/owner", { id, status }))) {
+      setServerState((prev) => {
+        const owners = { ...prev.owners };
+        if (before === undefined) delete owners[id];
+        else owners[id] = before;
+        return { ...prev, owners };
+      });
+    }
+  };
+
+  /** Every key the stored state uses, so a new plan item never inherits one. */
+  const stateKeys = (): string[] => [
+    ...Object.keys(serverState.checkboxes),
+    ...Object.keys(serverState.kanban),
+    ...Object.keys(serverState.decisions),
+    ...Object.keys(serverState.owners),
+    ...Object.keys(serverState.copy).map((k) => k.replace(/^note-/, "")),
+  ];
+
+  /**
+   * Save the edited plan whole. The same check the route runs, first, so a
+   * problem is named before anything is sent; then the server's own answer,
+   * which also refuses a plan somebody else saved over in the meantime.
+   * Nothing is lost on a refusal: the editor stays open with the draft in it.
+   */
+  const savePlan = async () => {
+    if (!planDraft) return;
+    setWriteNote("");
+    const draft = withoutUntouchedNew(planDraft, serverState.plan);
+    const problems = planProblems(draft, serverState.plan);
+    if (problems.length > 0) {
+      setPlanDraft(draft);
+      setWriteNote(`The plan was not saved: ${problems[0]}`);
+      return;
+    }
+    setSavingPlan(true);
+    const { revision, ...plan } = draft;
+    const answer = await journeyPost("/api/journey/plan", { plan, revision: serverState.plan.revision });
+    setSavingPlan(false);
+    if (!answer.ok || !answer.body?.plan) {
+      setPlanDraft(draft);
+      return;
+    }
+    setServerState((prev) => ({ ...prev, plan: answer.body.plan }));
+    setPlanDraft(null);
+  };
+
+  const startEditingPlan = () => {
+    setWriteNote("");
+    setPlanDraft(JSON.parse(JSON.stringify(serverState.plan)) as CommandCentrePlan);
+    if (activeView !== "timeline" && activeView !== "decisions") setActiveView("timeline");
+  };
+
+  const cycleCheckbox = async (d: PlanTask) => {
     setWriteNote("");
     const current = getEffectiveState(d.id, d, serverState.checkboxes);
     const next: 0 | 1 | 2 = current === 0 ? 1 : current === 1 ? 2 : 0;
@@ -891,7 +807,7 @@ export default function ProjectHistory() {
     }));
     // If moved to completed, also mark checkbox as state 2
     if (column === "completed") {
-      const d = WEEKS.flatMap((w) => w.deliverables).find((x) => x.id === id);
+      const d = TASKS.find((x) => x.id === id);
       if (d) {
         const wasChecked = serverState.checkboxes[id];
         setServerState((prev) => ({
@@ -930,7 +846,7 @@ export default function ProjectHistory() {
     // If decided and has a linked timeline item, mark it as state 1 (delivered)
     const def = DECISIONS.find((decDef) => decDef.id === id);
     if (status === "decided" && def?.linkedItem) {
-      const linkedD = WEEKS.flatMap((w) => w.deliverables).find((x) => x.id === def.linkedItem);
+      const linkedD = TASKS.find((x) => x.id === def.linkedItem);
       if (linkedD) {
         const current = getEffectiveState(linkedD.id, linkedD, serverState.checkboxes);
         if (current === 0) {
@@ -1002,12 +918,12 @@ export default function ProjectHistory() {
   );
 
   // Progress: weighted - delivered (state 1) = 50%, village-confirmed (state 2) = 100%
-  const allDeliverables = WEEKS.flatMap((w) => w.deliverables);
+  const allDeliverables = TASKS;
   const deliveryScore = allDeliverables.reduce((acc, d) => {
     const state = getEffectiveState(d.id, d, serverState.checkboxes);
     return acc + (state === 1 ? 0.5 : state === 2 ? 1 : 0);
   }, 0);
-  const progressPct = Math.round((deliveryScore / allDeliverables.length) * 100);
+  const progressPct = allDeliverables.length ? Math.round((deliveryScore / allDeliverables.length) * 100) : 0;
   const confirmedCount = allDeliverables.filter(
     (d) => getEffectiveState(d.id, d, serverState.checkboxes) === 2
   ).length;
@@ -1031,9 +947,28 @@ export default function ProjectHistory() {
           <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">
             Command Centre
           </h1>
-          <p className="text-white text-sm max-w-2xl mb-6">
-            It holds the original build tracker: the six weeks that made this
-            site, kept whole. For what's left before launch, see{" "}
+          {/* The intro line is the plan's own, so an admin edits it here with
+              the rest of the plan. The pointer to Journey to Launch is
+              navigation and stays put. */}
+          {planDraft ? (
+            <div className="max-w-2xl mb-3">
+              <label className="block text-amber-on-band text-xs font-semibold uppercase tracking-wide mb-1" htmlFor="plan-intro">
+                Intro line
+              </label>
+              <textarea
+                id="plan-intro"
+                value={planDraft.intro}
+                maxLength={PLAN_LIMITS.intro}
+                rows={2}
+                onChange={(e) => setPlanDraft({ ...planDraft, intro: e.target.value })}
+                className="w-full text-sm px-3 py-2 rounded-lg bg-white text-stone-700 border border-white outline-none resize-y font-sans"
+              />
+              <p className="text-white text-[11px] text-right">{Array.from(planDraft.intro).length}/{PLAN_LIMITS.intro}</p>
+            </div>
+          ) : null}
+          <p className="text-white text-sm max-w-2xl mb-6 break-words">
+            {!planDraft && serverState.plan.intro ? `${fill(serverState.plan.intro)} ` : ""}
+            For what's left before launch, see{" "}
             <Link href="/journey-to-launch" className="text-amber-on-band underline">Journey to Launch</Link>.
           </p>
 
@@ -1306,14 +1241,31 @@ export default function ProjectHistory() {
               </button>
             </div>
           )}
+          {!loadingState && planLoaded && (planDraft || activeView === "timeline" || activeView === "decisions") && (
+            <PlanEditBar editing={!!planDraft} saving={savingPlan} onEdit={startEditingPlan} onSave={savePlan} onCancel={() => { setPlanDraft(null); setWriteNote(""); }} />
+          )}
           {loadingState ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-stone-400 text-sm">Loading...</div>
             </div>
           ) : (
             <>
+              {/* ── THE PLAN, EDITED IN PLACE ────────────────────────────── */}
+              {planDraft && activeView === "timeline" && (
+                <div className="max-w-4xl mx-auto">
+                  <PlanWeeksEditor plan={planDraft} onChange={setPlanDraft} stateKeys={stateKeys()} fill={fill} villageName={villageName} />
+                  <PlanEditBar editing saving={savingPlan} onEdit={startEditingPlan} onSave={savePlan} onCancel={() => { setPlanDraft(null); setWriteNote(""); }} bottom />
+                </div>
+              )}
+              {planDraft && activeView === "decisions" && (
+                <div className="max-w-3xl mx-auto">
+                  <DecisionsEditor plan={planDraft} onChange={setPlanDraft} stateKeys={stateKeys()} fill={fill} />
+                  <PlanEditBar editing saving={savingPlan} onEdit={startEditingPlan} onSave={savePlan} onCancel={() => { setPlanDraft(null); setWriteNote(""); }} bottom />
+                </div>
+              )}
+
               {/* ── TIMELINE VIEW ───────────────────────────────────────── */}
-              {activeView === "timeline" && (
+              {activeView === "timeline" && !planDraft && (
                 <div className="max-w-4xl mx-auto">
                   {/* Legend — two things to read on every row: who owns it, and what stage it's at */}
                   <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 mb-6 text-xs text-stone-600">
@@ -1321,7 +1273,7 @@ export default function ProjectHistory() {
                       <div className="flex-1">
                         <p className="font-semibold text-stone-500 uppercase tracking-wide mb-2">Who owns it</p>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-full border font-semibold bg-teal-deep/10 text-teal-deep border-teal-deep/20">ReGen</span>
+                          <span className="px-2 py-0.5 rounded-full border font-semibold bg-teal-deep/10 text-teal-deep border-teal-deep/20 break-all">{serverState.plan.partnerName}</span>
                           <span className="px-2 py-0.5 rounded-full border font-semibold bg-amber/20 text-amber-800 border-amber/40">{villageName}</span>
                           <span className="px-2 py-0.5 rounded-full border font-semibold bg-violet-100 text-violet-700 border-violet-200">Both</span>
                           <span className="text-stone-400">(set with the dropdown on each row)</span>
@@ -1340,11 +1292,11 @@ export default function ProjectHistory() {
                   </div>
 
                   {(() => {
-                    const allItems = WEEKS.flatMap((w) => w.deliverables);
+                    const allItems = TASKS;
                     return buckets.map((bucket) => {
                       const bucketItems = allItems.filter((d) => {
                         const st = getEffectiveState(d.id, d, serverState.checkboxes);
-                        return getBucket(d, st, statusOverrides) === bucket.id;
+                        return getBucket(d, st, serverState.owners) === bucket.id;
                       });
                       return (
                       <div key={bucket.id} className="mb-8 bg-white rounded-xl border border-stone-200 overflow-hidden shadow-sm">
@@ -1371,7 +1323,7 @@ export default function ProjectHistory() {
                             <p className="text-center text-xs text-stone-400 py-6 italic">Nothing here right now.</p>
                           )}
                           {bucketItems.map((d) => {
-                            const effStatus = getEffectiveStatus(d, statusOverrides);
+                            const effStatus = getEffectiveStatus(d, serverState.owners);
                             const isVillageOwned = effStatus === "amora";
                             const isCollab = effStatus === "collab";
                             const state = getEffectiveState(d.id, d, serverState.checkboxes);
@@ -1416,8 +1368,15 @@ export default function ProjectHistory() {
                                     )}
                                   </button>
 
+                                  {/* The text and its controls share one line only where both
+                                      fit (lg and up), and the controls wrap within half the row.
+                                      Side by side at every width, the dropdown sized itself to its
+                                      widest option, squeezed a task to one word per line at 390px
+                                      and pushed the expand toggle past the card's edge; a build
+                                      partner's name is now as long as an admin types it. */}
+                                  <div className="flex-1 min-w-0 flex flex-col lg:flex-row lg:items-start gap-2">
                                   <span
-                                    className={`flex-1 text-sm leading-relaxed ${
+                                    className={`flex-1 min-w-0 break-words text-sm leading-relaxed ${
                                       isVillageOwned
                                         ? "text-amber-800 font-medium"
                                         : isCollab
@@ -1429,31 +1388,33 @@ export default function ProjectHistory() {
                                         : "text-stone-700"
                                     }`}
                                   >
-                                    {d.text}
+                                    {fill(d.text)}
                                   </span>
 
+                                  <div className="flex flex-wrap items-center gap-1.5 min-w-0 lg:justify-end lg:max-w-[50%]">
                                   {/* At-a-glance: who owns it + what stage it's at */}
                                   {(() => {
-                                    const owner = ownerMeta(effStatus, villageName);
+                                    const owner = ownerMeta(effStatus, villageName, serverState.plan.partnerName);
                                     const stage = stageMeta(state, effStatus);
                                     return (
                                       <>
-                                        <span className={`shrink-0 hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${owner.cls}`} title="Who owns this item">
+                                        <span className={`hidden sm:inline-block max-w-full break-words text-xs font-semibold px-2 py-0.5 rounded-full border ${owner.cls}`} title="Who owns this item">
                                           {owner.label}
                                         </span>
-                                        <span className={`shrink-0 hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${stage.cls}`} title="What stage this item is at">
+                                        <span className={`hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${stage.cls}`} title="What stage this item is at">
                                           {stage.label}
                                         </span>
                                       </>
                                     );
                                   })()}
 
-                                  {/* Inline status dropdown — sets the owner / bucket (saved to server) */}
+                                  {/* Inline status dropdown: sets the owner and the bucket, saved to the server */}
                                   <select
                                     value={effStatus}
                                     onChange={(e) => setItemStatus(d.id, e.target.value as DeliveryStatus)}
                                     title="Set who owns this item"
-                                    className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded border outline-none cursor-pointer ${
+                                    aria-label="Who owns this item"
+                                    className={`max-w-full min-w-0 text-xs font-semibold px-2 py-0.5 rounded border outline-none cursor-pointer ${
                                       isVillageOwned
                                         ? "bg-amber text-foreground border-amber"
                                         : isCollab
@@ -1463,16 +1424,18 @@ export default function ProjectHistory() {
                                         : "bg-stone-100 text-stone-600 border-stone-200"
                                     }`}
                                   >
-                                    <option value="pending">ReGen · to do</option>
-                                    <option value="done">ReGen · in motion</option>
-                                    <option value="amora">{villageName}'s call</option>
+                                    <option value="pending">{serverState.plan.partnerName} · to do</option>
+                                    <option value="done">{serverState.plan.partnerName} · in motion</option>
+                                    <option value={VILLAGE_OWNED}>{villageName}'s call</option>
                                     <option value="collab">Collab (both)</option>
                                   </select>
                                   {assigneeName && (
-                                    <span className="shrink-0 text-xs bg-stone-100 text-stone-600 font-medium px-2 py-0.5 rounded-full border border-stone-200">
+                                    <span className="max-w-full truncate text-xs bg-stone-100 text-stone-600 font-medium px-2 py-0.5 rounded-full border border-stone-200">
                                       {assigneeName}
                                     </span>
                                   )}
+                                  </div>
+                                  </div>
 
                                   {/* Expand toggle */}
                                   <button
@@ -1543,7 +1506,7 @@ export default function ProjectHistory() {
                   })()}
 
                   <p className="text-stone-400 text-xs text-center mt-4">
-                    The <strong>checkbox</strong> advances the stage: To do → In progress → Confirmed → back to To do. The <strong>dropdown</strong> sets who owns it (the build side, {villageName}, or both), which sorts it into the buckets above. Everything is shared and synced to the server.
+                    The <strong>checkbox</strong> advances the stage: To do → In progress → Confirmed → back to To do. The <strong>dropdown</strong> sets who owns it (the build side, {villageName}, or both), which sorts it into the buckets above. Both are saved to the server and shared with everyone who opens this page.
                   </p>
                 </div>
               )}
@@ -1566,9 +1529,7 @@ export default function ProjectHistory() {
                     </div>
                     <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                       {kanbanCols.map((col) => {
-                        const colCards = WEEKS.flatMap((w) =>
-                          w.deliverables.map((d) => ({ ...d, weekLabel: w.label }))
-                        ).filter((d) => {
+                        const colCards = TASKS.filter((d) => {
                           const entry = serverState.kanban[d.id];
                           return entry ? entry.column === col.id : col.id === "assigned";
                         });
@@ -1584,8 +1545,13 @@ export default function ProjectHistory() {
                               )}
                               {colCards.map((d) => {
                                 const entry = serverState.kanban[d.id];
-                                const isVillageOwned = d.status === "amora";
-                                const isCollab = d.status === "collab";
+                                // The row's owner as the timeline shows it,
+                                // dropdown choice included. Reading the plan's
+                                // own default here is how Kanban used to
+                                // disagree with the timeline about who owns a card.
+                                const owner = getEffectiveStatus(d, serverState.owners);
+                                const isVillageOwned = owner === VILLAGE_OWNED;
+                                const isCollab = owner === "collab";
                                 return (
                                   <div
                                     key={d.id}
@@ -1597,8 +1563,8 @@ export default function ProjectHistory() {
                                         : "border-stone-200"
                                     }`}
                                   >
-                                    <p className="text-xs text-stone-700 leading-relaxed mb-2">{d.text}</p>
-                                    <div className="text-xs text-stone-400 mb-2">{d.weekLabel}</div>
+                                    <p className="text-xs text-stone-700 leading-relaxed mb-2 break-words">{fill(d.text)}</p>
+                                    <div className="text-xs text-stone-400 mb-2 break-words" title={fill(d.weekGoal)}>{fill(d.weekLabel)}</div>
                                     {isVillageOwned && (
                                       <span className="inline-block text-xs bg-amber text-foreground font-semibold px-1.5 py-0.5 rounded mb-2">
                                         {villageName}
@@ -1652,7 +1618,7 @@ export default function ProjectHistory() {
               })()}
 
               {/* ── DECISIONS VIEW ──────────────────────────────────────── */}
-              {activeView === "decisions" && (
+              {activeView === "decisions" && !planDraft && (
                 <div className="max-w-3xl mx-auto">
                   <div className="mb-6">
                     <h2 className="font-display text-2xl font-bold text-teal-deep">Decision Log</h2>
@@ -1662,20 +1628,20 @@ export default function ProjectHistory() {
                   </div>
 
                   {/* Summary stats */}
-                  <div className="flex gap-4 mb-6">
-                    <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 flex-1 text-center shadow-sm">
+                  <div className="flex gap-2 sm:gap-4 mb-6">
+                    <div className="bg-white border border-stone-200 rounded-xl px-3 sm:px-5 py-4 flex-1 min-w-0 text-center shadow-sm">
                       <p className="text-2xl font-bold text-teal-deep">
                         {DECISIONS.filter((dec) => serverState.decisions[dec.id]?.status === "decided").length}
                       </p>
                       <p className="text-stone-400 text-xs mt-0.5">Decided</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 flex-1 text-center shadow-sm">
+                    <div className="bg-white border border-stone-200 rounded-xl px-3 sm:px-5 py-4 flex-1 min-w-0 text-center shadow-sm">
                       <p className="text-2xl font-bold text-amber-600">
                         {DECISIONS.filter((dec) => !serverState.decisions[dec.id] || serverState.decisions[dec.id]?.status === "open").length}
                       </p>
                       <p className="text-stone-400 text-xs mt-0.5">Open</p>
                     </div>
-                    <div className="bg-white border border-stone-200 rounded-xl px-5 py-4 flex-1 text-center shadow-sm">
+                    <div className="bg-white border border-stone-200 rounded-xl px-3 sm:px-5 py-4 flex-1 min-w-0 text-center shadow-sm">
                       <p className="text-2xl font-bold text-stone-400">{DECISIONS.length}</p>
                       <p className="text-stone-400 text-xs mt-0.5">Total</p>
                     </div>
@@ -1687,7 +1653,7 @@ export default function ProjectHistory() {
                       const isDecided = entry?.status === "decided";
                       const isEditing = editingDecision === dec.id;
                       const linkedDeliverable = dec.linkedItem
-                        ? WEEKS.flatMap((w) => w.deliverables).find((x) => x.id === dec.linkedItem)
+                        ? TASKS.find((x) => x.id === dec.linkedItem)
                         : null;
                       const linkedState = linkedDeliverable
                         ? getEffectiveState(linkedDeliverable.id, linkedDeliverable, serverState.checkboxes)
@@ -1719,11 +1685,11 @@ export default function ProjectHistory() {
                                         ? "bg-teal-deep/10 text-teal-deep"
                                         : "bg-stone-100 text-stone-500"
                                     }`}>
-                                      Timeline: {linkedDeliverable.text.slice(0, 40)}{linkedDeliverable.text.length > 40 ? "..." : ""}
+                                      Timeline: {fill(linkedDeliverable.text).slice(0, 40)}{fill(linkedDeliverable.text).length > 40 ? "..." : ""}
                                     </span>
                                   )}
                                 </div>
-                                <h3 className="font-semibold text-stone-800 text-sm">{dec.title}</h3>
+                                <h3 className="font-semibold text-stone-800 text-sm break-words">{fill(dec.title)}</h3>
                               </div>
                               <button
                                 onClick={() => {
@@ -1749,13 +1715,13 @@ export default function ProjectHistory() {
                           </div>
 
                           <div className="px-5 py-4">
-                            <p className="text-stone-500 text-sm mb-3">{dec.description}</p>
+                            <p className="text-stone-500 text-sm mb-3 break-words">{fill(dec.description)}</p>
 
-                            {dec.suggestedOptions && dec.suggestedOptions.length > 0 && (
+                            {dec.options.length > 0 && (
                               <div className="mb-3">
                                 <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-1.5">Suggested options</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {dec.suggestedOptions.map((opt) => (
+                                  {dec.options.map((opt) => (
                                     <button
                                       key={opt}
                                       onClick={() => {
@@ -1840,7 +1806,9 @@ export default function ProjectHistory() {
                       of the code, and a founder's written decision must not
                       disappear because a key was renamed underneath it. */}
                   {(() => {
-                    const known = new Set(DECISIONS.map((dec) => dec.id));
+                    // Hidden decisions are known: removing one hides it, and
+                    // its answer comes back with it rather than moving here.
+                    const known = new Set(serverState.plan.decisions.map((dec) => dec.id));
                     const carried = Object.entries(serverState.decisions).filter(
                       ([id, entry]) => !known.has(id) && (entry?.chosen || entry?.notes),
                     );
