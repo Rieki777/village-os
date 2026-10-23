@@ -69,8 +69,8 @@ describe("module images", () => {
   // case above keeps this list honest: a module named here may not also ship
   // a file, and may not be a module that does not exist. `comms`, `journal` and
   // `sessions` joined on the same terms: a hue and an emblem (Mail, NotebookPen,
-  // Orbit), no file.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions"]);
+  // Orbit), no file, and `gene_keys` (Sparkles) after them.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions", "gene_keys"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

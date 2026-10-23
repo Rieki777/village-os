@@ -1218,6 +1218,26 @@ export const MODULES: ModuleDef[] = [
     // entries stay in their tables and come back intact when it is turned on.
   },
   {
+    id: "gene_keys",
+    guild: [],
+    tier: "included",
+    // A reading of each member's own birth: their Gene Keys lines and Human
+    // Design type. No birth date, time or place is ever stored (drizzle/0272).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Gene Keys",
+    description:
+      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.",
+    requires: [],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/gene-keys"],
+    // No openStateCheck: it holds nothing anybody is owed. Off hides every
+    // surface; saved results stay in their table and return when it is on.
+  },
+  {
     id: "sessions",
     guild: [],
     tier: "included",

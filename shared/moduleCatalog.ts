@@ -412,6 +412,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 28,
     emblem: "NotebookPen",
   },
+  gene_keys: {
+    promise: "Each member's lines and how they work best, so roles and teams fit the people in them.",
+    benefits: [
+      "Gene Keys lines and Human Design type, read from a member's birth details on their own device",
+      "A seal on the portrait, two words and two numbers, which a member can hide at any time",
+      "A circle sees which of the six lines it holds, and a gap becomes an invitation to hold one",
+      "Role suggestions say why they fit, and Maia shapes her offers to each member's type when they say yes",
+    ],
+    forWhom: "Villages forming teams and roles that want to understand the people who fill them.",
+    setupSummary: "Nothing to set up. Members find their lines from their character page.",
+    dataSummary: "Each member's saved result: their lines, keys and type. Birth details are never sent to the village or kept.",
+    hue: 160,
+    emblem: "Sparkles",
+  },
   sessions: {
     promise: "A circle's working call, held together live, from the first breath to the last action claimed.",
     benefits: [

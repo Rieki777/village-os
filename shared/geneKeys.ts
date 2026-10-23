@@ -173,7 +173,7 @@ export function analyse(chart: Chart): Design {
     while (queue.length) {
       const c = queue.shift()!;
       if (c === to) return true;
-      for (const n of adj.get(c) ?? []) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+      for (const n of Array.from(adj.get(c) ?? [])) if (!seen.has(n)) { seen.add(n); queue.push(n); }
     }
     return false;
   };
