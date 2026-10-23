@@ -1,6 +1,6 @@
 ---
 name: village-directory
-description: Read the village's circles and seats, and who holds them at the tier the member you serve may already see; look up a member by name for a message the member writes themselves.
+description: Read the village's circles and roles, and who holds them at the tier the member you serve may already see; look up a member by name for a message the member writes themselves.
 version: 1.0.0
 metadata:
   platform: village-coordination
@@ -25,7 +25,7 @@ Same as village-calendar: `Authorization: Bearer $VILLAGE_AGENT_TOKEN` against `
 ## Read
 
 `GET /api/agent/v1/directory` (scope `directory.read`)
-`circles` (id, name, purpose, status, parent) and `roles` (the seats: id, circleId, name, aim, domain, accountabilities, seats, state, holderCount, holders). `holders` is the tier: it lists names only when the member may see who holds seats. When it comes back as an empty list while `holderCount` is above zero, that is a hidden field. Say "the village does not show me who holds that seat". Do not guess from a name elsewhere, a forum post, or memory.
+`circles` (id, name, purpose, status, parent) and `roles` (id, circleId, name, aim, domain, accountabilities, seats, state, holderCount, holders). `holders` is the tier: it lists names only when the member may see who holds roles. When it comes back as an empty list while `holderCount` is above zero, that is a hidden field. Say "the village does not show me who holds that role". Do not guess from a name elsewhere, a forum post, or memory.
 
 `GET /api/agent/v1/directory/search?q=<two or more letters>` (scope `directory.read`)
 Up to ten members by first name or handle, for a message the member is writing themselves. Returns `userId`, `name` (first name only), `handle`. Nothing else about a person is here, and nothing else is yours to say about them.
@@ -35,7 +35,7 @@ The member's own profile sheet: handle, name, standing, gratitude, party, allowa
 
 ## Saying things about people
 
-Names, seats and labels about a person come word for word from a result. If it is not there, say "I don't see that anywhere". Do not summarise a person, do not infer a role from a circle, do not carry a fact about one member into a conversation with another.
+Names, roles and labels about a person come word for word from a result. If it is not there, say "I don't see that anywhere". Do not summarise a person, do not infer a role from a circle, do not carry a fact about one member into a conversation with another.
 
 ## Do not
 

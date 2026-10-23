@@ -302,6 +302,9 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     await answer("m-dee", "object", "Not until the shelves are dry");
     const mark = (who: string) => as(who, "PATCH /api/sessions/:id/entries/:entryId", { params: room(sid, { entryId: String(proposal) }), body: { status: "done" } });
     expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
+    // Sleeping on it needs no sentence and is never an objection, and the round waits for the answer after the night.
+    expect((await answer("m-dee", "sleep")).status).toBe(200);
+    expect(await mark("m-ana")).toMatchObject({ status: 409, body: { error: SESSION_REFUSALS.decisionNotConsented } });
     await answer("m-dee", "consent");
     expect(await mark("m-ben")).toMatchObject({ status: 403, body: { error: SESSION_REFUSALS.facilitatorOnly } });
     expect((await mark("m-ana")).status).toBe(200);
@@ -449,7 +452,8 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
     const summary = JSON.parse(row.summary);
     expect(summary.arrival).toEqual({ count: 3, median: 8, low: 4, high: 9 });
     expect(summary.tallies[proposal]).toMatchObject({ consent: 3, object: 0, consented: true });
-    expect(row.summary).not.toContain("sleep");
+    // The arrival words are gone from the summary too ("sleeping" is a tally's count, and stays).
+    expect(row.summary).not.toContain("more sleep");
 
     // The people's minutes name the people; the shareable ones name nobody.
     expect(row.minutes_people).toContain("Facilitated by Ana Reyes, notes by Ben Ortiz.");

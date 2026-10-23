@@ -23,8 +23,8 @@ import ConsentQueue, { type ConsentClaim } from "./ConsentQueue";
 const valued: WorkPay = {
   value: { minor: 2500000, currency: "CRC" },
   lines: [
-    { token: "credits", name: "Village Credits", amount: 40, capped: false },
-    { token: "village-voice", name: "Village Voice", amount: 5, capped: false },
+    { token: "credits", name: "Village Credits", amount: 40 },
+    { token: "village-voice", name: "Village Voice", amount: 5 },
   ],
   source: "own",
   cadence: "once",

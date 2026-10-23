@@ -61,6 +61,7 @@ import {
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
+import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
 
 /**
@@ -703,6 +704,9 @@ async function cooldownProblem(
  * WHOLE normalised set with the rule's current values standing in for whatever
  * the set does not touch. `queueRuleChange` asks the same question again at
  * execution, against the row as it stands then.
+ *
+ * Except on a rule that pays work, where no ceiling binds (Rye, 2026-10-22,
+ * `ceilingBinds` in shared/workValue.ts), so its amount may sit above it.
  */
 export function mintCeilingProblems(
   normalized: ProposedChange[],
@@ -719,7 +723,7 @@ export function mintCeilingProblems(
   }
   for (const [ruleId, fields] of Array.from(touched.entries())) {
     const rule = mintRules.get(ruleId);
-    if (!rule) continue;
+    if (!rule || !ceilingBinds(rule.trigger)) continue;
     const amountRaw = fields.amount?.to ?? currentMintRuleValue(rule, "amount");
     const ceilingRaw = fields.ceiling?.to ?? currentMintRuleValue(rule, "ceiling");
     const amount = mintRuleValueNumber("amount", amountRaw);

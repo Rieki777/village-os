@@ -28,7 +28,7 @@ Provenance: platform
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
 and can look back at an earlier one on their own screen. Every action leaves with a person or a
-seat on it, and the record of the call stays with the people who were in it and the village's
+role on it, and the record of the call stays with the people who were in it and the village's
 admins.**
 
 ## Status
@@ -57,9 +57,9 @@ screen and is shown where the room is, with one tap back to it.
 |---|---|---|
 | **Drop in** | The village's place line, the moon and the season. A shared breath that every screen in the room takes at the same pace, from one start time the server holds. Who is here. | Reads the place line or asks someone to, starts the breath, names who is here and who sent word. |
 | **Arrival** | Each person gives one number from 1 to 11 for how they are arriving and, if they like, what would make it an 11+. Nobody fixes anybody's answer. | Goes first, calls names two at a time. When the room arrives low (two or more numbers and a median of 5 or below), offers a lighter agenda and asks for consent. The tool suggests; it never trims. |
-| **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, or object, and a concern or an objection is said in one sentence. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
+| **Agenda** | Anyone adds an item with an aim (Report, Explore or Decide) and some minutes. The running total is read against the time the session has left. The room consents to the agenda: consent, consent with a concern, object, or sleep on it, and a concern or an objection is said in one sentence. Sleeping on it (Rye, 2026-10-22) is for someone who decides best after a night: it needs no sentence, it is never an objection, and the round, here and on every proposal, stays open and says so until they answer again. | Starts with the action check from last time, reads the agenda back, asks for objections, parks what will not fit. |
 | **Items** | One live page per agenda item with its own clock, notes, ideas, a proposal with a consent round, a line on what we learned (one sentence for the record) and actions. A tension anybody senses goes to the backlog. | Starts the item's clock, says its aim, catches every action with a name or a seat, closes the item with what we learned. Going on to the actions or the close stops the item on screen, the same as wrapping it up. |
-| **Actions** | Every action is claimed by a person or a seat, here and now, or parked. | Reads each action out and waits for a claim. |
+| **Actions** | Every action is claimed by a person or a role, here and now, or parked. | Reads each action out and waits for a claim. |
 | **Close** | Gratitude, one word each, feedback on the facilitation, and an idea for the tool. | Closes the session, which keeps the record. |
 
 **The item's clock has grace.** It stays calm until four fifths of its minutes are gone, then
@@ -79,8 +79,8 @@ the round whether or not the person who raised it is still here.
 status stay as they are and it cannot be deleted. While a proposal is still open, new words start a
 new round: the answers given to the old words are cleared.
 
-**The close refuses while any action has nobody.** An open action with no person and no seat on it
-stops the close with a sentence and the list of those actions. Claim it, name a seat, or park it.
+**The close refuses while any action has nobody.** An open action with no person and no role on it
+stops the close with a sentence and the list of those actions. Claim it, name a role, or park it.
 
 **Editing in the room.** Every box in the room can be put right while the session is open, by the
 people it belongs to:
@@ -184,9 +184,9 @@ own, both described under "Circle meetings on a calendar".
 | `live_sessions` | Title, circle, status, facilitator, secretary, length, the room's state, its version, the stamp (moon, season, place line), and at close the summary (the arrival spread, every proposal's tally, a few counts) and the minutes in both audiences. |
 | `live_session_people` | Who joined, when they were last seen, and their arrival number and words while the session is open. |
 | `live_session_items` | The agenda: title, aim, minutes, position, status, the seconds it was active, and which earlier session it came over from. |
-| `live_session_entries` | Notes, ideas, what we learned (stored as the kind `seed`), proposals, actions and tensions, each with its author, and for an action its person or seat and a due date. |
+| `live_session_entries` | Notes, ideas, what we learned (stored as the kind `seed`), proposals, actions and tensions, each with its author, and for an action its person or role and a due date. |
 | `live_session_responses` | One answer per person per target: consent to the agenda, consent on a proposal, the closing word, and feedback on the facilitation. |
-| `live_session_task_state` | One row per action open or done at close: its status (`open`, `done`, `let_go`), its person or seat now, its date, the kind and the one line of its latest answer, who gave it, and a version that goes up on every answer. |
+| `live_session_task_state` | One row per action open or done at close: its status (`open`, `done`, `let_go`), its person or role now, its date, the kind and the one line of its latest answer, who gave it, and a version that goes up on every answer. |
 | `live_session_task_events` | Every answer to a task, in order, with the state it left. Append-only. |
 | `live_session_task_sends` | Each time a session's task emails went out: the send's number (1 is the close), who pressed, and the counts by outcome. Numbers only, never an address. |
 | `live_session_library` | One row per item a member brought for a circle's next session: its title, the aim it needs if they knew it, a note, the circle (or none), who brought it, where it stands now (`waiting`, `on_agenda`, `taken_up`), the session and agenda item it is on or was taken up in, and who last changed its words when that was somebody else. |
@@ -199,7 +199,7 @@ own, both described under "Circle meetings on a calendar".
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
-action, or sits in a seat that holds one, gets a notice that it is in their hands. The notice says
+action, or sits in a role that holds one, gets a notice that it is in their hands. The notice says
 what the action is and by when. It links to the record only for somebody who was in the room, since
 the record opens to nobody else. Each of them also gets one email listing every task they hold
 from that call (below).
@@ -207,7 +207,7 @@ from that call (below).
 **A room nobody closes closes itself.** The arrival round is erased only by a close, so a room left
 open would keep it for anybody who joined later. An open room that nobody has been seen in for its
 own length plus two hours (and never less than six hours), and that is older than that, is closed
-the way a facilitator closes it: its actions with no person and no seat are parked first, then the
+the way a facilitator closes it: its actions with no person and no role are parked first, then the
 arrival spread is stored and every number and word erased, each proposal's tally is kept, both
 minutes are written, and the admins hear the record is ready. The item on screen stops at the last
 moment anybody was seen. Nothing runs on a timer. Reading the list closes every quiet room with one
@@ -240,7 +240,7 @@ at 18:00" where it was. A first meeting is today or up to 120 days ahead, as far
 saved rhythm always shows; a later one is refused in words.
 
 **Who sets it:** the circle's own members, by the standing rule (in its last meeting, or one of its
-seats now), and admins. A circle sets its own rhythm, the way it holds its own meetings. They change it,
+roles now), and admins. A circle sets its own rhythm, the way it holds its own meetings. They change it,
 skip one coming meeting (named by its village date, one of the next twelve), or stop it, which asks once
 first. **A change keeps the circle's week**: the form opens starting from the next meeting, so a new time
 or length on an every-other-week rhythm leaves its meetings on the same weeks (the door does the same for
@@ -260,7 +260,7 @@ itself**: a person opens it, so a rhythm nobody keeps any more never fills the l
 **The day before** (the hourly `session-coming-up` job, in the village's daytime window, nothing until
 the module is open to members: in preview the page answers admins alone, and a member's notice would open
 a door that refuses them), each of the circle's members hears when, with what is on the agenda: the people
-who sit in its seats now and the people of its last meeting. In the bell only (`session_coming_up`): no
+who sit in its roles now and the people of its last meeting. In the bell only (`session_coming_up`): no
 email preference a member has set covers a meeting reminder yet. Once per meeting per person: the key is
 `session-coming:<circle>:<date>T<time>:<user>`, so a skipped meeting, or one moved to another day or
 another time, is a new one. The notice opens the row on /sessions (`/sessions#coming-<circle>`), lit for a
@@ -399,7 +399,7 @@ because `GET /api/sessions/library` would be read as the room numbered "library"
 **Who sees an item** (`canSeeBrought` in the contract): whoever brought it, admins, every member for an
 item for no circle in particular, and the people with **standing** in its circle, the same rule the
 task layer reads, from the same function (`standingIn` in `server/lib/circleStanding.ts`): they were
-in the circle's **last meeting**, or sit in one of its seats now, live and not lapsed, in a seat the
+in the circle's **last meeting**, or sit in one of its roles now, live and not lapsed, in a role the
 circle still keeps. A meeting is a closed session **at least two people were in** (Rye, 2026-10-21),
 because any member may open a room for any circle and close it alone, and that one close would
 otherwise hand them the circle's waiting items, with the words of the people who brought them, and
@@ -486,7 +486,7 @@ a task afterwards lives in the three task tables.
 own transaction, so a task exists the moment the close does. The facilitator's close and a quiet
 room closing itself both come through `closeLocked`, so both write them. The migration wrote the
 same rows for the sessions closed before it, and running its backfill again adds nothing. A task is
-`open`, `done` or `let_go`; an open task with no person and no seat is **back with the circle**.
+`open`, `done` or `let_go`; an open task with no person and no role is **back with the circle**.
 Each answer moves the state row, appends one `live_session_task_events` row, and bumps the version
 of any open room in the same circle, so that room's next poll shows it. The answers are **It's
 done**, **Not yet** (a new date after today), **Let go** (one sentence), **Hand it back**, **I'll
@@ -494,25 +494,25 @@ take it** (a task back with the circle) and **Open it again**. A version the pag
 refused with the card as it stands now.
 
 **Who may answer.** One pure function, `taskRights` in `shared/sessionTasks.ts`, decides every door:
-the person holding the task; a member who sits in the holding seat now, with a term that has not
+the person holding the task; a member who sits in the holding role now, with a term that has not
 lapsed; the facilitator or secretary of the session it came from, or of an open session in the same
 circle, since facilitation rotates; and admins. Anybody with rights may open a done task again (a
 mistaken tap). Only the hosts and admins may open a let go task again. Anybody who may see a task
 back with the circle may take it, which since the ruling below is every member with standing in
-its circle; somebody who sits in one of its seats and has never joined a session gets their number
+its circle; somebody who sits in one of its roles and has never joined a session gets their number
 when they take it.
 
 **Who may see a task.** `canSeeTask`: the people who were in the session it came from, whoever
-holds it now (person or seat), **every member with standing in the task's circle**, the facilitator
+holds it now (person or role), **every member with standing in the task's circle**, the facilitator
 or secretary of an open session in the same circle, and admins. Standing is one measure, shared
 with the agenda library (`standingIn` in `server/lib/circleStanding.ts`): they were in the circle's
 last meeting, a closed session **at least two people were in** (a session somebody opened and
 closed alone gives nobody standing and takes it from nobody; the count is the one the close kept, so
 a meeting that has closed stays one after a member later leaves the village), or they sit in one of
-its seats now,
-with a term that has not lapsed, in a seat the circle still keeps (active and not a standing
-example). A seat holder who has never joined a session has standing
-too: every door reads their seats by their own id. Rye ruled on 2026-10-21 that the
+its roles now,
+with a term that has not lapsed, in a role the circle still keeps (active and not a standing
+example). A role holder who has never joined a session has standing
+too: every door reads their roles by their own id. Rye ruled on 2026-10-21 that the
 whole circle reads its task cards: a sociocratic circle works in the open, and a task that comes
 back to the circle should be visible to everyone who might take it. Standing widens seeing and
 taking and nothing else: a circle member who holds nothing and hosts nothing cannot answer a task
@@ -520,26 +520,26 @@ somebody else holds or open a finished one again. A task from a session with no 
 narrower rule. A task somebody may not see answers 404, the same as a task that is not there. No
 card carries a user id, an email or a count about a person.
 
-**A card is not the record.** A seat holder or a circle member who was not in the room sees the
+**A card is not the record.** A role holder or a circle member who was not in the room sees the
 text, the session's title, the circle, the date, the status and the latest answer, with no link to
 the record, because a closed record and its minutes open only to the people who were in it and
 admins.
 
 | Who | Reads the card | Takes it when it is back with the circle | Answers it | Opens it again | Record link |
 |---|---|---|---|---|---|
-| Holds it (in person, or sits in the holding seat now) | yes | | yes | done: yes; let go: no | only if they were in the room |
+| Holds it (in person, or sits in the holding role now) | yes | | yes | done: yes; let go: no | only if they were in the room |
 | Was in the session it came from | yes | yes | | | yes |
-| Has standing in its circle (its last meeting of two or more, or a live seat) | yes | yes | | | no, unless they were in the room |
+| Has standing in its circle (its last meeting of two or more, or a live role) | yes | yes | | | no, unless they were in the room |
 | Facilitates or keeps notes for the source session, or for an open room of the circle where they have standing | yes | yes | yes | yes | only if they were in the room |
 | Admin | yes | yes | yes | yes | yes |
 | Anybody else | no (404) | | | | |
 
-**Where tasks show.** **Your task board** on the profile lists what a member holds, what their seats
+**Where tasks show.** **Your task board** on the profile lists what a member holds, what their roles
 hold, what is **back with their circles** (open tasks nobody holds, in a circle where they have
 standing, each with **I'll take it**), and what they finished in the last three moons, with older
 ones a tap away. An action still in an open session shows there read-only, answered in the room.
 The menu's count and the profile's **Your tasks** card stay the member's own: what they hold and
-what their seats hold, never the circle's. The next session of the same circle shows the circle's
+what their roles hold, never the circle's. The next session of the same circle shows the circle's
 tasks in "From last time" to everyone with standing there, grouped for the action check: done since
 last time, back with the circle, new dates, let go, and still holding. A closed record shows each
 action's status beside it. No notice or email goes to the whole circle: the notices and the task
@@ -556,11 +556,11 @@ The doors register right after the room's, so the module gate and the members-on
 of `/api/sessions` stand in front of them too.
 
 **The task emails.** When a call closes, each person holding an open task from it gets one email
-listing every task they hold, and every task their seats hold, with its date. It goes out as a
+listing every task they hold, and every task their roles hold, with its date. It goes out as a
 `notices` email (members only, sent with the Village Comms module off too, with suppression and the
 one-click unsubscribe). The holders are read again when the email is sent: the person, and every
-member who sits in the seat now. A seat holder who was not in the room gets the seat's opening and
-no record link. A seat nobody sits in tells the admins and the session's facilitator in-app.
+member who sits in the role now. A role holder who was not in the room gets the role's opening and
+no record link. A role nobody sits in tells the admins and the session's facilitator in-app.
 `noticesAfterClose` is the one place the close starts these emails, and nothing waits for them: the
 close answers first. The closed record's facilitator and admins can press **Send the task emails** to
 send the open tasks again; each press takes the next send number. Each email is keyed
@@ -584,12 +584,12 @@ daily digest. `off` keeps them in the bell only.
 `GET /api/sessions/:id/minutes.md?for=shareable` gives the record as markdown that names no person.
 `buildMinutes(input, "shareable")` writes it:
 
-- Actions say the seat that holds them, or "a member".
+- Actions say the role that holds them, or "a member".
 - Email addresses and phone numbers are removed from every line.
 - Nothing from the arrival round or the check-out crosses except the numbers: how many took part,
   and the arrival median and range.
 - Notes and ideas stay in the record for the people who were there. The shareable version carries
-  the agenda, decisions with their tallies, what we learned (stored as the kind `seed`), actions by seat, and the backlog.
+  the agenda, decisions with their tallies, what we learned (stored as the kind `seed`), actions by role, and the backlog.
 
 The room shows these minutes under "Shareable minutes", with a line asking the reader to read them
 through before copying them anywhere, and a copy button. **An admin who keeps the village's
@@ -604,8 +604,8 @@ and the admins.
 
 ## How it rhymes with the rest of the game
 
-- **Seats.** An action can be held by a seat from the org chart, so the work stays with the role
-  when its holder changes. The notice at close reaches whoever sits in that seat.
+- **Roles.** An action can be held by a role from the org chart, so the work stays with the role
+  when its holder changes. The notice at close reaches whoever sits in that role.
 - **Gratitude.** The close opens a gratitude round. A thank-you goes through the gratitude door like
   any other, from the sender's own allowance, and lands in the current moon's cycle. That is why the
   module recommends `gratitude`, which is core and always on.
@@ -657,7 +657,7 @@ and the admins.
 
 - **No push to any outside service.** No write to an organisational-memory service, no webhook, no
   relay of the record or the minutes. An admin copies the shareable minutes by hand.
-- **No quest creation.** An action stays in the session with its person or seat. Work that wants a
+- **No quest creation.** An action stays in the session with its person or role. Work that wants a
   reward goes through the quest board the usual way, proposed and approved by people.
 - **No guests.** Members only, with no link a non-member can open and no public minutes.
 - **No village-wide decisions.** A consent round in the room decides for the circle in the room.

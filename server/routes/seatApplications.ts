@@ -128,8 +128,11 @@ import {
   type StoredApplication,
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
-import { proposalsForApplications, type StoredProposal } from "../repos/roleProposals";
-import { changesRoles, PROPOSAL_WORDS } from "../../shared/roleProposals";
+import { asksFor, proposalsForApplications, setDecidedWords, type StoredAsk, type StoredProposal } from "../repos/roleProposals";
+import { changesRoles } from "../../shared/roleProposals";
+import { CONSENT_WORDS, consentState } from "../../shared/roleProposalConsent";
+import { applyProposalChanges, consentAsksWaitingOn, consentView, decisionFor } from "../lib/roleProposals";
+import { revertDraft } from "../lib/orgDrafts";
 import { groupApplications, groupingContext, PAST_SEATING_WORDS } from "../../shared/applicationGroups";
 import { registerJob } from "../lib/scheduler";
 import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
@@ -358,7 +361,7 @@ export function register(app: Express, deps: Deps): void {
     a: StoredApplication,
     viewerId: string | null,
     rule: Awaited<ReturnType<typeof adoptionRule>> | null,
-    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null },
+    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null; asks: StoredAsk[] },
   ) {
     const pool = getPool();
     const seats = known ? known.seats : await seatsForUpdate(pool, a.seatIds);
@@ -369,8 +372,10 @@ export function register(app: Express, deps: Deps): void {
     // The role proposal this came from, if any (role proposals PR A): its new roles have no row yet, so they are named from it.
     const proposal = known ? known.proposal : ((await proposalsForApplications(pool, [a.id])).get(a.id) ?? null);
     const proposed = new Map((proposal?.body.newRoles ?? []).map((r) => [r.id, typeof r.words.name === "string" ? r.words.name : r.id]));
-    const held = !!proposal && changesRoles(proposal.body);
-    const awaiting = a.status === "awaiting-holder" && !held;
+    // A proposal that changes roles is decided by its circle or the power, never by a village vote (PR B).
+    const changes = !!proposal && changesRoles(proposal.body);
+    const asks = proposal ? (known ? known.asks : ((await asksFor(pool, [proposal.id])).get(proposal.id) ?? [])) : [];
+    const awaiting = a.status === "awaiting-holder";
     const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? proposed.get(id) ?? id);
     return {
       id: a.id,
@@ -383,8 +388,10 @@ export function register(app: Express, deps: Deps): void {
         const s = seats.find((x) => x.id === id);
         return { id, name: s?.name ?? proposed.get(id) ?? id, aim: s?.aim ?? null, ...(s ? {} : proposed.has(id) ? { proposedNew: true } : {}) };
       }),
-      // The role proposal it came from, and whether its role changes hold adoption until they can be applied.
-      proposal: proposal ? { id: proposal.id, changesRoles: held, waits: held ? PROPOSAL_WORDS.adoptionWaits : null } : null,
+      // The role proposal it came from: whether it changes roles, where the circle's consent stands, and the decision in words.
+      proposal: proposal
+        ? { id: proposal.id, changesRoles: changes, consent: consentView(asks, new Date(), tz, viewerId), decided: proposal.decidedWords }
+        : null,
       note: a.note,
       deliverables: a.deliverables,
       settings: a.settings,
@@ -410,7 +417,7 @@ export function register(app: Express, deps: Deps): void {
             you: {
               isCandidate,
               mayAdopt: awaiting && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
-              mayPutToVillage: awaiting && putToVillageRefusal(rule, viewerId) === null,
+              mayPutToVillage: awaiting && !changes && putToVillageRefusal(rule, viewerId) === null,
               mayWithdraw: isCandidate && (await withdrawable(a, ballot)),
               holdsThePower: rule.who === "live-holders" && rule.holders.includes(viewerId),
             },
@@ -755,6 +762,7 @@ export function register(app: Express, deps: Deps): void {
     const tz = seatCalendar().timezone || "UTC";
     const views = await viewTexts(pool, texts, today(), tz);
     const proposals = await proposalsForApplications(pool, all.map((a) => a.id));
+    const asks = await asksFor(pool, Array.from(proposals.values()).map((p) => p.id));
     const applications = await Promise.all(
       all.map((a) =>
         served(a, String(viewer.id), rule, {
@@ -762,6 +770,7 @@ export function register(app: Express, deps: Deps): void {
           seats,
           view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
           proposal: proposals.get(a.id) ?? null,
+          asks: asks.get(proposals.get(a.id)?.id ?? "") ?? [],
         }),
       ),
     );
@@ -854,6 +863,11 @@ export function register(app: Express, deps: Deps): void {
         : [],
       toAccept: await acceptsWaitingOn(viewerId),
       raisedWithYou: await tensionsWaitingOn(viewerId),
+      // Role proposals the reader's circle is asked about and they have not answered (role proposals PR B).
+      toConsent: await consentAsksWaitingOn(
+        { pool, allMembers: () => members.all(), firstName, timezone: seatCalendar().timezone || "UTC", now: new Date() },
+        viewerId,
+      ),
     };
     res.set("Cache-Control", "no-store").json(payload);
   });
@@ -888,20 +902,27 @@ export function register(app: Express, deps: Deps): void {
       res.status(409).json({ error: `This application is ${STATUS_WORDS[a.status].toLowerCase()}, so it is not waiting for a role holder.`, status: a.status });
       return null;
     }
-    // A role proposal that changes a role's words or adds a role waits for the step that applies those changes.
-    const proposal = (await proposalsForApplications(getPool(), [a.id])).get(a.id);
-    if (proposal && changesRoles(proposal.body)) {
-      res.status(409).json({ error: "proposal_changes_roles", message: PROPOSAL_WORDS.adoptionWaits });
-      return null;
-    }
-    return { user, a, rule: await adoptionRule(user) };
+    // The role proposal it came from, if any (role proposals PR B): adopting it applies the proposal's role changes.
+    const proposal = (await proposalsForApplications(getPool(), [a.id])).get(a.id) ?? null;
+    return { user, a, rule: await adoptionRule(user), proposal };
   }
 
   // ── Adopt, for the village ────────────────────────────────────────────────
+  /*
+   * A ROLE PROPOSAL IS ADOPTED HERE TOO (role proposals PR B). Path (a) is a
+   * live holder of `org.seat` who is not the candidate, whenever they like;
+   * path (b) is the same click once the circle has consented ("Record the
+   * adoption"). Either way the holder's click first applies the proposal's
+   * role changes as one published org draft (`applyProposalChanges`), then
+   * adopts the application the ordinary way. An adoption that then cannot go
+   * through (somebody else decided it, or a role is gone) reverts that draft,
+   * so the chart never changes for a proposal nobody adopted. The decision is
+   * recorded on the proposal in words naming a role, never a person.
+   */
   app.post("/api/governance/role-applications/:id/adopt", async (req, res) => {
     const got = await forHolder(req, res, "seat-application-adopt");
     if (!got) return;
-    const { user, a, rule } = got;
+    const { user, a, rule, proposal } = got;
     const actorId = String(user.id);
     const refusal = adoptRefusal(rule, actorId, a.candidateUserId);
     if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
@@ -909,20 +930,40 @@ export function register(app: Express, deps: Deps): void {
     const money = moneyRefusal(user, a.settings);
     if (money) return res.status(403).json(money);
 
-    const carrying = rolesCarrying(ADOPTING_POWER).map((r) => r.id);
-    const seatedIn = loadRoleHolders().find((h) => h.userId === actorId && carrying.includes(h.roleId))?.roleId ?? "badge";
+    const carrying = rolesCarrying(ADOPTING_POWER);
+    const seatedIn = loadRoleHolders().find((h) => h.userId === actorId && carrying.some((r) => r.id === h.roleId))?.roleId ?? "badge";
+    const pool = getPool();
+    const now = new Date();
+    const tz = seatCalendar().timezone || "UTC";
+    let draftId: string | null = null;
+    if (proposal) {
+      const seats = await seatsForUpdate(pool, a.seatIds);
+      const proposed = new Map(proposal.body.newRoles.map((r) => [r.id, typeof r.words.name === "string" ? r.words.name : r.id]));
+      const names = a.seatIds.map((id) => seats.find((s) => s.id === id)?.name ?? proposed.get(id) ?? id);
+      const applied = await applyProposalChanges(pool, proposal, actorId, seatCalendar(), names);
+      if (!applied.ok) return res.status(409).json({ error: "proposal_changes_failed", message: applied.error });
+      draftId = applied.draftId;
+    }
     const { outcome, app: stored, textId } = await adoptApplication(
-      getPool(),
+      pool,
       a.id,
       ["awaiting-holder"],
       { via: "holder", ref: actorId, authority: `${ADOPTING_POWER}@${seatedIn}`.slice(0, 64) },
-      { now: new Date(), lapse: lapse(), calendar: seatCalendar() },
+      { now, lapse: lapse(), calendar: seatCalendar() },
     );
+    // Nothing adopted: the role changes made for it are put back.
+    if (draftId && (outcome.kind === "lost" || outcome.kind === "cannot" || !stored)) await revertDraft(pool, draftId);
     if (outcome.kind === "lost" || !stored) {
       return res.status(409).json({ error: "Somebody else decided this application a moment ago.", status: outcome.kind === "lost" ? outcome.status : null });
     }
     await tellOutcome({ getPool, notify, notifyAdmins }, stored, outcome, actorId, actorId);
     if (textId) await settleText(settleDeps, textId);
+    let decided: string | null = null;
+    if (proposal && outcome.kind !== "cannot") {
+      const state = consentState((await asksFor(pool, [proposal.id])).get(proposal.id) ?? [], now);
+      decided = decisionFor(state, now, tz, carrying.find((r) => r.id === seatedIn)?.name ?? null);
+      await setDecidedWords(pool, proposal.id, decided);
+    }
     const status = outcome.kind === "held-full" ? "held-full" : outcome.kind === "cannot" ? "not-adopted" : "adopted";
     res.json({
       success: outcome.kind === "seated" || outcome.kind === "later",
@@ -931,6 +972,7 @@ export function register(app: Express, deps: Deps): void {
       linked: outcome.kind === "seated" ? outcome.linked.length : 0,
       ...(outcome.kind === "held-full" ? { full: outcome.full } : {}),
       ...(outcome.kind === "cannot" ? { message: outcome.why } : {}),
+      ...(decided ? { decided } : {}),
     });
   });
 
@@ -938,7 +980,9 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/governance/role-applications/:id/put-to-village", async (req, res) => {
     const got = await forHolder(req, res, "seat-application-to-village");
     if (!got) return;
-    const { user, a, rule } = got;
+    const { user, a, rule, proposal } = got;
+    // A proposal that changes roles is decided by its circle or by the power (Rye, 2026-10-22), never by a vote.
+    if (proposal && changesRoles(proposal.body)) return res.status(409).json({ error: "proposal_changes_roles", message: CONSENT_WORDS.noVote });
     const refusal = putToVillageRefusal(rule, String(user.id));
     if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
     let moved = false;
