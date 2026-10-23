@@ -210,11 +210,14 @@ describe("parseHyphaProposalId", () => {
 describe("a change set that names a minting rule", () => {
   const SEAT_GRATITUDE = "rule-role.cycle-gratitude";
   const QUEST_VOICE = "rule-quest.completed-village-voice";
+  // A rule on a trigger that is not work, where a ceiling still binds (`ceilingBinds`).
+  const LIBRARY = "rule-library.contributed-credits";
 
   const rules = (): Map<string, MintRuleValues> =>
     new Map([
       [SEAT_GRATITUDE, { trigger: "role.cycle", tokenSlug: "gratitude", amount: 20, ceiling: 100, enabled: true }],
       [QUEST_VOICE, { trigger: "quest.completed", tokenSlug: "village-voice", amount: 10, ceiling: 100, enabled: true }],
+      [LIBRARY, { trigger: "library.contributed", tokenSlug: "credits", amount: 20, ceiling: 100, enabled: true }],
     ]);
   const readRules = async (ids: string[]) => {
     const all = rules();
@@ -294,16 +297,28 @@ describe("a change set that names a minting rule", () => {
     expect(same.problems[0].problem).toContain("would not change anything");
   });
 
-  it("refuses a set that builds a rule paying above its own ceiling", async () => {
+  it("refuses a set that builds a rule paying above its own ceiling, on a rule that is not work", async () => {
     const built = await validateChangeSet(
       noPool,
-      [{ key: key(SEAT_GRATITUDE, "amount"), to: "60" }, { key: key(SEAT_GRATITUDE, "ceiling"), to: "50" }],
+      [{ key: key(LIBRARY, "amount"), to: "60" }, { key: key(LIBRARY, "ceiling"), to: "50" }],
       effective,
       0,
       readRules,
     );
     expect(built.problems.length).toBe(1);
     expect(built.problems[0].problem).toContain("is above the");
+  });
+
+  it("lets a quest or role rule pay above its ceiling, because no ceiling binds work", async () => {
+    // Rye, 2026-10-22: "we definitely can't have caps on what things pay".
+    const built = await validateChangeSet(
+      noPool,
+      [{ key: key(QUEST_VOICE, "amount"), to: "600" }, { key: key(QUEST_VOICE, "ceiling"), to: "50" }],
+      effective,
+      0,
+      readRules,
+    );
+    expect(built.problems).toEqual([]);
   });
 
   it("accepts the amount and the ceiling moving together", async () => {

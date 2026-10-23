@@ -567,6 +567,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        *
        * Order and idempotency live in the repo, because deliveries key on the
        * inbox rather than on the member and carry no foreign key.
+       *
+       * IT RUNS AGAIN AFTER THE TOMBSTONE, as "member-agent-after-tombstone",
+       * because the member can still write to all of this until then. This
+       * first pass stays, under its old name, for the reason that step gives.
        */
       name: "member-agent",
       run: async () => {
@@ -638,6 +642,34 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
           u.walletAddress = null;
           u.walletVerifiedAt = null;
         });
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S OWN AGENT, A SECOND TIME, once nothing can write to it.
+       *
+       * "member-agent" runs before the tombstone, while the member's sessions
+       * still live, and `POST /api/agent/tokens` and `PUT /api/agent/inbox`
+       * write for anybody signed in. A sweep that stopped between the two
+       * ("portraits" throws on a file that will not come off the volume) left
+       * an account that still worked with "member-agent" recorded as done. A
+       * token minted or an inbox set in that window was skipped by the resume
+       * and stood for good, and `agent-week-ahead`, which selects enabled
+       * inboxes with no join to `users`, kept delivering to it. Here, the
+       * delete comes after the last moment the member could write, for the
+       * reason the needs step below gives.
+       *
+       * A NEW NAME, AND THE FIRST PASS STAYS. Records already hold
+       * "member-agent" by name, and a resume skips what a record holds, so
+       * moving that step or reusing its name would change what an in-flight
+       * resume does. This one is new to every record, so an old record runs
+       * it, which is the safe direction the header of this list names.
+       * `forgetAgentForMember` is DELETEs keyed on the member, so this pass
+       * matches nothing when nothing was written in between.
+       */
+      name: "member-agent-after-tombstone",
+      run: async () => {
+        await forgetAgentForMember(pool, target.id);
       },
     },
     {
