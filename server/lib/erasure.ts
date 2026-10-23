@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
@@ -714,6 +715,21 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "sessions-after-tombstone",
       run: async () => {
         await forgetMemberSessions(pool, target.id, (id) => members.byId(id));
+      },
+    },
+    {
+      /*
+       * Gene Keys (0272): the member's one saved result goes, deleted. It is
+       * a reading of their own birth, and no birth data was ever stored to
+       * de-attribute, so there is nothing to keep.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the save door
+       * writes for anybody signed in, and the tombstone is where the member's
+       * sessions die.
+       */
+      name: "gene-keys-after-tombstone",
+      run: async () => {
+        await forgetMemberGeneKeys(pool, target.id);
       },
     },
     {
