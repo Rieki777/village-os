@@ -48,6 +48,13 @@ import { routes } from "./qa/routes.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT = path.join(ROOT, "client", "src");
+/**
+ * The page specs (Rye, 2026-10-22: every village's pages are its own). A
+ * page's buttons and links are fields there now, and their defaults are what
+ * the page links to until a village says otherwise, so a route-shaped default
+ * is a door exactly as `<Link href>` was before the words moved.
+ */
+const PAGE_SPECS_DIR = path.join(ROOT, "shared", "pageContent");
 
 /** How many independent doors a route needs. */
 const REQUIRED = 2;
@@ -251,6 +258,23 @@ function isRouteShaped(v) {
  * Everything a file offers as a door, plus everything route-shaped that it
  * could not classify as one.
  */
+/** Every route-shaped string in a page spec is one of that page's default doors. */
+function scanSpecFile(abs) {
+  const src = fs.readFileSync(abs, "utf8");
+  const sf = ts.createSourceFile(abs, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const doors = [];
+  const visit = (node) => {
+    // A spec's own `path` is its address for the editor's "Open this page", never a link a visitor sees.
+    const ownAddress = !!node.parent && ts.isPropertyAssignment(node.parent) && node.parent.name.getText().replace(/['"]/g, "") === "path";
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !ownAddress && isRouteShaped(node.text)) {
+      doors.push({ target: node.text, kind: "literal", line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, why: "page spec" });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return { doors, unclassified: [] };
+}
+
 function scanFile(abs) {
   const src = fs.readFileSync(abs, "utf8");
   const sf = ts.createSourceFile(abs, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -400,12 +424,13 @@ function audit() {
   const all = [...concrete, ...parameterised].sort();
 
   const files = walkFiles(CLIENT).filter((f) => !isTest(rel(f)) && rel(f) !== ROUTER_REL);
+  const specFiles = fs.existsSync(PAGE_SPECS_DIR) ? walkFiles(PAGE_SPECS_DIR).filter((f) => !isTest(rel(f))) : [];
   const inbound = new Map(all.map((r) => [r, []]));
   let notClassified = 0;
   const notClassifiedSamples = [];
 
-  for (const abs of files) {
-    const { doors, unclassified } = scanFile(abs);
+  for (const abs of [...files, ...specFiles]) {
+    const { doors, unclassified } = specFiles.includes(abs) ? scanSpecFile(abs) : scanFile(abs);
     for (const d of doors) {
       let landed = false;
       for (const r of all) {
