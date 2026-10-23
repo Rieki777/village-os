@@ -117,10 +117,10 @@ export function objectionTension(roleNames: readonly string[], reason: string): 
 
 export const CONSENT_WORDS = {
   open: (closesOnDay: string) => `The circle is asked to consent or object by ${civilDayWords(closesOnDay)}.`,
-  objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. A holder of the power that seats people can still adopt it.",
+  objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. It can still be adopted by a holder of the power that seats people.",
   consented: "Consented by the circle",
-  lapsed: "The circle's 2 business days passed with no consent. A holder of the power that seats people can still adopt it.",
-  noOtherHolders: "Nobody else holds a role in this circle, so the circle cannot consent. A holder of the power that seats people adopts it.",
+  lapsed: "The circle's 2 business days passed with no consent. It can still be adopted by a holder of the power that seats people.",
+  noOtherHolders: "Nobody else holds a role in this circle, so the circle cannot consent. It is adopted by a holder of the power that seats people.",
   /** The one click that records a circle's consent. */
   record: "Record the adoption",
   reasonNeeded: "Say why you object, so the circle can talk it through.",
@@ -164,13 +164,6 @@ export const PROPOSE_ENTRY_HREF = "/propose?type=role_application";
 /** Why a member is nudged to propose their roles, most pressing first. */
 export const NUDGE_REASONS = ["window-closing", "review-due", "window-open"] as const;
 export type NudgeReason = (typeof NUDGE_REASONS)[number];
-
-/** The notification kind each nudge is sent as. */
-export const NUDGE_KINDS: Record<NudgeReason, string> = {
-  "window-closing": "role_proposal_window_closing",
-  "review-due": "role_proposal_review_due",
-  "window-open": "role_proposal_window_open",
-};
 
 /** A review date stays a reason to propose for two weeks, so a nudge never fires for one long past. */
 export const REVIEW_NUDGE_DAYS = 14;

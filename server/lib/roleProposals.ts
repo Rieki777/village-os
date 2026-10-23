@@ -40,13 +40,13 @@ import {
   consentStateWords,
   decisionWords,
   dueNudges,
-  NUDGE_KINDS,
   NUDGE_WORDS,
   objectionTension,
   parseConsentAnswer,
   PROPOSE_ENTRY_HREF,
   type ConsentState,
   type DueNudge,
+  type NudgeReason,
 } from "../../shared/roleProposalConsent";
 import { changesRoles, wordFieldsOf, type ProposalBody, type WordFieldsContext } from "../../shared/roleProposals";
 import { applicationHref, seatList } from "../../shared/seatApplications";
@@ -357,6 +357,17 @@ export function decisionFor(state: ConsentState, at: Date, timeZone: string, rol
 }
 
 // ── The nudges ──────────────────────────────────────────────────────────────
+
+/**
+ * The notification kind each nudge is sent as. Declared beside the one call
+ * that sends them, so the notification catalogue's scan
+ * (shared/notificationKinds.test.ts) reads every kind with its producer.
+ */
+const NUDGE_KINDS: Record<NudgeReason, string> = {
+  "window-closing": "role_proposal_window_closing",
+  "review-due": "role_proposal_review_due",
+  "window-open": "role_proposal_window_open",
+};
 
 export const NUDGE_JOB = "role-proposal-nudges";
 /** Four times a day, so a 2 business day mark is met within six hours. */
