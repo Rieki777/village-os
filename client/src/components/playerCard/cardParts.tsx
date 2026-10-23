@@ -181,6 +181,41 @@ export function EditInPlace({
   );
 }
 
+/**
+ * A ROLE PROPOSAL'S CHANGED WORDS, drawn in gold (role proposals PR C). The
+ * proposal steps hand the card, per role, the sections whose words differ
+ * from the posted role, or mark the role new; each such section says so in
+ * the card's own gold. Absent, nothing is marked.
+ */
+export interface ChangedWords {
+  keys: readonly RoleEditKey[];
+  isNew: boolean;
+}
+
+export const CHANGED_WORDS = { changed: "Changed from the posted role", isNew: "New" } as const;
+
+export const ChangedContext = createContext<ChangedWords | null>(null);
+
+/** Whether this role's section is changed (or new) in the proposal being drawn. */
+export function useChanged(k: RoleEditKey): boolean {
+  const c = useContext(ChangedContext);
+  return !!c && (c.isNew || c.keys.includes(k));
+}
+
+/** The gold frame a changed section takes, or nothing. */
+export const GOLD_FRAME = "border-notice bg-notice/10";
+
+/** "Changed from the posted role", or "New", under a changed section's heading. */
+export function ChangedMark({ k }: { k: RoleEditKey }) {
+  const c = useContext(ChangedContext);
+  if (!c || !(c.isNew || c.keys.includes(k))) return null;
+  return (
+    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-notice" data-changed-mark={k}>
+      {c.isNew ? CHANGED_WORDS.isNew : CHANGED_WORDS.changed}
+    </p>
+  );
+}
+
 /** "Proposed, waiting for consent", beside a role word an open draft would change. */
 export function PendingNote({ show }: { show: boolean }) {
   if (!show) return null;

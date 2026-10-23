@@ -36,8 +36,9 @@ export interface SeasonalRow {
   doneWhen: string;
 }
 
+// min-h-[44px]: a 44px tap on a phone (the role proposal steps reuse these fields at 375px).
 const inputClass =
-  "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
+  "min-h-[44px] w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
 
 /** Rows for every goal of the season, ticked where the plan serves it. */
 export function servedRows(goals: readonly string[], served: ReadonlyArray<{ goal: string; howItHelps: string | null }>): ServedRow[] {
