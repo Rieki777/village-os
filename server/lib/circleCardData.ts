@@ -1,0 +1,117 @@
+/**
+ * THE CIRCLE CARD, BUILT FROM THE DATABASE FOR ONE CIRCLE AT ONE READER'S TIER.
+ *
+ * `buildCircleCardFor(pool, circle, ctx)` reads each table once (five reads,
+ * whatever the number of roles), applies the reader's tier, and hands the rows
+ * to the pure model (`buildCircleCard`, shared/circleCard.ts).
+ *
+ * ── ONE SEAT OBJECT, SO IT CANNOT DRIFT FROM /api/org ──────────────────────
+ *
+ * The circle's roles go through `projectSeats` (server/lib/seatProjection.ts)
+ * at the tier `/api/org` would give this reader, and the card reads a role's
+ * state, holder count and the holders' handles off that projection. A field the
+ * projection withholds from this reader is unread on the card, never guessed.
+ * The holders' names are never read off it: the card names roles, not people.
+ *
+ * ── WHAT EACH READER SEES ──────────────────────────────────────────────────
+ *
+ * Every reader sees the circle's words, the way `/api/org` serves every
+ * circle's purpose to every reader, and each role with how full it is, which
+ * `/api/org` also tells a visitor. The links to the holders' cards need the
+ * member holder rows (`map.viewPeople`), so below that tier a filled role
+ * carries no link and the card says once that holder cards are for members.
+ */
+import type { Pool } from "mysql2/promise";
+import { buildCircleCard, type CircleCard, type CircleRoleIn } from "../../shared/circleCard";
+import { charterFromRow } from "../../shared/circleCharter";
+import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
+import { projectSeats, type SeatTier } from "./seatProjection";
+import { handlesOf } from "../repos/orgRoleHealth";
+import { readCharterRow, readCircleAdoptions } from "../repos/circleCard";
+
+/** A circle as the circles store holds it (`circlesRepo`). */
+export interface StoredCircle {
+  id: string;
+  name: string;
+  purpose?: string | null;
+  status?: string | null;
+  parentCircleId?: string | null;
+}
+
+export interface CircleCardCtx {
+  now: Date;
+  timeZone: string;
+  lapse: LapseContext;
+  /** `/api/org`'s tier for this reader (`orgSeatTier`). */
+  tier: SeatTier;
+  /** `org.ccos_terms`. */
+  frameworkTerms: boolean;
+}
+
+/**
+ * The card for one circle. `circles` is every circle in the store, read for
+ * the name of the circle this one sits in.
+ */
+export async function buildCircleCardFor(
+  pool: Pool,
+  circle: StoredCircle,
+  circles: readonly StoredCircle[],
+  ctx: CircleCardCtx,
+): Promise<CircleCard> {
+  const [roles, assignments, charterRow, adoptions] = await Promise.all([
+    listOrgRoles(pool),
+    listOrgAssignments(pool, ctx.lapse),
+    readCharterRow(pool, circle.id),
+    readCircleAdoptions(pool, circle.id),
+  ]);
+  const inCircle = roles.filter((r) => r.active && r.circleId === circle.id);
+  const ids = new Set(inCircle.map((r) => r.id));
+  const held = assignments.filter((a) => ids.has(a.orgRoleId));
+
+  const memberTier = ctx.tier.people === "member";
+  const memberIds = Array.from(new Set(held.filter((a) => a.holderKind === "member" && a.userId).map((a) => String(a.userId))));
+  const handles = memberTier ? await handlesOf(pool, memberIds) : new Map<string, string | null>();
+
+  // The holders' names are never read: nameOf answers nothing a reader sees.
+  const seats = projectSeats(inCircle, held, ctx.tier, {
+    route: "org",
+    now: ctx.now,
+    nameOf: () => "",
+    firstName: (s) => s,
+    ...(memberTier ? { handleOf: (id: string) => handles.get(String(id)) ?? null } : {}),
+  });
+  const roleRows: CircleRoleIn[] = seats.map((s: any) => ({
+    id: String(s.id),
+    name: String(s.name ?? ""),
+    capacity: Number(s.seats) || 1,
+    holderCount: Number(s.holderCount) || 0,
+    state: String(s.state ?? "open"),
+    isExample: !!s.isExample,
+    holderHandles: memberTier
+      ? (Array.isArray(s.holders) ? s.holders : [])
+          .filter((h: any) => h?.kind === "member" && !h?.isAgent)
+          .map((h: any) => (typeof h.handle === "string" && h.handle ? h.handle : null))
+      : undefined,
+  }));
+
+  const parent = circle.parentCircleId ? circles.find((c) => c.id === circle.parentCircleId) : undefined;
+  return buildCircleCard({
+    circle: {
+      id: circle.id,
+      name: circle.name,
+      purpose: circle.purpose ?? null,
+      status: circle.status ?? null,
+      parent: parent ? { id: parent.id, name: parent.name } : null,
+    },
+    charter: charterFromRow(charterRow),
+    roles: roleRows,
+    adoptions: adoptions.map((a) => ({
+      draftId: a.draftId,
+      publishedAt: new Date(a.publishedAt * 1000).toISOString(),
+      byVote: a.byVote,
+      created: a.created,
+    })),
+    timeZone: ctx.timeZone,
+    frameworkTerms: ctx.frameworkTerms,
+  });
+}
