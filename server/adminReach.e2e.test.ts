@@ -269,7 +269,7 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(JSON.stringify(journal.json)).toContain("why this role matters rewritten");
   });
 
-  it("a circle's name, purpose and status reach /api/org, with the map module OFF", async () => {
+  it("a circle's name and status reach /api/org, with the map module OFF, and its purpose changes only by consent", async () => {
     const made = await call("POST", "/api/admin/circles", { name: "Water Circle", purpose: "Springs and greywater" });
     const id = String(made.json.id);
 
@@ -292,17 +292,25 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(off.status, JSON.stringify(off.json)).toBe(200);
     expect((await asStranger("/api/circles")).status, "the map's own route is gated").toBe(404);
 
+    // The purpose sent back unchanged with a rename is no change, and goes through.
     const renamed = await call("PUT", `/api/admin/circles/${id}`, {
       name: "Springs and Greywater Circle",
-      purpose: "Everything the water touches on the way through.",
+      purpose: "Springs and greywater",
       status: "forming",
     });
     expect(renamed.status, JSON.stringify(renamed.json)).toBe(200);
 
+    // A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): the admin door
+    // refuses a new one and points to the circle's card, where it is proposed.
+    const repurposed = await call("PUT", `/api/admin/circles/${id}`, { purpose: "Everything the water touches on the way through." });
+    expect(repurposed.status).toBe(409);
+    expect(repurposed.json?.error).toBe("purpose_by_consent");
+    expect(repurposed.json?.message).toBe(`A circle's purpose changes by consent. Propose new words on the circle's card, at /circles/${id}.`);
+
     const org = await asStranger("/api/org");
     const c = (org.json.circles ?? []).find((x: any) => x.id === id);
     expect(c.name).toBe("Springs and Greywater Circle");
-    expect(c.purpose).toContain("on the way through");
+    expect(c.purpose).toBe("Springs and greywater");
     expect(c.status).toBe("forming");
 
     // A status outside the enum is refused in words. `replaceAll` is a

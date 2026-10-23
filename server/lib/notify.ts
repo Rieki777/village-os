@@ -292,6 +292,9 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // a member who wants these by email can be offered that later.
     case "session_item_taken":
     case "session_item_settled":
+    // A circle meeting tomorrow: the bell, for the same reason. No preference covers a
+    // meeting reminder yet.
+    case "session_coming_up":
       return "off";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been

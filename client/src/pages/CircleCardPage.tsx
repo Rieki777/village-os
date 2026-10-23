@@ -16,7 +16,11 @@ import { gameFetch } from "@/lib/gameApi";
 import type { CircleCard } from "@shared/circleCard";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 
-type View = { kind: "loading" } | { kind: "ok"; card: CircleCard } | { kind: "missing" } | { kind: "failed" };
+type View =
+  | { kind: "loading" }
+  | { kind: "ok"; card: CircleCard; mayPropose: boolean }
+  | { kind: "missing" }
+  | { kind: "failed" };
 
 export default function CircleCardPage() {
   const params = useParams<{ id: string }>();
@@ -25,14 +29,18 @@ export default function CircleCardPage() {
 
   const load = useCallback(() => {
     let alive = true;
-    setView({ kind: "loading" });
     void gameFetch(`/api/org/circles/${encodeURIComponent(id)}/card`)
       .then(async (res) => {
         if (!alive) return;
         if (res.status === 404) return setView({ kind: "missing" });
         if (!res.ok) return setView({ kind: "failed" });
         const out = await res.json();
-        if (alive) setView(out?.card ? { kind: "ok", card: out.card as CircleCard } : { kind: "failed" });
+        if (!alive) return;
+        setView(
+          out?.card
+            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true }
+            : { kind: "failed" },
+        );
       })
       .catch(() => alive && setView({ kind: "failed" }));
     return () => {
@@ -48,7 +56,9 @@ export default function CircleCardPage() {
           <Link href="/circles" className={LINK}>
             {W.backToCircles}
           </Link>
-          {view.kind === "ok" ? <CircleCardView card={view.card} /> : null}
+          {view.kind === "ok" ? (
+            <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reload={load} />
+          ) : null}
           {view.kind === "missing" ? <p className="text-foreground">{W.notFound}</p> : null}
           {view.kind === "failed" ? (
             <p role="status" className="text-foreground">
