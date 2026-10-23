@@ -169,11 +169,11 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const save = useAutosave(send);
   const isNewId = (id: string) => latest.current.newRoles.some((n) => n.id === id);
 
-  // A field scrolled to by focus stops above the sticky save bar, never under it.
+  // A field scrolled to by focus stops above the sticky save bar and the tab bar, never under them.
   useEffect(() => {
     const root = document.documentElement;
     const before = root.style.scrollPaddingBottom;
-    root.style.scrollPaddingBottom = "8rem";
+    root.style.scrollPaddingBottom = "11rem";
     return () => {
       root.style.scrollPaddingBottom = before;
     };
@@ -357,7 +357,18 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
         )}
       </section>
 
-      <div className="sticky bottom-0 z-10 -mx-4 grid gap-1 border-t border-stone-200 bg-white/95 px-4 py-2 backdrop-blur">
+      {/*
+        The save line and Back and Next, kept in reach. On a phone the bar sits
+        on top of the site's tab bar (h-16 plus the safe area, MobileTabBar.tsx)
+        and the shortcuts button steps out while the steps are open, the way a
+        journal sitting's Next does (index.css, `data-hides-fab-phone`).
+      */}
+      <div
+        data-hides-fab-phone
+        data-step-bar=""
+        className="sticky bottom-[var(--rp-bar-bottom)] z-10 -mx-4 grid gap-1 border-t border-stone-200 bg-white/95 px-4 py-2 backdrop-blur md:bottom-0"
+        style={{ "--rp-bar-bottom": "max(calc(env(safe-area-inset-bottom, 0px) + 4rem), 4rem)" } as React.CSSProperties}
+      >
         <SaveLine status={save.status} error={save.error} onRetry={() => void save.flush()} />
         <div className="flex items-center justify-between gap-2">
           <button type="button" disabled={index === 0} onClick={() => void go(STEPS[index - 1])} className={SECONDARY}>

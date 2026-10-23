@@ -105,6 +105,19 @@ describe("my proposals under My applications", () => {
     expect(d.textContent).toContain(RP_WORDS.draftWords);
   });
 
+  it("with no draft open, offers to start one from the card too", async () => {
+    answer = () => json(mine(null, [submitted]));
+    render(
+      <Router>
+        <PlayerRoleCardView data={fixturePayload(1, "self")} />
+      </Router>,
+    );
+    const links = await screen.findByText(RP_WORDS.myProposals);
+    const box = links.closest("[data-proposal-links]") as HTMLElement;
+    const start = Array.from(box.querySelectorAll("a")).find((a) => a.textContent === RP_WORDS.propose);
+    expect(start?.getAttribute("href")).toBe("/role-proposals/new");
+  });
+
   it("is not asked on somebody else's card, or on a proposal card", async () => {
     answer = () => json(mine(null, [submitted]));
     render(

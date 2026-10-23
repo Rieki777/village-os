@@ -202,6 +202,16 @@ describe("where a submitted proposal stands", () => {
     expect(screen.getByText("Adopted on 9 Nov after the circle consented")).toBeTruthy();
   });
 
+  it("keeps a way to the shared view while the link is on", () => {
+    const share = { on: true, audience: "members" as const, link: `/role-proposals/shared/${"T".repeat(32)}`, token: "T".repeat(32), anyoneReaches: true, anyoneNote: null };
+    render(
+      <Router>
+        <ProposalState proposal={submitted("open", { share })} />
+      </Router>,
+    );
+    expect(screen.getByRole("link", { name: RP_WORDS.openShared }).getAttribute("href")).toBe(`/role-proposals/shared/${"T".repeat(32)}`);
+  });
+
   it("the page draws the state, not the steps, once submitted", async () => {
     server = fakeServer({ roles: [{ roleId: "r1" }] }, { card: CARD });
     vi.stubGlobal("fetch", vi.fn(server.fetch));

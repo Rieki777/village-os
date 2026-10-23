@@ -45,6 +45,12 @@ export default function ProposalState({ proposal }: { proposal: ProposalOut }) {
           {RP_WORDS.seeApplication}
         </Link>
       )}
+      {/* The share link outlives the draft: the owner can still open what readers see. */}
+      {proposal.share?.on && proposal.share.token && (
+        <Link href={`/role-proposals/shared/${encodeURIComponent(proposal.share.token)}`} className={`${QUIET} w-fit px-0`}>
+          {RP_WORDS.openShared}
+        </Link>
+      )}
     </section>
   );
 }
