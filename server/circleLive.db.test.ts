@@ -115,6 +115,11 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
       "INSERT INTO `live_session_entries` (`session_id`, `kind`, `text`, `author_no`, `created_at`) VALUES (?, 'decision', 'Plant the beans', 1, ?), (?, 'decision', 'Elsewhere', 1, ?)",
       [met, thisMoon, elsewhere, thisMoon],
     );
+    // A rhythm the circle keeps, written the way Live Sessions stores one (0271).
+    await q(
+      "INSERT INTO `live_session_rhythms` (`circle_id`, `kind`, `recurrence`, `starts_on`, `time_of_day`, `duration_min`) " +
+        "VALUES ('c-garden', 'weekly', '{\"freq\":\"weekly\",\"byWeekday\":[4],\"interval\":1}', '2026-10-01', '18:00', 45)",
+    );
     await q(
       "INSERT INTO `role_tensions` (`id`, `org_role_id`, `raised_by`, `text`, `status`) VALUES " +
         "('rt-1', 'seat-water', 'm-dee', 'The valve sticks', 'open'), ('rt-2', 'seat-water', 'm-dee', 'Answered one', 'answered')",
@@ -143,8 +148,11 @@ describe.skipIf(!configured)("the circle card's live parts, on a real schema", (
     sessions = "members";
     const card = await read();
     const meet = section(card, "meet");
-    expect(meet.slot.kind === "shown" && meet.slot.value.lines[1]).toBe("Meeting rhythm: not set yet");
-    expect(meet.slot.kind === "shown" && meet.slot.value.lines[0]).toMatch(/^Last met on \d{1,2} \w{3} 2026$/);
+    // Through Live Sessions' own door (circleSummary): the rhythm and the next meeting in its words, then the last real meeting.
+    expect(meet.slot.value.lines[0]).toBe("Meeting rhythm: Every Thursday at 18:00");
+    expect(meet.slot.value.lines[1]).toMatch(/^Next meeting: /);
+    expect(meet.slot.value.lines[2]).toMatch(/^Last met on \d{1,2} \w{3} 2026$/);
+    expect(meet.slot.value.lines[3]).toMatch(/waiting for the next meeting$/);
     expect(meet.slot.kind === "shown" && meet.slot.value.links).toEqual([{ label: "Open Live Sessions", href: "/sessions" }]);
     const whole = section(card, "wholeness");
     expect(whole.slot.kind === "shown" && whole.slot.value.lines[0]).toContain("how everyone is arriving");

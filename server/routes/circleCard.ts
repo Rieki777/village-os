@@ -114,6 +114,8 @@ export function register(app: Express, deps: Deps): void {
       clock: (deps.clock ?? villageClock)(),
       sessionsOn: sessionsOnFor(deps.sessionsLifecycle(), !!viewer, admin),
       reviewOn: state.current?.endsOn ?? null,
+      viewer: viewer ? { userId: String(viewer.id), admin } : null,
+      sessionsDeps: { circles: () => deps.circles().map((c) => ({ id: c.id, name: c.name })), lapseContext: deps.lapse },
     });
     res.json({
       circleId: circle.id,

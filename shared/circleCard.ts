@@ -122,7 +122,18 @@ export interface CircleCardIn {
    * member tier only. `sessionsOn` is false where Live Sessions is off, and
    * then the meeting sections draw nothing.
    */
-  live?: Read<{ signs: SignReading[]; lastMetAt: string | null; openTensions: number; sessionsOn: boolean }>;
+  live?: Read<{
+    signs: SignReading[];
+    lastMetAt: string | null;
+    openTensions: number;
+    sessionsOn: boolean;
+    /** Live Sessions' own words for the circle's rhythm ("Every Thursday at 18:00"), or null when none is kept. */
+    rhythm?: string | null;
+    /** Its next meeting in words ("Tomorrow at 18:00"), or null. */
+    next?: string | null;
+    /** What waits for the next meeting, as this reader may see it; null when unread. */
+    waiting?: number | null;
+  }>;
   /** The last day of the current season, a civil date: the review is due then (Rye, 2026-10-22). Null with no season. */
   reviewOn?: Read<string | null>;
 }
@@ -339,7 +350,15 @@ function liveSections(input: CircleCardIn, terms: boolean): CircleSection[] {
     ? {
         ...base("meet", terms),
         kind: "facts",
-        slot: shown({ lines: [met ? W.lastMet(met) : W.notMetYet, W.rhythmNotSet], links: [{ label: W.openSessions, href: SESSIONS_HREF }] }),
+        slot: shown({
+          lines: [
+            live.rhythm ? W.rhythm(live.rhythm) : W.rhythmNotSet,
+            ...(live.next ? [W.nextMeeting(live.next)] : []),
+            met ? W.lastMet(met) : W.notMetYet,
+            ...(typeof live.waiting === "number" ? [W.waiting(live.waiting)] : []),
+          ],
+          links: [{ label: W.openSessions, href: SESSIONS_HREF }],
+        }),
       }
     : { ...base("meet", terms), kind: "facts", slot: UNREAD };
   const wholeness: CircleSection = live.sessionsOn

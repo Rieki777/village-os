@@ -168,8 +168,31 @@ describe("the live parts, which the platform reads and nobody types", () => {
       const s = find(card.sections, key) as Extract<CircleSection, { kind: "facts" }>;
       return s.slot.kind === "shown" ? s.slot.value.lines : null;
     };
-    expect(facts("meet")).toEqual(["Last met on 20 Oct 2026", "Meeting rhythm: not set yet"]);
+    expect(facts("meet")).toEqual(["Meeting rhythm: not set yet", "Last met on 20 Oct 2026"]);
     expect(facts("tensions")?.[0]).toBe("2 open tensions on this circle's roles");
+  });
+
+  it("reads the rhythm, the next meeting and what waits in Live Sessions' own words", () => {
+    const card = buildCircleCard(
+      base({
+        live: {
+          signs: [],
+          lastMetAt: null,
+          openTensions: 0,
+          sessionsOn: true,
+          rhythm: "Every Thursday at 18:00",
+          next: "Tomorrow at 18:00",
+          waiting: 2,
+        },
+      }),
+    );
+    const meet = find(card.sections, "meet") as Extract<CircleSection, { kind: "facts" }>;
+    expect(meet.slot.kind === "shown" && meet.slot.value.lines).toEqual([
+      "Meeting rhythm: Every Thursday at 18:00",
+      "Next meeting: Tomorrow at 18:00",
+      "Has not met yet",
+      "2 items waiting for the next meeting",
+    ]);
   });
 
   it("draws no meeting section while Live Sessions is off, and nothing live below the member tier", () => {

@@ -166,6 +166,10 @@ export const CIRCLE_CARD_WORDS = {
   lastMet: (day: string) => `Last met on ${day}`,
   notMetYet: "Has not met yet",
   rhythmNotSet: "Meeting rhythm: not set yet",
+  rhythm: (words: string) => `Meeting rhythm: ${words}`,
+  nextMeeting: (words: string) => `Next meeting: ${words}`,
+  waiting: (n: number) =>
+    n === 0 ? "Nothing waiting for the next meeting" : n === 1 ? "1 item waiting for the next meeting" : `${n} items waiting for the next meeting`,
   openSessions: "Open Live Sessions",
   arrivalRound: "Each meeting in Live Sessions opens by asking how everyone is arriving, with a number from 1 to 11.",
   sharedBreath: "Whoever facilitates can start a shared breath for everyone in the room.",
