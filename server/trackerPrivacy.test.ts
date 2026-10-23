@@ -51,6 +51,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_COMMAND_CENTRE_PLAN } from "./lib/commandCentrePlanDefault";
 
 const ASSETS = path.resolve(process.cwd(), "dist/public/assets");
 
@@ -165,5 +166,26 @@ describe("the founders' tracker ships nothing private in its chunk", () => {
     const { text } = trackerChunk();
     const hit = text.match(MAIL_ADDRESS);
     expect(hit?.[0] ?? null, "a mail address in a bundle is a person in a bundle").toBeNull();
+  });
+
+  /*
+   * THE BUILD PLAN IS SERVED, NOT COMPILED (2026-10-22). Its weeks, tasks and
+   * decisions (deal terms, a legal structure, a landholder) used to be
+   * constants in the tracker page. They now reach a browser only through the
+   * admin-gated journey read. Checked against the default itself, so no
+   * string is written out here a second time.
+   */
+  it("ships none of the build plan's own words in any client chunk", () => {
+    const words = [
+      ...DEFAULT_COMMAND_CENTRE_PLAN.weeks.flatMap((w) => [w.goal, ...w.tasks.map((t) => t.text)]),
+      ...DEFAULT_COMMAND_CENTRE_PLAN.decisions.flatMap((d) => [d.title, d.description]),
+    ].filter((text) => !text.includes("{village}") && text.length > 30);
+    expect(words.length, "the check must hold real sentences to mean anything").toBeGreaterThan(50);
+    const offenders: string[] = [];
+    for (const chunk of chunkFiles()) {
+      const text = readChunk(chunk);
+      for (const sentence of words) if (text.includes(sentence)) offenders.push(`${chunk}: ${sentence.slice(0, 40)}`);
+    }
+    expect(offenders, "the plan belongs in journey-state, behind the admin gate").toEqual([]);
   });
 });
