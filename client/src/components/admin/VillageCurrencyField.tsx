@@ -15,6 +15,10 @@
  * the reason this used to be free text: the list then was the ECB's fourteen,
  * and CRC was not one of them.
  *
+ * IT SAYS WHEN A CHOICE IS NOT SAVED YET. The pick only lands when Save
+ * identity is pressed, and that button sits below several other fields, so a
+ * founder who picked colones and moved on came back to USD with no word why.
+ *
  * Its own file because client/src/pages/Admin.tsx is on a line ratchet that
  * only turns down. Light-only, like the rest of this folder.
  */
@@ -53,11 +57,14 @@ export function currencyChoices(stored: string): { code: string; label: string }
 
 export default function VillageCurrencyField({
   value,
+  saved,
   platformDefault,
   onChange,
 }: {
-  /** The stored overlay value, as typed or chosen. Blank means inherit. */
+  /** The overlay value as typed or chosen, not yet saved. Blank means inherit. */
   value: string;
+  /** The value as last stored, when the host knows it. */
+  saved?: string;
   platformDefault: string;
   onChange: (code: string) => void;
 }) {
@@ -94,6 +101,8 @@ export default function VillageCurrencyField({
 
   const problem = another ? displayCurrencyProblem(code) : null;
   const covered = fxCovered.includes(code);
+  const unsaved = saved !== undefined && code !== saved.trim().toUpperCase();
+  const picked = choices.find((c) => c.code === code)?.label ?? code;
 
   return (
     <div className="md:col-span-2">
@@ -148,6 +157,11 @@ export default function VillageCurrencyField({
         <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
           {platformDefault ? `Platform default: ${platformDefault}. ` : ""}This sets what every price on the
           site is quoted in, and what a member sees before choosing their own display currency.
+        </p>
+      )}
+      {unsaved && (
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2" role="status">
+          Not saved yet. Press Save identity below to keep {code ? picked : "no currency of your own"}.
         </p>
       )}
       <CurrencyAnswerNote answered={!!code} />

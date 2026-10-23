@@ -150,7 +150,10 @@ describe("the founder can set the village's own currency", () => {
     await open("USD");
     expect(field().value).toBe("USD");
     await user.selectOptions(field(), "CRC");
+    // The pick lands only on Save identity, so the screen says so until then.
+    expect(screen.getByText(/Not saved yet\. Press Save identity below to keep Costa Rican Col[oó]n \(CRC\)/)).toBeTruthy();
     await save(user);
+    await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull());
 
     expect(ctx.current.project.fiatCurrency).toBe("CRC");
     /*

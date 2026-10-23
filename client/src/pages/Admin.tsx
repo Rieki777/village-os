@@ -7316,12 +7316,15 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  // The currency as last stored, so the picker can say when a choice is not saved yet.
+  const [savedCurrency, setSavedCurrency] = useState("");
   const needsSetup = useNeedsSetupObservation(password);
   const load = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, { headers: authHeaders(password) });
       const data = await res.json();
       setBrand(data.brand);
+      setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       setDefaults(data.defaults);
     } catch { toast.error("Failed to load setup"); }
   }, [password]);
@@ -7339,6 +7342,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBrand(data.brand);
+      setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       toast.success("Saved");
     } catch { toast.error("Save failed"); }
     setSavingSection(null);
@@ -7454,6 +7458,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           {/* Picked by name, so a founder never has to know the code (VillageCurrencyField.tsx). */}
           <VillageCurrencyField
             value={String(brand.project?.fiatCurrency ?? "")}
+            saved={savedCurrency}
             platformDefault={defaults.project?.fiatCurrency ?? ""}
             onChange={(c) => setField("project", "fiatCurrency", c)}
           />
