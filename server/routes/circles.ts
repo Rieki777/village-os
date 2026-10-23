@@ -39,6 +39,10 @@ import { parentingRefusal } from "../../shared/circleView";
 
 type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "circlesRepo" | "getPool" | "loadRoles">;
 
+/** The refusal an admin meets changing a circle's purpose directly. */
+export const PURPOSE_BY_CONSENT = (circleId: string): string =>
+  `A circle's purpose changes by consent. Propose new words on the circle's card, at /circles/${circleId}.`;
+
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, adminActor, circlesRepo, getPool, loadRoles } = deps;
 
@@ -112,10 +116,22 @@ export function register(app: Express, deps: Deps): void {
         message: `A circle is ${CIRCLE_STATUSES.join(", ")}. "${String(req.body.status)}" is none of those.`,
       });
     }
+    /*
+     * A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22). It is one of the
+     * circle card's words, and those change through an org draft
+     * (`update_circle`, server/lib/circleWordsDraft.ts), so the admin door
+     * refuses a purpose that differs from the one stored and points to the
+     * card. The same purpose sent back with a rename or a status change is no
+     * change, and goes through. A new circle still starts with its purpose
+     * (POST above): there was nothing to consent to changing.
+     */
     if (req.body?.purpose !== undefined) {
-      const purpose = String(req.body.purpose ?? "").trim();
-      if (purpose.length > 2000) return res.status(400).json({ error: "purpose_too_long", message: "A circle purpose is at most 2000 characters." });
-      req.body.purpose = purpose || null;
+      const purpose = String(req.body.purpose ?? "").trim() || null;
+      const stored = String((all[idx] as any).purpose ?? "").trim() || null;
+      if (purpose !== stored) {
+        return res.status(409).json({ error: "purpose_by_consent", message: PURPOSE_BY_CONSENT(String(req.params.id)) });
+      }
+      req.body.purpose = stored;
     }
     // isExample is pinned exactly like id: a request body may not forge the
     // flag onto a real row, nor strip it off an example to launder it.

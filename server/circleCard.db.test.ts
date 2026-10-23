@@ -64,12 +64,13 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
     const handlers = new Map<string, Handler>();
-    const app: any = { get: (p: string, h: Handler) => handlers.set(`GET ${p}`, h) };
+    const app: any = { get: (p: string, h: Handler) => handlers.set(`GET ${p}`, h), post: () => undefined };
     register(app, {
       authedUser: async () => (admin ? { id: "m-ana", name: "Ana Reyes" } : null),
       isAdmin: async () => admin,
       capabilityCtx: async () => ({ stageIndex: 0, stageIndexOf: () => 0, roleCapabilities: [], isAdmin: admin }) as any,
       getPool: () => pool as any,
+      overLimit: async () => false,
       circles: () => CIRCLES,
       seasonState: () => ({ timezone: "UTC" }),
       lapse: () => ({ currentSeasonId: null, cadence: "never" }) as any,
