@@ -135,6 +135,9 @@ export const CONSENT_WORDS = {
   notAsked: "This proposal did not ask you. The circle's holders answer it.",
   answered: "You have answered this already.",
   windowClosed: "The circle's 2 business days have passed, so answers are closed.",
+  /** The application was withdrawn, or already decided, so the circle's answers are closed (PR D). */
+  withdrawn: "This proposal was withdrawn, so answers are closed.",
+  decided: "This proposal has been decided, so answers are closed.",
   /** An objection where the circle has no meeting to carry it to yet. */
   notCarried: "The circle has not met yet, so the objection waits on the application page.",
   sessionsOff: "Live Sessions is off, so the objection waits on the application page.",

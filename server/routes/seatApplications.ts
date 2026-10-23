@@ -356,6 +356,10 @@ export function register(app: Express, deps: Deps): void {
     return STATUS_WORDS[a.status];
   }
 
+  /** A withdrawn or decided application takes no answer from the circle, so nobody reads that they may give one (PR D). */
+  const answersCloseWith = (view: ReturnType<typeof consentView>, awaiting: boolean) =>
+    awaiting ? view : { ...view, you: { ...view.you, mayAnswer: false } };
+
   /** An application as a member reads it, with what this reader may do with it. */
   async function served(
     a: StoredApplication,
@@ -392,7 +396,7 @@ export function register(app: Express, deps: Deps): void {
       }),
       // The role proposal it came from: whether it changes roles, where the circle's consent stands, and the decision in words.
       proposal: proposal
-        ? { id: proposal.id, changesRoles: changes, consent: consentView(asks, new Date(), tz, viewerId, askRoles), decided: proposal.decidedWords }
+        ? { id: proposal.id, changesRoles: changes, consent: answersCloseWith(consentView(asks, new Date(), tz, viewerId, askRoles), awaiting), decided: proposal.decidedWords }
         : null,
       note: a.note,
       deliverables: a.deliverables,

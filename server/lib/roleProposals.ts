@@ -124,6 +124,11 @@ export interface ConsentView {
    * asked for, each once (role proposals PR D), so the tally says who in
    * roles and never in names. A holder who has since left a role is counted
    * and carries no title.
+   *
+   * WHO OBJECTED IS NEVER SAID OUTSIDE THE CIRCLE (part B's rule): `objected`
+   * carries titles only for a reader the circle asked, and only the titles of
+   * objections from the circle that reader was asked for. The candidate, a
+   * holder of the power and every other member read the count alone.
    */
   roles: { asked: string[]; consented: string[]; objected: string[] };
   /** "Record the adoption", once the circle has consented. */
@@ -176,7 +181,8 @@ export function consentView(asks: readonly store.StoredAsk[], now: Date, timeZon
     roles: {
       asked: titlesOf(asks, rolesOf),
       consented: titlesOf(asks.filter((a) => a.answer === "consent"), rolesOf),
-      objected: titlesOf(asks.filter((a) => a.answer === "object"), rolesOf),
+      // Titles for a reader asked in that circle, and a count alone for everybody else.
+      objected: mine ? titlesOf(asks.filter((a) => a.answer === "object" && a.circleId === mine.circleId), rolesOf) : [],
     },
     record: state === "consented" ? CONSENT_WORDS.record : null,
     you: { asked: !!mine, answer: mine?.answer ?? null, mayAnswer: !!mine && !mine.answer && state === "open" },
@@ -243,9 +249,11 @@ export type AnswerOutcome =
   | { ok: false; status: number; error: string; field?: string };
 
 /**
- * A holder the circle asked consents or objects, once, inside the window. An
- * objection's tension entry and the answer are one transaction, so a backlog
- * never carries an objection the ask does not record.
+ * A holder the circle asked consents or objects, once, inside the window,
+ * while the application still waits on a decision (withdrawn or decided, the
+ * answers are closed: 409 with the sentence). An objection's tension entry
+ * and the answer are one transaction, so a backlog never carries an objection
+ * the ask does not record.
  */
 export async function answerConsent(
   deps: AnswerDeps,
@@ -257,6 +265,11 @@ export async function answerConsent(
   const parsed = parseConsentAnswer(body);
   const ask = await store.readAsk(deps.pool, p.id, userId);
   if (!ask) return { ok: false, status: 404, error: CONSENT_WORDS.notAsked };
+  // Answers close with the application (PR D): a withdrawn or decided proposal takes no answer,
+  // so nothing reaches the circle's backlog for a proposal nobody is deciding any more.
+  const [a] = p.applicationId ? await readApplications(deps.pool, [p.applicationId]) : [];
+  if (!a || a.status === "withdrawn") return { ok: false, status: 409, error: CONSENT_WORDS.withdrawn };
+  if (a.status !== "awaiting-holder") return { ok: false, status: 409, error: CONSENT_WORDS.decided };
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error, field: parsed.field };
   if (ask.answer) return { ok: false, status: 409, error: CONSENT_WORDS.answered };
   if (deps.now.getTime() >= ask.closesAt.getTime()) return { ok: false, status: 409, error: CONSENT_WORDS.windowClosed };

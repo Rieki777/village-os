@@ -177,11 +177,17 @@ describe.skipIf(!configured)("the circle answers a role proposal, through the ro
     const [entry] = await q("SELECT text FROM live_session_entries WHERE kind = 'tension' AND text LIKE 'An objection%'");
     expect(entry.text).toBe("An objection to a role proposal for Kitchen Keeper: The bakery needs the kitchen on Fridays.");
 
-    // Every reader reads the same tally, in roles: the candidate on their own page, a member by the share link.
+    // WHO OBJECTED IS NEVER TOLD OUTSIDE THE CIRCLE (part B's rule). The candidate reads the
+    // asked and consented roles, and the objection as a count alone.
     h.as(OWNER);
     const own = await h.call("GET", `${P}/${s.proposalId}`);
-    expect(own.body.proposal.consent).toMatchObject({ state: "objected", roles: { consented: ["Gate Keeper"], objected: ["Bread Keeper"] } });
+    expect(own.body.proposal.consent).toMatchObject({ state: "objected", objected: 1, roles: { consented: ["Gate Keeper"], objected: [] } });
     expect([...own.body.proposal.consent.roles.asked].sort()).toEqual(["Bread Keeper", "Gate Keeper"]);
+    expect((await application(OWNER, s.applicationId)).proposal.consent).toMatchObject({ objected: 1, roles: { objected: [] } });
+    // So does a holder of the power outside the circle.
+    expect((await application(HOLDER, s.applicationId)).proposal.consent).toMatchObject({ objected: 1, roles: { consented: ["Gate Keeper"], objected: [] } });
+    // A holder the circle asked reads the objecting role, on the application and by the share link.
+    expect((await application(READER, s.applicationId)).proposal.consent).toMatchObject({ objected: 1, roles: { objected: ["Bread Keeper"] } });
     h.as(READER);
     const link = await h.call("GET", `${P}/shared/${s.token}`);
     expect(link.status, link.text).toBe(200);
@@ -236,5 +242,34 @@ describe.skipIf(!configured)("the circle answers a role proposal, through the ro
     const after = await application(OWNER, s.applicationId);
     expect(after.status).toBe("adopted");
     expect(after.proposal.decided).toBe(recorded.body.decided);
+  });
+
+  it("answers close with the application: withdrawn or decided, the route refuses in a sentence and writes nothing", async () => {
+    const tensions = async () => (await q("SELECT COUNT(*) AS n FROM live_session_entries WHERE kind = 'tension'"))[0].n;
+    const before = await tensions();
+
+    // Withdrawn by the candidate inside the window: nobody may answer it, and nobody reads that they may.
+    const gone = await propose([roles.water], { aim: "Keep the springs clean all year." });
+    expect((await application(READER, gone.applicationId)).proposal.consent.you.mayAnswer).toBe(true);
+    h.as(OWNER);
+    expect((await h.call("POST", `/api/governance/role-applications/${gone.applicationId}/withdraw`)).status).toBe(200);
+    const late = await answer(READER, gone.applicationId, { answer: "consent" });
+    expect(late.status).toBe(409);
+    expect(late.body.error).toBe("This proposal was withdrawn, so answers are closed.");
+    expect((await answer(FOURTH, gone.applicationId, { answer: "object", reason: "Not this season." })).body.error).toBe(CONSENT_WORDS.withdrawn);
+    expect((await application(READER, gone.applicationId)).proposal.consent.you).toMatchObject({ asked: true, answer: null, mayAnswer: false });
+    expect(await waitingFor(READER)).toEqual([]);
+
+    // Decided by the power inside the window: the same, in its own sentence.
+    const done = await propose([roles.gate], { aim: "Welcome every visitor by name." });
+    h.as(HOLDER);
+    expect((await h.call("POST", `/api/governance/role-applications/${done.applicationId}/adopt`)).status).toBe(200);
+    const after = await answer(FOURTH, done.applicationId, { answer: "object", reason: "Two of us keep the gate already." });
+    expect(after.status).toBe(409);
+    expect(after.body.error).toBe("This proposal has been decided, so answers are closed.");
+    expect((await application(FOURTH, done.applicationId)).proposal.consent.you.mayAnswer).toBe(false);
+
+    // Neither refusal reached the circle's backlog. (Past the window: the case above, "The circle's 2 business days have passed".)
+    expect(await tensions()).toBe(before);
   });
 });
