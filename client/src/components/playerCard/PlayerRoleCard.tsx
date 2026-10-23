@@ -67,7 +67,7 @@ export function PlayerRoleCardView({
   const { card, sheets, links, viewer, timeZone } = data;
   const mayEdit = viewer.isSelf && mode === "live";
   return (
-    <CardEditContext.Provider value={{ editing: mayEdit && editing, owner: mayEdit, reload, reviewHref: links.review ?? null }}>
+    <CardEditContext.Provider value={{ editing: mayEdit && editing, owner: mayEdit, reload }}>
       <div data-player-card data-card-mode={mode} className={`grid gap-4 sm:gap-6 ${className}`}>
         <div className={`${SECTION} grid gap-5`}>
           <div className="flex flex-wrap items-start justify-between gap-3">

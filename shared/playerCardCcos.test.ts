@@ -115,7 +115,9 @@ describe("a role with every CCOS word written", () => {
   });
 
   it("carries the review week as a chip after the term date, and the terms key once for the card", () => {
-    expect(r.chips).toEqual(["Key role", "Community Anchor", "Held until 31 Dec 2026", "Review week of 9 Nov"]);
+    // The role's circle is drawn as a link to its card, beside the chips (circle cards PR 4).
+    expect(r.chips).toEqual(["Key role", "Held until 31 Dec 2026", "Review week of 9 Nov"]);
+    expect(r.circle).toEqual({ name: "Community Anchor", href: "/circles/c1" });
     expect(card(WORDS, { frameworkTerms: true }).termsKey).toBe("Underlined headings show the matching CCOS term when you hover or tap them.");
   });
 });
@@ -172,7 +174,7 @@ describe("the review chip", () => {
     expect(reviewChip({ v: 1 })).toBe("No review date set");
     expect(reviewChip(null)).toBe("No review date set");
     expect(reviewChip(undefined)).toBeNull();
-    expect(one(card({ settings: undefined })).chips).toEqual(["Key role", "Community Anchor", "Held until 31 Dec 2026"]);
+    expect(one(card({ settings: undefined })).chips).toEqual(["Key role", "Held until 31 Dec 2026"]);
     expect(one(card({ settings: null })).chips).toContain("No review date set");
   });
 });
