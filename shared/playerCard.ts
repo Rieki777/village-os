@@ -40,6 +40,7 @@ import { CARD_WORDS as W, ALLOWANCE_WORDS, APPLICATION_STATUS_WORDS, PAY_WORDS, 
 import { formatDay, joinList, type Read } from "./roleSheet";
 import { cycleWindows, readSign, type SignReading, type SignRows } from "./roleSigns";
 import { roleHandover, roleHealth, type HandoverOut, type HealthOut } from "./playerCardHealth";
+import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type TextSectionOut } from "./playerCardCcos";
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
@@ -147,6 +148,19 @@ export interface PlayerRoleIn {
   bringMe: Read<string[] | null>;
   notMine: Read<string[] | null>;
   runbook: Read<string | null>;
+  /**
+   * `org_roles` CCOS words (0274): "This role exists while", what it can
+   * decide on its own, what it does regularly, the three "Holding this role
+   * well" lines and the time chip (shared/playerCardCcos.ts). Optional, so a
+   * host written before them compiles: left out is unread, and draws nothing.
+   */
+  existsWhile?: Read<string | null>;
+  authorities?: Read<string[] | null>;
+  responsibilities?: Read<string[] | null>;
+  signsStretched?: Read<string | null>;
+  flowsBack?: Read<string | null>;
+  stepBack?: Read<string | null>;
+  timeCommitment?: Read<string | null>;
   worksWith: Read<WorksWithIn[]>;
   powers: Read<PowerIn[]>;
   tensions: Read<TensionIn[]>;
@@ -275,6 +289,11 @@ export interface PlayerCardInput {
   endedSeasonIds?: readonly string[];
   /** The owner's old seatings that came through no application. */
   pastSeatings?: Read<PastSeating[]>;
+  /**
+   * Show the CCOS term beside each heading of a role in full (`org.ccos_terms`,
+   * the variable the circle card reads). Left out is off: plain headings.
+   */
+  frameworkTerms?: boolean;
 }
 
 export type CardMode = "live" | "proposal";
@@ -342,15 +361,28 @@ export interface RoleOut {
   id: string;
   anchor: string;
   title: string;
-  purpose: { heading: string; text: Slot<string>; why: string | null; source: string };
+  /** `term` on a heading is "CCOS: <term>" for the hover, or null where the village turned the terms off. */
+  purpose: { heading: string; term: string | null; text: Slot<string>; why: string | null; source: string };
+  /** "This role exists while ...", drawn inside the Purpose block (0274). */
+  existsWhile: TextSectionOut;
+  /** "Key role", the circle, "Held until ...", and "Review week of ..." or "No review date set". */
   chips: string[];
+  /** The time chip (0274), drawn after the chips when it is written. */
+  time: TextSectionOut;
   plays: { label: string; chips: { key: string; name: string }[] } | null;
-  decide: { heading: string; text: Slot<string> };
+  /** "What I look after": the role's domain. */
+  decide: { heading: string; term: string | null; text: Slot<string> };
+  /** "What I can decide on my own", in the box with the domain (0274). */
+  authorities: ListSectionOut;
   bringMe: { heading: string; items: Slot<string[]> };
-  countOnMe: { heading: string; items: Slot<string[]> };
-  working: { heading: string; items: Slot<SignOut[]> };
+  countOnMe: { heading: string; term: string | null; items: Slot<string[]> };
+  /** "What I do regularly", after what people can count on (0274). */
+  responsibilities: ListSectionOut;
+  working: { heading: string; term: string | null; items: Slot<SignOut[]> };
   worksWith: { heading: string; items: Slot<string[]> };
-  notMine: { heading: string; items: Slot<string[]> };
+  /** "Holding this role well", before "Not mine to hold" (0274). */
+  holdingWell: HoldingWellOut;
+  notMine: { heading: string; term: string | null; items: Slot<string[]> };
   runbook: { heading: string; text: Slot<string> };
   powers: { heading: string; items: Slot<string[]> };
   tensions: Slot<TensionsOut>;
@@ -451,6 +483,8 @@ export interface AccomplishedOut {
 export interface PlayerCard {
   header: HeaderOut;
   tiles: { heading: string; items: Slot<TileOut[]> };
+  /** The one line that says what an underlined heading does, when the card shows the terms and has a role. */
+  termsKey: string | null;
   across: AcrossOut;
   roles: RoleOut[];
   timeline: TimelineOut;
@@ -623,6 +657,10 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   if (role.circle) chips.push(role.circle.name);
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
+  // 0274: the CCOS sections, and the review chip from the role's own terms.
+  const terms = input.frameworkTerms === true;
+  const ccos = roleCcos(role, terms);
+  if (ccos.review) chips.push(ccos.review);
 
   const powers =
     role.powers === undefined
@@ -642,16 +680,21 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     title: role.name,
     purpose: {
       heading: W.purpose,
+      term: roleTerm("purpose", terms),
       text: textSlot(clean(role.aim) ?? role.whyItMatters, W.noPurpose),
       why: clean(role.aim) ? clean(role.whyItMatters) : null,
       source: "org_roles.aim, org_roles.why_it_matters",
     },
+    existsWhile: ccos.existsWhile,
     chips,
+    time: ccos.time,
     plays: playsAs(role, input.archetypeNames),
-    decide: { heading: W.decide, text: textSlot(role.domain, W.notWritten) },
+    decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, W.notWritten) },
+    authorities: ccos.authorities,
     bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, W.notWritten) },
-    countOnMe: { heading: W.countOnMe, items: wordsSlot(role.accountabilities, W.notWritten) },
-    working: { heading: W.working, items: signsFor(role, input) },
+    countOnMe: { heading: W.countOnMe, term: roleTerm("countOnMe", terms), items: wordsSlot(role.accountabilities, W.notWritten) },
+    responsibilities: ccos.responsibilities,
+    working: { heading: W.working, term: roleTerm("working", terms), items: signsFor(role, input) },
     worksWith: {
       heading: W.worksWith,
       items:
@@ -661,7 +704,8 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
             ? shown(role.worksWith.map((w) => (clean(w.about) ? W.worksWithLine(w.roleName, clean(w.about)!) : w.roleName)))
             : empty(W.notWritten),
     },
-    notMine: { heading: W.notMine, items: wordsSlot(role.notMine, W.notWritten) },
+    holdingWell: ccos.holdingWell,
+    notMine: { heading: W.notMine, term: roleTerm("notMine", terms), items: wordsSlot(role.notMine, W.notWritten) },
     runbook: { heading: W.runbook, text: textSlot(role.runbook, W.notWritten) },
     powers: { heading: anyShared ? W.powersShared : W.powers, items: powers },
     tensions: tensionsFor(role, input),
@@ -1014,6 +1058,7 @@ export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
   return {
     header: header(input, roles),
     tiles,
+    termsKey: input.frameworkTerms === true && list.length > 0 ? W.termsKey : null,
     across: across(input, roles, roleOuts),
     roles: roleOuts,
     timeline: timeline(input, list),

@@ -30,6 +30,7 @@ import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
 import RoleValueEditor from "@/components/admin/RoleValueEditor";
 import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
+import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
@@ -299,7 +300,7 @@ export function OrgChartTab({ password }: { password: string }) {
                           <textarea rows={2} value={d.aim ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, aim: e.target.value } })} />
                         </label>
-                        <label className="text-xs text-gray-500">Domain (what it decides alone)
+                        <label className="text-xs text-gray-500">Domain (what it looks after)
                           <textarea rows={2} value={d.domain ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, domain: e.target.value } })} />
                         </label>
@@ -447,6 +448,8 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
                       {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
                       {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
+                      {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>

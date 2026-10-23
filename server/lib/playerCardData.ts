@@ -142,6 +142,11 @@ export interface CardContext {
    * so a host that never says reads no tensions.
    */
   viewerMember?: boolean;
+  /**
+   * Show the CCOS term on each heading of a role in full (`org.ccos_terms`,
+   * the variable the circle card reads). Absent is off: plain headings.
+   */
+  frameworkTerms?: boolean;
 }
 
 /** The four card words drawn under "How I hold my roles". The other two have their own boxes. */
@@ -432,6 +437,14 @@ export async function buildPlayerCards(
         bringMe: (p.bringMe as string[] | null) ?? null,
         notMine: (p.notMine as string[] | null) ?? null,
         runbook: (p.runbook as string | null) ?? null,
+        // The role's CCOS words (0274), off the same seat object, at the domain's tier.
+        existsWhile: (p.existsWhile as string | null) ?? null,
+        authorities: (p.authorities as string[] | null) ?? null,
+        responsibilities: (p.responsibilities as string[] | null) ?? null,
+        signsStretched: (p.signsStretched as string | null) ?? null,
+        flowsBack: (p.flowsBack as string | null) ?? null,
+        stepBack: (p.stepBack as string | null) ?? null,
+        timeCommitment: (p.timeCommitment as string | null) ?? null,
         worksWith: seat.structure ? worksWith : undefined,
         powers: seat.structure
           ? (grantsByRole.get(id) ?? []).map((g) => ({
@@ -521,6 +534,8 @@ export async function buildPlayerCards(
       whoCouldHoldNext: memberUp ? words?.nextHolder ?? null : undefined,
       signReader: (key, circleId) =>
         signs(key, circleId)?.reading ?? { kind: "not-counted", key: key ?? null, words: "Not counted yet" },
+      // 0274: the CCOS term on each heading, by the village's `org.ccos_terms`.
+      frameworkTerms: ctx.frameworkTerms === true,
     };
     const card = buildPlayerCard(input);
 
