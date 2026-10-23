@@ -415,7 +415,7 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
             swept = true;
             await anonymizeMember(pool, target, null, deps());
           }
-          return pool.query(sql, params);
+          return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema, and writes none of its own
         },
       } as unknown as mysql.Pool;
       return { pool: racing, swept: () => swept };
