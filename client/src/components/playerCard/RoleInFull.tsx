@@ -15,6 +15,7 @@
  * proposed change that waits for consent. Other roles are named by their full
  * title and nobody but the owner is named anywhere.
  */
+import { useContext } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
@@ -22,7 +23,9 @@ import type { SignSheetOut } from "@shared/playerCardPayload";
 import { ROLE_HANDOVER_WORDS, runbookIsLink } from "@shared/roleHandover";
 import { TASK_BOARD_PATH } from "@shared/sessionTasks";
 import RaiseTension from "@/components/roleTension/RaiseTension";
-import { BOX, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
+import DecideDoors, { type DecideDoorWords } from "@/components/review/DecideDoors";
+import { ROLE_PROPOSAL_WORDS as PW } from "@shared/playerCardProposals";
+import { BOX, CardEditContext, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
 import { SignList } from "./SignList";
 
 const asText = (slot: { kind: string; value?: unknown }): string =>
@@ -89,6 +92,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           ))}
         </ul>
       ) : null}
+      {role.proposals.length ? <RoleProposals role={role} /> : null}
       {role.plays ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">{role.plays.label}</span>
@@ -234,5 +238,57 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </ul>
       </div>
     </article>
+  );
+}
+
+/** The player card's words for the doors every org draft has. */
+const DOOR_WORDS: DecideDoorWords = {
+  adopt: PW.adopt,
+  adoptConfirm: PW.adoptConfirm,
+  adoptYes: PW.adoptYes,
+  putToVillage: PW.putToVillage,
+  putConfirm: PW.putConfirm,
+  putYes: PW.putYes,
+  voting: PW.voting,
+  waitingHolder: PW.waitingHolder,
+  waitingVillage: PW.waitingVillage,
+  blocked: PW.blocked,
+  adopted: PW.adopted,
+  putDone: PW.putDone,
+  cancel: PW.cancel,
+  failed: PW.failed,
+};
+
+/**
+ * The open proposals for this role's words, each with the words it would put
+ * live and the doors that adopt it. A draft opened from a card is listed on no
+ * review page, so the role's own section is where it is decided.
+ */
+function RoleProposals({ role }: { role: RoleOut }) {
+  const { reload } = useContext(CardEditContext);
+  return (
+    <div className={`${BOX} grid gap-3`} data-role-proposals={role.id}>
+      <Eyebrow gold>{PW.heading}</Eyebrow>
+      {role.proposals.map((p) => (
+        <div key={p.draftId} className="grid gap-2">
+          <p className="text-xs text-muted-foreground">{p.proposedOn}</p>
+          {p.fields.map((f) => (
+            <div key={f.key} className="grid gap-1">
+              <p className="text-sm font-semibold">{f.label}</p>
+              {f.lines.length ? (
+                <ul className="list-disc space-y-1 break-words pl-5 text-sm">
+                  {f.lines.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">{PW.clears}</p>
+              )}
+            </div>
+          ))}
+          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} />
+        </div>
+      ))}
+    </div>
   );
 }

@@ -45,6 +45,7 @@ import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationS
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
+import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
 
 export * from "./playerCardWords";
 export type { Read } from "./roleSheet";
@@ -170,6 +171,12 @@ export interface PlayerRoleIn {
   circleDecisions?: Read<number>;
   /** Role words an open org draft would change: "Proposed, waiting for consent". */
   pendingWords?: Read<RoleEditKey[]>;
+  /**
+   * The open drafts that would change this role's words, with what they
+   * propose, so the card lists them with the doors that adopt them (a draft
+   * opened from a card is on no review page). Read at the member tier.
+   */
+  proposals?: Read<RoleProposalIn[]>;
 }
 
 export interface TaskIn {
@@ -365,6 +372,8 @@ export interface RoleOut {
   handover: HandoverOut;
   /** Role words a proposed change is waiting on consent for. */
   pending: RoleEditKey[];
+  /** The open proposals for this role's words, oldest first; empty when none or unread. */
+  proposals: RoleProposalOut[];
 }
 
 export type TensionDoor = "raise" | "waiting" | null;
@@ -672,6 +681,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     tensionDoor: tensionDoorFor(role, input),
     handover: roleHandover(role),
     pending: role.pendingWords ?? [],
+    proposals: role.proposals ? roleProposalsOut(role.proposals, input.timeZone) : [],
   };
 }
 

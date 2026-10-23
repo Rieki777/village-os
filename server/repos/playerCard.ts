@@ -108,7 +108,7 @@ export async function readCardRows(
       [window.threeMoonsFrom, ...ids],
     ),
     q(
-      "SELECT c.org_role_id, c.payload, c.draft_id FROM org_draft_changes c JOIN org_drafts d ON d.id = c.draft_id " +
+      "SELECT c.org_role_id, c.payload, c.draft_id, UNIX_TIMESTAMP(d.created_at) AS created_at FROM org_draft_changes c JOIN org_drafts d ON d.id = c.draft_id " +
         `WHERE d.status = 'open' AND c.op = 'update_seat' AND c.org_role_id IN (${held})`,
       ids,
     ),

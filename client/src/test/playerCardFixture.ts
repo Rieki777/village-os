@@ -101,6 +101,6 @@ export function fixturePayload(rolesN: number, level: CardLevel = "self", extra:
         note: "First names only. Listed in the order it happened.",
       },
     },
-    links: { apply: "/roles", plan: "/season-plans/mine", ...(level === "self" ? { wallet: "/wallet", review: "/review", newApplication: "/propose?type=role_application" } : {}) },
+    links: { apply: "/roles", plan: "/season-plans/mine", ...(level === "self" ? { wallet: "/wallet", newApplication: "/propose?type=role_application" } : {}) },
   };
 }

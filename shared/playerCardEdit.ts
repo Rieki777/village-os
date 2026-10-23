@@ -68,7 +68,7 @@ export const EDIT_WORDS = {
   noSeason: "There is no season to plan yet, so this part of the card cannot be saved. Planning opens one moon before the next season starts.",
   failed: "That did not save. Try again.",
   onePerLine: "One per line",
-  seeProposal: "See it in review",
+  sent: "Sent as a proposal for consent.",
   seasonalGoalsHint: "One goal per line. Add when it is done after a colon.",
   servesGoalsHint: "One of this season's goals per line, as the village wrote it.",
   loadSaved: "Saved for this moon",

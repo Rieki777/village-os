@@ -9,7 +9,6 @@
  * own. No hex colour anywhere.
  */
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
-import { Link } from "wouter";
 import { Pencil } from "lucide-react";
 import type { Slot } from "@shared/playerCard";
 import { EDIT_WORDS, type PersonalEditKey, type RoleEditKey } from "@shared/playerCardEdit";
@@ -59,10 +58,9 @@ export interface CardEditState {
   owner?: boolean;
   /** Read the card again after a save. */
   reload: () => void;
-  reviewHref: string | null;
 }
 
-export const CardEditContext = createContext<CardEditState>({ editing: false, owner: false, reload: () => undefined, reviewHref: null });
+export const CardEditContext = createContext<CardEditState>({ editing: false, owner: false, reload: () => undefined });
 
 type Target = { kind: "personal"; key: PersonalEditKey; goal?: string } | { kind: "role"; key: RoleEditKey; roleId: string };
 
@@ -101,7 +99,7 @@ export function EditInPlace({
   multiline?: boolean;
   hint?: string;
 }) {
-  const { editing, reload, reviewHref } = useContext(CardEditContext);
+  const { editing, reload } = useContext(CardEditContext);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -124,7 +122,7 @@ export function EditInPlace({
         : await proposeRoleWords(target.roleId, target.key, text);
     setBusy(false);
     if (r.ok) {
-      setSaid(target.kind === "personal" ? EDIT_WORDS.saved : EDIT_WORDS.proposed);
+      setSaid(target.kind === "personal" ? EDIT_WORDS.saved : EDIT_WORDS.sent);
       setOpen(false);
       reload();
     } else setSaid(r.error);
@@ -173,14 +171,6 @@ export function EditInPlace({
       {said && (
         <p role="status" className="mt-1 text-sm text-card-foreground">
           {said}
-          {said === EDIT_WORDS.proposed && reviewHref ? (
-            <>
-              {" "}
-              <Link href={reviewHref} className={LINK}>
-                {EDIT_WORDS.seeProposal}
-              </Link>
-            </>
-          ) : null}
         </p>
       )}
     </div>
