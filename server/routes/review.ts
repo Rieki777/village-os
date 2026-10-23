@@ -762,12 +762,8 @@ export function register(app: Express, deps: Deps): void {
     const actor = await actorId(req);
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Putting a quest on the board needs a named person" });
     const rules = await questPayRules(getPool());
-    const typed = readWorkValueInput(req.body?.reward ?? {}, (slug) => payLineProblem(rules, slug, 0));
+    const typed = readWorkValueInput(req.body?.reward ?? {}, (slug) => payLineProblem(rules, slug));
     if (!typed.ok) return res.status(400).json({ error: typed.error });
-    for (const t of typed.tokens ?? []) {
-      const problem = payLineProblem(rules, t.token, t.amount);
-      if (problem) return res.status(400).json({ error: problem });
-    }
     const reward: HumanReward = {
       valueMinor: typed.valueMinor ?? null,
       valueCurrency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),

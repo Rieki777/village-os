@@ -83,7 +83,6 @@ export default function WorkPayBlock({
                 <span key={l.token}>
                   {i > 0 && ", "}
                   <span className="font-semibold">{lineWords(l)}</span>
-                  {l.capped && <span className="text-muted-foreground"> (the village&apos;s limit)</span>}
                 </span>
               ))}
               .

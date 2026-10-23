@@ -17,6 +17,12 @@
  *   GET    /api/governance/role-proposals/shared/:token            the shared read, at the reader's tier
  *   GET    /api/governance/role-proposals/shared/:token/comments   your own comments (the owner's: all)
  *   POST   /api/governance/role-proposals/shared/:token/comments   leave feedback (members only)
+ *   GET    /api/governance/role-proposals/nudge                    the nudge due for you now, for the profile banner
+ *   POST   /api/governance/role-applications/:id/consent           an asked holder consents or objects (PR B)
+ *
+ * Plus one job, `role-proposal-nudges`, four times a day: when next season's
+ * window opens, at a role's review date, and 2 business days before the
+ * window closes (server/lib/roleProposals.ts), each trigger once.
  *
  * The contract, every limit and every sentence is shared/roleProposals.ts;
  * the statements are server/repos/roleProposals.ts.
@@ -36,10 +42,17 @@
  * check the door makes is made. The draft is stamped submitted INSIDE the
  * application's transaction, so the two never disagree. A new role is named
  * in the application by the id the draft gave it, and the village creates it
- * under that id. Until PR B, a proposal that changes a role's words or adds a
- * role waits on a holder and the adopt doors refuse it with a plain sentence
- * (`PROPOSAL_WORDS.adoptionWaits`). The member's season words are saved as
- * their plan for that season once the application is written.
+ * under that id. The member's season words are saved as their plan for that
+ * season once the application is written.
+ *
+ * ── THE CIRCLE IS ASKED IN THE SAME TRANSACTION (PR B) ─────────────────────
+ *
+ * Every live holder of a role in the proposed roles' circles, the member
+ * excluded, is asked to consent or object within 2 business days, and the
+ * asks are written with the application. A proposal always waits on a holder
+ * and never opens a village vote: Rye's ruling decides it by the circle or by
+ * the power. Adoption is the member door's own adopt route, which applies the
+ * proposal's role changes first (server/lib/roleProposals.ts).
  *
  * ── THE SHARED READ ────────────────────────────────────────────────────────
  *
@@ -75,19 +88,22 @@ import {
   sharedProposalHref,
   submitRefusal,
   wordFields,
-  wordFieldsOf,
   type BodyContext,
   type ProposalBody,
   type ShareAudience,
   type WordFieldsContext,
 } from "../../shared/roleProposals";
-import { applicationHref } from "../../shared/seatApplications";
+import { APPLICATION_ID, applicationHref } from "../../shared/seatApplications";
+import { CONSENT_WORDS, consentClosesAt, NUDGE_WORDS, PROPOSE_ENTRY_HREF } from "../../shared/roleProposalConsent";
 import { parseSeatSettings, type SeatSettings } from "../../shared/seatSettings";
 import { carriesMoney, intentSentence } from "../../shared/alignments";
 import type { AppDeps } from "../lib/appDeps";
 import { seatTermsWords } from "../lib/alignmentSubjects";
 import { effectiveLifecycle } from "../lib/modules";
-import { listOrgAssignments, listOrgRoles, rowToRole, type OrgRole } from "../lib/orgChart";
+import { listOrgAssignments, listOrgRoles, type OrgRole } from "../lib/orgChart";
+import { answerConsent, circleAsksFor, consentView, NUDGE_EVERY_MS, NUDGE_JOB, nudgesFor, ROLE_WORD_FIELDS, runProposalNudges } from "../lib/roleProposals";
+import { registerJob } from "../lib/scheduler";
+import { villageClock } from "../lib/stewardship";
 import { buildPlayerCards, type CardLevel, type CardProposal } from "../lib/playerCardData";
 import * as store from "../repos/roleProposals";
 import { readApplications } from "../repos/seatApplications";
@@ -96,9 +112,11 @@ import { cardContext, cardSeatTier, type CardDeps } from "./playerCard";
 import { roleApplicationDoor } from "./seatApplications";
 
 type Deps = CardDeps &
-  Pick<AppDeps, "guardCapability" | "overLimit" | "notify" | "members"> & {
+  Pick<AppDeps, "guardCapability" | "overLimit" | "notify" | "members" | "isPresent"> & {
     /** The governance module's lifecycle. Defaults to the live one; tests hand one in. */
     governanceLifecycle?: () => ModuleLifecycle;
+    /** Whether Live Sessions is on, so an objection has a circle backlog to go to. Defaults to the live lifecycle. */
+    sessionsOn?: () => boolean;
   };
 
 const BASE = "/api/governance/role-proposals";
@@ -112,12 +130,8 @@ const COMMENTS_PER_WINDOW = 10;
 /** Reads of one link in ten minutes, whoever is reading. */
 const SHARED_READS_PER_WINDOW = 240;
 
-/**
- * THE WORD FIELDS OF THIS PLATFORM'S ROLES, read off the role reader itself.
- * `rowToRole({})` names every field a role carries, so a field a later release
- * adds there is a word a proposal can change, with no edit in this file.
- */
-const WORDS: WordFieldsContext = wordFieldsOf(rowToRole({}) as unknown as Record<string, unknown>);
+/** The word fields of this platform's roles, read off the role reader itself (server/lib/roleProposals.ts). */
+const WORDS: WordFieldsContext = ROLE_WORD_FIELDS;
 
 const MEMBERS_ONLY_BODY = { error: "members_only", message: "Proposing roles opens at the member rung." };
 
@@ -206,7 +220,7 @@ export function register(app: Express, deps: Deps): void {
   type Reader = "owner" | "member" | "anyone";
 
   /** A proposal as one reader may read it. Terms, season words and review dates are for members and the owner only. */
-  function proposalOut(p: store.StoredProposal, target: Target | null, k: Known, reader: Reader) {
+  function proposalOut(p: store.StoredProposal, target: Target | null, k: Known, reader: Reader, asks: store.StoredAsk[] = [], viewerId: string | null = null) {
     const membersUp = reader !== "anyone";
     const body = p.body;
     const circleOf = (id: string | null) => (id ? { id, name: k.circles.get(id) ?? "" } : null);
@@ -264,6 +278,9 @@ export function register(app: Express, deps: Deps): void {
           }
         : {}),
       application: p.applicationId ? { id: p.applicationId, href: applicationHref(p.applicationId) } : null,
+      // Where the circle's consent stands, and the decision in words once adopted (PR B).
+      consent: p.status === "submitted" && membersUp ? consentView(asks, now(), tz(), viewerId) : null,
+      decided: p.decidedWords,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
       submittedAt: p.submittedAt ? p.submittedAt.toISOString() : null,
@@ -402,7 +419,8 @@ export function register(app: Express, deps: Deps): void {
     const [list, k] = await Promise.all([store.proposalsOf(pool, String(user.id)), known(pool)]);
     const next = nextSeason();
     const out = [];
-    for (const p of list) out.push(proposalOut(p, p.status === "draft" ? await targetFor(p) : seasonById(p.targetSeasonId), k, "owner"));
+    const asks = await store.asksFor(pool, list.filter((p) => p.status === "submitted").map((p) => p.id));
+    for (const p of list) out.push(proposalOut(p, p.status === "draft" ? await targetFor(p) : seasonById(p.targetSeasonId), k, "owner", asks.get(p.id) ?? [], String(user.id)));
     res.set("Cache-Control", "no-store").json({
       nextSeason: next ? { seasonId: next.id, name: next.name, startsOn: next.startsOn, endsOn: next.endsOn, goals: next.goals } : null,
       nextSeasonWords: next ? null : PROPOSAL_WORDS.noTarget,
@@ -421,6 +439,30 @@ export function register(app: Express, deps: Deps): void {
     const user = await member(req, res);
     if (!user) return;
     await startDraft(req, res, user, "card");
+  });
+
+  // ── The nudge, for the profile banner (PR B). Before `/:id`, which would take the path. ──
+
+  const clock = () => (deps.clock ?? villageClock)();
+
+  /*
+   * THE BANNER'S READ: the nudge due for the signed-in member now, most
+   * pressing first, or nothing. Worked out live from the same facts the sweep
+   * reads, so the banner and the bell never disagree about why.
+   */
+  app.get(`${BASE}/nudge`, async (req, res) => {
+    const user = await member(req, res);
+    if (!user) return;
+    const due = await nudgesFor({ pool: getPool(), now: now(), timeZone: tz(), clock: clock(), seasons: seasons(), lapse: deps.lapse() }, String(user.id));
+    const first = due[0] ?? null;
+    res.set("Cache-Control", "no-store").json({
+      show: !!first,
+      reason: first?.reason ?? null,
+      heading: NUDGE_WORDS.heading,
+      reasonWords: first ? NUDGE_WORDS.reasons[first.reason] : null,
+      href: PROPOSE_ENTRY_HREF,
+      linkWords: NUDGE_WORDS.link,
+    });
   });
 
   // ── The shared read ───────────────────────────────────────────────────────
@@ -520,7 +562,8 @@ export function register(app: Express, deps: Deps): void {
     const p = await owned(req, res, user);
     if (!p) return;
     const k = await known(getPool());
-    res.set("Cache-Control", "no-store").json({ proposal: proposalOut(p, await targetFor(p), k, "owner") });
+    const asks = (await store.asksFor(getPool(), [p.id])).get(p.id) ?? [];
+    res.set("Cache-Control", "no-store").json({ proposal: proposalOut(p, await targetFor(p), k, "owner", asks, String(user.id)) });
   });
 
   app.put(`${BASE}/:id`, async (req, res) => {
@@ -698,6 +741,10 @@ export function register(app: Express, deps: Deps): void {
 
     const words = applicationWordsOf(p.body.season);
     const at = now();
+    // The circle: every live holder of a role in the proposed roles' circles, the member excluded (PR B).
+    const k = await known(pool);
+    const asked = await circleAsksFor(pool, p.body, userId, (id) => k.posted.get(id)?.circleId ?? null);
+    const closesAt = consentClosesAt(at, tz());
     const out = await applyDoor(
       user,
       {
@@ -711,15 +758,32 @@ export function register(app: Express, deps: Deps): void {
       },
       {
         pendingRoles: p.body.newRoles.map((r) => ({ id: r.id, name: typeof r.words.name === "string" ? r.words.name : r.id })),
-        holderOnly: changesRoles(p.body),
+        // A proposal is decided by its circle or by the power (Rye, 2026-10-22), so it always waits on a holder.
+        holderOnly: true,
         alsoWrite: async (conn, applicationId) => {
           if (!(await store.markSubmitted(conn, p.id, applicationId, at))) {
             throw Object.assign(new Error("the draft moved"), { code: "DOOR_REFUSED", status: 409, body: { error: "submitted", message: PROPOSAL_WORDS.notDraft } });
           }
+          // Asked in the same transaction, so a proposal is never submitted half asked.
+          await store.insertAsks(conn, asked.map((a) => ({ proposalId: p.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
         },
       },
     );
     if (out.status !== 201) return res.status(out.status).json(out.body);
+    // Each asked holder hears once, by the roles' names, in the bell and under Tasks.
+    const names = namesOf(p.body, k);
+    const closesOn = civilDateKey(new Date(closesAt.getTime() - 1), tz());
+    for (const a of asked) {
+      await notify({
+        userId: a.userId,
+        type: "role_proposal_consent_ask",
+        title: CONSENT_WORDS.askTitle(names),
+        body: CONSENT_WORDS.askBody(closesOn),
+        link: applicationHref(String(out.body.id)),
+        actorUserId: null,
+        dedupeKey: `rp:${p.id}:ask:${a.userId}`,
+      });
+    }
     let seasonPlanSaved = true;
     try {
       await saveSeasonWords(pool, userId, target, p.body);
@@ -731,8 +795,55 @@ export function register(app: Express, deps: Deps): void {
     const fresh = await store.readProposal(pool, p.id);
     res.status(201).json({
       ...out.body,
-      proposal: fresh ? proposalOut(fresh, target, await known(pool), "owner") : null,
+      proposal: fresh ? proposalOut(fresh, target, k, "owner", (await store.asksFor(pool, [p.id])).get(p.id) ?? [], userId) : null,
       seasonPlanSaved,
     });
+  });
+
+  // ── The circle consents or objects (PR B) ─────────────────────────────────
+  /*
+   * Keyed by the APPLICATION, which is what the asked holder reads and what
+   * their bell notice links. Only a holder the circle asked may answer, once,
+   * inside the 2 business days; anybody else is told the proposal did not ask
+   * them. An objection needs a reason and goes to the circle's next meeting.
+   */
+  app.post("/api/governance/role-applications/:id/consent", async (req, res) => {
+    const user = await member(req, res);
+    if (!user) return;
+    const userId = String(user.id);
+    if (await limited(res, `role-proposal-consent:${userId}`, ACTS_PER_WINDOW)) return;
+    const id = String(req.params.id ?? "");
+    const pool = getPool();
+    const p = APPLICATION_ID.test(id) ? (await store.proposalsForApplications(pool, [id])).get(id) ?? null : null;
+    if (!p) return res.status(404).json({ error: "not_asked", message: CONSENT_WORDS.notAsked });
+    const k = await known(pool);
+    const out = await answerConsent(
+      { pool, notify, timeZone: tz(), sessionsOn: (deps.sessionsOn ?? (() => effectiveLifecycle("sessions") !== "off"))(), now: now() },
+      p,
+      userId,
+      namesOf(p.body, k),
+      req.body,
+    );
+    if (!out.ok) return res.status(out.status).json({ error: out.error, ...(out.field ? { field: out.field } : {}) });
+    const asks = (await store.asksFor(pool, [p.id])).get(p.id) ?? [];
+    res.json({ answer: out.answer, carried: out.carried, carriedWords: out.carriedWords, consent: consentView(asks, now(), tz(), userId) });
+  });
+
+  // ── The nudges (PR B) ─────────────────────────────────────────────────────
+
+  // The sweep: when the window opens, at a review date, and 2 business days before the window closes. Each trigger once.
+  registerJob(NUDGE_JOB, NUDGE_EVERY_MS, async () => {
+    const r = await runProposalNudges({
+      pool: getPool(),
+      now: now(),
+      timeZone: tz(),
+      clock: clock(),
+      seasons: seasons(),
+      lapse: deps.lapse(),
+      members: await deps.members.all(),
+      isPresent: deps.isPresent,
+      notify,
+    });
+    if (r.sent) return `${r.sent} nudge(s) to propose roles`;
   });
 }

@@ -344,7 +344,7 @@ export default function YourAgentPanel() {
         {/* ── Bring your agent ── */}
         <Card title="Bring your agent" icon={<KeyRound className="w-4 h-4 text-notice" />}>
           <p className="text-xs text-muted-foreground mb-3">
-            A personal access token lets your agent read what you already see here and make two writes, each one shown to you first. Tokens expire in 90 days and you can revoke one any time.
+            A personal access token lets your agent read what you already see here and make two writes, each one shown to you first. Tokens expire in 90 days and you can revoke one any time. Changing or resetting your password ends every token you made.
           </p>
 
           {tokens.length > 0 && (
