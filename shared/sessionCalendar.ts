@@ -233,6 +233,13 @@ export const OWN_CALENDAR_COPY = {
   notReadYet: "Not read yet.",
   readFailed: "The last read did not work. Check that the address is the secret one, and attach it again.",
   detach: "Detach",
+  /** The confirm "Detach" opens: undoing it takes the secret address again. */
+  detachConfirm: (circleName: string): string =>
+    `Detach the ${circleWords(circleName)} calendar? Its meetings leave Coming up and the calendars of those who follow the circle. Attaching it again takes its secret address.`,
+  detachYes: "Detach it",
+  keep: "Keep it",
+  /** While the village cannot seal an address, nobody can attach one. */
+  unavailable: "This village cannot keep calendar addresses yet. Ask an admin to set it up.",
   attached: (circleName: string): string => `Attached. The ${circleWords(circleName)} meetings from its own calendar now show under Coming up.`,
   attachedUnread: (circleName: string): string =>
     `Attached to the ${circleWords(circleName)}, but the first read did not work. Check that the address is the secret one.`,
@@ -246,6 +253,10 @@ export const OWN_CALENDAR_COPY = {
 export const OWN_CALENDAR_REFUSALS = {
   notYours: "Only the circle's members and admins can attach its calendar.",
   urlNeeded: "Paste the calendar's address, starting with https:// or webcal://.",
+  /** For any address the outbound guard turns away. Says nothing of why: that is the admins' to read. */
+  cantRead: "That address cannot be read from here. Check that it is the calendar's secret address in iCal format.",
+  /** While the village has no secrets key. The operator's own sentence stays with the admins. */
+  noSecretsKey: "This village cannot keep calendar addresses yet. Ask an admin to set it up.",
   noneAttached: "This circle has no calendar of its own attached.",
   slowDown: "That was a lot at once. Try again tomorrow.",
 } as const;

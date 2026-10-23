@@ -76,9 +76,9 @@ export async function ownCalendarRows(q: Queryable): Promise<RowDataPacket[]> {
   return rowsOf(q, `SELECT ${OWN_COLUMNS} FROM \`live_session_circle_calendars\` ORDER BY \`circle_id\``);
 }
 
-/** One circle's own calendar. */
-export async function ownCalendarRow(q: Queryable, circleId: string): Promise<RowDataPacket[]> {
-  return rowsOf(q, `SELECT ${OWN_COLUMNS} FROM \`live_session_circle_calendars\` WHERE \`circle_id\` = ? LIMIT 1`, [circleId]);
+/** One circle's own calendar. `lock` takes the row for the rest of the transaction. */
+export async function ownCalendarRow(q: Queryable, circleId: string, lock = false): Promise<RowDataPacket[]> {
+  return rowsOf(q, `SELECT ${OWN_COLUMNS} FROM \`live_session_circle_calendars\` WHERE \`circle_id\` = ? LIMIT 1${lock ? " FOR UPDATE" : ""}`, [circleId]);
 }
 
 /** A circle's own calendar, taking the place of the one before. */

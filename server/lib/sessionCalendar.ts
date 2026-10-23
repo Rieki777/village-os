@@ -42,7 +42,7 @@ import * as rhythms from "../repos/sessionRhythm";
 import * as room from "../repos/liveSessions";
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
 import { mapRhythm } from "./sessionRhythm";
-import { exportOwnCalendarsFor, importedRowsFor, ownCalendars } from "./circleOwnCalendar";
+import { exportOwnCalendarsFor, importedRowsFor, ownCalendars, retireGoneCircleCalendars } from "./circleOwnCalendar";
 import { calendarIdFor, calendarRemoveMissing, calendarUpsert, type CalendarRow, type CalendarUpsertInput } from "./calendar";
 import { buildIcs } from "./icsFeed";
 import { listMonthNames, namesForHemisphere } from "./lunarTable";
@@ -207,6 +207,8 @@ export function mirrorRhythms(pool: Pool, deps: CalendarDeps): Promise<{ written
 }
 
 async function mirrorOnce(pool: Pool, deps: CalendarDeps): Promise<{ written: number; retired: number }> {
+  // A circle no longer live keeps no calendar of its own: nobody is left to detach it.
+  await retireGoneCircleCalendars(pool, new Set(deps.circles().map((c) => c.id)));
   if (!openToMembers(deps)) return { written: 0, retired: await calendarRemoveMissing(pool, MIRROR_SOURCE, []) };
   const zone = villageTimezone();
   const live = new Map(deps.circles().map((c) => [c.id, c]));

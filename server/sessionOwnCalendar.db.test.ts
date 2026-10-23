@@ -26,6 +26,7 @@ import { loadModuleSettings } from "./lib/modules";
 import { loadSecrets } from "./lib/secrets";
 import { forgetMemberSessions } from "./lib/liveSessions";
 import { runComingUpNotes } from "./lib/sessionRhythm";
+import { mirrorRhythms } from "./lib/sessionCalendar";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { liveCircles, register as registerRhythm } from "./routes/sessionRhythm";
@@ -187,7 +188,10 @@ describe.skipIf(!configured)("a circle's own calendar against a real schema", ()
     expect(await attach("m-cai", "c-garden", "  ")).toMatchObject({ status: 400, body: { error: OWN_CALENDAR_REFUSALS.urlNeeded } });
     // The subscription's own rules for an address hold: https only, and never a private address.
     expect((await attach("m-cai", "c-garden", "http://8.8.8.8/x.ics")).status).toBe(400);
-    expect((await attach("m-cai", "c-garden", "https://127.0.0.1/x.ics")).status).toBe(400);
+    // What the outbound guard found is the admins' to read: a member is told only that it cannot be read.
+    const guarded = await attach("m-cai", "c-garden", "https://127.0.0.1/x.ics");
+    expect(guarded).toMatchObject({ status: 400, body: { error: OWN_CALENDAR_REFUSALS.cantRead } });
+    expect(JSON.stringify(guarded.body)).not.toContain("127.0.0.1");
     expect(fetched).toEqual([]);
   });
 
@@ -227,9 +231,18 @@ describe.skipIf(!configured)("a circle's own calendar against a real schema", ()
     const row = (await gardenRow("m-eve"))!;
     expect(row).toMatchObject({ nextFrom: "rhythm", nextTitle: null, rhythmWords: expect.stringMatching(/^Every \w+day at 09:00$/) });
     expect(Date.parse(row.next.at)).toBeLessThan(planning.getTime());
+    // While the calendar's meeting comes later, the row still names the rhythm's own next meeting for a skip.
+    expect(row.rhythmNext).toMatchObject({ key: row.next.key });
     // The rhythm stopped, the calendar's meeting is the next one again.
     expect((await as("m-cai", "PUT /api/sessions/circles/:circleId/rhythm", { params: { circleId: "c-garden" }, body: { kind: "none" } })).status).toBe(200);
     expect((await gardenRow("m-eve"))?.nextFrom).toBe("calendar");
+    // A single meeting already past says nothing about the row: no stale words, and nothing for the form to start from.
+    await q(
+      "INSERT INTO `live_session_rhythms` (`circle_id`, `kind`, `recurrence`, `starts_on`, `time_of_day`, `duration_min`, `set_by_no`, `created_at`, `updated_at`) VALUES ('c-garden', 'once', NULL, ?, '18:00', 60, 0, NOW(), NOW())",
+      [new Date(Date.now() - 5 * DAY_MS).toISOString().slice(0, 10)],
+    );
+    expect(await gardenRow("m-cai")).toMatchObject({ nextFrom: "calendar", rhythmWords: OWN_CALENDAR_COPY.fromOwnCalendar, rhythm: { kind: "none" }, rhythmNext: null });
+    await q("DELETE FROM `live_session_rhythms` WHERE `circle_id` = 'c-garden'");
   });
 
   it("tells the circle's members the day before a meeting on its own calendar", async () => {
@@ -284,11 +297,54 @@ describe.skipIf(!configured)("a circle's own calendar against a real schema", ()
     expect(await detach("m-cai", "c-garden")).toMatchObject({ status: 404, body: { error: OWN_CALENDAR_REFUSALS.noneAttached } });
   });
 
+  it("never makes an all-day or a multi-day entry the circle's next meeting", async () => {
+    const tomorrow = new Date(Date.now() + DAY_MS);
+    const ymd = tomorrow.toISOString().slice(0, 10).replace(/-/g, "");
+    const afterDay = new Date(Date.now() + 2 * DAY_MS).toISOString().slice(0, 10).replace(/-/g, "");
+    serving = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//village test//EN",
+      "BEGIN:VEVENT",
+      "UID:seed-swap@test",
+      "DTSTAMP:20261001T000000Z",
+      `DTSTART;VALUE=DATE:${ymd}`,
+      `DTEND;VALUE=DATE:${afterDay}`,
+      "SUMMARY:Seed swap",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:harvest-week@test",
+      "DTSTAMP:20261001T000000Z",
+      `DTSTART:${stamp(new Date(Date.now() + 2 * DAY_MS))}`,
+      `DTEND:${stamp(new Date(Date.now() + 9 * DAY_MS))}`,
+      "SUMMARY:Harvest week",
+      "END:VEVENT",
+      "END:VCALENDAR",
+      "",
+    ].join("\r\n");
+    expect((await attach("m-cai", "c-garden", GARDEN_URL)).status).toBe(200);
+    // Both are on the village calendar, as what they are; neither is a meeting.
+    expect((await q("SELECT `title`, `all_day` FROM `events` WHERE `kind` = 'external' AND `removed_at` IS NULL ORDER BY `title`")).map((r: any) => r.title)).toEqual([
+      "Harvest week",
+      "Seed swap",
+    ]);
+    expect(await gardenRow("m-cai")).toBeUndefined();
+    expect((await detach("m-cai", "c-garden")).status).toBe(200);
+  });
+
   it("exports the circles whose calendar a member attached, and keeps the calendar when they leave", async () => {
     serving = calendarWith("kitchen-1@test", "Kitchen tasting", planning, 60);
     expect((await attach("m-founder", "c-kitchen", GARDEN_URL)).status).toBe(200);
     expect((await exportMemberSessions(pool, "m-founder")).ownCalendarsAttached).toEqual([{ circleId: "c-kitchen", since: expect.any(String) }]);
     await forgetMemberSessions(pool, "m-founder", async (id) => PEOPLE[id] ?? null);
     expect(await q("SELECT `circle_id`, `set_by_no` FROM `live_session_circle_calendars`")).toEqual([{ circle_id: "c-kitchen", set_by_no: 0 }]);
+  });
+
+  it("detaches the calendar of a circle that has gone dormant, since nobody is left to", async () => {
+    CIRCLES[1].status = "dormant";
+    await mirrorRhythms(pool, { circles: () => liveCircles({ all: () => CIRCLES } as any), lifecycle: () => "members" });
+    expect(await q("SELECT * FROM `live_session_circle_calendars`")).toEqual([]);
+    expect(await q("SELECT * FROM `external_calendars`")).toEqual([]);
+    expect(await q("SELECT `title` FROM `events` WHERE `kind` = 'external' AND `removed_at` IS NULL")).toEqual([]);
   });
 });

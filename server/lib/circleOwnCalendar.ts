@@ -10,6 +10,22 @@
  *   importedRowsFor   those meetings as calendar rows, for a follower's feed
  *   attachOwnCalendar attach or replace one, and read it at once
  *   detachOwnCalendar detach one
+ *   retireGoneCircleCalendars  detach the calendars of circles that are no longer live
+ *
+ * ── WHAT COUNTS AS A MEETING ─────────────────────────────────────────────
+ *
+ * A timed event no longer than the longest session (`SESSION_LIMITS.durationMax`).
+ * An all-day entry has no time to meet at, and a multi-day one ("Harvest
+ * week") is not a call: both stay on the village calendar and in a follower's
+ * feed, where they read as what they are, and neither becomes the circle's
+ * next meeting, its start card or its day-before notice.
+ *
+ * ── WHAT A MEMBER IS TOLD ────────────────────────────────────────────────
+ *
+ * The subscription's own refusals are written for admins: the outbound
+ * guard names the private address a host resolves to, and the missing-key
+ * sentence is the operator's. The circle's door says neither: a guard refusal
+ * is "cannot be read from here", a missing key is "ask an admin".
  *
  * NOTHING HERE FETCHES, STORES AN ADDRESS OR IMPORTS. A circle's own calendar
  * is one of the village's own external calendar subscriptions
@@ -25,6 +41,8 @@ import type { Pool } from "mysql2/promise";
 import * as store from "../repos/sessionCalendar";
 import { addExternalCalendar, getExternalCalendar, listExternalCalendars, pollExternalCalendar, removeExternalCalendar, type ExternalCalendarView } from "./externalCalendars";
 import { rowToCalendarRow, type CalendarRow } from "./calendar";
+import { villageSecretsConfigured } from "./secrets";
+import * as room from "../repos/liveSessions";
 import type { Outcome, Refusal } from "./liveSessions";
 import { SESSION_LIMITS } from "../../shared/sessions";
 import { RHYTHM_LIMITS, villageKey, type Meeting } from "../../shared/sessionRhythm";
@@ -88,10 +106,12 @@ export async function importedNext(
   const rows = (await store.importedRows(pool, Array.from(circleOf.keys()), now, new Date(now.getTime() + lookAheadDays * DAY_MS))).map(rowToCalendarRow);
   for (const r of rows) {
     const circleId = r.externalSourceId ? circleOf.get(r.externalSourceId) : undefined;
-    if (!circleId || out.has(circleId) || r.status !== "scheduled") continue;
+    if (!circleId || out.has(circleId) || r.status !== "scheduled" || r.allDay) continue;
     const endsAt = r.endsAt ?? new Date(r.startsAt.getTime() + SESSION_LIMITS.durationDefault * 60_000);
     if (endsAt.getTime() <= now.getTime()) continue;
     const minutes = Math.round((endsAt.getTime() - r.startsAt.getTime()) / 60_000);
+    // Longer than any session is not a meeting: a retreat, a week, a season.
+    if (minutes > SESSION_LIMITS.durationMax) continue;
     out.set(circleId, {
       meeting: { at: r.startsAt.toISOString(), endsAt: endsAt.toISOString(), key: villageKey(r.startsAt, zone) },
       title: r.title,
@@ -125,16 +145,50 @@ export async function attachOwnCalendar(
   const b = input.raw && typeof input.raw === "object" ? (input.raw as Record<string, unknown>) : {};
   const url = typeof b.url === "string" ? b.url.trim() : "";
   if (!url) return refuse(400, OWN_CALENDAR_REFUSALS.urlNeeded);
+  if (!villageSecretsConfigured()) return refuse(409, OWN_CALENDAR_REFUSALS.noSecretsKey);
   const added = await addExternalCalendar(pool, { name: OWN_CALENDAR_COPY.subscriptionName(input.circleName), url, layer: "circle", createdBy: input.userId });
-  if (!added.ok) return refuse(400, added.message ?? added.error);
-  const [before] = await store.ownCalendarRow(pool, input.circleId);
-  await store.putOwnCalendar(pool, { circleId: input.circleId, externalId: added.calendar.id, setByNo: input.setByNo, now: input.now });
-  if (before && String(before.external_calendar_id) !== added.calendar.id) {
-    await removeExternalCalendar(pool, String(before.external_calendar_id), input.userId);
-  }
+  if (!added.ok) return refuse(400, memberWords(added.error));
+  // The swap holds the circle's row, so two attaches at once leave one calendar and no orphan.
+  const swapped = await room.inTransaction(pool, async (conn): Promise<Outcome<string | null>> => {
+    const [before] = await store.ownCalendarRow(conn, input.circleId, true);
+    await store.putOwnCalendar(conn, { circleId: input.circleId, externalId: added.calendar.id, setByNo: input.setByNo, now: input.now });
+    return { ok: true, value: before ? String(before.external_calendar_id) : null };
+  });
+  const previous = swapped.ok ? swapped.value : null;
+  if (previous && previous !== added.calendar.id) await removeExternalCalendar(pool, previous, input.userId);
   const read = await pollExternalCalendar(pool, added.calendar.id, { timezone: input.zone, now: input.now, fetchText: input.fetchText });
   const sub = await getExternalCalendar(pool, added.calendar.id);
   return { ok: true, value: { view: viewOf(sub ?? added.calendar), read: read.ok } };
+}
+
+/**
+ * The subscription's refusal, in a member's words. Its own sentences about the
+ * shape of an address are a member's to read; what the outbound guard found
+ * (a private address, a failed lookup) is not.
+ */
+function memberWords(error: string): string {
+  return /cannot be fetched from here/i.test(error) ? OWN_CALENDAR_REFUSALS.cantRead : error;
+}
+
+/** Whether a circle's own calendar can be attached here at all: the village must be able to seal its address. */
+export function ownCalendarsAvailable(): boolean {
+  return villageSecretsConfigured();
+}
+
+/**
+ * The calendars of circles that are no longer live, detached: a circle gone
+ * dormant or removed has no keepers to detach it, and its calendar would go
+ * on being read and published. Run hourly by the calendar mirror's job.
+ */
+export async function retireGoneCircleCalendars(pool: Pool, liveCircleIds: ReadonlySet<string>): Promise<number> {
+  let retired = 0;
+  for (const row of await store.ownCalendarRows(pool)) {
+    if (liveCircleIds.has(String(row.circle_id))) continue;
+    await removeExternalCalendar(pool, String(row.external_calendar_id), "sessions:circle-gone");
+    await store.deleteOwnCalendar(pool, String(row.circle_id));
+    retired += 1;
+  }
+  return retired;
 }
 
 /** Detach a circle's own calendar: its subscription, its address and its imported meetings go. */

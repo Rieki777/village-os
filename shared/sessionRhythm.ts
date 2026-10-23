@@ -137,6 +137,8 @@ export interface ComingUpRow {
   nextFrom: "rhythm" | "calendar";
   /** The meeting's own title, when it comes from the circle's own calendar. */
   nextTitle: string | null;
+  /** The rhythm's own next meeting, which a skip names, even while a meeting from the circle's own calendar comes sooner. */
+  rhythmNext: (Meeting & { words: string }) | null;
   /** "Today at 18:00", "Tomorrow at 18:00", "Thursday 23 October at 18:00". */
   words: string;
   durationMin: number;
@@ -159,6 +161,8 @@ export interface ComingUpPayload {
   keepCircleIds: string[];
   /** The own calendars of the circles this viewer may keep, by circle. Never an address. */
   ownCalendars: Record<string, OwnCalendarView>;
+  /** Whether a circle's own calendar can be attached here: false while the village cannot seal an address. */
+  ownCalendarsAvailable: boolean;
 }
 
 /** One circle's sessions, for its home page (the circle card). */
@@ -447,6 +451,8 @@ export const RHYTHM_COPY = {
   setRhythm: "Set a meeting rhythm",
   change: "Change",
   skip: "Skip this one",
+  /** While a meeting from the circle's own calendar comes sooner, the skip names the rhythm's own: "on Thursday 29 October at 09:00". */
+  skipRhythm: (when: string): string => `Skip the rhythm's meeting ${when}`,
   getReady: "Get the room ready",
   /** The start card's title for a meeting coming up: "Garden circle, 23 October". */
   roomTitle: (circleName: string, day: string): string => `${circleWords(circleName)}, ${day}`,

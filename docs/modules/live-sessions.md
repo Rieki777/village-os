@@ -322,15 +322,23 @@ or `webcal://` only, never a private address, sealed in the secrets store (so at
 words while the village has no `VILLAGE_SECRETS_KEY`), fetched through the outbound guard, and its
 events imported onto the calendar's `circle` layer every three hours by `calendar-external-poll`. It
 is read once the moment it is attached, so its meetings show at once; a first read that fails still
-attaches, and the panel says so. 0277 only says which subscription is whose.
+attaches, and the panel says so. 0277 only says which subscription is whose. A member is told nothing the
+admins alone may read: an address the outbound guard turns away is "cannot be read from here", whatever it
+resolved to, and while the village has no secrets key the panel says to ask an admin. A circle that goes
+dormant or is removed has nobody left to detach its calendar, so the hourly `session-calendar-mirror` job
+detaches it; attach it again if the circle comes back.
 
-Its meetings count as the circle's: a row's next meeting is the sooner of the rhythm's and the
-calendar's (`nextOf`, which Coming up, the circle's summary and the day-before notice all ask), shown
+A meeting is a timed event no longer than the longest session (480 minutes). An all-day entry or a
+multi-day one stays on the village calendar and in a follower's feed as what it is, and never becomes the
+circle's next meeting, its start card or its day-before notice. Its meetings count as the circle's: a row's
+next meeting is the sooner of the rhythm's and the calendar's (`nextOf`, which Coming up, the circle's summary and the day-before notice all ask), shown
 with that meeting's own title, and a circle with a calendar and no rhythm gets a row of its own ("From
-the circle's own calendar"). A meeting from the calendar has no skip: it is skipped in that calendar.
+the circle's own calendar"). A meeting from the calendar is skipped in that calendar; a skip always names the rhythm's own next meeting,
+and says which while the calendar's comes sooner ("Skip the rhythm's meeting on Friday 30 October at
+09:00"). A circle with a calendar and no rhythm is offered "Set a meeting rhythm", with nothing to stop.
 A follower's feed carries the circle's imported meetings with its rhythm. Only the circle's keepers
 see which calendar it is (where it points and its last four characters, never the address) and how
-its last read went, and they replace or detach it. Replacing or detaching removes the old
+its last read went, and they replace it, or detach it after one confirm. Replacing or detaching removes the old
 subscription whole, its sealed address and its imported meetings with it; an admin who removes the
 subscription on the Events page detaches it too.
 

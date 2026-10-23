@@ -43,7 +43,7 @@ import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart"
 import { ensureMemberNo, memberNo, type Outcome, type Refusal } from "./liveSessions";
 import { keptSeat, standingIn } from "./circleStanding";
 import { libraryViewer, mapLibrary } from "./sessionLibrary";
-import { attachOwnCalendar, detachOwnCalendar, importedNext, ownCalendars, type ImportedMeeting, type OwnCalendar } from "./circleOwnCalendar";
+import { attachOwnCalendar, detachOwnCalendar, importedNext, ownCalendars, ownCalendarsAvailable, type ImportedMeeting, type OwnCalendar } from "./circleOwnCalendar";
 import { civilParts } from "../../shared/lunar";
 import { OWN_CALENDAR_COPY, OWN_CALENDAR_REFUSALS, type OwnCalendarView } from "../../shared/sessionCalendar";
 import { villageTimezone } from "./villageReaders";
@@ -203,20 +203,23 @@ function rowFor(
   if (!n) return null;
   // An admin is no circle's member by being an admin: their own circles come first only through standing.
   const mine = ctx.own.has(circle.id);
+  // A rhythm with nothing coming (a single meeting already past) says nothing about this row.
+  const live = r && n.fromRhythm ? r : null;
   return {
     circleId: circle.id,
     circleName: circle.name,
-    rhythmWords: r ? rhythmWords(r, now, zone) : OWN_CALENDAR_COPY.fromOwnCalendar,
+    rhythmWords: live ? rhythmWords(live, now, zone) : OWN_CALENDAR_COPY.fromOwnCalendar,
     next: n.next,
     nextFrom: n.from,
     nextTitle: n.title,
+    rhythmNext: n.fromRhythm ? { ...n.fromRhythm, words: meetingWords(new Date(n.fromRhythm.at), now, zone) } : null,
     words: meetingWords(new Date(n.next.at), now, zone),
     durationMin: n.durationMin,
     waiting: ctx.waiting.get(circle.id) ?? 0,
     openRoom: ctx.rooms.get(circle.id) ?? null,
     mine,
     canKeep: mayKeepRhythm(circle.id, ctx.lib),
-    rhythm: r ? rhythmAsInput(r, n.fromRhythm?.key) : { kind: "none" },
+    rhythm: live ? rhythmAsInput(live, n.fromRhythm?.key) : { kind: "none" },
   };
 }
 
@@ -245,13 +248,14 @@ export async function comingUpFor(pool: Pool, who: RhythmAsker, deps: RhythmDeps
   const ownCalendarViews: Record<string, OwnCalendarView> = {};
   for (const o of Array.from(owned.values())) if (keepCircleIds.includes(o.circleId)) ownCalendarViews[o.circleId] = o.view;
   const ids = Array.from(circles.keys()).filter((id) => rhythms.has(id) || imported.has(id));
-  if (!ids.length) return { rows: [], zone, keepCircleIds, ownCalendars: ownCalendarViews };
+  const available = ownCalendarsAvailable();
+  if (!ids.length) return { rows: [], zone, keepCircleIds, ownCalendars: ownCalendarViews, ownCalendarsAvailable: available };
   const ctx = { waiting: await waitingByCircle(pool, v), rooms: await openRooms(pool), lib: v.lib, own: v.own };
   const rows = ids
     .map((id) => rowFor(rhythms.get(id) ?? null, imported.get(id) ?? null, circles.get(id)!, now, zone, ctx))
     .filter((r): r is ComingUpRow => r != null)
     .sort((a, b) => Number(b.mine) - Number(a.mine) || Date.parse(a.next.at) - Date.parse(b.next.at));
-  return { rows, zone, keepCircleIds, ownCalendars: ownCalendarViews };
+  return { rows, zone, keepCircleIds, ownCalendars: ownCalendarViews, ownCalendarsAvailable: available };
 }
 
 /** One circle's row as "Coming up" shows it, or null when nothing is coming. */

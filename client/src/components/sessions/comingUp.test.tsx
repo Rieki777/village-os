@@ -58,6 +58,7 @@ const row = (over: Partial<ComingUpRow> = {}): ComingUpRow => ({
   next: { at: "2026-10-29T18:00:00.000Z", endsAt: "2026-10-29T19:00:00.000Z", key: "2026-10-29" },
   nextFrom: "rhythm",
   nextTitle: null,
+  rhythmNext: { at: "2026-10-29T18:00:00.000Z", endsAt: "2026-10-29T19:00:00.000Z", key: "2026-10-29", words: "Thursday 29 October at 18:00" },
   words: "Thursday 29 October at 18:00",
   durationMin: 60,
   waiting: 2,
@@ -72,6 +73,7 @@ const payload = (rows: ComingUpRow[], keepCircleIds: string[] = ["garden"], ownC
   zone: "UTC",
   keepCircleIds,
   ownCalendars,
+  ownCalendarsAvailable: true,
 });
 const circles = [
   { id: "garden", name: "Garden" },

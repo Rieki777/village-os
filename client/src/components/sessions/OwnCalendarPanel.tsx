@@ -7,7 +7,9 @@
  *
  * Shown only to someone who may keep at least one circle. Each attached
  * calendar is named by where it points and its last four characters, never
- * the address, with how its last read went, and can be detached. The address
+ * the address, with how its last read went, and can be detached after one
+ * confirm, since attaching it again takes the secret address. While the
+ * village cannot seal an address the panel says to ask an admin. The address
  * box is a password box: the address is a key to the whole calendar. Every
  * write reads `res.ok` before it says anything, then the page reads the list
  * again, and the focus returns to the button that opened the form.
@@ -16,7 +18,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { OWN_CALENDAR_COPY, ownCalendarUrl, type OwnCalendarView } from "@shared/sessionCalendar";
 import { RHYTHM_COPY } from "@shared/sessionRhythm";
 import { gameFetch } from "@/lib/gameApi";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, LABEL_CAPS, PANEL, UNDER_BOX } from "./roomUi";
+import { BTN_DANGER, BTN_DANGER_QUIET, BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT, INPUT, LABEL, LABEL_CAPS, PANEL, UNDER_BOX } from "./roomUi";
 
 type Sent = { ok: true; body: { read?: boolean } } | { ok: false; error: string };
 
@@ -47,12 +49,15 @@ function readLine(view: OwnCalendarView): string {
 export default function OwnCalendarPanel({
   circles,
   ownCalendars,
+  available,
   onChanged,
   onSaid,
 }: {
   /** The circles this person may keep. */
   circles: { id: string; name: string }[];
   ownCalendars: Record<string, OwnCalendarView>;
+  /** Whether the village can seal an address, so one can be attached. */
+  available: boolean;
   onChanged: () => Promise<void> | void;
   onSaid: (text: string) => void;
 }) {
@@ -61,6 +66,7 @@ export default function OwnCalendarPanel({
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const backToButton = useRef(false);
 
@@ -100,6 +106,7 @@ export default function OwnCalendarPanel({
   };
 
   const detach = async (id: string) => {
+    setAsking(null);
     setBusy(true);
     setError(null);
     const out = await send(ownCalendarUrl(id), "DELETE");
@@ -121,14 +128,37 @@ export default function OwnCalendarPanel({
           {attached.map((c) => {
             const view = ownCalendars[c.id];
             return (
-              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 text-sm text-foreground">
-                  {OWN_CALENDAR_COPY.attachedLine(c.name, view.host, view.last4)}
-                  <span className={`block ${view.status === "failed" ? "font-medium text-destructive" : "text-muted-foreground"}`}>{readLine(view)}</span>
-                </span>
-                <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => void detach(c.id)} aria-label={`${OWN_CALENDAR_COPY.detach}: ${OWN_CALENDAR_COPY.attachedLine(c.name, view.host, view.last4)}`}>
-                  {OWN_CALENDAR_COPY.detach}
-                </button>
+              <li key={c.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words text-sm text-foreground">
+                    {OWN_CALENDAR_COPY.attachedLine(c.name, view.host, view.last4)}
+                    <span className={`block ${view.status === "failed" ? "font-medium text-destructive" : "text-muted-foreground"}`}>{readLine(view)}</span>
+                  </span>
+                  {asking !== c.id && (
+                    <button
+                      type="button"
+                      className={BTN_DANGER_QUIET}
+                      disabled={busy || open}
+                      onClick={() => setAsking(c.id)}
+                      aria-label={`${OWN_CALENDAR_COPY.detach}: ${OWN_CALENDAR_COPY.attachedLine(c.name, view.host, view.last4)}`}
+                    >
+                      {OWN_CALENDAR_COPY.detach}
+                    </button>
+                  )}
+                </div>
+                {asking === c.id && (
+                  <div role="group" aria-label={OWN_CALENDAR_COPY.detach} className="mt-2 rounded-xl border border-border bg-muted px-3 py-3">
+                    <p className="text-sm text-foreground">{OWN_CALENDAR_COPY.detachConfirm(c.name)}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className={BTN_DANGER} disabled={busy} onClick={() => void detach(c.id)}>
+                        {OWN_CALENDAR_COPY.detachYes}
+                      </button>
+                      <button type="button" autoFocus className={BTN_QUIET} disabled={busy} onClick={() => setAsking(null)}>
+                        {OWN_CALENDAR_COPY.keep}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -187,9 +217,22 @@ export default function OwnCalendarPanel({
         </form>
       ) : (
         <>
-          <button ref={openButton} type="button" className={BTN_SECONDARY} onClick={() => setOpen(true)}>
-            {OWN_CALENDAR_COPY.open}
-          </button>
+          {available ? (
+            <button
+              ref={openButton}
+              type="button"
+              className={BTN_SECONDARY}
+              onClick={() => {
+                setError(null);
+                setAsking(null);
+                setOpen(true);
+              }}
+            >
+              {OWN_CALENDAR_COPY.open}
+            </button>
+          ) : (
+            <p className={HINT}>{OWN_CALENDAR_COPY.unavailable}</p>
+          )}
           {error && (
             <p role="alert" className="mt-2 text-sm font-medium text-destructive">
               {error}
