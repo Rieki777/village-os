@@ -220,23 +220,32 @@ describe.skipIf(!configured)("seat fees on a recurring gathering settle by their
     await conserves();
   });
 
-  it("reads each evening in the village's own zone", async () => {
-    // 02:00 UTC is 20:00 the evening before in Regina (UTC-6 all year), so every key here
-    // is a day earlier than the UTC date. A job reading UTC would find no
-    // such evening and keep nothing; one reading the base row would keep both.
+  it("reads each evening in the village's own zone, so the grace is never a day short", async () => {
+    // The evenings are at 20:00 in Regina (UTC-6 all year), which is 02:00 UTC
+    // the next day, so each key is a day earlier than the UTC date. Read in
+    // UTC, the key names a day whose 20:00-in-Regina hour, taken as 02:00 UTC,
+    // falls a whole day early: such a job would keep a fee twelve hours after
+    // the evening ended, inside the day a host has to cancel into a refund.
     const zone = "America/Regina";
     wireReaders({ moduleIsOn: () => false, boolVar: () => false, timezone: () => zone });
     const anchor = anchorAt(2);
     await weekly("ev-z", anchor, zone);
     await member("u-zp", 40);
     await member("u-za", 40);
-    const pastKey = civilDateKey(new Date(anchor - 7 * DAY), zone);
+    const pastEvening = anchor - 7 * DAY;
+    const pastKey = civilDateKey(new Date(pastEvening), zone);
     const aheadKey = civilDateKey(new Date(anchor + 7 * DAY), zone);
-    expect(pastKey).not.toBe(civilDateKey(new Date(anchor - 7 * DAY), "UTC"));
+    expect(pastKey).not.toBe(civilDateKey(new Date(pastEvening), "UTC"));
     await going("ev-z", "u-zp", pastKey);
     await going("ev-z", "u-za", aheadKey);
 
-    expect(await settleFinishedSeats(pool, { now: new Date() })).toEqual({ settled: 1, amount: units(5) });
+    // Twelve hours after the evening ended: still inside the grace.
+    const ended = pastEvening + 2 * HOUR;
+    expect(await settleFinishedSeats(pool, { now: new Date(ended + 12 * HOUR) })).toEqual({ settled: 0, amount: 0 });
+    expect(await statusOf("ev-z", "u-zp", pastKey)).toBe("held");
+
+    // A day and an hour after: kept, and the evening ahead is still held.
+    expect(await settleFinishedSeats(pool, { now: new Date(ended + 25 * HOUR) })).toEqual({ settled: 1, amount: units(5) });
     expect(await statusOf("ev-z", "u-zp", pastKey)).toBe("kept");
     expect(await statusOf("ev-z", "u-za", aheadKey)).toBe("held");
     await conserves();
