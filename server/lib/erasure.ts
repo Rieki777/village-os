@@ -32,7 +32,32 @@
  *
  * WHAT IT DELIBERATELY KEEPS. Value rows stay: the ledger, gratitude, claims,
  * loans, orders and badge awards are the village's record of what happened and
- * what is owed, and deleting them would break the conservation proof.
+ * what is owed, and deleting them would break the conservation proof. A kept
+ * row still loses the words and the address it carries about the person: a
+ * stay keeps its nights and loses its notes, an order keeps its amount and
+ * loses the payer's address, and a housing request keeps the home it holds
+ * (reserved rows count toward a hamlet's homes taken) and loses the name,
+ * address, phone and notes on it.
+ *
+ * Three more things stay on purpose, each for its own reason:
+ *
+ *   MESSAGES. What they wrote in a conversation stays in it, read as "A
+ *   departed member" through the join to the tombstone, the way a forum post
+ *   is. The other people in a thread keep the conversation they had, and a
+ *   direct message was written TO somebody, so taking it out of their history
+ *   is a choice about that person's record as much as the leaver's. The leaver
+ *   walks out of every thread first, so nothing new reaches them and a group
+ *   they owned has an owner again. Whether a direct message should go with its
+ *   author instead is Rye's to decide (raised 2026-10-22).
+ *   VOUCHES THEY GAVE. Each is the record of somebody else's admission, so the
+ *   row stays and only the words they wrote on it go. The vouches written
+ *   ABOUT them go whole.
+ *   INVESTOR PATH FACTS. A dated record that an interest was registered, a
+ *   packet released, an accreditation declared or an agreement signed is the
+ *   kind a village may be obliged to keep after a person leaves, and whether
+ *   it must is a legal question for each village. The fact and its dates stay,
+ *   de-attributed; the free text beside it goes. Rye decides whether a village
+ *   should be able to delete them outright (raised 2026-10-22).
  *
  * ORDER IS LOAD-BEARING. The local sweep runs to completion FIRST, then the
  * outside stores are asked, so a slow or refusing vendor never delays the one
@@ -131,6 +156,17 @@ import { forgetNoticesOf } from "../repos/noticesNaming";
 import { forgetMeetMeWindowsOf } from "./gatherings";
 import { forgetOwnExitNotes } from "./exit";
 import { forgetCheckinNotesOf } from "./economy";
+import { revokeOpenInvitesOf } from "../repos/memberInvites";
+import { releasePlacesOf } from "./calendarCommunity";
+import { scrubReservationsOf } from "../repos/housing";
+import { forgetVouchesOf } from "../repos/vouches";
+import { leaveEveryConversation } from "./messaging";
+import { endDelegationsOf } from "./delegation";
+import { insertNotification, type NotifyDeps, type NotifyInput } from "./notify";
+import { forgetVenturesOf } from "../repos/ventures";
+import { forgetFactWordsOf } from "../repos/investorPath";
+import { forgetStayNotesOf } from "../repos/stays";
+import { forgetPayerEmailOf } from "../repos/productPurchases";
 import { emailKeyOf } from "../../shared/comms/address";
 import { isTombstone } from "./oauthAccounts";
 import {
@@ -159,6 +195,14 @@ export type ErasureDeps = {
    * needs no sign-in, so revoking a face means unlinking a file.
    */
   uploadsDir: string;
+  /**
+   * The notification spine as the server holds it, so a notice this sweep
+   * writes follows each recipient's mail preference. The delegations step
+   * tells the members who had handed the leaver their voice. Absent, the
+   * notice is written to the bell with no mail (`bellOnly` below), so leaving
+   * it out loses no notice.
+   */
+  notify?: (input: NotifyInput) => Promise<unknown>;
 };
 
 /** What one attempt at the sweep did. */
@@ -175,6 +219,40 @@ export interface SweepResult {
 }
 
 const ANON = "A departed member";
+
+/** The address the tombstone carries, and the one a scrubbed row is given in place of theirs. */
+const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.invalid`;
+
+/**
+ * The member's real address as a match key, or "" when it is no longer known.
+ * `target` is the record read before the sweep began, so on a first run this
+ * is their real address; a resume reads the tombstone and gets "", and the
+ * steps that match by address then find their rows by user id alone, the
+ * limit the comms step states.
+ */
+const realEmailKey = (target: any): string => {
+  const email = String(target?.email ?? "");
+  return email && !isTombstone({ email }) ? emailKeyOf(email) : "";
+};
+
+/**
+ * The notification spine with no mail, for a host that hands this sweep no
+ * `notify`. The row still lands in the bell under its stable key, and the
+ * daily digest still picks it up; only an immediate email needs the host's
+ * mailer. The server always passes `notify`, so this is the path a script or
+ * a test takes, and it means no caller can lose a delegator's notice by
+ * leaving a field out.
+ */
+function bellOnly(pool: Pool, members: ErasureDeps["members"]): NotifyDeps {
+  return {
+    pool,
+    memberById: (id) => members.byId(id),
+    sendEmail: async () => ({ accepted: false, status: "skipped", reason: "the erasure was handed no mailer" }),
+    origin: () => "",
+    projectName: () => "",
+    isPresent: (m) => !!m && !isTombstone({ email: String(m.email ?? "") }),
+  };
+}
 
 /** Nothing outside holds anything, and nothing was asked. */
 const ASKED_NOBODY: ErasureOutcome = { asked: [], confirmed: [], unconfirmed: [] };
@@ -390,10 +468,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     /*
      * THE TRACES A TOMBSTONE DOES NOT COVER.
      *
-     * Most identity here is a join: forum posts and quest claims carry only an
-     * `author_id`, so once the user row becomes a tombstone they read as "a
-     * departed member" for free. The steps below are the ones that do NOT work
-     * that way. They either restate the person independently of the users
+     * Most identity here is a join: forum posts, quest claims and messages
+     * carry only an author id, so once the user row becomes a tombstone they
+     * read as "a departed member" for free. The steps below are the ones that
+     * do NOT work that way. They either restate the person independently of the users
      * table, or they keep a live channel open to them after they have gone.
      *
      * Value rows stay, as always: the ledger, gratitude, claims, loans, orders
@@ -553,7 +631,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       run: async () => {
         await members.update(target.id, (u: any) => {
           u.name = ANON;
-          u.email = `deleted-${u.id}@anonymized.invalid`;
+          u.email = tombstoneAddress(u.id);
           u.handle = `departed-${String(u.id).slice(-8)}`;
           u.passwordHash = "";
           u.tokenVersion = (u.tokenVersion ?? 0) + 1; // every session dies now
@@ -661,6 +739,26 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Invitation links (0209): every link the member made that nobody has
+       * used is withdrawn. A link is its maker's vouch, and using one records
+       * an `arrival` vouch from them that can admit somebody on its own, so a
+       * departed member's open links would keep letting people in under the
+       * name "A departed member" for up to fourteen days. A used link made an
+       * account and stays the record of that.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives:
+       * `POST /api/invites` makes a link for anybody signed in who may vouch,
+       * and the tombstone is where the member's sessions die. The door refuses
+       * a tombstone's link on its own as well (server/lib/inviteDoor.ts), so a
+       * sweep that stops between the two still lets nobody in.
+       */
+      name: "invites-after-tombstone",
+      run: async () => {
+        await revokeOpenInvitesOf(pool, target.id);
       },
     },
     {
@@ -797,6 +895,105 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "role-tensions-after-tombstone",
       run: async () => {
         await forgetRoleTensionsFor(pool, target.id);
+      },
+    },
+    /*
+     * THE ROWS A MEMBER OWNED THAT NOTHING SWEPT (review of 2026-10-22). Nine
+     * steps, each after the tombstone for the reason the needs step gives:
+     * every one of these tables takes a write from anybody signed in, and the
+     * tombstone is where the member's sessions die. Each has a new name of its
+     * own, so a resume of an older record runs it.
+     */
+    {
+      /*
+       * Their places at gatherings: every answer, queue place and slot. A seat
+       * they held on an evening still ahead goes to whoever is waiting for it,
+       * and a fee still held for a place ahead comes back, which are the seat
+       * rules every other exit follows (server/lib/calendarCommunity.ts).
+       */
+      name: "event-places-after-tombstone",
+      run: async () => {
+        await releasePlacesOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Housing requests (0077): SCRUBBED, never deleted, because a reserved
+       * row is a home held and counts toward the homes taken. The name, the
+       * address, the phone, the notes and the account link go; the request
+       * made under their address before they joined goes with the rest.
+       * server/repos/housing.ts says why.
+       */
+      name: "housing-reservations-after-tombstone",
+      run: async () => {
+        await scrubReservationsOf(pool, {
+          userId: target.id,
+          emailKey: realEmailKey(target),
+          name: ANON,
+          address: tombstoneAddress(target.id),
+        });
+      },
+    },
+    {
+      /*
+       * Vouches (0198): the ones written about them go, and the ones they gave
+       * stay without their words, because each is the record of somebody
+       * else's admission. The vouch route refuses a new one for a tombstone.
+       */
+      name: "vouches-after-tombstone",
+      run: async () => {
+        await forgetVouchesOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Conversations (0066): they leave every thread they are still in, so a
+       * group they owned passes to its longest-standing member. Their messages
+       * stay, de-attributed: see WHAT IT DELIBERATELY KEEPS at the top.
+       */
+      name: "conversations-after-tombstone",
+      run: async () => {
+        await leaveEveryConversation(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Delegations (0174): every one they gave or carried ends, each member
+       * who handed them a voice is told through the spine, and every open
+       * ballot is derived again so no vote copied from them still stands.
+       */
+      name: "delegations-after-tombstone",
+      run: async () => {
+        const notify = deps.notify ?? ((input: NotifyInput) => insertNotification(bellOnly(pool, members), input));
+        await endDelegationsOf(pool, target.id, notify);
+      },
+    },
+    {
+      // Ventures (0157): their own business in their own words, published when listed. Deleted.
+      name: "ventures-after-tombstone",
+      run: async () => {
+        await forgetVenturesOf(pool, target.id);
+      },
+    },
+    {
+      // Investor path facts (0156): the dated facts stay, their words go. See WHAT IT DELIBERATELY KEEPS.
+      name: "investor-fact-words-after-tombstone",
+      run: async () => {
+        await forgetFactWordsOf(pool, target.id);
+      },
+    },
+    {
+      // Stays (0021): a value row, so the stay stays; the notes they wrote go.
+      name: "stay-notes-after-tombstone",
+      run: async () => {
+        await forgetStayNotesOf(pool, target.id);
+      },
+    },
+    {
+      // Orders (0032): a value row, so the order stays; the address beside the tombstone's name goes.
+      name: "purchase-emails-after-tombstone",
+      run: async () => {
+        await forgetPayerEmailOf(pool, { userId: target.id, emailKey: realEmailKey(target) });
       },
     },
     {

@@ -25,6 +25,7 @@ import AlignedSection from "@/components/profile/AlignedSection";
 import YourRolesSection from "@/components/profile/YourRolesSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
+import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
@@ -619,6 +620,7 @@ export default function Profile() {
               {/* YOUR ROLES: the seats you hold, the doors to apply and plan, your open applications. */}
               <YourRolesSection />
               <ProposeBanner />
+              <ProposeRolesEntry />
               <PlayerRoleCard />
               {/*
                 THE ANCHOR THE SURFACED BANNER POINTS AT.

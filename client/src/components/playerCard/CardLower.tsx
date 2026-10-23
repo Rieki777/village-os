@@ -9,6 +9,7 @@ import { Link } from "wouter";
 import { CARD_WORDS as W, type ApplicationOut, type PlayerCard, type Slot } from "@shared/playerCard";
 import { EDIT_WORDS } from "@shared/playerCardEdit";
 import { CardEditContext, EditInPlace, Eyebrow, H2, LINK, SECTION, SlotView } from "./cardParts";
+import ProposalLinks from "@/components/roleProposal/ProposalLinks";
 
 export function MoonTimeline({ timeline }: { timeline: PlayerCard["timeline"] }) {
   return (
@@ -109,6 +110,7 @@ function AppGroup({ heading, slot, now = false }: { heading: string; slot: Slot<
 }
 
 export function MyApplications({ applications }: { applications: PlayerCard["applications"] }) {
+  const { owner } = useContext(CardEditContext);
   if (applications.thisSeason.kind === "unread") return null;
   return (
     <section aria-labelledby="pc-apps-h" className={`${SECTION} grid gap-3`}>
@@ -120,6 +122,8 @@ export function MyApplications({ applications }: { applications: PlayerCard["app
         <AppGroup heading={W.thisSeason} slot={applications.thisSeason} now />
         <AppGroup heading={W.nextSeason} slot={applications.nextSeason} />
       </div>
+      {/* The owner's role proposals, each linked to where it stands (role proposals PR C). */}
+      {owner ? <ProposalLinks /> : null}
     </section>
   );
 }
