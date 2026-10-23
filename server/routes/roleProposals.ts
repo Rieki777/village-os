@@ -121,8 +121,12 @@ type Deps = CardDeps &
 
 const BASE = "/api/governance/role-proposals";
 const WINDOW_MS = 10 * 60 * 1000;
-/** Saves as a member types through the steps: the season plan's own allowance. */
-const SAVES_PER_WINDOW = 30;
+/**
+ * Saves as a member types through the steps. The page (PR C) saves after each
+ * pause in typing, on every step, for up to five roles' words, so it needs
+ * more room than the season plan's 30, which saves on a button.
+ */
+const SAVES_PER_WINDOW = 120;
 /** Starting, deleting, sharing and submitting: ten of each in ten minutes. */
 const ACTS_PER_WINDOW = 10;
 /** Feedback a member leaves: ten in ten minutes, across every proposal. */
@@ -259,6 +263,8 @@ export function register(app: Express, deps: Deps): void {
       roles,
       newRoles,
       limits: { maxRoles: MAX_PROPOSAL_ROLES },
+      // Whether role headings carry their CCOS term on hover or tap, the card's own switch (PR C draws it).
+      frameworkTerms: deps.boolVar("org.ccos_terms"),
       ...(membersUp ? { settings: body.settings, season: body.season } : {}),
       ...(isOwner
         ? {
