@@ -229,10 +229,12 @@ const tombstoneAddress = (id: string): string => `deleted-${id}@anonymized.inval
 
 /**
  * The member's real address as a match key, or "" when it is no longer known.
- * `target` is the record read before the sweep began, so on a first run this
- * is their real address; a resume reads the tombstone and gets "", and the
- * steps that match by address then find their rows by user id alone, the
- * limit the comms step states.
+ * `target` carries their real address on every run: the record read before
+ * the sweep began on a first run, and on a resume the identity
+ * `member_erasures` held from before the tombstone (`asTheyWere`, 0282). Only
+ * a record from before 0282 that stopped past the tombstone gets "", and the
+ * steps that match by address then find its rows by user id alone, the limit
+ * the comms step states.
  */
 const realEmailKey = (target: any): string => {
   const email = String(target?.email ?? "");

@@ -45,6 +45,7 @@ import { usersRepo } from "../repos/users";
 import { erasureRecord, unfinishedErasures } from "../repos/memberErasure";
 import * as portraits from "../repos/characterPortraits";
 import { register as registerProfileRoutes } from "../routes/profile";
+import { createReservation } from "./housing";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -236,6 +237,40 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     expect(await q("SELECT `email_key` FROM `comms_suppressions` WHERE `email_key` = ?", [address])).toEqual([]);
     // Held while the obligation was open, and only then.
     expect(await heldIdentity(id), "the finished sweep must let go of who the member was").toBeNull();
+  });
+
+  it("finds a housing request and a guest order made under their address, on a resume after the tombstone (findings 14 and 23)", async () => {
+    const id = "er-ident-6";
+    const address = `${id}@examples.invalid`;
+    const target = await seedMember(id, "wrenh10");
+    // The public form and guest checkout need no account, so neither row
+    // carries a user id: the address is the only way to find them.
+    const request = await createReservation(pool, {
+      structureKey: null,
+      homeType: "tiny-home",
+      name: NAME,
+      email: ` ${address.toUpperCase()} `,
+      phone: "555 0100",
+      notes: "Call after six",
+    });
+    await q("INSERT INTO `product_purchases` (`id`, `product_id`, `user_id`, `payer_email`, `amount_minor`, `receipt_no`) VALUES (?,?,?,?,?,?)", [
+      `pp-${id}`,
+      "prod-1",
+      null,
+      address,
+      1200,
+      901,
+    ]);
+
+    await stopRightAfterTombstone(id, target);
+    const out = await resumeErasure(pool, id, deps());
+    expect(out.finished).toBe(true);
+
+    expect(
+      await q("SELECT `name`, `email`, `phone`, `notes` FROM `housing_reservations` WHERE `id` = ?", [request.id]),
+      "a resumed sweep left the request made under the member's address",
+    ).toEqual([{ name: ANON, email: `deleted-${id}@anonymized.invalid`, phone: null, notes: null }]);
+    expect(await q("SELECT `payer_email` FROM `product_purchases` WHERE `id` = ?", [`pp-${id}`])).toEqual([{ payer_email: null }]);
   });
 
   it("scrubs the member's own name and handle on a resume after the tombstone (finding 15)", async () => {
