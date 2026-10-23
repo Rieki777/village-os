@@ -619,7 +619,7 @@ import { guardedFetchJson } from "./lib/toolcheck";
 // ── LANE L6 IMPORTS: your agent ─────────────────────────────────────────────
 import {
   AGENT_SCOPES, CONFIRM_REASON_SENTENCE, READ_SCOPES, cleanScopes, isAgentBearer, listTokens, mintConfirmToken,
-  mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
+  holderStands, mintToken, revokeToken, verifyConfirmToken, verifyToken, type AgentScope, type AgentTokenRow,
 } from "./lib/agentTokens";
 import {
   DELIVERY_KINDS, SIGNATURE_HEADER, drainDeliveries, enqueueAgentDelivery, getInbox, listDeliveries, removeInbox,
@@ -6698,7 +6698,7 @@ async function startServer() {
         return null;
       }
       const user = await members.byId(row.userId);
-      if (!user) {
+      if (!holderStands(user)) {
         res.status(401).json({ error: "agent_token_invalid", reason: "holder gone" });
         return null;
       }

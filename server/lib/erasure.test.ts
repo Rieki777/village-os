@@ -669,7 +669,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect((await unfinishedErasures(pool)).map((r) => r.userId)).toContain(id);
   });
 
-  it("takes the member's own agent with them: inbox, queue, key and drafts", async () => {
+  it("takes the member's own agent with them: inbox, queue, key, drafts, tokens, note and statements", async () => {
     /*
      * THE GAP A REVIEWER FOUND BY ASKING WHAT A MEMBER OWNS, rather than by
      * reading the step list. The sweep was rewritten into named steps and the
@@ -681,6 +681,10 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
      * `FROM agent_inboxes WHERE enabled = 1` with no join to `users`, so this
      * row standing meant a departed member's endpoint kept receiving the
      * village's payloads. `member_llm_keys` holds their third-party API key.
+     *
+     * `agent_tokens` was missed the same way, later: a `vat_` token is not a
+     * session, so the tombstone's tokenVersion bump never reached it, and the
+     * token kept reading the calendar and the directory as the erased member.
      *
      * ASSERTS COMPLETENESS, NOT THAT THE STEP RAN. "It did not throw" is what
      * the sweep already reported before these tables were in it.
@@ -708,12 +712,24 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "INSERT INTO `member_drafts` (`id`, `user_id`, `kind`, `payload`, `source`, `status`) VALUES (?,?,?,?,?,?)",
       [`draft-${id}`, id, "note", JSON.stringify({ body: "unsent" }), "assistant", "proposed"],
     );
+    await pool.query(
+      "INSERT INTO `agent_tokens` (`id`, `user_id`, `name`, `token_hash`, `prefix`, `scopes`, `expires_at`) VALUES (?,?,?,?,?,?, UTC_TIMESTAMP() + INTERVAL 90 DAY)",
+      [`tok-${id}`, id, "laptop agent", "a".repeat(64), "vat_abcdef", JSON.stringify(["calendar.read"])],
+    );
+    await pool.query(
+      "INSERT INTO `agent_profiles` (`user_id`, `about_me`, `about_tier`) VALUES (?,?,?)",
+      [id, "I garden on Tuesdays and I am learning Spanish.", "assistant"],
+    );
+    await pool.query(
+      "INSERT INTO `assistant_statements` (`id`, `subject_user_id`, `mode`, `text`) VALUES (?,?,?,?)",
+      [`stmt-${id}`, id, "member", "You garden on Tuesdays."],
+    );
 
     const before = await agentRowsRemaining(pool, id);
     expect(
       before,
       "the fixture must actually put rows there, or the assertion below passes over nothing",
-    ).toEqual({ deliveries: 1, inboxes: 1, keys: 1, drafts: 1 });
+    ).toEqual({ deliveries: 1, inboxes: 1, keys: 1, drafts: 1, tokens: 1, profiles: 1, statements: 1 });
 
     await anonymizeMember(pool, target, "admin-1", deps());
 
@@ -722,6 +738,9 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       inboxes: 0,
       keys: 0,
       drafts: 0,
+      tokens: 0,
+      profiles: 0,
+      statements: 0,
     });
   });
 });
