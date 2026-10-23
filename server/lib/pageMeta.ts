@@ -10,7 +10,7 @@
  */
 import { documentTitle } from "../../shared/pageTitles";
 import { SITE_PAGE } from "../../shared/pageContent/site";
-import { resolvePage } from "../../shared/pageContent/resolve";
+import { resolvePage, resolvePageRaw } from "../../shared/pageContent/resolve";
 import { pageSectionKey } from "../../shared/pageContent/types";
 
 export interface PageMeta {
@@ -101,11 +101,25 @@ export function sitePageMeta(path: string, origin: string, config: SiteConfig, c
  * The site-wide words the shell paints on every page, served inside
  * /api/game/config so the footer costs no request of its own.
  */
-export function siteWords(content: Record<string, unknown> | null, config: SiteConfig): { footerSignoff: string } {
-  const site = resolvePage(SITE_PAGE, content?.[pageSectionKey(SITE_PAGE)], {
+export function siteWords(
+  content: Record<string, unknown> | null,
+  config: SiteConfig,
+): { footerSignoff: string; menu: Record<string, { label: string; subtitle: string }>; menuChanged: string[] } {
+  const stored = content?.[pageSectionKey(SITE_PAGE)];
+  const site = resolvePage(SITE_PAGE, stored, {
     village: config.project.name,
     tagline: config.project.tagline ?? "",
     location: config.project.location ?? "",
+    commitment: config.project.commitmentName?.trim() || "membership agreement",
   });
-  return { footerSignoff: site.footer.fields.signoff };
+  const defaults = resolvePageRaw(SITE_PAGE, null).menu.lists.pages;
+  const raw = resolvePageRaw(SITE_PAGE, stored).menu.lists.pages;
+  const menu: Record<string, { label: string; subtitle: string }> = {};
+  const menuChanged: string[] = [];
+  site.menu.lists.pages.forEach((row, i) => {
+    const id = String(row.id);
+    menu[id] = { label: row.label, subtitle: row.subtitle };
+    if (raw[i].label !== defaults[i].label || raw[i].subtitle !== defaults[i].subtitle) menuChanged.push(id);
+  });
+  return { footerSignoff: site.footer.fields.signoff, menu, menuChanged };
 }

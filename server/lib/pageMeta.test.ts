@@ -56,3 +56,20 @@ describe("what a shared link shows", () => {
     expect(html).toContain("<title>Willow &quot;&amp;&quot; &lt;brook&gt;</title>");
   });
 });
+
+describe("the names of the story pages in the menu and footer", () => {
+  it("serves every story page's name, with the village's commitment word, and marks none as changed by default", async () => {
+    const { siteWords } = await import("./pageMeta");
+    const words = siteWords(null, config);
+    expect(words.menu["/visit"]).toEqual({ label: "Plan a Visit", subtitle: "" });
+    expect(words.menu["/love-letter"].label).toBe("Sign the Village Pledge");
+    expect(words.menuChanged).toEqual([]);
+  });
+
+  it("marks only the pages the village renamed, so the footer keeps its own wording for the rest", async () => {
+    const { siteWords } = await import("./pageMeta");
+    const words = siteWords({ "page-site": { menu: { pages: [{ id: "/visit", label: "Come Stay" }] } } }, config);
+    expect(words.menu["/visit"].label).toBe("Come Stay");
+    expect(words.menuChanged).toEqual(["/visit"]);
+  });
+});

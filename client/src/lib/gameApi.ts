@@ -105,7 +105,13 @@ export interface PublicGameConfig {
    *  Absent on a server older than 1.2.0, which reads as off. */
   brochurePages?: boolean;
   /** Site-wide words from Admin, Pages, Whole site. Absent on an older server. */
-  site?: { footerSignoff: string };
+  site?: {
+    footerSignoff: string;
+    /** Every story page's name and second line, resolved (Admin, Pages, Whole site). */
+    menu?: Record<string, { label: string; subtitle: string }>;
+    /** The story pages whose names the village changed; the footer keeps its own wording otherwise. */
+    menuChanged?: string[];
+  };
 }
 
 export interface SeasonEntry {

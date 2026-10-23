@@ -65,7 +65,17 @@ export default function Layout({ children }: LayoutProps) {
   // An entry named after a token carries the village's word for it, and its
   // href stays put. Substituted HERE, once, because both the desktop dropdown
   // and the mobile drawer render their items through groupItems.
-  const withTokenLabel = (link: NavLink): NavLink => (link.token ? { ...link, label: tokenName } : link);
+  const withTokenLabel = (link: NavLink): NavLink => {
+    if (link.token) return { ...link, label: tokenName };
+    // A story page carries the village's own name for it (Admin, Pages, Whole site).
+    const named = link.brochure ? cfg?.site?.menu?.[link.href] : undefined;
+    return named ? { ...link, label: named.label || link.label, subtitle: named.subtitle || undefined } : link;
+  };
+  // The footer keeps its own wording for a story page until the village
+  // renames that page; the commitment page always follows the village's word.
+  const storyName = (href: string) => cfg?.site?.menu?.[href]?.label ?? "";
+  const footerName = (href: string, fallback: string) =>
+    cfg?.site?.menuChanged?.includes(href) ? storyName(href) || fallback : fallback;
 
   // Groups collapse to nothing when every child is filtered out, so a fork with
   // its optional modules off never renders an empty dropdown.
@@ -531,42 +541,42 @@ export default function Layout({ children }: LayoutProps) {
                 {brochureOn && (
                   <li>
                     <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Investor
+                      {footerName("/investor", "Investor")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Village Steward
+                      {footerName("/steward", "Village Steward")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Resident
+                      {footerName("/resident", "Resident")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Prosperity Creator
+                      {footerName("/prosperity", "Prosperity Creator")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Sign the Love Letter
+                      {storyName("/love-letter")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Plan a Visit
+                      {footerName("/visit", "Plan a Visit")}
                     </Link>
                   </li>
                 )}
@@ -578,7 +588,7 @@ export default function Layout({ children }: LayoutProps) {
                 {brochureOn && (
                   <li>
                     <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Work With Us
+                      {footerName("/work-with-us", "Work With Us")}
                     </Link>
                   </li>
                 )}
@@ -607,21 +617,21 @@ export default function Layout({ children }: LayoutProps) {
                 {brochureOn && (
                   <li>
                     <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      How We Create
+                      {footerName("/how-we-create", "How We Create")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Good Neighbor Criteria
+                      {footerName("/good-neighbor", "Good Neighbor Criteria")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Our Team
+                      {footerName("/team", "Our Team")}
                     </Link>
                   </li>
                 )}
@@ -681,7 +691,7 @@ export default function Layout({ children }: LayoutProps) {
                 {brochureOn && (
                   <li>
                     <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Co-Creators Guide
+                      {footerName("/co-creators-guide", "Co-Creators Guide")}
                     </Link>
                   </li>
                 )}
@@ -737,21 +747,21 @@ export default function Layout({ children }: LayoutProps) {
                 {brochureOn && (
                   <li>
                     <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Housing
+                      {footerName("/housing", "Housing")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Business Opportunities
+                      {footerName("/opportunities", "Business Opportunities")}
                     </Link>
                   </li>
                 )}
                 {brochureOn && (
                   <li>
                     <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Master Plan
+                      {footerName("/master-plan", "Master Plan")}
                     </Link>
                   </li>
                 )}
