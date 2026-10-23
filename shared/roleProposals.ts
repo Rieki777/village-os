@@ -53,6 +53,8 @@ import { AIM_MAX } from "./seasonPlans";
 import { parseSeasonalGoals, parseServesGoals, type SeasonalGoal, type ServedGoal } from "./seasonPlanWords";
 import { ROLE_HANDOVER_FIELDS, type RoleHandoverField } from "./roleHandover";
 import { parseRoleHandoverField } from "./roleHandoverParse";
+import { accountabilitiesProblem, ROLE_CCOS_FIELDS, ROLE_CCOS_LIST_FIELDS, type RoleCcosField } from "./roleCcos";
+import { parseRoleCcosField } from "./roleCcosParse";
 
 /** One proposal holds at most as many roles as one application does. */
 export const MAX_PROPOSAL_ROLES = MAX_SEATS;
@@ -151,13 +153,13 @@ export interface WordFieldsContext {
  *
  * `template` is a role as the server reads one (`rowToRole({})`), so every
  * field it carries is offered, minus `NOT_ROLE_WORDS`. A field whose value is
- * a list there is a list here. The handover lists are lists whatever the
- * template says, since an absent one reads as null.
+ * a list there is a list here. The handover lists and the CCOS lists are
+ * lists whatever the template says, since an absent one reads as null.
  */
 export function wordFieldsOf(template: Record<string, unknown>): WordFieldsContext {
   const fields = Object.keys(template).filter((k) => !NOT_ROLE_WORDS.has(k));
   const lists = new Set(fields.filter((k) => Array.isArray(template[k])));
-  for (const f of ["bringMe", "notMine"]) if (fields.includes(f)) lists.add(f);
+  for (const f of ["bringMe", "notMine", ...ROLE_CCOS_LIST_FIELDS]) if (fields.includes(f)) lists.add(f);
   return { fields, lists };
 }
 
@@ -192,8 +194,11 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
  *
  * Every key must be a word field of this village's roles. A text is at most
  * `WORD_TEXT_MAX` characters; a list at most `WORD_LIST_MAX` items of
- * `WORD_ITEM_MAX`; the handover words pass the one parser the draft preview
- * and the publish run (shared/roleHandoverParse.ts). Nothing that looks like
+ * `WORD_ITEM_MAX`; the handover words and the CCOS words pass the one parser
+ * the draft preview and the publish run (shared/roleHandoverParse.ts,
+ * shared/roleCcosParse.ts), and accountabilities, once written, are 3 to 6
+ * (`accountabilitiesProblem`), so a proposal hears at save what its adoption
+ * would refuse. Nothing that looks like
  * payment details is kept. `posted` is the role as it stands: a value equal to
  * it is no change, so it is not stored.
  */
@@ -215,6 +220,10 @@ export function parseRoleWords(v: unknown, at: string, ctx: WordFieldsContext, p
       const r = parseRoleHandoverField(key as RoleHandoverField, raw);
       if (!r.ok) return { ok: false, field, error: r.problem };
       value = normalWord(r.value, ctx.lists.has(key));
+    } else if ((ROLE_CCOS_FIELDS as readonly string[]).includes(key)) {
+      const r = parseRoleCcosField(key as RoleCcosField, raw);
+      if (!r.ok) return { ok: false, field, error: r.problem };
+      value = normalWord(r.value, ctx.lists.has(key));
     } else {
       value = normalWord(raw, ctx.lists.has(key));
       if (typeof value === "string") {
@@ -228,6 +237,11 @@ export function parseRoleWords(v: unknown, at: string, ctx: WordFieldsContext, p
     const text = Array.isArray(value) ? value.join("\n") : value ?? "";
     if (text && looksLikePaymentDetails(text)) return { ok: false, field, error: PROPOSAL_WORDS.paymentInWords };
     if (posted && same(value, normalWord(posted[key], ctx.lists.has(key)))) continue;
+    // Only a change is judged: a role stored with fewer is never re-judged by being sent back as it is.
+    if (key === "accountabilities") {
+      const problem = accountabilitiesProblem(value ?? []);
+      if (problem) return { ok: false, field, error: problem };
+    }
     out[key] = value;
   }
   return { ok: true, value: out };
@@ -503,9 +517,6 @@ export const PROPOSAL_WORDS = {
   linkOff: "This link is no longer shared.",
   membersOnly: "Sign in as a member of the village to read this proposal.",
   commentMembersOnly: "Only members of the village can leave feedback.",
-  /** The adopt and put-to-village doors, until the circle consent step (PR B) applies a proposal's role changes. */
-  adoptionWaits:
-    "This application came from a role proposal that changes a role's words or adds a new role. The platform cannot apply those changes yet, so it cannot be adopted here. Nothing was changed.",
   /** The candidate's notice that a member left feedback. */
   commentNoticeTitle: "A member left feedback on your role proposal",
   anyoneNeedsPublicGovernance: "Anyone with the link can read it once the village shows its governance to the public.",

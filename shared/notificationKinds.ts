@@ -259,6 +259,41 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} pieces of feedback on your role proposal.",
     celebrate: false,
   },
+  // The circle's 2 business days to consent or object (role proposals PR B),
+  // and an objection reaching the candidate. Bell only, like the tension pair:
+  // neither has a case in emailCadenceFor.
+  role_proposal_consent_ask: {
+    group: "decisions",
+    blurb: "A member proposes roles in a circle you hold a role in. Consent or object within 2 business days.",
+    many: "{n} role proposals ask your circle to consent.",
+    celebrate: false,
+  },
+  role_proposal_objection: {
+    group: "decisions",
+    blurb: "A member of the circle objected to your role proposal, so it goes to the circle's next meeting.",
+    many: "{n} objections to your role proposals.",
+    celebrate: false,
+  },
+  // The three nudges to propose roles for next season. Bell only; the
+  // profile banner says the same thing for as long as it is true.
+  role_proposal_window_open: {
+    group: "decisions",
+    blurb: "Planning for next season is open. Propose the roles you will hold.",
+    many: "{n} notices that you can propose your roles.",
+    celebrate: false,
+  },
+  role_proposal_review_due: {
+    group: "decisions",
+    blurb: "One of your roles is due its review. Propose how you will hold it next season.",
+    many: "{n} roles due their review.",
+    celebrate: false,
+  },
+  role_proposal_window_closing: {
+    group: "decisions",
+    blurb: "Your role proposal is still a draft, and the window closes in 2 business days.",
+    many: "{n} reminders that the window closes soon.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your role is running out. In a role that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
