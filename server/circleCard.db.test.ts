@@ -23,6 +23,7 @@ import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register } from "./routes/circleCard";
 import type { CircleCard, CircleSection } from "../shared/circleCard";
+import { CIRCLE_SECTION_KEYS } from "../shared/circleCardWords";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 
@@ -138,21 +139,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     expect(card.header.parent?.name).toBe("Coordinating circle");
     expect(card.header.parent?.href).toBe("/circles/c-root");
     expect(card.header.existsWhile).toEqual({ kind: "shown", value: "the village eats from its own land" });
-    expect(card.sections.map((s) => s.key)).toEqual([
-      "purpose",
-      "accountabilities",
-      "domains",
-      "authorities",
-      "responsibilities",
-      "roles",
-      "stewardship",
-      "checks",
-      "succession",
-      "values",
-      "livingAgreement",
-      "tools",
-      "adoption",
-    ]);
+    expect(card.sections.map((s) => s.key)).toEqual([...CIRCLE_SECTION_KEYS]);
     expect(section(card, "purpose").slot).toEqual({ kind: "shown", value: "Grow food together for every household." });
     const acc = section(card, "accountabilities") as Extract<CircleSection, { kind: "list" }>;
     expect(acc.slot).toEqual({ kind: "shown", value: ["Every household has fresh food each week", "The soil is richer each season"] });

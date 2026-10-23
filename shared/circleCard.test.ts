@@ -133,7 +133,7 @@ describe("the stored charter, read back", () => {
   });
 });
 
-describe("the live parts, which Amora reads and nobody types", () => {
+describe("the live parts, which the platform reads and nobody types", () => {
   const counted = (key: "circle-met" | "decisions-recorded" | "roles-with-card-and-term", n: number, of?: number, trend?: any): any => ({
     kind: "counted",
     key,
