@@ -1,7 +1,7 @@
 /**
  * Gene Keys on profiles: the member's own seal and card, and another member's.
  *
- * Every export renders nothing while the gene_keys module is off for this
+ * Every export renders nothing while the gene-keys module is off for this
  * viewer. Another member's lines arrive only when their owner shows them (the
  * server filters on that), so "nothing came back" is the hidden case and
  * renders nothing, never a placeholder that would hint at a hidden result.
@@ -65,7 +65,7 @@ const byHandle = new Map<string, Promise<GeneKeysView | null>>();
 
 /** Another member's shown lines, read once per handle per page load. */
 function useHandleGeneKeys(handle: string | null | undefined): GeneKeysView | null {
-  const on = useModuleOn("gene_keys");
+  const on = useModuleOn("gene-keys");
   const [view, setView] = useState<GeneKeysView | null>(null);
   useEffect(() => {
     if (!on || !handle) return;
@@ -107,7 +107,7 @@ export function PersonGeneKeysCard({ handle, firstName }: { handle: string | nul
  * a score or a fit.
  */
 export function ApplicantGeneKeys({ userId, firstName }: { userId: string; firstName: string }) {
-  const on = useModuleOn("gene_keys");
+  const on = useModuleOn("gene-keys");
   const [view, setView] = useState<GeneKeysView | null>(null);
   useEffect(() => {
     if (!on || !userId) return;

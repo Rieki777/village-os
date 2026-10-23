@@ -36,7 +36,7 @@ const TYPE_PLURAL: Record<string, string> = {
 };
 
 export default function CircleLines({ holders }: { holders: CircleHolder[] }) {
-  const on = useModuleOn("gene_keys");
+  const on = useModuleOn("gene-keys");
   const [people, setPeople] = useState<Record<string, GeneKeysView> | null>(null);
   const key = holders.map((h) => h.id).sort().join(",");
 

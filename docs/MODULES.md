@@ -51,13 +51,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | 23: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene_keys`, `sessions`, `governance`, `comms` |
+| `member-pii` | 23: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `sessions`, `governance`, `comms` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene_keys`, `sessions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `sessions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `comms`, `saberra` |
 
@@ -98,7 +98,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Village Calendar | `events` | Coordinate | no | included | member-pii | required | [events.md](modules/events.md) |
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
-| Gene Keys | `gene_keys` | Connect | no | included | member-pii | none | [gene-keys.md](modules/gene-keys.md) |
+| Gene Keys | `gene-keys` | Connect | no | included | member-pii | none | [gene-keys.md](modules/gene-keys.md) |
 | Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
@@ -703,7 +703,7 @@ Each member can find their Gene Keys lines and Human Design type from their birt
 
 | Fact | Value |
 | --- | --- |
-| Id | `gene_keys` |
+| Id | `gene-keys` |
 | Shelf | Connect (`connect`) |
 | A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
 | Tier | `included` |
@@ -1404,7 +1404,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "contractDoc": "docs/modules/journal.md"
     },
     {
-      "id": "gene_keys",
+      "id": "gene-keys",
       "name": "Gene Keys",
       "description": "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and Maia can shape suggestions to how a member works best when they say yes.",
       "core": false,

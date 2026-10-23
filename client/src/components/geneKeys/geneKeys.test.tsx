@@ -13,7 +13,7 @@ import { viewOf, type GeneKeysView } from "@shared/geneKeys";
 import { chartAt, zonedToUtc } from "@shared/geneKeysSky";
 
 const modules = vi.hoisted(() => ({ on: true }));
-vi.mock("@/modules/ModuleProvider", () => ({ useModuleOn: (id: string) => id === "gene_keys" && modules.on }));
+vi.mock("@/modules/ModuleProvider", () => ({ useModuleOn: (id: string) => id === "gene-keys" && modules.on }));
 
 const api = vi.hoisted(() => ({ people: {} as Record<string, unknown>, asked: [] as string[][] }));
 vi.mock("@/lib/geneKeysApi", () => ({

@@ -1218,7 +1218,7 @@ export const MODULES: ModuleDef[] = [
     // entries stay in their tables and come back intact when it is turned on.
   },
   {
-    id: "gene_keys",
+    id: "gene-keys",
     guild: [],
     tier: "included",
     // A reading of each member's own birth: their Gene Keys lines and Human

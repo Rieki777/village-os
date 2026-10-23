@@ -21,7 +21,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
+import { GENE_KEYS_SITE, viewOf, type Chart, type GeneKeysView } from "@shared/geneKeys";
 import { resultsAcross, type TimeWindow } from "@shared/geneKeysSky";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
@@ -52,7 +52,7 @@ function clock(minute: number): string {
 export default function GeneKeysPage() {
   const modules = useModules();
   const { user } = useAuth();
-  const on = (modules.modules ?? []).some((m) => m.id === "gene_keys" && m.lifecycle !== "off");
+  const on = (modules.modules ?? []).some((m) => m.id === "gene-keys" && m.lifecycle !== "off");
 
   const [step, setStep] = useState<Step>("form");
   const [date, setDate] = useState("");
@@ -92,8 +92,8 @@ export default function GeneKeysPage() {
       </Layout>
     );
   }
-  if (!on) return <ModuleGate moduleId="gene_keys" name="Gene Keys" />;
-  if (!user) return <SignInToSee moduleId="gene_keys" name="Gene Keys" />;
+  if (!on) return <ModuleGate moduleId="gene-keys" name="Gene Keys" />;
+  if (!user) return <SignInToSee moduleId="gene-keys" name="Gene Keys" />;
 
   const read = () => {
     if (!date) return setProblem("Add your birth date to continue.");
@@ -372,7 +372,7 @@ export default function GeneKeysPage() {
                   See them on your profile
                 </Link>
               </div>
-              <a className={BTN_LINK} href="https://genekeys.com/free-profile/" target="_blank" rel="noopener noreferrer">
+              <a className={BTN_LINK} href={GENE_KEYS_SITE} target="_blank" rel="noopener noreferrer">
                 Explore more in depth on genekeys.com
               </a>
             </section>

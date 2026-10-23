@@ -158,7 +158,7 @@ export async function geneKeysOfHandle(pool: Pool, handle: string): Promise<Gene
  * while the module is off, too, because off means the village is not using it.
  */
 export async function geneKeysForAssistant(pool: Pool, userId: string): Promise<string | null> {
-  if (effectiveLifecycle("gene_keys") === "off") return null;
+  if (effectiveLifecycle("gene-keys") === "off") return null;
   const row = await readGeneKeys(pool, userId);
   if (!row?.maia) return null;
   const chart = chartOf(row);

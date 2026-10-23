@@ -412,7 +412,7 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 28,
     emblem: "NotebookPen",
   },
-  gene_keys: {
+  "gene-keys": {
     promise: "Each member's lines and how they work best, so roles and teams fit the people in them.",
     benefits: [
       "Gene Keys lines and Human Design type, read from a member's birth details on their own device",

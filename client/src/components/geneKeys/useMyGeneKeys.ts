@@ -40,7 +40,7 @@ function readOnce(): void {
 }
 
 export function useMyGeneKeys(): { on: boolean; mine: State } {
-  const on = useModuleOn("gene_keys");
+  const on = useModuleOn("gene-keys");
   const [mine, setMine] = useState<State>(current);
   useEffect(() => {
     if (!on) return;

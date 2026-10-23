@@ -1,5 +1,5 @@
 /**
- * Gene Keys routes: `/api/gene-keys/**`, behind `requireModule("gene_keys")`.
+ * Gene Keys routes: `/api/gene-keys/**`, behind `requireModule("gene-keys")`.
  *
  *   GET    /api/gene-keys/me              the member's own lines and settings, or null
  *   PUT    /api/gene-keys/me              save a chart read in their browser
@@ -48,7 +48,7 @@ export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, overLimit } = deps;
   let places: string | null = null;
 
-  app.use("/api/gene-keys", requireModule("gene_keys"));
+  app.use("/api/gene-keys", requireModule("gene-keys"));
 
   app.get("/api/gene-keys/me", async (req, res) => {
     const me = await authedUser(req);

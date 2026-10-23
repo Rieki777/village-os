@@ -141,7 +141,7 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
     await loadModuleSettings(pool);
-    await setModuleLifecycle("gene_keys", "members", null, { sharedPasswordPosture: () => false });
+    await setModuleLifecycle("gene-keys", "members", null, { sharedPasswordPosture: () => false });
     await q( // module-review-ok: fixture SQL against the S5 scratch schema
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `handle`) VALUES (?,?,?,'x',?), (?,?,?,'x',?), (?,?,?,'x',?)",
       ["m-wren", "Wren Alder", "wren@example.test", "wren", "m-kai", "Kai Moss", "kai@example.test", "kai", "m-juno", "Juno Ash", "juno@example.test", "juno"],
@@ -209,9 +209,9 @@ describe.skipIf(!configured)("gene keys against a real schema", () => {
     const text = await geneKeysForAssistant(pool, "m-wren");
     expect(text).toMatch(/2\/5 \(Dancer · Fixer\)/);
     expect(text).toMatch(/a Manifestor/);
-    await setModuleLifecycle("gene_keys", "off", null, { sharedPasswordPosture: () => false });
+    await setModuleLifecycle("gene-keys", "off", null, { sharedPasswordPosture: () => false });
     expect(await geneKeysForAssistant(pool, "m-wren")).toBeNull();
-    await setModuleLifecycle("gene_keys", "members", null, { sharedPasswordPosture: () => false });
+    await setModuleLifecycle("gene-keys", "members", null, { sharedPasswordPosture: () => false });
   });
 
   it("removes the row on the member's word, and on erasure", async () => {

@@ -13,12 +13,10 @@
  */
 import { useState } from "react";
 import { Link } from "wouter";
-import { withArticle, type GeneKeysView, type OwnGeneKeysView } from "@shared/geneKeys";
+import { GENE_KEYS_SITE, withArticle, type GeneKeysView, type OwnGeneKeysView } from "@shared/geneKeys";
 import { changeMyGeneKeys, removeMyGeneKeys, GeneKeysRefusal } from "@/lib/geneKeysApi";
 import { setMyGeneKeys } from "./useMyGeneKeys";
 import { BTN_LINK, BTN_PLAIN, EYEBROW, HINT, TILE } from "./ui";
-
-export const GENE_KEYS_SITE = "https://genekeys.com/free-profile/";
 
 export function GeneKeysLines({ view, whose }: { view: GeneKeysView; whose: string | null }) {
   return (

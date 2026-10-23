@@ -1,8 +1,8 @@
-# Module design: gene_keys
+# Module design: gene-keys
 
 Provenance: platform
 
-> Registry id `gene_keys`. The contract is `shared/geneKeys.ts` (the wheel, the Human Design tables, type and
+> Registry id `gene-keys`. The contract is `shared/geneKeys.ts` (the wheel, the Human Design tables, type and
 > authority, the chart checks and the words). The sky is read in the browser by `shared/geneKeysSky.ts`, the
 > only file that imports `astronomy-engine`. Routes in `server/routes/geneKeys.ts`; the rules in
 > `server/lib/geneKeys.ts`; every statement in `server/repos/geneKeys.ts`; the schema in

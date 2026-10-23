@@ -291,6 +291,13 @@ export const AUTHORITY_WORDS: Record<Authority, { name: string; line: string }> 
   Lunar: { name: "Lunar", line: "Take a full moon cycle before you choose." },
 };
 
+/**
+ * Richard Rudd's own site, where every Gene Keys surface sends a member to
+ * explore more in depth (Rye, 2026-10-22). A platform destination of this
+ * module, the same for every village that turns it on, never one village's.
+ */
+export const GENE_KEYS_SITE = "https://genekeys.com/free-profile/";
+
 /** "a Manifestor", "an Emotional". */
 export function withArticle(word: string): string {
   return `${/^[AEIOU]/.test(word) ? "an" : "a"} ${word}`;
