@@ -154,7 +154,10 @@ describe.skipIf(!configured)("every tension becomes an agenda item, against a re
       mine: true,
       source: { kind: "room_tension", label: "Garden circle" },
     });
+    const items = await q("SELECT COUNT(*) AS n FROM `live_session_library`");
     expect(await send("m-ana", { sessionId: week1, entryId: rota, circleId: null })).toMatchObject({ status: 409, body: { error: LIBRARY_REFUSALS.alreadySent } });
+    // The refusal is decided before anything is written: no second item, sourced or not.
+    expect(await q("SELECT COUNT(*) AS n FROM `live_session_library`")).toEqual(items);
   });
 
   it("says in the room where each tension went, and hands the circles only to the people in it", async () => {
@@ -162,6 +165,16 @@ describe.skipIf(!configured)("every tension becomes an agenda item, against a re
     expect(ana.sentTensions).toEqual({ [String(rota)]: { circleName: "Kitchen circle" } });
     expect(ana.circleOptions.map((c: any) => c.id)).toEqual(["c-garden", "c-kitchen"]);
     expect((await view("m-dee", week1)).circleOptions).toEqual([]);
+  });
+
+  it("lets a tension be sent again once its item was withdrawn, and the room says so", async () => {
+    const [{ library_id: itemId }] = await q("SELECT `library_id` FROM `live_session_library_sources` WHERE `kind` = 'room_tension' AND `ref` = ?", [String(rota)]);
+    expect((await as("m-ben", "DELETE /api/sessions/library/:itemId", { params: { itemId: String(itemId) } })).status).toBe(200);
+    expect(await q("SELECT * FROM `live_session_library_sources` WHERE `library_id` = ?", [itemId])).toEqual([]);
+    expect((await view("m-ana", week1)).sentTensions).toEqual({});
+    const again = await send("m-ana", { sessionId: week1, entryId: rota, circleId: "c-kitchen" });
+    expect(again.status, JSON.stringify(again.body)).toBe(200);
+    expect((await view("m-ana", week1)).sentTensions).toEqual({ [String(rota)]: { circleName: "Kitchen circle" } });
   });
 
   it("sends a closed session's tension on from From last time, and offers it there no more, leaving the record as it was", async () => {

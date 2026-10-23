@@ -84,6 +84,11 @@ export async function insertSource(q: Queryable, row: { libraryId: number; kind:
   );
 }
 
+/** The source of one tension, if it became an item already. `lock` holds the key for the rest of the transaction. */
+export async function sourceByRef(q: Queryable, kind: string, ref: string, lock = false): Promise<RowDataPacket[]> {
+  return rowsOf(q, `SELECT \`library_id\` FROM \`live_session_library_sources\` WHERE \`kind\` = ? AND \`ref\` = ? LIMIT 1${lock ? " FOR UPDATE" : ""}`, [kind, ref]);
+}
+
 /** Where some items came from. */
 export async function sourceRows(q: Queryable, libraryIds: readonly number[]): Promise<RowDataPacket[]> {
   if (none(libraryIds)) return [];
@@ -143,6 +148,8 @@ export async function writeWords(
 export async function deleteItems(q: Queryable, ids: readonly number[]): Promise<void> {
   if (none(ids)) return;
   await q.query("DELETE FROM `live_session_library` WHERE `id` IN (?)", [ids]);
+  // Where it came from goes with it (0279), so a withdrawn tension can be sent on again, and the room says it can.
+  await q.query("DELETE FROM `live_session_library_sources` WHERE `library_id` IN (?)", [ids]);
 }
 
 /** A taken-up item waits again. Its takes stay as history. Hands back 1 or 0. */

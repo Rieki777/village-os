@@ -54,7 +54,7 @@ export default function TensionCatcher({ view, actions }: Omit<StageProps, "now"
   const backlog =
     tensions.length > 0 ? (
       <section className={PANEL} aria-labelledby="tension-backlog">
-        <h3 id="tension-backlog" className={`${LABEL_CAPS} mb-3`}>
+        <h3 id="tension-backlog" tabIndex={-1} className={`${LABEL_CAPS} mb-3 outline-none`}>
           {ROOM_COPY.backlogSoFar}
         </h3>
         <ul className="space-y-2">
@@ -72,7 +72,7 @@ export default function TensionCatcher({ view, actions }: Omit<StageProps, "now"
                       <p className="mt-1 text-sm text-open">{TENSION_SEND_COPY.sent(sent.circleName)}</p>
                     ) : maySend ? (
                       <div className="mt-1">
-                        <SendTension view={view} actions={actions} entry={e} sessionId={view.id} />
+                        <SendTension view={view} actions={actions} entry={e} sessionId={view.id} returnFocusTo="tension-backlog" />
                       </div>
                     ) : null
                   }

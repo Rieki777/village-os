@@ -379,8 +379,11 @@ says where each one went (`sentTensions`) and "From last time" offers a sent one
 record stays exactly as it was. Each such item says where it came from on its card ("From a tension
 raised with Water keeper", "From a tension named in a session of the Garden circle"), from 0279, which
 keeps the role's or circle's name as it was. The same tension never becomes two items: the unique key
-on the source refuses the second ("That tension has been sent to agenda items already."). No waiting cap
-applies: bringing a tension on is answering it.
+on the source refuses the second ("That tension has been sent to agenda items already."), decided before
+anything is written, and two sends at once leave one item. A withdrawn item takes its source with it, so
+the tension can be sent on again and the room offers it again. The warning before a send names who will
+read the words: the circle's members, or every member for no circle in particular. No waiting cap applies:
+bringing a tension on is answering it.
 
 | Door | Who | Limit |
 |---|---|---|

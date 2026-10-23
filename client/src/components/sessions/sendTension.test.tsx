@@ -5,10 +5,11 @@
  * What each case holds: whoever named a tension sees "Send to a circle's
  * agenda items" under it in the room's backlog, and somebody who neither named
  * it nor hosts does not; the send names the circle chosen (this room's own
- * first) or none, after saying who will read the words; a tension sent already
- * says where it went instead; a refusal is said in the server's words; and
- * "From last time" offers the send for an earlier session's tension, naming
- * that session.
+ * first) or none, after saying who will read the words for that choice; a
+ * village with no live circle can still send to none; Escape closes it and
+ * gives the focus back; a tension sent already says where it went instead; a
+ * refusal is said in the server's words; and "From last time" offers the send
+ * for an earlier session's tension, naming that session.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -77,13 +78,31 @@ describe("sending a tension from the room's backlog", () => {
     await waitFor(() => expect(sent).toEqual([{ sessionId: view.id, entryId: 70, circleId: "garden" }]));
   });
 
-  it("sends to no circle in particular when that is chosen", async () => {
+  it("sends to no circle in particular when that is chosen, saying every member can read it", async () => {
     const view = makeView({ entries: [tension()] });
     render(<TensionCatcher view={view} actions={doors()} />);
     fireEvent.click(screen.getByRole("button", { name: TENSION_SEND_COPY.send }));
     fireEvent.change(screen.getByLabelText(TENSION_SEND_COPY.circleLabel), { target: { value: "" } });
+    expect(screen.getByText(TENSION_SEND_COPY.warningNoCircle)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: TENSION_SEND_COPY.sendYes }));
     await waitFor(() => expect(sent).toEqual([{ sessionId: view.id, entryId: 70, circleId: null }]));
+  });
+
+  it("still sends to no circle in particular in a village with no live circle", async () => {
+    const view = makeView({ entries: [tension()], circleOptions: [] });
+    render(<TensionCatcher view={view} actions={doors()} />);
+    fireEvent.click(screen.getByRole("button", { name: TENSION_SEND_COPY.send }));
+    fireEvent.click(screen.getByRole("button", { name: TENSION_SEND_COPY.sendYes }));
+    await waitFor(() => expect(sent).toEqual([{ sessionId: view.id, entryId: 70, circleId: null }]));
+  });
+
+  it("closes on Escape and gives the focus back to the button", () => {
+    render(<TensionCatcher view={makeView({ entries: [tension()] })} actions={doors()} />);
+    fireEvent.click(screen.getByRole("button", { name: TENSION_SEND_COPY.send }));
+    fireEvent.keyDown(screen.getByRole("group", { name: TENSION_SEND_COPY.send }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: TENSION_SEND_COPY.send })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: TENSION_SEND_COPY.send }));
+    expect(sent).toEqual([]);
   });
 
   it("is not offered to somebody who neither named it nor hosts", () => {

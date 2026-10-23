@@ -80,7 +80,9 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
   doors.current = actions;
   const heading = useRef<HTMLHeadingElement>(null);
 
-  // Read when the stage shows, and again whenever the room moved.
+  // Read when the stage shows, again whenever the room moved, and when one of its tensions became an agenda item (that bumps no version).
+  const sentCount = Object.keys(view.sentTensions).length;
+  const carriedCount = view.carried?.backlog.length ?? 0;
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -90,7 +92,7 @@ export default function RoomBrought({ view, actions }: Omit<StageProps, "now">) 
     return () => {
       alive = false;
     };
-  }, [open, view.id, view.version]);
+  }, [open, view.id, view.version, sentCount, carriedCount]);
 
   const onAgenda = useMemo(() => new Set(view.items.map((i) => i.libraryId).filter((id): id is number => typeof id === "number")), [view.items]);
   const shown = (cards ?? []).filter((c) => c.status === "waiting" && !onAgenda.has(c.id));

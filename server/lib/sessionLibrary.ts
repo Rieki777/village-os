@@ -278,22 +278,38 @@ export async function bringItem(
 }
 
 /**
+ * Thrown from inside a transaction when another send of the same tension won
+ * the race to the unique source key, so the transaction rolls back whole (no
+ * item is left behind) and the caller answers "sent already" outside it.
+ */
+export class TensionSentAlready extends Error {
+  constructor() {
+    super("live sessions: that tension became an agenda item already");
+  }
+}
+
+/**
  * An agenda item from a tension, inside the caller's transaction: its words
  * as the title (and every word in the note when they run long), for the
  * circle given or none, brought by `broughtByNo`, with where it came from. No
  * waiting cap: bringing a tension on is answering it, never adding to a pile.
- * Null when that tension became an item already (the unique source key).
+ *
+ * DECIDED BEFORE ANYTHING IS WRITTEN: the tension's source is read and held
+ * first, and null comes back, with nothing written, when it became an item
+ * already. Two sends at once still meet at the unique source key; the loser
+ * throws `TensionSentAlready`, so its transaction rolls back, item and all.
  */
 export async function itemFromTension(
   conn: PoolConnection,
   row: { circleId: string | null; text: string; broughtByNo: number; source: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
 ): Promise<number | null> {
+  if ((await store.sourceByRef(conn, row.source.kind, row.source.ref, true)).length) return null;
   const { title, note } = tensionAsItem(row.text);
   const id = await store.insertItemRow(conn, { circleId: row.circleId, title, aim: null, note, broughtByNo: row.broughtByNo, now: row.now });
   try {
     await store.insertSource(conn, { libraryId: id, kind: row.source.kind, ref: row.source.ref, label: row.source.label, now: row.now });
   } catch (e) {
-    if ((e as { code?: string })?.code === "ER_DUP_ENTRY") return null;
+    if ((e as { code?: string })?.code === "ER_DUP_ENTRY") throw new TensionSentAlready();
     throw e;
   }
   return id;
@@ -330,10 +346,16 @@ export async function sendRoomTension(
   }
   const broughtByNo = no ?? (await ensureMemberNo(pool, who.userId, now));
   const fromCircle = s.circleId ? (deps.circleName(s.circleId) ?? "") : "";
-  const out = await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<number>> => {
-    const id = await itemFromTension(conn, { circleId, text: String(entry.text ?? ""), broughtByNo, source: { kind: "room_tension", ref: String(entryId), label: fromCircle }, now });
-    return id == null ? refuse(409, LIBRARY_REFUSALS.alreadySent) : done(id);
-  });
+  let out: Outcome<number>;
+  try {
+    out = await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<number>> => {
+      const id = await itemFromTension(conn, { circleId, text: String(entry.text ?? ""), broughtByNo, source: { kind: "room_tension", ref: String(entryId), label: fromCircle }, now });
+      return id == null ? refuse(409, LIBRARY_REFUSALS.alreadySent) : done(id);
+    });
+  } catch (e) {
+    if (e instanceof TensionSentAlready) return refuse(409, LIBRARY_REFUSALS.alreadySent);
+    throw e;
+  }
   if (!out.ok) return out;
   const viewer = await libraryViewer(pool, { userId: who.userId, no: broughtByNo, admin: who.admin }, deps);
   const item = await oneCard(pool, out.value, viewer, deps);

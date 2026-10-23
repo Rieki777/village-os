@@ -115,7 +115,7 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
 
   return (
     <section className={CARD} aria-labelledby="carried-title">
-      <h3 id="carried-title" className={H3}>
+      <h3 id="carried-title" tabIndex={-1} className={`${H3} outline-none`}>
         {SESSION_COPY.carriedTitle}
       </h3>
       {carried && <p className={HINT}>{carried.title}</p>}
@@ -225,7 +225,7 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
                             {ROOM_COPY.addToAgenda}
                           </button>
                         )}
-                        {e.kind === "tension" && carried && <SendTension view={view} actions={actions} entry={e} sessionId={carried.sessionId} />}
+                        {e.kind === "tension" && carried && <SendTension view={view} actions={actions} entry={e} sessionId={carried.sessionId} returnFocusTo="carried-title" />}
                       </div>
                     ) : null
                   }

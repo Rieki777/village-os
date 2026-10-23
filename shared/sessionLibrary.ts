@@ -577,6 +577,8 @@ export const TENSION_SEND_COPY = {
   circleLabel: "Which circle's agenda items?",
   noCircle: SESSION_COPY.noCircle,
   warning: "Its words go to that circle's agenda items, where the circle's members can read them.",
+  /** For "No circle in particular": an item for no circle is read by every member. */
+  warningNoCircle: "Its words go to the agenda items for any circle, where every member of the village can read them.",
   sendYes: "Send it",
   sending: "Sending...",
   cancel: ROOM_COPY.cancel,

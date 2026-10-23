@@ -1887,8 +1887,8 @@ export async function buildView(
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
     sentTensions,
-    // Only somebody in the room, or an admin, sends a tension on, so only they are handed the list.
-    circleOptions: joined || viewer.admin ? (ctx.circles?.() ?? []) : [],
+    // Only somebody in the room, an admin, or somebody From last time is shown to sends a tension on, so only they are handed the list.
+    circleOptions: joined || viewer.admin || carriedFrom != null ? (ctx.circles?.() ?? []) : [],
     circleTasks: circle.cards,
     circleLastMetAt: circle.lastMetAt,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },

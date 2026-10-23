@@ -63,7 +63,7 @@ import { civilDateKey } from "../../shared/lunar";
 import * as store from "../repos/roleTensions";
 import { inTransaction } from "../repos/liveSessions";
 import { ensureMemberNo } from "./liveSessions";
-import { itemFromTension } from "./sessionLibrary";
+import { TensionSentAlready, itemFromTension } from "./sessionLibrary";
 import type { NotifyInput } from "./notify";
 import type { TensionRow } from "../repos/roleTensions";
 
@@ -188,7 +188,7 @@ export async function respondToTension(
     authorNo = await ensureMemberNo(pool, who.userId, now);
   }
 
-  const out = await inTransaction(pool, async (conn): Promise<Outcome<null>> => {
+  const respond = () => inTransaction(pool, async (conn): Promise<Outcome<null>> => {
     const t = await store.tensionById(conn, id, true);
     if (!t) return refuse(404, TENSION_REFUSALS.notFound);
     const why = respondRefusal(t.status, action);
@@ -209,6 +209,14 @@ export async function respondToTension(
     });
     return done(null);
   });
+  let out: Outcome<null>;
+  try {
+    out = await respond();
+  } catch (e) {
+    // A bring that lost the race to the same tension's agenda item: rolled back whole, and refused as answered already.
+    if (e instanceof TensionSentAlready) return refuse(409, TENSION_REFUSALS.alreadyAnswered);
+    throw e;
+  }
   if (!out.ok) return out;
   const stored = await store.tensionById(pool, id);
   if (!stored) return refuse(404, TENSION_REFUSALS.notFound);
