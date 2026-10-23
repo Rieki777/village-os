@@ -274,7 +274,9 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
   // just left a token off its own list must not then offer to mint into it,
   // and a picker with more tokens in it than the table above is the kind of
   // disagreement that makes a founder distrust both.
-  const platformTokens = shown.filter((t) => t.governance === "platform" && !t.isExample);
+  // Gratitude is never minted by hand: it is only sent member to member (Rye,
+  // 2026-10-23), and the route refuses it.
+  const platformTokens = shown.filter((t) => t.governance === "platform" && !t.isExample && t.slug !== "gratitude");
 
   return (
     <div>

@@ -747,7 +747,11 @@ export default function Profile() {
                                 frozen, so the amount takes the theme's own
                                 foreground and the amber stays on the icon. */}
                             <p className="text-lg font-semibold text-foreground">
-                              +{contrib.recognitionEarned}
+                              {contrib.paid?.length
+                                ? contrib.paid.map((p) => `+${p.amount} ${p.name}`).join(", ")
+                                : contrib.recognitionEarned > 0
+                                  ? `+${contrib.recognitionEarned}`
+                                  : null}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(contrib.date).toLocaleDateString()}

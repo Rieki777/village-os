@@ -71,8 +71,19 @@ export interface BadgeDef {
   rule: BadgeRule | null;
   /** Whether this badge's POWERS are always live, or only during its seasons. */
   seasonScope: "permanent" | "seasonal";
-  /** Multiplies what a holder is credited at consent. null means no effect. */
+  /**
+   * The OLD single multiplier (0050). It names no token, so since quests
+   * stopped paying Gratitude it multiplies nothing; the admin screen shows it
+   * so a village can move it onto a token. null means none.
+   */
   multiplier: number | null;
+  /**
+   * What this badge multiplies, token by token (0278, Rye 2026-10-23: "the
+   * multiplier is attached to a token, so voice, credits, etc"). It multiplies
+   * a holder's pay in that token for a quest, a role each cycle and an accepted
+   * proposal (`rewardMultipliersFor`, server/lib/seasonPatterns.ts). null means none.
+   */
+  multipliers: Record<string, number> | null;
   active: boolean;
   /** A standing example: renders like any other badge, but never awards. */
   isExample: boolean;
@@ -107,9 +118,43 @@ function rowToBadge(r: RowDataPacket): BadgeDef {
     // function nothing could reach, and were invisible everywhere.
     seasonScope: r.season_scope === "seasonal" ? "seasonal" : "permanent",
     multiplier: r.multiplier === null || r.multiplier === undefined ? null : Number(r.multiplier),
+    multipliers: readBadgeMultipliers(r.multipliers),
     active: !!r.active,
     isExample: Number(r.is_example) === 1,
   };
+}
+
+/** The most tokens one badge may multiply. */
+export const MAX_BADGE_MULTIPLIER_TOKENS = 8;
+
+/**
+ * A stored or posted multiplier map, read leniently: a map of token slug to a
+ * number. Anything else reads as null here, and `badgeProblem` judges the
+ * values. Stored JSON arrives as a string from some drivers and an object from
+ * others, so both are accepted.
+ */
+export function readBadgeMultipliers(raw: unknown): Record<string, number> | null {
+  let v: unknown = raw;
+  if (typeof v === "string") {
+    try { v = JSON.parse(v); } catch { return null; }
+  }
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: Record<string, number> = {};
+  for (const [token, factor] of Object.entries(v as Record<string, unknown>)) {
+    const slug = String(token).trim();
+    if (slug) out[slug] = Number(factor);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** What one multiplier may be, said once for the old column and the new map. */
+function multiplierProblem(m: number, what: string): string | null {
+  if (!Number.isFinite(m) || m <= 0) return `${what} must be greater than zero`;
+  // A multiplier that can shrink a reward is a penalty wearing a badge, and
+  // penalties belong on warning badges as denies.
+  if (m < 1) return `${what} below 1 would cut somebody's pay; use a warning badge instead`;
+  if (m > MAX_BADGE_MULTIPLIER) return `${what} above ${MAX_BADGE_MULTIPLIER} is past the limit a badge may carry`;
+  return null;
 }
 
 export async function allBadges(pool: Pool): Promise<BadgeDef[]> {
@@ -133,6 +178,7 @@ export function badgeProblem(b: {
   rule: BadgeRule | null;
   seasonScope?: string | null;
   multiplier?: number | null;
+  multipliers?: Record<string, number> | null;
 }): string | null {
   if (!BADGE_KINDS.includes(b.kind as BadgeKind)) return `unknown badge kind "${b.kind}"`;
   const known = new Set<string>(ALL_CAPABILITIES);
@@ -185,22 +231,29 @@ export function badgeProblem(b: {
   if (b.seasonScope && b.seasonScope !== "permanent" && b.seasonScope !== "seasonal") {
     return `unknown season scope "${b.seasonScope}"`;
   }
-  if (b.multiplier !== undefined && b.multiplier !== null) {
-    const m = Number(b.multiplier);
-    if (!Number.isFinite(m) || m <= 0) return "a reward multiplier must be greater than zero";
-    // A multiplier that can shrink a reward is a penalty wearing a badge, and
-    // penalties belong on warning badges as denies.
-    if (m < 1) return "a reward multiplier below 1 would cut somebody's reward; use a warning badge instead";
-    if (m > MAX_BADGE_MULTIPLIER) {
-      return `a reward multiplier above ${MAX_BADGE_MULTIPLIER} mints more than the board advertises; the ceiling is deliberate`;
-    }
+  const tokens = b.multipliers ? Object.keys(b.multipliers) : [];
+  if ((b.multiplier !== undefined && b.multiplier !== null) || tokens.length) {
     // Self badges are self-claimed and hypha badges mirror an outside fact.
     // Both gate nothing on purpose, and a multiplier is a power: letting one
-    // ride a self-claimable badge would put the recognition faucet behind a
-    // button any member can press.
+    // ride a self-claimable badge would put a faucet behind a button any
+    // member can press.
     if (b.kind === "self" || b.kind === "hypha") {
       return `${b.kind} badges carry no powers, so they cannot carry a reward multiplier`;
     }
+  }
+  if (b.multiplier !== undefined && b.multiplier !== null) {
+    const bad = multiplierProblem(Number(b.multiplier), "a reward multiplier");
+    if (bad) return bad;
+  }
+  if (tokens.length > MAX_BADGE_MULTIPLIER_TOKENS) {
+    return `a badge may multiply at most ${MAX_BADGE_MULTIPLIER_TOKENS} tokens`;
+  }
+  for (const token of tokens) {
+    // Gratitude is only ever sent member to member (Rye, 2026-10-23), so no
+    // pay is ever made in it and a multiplier on it would multiply nothing.
+    if (token === "gratitude") return "Gratitude is only sent member to member, so a badge cannot multiply it";
+    const bad = multiplierProblem(Number(b.multipliers![token]), `the multiplier on ${token}`);
+    if (bad) return bad;
   }
   if (b.kind === "earned") {
     if (!b.rule) return "an earned badge needs a rule {metric, threshold}";

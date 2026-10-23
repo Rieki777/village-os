@@ -164,7 +164,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `pp:<purchaseId>:reversal:inv_<String(invoiceId)>` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:manual` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:pi_<payment_intent>` | `server/index.ts` |
-| `proposal_accepted:<id>` | `server/index.ts` |
+| `proposal_accepted:<submissionId>:<token>` | `server/lib/proposalAward.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
 | `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
@@ -373,6 +373,9 @@ The mint rules a fresh village is seeded with:
 | `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
 | `role.cycle` | `credits` | 25 | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
+| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
 | `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
 | `role.cycle` | `earned-equity` | 1 | 1 | holder | **no** |
 
@@ -470,6 +473,23 @@ what the platform records: `TOKEN_AMOUNT_MAX`, a billion of a token on one line.
 rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a list
 replaces the flat amounts for that piece of work, so turning values on needs no flag day
 and no rule change: the flat rules go on paying the quests nobody has valued yet.
+
+**An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
+Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
+Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
+`payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
+recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
+sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle
+treasuries refuse it too.
+
+**A badge multiplies the token it names (0278, Rye, 2026-10-23: "the multiplier is attached to a
+token, so voice, credits, etc").** `badges.multipliers` maps a token to a factor from 1 to 3.
+`rewardMultipliersFor` (`server/lib/seasonPatterns.ts`) compounds every awake badge a member
+holds, per token, held at `MAX_REWARD_MULTIPLIER` (3), and skips self and hypha badges and any
+badge asleep for the season. It is applied where the member is PAID, never on a card: the
+consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFor`) and an
+accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
+names no token and multiplies nothing.
 
 **Who the pool follows.** Before 2026-10-21 a member who finished many quests earned
 Gratitude for each, and so a share of the cycle pool. Now the pool follows peer thanks

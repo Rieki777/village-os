@@ -54,6 +54,7 @@ import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
 import VillageAnswers from "@/components/admin/VillageAnswers";
 import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
+import BadgeMultipliersEditor from "@/components/admin/BadgeMultipliersEditor";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -5048,6 +5049,7 @@ function BadgesAdminTab({ password }: { password: string }) {
                     {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
                     {b.description || "no description"}
                   </p>
+                  <BadgeMultipliersEditor badge={b} call={call} onSaved={load} />
                 </div>
                 <button
                   onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) load(); }}
