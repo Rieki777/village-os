@@ -145,7 +145,7 @@ export const SEAT_GATHERING_FILES = [
   /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|calendarProviders|failedActions|spending)\.ts$/,
 ];
 // Phrases about a chair at a gathering, never the bare word "gathering": a sentence can name both.
-export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|give (my|your|the) seat back|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat/i;
+export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|give (my|your|the) seat back|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
 const SEAT_PERSON = "them|him|her|you|people|somebody|someone|anybody|anyone|nobody|no one|a member|members|the member|the stewards|stewards|a voice|software agents|the software agents|software|yourself|themselves|whoever|a software|an agent|agents|the people|a person|the person|roles|a role";
 const SEAT_VERB_AFTER = new RegExp(`^\\s+(${SEAT_PERSON})\\b`, "i");
 // "a seat you hold", "a seat nobody sits in": the person is the subject of a clause, so seat is a noun.
@@ -175,6 +175,8 @@ export function seatNounHits(text) {
     if (/[-_/.]$/.test(before) || /^[-_/]/.test(after) || /^[.:]\w/.test(after)) continue;
     // `seats: [...]` opening a literal is a key in a data format, not a sentence.
     if (/^[`'"]$/.test(before) && /^:/.test(after)) continue;
+    // An HTML attribute value inside a template (`data-sec="seat"`) is machinery.
+    if (/=\s*["']$/.test(before)) continue;
     if (!m[2]) {
       if (/^\s+(and|or) unseat/i.test(after)) continue;
       if (SEAT_VERB_AFTER.test(after) && !SEAT_NOUN_CLAUSE.test(after) && SEAT_VERB_FOLLOW.test(after)) continue;
@@ -183,6 +185,48 @@ export function seatNounHits(text) {
     hits.push(["seat-noun", m[0], m.index]);
   }
   return hits;
+}
+
+/**
+ * The living map is one HTML file with inline scripts, served at /grounds. R45 (2026-08-22)
+ * moved its public copy to role in a patch script that was written and never run, and nothing
+ * gated the file, so the map kept "seat" for two months. Only rule 6 applies here: the map has
+ * its own voice history, and switching the other rules on would be a separate decision.
+ */
+export const SEAT_HTML_FILES = ["docs/prototypes/grounds-v0.html"];
+
+/**
+ * Every role-meaning "seat" in an HTML page: the string and template literals of each inline
+ * script (read as JavaScript, the same way copySpans reads TypeScript), the text between tags,
+ * and the title, aria-label, placeholder and alt attributes. Returns [{ line, hit, text }].
+ */
+export function htmlSeatHits(html) {
+  const lineAt = (i) => html.slice(0, i).split("\n").length;
+  const lines = html.split("\n");
+  const out = [];
+  const push = (at, hit) => {
+    const line = lineAt(at);
+    const text = (lines[line - 1] ?? "").trim();
+    if (!/voice-ok:/.test(text)) out.push({ line, hit, text: text.slice(0, 160) });
+  };
+  let stripped = html;
+  for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const bodyAt = m.index + m[0].indexOf(">") + 1;
+    stripped = stripped.slice(0, m.index) + " ".repeat(m[0].length) + stripped.slice(m.index + m[0].length);
+    if (!/seat/i.test(m[1])) continue;
+    const sf = ts.createSourceFile("inline.js", m[1], ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    for (const span of copySpans(sf)) {
+      for (const [, hit, offset] of seatNounHits(span.text)) push(bodyAt + span.pos + (offset || 0), hit);
+    }
+  }
+  stripped = stripped.replace(/<style[\s\S]*?<\/style>/gi, (s) => " ".repeat(s.length));
+  for (const m of stripped.matchAll(/>([^<]*\bseats?\b[^<]*)</gi)) {
+    for (const [, hit, offset] of seatNounHits(m[1])) push(m.index + 1 + offset, hit);
+  }
+  for (const m of stripped.matchAll(/\b(?:title|aria-label|placeholder|alt)="([^"]*\bseats?\b[^"]*)"/gi)) {
+    for (const [, hit, offset] of seatNounHits(m[1])) push(m.index + m[0].indexOf('"') + 1 + offset, hit);
+  }
+  return out;
 }
 
 function walkFiles(dir, out) {
@@ -361,7 +405,16 @@ if (isMain) {
       }
     }
   }
-  
+
+  // The living map, for rule 6 only. A default run always reads it; a run handed paths reads it
+  // when one of them names it.
+  for (const rel of SEAT_HTML_FILES) {
+    if (roots.length && !roots.some((r) => r.split(path.sep).join("/") === rel)) continue;
+    const abs = path.join(ROOT, rel);
+    if (!fs.existsSync(abs)) continue;
+    for (const f of htmlSeatHits(fs.readFileSync(abs, "utf8"))) findings.push({ file: rel, kind: "seat-noun", ...f });
+  }
+
   if (asJson) {
     console.log(JSON.stringify(findings, null, 0));
     process.exit(0);

@@ -470,7 +470,7 @@ export default function MySeason() {
                   </div>
                 </>
               )}
-              {/* "Propose a seat" waits for the seat-proposal kind (PR7): the wizard has no such kind yet (red team U11). */}
+              {/* "Propose a role" waits for the role-proposal kind (PR7): the wizard has no such kind yet (red team U11). */}
               {data.applications.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-sm font-semibold text-stone-800">{MY_SEASON_WORDS.applicationsHeading}</h3>
