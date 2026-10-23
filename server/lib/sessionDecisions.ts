@@ -159,7 +159,7 @@ export async function runDecisionReviews(deps: DecisionDeps & { getPool: () => P
           circleId: circle.id,
           text: reviewItemText(String(due.text ?? "")),
           broughtByNo: 0,
-          source: { kind: "decision_review", ref, label: circle.name },
+          origin: { kind: "decision_review", ref, label: circle.name },
           now,
         });
         // Made already in an earlier run that did not get as far as marking it: mark the one there is.
