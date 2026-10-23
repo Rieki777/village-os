@@ -25,7 +25,7 @@ Same as village-calendar: `Authorization: Bearer $VILLAGE_AGENT_TOKEN` against `
 ## Read
 
 `GET /api/agent/v1/directory` (scope `directory.read`)
-`circles` (id, name, purpose, status, parent) and `roles` (id, circleId, name, aim, domain, accountabilities, seats, state, holderCount, holders). `holders` is the tier: it lists names only when the member may see who holds roles. When it comes back as an empty list while `holderCount` is above zero, that is a hidden field. Say "the village does not show me who holds that role". Do not guess from a name elsewhere, a forum post, or memory.
+`circles` (id, name, purpose, status, parent) and `roles` (id, circleId, name, aim, domain, accountabilities, `seats`, state, holderCount, holders). `holders` is the tier: it lists names only when the member may see who holds roles. When it comes back as an empty list while `holderCount` is above zero, that is a hidden field. Say "the village does not show me who holds that role". Do not guess from a name elsewhere, a forum post, or memory.
 
 `GET /api/agent/v1/directory/search?q=<two or more letters>` (scope `directory.read`)
 Up to ten members by first name or handle, for a message the member is writing themselves. Returns `userId`, `name` (first name only), `handle`. Nothing else about a person is here, and nothing else is yours to say about them.
