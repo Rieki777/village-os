@@ -25,7 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { clearPending, closeUnlanded, type UnlandedDeps } from "./lib/applyDue";
 import type { ErasureDeps } from "./lib/erasure";
 import { keysFor } from "./lib/eventSeats";
@@ -130,7 +130,7 @@ const EMPTIED_BETWEEN_CASES = [
 describe.skipIf(!configured)("the failed-actions report, against a real database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-failed-actions-"));
   });
 

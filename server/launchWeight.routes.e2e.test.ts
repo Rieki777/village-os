@@ -36,7 +36,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { waitForHealth } from "./db/e2eBoot";
 
@@ -156,7 +156,7 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-launchweight-"));
   // A village that has NOT started its Game, which is the whole premise.
   testDb = await provisionTestDb({ gameStarted: false });
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY

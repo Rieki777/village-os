@@ -32,7 +32,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { balanceOf, loadTokenRegistry, memberAccount } from "./ledger";
 import { loadVariables } from "./variables";
 import { recordGameStart } from "./gameStart";
@@ -108,7 +108,7 @@ describe.skipIf(!configured)("gratitude before the Game starts (MySQL)", () => {
     // The whole point of this suite: a village that has NOT launched, which is
     // every village on its first day.
     db = await provisionTestDb({ gameStarted: false });
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
     await loadTokenRegistry(pool);
     await loadVariables(pool);
   }, 240_000);

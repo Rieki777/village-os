@@ -13,7 +13,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { goingCountFor, missingReason, rowByMapKey } from "./mapPromise";
 
 const configured = testDbConfigured();
@@ -24,7 +24,7 @@ describe.skipIf(!configured)("resolving the map's key", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     // No local timeout: inherit the 300s from vitest.config.ts. Provisioning
     // runs every migration against a hosted MySQL and a local ceiling below
     // the config's has already failed a run by five seconds.

@@ -22,7 +22,7 @@ import { createServer, type Server } from "http";
 import type { AddressInfo } from "net";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   MAX_ATTEMPTS,
   enqueueSynthesis,
@@ -74,7 +74,7 @@ describe.skipIf(!configured)("call synthesis through the batch API", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
 
     stub = createServer((req, res) => {
       let raw = "";

@@ -23,7 +23,7 @@ import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { CREDITS, HEARTS, VILLAGE_VOICE, toLedgerUnits, villageId } from "../lib/economy";
 import { seedEconomy } from "../lib/economySeed";
 import { recordGameStart } from "../lib/gameStart";
@@ -105,7 +105,7 @@ const consentedTitle = () => rung.find((n) => n.type === "quest_consented")?.tit
 describe.skipIf(!configured)("what a quest consent moves (MySQL, real ledger)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     // The rules a fresh village boots with: voice and credits on quest.completed.
     await seedEconomy(pool, villageId());
     // Boot registers the stay-credit token (`ensureStayToken`), and this harness does not boot.

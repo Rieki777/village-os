@@ -64,7 +64,7 @@ import { createExit } from "./lib/exit";
 import { VOICE_SETTLED } from "./lib/voiceClaim";
 import { loadVariables, numberVar, setVariable } from "./lib/variables";
 import { cycleBoundsFor } from "../shared/lunar";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { lostConcurrencyRace } from "./db/concurrency";
 import { sendGratitude, type GratitudeDeps } from "./lib/gratitude";
 import { gratitudeLogRepo } from "./repos/gratitude";
@@ -191,7 +191,7 @@ const rule = (over: Partial<MintRule> = {}): MintRule => ({
 describe.skipIf(!configured)("the village economy engine", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
@@ -2640,7 +2640,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     beforeAll(async () => {
       ddb = await provisionTestDb();
-      dpool = mysql.createPool({ uri: ddb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      dpool = testPool(ddb, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadTokenRegistry(dpool);
       await loadVariables(dpool);
       await ensureVoiceToken(dpool, "Village Voice");
@@ -3693,7 +3693,7 @@ function gratitudeAtScale(decimals: number): void {
 
     beforeAll(async () => {
       fdb = await provisionTestDb();
-      fpool = mysql.createPool({ uri: fdb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      fpool = testPool(fdb, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       // The seam, before anything is posted. What the flip migration does,
       // minus the rescale of rows already held.
       await fpool.query("UPDATE `tokens` SET `decimals` = ? WHERE `slug` = ?", [decimals, HEARTS]); // module-review-ok: the decimals seam this suite exists to exercise, against the S5 scratch schema

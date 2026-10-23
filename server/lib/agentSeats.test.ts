@@ -17,7 +17,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   agentKeySlug,
   claimSeating,
@@ -47,7 +47,7 @@ const SETTLEMENT_SEATS =
 describe.skipIf(!configured)("an agent holds a seat", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });
 
   afterAll(async () => {

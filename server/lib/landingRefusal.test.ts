@@ -18,7 +18,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, closeBallot, openBallot, type BallotRow } from "./ballots";
 import { applyDueGovernance, landingRow, routeOutcome, type LandingDeps, type SubjectCloser } from "./applyDue";
 import { loadVariables } from "./variables";
@@ -135,7 +135,7 @@ describe("the sentence a set that did not wholly land is recorded with", () => {
 describe.skipIf(!configured)("a weight-mode landing that refuses", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool
     await loadVariables(pool);
   }, 300000);
   afterAll(async () => {

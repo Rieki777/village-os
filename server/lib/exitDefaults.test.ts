@@ -33,7 +33,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { VARIABLES, VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { ensureVoiceToken, fromLedgerUnits, VILLAGE_VOICE } from "./economy";
 import {
@@ -72,7 +72,7 @@ describe.skipIf(!configured)("a departure on the shipped Exit defaults", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the exit.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the exit.test.ts shape
     await loadTokenRegistry(pool);
     await ensureVoiceToken(pool, "Village Voice");
     await registerToken(pool, {

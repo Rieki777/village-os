@@ -23,7 +23,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ballotById, castVote, closeBallot, openBallot, type OpenBallotInput } from "./ballots";
 import { loadVariables, setVariable, stringVar } from "./variables";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
@@ -73,7 +73,7 @@ const openOne = async (over: Partial<OpenBallotInput> = {}) =>
 describe.skipIf(!configured)("governance windows at the open path (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     await loadVariables(pool);
     await setVariable(pool, "governance.vote_days", "1");
   });

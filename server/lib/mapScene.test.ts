@@ -31,7 +31,7 @@ import {
   revisionScene,
   saveDraft,
 } from "./mapScene";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -70,7 +70,7 @@ describe("the refused restore, in words", () => {
 describe.skipIf(!configured)("the map's draft, publish and undo", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
   });
 
   afterAll(async () => {

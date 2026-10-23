@@ -29,7 +29,7 @@ import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { recordGameStart } from "../lib/gameStart";
 import { loadTokenRegistry } from "../lib/ledger";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestsRepo } from "../repos/quests";
@@ -122,7 +122,7 @@ const refs = (rows: Array<{ entity_ref: string }>) => rows.map((r) => r.entity_r
 describe.skipIf(!configured)("what the solo-founder window records (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadTokenRegistry(pool);
     // Issuance waits for the launch vote, and this village has cast it, so a
     // consent gets as far as the ledger.

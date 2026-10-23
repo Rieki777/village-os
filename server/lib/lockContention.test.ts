@@ -19,7 +19,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { respondToTerminalError, terminalAnswerFor } from "./errors";
 
 const configured = testDbConfigured();
@@ -65,7 +65,7 @@ async function lockWaitTimeout(): Promise<unknown> {
 describe.skipIf(!configured)("what the terminal handler answers for a lost lock (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await pool.query("CREATE TABLE lock_probe (id int NOT NULL PRIMARY KEY, n int NOT NULL)"); // module-review-ok: fixture table on the S5 scratch schema this suite provisioned, so no product table is locked
     await pool.query("INSERT INTO lock_probe (id, n) VALUES (1, 0)"); // module-review-ok: fixture row on the S5 scratch schema this suite provisioned
   }, 300_000);
