@@ -12,10 +12,13 @@ import { HOUSING_PAGE } from "./housing";
 import { OPPORTUNITIES_PAGE } from "./opportunities";
 import { VISIT_PAGE } from "./visit";
 import { WORK_WITH_US_PAGE } from "./workWithUs";
+import { GOOD_NEIGHBOR_PAGE } from "./goodNeighbor";
+import { HOW_WE_CREATE_PAGE } from "./howWeCreate";
+import { CO_CREATORS_GUIDE_PAGE } from "./coCreatorsGuide";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE, GOOD_NEIGHBOR_PAGE, HOW_WE_CREATE_PAGE, CO_CREATORS_GUIDE_PAGE];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;
