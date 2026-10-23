@@ -378,10 +378,15 @@ export async function buildPlayerCards(
   const appsById = new Map(rows.applications.map((a) => [String(a.id), a]));
   const decisionsByCircle = new Map(rows.circleDecisions.map((d) => [String(d.circle_id), Number(d.n)]));
   const pendingByRole = new Map<string, Set<RoleEditKey>>();
+  const proposalsByRole = new Map<string, { draftId: string; proposedAt: string; payload: unknown }[]>();
   for (const p of rows.pending) {
     const set = pendingByRole.get(String(p.org_role_id)) ?? new Set<RoleEditKey>();
-    for (const k of roleWordsIn(json<unknown>(p.payload, {}))) set.add(k);
+    const payload = json<unknown>(p.payload, {});
+    for (const k of roleWordsIn(payload)) set.add(k);
     pendingByRole.set(String(p.org_role_id), set);
+    const list = proposalsByRole.get(String(p.org_role_id)) ?? [];
+    list.push({ draftId: String(p.draft_id), proposedAt: new Date(Number(p.created_at) * 1000).toISOString(), payload });
+    proposalsByRole.set(String(p.org_role_id), list);
   }
   // Every role a live card in the batch carries, the tensions read once for all of them.
   const liveOwnerIds = new Set(owners.filter((o) => !o.proposal && o.tier.level !== "stranger").map((o) => o.userId));
@@ -497,6 +502,8 @@ export async function buildPlayerCards(
         // The decisions read counts only the circles of held roles, so a proposal leaves it uncounted.
         circleDecisions: proposal ? undefined : memberUp && role.circleId ? decisionsByCircle.get(role.circleId) ?? 0 : memberUp ? 0 : undefined,
         pendingWords: isSelf && !proposal ? Array.from(pendingByRole.get(id) ?? []) : [],
+        // The proposals themselves, with the words they would put live, for whoever decides them.
+        proposals: memberUp && !proposal ? (proposalsByRole.get(id) ?? []) : undefined,
       };
     });
 
@@ -608,7 +615,7 @@ export async function buildPlayerCards(
       links: {
         apply: "/roles",
         plan: "/season-plans/mine",
-        ...(isSelf ? { wallet: "/wallet", newApplication: "/propose?type=role_application", review: "/review" } : {}),
+        ...(isSelf ? { wallet: "/wallet", newApplication: "/propose?type=role_application" } : {}),
       },
     });
   }

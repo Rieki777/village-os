@@ -37,6 +37,64 @@ describe("the player card, live", () => {
     expect(screen.getByText("Across my role")).toBeTruthy();
   });
 
+  it("links each role's circle to that circle's card", () => {
+    render(<PlayerRoleCardView data={fixturePayload(1)} />);
+    expect(screen.getByRole("link", { name: "Community Anchor" }).getAttribute("href")).toBe("/circles/c1");
+  });
+
+  it("lists a role's open proposal with its words, and adopts it through the decide door", async () => {
+    const data = fixturePayload(1);
+    data.card.roles[0]!.proposals = [
+      { draftId: "d-9", proposedOn: "Proposed on 22 Oct 2026", fields: [{ key: "purpose", label: "Purpose", lines: ["Water for all."] }] },
+    ];
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) =>
+      String(url).endsWith("/decide")
+        ? new Response(
+            JSON.stringify({ status: "open", blocked: 0, blockedLines: [], youMayPublish: true, youMayPutToVillage: false, adminMayPublish: false, ballotNeeded: false, ballot: null }),
+            { status: 200 },
+          )
+        : new Response("{}", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const reload = vi.fn();
+    render(<PlayerRoleCardView data={data} reload={reload} />);
+    const panel = document.querySelector("[data-role-proposals]")!;
+    expect(panel.textContent).toContain("Proposed, waiting for consent");
+    expect(panel.textContent).toContain("Water for all.");
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt these words" }));
+    expect(screen.getByText("Adopt now? The role's words change for everyone.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, adopt them" }));
+    expect(await screen.findByText("Adopted. The role now has the new words.")).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([u, init]) => u === "/api/org/drafts/d-9/publish-by-power" && init?.method === "POST")).toBe(true);
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("keeps the confirmation once the last proposal is adopted and the card reads itself again", async () => {
+    const withProposal = fixturePayload(1);
+    withProposal.card.roles[0]!.proposals = [
+      { draftId: "d-9", proposedOn: "Proposed on 22 Oct 2026", fields: [{ key: "purpose", label: "Purpose", lines: ["Water for all."] }] },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).endsWith("/decide")
+          ? new Response(
+              JSON.stringify({ status: "open", blocked: 0, blockedLines: [], youMayPublish: true, youMayPutToVillage: false, adminMayPublish: false, ballotNeeded: false, ballot: null }),
+              { status: 200 },
+            )
+          : new Response("{}", { status: 200 }),
+      ),
+    );
+    const view = render(<PlayerRoleCardView data={withProposal} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt these words" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, adopt them" }));
+    await screen.findByText("Adopted. The role now has the new words.");
+    // The card reads itself again: the proposal is gone, and so is the panel that drew the doors.
+    view.rerender(<PlayerRoleCardView data={fixturePayload(1)} />);
+    expect(document.querySelector("[data-role-proposals]")).toBeNull();
+    expect(screen.getByText("Adopted. The role now has the new words.")).toBeTruthy();
+  });
+
   it("with six roles draws six tiles and six roles in full, in order, and names nobody but the owner", () => {
     render(<PlayerRoleCardView data={fixturePayload(6)} />);
     expect(screen.getByText("Across all 6 roles")).toBeTruthy();

@@ -21,7 +21,7 @@ import { Link } from "wouter";
 import { Pencil } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import { BOX, EYEBROW, LINK, QUIET_BUTTON, SECTION, SlotView } from "@/components/playerCard/cardParts";
-import type { CircleCard, CircleSection, RoleRowOut, Slot } from "@shared/circleCard";
+import type { CircleCard, CircleSection, RoleRowOut, SignOut, Slot } from "@shared/circleCard";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 import type { CircleValue } from "@shared/circleCharter";
 import type { CircleWordKey } from "@shared/circleCharterParse";
@@ -96,8 +96,38 @@ function WordBox({ section }: { section: CircleSection }) {
           )}
         </SlotView>
       ) : null}
+      {section.kind === "facts" ? (
+        <SlotView slot={section.slot}>
+          {(f) => (
+            <div className="grid gap-1 text-sm">
+              {f.lines.map((l, i) => (
+                <p key={i}>{l}</p>
+              ))}
+              {f.links.map((l) => (
+                <Link key={l.label} href={l.href} className={LINK}>
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </SlotView>
+      ) : null}
       {section.kind === "list" || section.kind === "values" ? <ProposeWords wordKey={key} initial={initialText(section.slot)} /> : null}
     </div>
+  );
+}
+
+/** One counted sign: what is counted, the count, its trend, and how it is counted. */
+function SignRow({ sign }: { sign: SignOut }) {
+  return (
+    <li className={`${BOX} grid gap-1`} data-circle-sign="">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="text-sm font-semibold">{sign.label}</span>
+        {sign.value !== null ? <span className="font-display text-2xl font-bold">{sign.value}</span> : null}
+      </div>
+      {sign.trend ? <p className="text-sm text-muted-foreground">{sign.trend}</p> : null}
+      {sign.countedFrom ? <p className="text-xs text-muted-foreground">{sign.countedFrom}</p> : null}
+    </li>
   );
 }
 
@@ -138,13 +168,20 @@ function Panel({ children, label }: { children: ReactNode; label?: string }) {
   );
 }
 
-/** Group the model's sections into panels: consecutive word sections share one. */
+/** Which panel family a section draws in: the circle's words, the facts Amora reads, or a panel of its own. */
+function family(s: CircleSection): "words" | "facts" | null {
+  if (s.kind === "list" || s.kind === "values") return "words";
+  if (s.kind === "facts") return "facts";
+  return null;
+}
+
+/** Group the model's sections into panels: consecutive sections of one family share one. */
 function panels(sections: CircleSection[]): CircleSection[][] {
   const out: CircleSection[][] = [];
   for (const s of sections) {
-    const words = s.kind === "list" || s.kind === "values";
+    const f = family(s);
     const last = out[out.length - 1];
-    if (words && last && (last[0]!.kind === "list" || last[0]!.kind === "values")) last.push(s);
+    if (f && last && family(last[0]!) === f) last.push(s);
     else out.push([s]);
   }
   return out;
@@ -152,7 +189,7 @@ function panels(sections: CircleSection[]): CircleSection[][] {
 
 function SectionPanel({ group }: { group: CircleSection[] }) {
   const first = group[0]!;
-  if (first.kind === "list" || first.kind === "values") {
+  if (first.kind === "list" || first.kind === "values" || first.kind === "facts") {
     if (group.every((s) => s.slot.kind === "unread")) return null;
     return (
       <Panel>
@@ -177,6 +214,23 @@ function SectionPanel({ group }: { group: CircleSection[] }) {
           )}
         </SlotView>
         {first.note ? <p className="text-sm text-muted-foreground">{first.note}</p> : null}
+      </Panel>
+    );
+  }
+  if (first.kind === "signs") {
+    if (first.slot.kind === "unread") return null;
+    return (
+      <Panel label={first.heading}>
+        <Heading text={first.heading} term={first.term} level={2} />
+        <SlotView slot={first.slot}>
+          {(signs) => (
+            <ul className="grid gap-3 sm:grid-cols-3" data-circle-signs="">
+              {signs.map((s) => (
+                <SignRow key={s.label} sign={s} />
+              ))}
+            </ul>
+          )}
+        </SlotView>
       </Panel>
     );
   }
@@ -222,6 +276,8 @@ export default function CircleCardView({
   reload?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  // A decided proposal's confirmation, kept here: adopting the last one empties the panel.
+  const [decided, setDecided] = useState<string | null>(null);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
   return (
@@ -277,7 +333,13 @@ export default function CircleCardView({
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
-      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} />
+      {(card.proposals ?? []).length ? (
+        <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
+      ) : decided ? (
+        <p role="status" className={`${SECTION} text-sm font-medium`}>
+          {decided}
+        </p>
+      ) : null}
       {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
         <SectionPanel key={g[0]!.key} group={g} />
       ))}

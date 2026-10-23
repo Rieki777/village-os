@@ -172,3 +172,36 @@ describe("a proposal waiting for consent, decided on the card", () => {
     expect(await screen.findByText("This village has not turned voting on, so there is nobody to put the draft to yet.")).toBeTruthy();
   });
 });
+
+describe("the live parts, drawn", () => {
+  it("draws each sign with its count and trend, and the meeting facts with their link", () => {
+    const card = buildCircleCard(
+      input({
+        frameworkTerms: false,
+        live: {
+          signs: [
+            {
+              kind: "counted",
+              key: "circle-met",
+              label: "Times the circle met",
+              countedFrom: "Counted from live sessions that two or more people joined.",
+              now: { n: 3, source: "t" },
+              trend: { kind: "compare", before: { n: 1, source: "t" }, direction: "up" },
+            },
+          ],
+          lastMetAt: "2026-10-20T15:00:00Z",
+          openTensions: 1,
+          sessionsOn: true,
+        },
+      }),
+    );
+    render(<CircleCardView card={card} circleId="c-garden" />);
+    const sign = document.querySelector("[data-circle-sign]")!;
+    expect(sign.textContent).toContain("Times the circle met");
+    expect(sign.textContent).toContain("3");
+    expect(sign.textContent).toContain("Up on last moon");
+    expect(screen.getByText("Last met on 20 Oct 2026")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Bring something to the next meeting" }).getAttribute("href")).toBe("/sessions");
+    expect(screen.getByText("1 open tension on this circle's roles")).toBeTruthy();
+  });
+});
