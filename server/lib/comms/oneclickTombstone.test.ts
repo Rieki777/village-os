@@ -35,7 +35,7 @@ import { clearMemberDrivers } from "../memberDrivers";
 import { ensureContact } from "./contacts";
 import type { CommsMode, PostOfficeDeps } from "./postOffice";
 import { recapAnswerAction, rsvpNextAction } from "./recaps";
-import { createPoll, pollView, timeVoteAction, timeVoteLink, type TimePollDeps } from "./timePolls";
+import { createPoll, invite, pollView, timeVoteAction, timeVoteLink, type TimePollDeps } from "./timePolls";
 import type { Transport } from "./transport";
 
 const configured = testDbConfigured();
@@ -299,6 +299,31 @@ describe.skipIf(!configured)("one-click links for a member who has been erased",
     const page = await call("GET", `/api/comms/action?t=${encodeURIComponent(liveToken)}`);
     expect(page.status, JSON.stringify(page.body)).toBe(200);
     expect(page.body.purpose).toBe("time_vote");
+  });
+
+  it("the vote's invitation passes over an erased member: no contact made for them, no email, no notice", async () => {
+    // Erasure keeps a member's own yes to a gathering today (people.erasure.test.ts).
+    // Seeded after it, so the case holds whichever way that rule lands.
+    for (const [id, who] of [
+      ["rs-oc-gone", GONE],
+      ["rs-oc-live", LIVE],
+    ]) {
+      await q("INSERT INTO event_rsvps (id, event_id, user_id, status, idempotency_key, occurrence_key) VALUES (?, ?, ?, 'going', ?, '')", [id, eventId, who, `key-${id}`]);
+    }
+    const notices: string[] = [];
+    const notify = (async (n: { userId: string }) => {
+      notices.push(n.userId);
+      return { fresh: true };
+    }) as unknown as NonNullable<TimePollDeps["notify"]>;
+    const result = await invite({ ...polls(), notify }, eventId, { answered: true, members: [GONE, LIVE] });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(await q("SELECT id FROM comms_contacts WHERE user_id = ?", [GONE]), "no contact was made for the erased member").toEqual([]);
+    expect(
+      await q("SELECT id FROM comms_messages WHERE origin = 'poll.invite' AND (user_id = ? OR to_email LIKE ?)", [GONE, "%@anonymized.invalid"]),
+      "no invitation went to the tombstone's address",
+    ).toEqual([]);
+    expect(notices, "only the live member was notified").toEqual([LIVE]);
+    expect(await q("SELECT id FROM comms_contacts WHERE user_id = ?", [LIVE]), "the live member is still written to").toHaveLength(1);
   });
 
   const feedbackOf = async (key: string) => q("SELECT question_key, answer FROM event_feedback WHERE event_id = ? AND person_key = ?", [recapEvent, key]);

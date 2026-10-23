@@ -109,6 +109,7 @@ import { expandOccurrences, getCalendarRow, type CalendarRow } from "../calendar
 import { updateGathering } from "../gatherings";
 import { icsEscape, icsFold, icsUtc } from "../icsFeed";
 import type { NotifyInput, NotifyResult } from "../notify";
+import { isTombstone } from "../oauthAccounts";
 import { numberVar } from "../variables";
 import { villageTimezone } from "../villageReaders";
 import type { ActionHandler, ActResult } from "./actions";
@@ -740,7 +741,12 @@ interface Recipient {
   timezone: string | null;
 }
 
-/** Who a person key reaches by email: a guest's contact, or a member's account. Null when nobody can be written to. */
+/**
+ * Who a person key reaches by email: a guest's contact, or a member's account.
+ * Null when nobody can be written to. A tombstone is nobody: its address is
+ * the erasure's own placeholder, and writing to it would make the erased
+ * member a fresh contact (`ensureContact` keeps any well-formed address).
+ */
 async function recipientFor(deps: TimePollDeps, personKey: string): Promise<Recipient | null> {
   const pool = deps.getPool();
   const guest = contactIdOfGuestKey(personKey);
@@ -749,7 +755,7 @@ async function recipientFor(deps: TimePollDeps, personKey: string): Promise<Reci
     return c ? { personKey, email: c.email, name: c.name, userId: null, contactId: c.id, timezone: c.timezone } : null;
   }
   const m = await deps.members.byId(personKey);
-  if (!m || m.isExample || typeof m.email !== "string" || !m.email.trim()) return null;
+  if (!m || m.isExample || typeof m.email !== "string" || !m.email.trim() || isTombstone({ email: m.email })) return null;
   const contact = await ensureContact({ getPool: deps.getPool }, { email: m.email, name: m.name ?? null, userId: m.id, source: "account" });
   if (!contact) return null;
   const row = await contactById(pool, contact.id);
@@ -1000,7 +1006,7 @@ export async function invite(deps: TimePollDeps, eventId: string, input: InviteI
   if (deps.notify) {
     for (const userId of Array.from(new Set(input.members))) {
       const m = await deps.members.byId(userId);
-      if (!m || m.isExample) continue;
+      if (!m || m.isExample || isTombstone({ email: String(m.email ?? "") })) continue;
       const result = await deps.notify({
         userId,
         type: "time_poll_open",
