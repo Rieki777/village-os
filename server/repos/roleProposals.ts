@@ -313,17 +313,18 @@ export async function proposalSeasons(db: Db): Promise<Array<{ userId: string; s
 
 /**
  * The live member holders of the roles in these circles, each with the
- * circles they hold in. One read; examples and documented holders left out.
+ * circles they hold in and the role's title. One read; examples and
+ * documented holders left out.
  */
-export async function holdersInCircles(db: Db, circleIds: readonly string[]): Promise<Array<{ userId: string; circleId: string; roleId: string }>> {
+export async function holdersInCircles(db: Db, circleIds: readonly string[]): Promise<Array<{ userId: string; circleId: string; roleId: string; roleName: string }>> {
   if (!circleIds.length) return [];
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT a.user_id, r.circle_id, a.org_role_id FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
+    "SELECT a.user_id, r.circle_id, a.org_role_id, r.name FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
       "WHERE a.ended_at IS NULL AND a.holder_kind = 'member' AND a.is_example = 0 AND a.user_id IS NOT NULL AND r.is_example = 0 AND r.active = 1 AND r.circle_id IN (?) " +
       "ORDER BY a.started_at, a.id",
     [[...circleIds]],
   );
-  return rows.map((r: any) => ({ userId: String(r.user_id), circleId: String(r.circle_id), roleId: String(r.org_role_id) }));
+  return rows.map((r: any) => ({ userId: String(r.user_id), circleId: String(r.circle_id), roleId: String(r.org_role_id), roleName: String(r.name ?? "") }));
 }
 
 // ── Erasure ─────────────────────────────────────────────────────────────────

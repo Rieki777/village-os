@@ -119,14 +119,46 @@ export interface ConsentView {
   objected: number;
   /** The reasons given, naming nobody. They are in the circle's backlog for every member already. */
   objections: string[];
+  /**
+   * The titles of the roles the asked holders hold in the circle they were
+   * asked for, each once (role proposals PR D), so the tally says who in
+   * roles and never in names. A holder who has since left a role is counted
+   * and carries no title.
+   */
+  roles: { asked: string[]; consented: string[]; objected: string[] };
   /** "Record the adoption", once the circle has consented. */
   record: string | null;
   /** The reader's own ask, when they were asked. */
   you: { asked: boolean; answer: string | null; mayAnswer: boolean };
 }
 
-/** Where a proposal's consent stands, for one reader. PURE over the asks it is handed. */
-export function consentView(asks: readonly store.StoredAsk[], now: Date, timeZone: string, viewerId: string | null): ConsentView {
+/** The titles of the roles each asked holder holds in the circle they were asked for. */
+export type AskRoles = (userId: string, circleId: string) => readonly string[];
+const NO_ROLES: AskRoles = () => [];
+
+/** Each asked holder's roles in their circle, by title, read live. One read however many asks. */
+export async function askRolesFor(db: Pool | PoolConnection, asks: readonly store.StoredAsk[]): Promise<AskRoles> {
+  const circles = Array.from(new Set(asks.map((a) => a.circleId)));
+  if (!circles.length) return NO_ROLES;
+  const held = new Map<string, string[]>();
+  for (const h of await store.holdersInCircles(db, circles)) {
+    const key = `${h.userId}\u0000${h.circleId}`;
+    const titles = held.get(key) ?? [];
+    if (h.roleName && !titles.includes(h.roleName)) titles.push(h.roleName);
+    held.set(key, titles);
+  }
+  return (userId, circleId) => held.get(`${userId}\u0000${circleId}`) ?? [];
+}
+
+/** The role titles a set of asks holds, each once, in the order the asks were made. PURE. */
+function titlesOf(asks: readonly store.StoredAsk[], rolesOf: AskRoles): string[] {
+  const out: string[] = [];
+  for (const a of asks) for (const t of rolesOf(a.userId, a.circleId)) if (!out.includes(t)) out.push(t);
+  return out;
+}
+
+/** Where a proposal's consent stands, for one reader. PURE over the asks and the role titles it is handed. */
+export function consentView(asks: readonly store.StoredAsk[], now: Date, timeZone: string, viewerId: string | null, rolesOf: AskRoles = NO_ROLES): ConsentView {
   const state = consentState(asks, now);
   const closes = asks.length ? new Date(Math.max(...asks.map((a) => a.closesAt.getTime()))) : null;
   // The last day inside the window: the instant before it closes.
@@ -141,6 +173,11 @@ export function consentView(asks: readonly store.StoredAsk[], now: Date, timeZon
     consented: asks.filter((a) => a.answer === "consent").length,
     objected: asks.filter((a) => a.answer === "object").length,
     objections: asks.filter((a) => a.answer === "object" && a.reason).map((a) => a.reason as string),
+    roles: {
+      asked: titlesOf(asks, rolesOf),
+      consented: titlesOf(asks.filter((a) => a.answer === "consent"), rolesOf),
+      objected: titlesOf(asks.filter((a) => a.answer === "object"), rolesOf),
+    },
     record: state === "consented" ? CONSENT_WORDS.record : null,
     you: { asked: !!mine, answer: mine?.answer ?? null, mayAnswer: !!mine && !mine.answer && state === "open" },
   };

@@ -39,8 +39,15 @@ import { civilDayWords } from "./seasonPlans";
 
 /** The circle's window, in business days on the village's clock. */
 export const CONSENT_BUSINESS_DAYS = 2;
-/** How long an objection's reason may run: a tension's room. */
+/** How long the tension an objection writes may run: a tension's room, the roles' names included. */
 export const REASON_MAX = 600;
+/**
+ * How long an objection's own reason may run (role proposals PR D): the box
+ * on the application page holds this many characters, and the route refuses
+ * more, so the limit has one spelling. It leaves the tension room for the
+ * roles' names in front of it.
+ */
+export const OBJECTION_MAX = 300;
 
 export const CONSENT_ANSWERS = ["consent", "object"] as const;
 export type ConsentAnswer = (typeof CONSENT_ANSWERS)[number];
@@ -84,7 +91,7 @@ export function parseConsentAnswer(body: unknown): { ok: true; answer: ConsentAn
   if (answer !== "consent" && answer !== "object") return { ok: false, field: "answer", error: "Answer consent or object." };
   const raw = typeof b.reason === "string" ? b.reason.trim() : "";
   if (answer === "object" && !raw) return { ok: false, field: "reason", error: CONSENT_WORDS.reasonNeeded };
-  if (raw.length > REASON_MAX) return { ok: false, field: "reason", error: `Keep the reason to ${REASON_MAX} characters.` };
+  if (raw.length > OBJECTION_MAX) return { ok: false, field: "reason", error: `Keep the reason to ${OBJECTION_MAX} characters.` };
   if (raw && looksLikePaymentDetails(raw)) return { ok: false, field: "reason", error: "This looks like a bank or card number. Payment details are never stored in a reason." };
   return { ok: true, answer, reason: raw || null };
 }
@@ -134,7 +141,44 @@ export const CONSENT_WORDS = {
   askTitle: (roles: readonly string[]) => `Your circle is asked about a role proposal: ${seatList(roles)}`,
   askBody: (closesOnDay: string) => `Consent or object by ${civilDayWords(closesOnDay)}. It waits under Tasks on your profile too.`,
   noVote: "A proposal that changes roles is adopted by its circle's consent or by a holder of the power that seats people. It does not go to a village vote.",
+
+  // The application page's controls (role proposals PR D).
+  heading: "The circle's answer",
+  askedYou: (closesOnDay: string) => `Your circle asks you to consent or object by ${civilDayWords(closesOnDay)}.`,
+  consentButton: "Consent",
+  objectButton: "Object",
+  objectionGoes: "Your objection goes to the circle's next meeting.",
+  reasonLabel: "Why you object",
+  reasonHelp: `Up to ${OBJECTION_MAX} characters.`,
+  sendObjection: "Send my objection",
+  notNow: "Not now",
+  youConsented: "You consented.",
+  youObjected: "You objected.",
+  /** The route takes one answer per holder, so an answer is shown as final. */
+  answerStands: "Each holder answers once, so your answer stands.",
+  /** Above "Record the adoption", for a holder of the power once the circle has consented. */
+  recordLine: "The circle consented. Record the adoption for the village.",
+  failed: "That did not reach the server. Try again.",
 } as const;
+
+/**
+ * THE TALLY under the state (role proposals PR D): who the circle asked, who
+ * consented and who objected, as counts and the titles of the roles they hold
+ * in the circle. A person is never named.
+ */
+export const TALLY_WORDS = {
+  asked: "Asked",
+  consented: "Consented",
+  objected: "Objected",
+  none: "None",
+} as const;
+
+/** "2 (Gate keeper, Orchard keeper)", "1", or "None". PURE. */
+export function tallyWords(count: number, roles: readonly string[]): string {
+  if (!Number.isFinite(count) || count <= 0) return TALLY_WORDS.none;
+  const titles = roles.map((r) => String(r).trim()).filter(Boolean);
+  return titles.length ? `${count} (${titles.join(", ")})` : String(count);
+}
 
 /** The words for a state, with the window's last day where it is open. PURE. */
 export function consentStateWords(state: ConsentState, closesOnDay: string | null): string {
