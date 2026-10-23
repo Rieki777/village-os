@@ -37,19 +37,25 @@ vi.mock("@/components/Layout", () => ({
 vi.mock("@/lib/gameApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/gameApi")>()),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+  // The recognition token is named, so the token ruling can be checked
+  // against the rendered page rather than against the source.
+  useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Gratitude", value: { name: "Seeds" } } }),
 }));
-vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
-vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Gratitude" }));
 
 const moneySection = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+// What GET /api/content/page-opportunities answers (null = never saved).
+const pageSection = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/hooks/useVillageContent", () => ({
   useVillageContent: (section: string) =>
     section === "money"
       ? { content: moneySection.current, loading: false, isPlaceholder: !moneySection.current }
       : { content: null, loading: false, isPlaceholder: true },
+  readVillageSection: () => Promise.resolve(pageSection.current),
 }));
 
 import Opportunities from "./Opportunities";
+import { OPPORTUNITIES_PAGE, VENTURE_IDS } from "@shared/pageContent/opportunities";
+import { markerDocument } from "@shared/pageContent/resolve";
 
 const renderPage = () =>
   render(
@@ -58,8 +64,17 @@ const renderPage = () =>
     </Router>,
   );
 
+/** The page's words arrive after one read, so a test waits for them before it asks. */
+const loaded = () => screen.findByText(/^Join our thriving village economy/);
+
+/** The eight titles as the spec writes them, so a reworded default moves the test with it. */
+const DEFAULT_TITLES = OPPORTUNITIES_PAGE.sections
+  .find((s) => s.id === "ventures")!
+  .lists![0].default.map((row) => row.title);
+
 beforeEach(() => {
   moneySection.current = null;
+  pageSection.current = null;
   // afterEach's unstubAllGlobals takes the module-level stub with it, and the
   // second render in any file then dies inside framer-motion's whileInView.
   vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
@@ -70,9 +85,10 @@ afterEach(() => vi.unstubAllGlobals());
 const currencyRuns = () => (document.body.textContent ?? "").match(/\$[\d.,]+ ?[KMB]?/g) ?? [];
 
 describe("a village that has costed none of its ventures", () => {
-  it("still draws every venture card", () => {
+  it("still draws every venture card", async () => {
     renderPage();
-    for (const title of [
+    await loaded();
+    expect(DEFAULT_TITLES).toEqual([
       "Retreat Center",
       "Health & Wellness Center",
       "Café & Restaurant",
@@ -81,25 +97,28 @@ describe("a village that has costed none of its ventures", () => {
       "Fitness & Recreation",
       "Art & Culture Hub",
       "Regenerative Agriculture",
-    ]) {
+    ]);
+    for (const title of DEFAULT_TITLES) {
       expect(screen.queryByText(title), title).toBeTruthy();
     }
   });
 
-  it("publishes no capital figure anywhere on the page", () => {
+  it("publishes no capital figure anywhere on the page", async () => {
     renderPage();
+    await loaded();
     expect(currencyRuns()).toEqual([]);
   });
 
-  it("prints no empty range slot and no placeholder in its place", () => {
+  it("prints no empty range slot and no placeholder in its place", async () => {
     renderPage();
+    await loaded();
     const said = document.body.textContent ?? "";
     expect(said).not.toMatch(/\bTBD\b|to be confirmed|Investment: *$/i);
   });
 });
 
 describe("a village that has costed some of its ventures", () => {
-  it("publishes exactly the ranges it stated and nothing for the rest", () => {
+  it("publishes exactly the ranges it stated and nothing for the rest", async () => {
     moneySection.current = {
       ventureInvestment: {
         "retreat-center": "₡2.500M a ₡5.000M",
@@ -107,25 +126,28 @@ describe("a village that has costed some of its ventures", () => {
       },
     };
     renderPage();
+    await loaded();
     expect(screen.queryByText("₡2.500M a ₡5.000M")).toBeTruthy();
     expect(screen.queryByText("under valuation")).toBeTruthy();
     // The six it has not costed stay silent.
     expect(currencyRuns()).toEqual([]);
   });
 
-  it("changes when the document changes", () => {
+  it("changes when the document changes", async () => {
     moneySection.current = { ventureInvestment: { "retreat-center": "$5M - $10M" } };
     const first = renderPage();
+    await loaded();
     expect(screen.queryByText("$5M - $10M")).toBeTruthy();
     first.unmount();
 
     moneySection.current = { ventureInvestment: { "retreat-center": "1,2M EUR upwards" } };
     renderPage();
+    await loaded();
     expect(screen.queryByText("1,2M EUR upwards")).toBeTruthy();
     expect(screen.queryByText("$5M - $10M")).toBeNull();
   });
 
-  it("attaches a range to its own venture and to no other", () => {
+  it("attaches a range to its own venture and to no other", async () => {
     // "Artisan Market" and "Regenerative Agriculture" carried the SAME
     // constant range, so a lookup keyed by anything sloppier than the venture
     // would print this twice and nobody would notice.
@@ -133,11 +155,120 @@ describe("a village that has costed some of its ventures", () => {
       ventureInvestment: { "regenerative-agriculture": "$100K - $300K" },
     };
     renderPage();
+    await loaded();
     const printed = screen.getAllByText("$100K - $300K");
     expect(printed).toHaveLength(1);
     // The one place it printed sits inside the agriculture card and no other.
     const card = printed[0]!.closest(".rounded-2xl");
     expect(card?.textContent ?? "").toContain("Regenerative Agriculture");
     expect(card?.textContent ?? "").not.toContain("Artisan Market");
+  });
+});
+
+describe("a village that renamed a venture", () => {
+  it("keeps the range on the card it was typed for, because the id is the contract", async () => {
+    // The investment range is keyed by the venture's id in the money
+    // section. Renaming the card in Pages must not orphan the figure.
+    pageSection.current = { ventures: { cards: [{ id: "retreat-center", title: "Healing Lodge" }] } };
+    moneySection.current = { ventureInvestment: { "retreat-center": "₡2.500M" } };
+    renderPage();
+    const card = (await screen.findByText("Healing Lodge")).closest(".rounded-2xl");
+    expect(card?.textContent ?? "").toContain("₡2.500M");
+    expect(screen.queryByText("Retreat Center")).toBeNull();
+  });
+
+  it("uses the same eight ids the money section is keyed by", () => {
+    expect([...VENTURE_IDS]).toEqual([
+      "retreat-center",
+      "health-wellness",
+      "cafe-restaurant",
+      "artisan-market",
+      "learning-center",
+      "fitness-recreation",
+      "art-culture",
+      "regenerative-agriculture",
+    ]);
+  });
+});
+
+/* ── THE TOKEN RULING (Rye, 2026-10-22; TOKEN_COPY_PROPOSAL rows 31 to 33) ──
+ *
+ * A token may be named; no sentence says what it does. This page said the
+ * revenue share was "paid in" the recognition token, in the hero, in the
+ * section heading, in its paragraph and in the link under it.
+ */
+describe("the page says nothing about what a token does", () => {
+  it("never names the recognition token in its default words", async () => {
+    renderPage();
+    await loaded();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toContain("Gratitude");
+    expect(text).toContain("align business success with community prosperity through shared revenue.");
+    expect(screen.getByRole("heading", { level: 2, name: "Revenue Sharing" })).toBeTruthy();
+    expect(text).toContain(
+      "All businesses at Willowbrook share a percentage of revenue with the community. This creates alignment",
+    );
+    expect(screen.getByRole("link", { name: /How we create together/ })).toHaveAttribute("href", "/how-we-create");
+  });
+});
+
+describe("every field in the Business Opportunities spec reaches the page", () => {
+  it("renders a distinct marker typed into each field and each list row", async () => {
+    const doc = markerDocument(OPPORTUNITIES_PAGE);
+    pageSection.current = doc;
+    renderPage();
+    await screen.findByText(String((doc.hero as Record<string, string>).lede));
+
+    const text = document.body.textContent ?? "";
+    const missing: string[] = [];
+    for (const [sectionId, section] of Object.entries(doc)) {
+      for (const [key, value] of Object.entries(section as Record<string, unknown>)) {
+        const rows = Array.isArray(value) ? (value as Record<string, string>[]) : [{ [key]: value as string }];
+        for (const row of rows) {
+          for (const [field, v] of Object.entries(row)) {
+            // An icon is a word that picks a picture, never text on the page.
+            if (field === "id" || field === "icon") continue;
+            if (!text.includes(v)) missing.push(`${sectionId}.${key}.${field} (${v})`);
+          }
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("draws one bullet per line, at most six, and the picture the icon word names", async () => {
+    pageSection.current = {
+      ventures: {
+        cards: [{ id: "cafe-restaurant", icon: "tools", details: ["One", "", "Two", "Three", "Four", "Five", "Six", "Seven"].join("\n") }],
+      },
+    };
+    renderPage();
+    const card = (await screen.findByText("Café & Restaurant")).closest(".rounded-2xl") as HTMLElement;
+    expect(Array.from(card.querySelectorAll("li")).map((li) => li.textContent)).toEqual([
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
+      "Six",
+    ]);
+    expect(card.querySelector("svg.lucide-hammer")).toBeTruthy();
+  });
+
+  it("draws no badge for a status the village cleared", async () => {
+    pageSection.current = { ventures: { cards: [{ id: "artisan-market", status: "" }] } };
+    renderPage();
+    const card = (await screen.findByText("Artisan Market")).closest(".rounded-2xl") as HTMLElement;
+    expect(card.textContent).not.toContain("Future");
+  });
+
+  it("draws nothing of a section the village hid", async () => {
+    pageSection.current = { ventures: { hidden: true }, revenue: { hidden: true } };
+    renderPage();
+    await loaded();
+    expect(screen.queryByText("Retreat Center")).toBeNull();
+    expect(screen.queryByText("Revenue Sharing")).toBeNull();
+    expect(screen.queryByRole("link", { name: /How we create together/ })).toBeNull();
+    expect(screen.getByText("Interested in an Opportunity?")).toBeTruthy();
   });
 });

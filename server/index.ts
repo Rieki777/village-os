@@ -52,6 +52,8 @@ import {
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 import { GPS_CHANGE } from "../shared/governingPurpose";
 import { pageContentProblem } from "../shared/pageContent";
+import { pageVarsFrom } from "../shared/pageContent/vars";
+import { workWithUsAckEmail } from "./lib/workWithUsAck";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
   NOT_YET_WIRED,
@@ -7638,13 +7640,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       }
       // Acknowledge the submitter of a Work With Us proposal: one typed address, never a list (lib/publicAddress.ts)
       const ackTo = type === "work-with-us" ? singlePublicAddress((data as any)?.email) : null;
-      if (ackTo) {
-        await sendResendEmail({
-          to: [ackTo], origin: "forms.ack",
-          subject: "We've received your proposal",
-          html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:22px 24px"><div style="font-size:20px;font-weight:700">Your proposal is with us</div></div><div style="padding:22px 24px;line-height:1.6"><p>Hi ${escapeHtml(String(applicantName))},</p><p>Thank you for offering your gifts. We read every Work With Us proposal with care. Please allow up to a month for a thoughtful response, and room for conversation and revision.</p><p style="color:#6b7280;font-size:13px;margin-top:20px">The team</p></div></div></body></html>`,
-        });
-      }
+      // Its words are the village's own (Admin, Pages, Work With Us): lib/workWithUsAck.ts.
+      if (ackTo) await sendResendEmail({ to: [ackTo], origin: "forms.ack", ...workWithUsAckEmail(contentRepo.get(), pageVarsFrom(mergedConfig()), String(applicantName)) });
     })();
 
     res.json({ success: true, id: entry.id, ...ideaReceipt(proposal, !!entry.userId) }); // whether a quest idea reached /review: lib/questIdeaReceipt.ts
@@ -17648,7 +17645,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 - timeToImplement (required): how long from approval to completion; phases, seasonality, dependencies
 - needsFromUs (required): information/access, decisions/approvals and by when, meeting time, site access/utilities/equipment/labor
 - maintenance (required): ongoing care, who's responsible, cost over time, expected lifespan and end-of-life
-- reciprocity (required, one or more of these EXACT values): ${recipValues}
+- reciprocity ${recipValues ? `(required, one or more of these EXACT values): ${recipValues}` : "(an empty list: this village lists no options, so the exchange goes in reciprocityDetail)"}
 - reciprocityDetail (optional): amounts, structure, percentages, or a blend they propose`;
     const shape = kind === "quest-proposal"
       ? `{"name","email","title","whatYouWantToDo","resourcesBringing","resourcesNeeded","compensation","timelineMilestones"}`

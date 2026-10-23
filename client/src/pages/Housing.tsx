@@ -6,6 +6,13 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useVillageContent } from "@/hooks/useVillageContent";
 import { useVillageName } from "@/hooks/useVillageName";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import {
+  HOUSING_PAGE,
+  HOUSING_TRANSFER_DEFAULT,
+  type HousingFeatureIcon,
+} from "@shared/pageContent/housing";
 import {
   Home,
   ArrowRight,
@@ -14,7 +21,12 @@ import {
   TreePine,
   Mountain,
   Droplets,
-  Sun
+  Sun,
+  Leaf,
+  Sprout,
+  Wind,
+  Heart,
+  type LucideIcon,
 } from "lucide-react";
 
 interface LegalContent {
@@ -52,33 +64,44 @@ interface LegalContent {
  * typing a name; the key underneath does not move.
  */
 
-const landFeatures = [
-  {
-    title: "Mountain Views",
-    description: "Many lots offer stunning views of the surrounding mountains and valleys.",
-    icon: Mountain,
-  },
-  {
-    title: "Water Access",
-    description: "Natural springs and streams throughout the property provide clean water.",
-    icon: Droplets,
-  },
-  {
-    title: "Mature Forest",
-    description: "Existing forest provides shade, privacy, and connection to nature.",
-    icon: TreePine,
-  },
-  {
-    title: "Solar Exposure",
-    description: "Lots are positioned for optimal solar energy and natural lighting.",
-    icon: Sun,
-  },
-];
+/**
+ * The pictures behind the icon words a founder types for a land feature
+ * (shared/pageContent/housing.ts lists the words). Keyed by the union, so a
+ * word added to the list without a picture here fails to compile.
+ */
+const FEATURE_ICONS: Record<HousingFeatureIcon, LucideIcon> = {
+  mountain: Mountain,
+  water: Droplets,
+  forest: TreePine,
+  sun: Sun,
+  leaf: Leaf,
+  sprout: Sprout,
+  wind: Wind,
+  home: Home,
+  pin: MapPin,
+  heart: Heart,
+};
+
+/** A word not on the list draws the first picture, so a typo shows a plain icon instead of a hole. */
+function featureIcon(word: string | undefined): LucideIcon {
+  const key = (word ?? "").trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(FEATURE_ICONS, key)
+    ? FEATURE_ICONS[key as HousingFeatureIcon]
+    : Mountain;
+}
 
 export default function Housing() {
   // Blank hides the button rather than pointing at another village.
   const { eventsUrl } = useVillageLinks();
   const villageName = useVillageName();
+  // The page's words are the village's own, from Admin, Pages, Housing
+  // (shared/pageContent/housing.ts). Null until the saved words have arrived,
+  // so the defaults never paint first and then change.
+  const page = usePageContent(HOUSING_PAGE);
+  const hero = page?.hero.fields;
+  const features = page?.features;
+  const tenure = page?.tenure;
+  const cta = page?.cta.fields;
   /**
    * S2 brochure lane, 2026-08-30: this section used to state the land share
    * transfers "tax-free" unconditionally: Costa Rica's tax treatment,
@@ -89,6 +112,15 @@ export default function Housing() {
    */
   const { content: legal } = useVillageContent<LegalContent>("legal");
   const transferNote = legal?.landShareTransferNote?.trim();
+  /*
+   * The Transferable card follows that note only while its description is
+   * the platform's own. A village that wrote its own description in Pages has
+   * said what it means, and the note does not overwrite it.
+   */
+  const tenureBody = (id: string | undefined, body: string) =>
+    id === "transferable" && transferNote && body === HOUSING_TRANSFER_DEFAULT
+      ? `Pass your land share to your children ${transferNote}, keeping it in the family.`
+      : body;
   /*
    * The homes this village has published, and nothing else (0131). `null`
    * until the read lands; `homeChoices` is where the three answers live, so
@@ -162,42 +194,49 @@ export default function Housing() {
                   holds for any village running this platform, because the
                   Land Share structure it names is the one this page already
                   explains further down for everybody. */}
-              <p className="text-xl text-white leading-relaxed">
-                Find your place here. Homes sit on land the community holds together,
-                and a Land Share Agreement is how you take one.
+              {/* Invisible, not absent, until the saved words arrive: the
+                  hero keeps its height and never shows the defaults first. */}
+              <p className={`text-xl text-white leading-relaxed break-words${hero ? "" : " invisible"}`}>
+                <Emphasized text={hero?.lede ?? "\u00a0"} />
               </p>
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Land Features */}
+      {/* Land Features. A village that hid them, or listed none, draws no
+          band at all rather than an empty strip of colour. */}
+      {features && !features.hidden && features.lists.items.length > 0 && (
       <section className="py-16 bg-aqua-light">
         <div className="container">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {landFeatures.map((feature, index) => (
+            {features.lists.items.map((feature, index) => {
+              const Icon = featureIcon(feature.icon);
+              return (
               <motion.div
-                key={feature.title}
+                key={`${index}-${feature.title}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="text-center"
+                className="text-center min-w-0"
               >
                 <div className="w-14 h-14 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-4">
-                  <feature.icon className="w-7 h-7 text-teal" />
+                  <Icon className="w-7 h-7 text-teal" />
                 </div>
-                <h2 className="font-display text-lg font-semibold text-foreground mb-2">
+                <h2 className="font-display text-lg font-semibold text-foreground mb-2 break-words">
                   {feature.title}
                 </h2>
-                <p className="text-sm text-muted-foreground">
-                  {feature.description}
+                <p className="text-sm text-muted-foreground break-words">
+                  {feature.body}
                 </p>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
+      )}
 
       {/* Housing Options.
           THE WHOLE SECTION, HEADING AND ALL, OR NOTHING. Hiding only the grid
@@ -286,39 +325,27 @@ export default function Housing() {
         </section>
       )}
 
-      {/* Land Share Info */}
+      {/* Land Share Info: how a home is held here, in the village's words. */}
+      {tenure && !tenure.hidden && (
       <section className="py-20 bg-teal/10">
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <MapPin className="w-12 h-12 text-teal mx-auto mb-6" />
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Land Share Agreements
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4 break-words">
+              {tenure.fields.heading}
             </h2>
-            <p className="text-muted-foreground mb-6">
-              At {villageName}, you don't purchase land outright: you acquire a Land Share Agreement 
-              that gives you long-term access to your lot. This unique structure:
+            <p className="text-muted-foreground mb-6 break-words">
+              <Emphasized text={tenure.fields.intro} />
             </p>
             <div className="grid sm:grid-cols-3 gap-6 text-left mb-8">
-              <div className="bg-card p-6 rounded-xl">
-                <h3 className="font-semibold text-foreground mb-2">Renewable</h3>
-                <p className="text-sm text-muted-foreground">
-                  Your agreement can be renewed, providing long-term security for your family.
+              {tenure.lists.points.map((point) => (
+              <div key={point.id} className="bg-card p-6 rounded-xl min-w-0">
+                <h3 className="font-semibold text-foreground mb-2 break-words">{point.title}</h3>
+                <p className="text-sm text-muted-foreground break-words">
+                  {tenureBody(point.id, point.body)}
                 </p>
               </div>
-              <div className="bg-card p-6 rounded-xl">
-                <h3 className="font-semibold text-foreground mb-2">Transferable</h3>
-                <p className="text-sm text-muted-foreground">
-                  {transferNote
-                    ? `Pass your land share to your children ${transferNote}, keeping it in the family.`
-                    : "Pass your land share to your children, keeping it in the family. Ask a steward about this village's specific transfer and tax terms."}
-                </p>
-              </div>
-              <div className="bg-card p-6 rounded-xl">
-                <h3 className="font-semibold text-foreground mb-2">Community Owned</h3>
-                <p className="text-sm text-muted-foreground">
-                  The land remains in community ownership, ensuring our values are preserved.
-                </p>
-              </div>
+              ))}
             </div>
             <Link
               href="/resident"
@@ -330,6 +357,7 @@ export default function Housing() {
           </div>
         </div>
       </section>
+      )}
 
       {/* CTA */}
       <section className="py-20 bg-background">
@@ -338,9 +366,8 @@ export default function Housing() {
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-4">
               Interested in Housing?
             </h2>
-            <p className="text-muted-foreground mb-8">
-              Join a community call to learn about available lots, pricing, 
-              and the process for becoming a resident.
+            <p className={`text-muted-foreground mb-8 break-words${cta ? "" : " invisible"}`}>
+              <Emphasized text={cta?.body ?? "\u00a0"} />
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {eventsUrl && (

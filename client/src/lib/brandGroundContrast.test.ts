@@ -446,7 +446,9 @@ function measureOnNearestGround(where: Located, village: Village) {
  */
 const HERO: { label: string; anchor: RegExp }[] = [
   { label: "the Housing hero heading", anchor: /Housing at \{villageName\}/ },
-  { label: "the Housing hero paragraph", anchor: /Find your place here/ },
+  // The sentence is the village's own since 2026-10-22 (Admin, Pages,
+  // Housing), so the paragraph is found by the field it renders.
+  { label: "the Housing hero paragraph", anchor: /hero\?\.lede/ },
 ];
 
 describe("the Housing hero reads on the band for every village, light only", () => {
