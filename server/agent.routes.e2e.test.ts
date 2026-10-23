@@ -544,3 +544,95 @@ describe.skipIf(!DB_CONFIGURED)("the founder's agent drafts the map", () => {
     expect(r.json.error).toBe("agent_token_scope");
   });
 });
+
+/**
+ * A NEW PASSWORD ENDS THE AGENT TOO (lane tokens-on-reset). Setting a password
+ * and an admin's "revoke sessions" bump tokenVersion, which ends every session.
+ * An agent token is not a session: the resolver mints one from the holder's
+ * CURRENT tokenVersion on every call, so the bump alone never reached it, and
+ * someone holding a stolen password could mint a token for up to a year that
+ * outlived the reset that answered the theft.
+ *
+ * The link is made here with the fixture secret. It is the same link the reset
+ * letter carries (server/routes/authRecovery.ts), and this server has no mail
+ * provider to read a letter back from.
+ */
+describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every agent token", () => {
+  const SIGNING = "agent-routes-token-secret"; // module-review-ok: the fixture signing secret this file boots its server with
+  const SCOPES = ["calendar.read", "directory.read", "me.read"];
+
+  async function mintFor(who: { token: string }, name: string): Promise<string> {
+    const minted = await call("POST", "/api/agent/tokens", { name, scopes: SCOPES, ttlDays: 365 }, who.token);
+    expect(minted.status, `${name} must mint`).toBe(200);
+    const value = String(minted.json.token);
+    expect((await call("GET", "/api/agent/v1/me", undefined, value)).status, `${name} answers before`).toBe(200);
+    return value;
+  }
+
+  async function expectRevoked(values: string[], when: string): Promise<void> {
+    for (const value of values) {
+      const dead = await call("GET", "/api/agent/v1/me", undefined, value);
+      expect(dead.status, `a token outlived ${when}`).toBe(401);
+      expect(dead.json.reason).toBe("revoked");
+    }
+  }
+
+  /** One audit line per revoked token, the line the single revoke writes. */
+  async function expectAudited(userId: string, n: number): Promise<void> {
+    const [ids] = await pool.query<any[]>("SELECT id FROM agent_tokens WHERE user_id = ? AND revoked_at IS NOT NULL", [userId]); // module-review-ok: reading back the rows the route revoked
+    expect(ids.length, "revoked rows").toBe(n);
+    for (const { id } of ids) {
+      const [lines] = await pool.query<any[]>( // module-review-ok: reading back the audit rows the route wrote
+        "SELECT actor_kind, audience FROM health_events WHERE kind = 'agent_token' AND entity_ref = ? AND text = ?",
+        [id, `revoked agent token ${id}`],
+      );
+      expect(lines, `the audit line for ${id}`).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ actor_kind: "agent", audience: "admin" });
+    }
+  }
+
+  it("setting a new password through the real link ends every token the member made, and theirs only", async () => {
+    const eli = await register("Eli Moss", "agent-eli");
+    const laptop = await mintFor(eli, "eli laptop");
+    const phone = await mintFor(eli, "eli phone");
+    const gil = await register("Gil Ortiz", "agent-gil");
+    const bystander = await mintFor(gil, "gil laptop");
+
+    const { makeSetPasswordToken } = await import("./lib/memberTokens");
+    const [[row]] = await pool.query<any[]>("SELECT token_version FROM users WHERE id = ?", [eli.id]); // module-review-ok: the version the reset letter binds its link to
+    const link = makeSetPasswordToken(SIGNING, eli.id, Number(row.token_version));
+    const reset = await call("POST", "/api/auth/set-password", { token: link, password: "AgentReset456!" }, "");
+    expect(reset.status, JSON.stringify(reset.json)).toBe(200);
+
+    await expectRevoked([laptop, phone], "the password reset");
+    await expectAudited(eli.id, 2);
+    expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this reset").toBe(200);
+
+    // The member keeps their agent: the session the reset hands back mints a fresh token, and it answers.
+    const after = await call("POST", "/api/agent/tokens", { name: "eli after", scopes: SCOPES }, String(reset.json.token));
+    expect(after.status).toBe(200);
+    expect((await call("GET", "/api/agent/v1/me", undefined, String(after.json.token))).status).toBe(200);
+  });
+
+  it("an admin's revoke sessions ends every token the member made, and says how many", async () => {
+    const fay = await register("Fay Lund", "agent-fay");
+    const laptop = await mintFor(fay, "fay laptop");
+    const phone = await mintFor(fay, "fay phone");
+    const hal = await register("Hal Brook", "agent-hal");
+    const bystander = await mintFor(hal, "hal laptop");
+
+    const revoke = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
+    expect(revoke.status, JSON.stringify(revoke.json)).toBe(200);
+
+    await expectRevoked([laptop, phone], "the admin's revoke sessions");
+    expect(revoke.json.agentTokensRevoked).toBe(2);
+    await expectAudited(fay.id, 2);
+    expect((await call("GET", "/api/profile", undefined, fay.token)).status, "the session itself still dies").toBe(401);
+    expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this revoke").toBe(200);
+
+    // A second press finds nothing left to end, and writes no second audit line.
+    const again = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
+    expect(again.json.agentTokensRevoked).toBe(0);
+    await expectAudited(fay.id, 2);
+  });
+});
