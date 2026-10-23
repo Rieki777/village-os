@@ -266,10 +266,11 @@ describe.skipIf(!configured)("seat fees on a recurring gathering settle by their
     expect(await held("u-leaver")).toBe(units(30));
 
     // The sweep runs first, the way the six-hour job would before anybody leaves.
-    expect(await settleFinishedSeats(pool, { now: new Date() })).toEqual({ settled: 1, amount: units(5) });
+    const swept = await settleFinishedSeats(pool, { now: new Date() });
 
     const r = await releasePlacesOf(pool, "u-leaver", { timeZone: zone });
     expect(r.refunded, "the place ahead was given up, so its fee comes back").toBe(1);
+    expect(swept, "the sweep kept the evening that happened, and only that one").toEqual({ settled: 1, amount: units(5) });
     expect(await statusOf("ev-l", "u-leaver", aheadKey)).toBe("released");
     expect(await statusOf("ev-l", "u-leaver", pastKey), "the evening that happened keeps its fee").toBe("kept");
     expect(await held("u-leaver")).toBe(units(35));
