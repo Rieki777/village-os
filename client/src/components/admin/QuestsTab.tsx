@@ -194,7 +194,7 @@ export default function QuestsTab({ password }: { password: string }) {
                     draft={d.payDraft}
                     onChange={(payDraft) => setDraft({ ...draft, [q.id]: { ...d, payDraft } })}
                     offered={offered}
-                    currency={(q.valueCurrency as string | undefined) || currency || null}
+                    currency={currency || null}
                     cadence="once"
                     inputClassName={inputCls}
                     recognitionName={options?.recognition ?? null}
@@ -282,7 +282,7 @@ export default function QuestsTab({ password }: { password: string }) {
                   <button
                     disabled={!dirty}
                     onClick={async () => {
-                      const pay = draftToBody(d.payDraft, offered ?? [], (q.valueCurrency as string | undefined) || currency, { required: false });
+                      const pay = draftToBody(d.payDraft, offered ?? [], currency, { required: false });
                       if (!pay.ok) return toast.error(pay.error);
                       const r = await call(`/admin/quests/${q.id}`, {
                         title: d.title, description: d.description,
