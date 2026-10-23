@@ -113,10 +113,10 @@ export const LIBRARY_TENSION_API = `${LIBRARY_API}/from-tension`;
 
 // ── Where an item came from ──────────────────────────────────────────────────
 
-export const LIBRARY_SOURCE_KINDS = ["role_tension", "room_tension"] as const;
+export const LIBRARY_SOURCE_KINDS = ["role_tension", "room_tension", "decision_review"] as const;
 export type LibrarySourceKind = (typeof LIBRARY_SOURCE_KINDS)[number];
 
-/** Where an item came from: a tension raised with a role (its name), or one named in a room (its circle's name, or ""). */
+/** Where an item came from: a tension raised with a role (its name), one named in a room (its circle's name, or ""), or a decision's review (its circle's name, shared/sessionDecisions.ts). */
 export interface LibrarySource {
   kind: LibrarySourceKind;
   label: string;
@@ -569,6 +569,7 @@ export const LIBRARY_COPY = {
 export const LIBRARY_SOURCE_LINE: Record<LibrarySourceKind, (label: string) => string> = {
   role_tension: (role) => `From a tension raised with ${role}`,
   room_tension: (circle) => (circle ? `From a tension named in a session of the ${circleWords(circle)}` : "From a tension named in a session"),
+  decision_review: (circle) => (circle ? `A decision the ${circleWords(circle)} set a date to review` : "A decision set a date to review"),
 };
 
 /** Sending a room's tension on, from the room's backlog or from "From last time". */

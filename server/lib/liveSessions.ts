@@ -91,6 +91,7 @@ import {
 } from "./sessionLibrary";
 import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
 import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
+import { exportReviewsFor, forgetReviewsFor } from "./sessionDecisions";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
@@ -1951,9 +1952,10 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   circlesFollowed: Record<string, unknown>[];
   calendarAddress: Record<string, unknown>[];
   ownCalendarsAttached: Record<string, unknown>[];
+  reviewsSet: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [], reviewsSet: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2029,7 +2031,8 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   // A circle's rhythm (0271): the ones they set last.
   const rhythmsSet = await exportRhythmsFor(pool, no);
   const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached };
+  const reviewsSet = await exportReviewsFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached, reviewsSet };
 }
 
 /**
@@ -2103,6 +2106,7 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     // A circle's rhythm (0271): one they set last says it was set by nobody.
     await forgetRhythmsFor(conn, no);
     await forgetFollowsFor(conn, no);
+    await forgetReviewsFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

@@ -171,13 +171,14 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Sixteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other fifteen holds that number. Three
-(0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library and
-one (0279) where its items came from, described under "Before the call: the agenda library", one (0271)
-is a circle's rhythm, described under "When a circle meets: its rhythm", two (0275) are who follows
-which circles on their own calendar, and the last (0277) is which circle keeps which calendar of its
-own, both described under "Circle meetings on a calendar".
+Seventeen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other sixteen holds that number. Three
+(0255) are the task layer, described under "After the call: tasks", one (0280) is a decision's review
+date, described under "After the call: a circle's decisions and their reviews", two (0264) are the agenda
+library and one (0279) where its items came from, described under "Before the call: the agenda library",
+one (0271) is a circle's rhythm, described under "When a circle meets: its rhythm", two (0275) are who
+follows which circles on their own calendar, and the last (0277) is which circle keeps which calendar of
+its own, both described under "Circle meetings on a calendar".
 
 | Table | Holds |
 |---|---|
@@ -195,7 +196,8 @@ own, both described under "Circle meetings on a calendar".
 | `live_session_follows` | The circles a member follows on their own calendar, one row each, or one row `*` for every circle, the new ones too. |
 | `live_session_feed_keys` | One per member: the sha256 of their private calendar address's key, when it was made, and when a calendar app last read it. |
 | `live_session_circle_calendars` | One per circle that attached its own calendar: which of the village's external calendar subscriptions it is, and who attached it. |
-| `live_session_library_sources` | One per agenda item that came from a tension: whether a role's or a room's, which one, and the role's or the circle's name as it was then. One item per tension. |
+| `live_session_library_sources` | One per agenda item that came from a tension or a decision's review: which kind, which one, and the role's or the circle's name as it was then. One item per tension, and per review date. |
+| `live_session_decision_reviews` | One per decision with a review date: the village date, who set it, and the agenda item its review became once it was made. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -347,6 +349,29 @@ subscription on the Events page detaches it too.
 |---|---|---|
 | `PUT /api/sessions/circles/:circleId/calendar` | the circle's members, admins | 10 a day |
 | `DELETE /api/sessions/circles/:circleId/calendar` | the circle's members, admins | the same bucket |
+
+## After the call: a circle's decisions and their reviews
+
+Every agreement is good until it is reviewed (Rye, 2026-10-22). **Decisions** on /sessions lists what a
+circle decided by consent, newest first: the `decision` entries its rooms marked decided, in its closed
+sessions. It is for the circle's members by standing (in its last meeting, or one of its seats now) and
+admins, one circle at a time, their own first: the same audience the circle's task cards on its earlier
+sessions already have. A decision's words are the circle's agreement; the session's title travels only
+to somebody who was in it, or an admin, and otherwise the card says only when it was decided.
+
+**A review date.** The same people set one ("In 3 months", "In 6 months", "In a year", or a date from
+tomorrow up to three years ahead), change it, or take it off. When the date comes, the hourly
+`session-decision-reviews` job (nothing before the module is open to members) makes "Review: <the
+decision>" an item waiting for the circle, added by nobody in particular so it stays the circle's,
+its source the decision and that date (0279: "A decision the Garden circle set a date to review"). The
+card then says its review is on the agenda items. Each review date is its own cycle: a new date lets the
+last one go, and each date's review is made once. The decision's record is never written to: 0280 keeps
+the date beside it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/circles/:circleId/decisions` | the circle's members, admins | none |
+| `PUT /api/sessions/circles/:circleId/decisions/:entryId/review` `{ reviewOn }` | the circle's members, admins | 60 an hour |
 
 ## Before the call: the agenda library
 
@@ -685,7 +710,8 @@ last changed somebody else's words the item says nobody, and a note they wrote o
 goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
 it goes with the rest. A circle's rhythm they set last says it was set by nobody: the rhythm is the
 circle's, and stays. The circles they followed and their calendar address go, so the address answers
-nothing from then on. A circle's own calendar they attached says it was attached by nobody, and stays.
+nothing from then on. A circle's own calendar they attached says it was attached by nobody, and stays,
+and so does a decision's review date they set.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -698,4 +724,5 @@ item); a session's id travels only where they may read that session. From a circ
 `rhythmsSet`, the circles whose rhythm they set last. From the calendar it carries `circlesFollowed`,
 the circles they follow (`*` for every circle) and since when, `calendarAddress`, when their
 address was made and last read, never its key, and `ownCalendarsAttached`, the circles whose own
-calendar they attached, never its address.
+calendar they attached, never its address. From decisions it carries `reviewsSet`, the review dates they
+set last.

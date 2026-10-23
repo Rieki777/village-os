@@ -64,6 +64,7 @@ import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/compone
 import ComingUp from "@/components/sessions/ComingUp";
 import StartChecklist from "@/components/sessions/StartChecklist";
 import WaitingForCircle from "@/components/sessions/WaitingForCircle";
+import CircleDecisions from "@/components/sessions/CircleDecisions";
 import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -408,6 +409,7 @@ export default function Sessions() {
                   onChanged={fetchList}
                 />
                 <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
+                <CircleDecisions circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
                 <RecentSessions rows={load.data.recent} />
               </>
             )}
