@@ -40,7 +40,7 @@ import { ROLE_CCOS_WORDS } from "@shared/roleCcos";
 import type { HoldingKey } from "@shared/playerCardCcos";
 import { TASK_BOARD_PATH } from "@shared/sessionTasks";
 import RaiseTension from "@/components/roleTension/RaiseTension";
-import { BOX, CardEditContext, EditInPlace, Eyebrow, LINK, ListSlot, PendingNote, SlotView } from "./cardParts";
+import { BOX, CardEditContext, ChangedMark, EditInPlace, Eyebrow, GOLD_FRAME, LINK, ListSlot, PendingNote, SlotView, useChanged } from "./cardParts";
 import { CcosTerm, INLINE_TAP } from "./CcosTerm";
 import { SignList } from "./SignList";
 
@@ -77,6 +77,7 @@ function Part({
   return (
     <>
       <Eyebrow term={term}>{heading}</Eyebrow>
+      <ChangedMark k={k} />
       <div className="mt-1 min-w-0 break-words">{children}</div>
       <PendingNote show={role.pending.includes(k)} />
       <EditInPlace target={{ kind: "role", key: k, roleId: role.id }} label={`${heading}, ${role.title}`} initial={initial} hint={hint} multiline={multiline} />
@@ -86,7 +87,7 @@ function Part({
 
 function RoleWord(props: React.ComponentProps<typeof Part>) {
   return (
-    <div className={`${BOX} min-w-0`} data-role-section={props.k}>
+    <div className={`${BOX} min-w-0 ${useChanged(props.k) ? GOLD_FRAME : ""}`} data-role-section={props.k}>
       <Part {...props} />
     </div>
   );
@@ -100,6 +101,9 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
   const time = role.time.text;
   const exists = role.existsWhile.text;
   const holding = role.holdingWell.parts.filter((p) => draws(p.text));
+  // A role proposal's changed words, drawn in gold (role proposals PR C).
+  const timeChanged = useChanged("timeCommitment");
+  const purposeChanged = useChanged("purpose");
   return (
     <article id={role.anchor} aria-labelledby={headingId} className="grid min-w-0 scroll-mt-6 gap-4 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8">
       <h3 id={headingId} className="font-display text-2xl font-bold break-words">
@@ -114,7 +118,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
             </li>
           ))}
           {time.kind === "shown" ? (
-            <li className="rounded-full border border-border px-3 py-1 text-sm" data-role-chip="time">
+            <li className={`rounded-full border px-3 py-1 text-sm ${timeChanged ? GOLD_FRAME : "border-border"}`} data-role-chip="time">
               <CcosTerm term={role.time.term} tap={INLINE_TAP}>
                 {time.value}
               </CcosTerm>
@@ -122,6 +126,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           ) : null}
         </ul>
       ) : null}
+      {time.kind === "shown" ? <ChangedMark k="timeCommitment" /> : null}
       {editing && time.kind !== "unread" ? (
         <div data-role-section="timeCommitment">
           {time.kind === "empty" ? (
@@ -150,10 +155,11 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         </div>
       ) : null}
 
-      <div className="min-w-0 rounded-xl border border-notice/40 border-l-4 border-l-notice bg-card p-4">
+      <div className={`min-w-0 rounded-xl border border-notice/40 border-l-4 border-l-notice p-4 ${purposeChanged ? "bg-notice/10" : "bg-card"}`}>
         <Eyebrow gold term={role.purpose.term}>
           {role.purpose.heading}
         </Eyebrow>
+        <ChangedMark k="purpose" />
         <SlotView slot={role.purpose.text}>{(t) => <p className="mt-1 font-display text-xl break-words">{t}</p>}</SlotView>
         {role.purpose.why ? <p className="mt-2 text-sm text-muted-foreground">{role.purpose.why}</p> : null}
         <PendingNote show={role.pending.includes("purpose")} />
@@ -168,6 +174,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
               </span>
               {exists.kind === "shown" ? ` ${exists.value}` : exists.kind === "empty" ? `: ${exists.words}` : null}
             </p>
+            <ChangedMark k="existsWhile" />
             <PendingNote show={role.pending.includes("existsWhile")} />
             <EditInPlace
               target={{ kind: "role", key: "existsWhile", roleId: role.id }}
@@ -261,6 +268,7 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
                     {p.heading}
                   </CcosTerm>
                 </p>
+                <ChangedMark k={p.key} />
                 <SlotView slot={p.text}>{(t) => <p className="mt-1 whitespace-pre-line break-words text-sm text-muted-foreground">{t}</p>}</SlotView>
                 <PendingNote show={role.pending.includes(p.key)} />
                 <EditInPlace

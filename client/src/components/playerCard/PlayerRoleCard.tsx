@@ -28,7 +28,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { EDIT_WORDS } from "@shared/playerCardEdit";
 import type { PlayerCardPayload } from "@shared/playerCardPayload";
-import { CardEditContext, QUIET_BUTTON, SECTION } from "./cardParts";
+import { CardEditContext, ChangedContext, QUIET_BUTTON, SECTION, type ChangedWords } from "./cardParts";
 import { CardHeader, RoleTiles } from "./CardHeader";
 import { AcrossSection } from "./AcrossSection";
 import { RoleInFull } from "./RoleInFull";
@@ -54,11 +54,14 @@ export function PlayerRoleCardView({
   reload = () => undefined,
   className = "",
   mode = "live",
+  changed,
 }: {
   data: PlayerCardPayload;
   reload?: () => void;
   className?: string;
   mode?: CardViewMode;
+  /** A role proposal's changed words by role id, drawn in gold (role proposals PR C). */
+  changed?: Readonly<Record<string, ChangedWords>>;
 }) {
   const [editing, setEditing] = useState(false);
   const { card, sheets, links, viewer, timeZone } = data;
@@ -86,7 +89,9 @@ export function PlayerRoleCardView({
             {/* 0274: once, above the roles, what an underlined heading does. */}
             {card.termsKey ? <p className="text-xs text-muted-foreground">{card.termsKey}</p> : null}
             {card.roles.map((r) => (
-              <RoleInFull key={r.id} role={r} sheets={sheets} timeZone={timeZone} />
+              <ChangedContext.Provider key={r.id} value={changed?.[r.id] ?? null}>
+                <RoleInFull role={r} sheets={sheets} timeZone={timeZone} />
+              </ChangedContext.Provider>
             ))}
           </section>
         ) : null}
