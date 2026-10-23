@@ -197,12 +197,12 @@ describe("your own season", () => {
     expect(await screen.findByText("Filed. The village can read your season.")).toBeTruthy();
   });
 
-  it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a seat (red team U5, U11)", async () => {
+  it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a role (red team U5, U11)", async () => {
     mine = () => json({ ...MINE, mayApply: false });
     render(<MySeason />);
     expect(await screen.findByText("Applying for a role opens at the member rung. Once you reach it, you can apply here.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Apply for a role" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Propose a seat" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Propose a role" })).toBeNull();
   });
 
   it("says carry on only of a seat held before the application, never of one it seated (red team U9)", async () => {

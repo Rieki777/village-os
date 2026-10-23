@@ -38,8 +38,8 @@ describe("the value and its conversion", () => {
 describe("the tokens", () => {
   it("names each line by its live name, and never as money", () => {
     const lines = [
-      { token: "credits", name: "Village Credits", amount: 40, capped: false },
-      { token: "village-voice", name: "Village Voice", amount: 2.5, capped: false },
+      { token: "credits", name: "Village Credits", amount: 40 },
+      { token: "village-voice", name: "Village Voice", amount: 2.5 },
     ];
     expect(lineWords(lines[0])).toBe("40 Village Credits");
     expect(linesWords(lines)).toBe("40 Village Credits, 2.5 Village Voice");
@@ -61,7 +61,7 @@ describe("a role's cash", () => {
 describe("what the card leads with", () => {
   it("says to inquire only when nothing at all is known", () => {
     expect(payHeadline(pay())).toBe("inquire");
-    expect(payHeadline(pay({ lines: [{ token: "credits", name: "Village Credits", amount: 25, capped: false }] }))).toBe("paid-unvalued");
+    expect(payHeadline(pay({ lines: [{ token: "credits", name: "Village Credits", amount: 25 }] }))).toBe("paid-unvalued");
     expect(payHeadline(pay({ cash: { kind: "fixed", currency: "CRC", minor: 1, minMinor: null, maxMinor: null, per: "month" } }))).toBe("paid-unvalued");
     expect(payHeadline(pay({ value: { minor: 0, currency: "CRC" } }))).toBe("valued");
   });
@@ -70,8 +70,8 @@ describe("what the card leads with", () => {
 describe("a summary of many", () => {
   it("states the range in the most common currency and every token any of them pays", () => {
     const s = paySummary([
-      pay({ value: { minor: 500000, currency: "CRC" }, lines: [{ token: "credits", name: "Village Credits", amount: 10, capped: false }] }),
-      pay({ value: { minor: 2500000, currency: "CRC" }, lines: [{ token: "village-voice", name: "Village Voice", amount: 5, capped: false }] }),
+      pay({ value: { minor: 500000, currency: "CRC" }, lines: [{ token: "credits", name: "Village Credits", amount: 10 }] }),
+      pay({ value: { minor: 2500000, currency: "CRC" }, lines: [{ token: "village-voice", name: "Village Voice", amount: 5 }] }),
       pay({ value: { minor: 4000, currency: "USD" } }),
       pay(),
       null,

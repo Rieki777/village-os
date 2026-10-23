@@ -450,7 +450,7 @@ registered jobs touch this module every hour:
   `calendarRemoveMissing` to retire any it did not write. This is why cycle marks appear on the
   village calendar, and why they disappear if the mirror stops. It moves no value.
 - **`moon-settlement`** (hourly, `runSettlement` in `server/lib/economy.ts`) runs on the same
-  lunar `cycleKey`, pays seat holders and promotes queued mint-rule changes. It does not settle
+  lunar `cycleKey`, pays role holders and promotes queued mint-rule changes. It does not settle
   a gratitude cycle.
 
 What does not run on a timer is the value release.

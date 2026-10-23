@@ -11,9 +11,8 @@
  *
  * ── A FIXED NUMBER OF READS ────────────────────────────────────────────────
  *
- * The board reads the waiting applications once, the role proposals they came
- * from once, their seats and circles once, and the members once, however
- * many rows come back. The drafts half
+ * The board reads the waiting applications once, their seats and circles
+ * once, and the members once, however many rows come back. The drafts half
  * reads the open drafts with their changes (two statements) and their batches
  * (one). Nothing is read per row.
  *
@@ -42,8 +41,6 @@ import {
   type WaitingDraft,
 } from "../../shared/waitingOnYou";
 import { awaitingHolderApplications, seatsWithCircles, type StoredApplication } from "../repos/seatApplications";
-import { proposalsForApplications } from "../repos/roleProposals";
-import { changesRoles } from "../../shared/roleProposals";
 import { batchIdsOf } from "../repos/externalProposals";
 import { villageHeldCapabilities } from "./capabilityHolding";
 import { listDrafts } from "./orgDrafts";
@@ -63,26 +60,11 @@ export interface WaitingReadDeps {
   timezone: string;
 }
 
-/**
- * The applications a holder could adopt from its page now: every one, less
- * those from a role proposal that changes a role's words or adds a role,
- * whose page offers no adopt until those changes can be applied (role
- * proposals PR A). One read, whatever the count.
- */
-async function adoptableNow(pool: Pool, apps: StoredApplication[]): Promise<StoredApplication[]> {
-  if (apps.length === 0) return apps;
-  const proposals = await proposalsForApplications(pool, apps.map((a) => a.id));
-  return apps.filter((a) => {
-    const p = proposals.get(a.id);
-    return !p || !changesRoles(p.body);
-  });
-}
-
-/** The applications waiting on `viewerId`, oldest first, in four reads. */
+/** The applications waiting on `viewerId`, oldest first, in three reads. */
 export async function applicationsWaitingOn(deps: WaitingReadDeps, rule: HandOpenerRule, viewerId: string): Promise<WaitingApplication[]> {
   // Not a holder: nothing waits on them, and nothing is read.
   if (rule.who !== "live-holders" || !rule.holders.includes(viewerId)) return [];
-  const mine = await adoptableNow(deps.pool, (await awaitingHolderApplications(deps.pool)).filter((a) => waitsOn(rule, a).includes(viewerId)));
+  const mine = (await awaitingHolderApplications(deps.pool)).filter((a) => waitsOn(rule, a).includes(viewerId));
   if (mine.length === 0) return [];
   const seats = await seatsWithCircles(deps.pool, Array.from(new Set(mine.flatMap((a) => a.seatIds))));
   const byId = new Map(seats.map((s) => [s.id, s]));
@@ -125,7 +107,7 @@ export interface ReminderDeps {
 
 /** Remind each holder an aged application still waits on, once. Answers how many reminders the spine was asked for. */
 export async function remindWaitingHolders(deps: ReminderDeps): Promise<number> {
-  const aged = await adoptableNow(deps.pool, await awaitingHolderApplications(deps.pool, REMINDER_AFTER_MS / 1000));
+  const aged = await awaitingHolderApplications(deps.pool, REMINDER_AFTER_MS / 1000);
   if (aged.length === 0) return 0;
   const rule = whoMayPutHandToVillage(
     isVillageHeld(ADOPTING_POWER as Capability, await villageHeldCapabilities(deps.pool)),

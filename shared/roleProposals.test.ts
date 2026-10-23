@@ -54,6 +54,7 @@ const TEMPLATE = {
   notMine: null,
   runbook: null,
   existsWhile: null,
+  authorities: null,
 };
 
 const WORDS = wordFieldsOf(TEMPLATE);
@@ -89,12 +90,12 @@ const ctx = (over: Partial<BodyContext> = {}): BodyContext => ({
 
 describe("the word fields of a role", () => {
   it("are every field the template carries, less the ones that are not words", () => {
-    expect(WORDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile"]);
+    expect(WORDS.fields).toEqual(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile", "authorities"]);
     for (const f of ["id", "circleId", "seats", "criticality", "termsOffer", "archetypes"]) expect(NOT_ROLE_WORDS.has(f)).toBe(true);
   });
 
-  it("knows a list from the template, and the handover lists whatever the template says", () => {
-    expect([...WORDS.lists].sort()).toEqual(["accountabilities", "bringMe", "notMine"]);
+  it("knows a list from the template, and the handover and CCOS lists whatever the template says", () => {
+    expect([...WORDS.lists].sort()).toEqual(["accountabilities", "authorities", "bringMe", "notMine"]);
   });
 
   it("passes a field a later release adds straight through", () => {
@@ -126,6 +127,23 @@ describe("one role's words", () => {
   it("reads a list sent as text one item per line, markers off", () => {
     const r = parseRoleWords({ accountabilities: "- Turn the compost each moon\n- Plan the planting\n- Save seed" }, "w", WORDS, POSTED);
     expect(r).toEqual({ ok: true, value: { accountabilities: ["Turn the compost each moon", "Plan the planting", "Save seed"] } });
+  });
+
+  it("reads a CCOS list sent as text one item per line, through the CCOS parser", () => {
+    expect(parseRoleWords({ authorities: "Choose the rootstock\nSet the pruning days" }, "w", WORDS, POSTED)).toEqual({
+      ok: true,
+      value: { authorities: ["Choose the rootstock", "Set the pruning days"] },
+    });
+    const many = Array.from({ length: 9 }, (_, i) => `Power ${i + 1}`).join("\n");
+    expect(parseRoleWords({ authorities: many }, "w", WORDS, POSTED).ok).toBe(false);
+  });
+
+  it("holds changed accountabilities to 3 to 6, and never re-judges a role sent back as it is", () => {
+    // Two lines posted, sent back unchanged: no change, nothing judged.
+    expect(parseRoleWords({ accountabilities: ["Turn the compost each moon", "Plan the planting"] }, "w", WORDS, POSTED)).toEqual({ ok: true, value: {} });
+    expect(parseRoleWords({ accountabilities: ["Only one"] }, "w", WORDS, POSTED).ok).toBe(false);
+    const seven = Array.from({ length: 7 }, (_, i) => `Line ${i + 1}`);
+    expect(parseRoleWords({ accountabilities: seven }, "w", WORDS, POSTED).ok).toBe(false);
   });
 
   it("passes the handover words through their own parser", () => {

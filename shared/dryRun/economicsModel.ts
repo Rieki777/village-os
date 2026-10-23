@@ -972,31 +972,13 @@ function stepCycle(
         noteUnpayable(unpayable, rule, problem);
         continue;
       }
-      // THE CEILING BINDS HERE, per occurrence, exactly where
-      // the claim pricing binds it (server/lib/economy.ts). A
-      // ceiling of zero refuses into the same `unpayable` list, and every
-      // other ceiling clamps.
-      const ruleDecimals = decimalsOf(tokens, rule.tokenSlug);
-      const capped = ceilingOutcomeMinor(rule, rule.amount, ruleDecimals);
-      if (capped.refusal) {
-        noteUnpayable(unpayable, rule, capped.refusal);
-        continue;
-      }
-      if (capped.paid < rule.amount) activity.clampedAway += rule.amount - capped.paid;
-      if (capped.paid <= BigInt(0)) {
-        // The cap was written above zero and still clamps to nothing, which is
-        // a cap below the token's own resolution. The engine reports exactly
-        // this, in these words (server/lib/economy.ts:1377).
-        noteUnpayable(
-          unpayable,
-          rule,
-          `${writtenCeiling(rule, ruleDecimals).raw} is smaller than the smallest amount this token can hold`,
-        );
-        continue;
-      }
+      // NO CEILING BINDS WORK (Rye, 2026-10-22; `ceilingBinds` in
+      // shared/workValue.ts), so a quest posts the rule's own amount in full,
+      // exactly as `quoteWorkPay` prices it (server/lib/economy.ts).
+      const paid = rule.amount;
       const faucet = tokenBySlug(tokens, rule.tokenSlug)!.faucet!;
-      if (post(book, faucet, member.accountId, rule.tokenSlug, capped.paid, "quest_consent")) {
-        activity.minted += capped.paid;
+      if (post(book, faucet, member.accountId, rule.tokenSlug, paid, "quest_consent")) {
+        activity.minted += paid;
         activity.fired += 1;
       }
     }
@@ -1088,14 +1070,8 @@ function stepCycle(
       noteUnpayable(unpayable, rule, problem);
       continue;
     }
-    // A ceiling of zero is reported ONCE for the whole rule and never once per
-    // seat, exactly as `runSettlement` reports it (server/lib/economy.ts:1515),
-    // and only when the rule claims to pay something.
-    const capped = ceilingOutcomeMinor(rule, rule.amount ?? BigInt(0), decimalsOf(tokens, rule.tokenSlug));
-    if ((rule.amount ?? BigInt(0)) > BigInt(0) && capped.refusal) {
-      noteUnpayable(unpayable, rule, capped.refusal);
-      continue;
-    }
+    // No ceiling takes a role rule out of the run: none binds work (Rye,
+    // 2026-10-22), exactly as in `runSettlement` (server/lib/economy.ts).
     payableRoleRules.push(rule);
   }
   for (let m = 0; m < members.length; m += 1) {
@@ -1107,12 +1083,8 @@ function stepCycle(
         const rule = payableRoleRules[r];
         if (rule.amount === null || rule.amount <= BigInt(0)) continue;
         const activity = activityFor(ruleActivity, rule);
-        // Clamped per seat, like the quest path and for the same reason: the
-        // ceiling is what the village voted on and the amount is what it typed
-        // first (server/lib/economy.ts:1560).
-        const paid = ceilingOutcomeMinor(rule, rule.amount, decimalsOf(tokens, rule.tokenSlug)).paid;
-        if (paid < rule.amount) activity.clampedAway += rule.amount - paid;
-        if (paid <= BigInt(0)) continue;
+        // In full per seat, like the quest path: no ceiling binds work.
+        const paid = rule.amount;
         const faucet = tokenBySlug(tokens, rule.tokenSlug)!.faucet!;
         if (post(book, faucet, member.accountId, rule.tokenSlug, paid, "role_cycle")) {
           activity.minted += paid;
@@ -1512,6 +1484,8 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
     const rule = rules[i];
     if (!rule.enabled) continue;
     if (ruleCannotPay(tokens, rule.tokenSlug)) continue;
+    // A rule that pays work has no ceiling to contradict (Rye, 2026-10-22).
+    if (rule.trigger === QUEST_TRIGGER || rule.trigger === ROLE_TRIGGER) continue;
     const decimals = decimalsOf(tokens, rule.tokenSlug);
     /*
      * TWO DIFFERENT VILLAGES ARRIVE HERE HOLDING `ceiling: BigInt(0)`, and
