@@ -212,12 +212,12 @@ export default function Quests() {
             {/* R47: the Trail line leads, the reward word keeps its tooltip,
                 and the Lore line comes last, after the numbers. */}
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-              Take a Quest, do the work, turn it in. Every quest says what it pays, released when the circle confirms the work is done.
+              Take a Quest, do the work, turn it in.
             </p>
             <ExamplesBanner moduleId="quests" noun="quest" />
             <p className="text-sm text-muted-foreground mb-8">
               {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
-              <InfoTip tip="A quest with a value shows what it is worth and the tokens it pays. One without says to inquire for payment details." label="What a value is" />
+              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" />
             </p>
             <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
               Real work, on real land, beside people becoming your people.
@@ -538,51 +538,26 @@ export default function Quests() {
         </div>
       </section>
 
-      {/* Gratitude Explainer */}
+      {/*
+        About the village's tokens, WITHOUT SAYING WHAT ANY OF THEM DOES (Rye,
+        2026-10-22): "every community will design their own rules for these and
+        other tokens so don't mention what it does anywhere". It names the tokens,
+        carries the village's own published wording about conversion when there
+        is any, and points at the village's live rules.
+      */}
       <section className="py-16 bg-primary/5">
         <div className="container">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="font-display text-3xl font-bold text-foreground mb-4 text-center">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="font-display text-3xl font-bold text-foreground mb-4">
               About {currencyName}
             </h2>
-            <p className="text-muted-foreground text-center mb-10">
-              {villageName} pays for quests in its own tokens, and every quest card says what it pays.
-              {" "}{currencyName} is something else: members give it to each other as thanks, and each
-              cycle the community shares a real pool of {valueName} across everyone's {currencyName},
-              so appreciation decides where that value flows.
+            <p className="text-muted-foreground">
+              {villageName} sets its own rules for {currencyName}, {valueName} and its other tokens.
+              {conversionNote ? ` ${conversionNote}` : ""}
             </p>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {[
-                {
-                  title: "Get paid",
-                  body: "Every quest names what it is worth and the tokens it pays, released when the circle confirms the work. A quest with no value yet says to inquire.",
-                  icon: Star,
-                },
-                {
-                  title: "Thank",
-                  body: `Members thank each other in ${currencyName}, from an allowance each cycle. A quest never pays it.`,
-                  icon: Heart,
-                },
-                {
-                  title: "Share",
-                  body: `Each cycle, everyone's ${currencyName} shares in a real pool of ${valueName}.${conversionNote ? ` ${conversionNote}` : ""} This is how we honor contributions made before we could pay in cash.`,
-                  icon: Sprout,
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="bg-card rounded-xl p-6 shadow-sm text-center"
-                >
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <item.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <h3 className="font-display text-lg font-bold text-foreground mb-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">{item.body}</p>
-                </div>
-              ))}
-            </div>
+            <Link href="/game-mechanics" className="inline-block mt-4 text-sm text-teal-deep underline">
+              See this village's rules
+            </Link>
           </div>
         </div>
       </section>

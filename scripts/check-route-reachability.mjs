@@ -397,7 +397,10 @@ function lands(target, route) {
 
 function audit() {
   const { concrete, parameterised } = routes();
-  const all = [...concrete, ...parameterised].sort();
+  // Fixed names first, so a door to `/profile/gene-keys` lands on that page and
+  // not on `/profile/:handle`, which sorts ahead of it and matches it too. The
+  // router itself places fixed routes first for the same reason (App.tsx).
+  const all = [...[...concrete].sort(), ...[...parameterised].sort()];
 
   const files = walkFiles(CLIENT).filter((f) => !isTest(rel(f)) && rel(f) !== ROUTER_REL);
   const inbound = new Map(all.map((r) => [r, []]));

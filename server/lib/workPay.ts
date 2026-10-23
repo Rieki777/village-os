@@ -92,11 +92,6 @@ export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: Stat
   return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash };
 }
 
-/** The recognition token's live name: a village may call it something else. */
-export function recognitionName(): string | null {
-  return tokenDef(HEARTS)?.name ?? null;
-}
-
 /** One token a steward may put on a quest or a role, and the most it may pay. */
 export interface PayableToken {
   token: string;

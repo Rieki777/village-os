@@ -26,7 +26,7 @@ describe("roleFieldChanges", () => {
       runbook: null,
     });
     expect(out).toEqual([
-      { key: "domain", label: "What it decides", before: "The tanks", after: "The tanks and the pipes" },
+      { key: "domain", label: "What it looks after", before: "The tanks", after: "The tanks and the pipes" },
       { key: "bringMe", label: "Bring me", before: "A reading", after: "A reading; The key" },
       { key: "notMine", label: "Not mine to hold", before: null, after: "Garden irrigation" },
       { key: "runbook", label: "Runbook", before: "Check Mondays.", after: null },
@@ -47,7 +47,8 @@ describe("roleFieldChanges", () => {
 
   it("covers the handover words beside aim and domain, in card order", () => {
     expect(ROLE_WORD_FIELDS.map((f) => f.key)).toEqual([
-      "aim", "domain", "whyItMatters", "accountabilities", "bringMe", "notMine", "runbook",
+      "aim", "existsWhile", "domain", "authorities", "whyItMatters", "accountabilities", "responsibilities", "bringMe",
+      "signsStretched", "flowsBack", "stepBack", "notMine", "runbook", "timeCommitment",
     ]);
     expect(FIELD_CHANGE_WORDS.none).toBe("Not written yet");
   });

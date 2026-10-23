@@ -93,7 +93,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
 
   it("blocks a seat whose circle name matched nothing, says what to do, and refuses to publish", async () => {
     const seat = normaliseProposedSeat(
-      { role_name: "Spring Keeper", circle: "Nowhere Circle", seat_count: 1, accountabilities: "Test the spring; Keep the log." },
+      { role_name: "Spring Keeper", circle: "Nowhere Circle", seat_count: 1, accountabilities: "Test the spring; Keep the log; Clear the intake." },
       await liveCircles(),
     );
     expect(seat.payload.circleId).toBeUndefined();
@@ -333,7 +333,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
       [JSON.stringify(["Water Care"])],
     );
     const seat = normaliseProposedSeat(
-      { role_name: "Spring Keeper", circle: " water care", seat_count: 1, accountabilities: "Test the spring; Keep the log." },
+      { role_name: "Spring Keeper", circle: " water care", seat_count: 1, accountabilities: "Test the spring; Keep the log; Clear the intake." },
       await liveCircles(),
     );
     expect(seat.payload.circleId).toBe("cnb-springs");
@@ -347,7 +347,7 @@ describe.skipIf(!configured)("a circle given by a name this village cannot place
     const row = await seatRow("cnb-spring");
     expect(row.circle_id).toBe("cnb-springs");
     const acc = typeof row.accountabilities === "string" ? JSON.parse(row.accountabilities) : row.accountabilities;
-    expect(acc).toEqual(["Test the spring", "Keep the log"]);
+    expect(acc).toEqual(["Test the spring", "Keep the log", "Clear the intake"]);
   });
 
   it("lists a live-name collision beside a missing circle in one preview, the collision first", async () => {

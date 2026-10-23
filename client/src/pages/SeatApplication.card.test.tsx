@@ -25,6 +25,8 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "governance", lifecycle: "members" }] }),
   useModule: () => ({ id: "governance", lifecycle: "members" }),
+  // The Gene Keys strip above the card asks this; off here, so it draws nothing.
+  useModuleOn: () => false,
 }));
 vi.mock("@/components/modules/ModuleGate", () => ({
   default: () => <p>Module gate</p>,

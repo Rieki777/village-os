@@ -87,8 +87,8 @@ export const VALUE_MINOR_MAX = 1_000_000_000_000;
 export const TOKEN_AMOUNT_MAX = 1_000_000_000;
 
 /** The one token that never pays for work. */
-export const GRATITUDE_NEVER_PAYS =
-  "Gratitude never pays for work. Its only job is sharing out the cycle pool.";
+// The refusal states the rule and never what the token does (Rye, 2026-10-22).
+export const GRATITUDE_NEVER_PAYS = "Quests and roles are not paid in Gratitude.";
 
 /**
  * The stored list, read tolerantly. NULL stays NULL (no list of its own); junk
