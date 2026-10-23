@@ -435,7 +435,7 @@ The routes are `server/routes/commsMembers.ts`, gated by the module one route at
   stands (`server/lib/comms/linkPerson.ts`): a member whose account is a tombstone, or a guest
   whose contact is gone, reads "Sign in to answer this gathering." and nothing is written. That
   covers the time vote, its vote route, the recap answer and the RSVP to the next gathering.
-  Giving a seat back stays open to anyone holding the link. The time vote's own emails and
+  Giving a seat back stays open to anyone holding the link. The time vote's own emails and <!-- voice-ok: a gathering's attendance seat, not a role on the org chart; cantMakeIt.ts hands it to the next person waiting and the button says Give my seat back -->
   notices pass over a tombstone too.
 - **Sensitive notices** (restorative intake, conflict) never carry content into an email. They
   link to the app.
