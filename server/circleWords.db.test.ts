@@ -164,11 +164,11 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
   });
 
   it("publishing writes the purpose and the charter words, and the card reads them back with the adoption", async () => {
-    const [[v0]] = await pool.query<any[]>("SELECT version FROM collection_versions WHERE collection = 'circles'");
+    const [v0] = await q("SELECT version FROM collection_versions WHERE collection = 'circles'");
     const published = await publishDraft(pool as any, first, "m-ana");
     expect(published.ok, JSON.stringify(published)).toBe(true);
     expect((await q("SELECT purpose FROM circles WHERE id = 'c-garden'"))[0].purpose).toBe("Grow food together for every household.");
-    const [[v1]] = await pool.query<any[]>("SELECT version FROM collection_versions WHERE collection = 'circles'");
+    const [v1] = await q("SELECT version FROM collection_versions WHERE collection = 'circles'");
     expect(Number(v1?.version)).toBeGreaterThan(Number(v0?.version ?? 0));
     const row = (await q("SELECT domains, circle_values, last_draft_id FROM circle_charters WHERE circle_id = 'c-garden'"))[0];
     expect(row.last_draft_id).toBe(first);
@@ -178,7 +178,7 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
     expect(section(read.card, "domains").slot).toEqual({ kind: "shown", value: ["The food forest", "The seed library"] });
     expect(section(read.card, "values").slot).toEqual({ kind: "shown", value: [{ value: "Reciprocity", practice: "We share every harvest first." }] });
     expect(read.card.pending).toEqual([]);
-    const adoption = section(read.card, "adoption");
+    const adoption = section(read.card, "adoption") as Extract<CircleSection, { kind: "adoption" }>;
     expect(adoption.slot.kind === "shown" && adoption.slot.value.lines.map((l) => l.what)).toEqual(["New words for the circle"]);
   });
 
