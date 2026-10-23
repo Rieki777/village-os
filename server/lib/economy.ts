@@ -55,7 +55,7 @@ import {
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import type { VillageMoon } from "../../shared/villageMoon";
-import { GRATITUDE_NEVER_PAYS, readValueTokens, type TokenAmount } from "../../shared/workValue";
+import { GRATITUDE_NEVER_PAYS, ceilingBinds, readValueTokens, type TokenAmount } from "../../shared/workValue";
 import { issuanceRefusal, readGameStart } from "./gameStart";
 import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
 // The import runs both ways, the same shape `./exit` above already has: both
@@ -489,7 +489,7 @@ export interface MintRule {
   id: string;
   trigger: string;
   tokenSlug: string;
-  /** null means "read it from the source", clamped to `ceiling`. */
+  /** null means "read it from the source", clamped to `ceiling` on every trigger but work (`ceilingBinds`). */
   amount: number | null;
   ceiling: number;
   recipient: string;
@@ -2279,11 +2279,9 @@ export interface OwedClaim {
 /** One line a piece of work will be paid, in the ledger's own integer. */
 export interface WorkPayLine {
   token: string;
-  /** Minor units, after the ceiling. Nothing downstream converts again. */
+  /** Minor units, in full. Nothing downstream converts again. */
   units: number;
   decimals: number;
-  /** True when the rule's ceiling lowered what the work names. */
-  capped: boolean;
 }
 
 export interface WorkPayQuote {
@@ -2305,27 +2303,33 @@ export interface WorkPayQuote {
  * TWO WAYS A PIECE OF WORK IS PRICED, AND NEVER BOTH.
  *
  *   own list   the work names its tokens and amounts (0265). Each line pays
- *              the work's own figure, clamped to the ceiling of the village's
- *              enabled rule on that token, whatever amount the rule itself
- *              carries. A token the work does not name pays nothing, so a
- *              quest with its own list is never also paid the flat amounts.
- *              That is what stops a valued quest paying twice for one piece
- *              of work.
+ *              the work's own figure in full, whatever amount the village's
+ *              rule on that token carries. A token the work does not name pays
+ *              nothing, so a quest with its own list is never also paid the
+ *              flat amounts. That is what stops a valued quest paying twice
+ *              for one piece of work.
  *   no list    the work is priced exactly as it was before 0265: every
  *              enabled rule with a fixed amount pays that amount. A rule that
  *              reads its amount from the work has nothing to read, and pays
  *              nothing for this work, quietly: it pays the work that names it.
  *
- * THE RULE IS STILL THE CEILING. A line the work names with no enabled rule
- * behind it cannot pay, because nothing caps it, and a figure somebody typed
- * with no ceiling is an open faucet with a form in front of it. It is reported,
- * never posted, and the editor refuses it before it is ever stored.
+ * NO CEILING BINDS WORK (Rye, 2026-10-22: "we definitely can't have caps on
+ * what things pay"; `WORK_PAY_TRIGGERS` in shared/workValue.ts). A ceiling
+ * used to clamp every line here, so a quest worth thousands in a currency
+ * pegged near one token each was held to 250. The rule still decides WHICH
+ * tokens may pay this kind of work: a line the work names with no enabled rule
+ * behind it cannot pay. It is reported, never posted, and the editor refuses
+ * it before it is ever stored. Somebody holding the power to set a quest's
+ * value names each figure, and a circle consents before a quest pays.
  *
  * GRATITUDE NEVER PAYS FOR WORK (Rye, 2026-10-21). A rule on it is reported and
  * skipped, and a list naming it is refused at the save and reported here.
  */
+/** What `quoteWorkPay` reads off a rule, and nothing more: the dry run hands it its own shape. */
+export type WorkPayRule = Pick<MintRule, "tokenSlug" | "amount">;
+
 export function quoteWorkPay(
-  rules: readonly MintRule[],
+  rules: readonly WorkPayRule[],
   own: readonly TokenAmount[] | null | undefined,
   work: "quest" | "seat",
 ): WorkPayQuote {
@@ -2343,14 +2347,12 @@ export function quoteWorkPay(
     // keeps a card from showing a line the ledger would refuse.
     if (quoted.has(r.tokenSlug)) continue;
     let asked: number;
-    let bound: CeilingRuleLike = r;
     if (own) {
       const mine = own.find((t) => t.token === r.tokenSlug);
       if (!mine) continue;
+      // The work's own figure: a fixed rule's own amount is ignored here,
+      // because the work has said what it pays.
       asked = Number(mine.amount);
-      // The work's figure, under the rule's ceiling: a fixed rule's own amount
-      // is ignored here, because the work has said what it pays.
-      bound = { tokenSlug: r.tokenSlug, ceiling: r.ceiling, amount: null };
     } else {
       if (r.amount === null) continue;
       asked = r.amount;
@@ -2364,22 +2366,13 @@ export function quoteWorkPay(
       continue;
     }
     const decimals = decimalsFor(r.tokenSlug);
-    const name = tokenDef(r.tokenSlug)?.name ?? r.tokenSlug;
-    const capped = ceilingOutcome(bound, asked, decimals, name);
-    if (capped.refusal) {
-      unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
-      continue;
-    }
-    if (capped.units <= 0) {
+    // In full, at the token's own scale. No ceiling is consulted: see above.
+    const units = unitsAtScale(asked, decimals);
+    if (units <= 0) {
       unpayable.push({ token: r.tokenSlug, reason: `${asked} is smaller than the smallest amount this token can hold` });
       continue;
     }
-    lines.push({
-      token: r.tokenSlug,
-      units: capped.units,
-      decimals,
-      capped: capped.units < unitsAtScale(asked, decimals),
-    });
+    lines.push({ token: r.tokenSlug, units, decimals });
   }
   if (own) {
     for (const t of own) {
@@ -2393,7 +2386,7 @@ export function quoteWorkPay(
         token: t.token,
         reason:
           `this ${work} names ${name}, and the village has no enabled ${work === "quest" ? "quest" : "role"} rule on ` +
-          `${name} to cap it, so it cannot pay. Add a rule on the Mint panel or take ${name} off the ${work}`,
+          `${name}, so it cannot pay. Add a rule on the Mint panel or take ${name} off the ${work}`,
       });
     }
   }
@@ -3179,40 +3172,15 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
       return false;
     }
     // A RULE THAT READS ITS AMOUNT FROM THE WORK PAYS THE ROLES THAT NAME ONE
-    // (0265), so it is no longer refused here. It was, while a seat could post
-    // no amount, because it then paid nobody on any moon and `alreadyRun` read
-    // the silence as a completed moon. That signal is kept below: a rule no
-    // seated role names an amount for is still reported, once.
+    // (0265), and a rule is reported below, once, when no seated role does.
     //
-    // A ceiling of zero is the same class again: the row says the most it may
-    // pay is nothing, whatever the rule or the role names. Asked ONCE here
-    // rather than once per seat, like every other reason in this filter. See
-    // `clampToCeiling` for what the column bounds, and `ceilingAtScale` for why
-    // the answer is in minor units.
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, r.amount ?? 0, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
-    if ((r.amount === null || r.amount > 0) && capped.refusal) {
-      // Into `ruleProblems` like the reasons above, and not straight onto
-      // `out.unpayable`: only `ruleProblems` reaches `reportUnpayable`, so a
-      // seat rule its own ceiling refused used to pay nobody every moon with
-      // no line in any log. It still lands on `out.unpayable` once, below.
-      ruleProblems.push({ token: r.tokenSlug, reason: capped.refusal });
-      return false;
-    }
-    // An amount that rounds to nothing in this token's minor units is the
-    // other way a rule pays nobody while looking alive. Same class, same
-    // report: a rule of 0.1 on a whole-unit token posts zero.
-    // KEPT for the reason written in `quoteWorkPay`: on a token at four
-    // decimals this cannot fire, because `mint_rules.amount` is
-    // `decimal(18,4)`, and it stays because the next token a village registers
-    // may carry fewer. (sweep lane F)
-    if (r.amount !== null && r.amount > 0 && capped.units <= 0) {
-      ruleProblems.push({
-        token: r.tokenSlug,
-        reason: `${r.amount} is smaller than the smallest amount this token can hold`,
-      });
-      return false;
-    }
+    // NOTHING ABOUT THE RULE'S OWN FIGURE TAKES IT OUT OF THE RUN HERE. A
+    // ceiling used to (a ceiling of zero dropped the rule), and so did an own
+    // amount too small for the token to hold, and either one silently stopped
+    // the roles that name their OWN amount of that token from being paid. No
+    // ceiling binds role pay now (Rye, 2026-10-22, `ceilingBinds`), and a rule
+    // amount that cannot post is reported by `quoteWorkPay` for the seats it
+    // would have paid, once per token and reason, below.
     return true;
   });
 
@@ -3235,8 +3203,7 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
   );
 
   // Each seat priced once, by the function the role cards read, so a card can
-  // never promise a figure this loop would not post. Clamped, like the quest
-  // path, and for the same reason: the ceiling is what the village voted on.
+  // never promise a figure this loop would not post.
   const quoted = seats.map((seat) => ({
     seat,
     quote: quoteWorkPay(payable, readValueTokens(seat.value_tokens), "seat"),
@@ -3449,17 +3416,22 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     const trigger = String(r.trigger);
     // Gratitude never pays for work (Rye, 2026-10-21), and `quoteWorkPay`
     // refuses a rule on it. The feed says what the engine does.
-    const forWork = trigger === "quest.completed" || trigger === "role.cycle";
+    const forWork = !ceilingBinds(trigger);
     if (forWork && String(r.token_slug) === HEARTS) {
       return { trigger, token: name, says: `no ${name} for work` };
     }
-    // A quest or role with its own amounts (0265) is paid those, up to the ceiling.
-    const own =
-      forWork && amount !== null && capUnits > 0
-        ? `; a ${trigger === "quest.completed" ? "quest" : "role"} that names its own amount is paid that, up to ${humanAtScale(capUnits, decimals)}`
-        : "";
-    const what =
-      amount === null
+    // Work is paid in full, with no ceiling (Rye, 2026-10-22): the rule's own
+    // amount when the work names none, and the work's own amount when it does.
+    const work = trigger === "quest.completed" ? "quest" : "role";
+    const ownUnits = amount === null ? 0 : unitsAtScale(amount, decimals);
+    const own = forWork && amount !== null ? `; a ${work} that names its own amount is paid that` : "";
+    const what = forWork
+      ? amount === null
+        ? `as much ${name} as each ${work} names`
+        : ownUnits > 0
+          ? `${humanAtScale(ownUnits, decimals)} ${name}`
+          : `no ${name} at present`
+      : amount === null
         ? capUnits > 0
           ? `up to ${humanAtScale(capUnits, decimals)} ${name}, as much as the work was posted for`
           : `no ${name}, because this rule's ceiling stops every payment`
@@ -3668,9 +3640,10 @@ export async function queueRuleChange(
     }
     const bad = mintRuleNumberProblem("amount", change.amount);
     if (bad) return { ok: false, error: bad };
-    // A fixed amount above its own ceiling is a rule that contradicts itself.
+    // A fixed amount above its own ceiling is a rule that contradicts itself,
+    // except on a rule that pays work, where no ceiling binds (`ceilingBinds`).
     const ceiling = change.ceiling ?? Number(rule.ceiling ?? 0);
-    if (ceiling > 0 && change.amount > ceiling) {
+    if (ceilingBinds(String(rule.trigger)) && ceiling > 0 && change.amount > ceiling) {
       return { ok: false, error: `${change.amount} is above this rule's ceiling of ${ceiling}` };
     }
     /*
@@ -4013,10 +3986,14 @@ export async function mintView(pool: Pool): Promise<MintView> {
       const ceiling = Number(r.ceiling ?? 0);
       const decimals = decimalsFor(slug);
       const name = String(r.token_name ?? slug);
-      const decided = ceilingOutcome({ tokenSlug: slug, amount, ceiling }, 0, decimals, name);
+      const trigger = String(r.trigger);
+      // Work pays its rule's own amount in full: no ceiling binds it (`ceilingBinds`).
+      const decided = ceilingBinds(trigger)
+        ? ceilingOutcome({ tokenSlug: slug, amount, ceiling }, 0, decimals, name)
+        : { units: amount === null ? 0 : unitsAtScale(amount, decimals), refusal: null };
       return {
       id: String(r.id),
-      trigger: String(r.trigger),
+      trigger,
       token: slug,
       tokenName: name,
       amount,

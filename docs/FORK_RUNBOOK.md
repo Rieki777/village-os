@@ -84,7 +84,9 @@ it; a plain admin may not target a founder) and the existing
 Note the session semantics, because members notice: `tokenVersion` is the only
 revocation lever there is, so **signing out, or setting a new password, ends
 every session on every device**. Per-session sign-out would need a sessions
-table.
+table. Setting a new password and `revoke-sessions` also revoke every agent
+token (`vat_`) the member made (`revokeAllTokens`, `server/lib/agentTokens.ts`);
+signing out leaves those standing.
 
 ## Game mechanics: rings, the public snapshot, the amendment ledger
 

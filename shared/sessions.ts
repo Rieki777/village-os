@@ -184,7 +184,12 @@ export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 
 // ── Consent rounds ───────────────────────────────────────────────────────────
 
-export const CONSENT_VALUES = ["consent", "concern", "object"] as const;
+/**
+ * Four answers. `sleep` (Rye, 2026-10-22) is for someone who decides best
+ * after a night: it is never an objection, it needs no sentence, and the round
+ * stays open until they answer again with one of the other three.
+ */
+export const CONSENT_VALUES = ["consent", "concern", "object", "sleep"] as const;
 export type ConsentValue = (typeof CONSENT_VALUES)[number];
 
 export function isConsentValue(v: unknown): v is ConsentValue {
@@ -195,11 +200,12 @@ export const CONSENT_LABELS: Record<ConsentValue, string> = {
   consent: "I consent",
   concern: "I consent, with a concern",
   object: "I object",
+  sleep: "I'll sleep on it",
 };
 
-/** A concern or an objection is said in one sentence, so the room can hear it whole. */
+/** A concern or an objection is said in one sentence, so the room can hear it whole. Sleeping on it needs none. */
 export function consentNeedsWords(value: ConsentValue): boolean {
-  return value !== "consent";
+  return value === "concern" || value === "object";
 }
 
 /**
@@ -551,9 +557,11 @@ export interface ConsentTally {
   consent: number;
   concern: number;
   object: number;
+  /** People sleeping on it: answered for now, never an objection, and the round waits for them. */
+  sleeping: number;
   /** People here who have not answered yet. */
   waiting: number;
-  /** Everyone here has answered and nobody objects. */
+  /** Everyone here has answered, nobody is sleeping on it, and nobody objects. */
   consented: boolean;
 }
 
@@ -570,11 +578,18 @@ export interface ConsentAnswer {
  * totals, and an objection blocks whoever gave it, present or not.
  */
 export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
-  const t = { consent: 0, concern: 0, object: 0 };
+  const t = { consent: 0, concern: 0, object: 0, sleep: 0 };
   for (const a of answers) t[a.value] += 1;
   const waitingIds = consentWaitingIds(answers, presentIds);
   const heardHere = presentIds.some((id) => answers.some((a) => a.who === id));
-  return { ...t, waiting: waitingIds.length, consented: heardHere && waitingIds.length === 0 && t.object === 0 };
+  return {
+    consent: t.consent,
+    concern: t.concern,
+    object: t.object,
+    sleeping: t.sleep,
+    waiting: waitingIds.length,
+    consented: heardHere && waitingIds.length === 0 && t.object === 0 && t.sleep === 0,
+  };
 }
 
 /**
@@ -956,7 +971,7 @@ export function buildMinutes(input: MinutesInput, audience: MinutesAudience): st
     for (const d of decisions) {
       const t = input.tallies[d.id];
       const how = d.status === "done" ? "Decided by consent" : "Proposal, not decided";
-      const counts = t ? ` (${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting)` : "";
+      const counts = t ? ` (${ROOM_COPY.talliedLine(t)})` : "";
       lines.push(`- **${how}:** ${text(d.text)}${counts}`);
     }
     for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **What we learned:** ${text(s.text)}`);
@@ -1262,10 +1277,13 @@ export const ROOM_COPY = {
   consentNeedsSentence: "A concern or an objection needs one sentence, so the room can hear it whole.",
   consentSend: "Give my answer",
   consentChange: "Change my answer",
-  tallyLine: (t: { consent: number; concern: number; object: number; waiting: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting, ${t.waiting} still to answer`,
-  talliedLine: (t: { consent: number; concern: number; object: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting`,
+  tallyLine: (t: { consent: number; concern: number; object: number; sleeping?: number; waiting: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}, ${t.waiting} still to answer`,
+  /** A record written before anyone could sleep on it carries no `sleeping`, and reads the same as it did. */
+  talliedLine: (t: { consent: number; concern: number; object: number; sleeping?: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}`,
+  /** Under a round while somebody is sleeping on it. */
+  sleepingOpen: "Somebody asked for a night. The round stays open until they answer.",
   consented: "Everyone here consents.",
   waitingFor: (names: readonly string[]) => `Waiting for ${names.join(", ")}`,
   proposalConsentAsk: "Do you consent to this proposal?",
