@@ -51,8 +51,11 @@ function singleLinkProblem(text: string): string | null {
   return null;
 }
 
-/** The checks every piece of free text on a role passes. */
-function textProblem(text: string): string | null {
+/**
+ * The checks every piece of free text on a role passes. Exported for a
+ * circle's charter words (shared/circleCharterParse.ts), which keep the same rules.
+ */
+export function textProblem(text: string): string | null {
   if (looksLikePaymentDetails(text)) return ROLE_HANDOVER_WORDS.paymentDetails;
   return linkProblem(text) ?? singleLinkProblem(text);
 }

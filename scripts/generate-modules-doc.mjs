@@ -277,7 +277,7 @@ export function readModuleDocs(root = ROOT) {
     );
   }
   const out = {};
-  for (const m of block[1].matchAll(/([A-Za-z0-9_-]+)\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
+  for (const m of block[1].matchAll(/["']?([A-Za-z0-9_-]+)["']?\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
   if (!Object.keys(out).length) fail(`modules-doc: MODULE_DOCS in ${relPath} parsed to nothing at all`);
   return out;
 }

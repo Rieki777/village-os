@@ -88,6 +88,8 @@ import {
   type SettledRecord,
   type TakenRecord,
 } from "./sessionLibrary";
+import { exportRhythmsFor, forgetRhythmsFor } from "./sessionRhythm";
+import { exportFollowsFor, forgetFollowsFor } from "./sessionCalendar";
 import { taskBoardLink, taskDateWords } from "../../shared/sessionTasks";
 import { LIBRARY_REFUSALS, cleanIds } from "../../shared/sessionLibrary";
 import { numberVar, stringVar } from "./variables";
@@ -1933,9 +1935,12 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   library: Record<string, unknown>[];
   libraryTakes: Record<string, unknown>[];
   libraryNotes: Record<string, unknown>[];
+  rhythmsSet: Record<string, unknown>[];
+  circlesFollowed: Record<string, unknown>[];
+  calendarAddress: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2008,7 +2013,10 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   }));
   // The agenda library (0264): what they brought, in their own words, and the times they put an item on an agenda.
   const { library, libraryTakes, libraryNotes } = await exportLibraryFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes };
+  // A circle's rhythm (0271): the ones they set last.
+  const rhythmsSet = await exportRhythmsFor(pool, no);
+  const { circlesFollowed, calendarAddress } = await exportFollowsFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress };
 }
 
 /**
@@ -2079,6 +2087,9 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     // changes they made. A note they brought into a room is an entry they
     // wrote, so it already went with the rest.
     await forgetLibraryFor(conn, no);
+    // A circle's rhythm (0271): one they set last says it was set by nobody.
+    await forgetRhythmsFor(conn, no);
+    await forgetFollowsFor(conn, no);
   });
   await repo.deleteMemberNo(pool, no);
 }

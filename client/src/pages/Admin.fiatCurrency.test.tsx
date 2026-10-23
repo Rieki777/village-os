@@ -37,14 +37,18 @@
  * that removed the two currency boxes that used to sit on this screen (see
  * the comment in the Identity section).
  *
- * WHY THE CONTROL IS NOT A DROPDOWN. The daily ECB rate table carries
- * fourteen codes and CRC is not among them, measured in server/lib/fxRates.ts.
- * A closed list would make the first village's own currency unreachable from
- * the screen built to set it, so the field takes free text with the covered
- * codes offered as suggestions, and says plainly when a chosen code has no
- * daily rate.
+ * WHY THE CONTROL IS A LIST OF NAMES NOW (Rye, 2026-10-22: "I can't set
+ * Colones"). It was free text with bare codes as suggestions, because the
+ * daily ECB table then carried fourteen codes and CRC was not among them, so a
+ * closed list would have made the first village's own currency unreachable.
+ * The route always took CRC; the screen never said which code colones are. A
+ * browser narrows suggestions to what is already in the box, so a box holding
+ * USD suggested USD alone, and a name typed into it was cut to "COL", another
+ * code. The daily source now carries 166 codes, CRC among them, so the field
+ * lists every one by name, keeps any code already stored, and keeps "Another
+ * code" for the rest, so it is still open.
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { defaultDisplayCurrency } from "@shared/money";
@@ -59,18 +63,10 @@ const IMAGE_KEYS = [
 ];
 
 /**
- * A currency the daily rate table does NOT carry.
- *
- * This was named PLATFORM_DEFAULT and quoted `shared/gameConfig.ts`, because a
- * village shipping it was the whole problem. That default went blank on
- * 2026-09-23, so the old name described history and the tests below would have
- * kept reading as though it were still live.
- *
- * The value stays CRC, and the two uses it has are both about the rate table
- * rather than about any default: the ECB daily list does not carry it
- * (measured 2026-08-21, server/lib/fxRates.ts), which is exactly what makes it
- * the right code for the unconverted warning, and it is the first village's
- * real currency, which is why the field cannot be a closed dropdown.
+ * A currency the STUBBED rate table below does not carry. The live source has
+ * carried CRC since 2026-09-25; this stub leaves it out so the unconverted
+ * warning has a code to speak about. It is also the first village's real
+ * currency, the one Rye could not set.
  */
 const UNCOVERED_CODE = "CRC";
 
@@ -79,18 +75,18 @@ const emptyProject = () => ({
   fiatCurrency: "", siteUrl: "", eventsUrl: "", contactEmail: "", footerBlurb: "",
 });
 
-const stub = () => {
+const stub = (storedCurrency = "") => {
   // The village's record, written by PUT the way the real route writes it, so
   // a later read sees what a save actually stored.
-  const current: any = { project: emptyProject(), currency: { name: "", nameLower: "" }, images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ""])), setup: {} };
+  const current: any = { project: { ...emptyProject(), fiatCurrency: storedCurrency }, currency: { name: "", nameLower: "" }, images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ""])), setup: {} };
   const puts: any[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: any, init?: any) => {
       const path = String(url);
       if (path.includes("/fx/rates")) {
-        // The shape /api/fx/rates really answers with. CRC is absent here for
-        // the same reason it is absent from the ECB list.
+        // The shape /api/fx/rates really answers with, short: CRC is left out
+        // so the unconverted warning has something to say.
         return { ok: true, status: 200, json: async () => ({ base: "EUR", asOf: "2026-09-03", rates: { USD: 1.1, CHF: 0.95, GBP: 0.84 } }) };
       }
       if (path.includes("/admin/brand")) {
@@ -118,69 +114,88 @@ const stub = () => {
   return { current, puts };
 };
 
-const field = () => document.getElementById("project-fiat-currency") as HTMLInputElement;
+const field = () => document.getElementById("project-fiat-currency") as HTMLSelectElement;
+const another = () => document.getElementById("project-fiat-currency-other") as HTMLInputElement | null;
 
 describe("the founder can set the village's own currency", () => {
   let ctx: ReturnType<typeof stub>;
-  beforeEach(() => { ctx = stub(); });
   afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
-  const open = async () => {
+  const open = async (stored = "") => {
+    ctx = stub(stored);
     render(<SetupWizard password="secret" onOpenTab={() => {}} />);
     await waitFor(() => expect(field()).toBeTruthy());
   };
+  const save = async (user: ReturnType<typeof userEvent.setup>) => {
+    // Anchored, because "Save identity pack" is a different button in a
+    // different section of the same wizard.
+    await user.click(screen.getByRole("button", { name: /^Save identity$/i }));
+    await waitFor(() => expect(ctx.puts.length).toBeGreaterThan(0));
+  };
 
-  it("offers the codes the daily rate table actually carries", async () => {
+  it("lists every currency by its name, so colones are found without knowing the code", async () => {
     await open();
-    // Array.from, not spread: an HTMLCollection needs downlevelIteration to
-    // spread, and this file IS typechecked (tsconfig excludes *.test.ts, and
-    // this is .tsx).
-    const options = Array.from((document.getElementById("fiat-currency-options") as HTMLDataListElement).options).map((o) => o.value);
-    // Read off the stubbed table, never a list typed into the component: a
-    // hardcoded list is one that drifts from what the village can convert.
-    expect(options).toEqual(["CHF", "EUR", "GBP", "USD"]);
+    const options = Array.from(field().options);
+    const colones = options.find((o) => o.value === "CRC");
+    expect(colones?.textContent, "colones are not findable by name").toMatch(/Costa Rican Col[oó]n \(CRC\)/i);
+    // The daily source's whole list, never the stubbed table's four: the
+    // offer is what a village may count in, and a rate is a separate fact.
+    expect(options.length).toBeGreaterThan(160);
+    expect(options.map((o) => o.value)).toEqual(expect.arrayContaining(["USD", "EUR", "CHF", "GBP"]));
+  });
+
+  it("changes a stored USD to colones, and the saved village then renders money in it", async () => {
+    // Rye's exact state on 2026-10-22: USD stored, colones wanted.
+    const user = userEvent.setup();
+    await open("USD");
+    expect(field().value).toBe("USD");
+    await user.selectOptions(field(), "CRC");
+    // The pick lands only on Save identity, so the screen says so until then.
+    expect(screen.getByText(/Not saved yet\. Press Save identity below to keep Costa Rican Col[oó]n \(CRC\)/)).toBeTruthy();
+    await save(user);
+    await waitFor(() => expect(screen.queryByText(/Not saved yet/)).toBeNull());
+
+    expect(ctx.current.project.fiatCurrency).toBe("CRC");
+    /*
+     * THE OUTCOME. This is the function the member-facing CurrencyPicker
+     * calls to label "this village's" currency, so this assertion is about
+     * what a member sees, not about a stored string.
+     */
+    expect(defaultDisplayCurrency(ctx.current.project)).toBe("CRC");
   });
 
   it("says so when a chosen currency has no daily rate", async () => {
     const user = userEvent.setup();
     await open();
-    await user.type(field(), UNCOVERED_CODE);
+    await user.selectOptions(field(), UNCOVERED_CODE);
     await waitFor(() =>
       expect(screen.getByText(/no daily rate for CRC/i), "a founder was not told their currency shows unconverted").toBeTruthy(),
     );
   });
 
-  it("refuses a code that is not three letters", async () => {
+  it("takes a code the list does not carry, typed by hand and uppercased", async () => {
     const user = userEvent.setup();
     await open();
-    await user.type(field(), "XX");
+    await user.selectOptions(field(), "Another code");
+    await user.type(another()!, "abc");
+    // Typed lowercase on purpose: one village must not be able to store two
+    // spellings of the same currency.
+    expect(another()!.value).toBe("ABC");
+    await save(user);
+    expect(ctx.current.project.fiatCurrency).toBe("ABC");
+  });
+
+  it("refuses a hand-typed code that is not three letters", async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.selectOptions(field(), "Another code");
+    await user.type(another()!, "XX");
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("three letter code"));
   });
 
-  it("saves the code, and the saved village then renders money in it", async () => {
-    const user = userEvent.setup();
-    await open();
-    await user.type(field(), "chf");
-
-    // Typed lowercase on purpose: one village must not be able to store two
-    // spellings of the same currency.
-    expect(field().value).toBe("CHF");
-
-    // Anchored, because "Save identity pack" is a different button in a
-    // different section of the same wizard.
-    await user.click(screen.getByRole("button", { name: /^Save identity$/i }));
-    await waitFor(() => expect(ctx.puts.length).toBeGreaterThan(0));
-
-    expect(ctx.current.project.fiatCurrency).toBe("CHF");
-
-    /*
-     * THE OUTCOME. This is the function the member-facing CurrencyPicker
-     * calls to label "this village's" currency, so this assertion is about
-     * what a member sees, not about a stored string. Before the field
-     * existed, this same call returned the platform's CRC for every village
-     * on earth.
-     */
-    expect(defaultDisplayCurrency(ctx.current.project)).toBe("CHF");
-    expect(defaultDisplayCurrency(ctx.current.project)).not.toBe(UNCOVERED_CODE);
+  it("shows a stored code the list does not carry as the answer, never a different one", async () => {
+    await open("ABC");
+    expect(field().value).toBe("ABC");
+    expect(another()).toBeNull();
   });
 });

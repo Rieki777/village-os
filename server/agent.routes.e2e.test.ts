@@ -490,13 +490,13 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     for (const route of ["/api/agent/v1/me", "/api/agent/v1/directory", "/api/agent/v1/calendar"]) {
       expect((await call("GET", route, undefined, vatDora)).status, `${route} answered an erased member's agent`).toBe(401);
     }
-    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [dora.id]);
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [dora.id]); // module-review-ok: a test asserting the token rows did not outlive the erased member; the product has no reader for a count it is supposed to have emptied
     expect(Number(rows[0].n), "the token rows outlived the member").toBe(0);
 
     // The second layer, pinned on its own: a row that escaped the sweep (minted
     // in a race, restored from a backup) still finds no holder to act for.
     const stray = "vat_" + randomBytes(32).toString("base64url");
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture minting a row the product CANNOT mint, to prove a token that escaped the sweep still finds no holder
       "INSERT INTO agent_tokens (id, user_id, name, token_hash, prefix, scopes, expires_at) VALUES (?,?,?,?,?,?, UTC_TIMESTAMP() + INTERVAL 90 DAY)",
       ["atk-stray-dora", dora.id, "stray", createHash("sha256").update(stray, "utf8").digest("hex"), stray.slice(0, 10), JSON.stringify(["me.read"])],
     );

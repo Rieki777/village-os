@@ -409,7 +409,9 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "alignment-names-after-tombstone",
       "season-plan-words-after-tombstone",
       "role-tensions-after-tombstone",
+      "role-proposals-after-tombstone",
       "sessions-after-tombstone",
+      "gene-keys-after-tombstone",
       "audit",
       "external-stores",
     ]);
@@ -713,15 +715,15 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "INSERT INTO `member_drafts` (`id`, `user_id`, `kind`, `payload`, `source`, `status`) VALUES (?,?,?,?,?,?)",
       [`draft-${id}`, id, "note", JSON.stringify({ body: "unsent" }), "assistant", "proposed"],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture seeding member_drafts before erasure, not a product read path
       "INSERT INTO `agent_tokens` (`id`, `user_id`, `name`, `token_hash`, `prefix`, `scopes`, `expires_at`) VALUES (?,?,?,?,?,?, UTC_TIMESTAMP() + INTERVAL 90 DAY)",
       [`tok-${id}`, id, "laptop agent", "a".repeat(64), "vat_abcdef", JSON.stringify(["calendar.read"])],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture seeding agent_tokens before erasure, not a product read path
       "INSERT INTO `agent_profiles` (`user_id`, `about_me`, `about_tier`) VALUES (?,?,?)",
       [id, "I garden on Tuesdays and I am learning Spanish.", "assistant"],
     );
-    await pool.query(
+    await pool.query( // module-review-ok: a fixture seeding agent_profiles before erasure, not a product read path
       "INSERT INTO `assistant_statements` (`id`, `subject_user_id`, `mode`, `text`) VALUES (?,?,?,?)",
       [`stmt-${id}`, id, "member", "You garden on Tuesdays."],
     );
