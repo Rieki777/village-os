@@ -183,6 +183,18 @@ describe("where a submitted proposal stands", () => {
     expect(screen.getByText("The kitchen needs a second keeper first.")).toBeTruthy();
   });
 
+  it("counts who was asked, consented and objected, by role title, never a name (PR D)", () => {
+    const roles = { asked: ["Gate keeper", "Orchard keeper"], consented: ["Gate keeper"], objected: [] };
+    render(
+      <Router>
+        <ProposalState proposal={submitted("open", { consent: consentOf("open", { consented: 1, roles }) })} />
+      </Router>,
+    );
+    expect((document.querySelector('[data-tally="asked"]') as HTMLElement).textContent).toBe("Asked2 (Gate keeper, Orchard keeper)");
+    expect((document.querySelector('[data-tally="consented"]') as HTMLElement).textContent).toBe("Consented1 (Gate keeper)");
+    expect((document.querySelector('[data-tally="objected"]') as HTMLElement).textContent).toBe("ObjectedNone");
+  });
+
   it("consented says it waits for a holder of the power to record it", () => {
     render(
       <Router>
