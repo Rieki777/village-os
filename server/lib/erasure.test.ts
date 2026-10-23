@@ -230,11 +230,19 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     const out = await resumeErasure(pool, id, deps());
 
     expect(out.finished).toBe(true);
-    // Only what was left. A resume that re-ran the whole sweep would still be
-    // correct, and would prove nothing about the record having been read.
+    // FROM THE TOP, because the break came before the tombstone. Until then
+    // the account worked, so a step recorded as done proves nothing about
+    // what the member wrote since, and every step runs again (they are
+    // idempotent, as the next cases prove). That the record IS read shows on
+    // a resume past the tombstone, which skips what it holds: the pinned list
+    // below for "tombstone" itself, and erasure.identity.test.ts for the rest.
+    expect(out.ran[0]).toBe("ledger-descriptions");
+    expect(out.ran).toContain("notifications");
     expect(out.ran).toContain("role-holdings");
     expect(out.ran).toContain("portraits");
-    expect(out.ran).not.toContain("notifications");
+    // And the record says what this attempt did, once each.
+    const ranOnce = (await erasureRecord(pool, id))!.stepsDone;
+    expect(ranOnce).toEqual(out.ran);
 
     const after = await erasureRecord(pool, id);
     expect(after!.finishedAt).toBeTruthy();
@@ -396,9 +404,38 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect(out.finished).toBe(true);
     // The comms rows, the needs deletion and the journal deletion sit after the
     // tombstone, so a break AT the tombstone leaves them undone and the resume
-    // runs them. The ORDER here is the order erasure.ts declares its steps in;
-    // the merge of wt/comms with main checks it against the source below.
+    // runs them. The tombstone never landed, so the account still worked and
+    // the resume starts again from the top: every step before it runs a second
+    // time, for anything the member wrote in between. The ORDER here is the
+    // order erasure.ts declares its steps in, ALL of them, so every new step
+    // has to be named here; the merge of wt/comms with main checks it against
+    // the source below.
     expect(out.ran).toEqual([
+      "ledger-descriptions",
+      "gratitude-names",
+      "quest-claim-names",
+      "notifications",
+      "tool-clicks",
+      "public-health-events",
+      "steward-acts",
+      "submissions",
+      "quest-proposals",
+      "alignment-party-left",
+      "role-holdings",
+      "org-seatings",
+      "org-drafts",
+      "proposal-drafts",
+      "skill-tags",
+      "push-subscriptions",
+      "forum-subscriptions",
+      "wallet-challenges",
+      "concierge-queries",
+      "contact-requests",
+      "intents",
+      "module-records",
+      "member-agent",
+      "character-sheet",
+      "portraits",
       "tombstone",
       "member-agent-after-tombstone",
       "comms",
