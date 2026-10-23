@@ -196,7 +196,7 @@ export async function respondToTension(
     if (action === "bring_to_circle" && circleId) {
       if (!t.text.trim()) return refuse(409, TENSION_REFUSALS.wordsCleared);
       // One item per tension: the status check above already refuses a second bring, and the source key holds it too.
-      const item = await itemFromTension(conn, { circleId, text: t.text, broughtByNo: authorNo, source: { kind: "role_tension", ref: t.id, label: roleName }, now });
+      const item = await itemFromTension(conn, { circleId, text: t.text, broughtByNo: authorNo, origin: { kind: "role_tension", ref: t.id, label: roleName }, now });
       if (item == null) return refuse(409, TENSION_REFUSALS.alreadyAnswered);
     }
     const status: TensionStatus = statusAfter(action);

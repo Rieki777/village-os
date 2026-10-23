@@ -301,13 +301,14 @@ export class TensionSentAlready extends Error {
  */
 export async function itemFromTension(
   conn: PoolConnection,
-  row: { circleId: string | null; text: string; broughtByNo: number; source: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
+  // `origin`, never `source`: in server code `source:` is a ledger source's key, and server/lib/contributionPay.test.ts reads every one.
+  row: { circleId: string | null; text: string; broughtByNo: number; origin: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
 ): Promise<number | null> {
-  if ((await store.sourceByRef(conn, row.source.kind, row.source.ref, true)).length) return null;
+  if ((await store.sourceByRef(conn, row.origin.kind, row.origin.ref, true)).length) return null;
   const { title, note } = tensionAsItem(row.text);
   const id = await store.insertItemRow(conn, { circleId: row.circleId, title, aim: null, note, broughtByNo: row.broughtByNo, now: row.now });
   try {
-    await store.insertSource(conn, { libraryId: id, kind: row.source.kind, ref: row.source.ref, label: row.source.label, now: row.now });
+    await store.insertSource(conn, { libraryId: id, kind: row.origin.kind, ref: row.origin.ref, label: row.origin.label, now: row.now });
   } catch (e) {
     if ((e as { code?: string })?.code === "ER_DUP_ENTRY") throw new TensionSentAlready();
     throw e;
@@ -349,7 +350,7 @@ export async function sendRoomTension(
   let out: Outcome<number>;
   try {
     out = await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<number>> => {
-      const id = await itemFromTension(conn, { circleId, text: String(entry.text ?? ""), broughtByNo, source: { kind: "room_tension", ref: String(entryId), label: fromCircle }, now });
+      const id = await itemFromTension(conn, { circleId, text: String(entry.text ?? ""), broughtByNo, origin: { kind: "room_tension", ref: String(entryId), label: fromCircle }, now });
       return id == null ? refuse(409, LIBRARY_REFUSALS.alreadySent) : done(id);
     });
   } catch (e) {
