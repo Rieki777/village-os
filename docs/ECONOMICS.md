@@ -444,6 +444,8 @@ settlement preview sums it seat by seat, and the cards render from it
 | a line on a token with no enabled rule | nothing. Nothing caps it, so it is refused at the save and reported if it is ever reached |
 | a line on Gratitude | nothing. Refused at the save, and a rule on Gratitude for quests or roles is reported and skipped |
 
+The refusal and the public rules feed state the rule ("Quests and roles are not paid in Gratitude", "no Gratitude for work") and never what the token does (Rye, 2026-10-22: "every community will design their own rules for these and other tokens so don't mention what it does anywhere"). Which token does which job is listed in one read model, `GET /api/admin/token-jobs` (`server/lib/tokenJobs.ts`), read from the places that decide each job.
+
 **The rule is still the ceiling.** A steward types how much a piece of work pays; the
 village's rules decide which tokens work may pay at all and the most any one occurrence
 may pay. A rule that reads its amount from the work (`amount` NULL) now pays the work that

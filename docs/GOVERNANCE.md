@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `a939c07e708de7e7`, which regenerating reproduces.
+It describes the sources at fingerprint `85dcd78333d88696`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -428,7 +428,7 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `ballot.vote` | Cast a vote on a ballot | `member` | **no** |
 | `member.vouch` | Vouch for an applicant | `contributor` | **no** |
 | `member.superVouch` | Admit a member outright | never by rung; a role or a badge grants it | **no** |
-| `org.seat` | Seat and unseat the holders of the village's roles | never by rung; a role or a badge grants it | yes |
+| `org.seat` | Records role changes after the circle consents | never by rung; a role or a badge grants it | yes |
 | `org.seatAgent` | Seat and unseat the software agents that hold roles | never by rung; a role or a badge grants it | yes |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
@@ -1054,7 +1054,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "a939c07e708de7e7",
+  "commit": "85dcd78333d88696",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1808,7 +1808,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's roles",
+      "label": "Records role changes after the circle consents",
       "unlocksAtStage": null,
       "deniableByBadge": true
     },
@@ -2850,7 +2850,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 189 migration files in `drizzle/`.
+Checked against the 192 migration files in `drizzle/`.
 
 ## What this file is made from
 

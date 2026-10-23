@@ -29,6 +29,9 @@
  *   - Both, in the CORE (0268): `bringMe`, `notMine` and `runbook`, the
  *     role's handover words. They sit where `domain` sits, at every tier,
  *     because they are the role's own words in the same sense.
+ *   - Both, in the CORE (0274): the CCOS words, `existsWhile`,
+ *     `authorities`, `responsibilities`, `signsStretched`, `flowsBack`,
+ *     `stepBack` and `timeCommitment`, on the same rule as the handover words.
  *
  * ── THE PRIVACY RULE FOR WHAT `/api/org` GAINED ────────────────────────────
  *
@@ -428,6 +431,15 @@ export function projectSeat(
     bringMe: role.bringMe ?? null,
     notMine: role.notMine ?? null,
     runbook: role.runbook ?? null,
+    // 0274: the CCOS words, at the domain's tier for the same reason. Null is
+    // nothing written, and the card draws nothing for it.
+    existsWhile: role.existsWhile ?? null,
+    authorities: role.authorities ?? null,
+    responsibilities: role.responsibilities ?? null,
+    signsStretched: role.signsStretched ?? null,
+    flowsBack: role.flowsBack ?? null,
+    stepBack: role.stepBack ?? null,
+    timeCommitment: role.timeCommitment ?? null,
     seats: role.seats,
     criticality: role.criticality,
     recruiting: role.recruiting,
