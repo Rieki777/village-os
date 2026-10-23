@@ -90,7 +90,7 @@ function EntryLines({ view, list, tasks, today }: { view: SessionView; list: Ses
     <ul className="mt-3 space-y-2">
       {decisions.map((d) => {
         const { tally } = consentOn(view, `decision:${d.id}`);
-        const answered = tally.consent + tally.concern + tally.object;
+        const answered = tally.consent + tally.concern + tally.object + tally.sleeping;
         return (
           <li key={d.id} className={`rounded-xl border px-3 py-2 text-sm ${d.status === "done" ? "border-open/50 bg-card" : "border-border bg-muted"}`}>
             <span className="font-semibold text-foreground">{d.status === "done" ? ROOM_COPY.decide : ROOM_COPY.proposalOpen}:</span>{" "}
