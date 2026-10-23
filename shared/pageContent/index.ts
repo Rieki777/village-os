@@ -8,10 +8,14 @@
 import { HOME_PAGE } from "./home";
 import { SITE_PAGE } from "./site";
 import { RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE } from "./rights";
+import { HOUSING_PAGE } from "./housing";
+import { OPPORTUNITIES_PAGE } from "./opportunities";
+import { VISIT_PAGE } from "./visit";
+import { WORK_WITH_US_PAGE } from "./workWithUs";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE, HOUSING_PAGE, OPPORTUNITIES_PAGE, VISIT_PAGE, WORK_WITH_US_PAGE];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;
