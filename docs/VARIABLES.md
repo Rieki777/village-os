@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 189 open and 45 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 190 open and 45 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 208 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-234 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 26 boolean, 29 choice, 37 text, 1 longtext.
+235 dials in 35 categories. 140 carry a minimum and a maximum. By type: 104 integer, 19 decimal, 18 percentage, 27 boolean, 29 choice, 37 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ Each dial also says WHEN a change lands. 207 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 1 | 0 | 1 |
+| The village's people | 2 | 1 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Messages | 2 | 2 | 0 |
@@ -248,6 +248,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
+| Show the CCOS term on circle card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
@@ -3053,7 +3054,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-1 dial. 1 for the founder or an admin.
+2 dials. 1 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3066,6 +3067,20 @@ On, anyone can read the first names of the people holding each role on the Team,
 | Default | `true` |
 | Range | on or off |
 | Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Show the CCOS term on circle card headings
+
+Each heading on a circle card is plain words, like "What we look after". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter, like "CCOS: Domains", for a village that writes its charters with it. Off keeps the plain headings and shows no term.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.ccos_terms` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 

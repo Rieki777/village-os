@@ -1,5 +1,7 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
+/** The link from a circle's group to its own card (`/circles/:id`). */
+const OPEN_CIRCLE_CARD = "Open this circle's card";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
@@ -455,13 +457,13 @@ export default function Roles() {
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
   const circleOrder = new Map(circles.map((c, i) => [c.name, i]));
-  const groups: { title: string; subtitle: string; roles: RoleEntry[] }[] = [];
+  const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of roles ?? []) {
     const g = groups.find((x) => x.title === role.group);
     if (g) g.roles.push(role);
     else {
       const circle = circles.find((c) => c.name === role.group);
-      groups.push({ title: role.group, subtitle: circle?.purpose ?? "", roles: [role] });
+      groups.push({ title: role.group, subtitle: circle?.purpose ?? "", circleId: circle?.id ?? null, roles: [role] });
     }
   }
   groups.sort(
@@ -548,13 +550,22 @@ export default function Roles() {
               )}
             </div>
 
-            {groups.map(({ title, subtitle, roles: groupRoles }) => (
+            {groups.map(({ title, subtitle, circleId, roles: groupRoles }) => (
               <div className="mb-14" key={title}>
                 <div className="mb-6">
                   <h2 className="font-display text-2xl font-bold text-foreground mb-1">{title}</h2>
                   {subtitle && (
                     <p className="text-muted-foreground text-sm">{subtitle}</p>
                   )}
+                  {/* The circle's own card: its words, its roles and who agreed to them. */}
+                  {circleId ? (
+                    <Link
+                      href={`/circles/${encodeURIComponent(circleId)}`}
+                      className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+                    >
+                      {OPEN_CIRCLE_CARD}
+                    </Link>
+                  ) : null}
                 </div>
                 <div className="space-y-3">
                   {groupRoles.map((role, i) => (
