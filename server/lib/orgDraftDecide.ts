@@ -66,6 +66,7 @@ import type { CloseRouting, SubjectCloser } from "./applyDue";
 import { decisionLink } from "./ballotNotices";
 import { ballotsFor, openBallot, openBallotFor, withdrawBallot, type BallotRow } from "./ballots";
 import { applyCircleStatusChanges } from "./circleTreasury";
+import { circleWordsLine } from "./circleWordsDraft";
 import { recordEvent } from "./events";
 import { launchedByBallotIdOf } from "./launch";
 import type { WeightModeSnapshot } from "./governanceWeights";
@@ -282,6 +283,9 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
       }
       case "rest_circle":
         return `Retire the circle ${circle(bare(c.orgRoleId))}, so it rests as dormant`;
+      case "update_circle":
+        // The fields it changes, by their plain headings, never the words themselves.
+        return circleWordsLine(circles.get(bare(c.orgRoleId)) ?? "a circle", c.payload);
       default:
         return "A change to the structure";
     }
