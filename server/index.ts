@@ -1074,7 +1074,7 @@ const DEFAULT_SETTINGS = {
     amount: "", // e.g. "250" — blank means "to be confirmed" and no figure is shown on the site
     period: "month",
     currency: "$",
-    note: "Village Dues cover utilities, maintenance, and community services. Contributions are recognised in Gratitude, and the value tokens the community pool distributes across Gratitude can help offset dues.",
+    note: "", // blank: the resident page then says its own dues words (token row 25, 2026-10-22)
   },
   /*
    * THE LAND AND MONEY FIGURES, and why every one of them ships blank.
@@ -1899,6 +1899,7 @@ async function ensureDataFiles() {
   await runOnce("accept-award-to-registry", migrateAcceptAwardToRegistry);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
+  await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -2559,6 +2560,21 @@ async function retireLegacyPegCopy() {
       await settingsRepo.put(settings);
     }
   } catch { /* same */ }
+}
+
+/**
+ * Token row 25 (Rye, 2026-10-22): the dues note this platform seeded said what
+ * Gratitude does. The default is blank now, so the resident page says its own
+ * words; a stored copy of the seeded note, character for character, is cleared
+ * the same way. Anything a village wrote itself is left exactly as it is.
+ */
+async function blankSeededDuesNote() {
+  const seeded = "Village Dues cover utilities, maintenance, and community services. Contributions are recognised in Gratitude, and the value tokens the community pool distributes across Gratitude can help offset dues.";
+  const settings = settingsRepo.get();
+  if (settings?.villageDues?.note === seeded) {
+    settings.villageDues.note = "";
+    await settingsRepo.put(settings);
+  }
 }
 
 /**

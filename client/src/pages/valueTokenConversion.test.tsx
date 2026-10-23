@@ -69,6 +69,8 @@ vi.mock("@/hooks/useVillageContent", () => ({
     section === "money"
       ? { content: moneySection.current, loading: false, isPlaceholder: !moneySection.current }
       : { content: null, loading: false, isPlaceholder: true },
+  // A page's own saved words (page-journey-prosperity): none, so the defaults.
+  readVillageSection: () => Promise.resolve(null),
 }));
 
 import Quests from "./Quests";
@@ -116,7 +118,10 @@ const PAGES = [
   {
     name: "ProsperityJourney",
     render: () => render(<Router><ProsperityJourney /></Router>),
-    anchor: /Gratitude Economy/,
+    // Token row 27 (2026-10-22): the card is "Shared Enterprise" now and names
+    // no token, so the sentence it keeps is its own.
+    anchor: /Shared Enterprise/,
+    kept: /agrees its revenue share with the village/,
   },
   {
     name: "CoCreatorsGuide",
@@ -153,7 +158,7 @@ for (const page of PAGES) {
     it("keeps the surrounding sentences it did not put in question", async () => {
       page.render();
       await waitFor(() => expect(screen.queryAllByText(page.anchor).length).toBeGreaterThan(0));
-      expect(document.body.textContent ?? "").toMatch(/Seeds/);
+      expect(document.body.textContent ?? "").toMatch("kept" in page ? page.kept : /Seeds/);
     });
   });
 

@@ -3,20 +3,21 @@ import { altOr, statedFacts, useBrandImages, useVillageLinks, useVillageSettings
 import WhyCostaRica from "@/components/WhyCostaRica";
 import FaqSection from "@/components/FaqSection";
 import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
-import { useVillageName } from "@/hooks/useVillageName";
 import InvestorSummary from "@/components/InvestorSummary";
-import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
-import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Emphasized, Highlighted } from "@/components/PageText";
+import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
+import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
+import { buttonAction, percent, stepPoints, type TargetContext } from "@/lib/journeyPage";
+import { INVESTOR_FIGURE_IDS, INVESTOR_JOURNEY, JOURNEY_LEGACY_STEP_IDS } from "@shared/pageContent/journeys";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  TrendingUp, 
-  ArrowRight, 
+import {
+  TrendingUp,
+  ArrowRight,
   CheckCircle2,
   Circle,
   FileText,
   Calendar,
-  DollarSign,
   Heart,
   Building,
   Users,
@@ -27,7 +28,6 @@ import {
   MapPin,
   Zap,
   BarChart3,
-  MessageSquare
 } from "lucide-react";
 import {
   Dialog,
@@ -37,86 +37,14 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 
-// New investor-focused image showing sustainable luxury development
+/*
+ * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Investor
+ * journey (shared/pageContent/journeys.ts). What stays here is the look: the
+ * icons and colours, handed out by position, and the forms' machinery.
+ */
 
-const buildJourneySteps = (villageName: string) => [
-  {
-    id: "discover",
-    stage: "Curious",
-    title: `Discover ${villageName}`,
-    description: "Learn about our vision, values, and regenerative approach to community development.",
-    icon: Sparkles,
-    action: "Join Community Call",
-    // Resolved at render from this village's own eventsUrl. Blank here so no
-    // village inherits another village's calendar.
-    link: "",
-    external: true,
-    details: [
-      "Understand our mission and values",
-      "Learn about the land and location",
-      "Meet the founding team",
-      "Ask questions in a live Q&A"
-    ]
-  },
-  {
-    id: "request",
-    stage: "Interested",
-    title: "Request Investor Pack",
-    description: "Receive the full investor pack: feasibility study, proformas, and development timeline.",
-    icon: FileText,
-    action: "Request Pack",
-    formType: "investor-pack",
-    details: [
-      "15-year financial proformas",
-      "Feasibility study with market analysis",
-      "Development timeline and phases",
-      "Legal structure overview"
-    ]
-  },
-  {
-    id: "call",
-    stage: "Exploring",
-    title: "Schedule Investment Call",
-    description: `Connect one-on-one with our team to discuss your investment goals and how they align with ${villageName}.`,
-    icon: Calendar,
-    action: "Schedule Call",
-    formType: "investor-call",
-    details: [
-      "Discuss investment options",
-      "Review financial projections",
-      "Understand debt vs equity structures",
-      "Explore your path to residency"
-    ]
-  },
-  {
-    id: "commit",
-    stage: "Committed",
-    title: "Make Your Commitment",
-    description: `Choose your investment vehicle and formalize your contribution to the ${villageName} vision.`,
-    icon: Heart,
-    action: "Contact Team",
-    // Resolved at render from this village's own contactEmail. An investment
-    // commitment is the single worst enquiry to misroute, so blank hides the
-    // control entirely rather than addressing it to somebody else.
-    link: "",
-    external: true,
-    details: [
-      "Select investment structure",
-      "Review and sign agreements",
-      "Transfer funds securely",
-      "Receive investor updates"
-    ]
-  },
-];
-
-
-const developmentPhases = [
-  { phase: "Resort & Retreat Center", units: "120-150 keys", status: "Planning", progress: 15 },
-  { phase: "Health Center", units: "1 facility", status: "Planning", progress: 10 },
-  { phase: "Community Center & Café", units: "1 facility", status: "Planning", progress: 20 },
-  { phase: "Show Homes", units: "10 homes", status: "Planning", progress: 25 },
-  { phase: "Residential Lots", units: "150+ lots", status: "Future", progress: 5 },
-];
+/** Icons for the steps, in order; a longer list starts again from the top. */
+const STEP_ICONS = [Sparkles, FileText, Calendar, Heart];
 
 /*
  * KEY NUMBERS ARE THE VILLAGE'S OWN, OR THERE ARE NONE.
@@ -128,65 +56,41 @@ const developmentPhases = [
  * the first time somebody opened this page, and no screen anywhere could change
  * them.
  *
- * What stays here is the SHAPE of the tile: its heading, its icon, its colour,
- * and the sentence explaining what the figure means. What a figure IS comes
- * from the village, through Admin, Settings. A village that has stated none of
- * them gets the honest sentence below rather than an empty grid, and never a
- * default: a number nobody typed is a claim nobody made.
+ * What stays here is the tile's icon and colour. Its heading and the sentence
+ * explaining the figure are the page's words; what a figure IS comes from the
+ * village, through Admin, Settings. A village that has stated none of them
+ * gets the honest sentence rather than an empty grid, and never a default: a
+ * number nobody typed is a claim nobody made.
  */
-const metricShapes = [
-  { key: "appreciation", title: "Land Value", detail: "Change in the value of this village's land.", icon: TrendingUp, color: "bg-teal-deep/10 text-teal-deep" },
-  { key: "appraisal", title: "Appraisal", detail: "Current property valuation.", icon: Building, color: "bg-gold/10 text-gold" },
-  { key: "projectedReturn", title: "Projected Return", detail: "Based on phased development.", icon: BarChart3, color: "bg-coral/10 text-coral" },
-  { key: "targetRaise", title: "Target Raise", detail: "What this phase is raising.", icon: Zap, color: "bg-sage/10 text-sage" },
+const METRIC_LOOKS: Record<(typeof INVESTOR_FIGURE_IDS)[number], { icon: typeof TrendingUp; color: string }> = {
+  appreciation: { icon: TrendingUp, color: "bg-teal-deep/10 text-teal-deep" },
+  appraisal: { icon: Building, color: "bg-gold/10 text-gold" },
+  projectedReturn: { icon: BarChart3, color: "bg-coral/10 text-coral" },
+  targetRaise: { icon: Zap, color: "bg-sage/10 text-sage" },
+};
+
+/** Icon and gradient for each person card, handed out in order. */
+const PERSONA_LOOKS = [
+  { icon: MapPin, color: "from-teal-deep to-teal-deep-dark" },
+  { icon: Users, color: "from-gold to-coral" },
+  { icon: Heart, color: "from-sage to-teal-deep" },
+  { icon: Sparkles, color: "from-coral to-gold" },
+  { icon: TrendingUp, color: "from-teal-deep to-sage" },
+  { icon: Building, color: "from-gold to-teal-deep" },
 ];
 
-const buyerPersonas = [
-  {
-    title: "Digital Nomad Couple",
-    subtitle: "Invest from anywhere, build your future haven",
-    icon: MapPin,
-    color: "from-teal-deep to-teal-deep-dark"
-  },
-  {
-    title: "Worldschooling Family",
-    subtitle: "Create a home base while the world is your classroom",
-    icon: Users,
-    color: "from-gold to-coral"
-  },
-  {
-    title: "Retiree/Snowbird",
-    subtitle: "A sanctuary of your own, with community and returns",
-    icon: Heart,
-    color: "from-sage to-teal-deep"
-  },
-  {
-    title: "Longevity Seeker",
-    subtitle: "Where your years are extended by regenerative living",
-    icon: Sparkles,
-    color: "from-coral to-gold"
-  },
-  {
-    title: "Remote Exec/Founder",
-    subtitle: "Build wealth while building a better world",
-    icon: TrendingUp,
-    color: "from-teal-deep to-sage"
-  },
-  {
-    // Was "Costa Rican/LatAm Professional". The persona is real in every
-    // region; only the region was one village's. The subtitle already said
-    // "your homeland", which carries the whole idea without a map.
-    title: "Local & Regional Professional",
-    subtitle: "Invest in your homeland's regenerative future",
-    icon: Building,
-    color: "from-gold to-teal-deep"
-  }
-];
-
+const PACK_FORM = "pack-form";
+const CALL_FORM = "call-form";
 
 export default function InvestorJourney() {
-  const villageName = useVillageName();
-  const journeySteps = buildJourneySteps(villageName);
+  const page = useJourneyContent(INVESTOR_JOURNEY);
+  const hero = page?.hero.fields;
+  const figures = page?.figures;
+  const personas = page?.personas;
+  const steps = page?.steps.lists.items ?? null;
+  const phases = page?.phases;
+  const closing = page?.closing;
+  const accreditationOn = !!page && !page.accreditation.hidden;
   const brand = useBrandImages();
   const settings = useVillageSettings();
   // NULL IS "NOT LOADED YET", NEVER "NOTHING STATED". Without this line the
@@ -195,9 +99,15 @@ export default function InvestorJourney() {
   // which is a sentence the product would be saying out of a default rather
   // than out of what happened.
   const loaded = settings !== null;
-  const financialMetrics = statedFacts(settings, metricShapes);
-  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
-  const [expandedStep, setExpandedStep] = useState<string | null>("discover");
+  const financialMetrics = statedFacts(
+    settings,
+    (figures?.lists.tiles ?? []).flatMap((tile) => {
+      const look = (METRIC_LOOKS as Record<string, (typeof METRIC_LOOKS)[keyof typeof METRIC_LOOKS] | undefined>)[tile.id ?? ""];
+      return look ? [{ key: tile.id ?? "", title: tile.title, detail: tile.detail, ...look }] : [];
+    }),
+  );
+  const progress = useJourneyProgress("amora-investor-progress", steps, JOURNEY_LEGACY_STEP_IDS.investor);
+  const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [showPackForm, setShowPackForm] = useState(false);
   const [showCallForm, setShowCallForm] = useState(false);
   const [packFormData, setPackFormData] = useState({ name: "", email: "", investmentRange: "", message: "", accredited: false });
@@ -206,14 +116,17 @@ export default function InvestorJourney() {
   const [packConsent, setPackConsent] = useState(false);
   const [callConsent, setCallConsent] = useState(false);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  // This village's own destinations. Blank hides the control that uses one.
+  // This village's own destinations. A button whose destination is blank is
+  // not drawn: an investment commitment is the single worst enquiry to
+  // misroute, so a blank contact address hides it rather than addressing it
+  // to somebody else.
   const { eventsUrl, contactEmail, mailTo } = useVillageLinks();
-  const commitHref = mailTo("Investment Commitment");
-  const steps = journeySteps.map((step) => {
-    if (step.id === "discover") return { ...step, link: eventsUrl };
-    if (step.id === "commit") return { ...step, link: commitHref };
-    return step;
-  });
+  const targets: TargetContext = { eventsUrl, mailTo, subject: hero?.contactSubject ?? "", forms: [PACK_FORM, CALL_FORM] };
+  const openForm = (form: string) => (form === PACK_FORM ? setShowPackForm(true) : setShowCallForm(true));
+  const heroPrimary = buttonAction(hero?.primaryLabel, hero?.primaryTarget, targets);
+  const heroSecondary = buttonAction(hero?.secondaryLabel, hero?.secondaryTarget, targets);
+  const closingPrimary = buttonAction(closing?.fields.primaryLabel, closing?.fields.primaryTarget, targets);
+  const closingSecondary = buttonAction(closing?.fields.secondaryLabel, closing?.fields.secondaryTarget, targets);
   // Named once so the two failure paths below cannot drift apart. With no
   // published address the sentence simply stops after "try again": pointing a
   // failed investor at a mailbox this village does not own is how the lead
@@ -222,43 +135,27 @@ export default function InvestorJourney() {
     ? `Something went wrong. Please try again or email ${contactEmail}.`
     : "Something went wrong. Please try again.";
 
-  // Load progress from localStorage
-  useEffect(() => {
-    // A blocked store threw here, and a half-written value threw one line
-    // later: JSON.parse had no guard either. Both now read as no progress,
-    // which costs a visitor their ticks and never the page.
-    const saved = readStoredJson("local", "amora-investor-progress");
-    if (saved.status === "value" && Array.isArray(saved.value)) {
-      setCompletedSteps(saved.value.filter((v): v is string => typeof v === "string"));
-    }
-  }, []);
-
-  // Save progress to localStorage
-  const toggleStep = (stepId: string) => {
-    const newCompleted = completedSteps.includes(stepId)
-      ? completedSteps.filter(id => id !== stepId)
-      : [...completedSteps, stepId];
-    setCompletedSteps(newCompleted);
-    writeStoredJson("local", "amora-investor-progress", newCompleted);
-  };
-
-  const progress = (completedSteps.length / journeySteps.length) * 100;
-
   const handlePackFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!packFormData.accredited) {
-      setFormSuccess("Please confirm you are an accredited investor.");
+    if (accreditationOn && !packFormData.accredited) {
+      setFormSuccess(page?.accreditation.fields.reminder ?? null);
       setTimeout(() => setFormSuccess(null), 4000);
       return;
     }
     try {
+      /*
+       * The server keeps name, email and the accreditation answer for this
+       * request and nothing else (POST /api/investor-docs/request), so the
+       * range and message boxes are not sent. A village that switched the
+       * accreditation check off is recorded as not having confirmed it.
+       */
       const response = await fetch("/api/investor-docs/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: packFormData.name,
           email: packFormData.email,
-          accredited: packFormData.accredited,
+          accredited: accreditationOn ? packFormData.accredited : false,
           [FORM_CONSENT_FIELD]: packConsent,
         }),
       });
@@ -292,7 +189,7 @@ export default function InvestorJourney() {
         })
       });
       if (response.ok) {
-        setFormSuccess("Thank you! Our team will be in touch within 48 hours.");
+        setFormSuccess(page?.callForm.fields.thanks ?? null);
         setShowCallForm(false);
         setCallFormData({ name: "", email: "", preferredTime: "", message: "" });
         setCallConsent(false);
@@ -302,6 +199,10 @@ export default function InvestorJourney() {
       console.error("Form submission error:", error);
     }
   };
+
+  // Until the saved words arrive the hero keeps its space and stays
+  // invisible, so a visitor never reads the defaults and watches them change.
+  const waiting = hero ? "" : " invisible";
 
   return (
     <Layout>
@@ -345,40 +246,41 @@ export default function InvestorJourney() {
               animate={{ opacity: 1, x: 0 }}
               className="relative flex items-center gap-3 mb-6"
             >
-              <motion.div 
-                className="w-12 h-12 rounded-xl bg-gold flex items-center justify-center"
+              <motion.div
+                className="w-12 h-12 shrink-0 rounded-xl bg-gold flex items-center justify-center"
                 animate={{ rotate: [0, 5, -5, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <TrendingUp className="w-6 h-6 text-white" />
               </motion.div>
               {/* amber-ink, index.css's amber for text on light grounds: gold is 4.07:1 on the band. */}
-              <span className="text-amber-ink font-medium tracking-wide uppercase text-sm">Capital Contributor Journey</span>
+              <span className={`text-amber-ink font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
             </motion.div>
 
             {/* 36px under 360px wide: at 48px "Regeneration" is one unbreakable word
                 that inked to x=336 at 320px, past the 304px column and the section's
-                overflow-hidden edge, so its end was cut off. From 360px up, unchanged. */}
+                overflow-hidden edge, so its end was cut off. From 360px up, unchanged.
+                break-words is for a village's own longer word at the field's limit. */}
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="relative font-display text-4xl min-[360px]:text-5xl md:text-6xl font-semibold text-foreground mb-6"
+              className={`relative font-display text-4xl min-[360px]:text-5xl md:text-6xl font-semibold text-foreground mb-6 break-words${waiting}`}
             >
-              Invest in{" "}
-              <span className="text-teal-deep italic">Regeneration</span>
+              <Highlighted
+                text={hero?.headline || " "}
+                phrase={hero?.highlight ?? ""}
+                render={(phrase) => <span className="text-teal-deep italic">{phrase}</span>}
+              />
             </motion.h1>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="relative text-xl text-muted-foreground leading-relaxed mb-8"
+              className={`relative text-xl text-muted-foreground leading-relaxed mb-8 break-words${waiting}`}
             >
-              Capital Contributors offer financial resources, credit lines, investments,
-              or other capital resources. We prioritize investors who share the vision -
-              capital structured to deliver real returns while keeping the village
-              in the hands of the people who call it home.
+              <Emphasized text={hero?.intro ?? ""} />
             </motion.p>
 
             <motion.div
@@ -387,31 +289,25 @@ export default function InvestorJourney() {
               transition={{ delay: 0.3 }}
               className="relative flex flex-wrap gap-4"
             >
-              {/* This asked for the investor pack by mail. The page already
-                  serves that exact request with its own form, posting to this
-                  village's own /api/forms/submit, so the hero now opens that
-                  form. Better than hiding it: the lead is captured either way,
-                  it reaches the right village, and the request now passes
-                  through the accreditation step the journey already had rather
-                  than around it. */}
-              <button
-                type="button"
-                onClick={() => setShowPackForm(true)}
-                className="btn-amora flex items-center gap-2"
-              >
-                <FileText className="w-5 h-5" />
-                Request Investor Pack
-              </button>
-              {eventsUrl && (
-                <a
-                  href={eventsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {/* The first button opens the page's own pack form by default,
+                  posting to this village's own server: the lead is captured,
+                  it reaches the right village, and the request passes through
+                  the accreditation step the journey already had. */}
+              {heroPrimary && (
+                <JourneyLink action={heroPrimary.action} onForm={openForm} className="btn-amora flex items-center gap-2">
+                  <FileText className="w-5 h-5" />
+                  {heroPrimary.label}
+                </JourneyLink>
+              )}
+              {heroSecondary && (
+                <JourneyLink
+                  action={heroSecondary.action}
+                  onForm={openForm}
                   className="px-6 py-3 bg-white/90 text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white transition-all flex items-center gap-2"
                 >
                   <Calendar className="w-5 h-5" />
-                  Join Community Call
-                </a>
+                  {heroSecondary.label}
+                </JourneyLink>
               )}
             </motion.div>
           </div>
@@ -419,160 +315,163 @@ export default function InvestorJourney() {
       </section>
 
       {/* Financial Metrics Section */}
+      {figures && !figures.hidden && (
       <section className="py-20 bg-background border-t border-b border-muted">
         <div className="container">
-          <motion.div 
+          <motion.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4">
-              Key Numbers
+            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+              {figures.fields.heading}
             </h2>
+            {/* R56: state what is true and get out of the way. A village with
+                no figures yet is early, and saying so beats an empty grid. The
+                line telling the village where to enter them belongs in Admin,
+                never on its public page. */}
             <p className="text-muted-foreground max-w-2xl mx-auto mb-6">
-              {!loaded
-                ? " "
-                : financialMetrics.length
-                ? "The figures this village has stated about its own land and its own raise."
-                : "This village has not published any figures yet."}
+              {!loaded ? " " : financialMetrics.length ? figures.fields.intro : figures.fields.empty}
             </p>
-            {financialMetrics.length ? (
+            {financialMetrics.length && figures.fields.disclaimer ? (
               <p className="text-xs text-muted-foreground italic max-w-2xl mx-auto">
-                Past performance and projections are not guarantees of future results.
+                {figures.fields.disclaimer}
               </p>
             ) : null}
           </motion.div>
 
-          {!loaded ? null : financialMetrics.length ? (
+          {loaded && financialMetrics.length ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {financialMetrics.map((metric, index) => (
               <motion.div
-                key={metric.title}
+                key={metric.key}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
                 whileHover={{ y: -8 }}
-                className={`${metric.color} rounded-xl p-8 shadow-sm transition-all`}
+                className={`${metric.color} rounded-xl p-8 shadow-sm transition-all min-w-0`}
               >
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display text-lg font-semibold text-foreground">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <h3 className="font-display text-lg font-semibold text-foreground min-w-0 break-words">
                     {metric.title}
                   </h3>
-                  <metric.icon className="w-6 h-6 opacity-90" />
+                  <metric.icon className="w-6 h-6 shrink-0 opacity-90" />
                 </div>
                 <div className="mb-2">
-                  <div className="font-display text-4xl font-semibold text-foreground">
+                  <div className="font-display text-4xl font-semibold text-foreground break-words">
                     {metric.value}
                   </div>
                   <div className="text-xs text-muted-foreground font-medium mt-1">
                     {metric.note}
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+                <p className="text-sm text-muted-foreground leading-relaxed break-words">
                   {metric.detail}
                 </p>
               </motion.div>
             ))}
           </div>
-          ) : (
-            /* R56: state what is true and get out of the way. A village with no
-               figures yet is early, and saying so beats an empty grid. */
-            <p className="text-center text-muted-foreground max-w-xl mx-auto">
-              Land value, appraisal, projected return and the raise appear here once the
-              village fills them in under Admin, Settings.
-            </p>
-          )}
+          ) : null}
         </div>
       </section>
+      )}
 
       <InvestorSummary />
 
       {/* Who invests in this village */}
+      {personas && !personas.hidden && (
       <section className="py-20 bg-cream">
         <div className="container">
-          <motion.div 
+          <motion.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4">
-              Who Invests in {villageName}?
+            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+              {personas.fields.heading}
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              People with different goals and backgrounds are building at {villageName}. See if your story is here.
+              <Emphasized text={personas.fields.intro} />
             </p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {buyerPersonas.map((persona, index) => (
+            {personas.lists.items.map((persona, index) => {
+              const look = PERSONA_LOOKS[index % PERSONA_LOOKS.length];
+              return (
               <motion.div
-                key={persona.title}
+                key={`${index}-${persona.title}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
                 whileHover={{ y: -8 }}
-                className={`bg-gradient-to-br ${persona.color} rounded-xl p-8 shadow-sm text-white transition-all`}
+                className={`bg-gradient-to-br ${look.color} rounded-xl p-8 shadow-sm text-white transition-all min-w-0`}
               >
                 <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center mb-4">
-                  <persona.icon className="w-6 h-6" />
+                  <look.icon className="w-6 h-6" />
                 </div>
-                <h3 className="font-display text-xl font-semibold mb-2">
+                <h3 className="font-display text-xl font-semibold mb-2 break-words">
                   {persona.title}
                 </h3>
-                <p className="text-white leading-relaxed">
+                <p className="text-white leading-relaxed break-words">
                   {persona.subtitle}
                 </p>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
+      )}
 
       <WhyCostaRica />
 
       {/* Interactive Journey Steps */}
+      {page && steps && (
       <section className="py-20 bg-background">
         <div className="container">
           <div className="max-w-3xl mx-auto">
-            <motion.div 
+            <motion.div
               className="text-center mb-8"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4">
-                Your Investment Journey
+              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+                {page.steps.fields.heading}
               </h2>
               <p className="text-muted-foreground mb-6">
-                Track your progress as you explore investment opportunities at {villageName}.
+                <Emphasized text={page.steps.fields.intro} />
               </p>
-              
+
               {/* Progress Bar */}
               <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <motion.div 
+                <motion.div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-coral to-gold rounded-full"
                   initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
+                  animate={{ width: `${progress.progress}%` }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                {completedSteps.length} of {journeySteps.length} steps completed
+                {progress.doneCount} of {progress.total} steps completed
               </p>
             </motion.div>
 
             <div className="space-y-4">
               {steps.map((step, index) => {
-                const isCompleted = completedSteps.includes(step.id);
-                const isExpanded = expandedStep === step.id;
-                
+                const isCompleted = progress.isDone(step);
+                const isExpanded = expandedStep === index;
+                const StepIcon = STEP_ICONS[index % STEP_ICONS.length];
+                const action = buttonAction(step.actionLabel, step.actionTarget, targets);
+
                 return (
                   <motion.div
-                    key={step.id}
+                    key={`${index}-${step.title}`}
                     initial={{ opacity: 0, x: -20 }}
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
@@ -581,9 +480,9 @@ export default function InvestorJourney() {
                       isCompleted ? "border-l-4 border-sage" : "border-l-4 border-transparent"
                     }`}
                   >
-                    <div 
+                    <div
                       className="p-6 cursor-pointer"
-                      onClick={() => setExpandedStep(isExpanded ? null : step.id)}
+                      onClick={() => setExpandedStep(isExpanded ? null : index)}
                     >
                       <div className="flex items-start gap-4">
                         {/* Checkbox */}
@@ -599,7 +498,7 @@ export default function InvestorJourney() {
                           aria-label={`${step.title}: mark as ${isCompleted ? "not done" : "done"}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleStep(step.id);
+                            progress.toggle(step);
                           }}
                           className="flex-shrink-0 mt-1"
                         >
@@ -619,30 +518,31 @@ export default function InvestorJourney() {
                         <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
                           isCompleted ? "bg-sage/10" : "bg-teal-deep/10"
                         }`}>
-                          <step.icon className={`w-6 h-6 ${isCompleted ? "text-sage" : "text-teal-deep"}`} />
+                          <StepIcon className={`w-6 h-6 ${isCompleted ? "text-sage" : "text-teal-deep"}`} />
                         </div>
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="inline-block px-2 py-1 bg-teal-deep/10 text-teal-deep text-xs font-semibold rounded-full">
+                            <span className="inline-block px-2 py-1 bg-teal-deep/10 text-teal-deep text-xs font-semibold rounded-full break-words">
                               Stage: {step.stage}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-4">
-                            <h3 className={`font-display text-xl font-semibold ${
+                            <h3 className={`font-display text-xl font-semibold min-w-0 break-words ${
                               isCompleted ? "text-muted-foreground line-through" : "text-foreground"
                             }`}>
                               {step.title}
                             </h3>
                             <motion.div
+                              className="shrink-0"
                               animate={{ rotate: isExpanded ? 180 : 0 }}
                               transition={{ duration: 0.2 }}
                             >
                               <ChevronDown className="w-5 h-5 text-muted-foreground" />
                             </motion.div>
                           </div>
-                          <p className="text-muted-foreground mt-1">
+                          <p className="text-muted-foreground mt-1 break-words">
                             {step.description}
                           </p>
                         </div>
@@ -663,47 +563,30 @@ export default function InvestorJourney() {
                             <div className="bg-muted/50 rounded-lg p-4 mb-4">
                               <h4 className="font-medium text-foreground mb-3">What you'll accomplish:</h4>
                               <ul className="space-y-2">
-                                {step.details.map((detail, i) => (
-                                  <motion.li 
+                                {stepPoints(step).map((detail, i) => (
+                                  <motion.li
                                     key={i}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.1 }}
-                                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                                    className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
                                   >
-                                    <div className="w-1.5 h-1.5 rounded-full bg-teal-deep" />
+                                    <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-teal-deep" />
                                     {detail}
                                   </motion.li>
                                 ))}
                               </ul>
                             </div>
-                            {step.formType === "investor-pack" ? (
-                              <button
-                                onClick={() => setShowPackForm(true)}
+                            {action && (
+                              <JourneyLink
+                                action={action.action}
+                                onForm={openForm}
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-full text-sm font-medium hover:bg-teal-deep-dark transition-colors"
                               >
-                                {step.action}
-                                <ArrowRight className="w-4 h-4" />
-                              </button>
-                            ) : step.formType === "investor-call" ? (
-                              <button
-                                onClick={() => setShowCallForm(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-full text-sm font-medium hover:bg-teal-deep-dark transition-colors"
-                              >
-                                {step.action}
-                                <ArrowRight className="w-4 h-4" />
-                              </button>
-                            ) : step.link ? (
-                              <a
-                                href={step.link}
-                                target={step.external ? "_blank" : undefined}
-                                rel={step.external ? "noopener noreferrer" : undefined}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-full text-sm font-medium hover:bg-teal-deep-dark transition-colors"
-                              >
-                                {step.action}
-                                {step.external ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                              </a>
-                            ) : null}
+                                {action.label}
+                                {leavesSite(action.action) ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                              </JourneyLink>
+                            )}
                           </div>
                         </motion.div>
                       )}
@@ -715,29 +598,33 @@ export default function InvestorJourney() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Development Phases */}
+      {phases && !phases.hidden && (
       <section className="py-20 bg-teal-deep text-white">
         <div className="container">
-          <motion.div 
+          <motion.div
             className="text-center mb-12"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4">
-              Development Phases
+            <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4 break-words">
+              {phases.fields.heading}
             </h2>
             <p className="text-white max-w-2xl mx-auto">
-              With the potential 1% regenerative development loan, multiple phases can proceed simultaneously.
+              <Emphasized text={phases.fields.intro} />
             </p>
           </motion.div>
 
           <div className="max-w-3xl mx-auto">
             <div className="space-y-4">
-              {developmentPhases.map((phase, index) => (
+              {phases.lists.items.map((phase, index) => {
+                const filled = percent(phase.progress);
+                return (
                 <motion.div
-                  key={phase.phase}
+                  key={`${index}-${phase.name}`}
                   initial={{ opacity: 0, x: -20 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
@@ -745,43 +632,55 @@ export default function InvestorJourney() {
                   whileHover={{ x: 8 }}
                   className="bg-white/10 rounded-lg p-4 backdrop-blur-sm"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-4">
-                      <Building className="w-5 h-5 text-gold" />
-                      <div>
-                        <div className="font-semibold">{phase.phase}</div>
-                        <div className="text-sm text-white">{phase.units}</div>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <Building className="w-5 h-5 shrink-0 text-gold" />
+                      <div className="min-w-0">
+                        <div className="font-semibold break-words">{phase.name}</div>
+                        <div className="text-sm text-white break-words">{phase.units}</div>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      phase.status === "Planning" ? "bg-gold text-white" : "bg-white/20 text-white"
+                    {phase.status && (
+                    <span className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium ${
+                      phase.status === phases.fields.activeStatus ? "bg-gold text-white" : "bg-white/20 text-white"
                     }`}>
                       {phase.status}
                     </span>
+                    )}
                   </div>
                   {/* Progress bar */}
-                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <motion.div 
+                  <div
+                    className="h-1.5 bg-white/10 rounded-full overflow-hidden"
+                    role="progressbar"
+                    aria-label={phase.name}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={filled}
+                  >
+                    <motion.div
                       className="h-full bg-gradient-to-r from-gold to-coral rounded-full"
                       initial={{ width: 0 }}
-                      whileInView={{ width: `${phase.progress}%` }}
+                      whileInView={{ width: `${filled}%` }}
                       viewport={{ once: true }}
                       transition={{ duration: 1, delay: index * 0.2 }}
                     />
                   </div>
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
       </section>
+      )}
 
-      <FaqSection pathway="investor" heading="Investor FAQs" />
+      {page && <FaqSection pathway="investor" heading={page.faq.fields.heading} />}
 
       {/* CTA */}
+      {closing && !closing.hidden && (
       <section className="py-20 bg-gradient-to-br from-gold/10 to-coral/10">
         <div className="container">
-          <motion.div 
+          <motion.div
             className="max-w-2xl mx-auto text-center"
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -793,31 +692,34 @@ export default function InvestorJourney() {
             >
               <Sparkles className="w-12 h-12 text-teal-deep mx-auto mb-6" />
             </motion.div>
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4">
-              Ready to Explore?
+            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+              {closing.fields.heading}
             </h2>
             <p className="text-muted-foreground mb-8">
-              Connect with our team to discuss how {villageName} fits your investment goals.
+              <Emphasized text={closing.fields.body} />
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <button
-                onClick={() => setShowPackForm(true)}
-                className="btn-amora flex items-center gap-2"
-              >
-                Request Investor Pack
-                <ArrowRight className="w-5 h-5" />
-              </button>
-              <Link
-                href="/master-plan"
-                className="px-6 py-3 bg-white/90 text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white transition-all flex items-center gap-2"
-              >
-                View the Master Plan
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+              {closingPrimary && (
+                <JourneyLink action={closingPrimary.action} onForm={openForm} className="btn-amora flex items-center gap-2">
+                  {closingPrimary.label}
+                  <ArrowRight className="w-5 h-5" />
+                </JourneyLink>
+              )}
+              {closingSecondary && (
+                <JourneyLink
+                  action={closingSecondary.action}
+                  onForm={openForm}
+                  className="px-6 py-3 bg-white/90 text-foreground rounded-full font-medium uppercase tracking-wider text-sm hover:bg-white transition-all flex items-center gap-2"
+                >
+                  {closingSecondary.label}
+                  <ArrowRight className="w-5 h-5" />
+                </JourneyLink>
+              )}
             </div>
           </motion.div>
         </div>
       </section>
+      )}
 
       {/* Success Message */}
       <AnimatePresence>
@@ -869,7 +771,7 @@ export default function InvestorJourney() {
               <label className="block text-sm font-medium text-foreground mb-2">Investment Range</label>
               <input
                 type="text"
-                placeholder="e.g., $50K - $250K"
+                placeholder={page?.packForm.fields.rangeHint || undefined}
                 value={packFormData.investmentRange}
                 onChange={(e) => setPackFormData({ ...packFormData, investmentRange: e.target.value })}
                 className="w-full px-4 py-2 bg-muted rounded-lg border border-muted text-foreground focus:outline-none focus:ring-2 focus:ring-teal-deep"
@@ -884,6 +786,7 @@ export default function InvestorJourney() {
                 className="w-full px-4 py-2 bg-muted rounded-lg border border-muted text-foreground focus:outline-none focus:ring-2 focus:ring-teal-deep resize-none"
               />
             </div>
+            {accreditationOn && (
             <label className="flex items-start gap-3 text-sm text-foreground bg-muted/40 rounded-lg p-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -891,10 +794,11 @@ export default function InvestorJourney() {
                 onChange={(e) => setPackFormData({ ...packFormData, accredited: e.target.checked })}
                 className="mt-0.5 h-4 w-4 rounded border-muted text-teal-deep focus:ring-teal-deep"
               />
-              <span className="leading-snug">
-                I confirm I am an accredited investor.
+              <span className="leading-snug break-words">
+                {page?.accreditation.fields.statement}
               </span>
             </label>
+            )}
             <PathConsentBox checked={packConsent} onChange={setPackConsent} />
             <button
               type="submit"
@@ -943,7 +847,7 @@ export default function InvestorJourney() {
               <label className="block text-sm font-medium text-foreground mb-2">Preferred Time</label>
               <input
                 type="text"
-                placeholder="e.g., Tuesday 2pm EST"
+                placeholder={page?.callForm.fields.timeHint || undefined}
                 value={callFormData.preferredTime}
                 onChange={(e) => setCallFormData({ ...callFormData, preferredTime: e.target.value })}
                 className="w-full px-4 py-2 bg-muted rounded-lg border border-muted text-foreground focus:outline-none focus:ring-2 focus:ring-teal-deep"
@@ -969,7 +873,7 @@ export default function InvestorJourney() {
           </form>
         </DialogContent>
       </Dialog>
-  
+
     </Layout>
   );
 }

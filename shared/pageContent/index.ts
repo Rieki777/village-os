@@ -6,10 +6,11 @@
  * registry, so one page's words never ride in another page's bundle.
  */
 import { HOME_PAGE } from "./home";
+import { JOURNEY_PAGES } from "./journeys";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, ...JOURNEY_PAGES];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;
