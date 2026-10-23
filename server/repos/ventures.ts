@@ -242,3 +242,23 @@ export async function listedVentures(pool: Pool, limit = 200): Promise<VentureRo
   );
   return rows.map(toRow);
 }
+
+/**
+ * Every venture one member opened, deleted, for the erasure's
+ * `ventures-after-tombstone` step (server/lib/erasure.ts).
+ *
+ * DELETED, not de-attributed. A venture's name, summary and link describe the
+ * member's own business in their own words, and a listed one is published to
+ * the village, so a tombstone's row would keep republishing them. No value
+ * sits on this table (the header's NO MONEY rule), so nothing the village owes
+ * or is owed goes with it.
+ *
+ * Idempotent: a DELETE keyed on the member.
+ */
+export async function forgetVenturesOf(pool: Pool, userId: string): Promise<number> {
+  const [r]: any = await pool.query(
+    "DELETE FROM member_ventures WHERE village_id = ? AND user_id = ?",
+    [VILLAGE, userId],
+  );
+  return Number(r?.affectedRows ?? 0);
+}

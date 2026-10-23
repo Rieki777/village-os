@@ -48,6 +48,7 @@ import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { numberVar } from "../lib/variables";
+import { isTombstone } from "../lib/oauthAccounts";
 import { refuseVouch, vouchBar, vouchingOffRefusal, vouchSentence, vouchState } from "../lib/vouches";
 import { recordVouch, vouchesBy, vouchesFor } from "../repos/vouches";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
@@ -176,6 +177,9 @@ export function register(app: Express, deps: Deps): void {
       vouchedUserId: targetId,
       existing,
       vouchedIsMember: !!target.membershipGranted,
+      // A tombstone is found by its id like anybody else, and its membership
+      // was set off by the erasure, so this is the line that keeps it off.
+      vouchedIsGone: isTombstone({ email: String(target.email ?? "") }),
       kind,
       needed: neededHere(),
     });

@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS, SEAT_HTML_FILES, htmlSeatHits } from "./check-voice.mjs";
+import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS, SEAT_HTML_FILES, htmlSeatHits, SEAT_DOC_ROOTS, SEAT_DOC_FILES, SEAT_DOC_EXEMPT, mdSeatHits, jsonSeatHits } from "./check-voice.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./check-voice.mjs", import.meta.url));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -180,6 +180,60 @@ check("seat rule on the map: the real map says role today", () => {
     return;
   }
   assert.deepStrictEqual(htmlSeatHits(fs.readFileSync(abs, "utf8")), []);
+});
+
+// ── Rule 6 on the docs an AI reads (markdown, and the openapi document) ─────
+
+const DOC_PAGE = [
+  "# A module",
+  "A steward takes the seat back by a vote.",
+  "Every role has a term, and the `seats` column counts its holders.",
+  'The hovercard then read "0 seats open" with no seal.',
+  "```sql",
+  "SELECT seats FROM org_roles WHERE id = ?; -- one seat per row",
+  "```",
+  "A seat opening sends `gathering.promoted` and enrolls.",
+  "The power that seats people in a role is `org.seat`.",
+  "| Vacant | proposed as an open seat |",
+].join("\n");
+
+check("seat rule in the docs an AI reads: flags the noun in prose and in a table", () => {
+  const hits = mdSeatHits(DOC_PAGE);
+  assert.deepStrictEqual(hits.map((h) => h.line), [2, 10], JSON.stringify(hits));
+});
+
+check("seat rule in the docs an AI reads: leaves code, a quotation, a gathering and the verb alone", () => {
+  const clean = DOC_PAGE.split("\n").filter((l) => !/takes the seat|open seat \|/.test(l)).join("\n");
+  assert.deepStrictEqual(mdSeatHits(clean), []);
+  const summary = (s) => JSON.stringify({ paths: { "/x": { get: { summary: s, operationId: "seats" } } } });
+  assert.strictEqual(jsonSeatHits(summary("Circles and seats, and who holds them")).length, 1);
+  assert.deepStrictEqual(jsonSeatHits(summary("Circles and roles, and who holds them")), []);
+});
+
+check("seat rule in the docs an AI reads: the scope, with a gathering's own doc left out", () => {
+  assert.deepStrictEqual(SEAT_DOC_ROOTS, ["docs/modules", "docs/skills"]);
+  assert.deepStrictEqual(SEAT_DOC_FILES, ["docs/VILLAGE_OVERVIEW.md", "docs/FOUNDER_AGENT_GUIDE.md"]);
+  assert.ok(SEAT_DOC_EXEMPT.some((re) => re.test("docs/modules/events.md")));
+  assert.ok(!SEAT_DOC_EXEMPT.some((re) => re.test("docs/modules/live-sessions.md")));
+});
+
+check("seat rule in the docs an AI reads: the real docs say role today", () => {
+  const rels = [...SEAT_DOC_FILES];
+  const walk = (rel) => {
+    for (const e of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+      const child = `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(child);
+      else if (/\.(md|json)$/.test(e.name)) rels.push(child);
+    }
+  };
+  for (const r of SEAT_DOC_ROOTS) if (fs.existsSync(path.join(ROOT, r))) walk(r);
+  const found = [];
+  for (const rel of rels) {
+    if (SEAT_DOC_EXEMPT.some((re) => re.test(rel)) || !fs.existsSync(path.join(ROOT, rel))) continue;
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    for (const h of rel.endsWith(".md") ? mdSeatHits(text) : jsonSeatHits(text)) found.push(`${rel}:${h.line} ${h.text}`);
+  }
+  assert.deepStrictEqual(found, []);
 });
 
 // ── The two carve-outs, as tested facts rather than prose ───────────────────
