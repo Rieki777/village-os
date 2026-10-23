@@ -28,6 +28,8 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { guardOutboundUrl } from "./toolcheck";
+import { holderStands } from "./agentTokens";
+import { usersRepo } from "../repos/users";
 
 export type { Sealed };
 
@@ -162,6 +164,14 @@ export async function storeMemberKey(
       "ciphertext = VALUES(ciphertext), iv = VALUES(iv), tag = VALUES(tag), last4 = VALUES(last4), set_at = CURRENT_TIMESTAMP",
     [userId, input.provider, compat ? base.url : null, compat ? model : null, sealed.ciphertext, sealed.iv, sealed.tag, last4],
   );
+  // The holder is read AFTER the write, for the reason `setInbox` gives
+  // (server/lib/agentInbox.ts): a request that passed its session check before
+  // an erasure, and then waited on the base URL's DNS lookup, can land here
+  // after the sweep's last delete. A tombstone keeps no third-party credential.
+  if (!holderStands(await usersRepo(pool).byId(userId))) {
+    await removeMemberKey(pool, userId);
+    return { ok: false, error: "This account can no longer hold an assistant key" };
+  }
   const view = await memberKeyView(pool, userId);
   return view ? { ok: true, view } : { ok: false, error: "The key did not save" };
 }

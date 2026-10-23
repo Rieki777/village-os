@@ -576,10 +576,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * ("portraits" throws on a file that will not come off the volume) left
        * an account that still worked with "member-agent" recorded as done. A
        * token minted or an inbox set in that window was skipped by the resume
-       * and stood for good, and `agent-week-ahead`, which selects enabled
+       * and stood for good, and `agent-week-ahead`, which selected enabled
        * inboxes with no join to `users`, kept delivering to it. Here, the
-       * delete comes after the last moment the member could write, for the
-       * reason the needs step below gives.
+       * delete comes after the last moment a NEW request of the member's can
+       * pass its session check, for the reason the needs step below gives.
+       *
+       * A request already past that check can still land after this step,
+       * and no step runs again. `PUT /api/agent/inbox` waits on a DNS lookup
+       * the member's own nameserver can stretch to seconds before it writes.
+       * So the two writes that wait (`setInbox`, `storeMemberKey`) read their
+       * holder after writing and take the row back for a tombstone, and every
+       * enqueue, the week-ahead job and the drain refuse an inbox nobody
+       * stands behind (`holderListens`, server/lib/agentInbox.ts).
        *
        * A NEW NAME, AND THE FIRST PASS STAYS. Records already hold
        * "member-agent" by name, and a resume skips what a record holds, so
