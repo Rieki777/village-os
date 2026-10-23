@@ -1938,9 +1938,10 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   rhythmsSet: Record<string, unknown>[];
   circlesFollowed: Record<string, unknown>[];
   calendarAddress: Record<string, unknown>[];
+  ownCalendarsAttached: Record<string, unknown>[];
 }> {
   const no = await memberNo(pool, userId);
-  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [] };
+  if (no == null) return { sessions: [], items: [], entries: [], responses: [], tasks: [], taskAnswers: [], library: [], libraryTakes: [], libraryNotes: [], rhythmsSet: [], circlesFollowed: [], calendarAddress: [], ownCalendarsAttached: [] };
   const sessions = (await repo.memberSessionRows(pool, no)).map((r) => ({
     id: Number(r.id),
     title: String(r.title ?? ""),
@@ -2015,8 +2016,8 @@ export async function exportMemberSessions(pool: Pool, userId: string): Promise<
   const { library, libraryTakes, libraryNotes } = await exportLibraryFor(pool, no);
   // A circle's rhythm (0271): the ones they set last.
   const rhythmsSet = await exportRhythmsFor(pool, no);
-  const { circlesFollowed, calendarAddress } = await exportFollowsFor(pool, no);
-  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress };
+  const { circlesFollowed, calendarAddress, ownCalendarsAttached } = await exportFollowsFor(pool, no);
+  return { sessions, items, entries, responses, tasks, taskAnswers, library, libraryTakes, libraryNotes, rhythmsSet, circlesFollowed, calendarAddress, ownCalendarsAttached };
 }
 
 /**

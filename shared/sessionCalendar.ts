@@ -22,6 +22,17 @@
  *     at the moment a calendar app reads it, so a changed rhythm, a skipped
  *     meeting or a new circle reaches the app with no new address.
  *
+ * A CIRCLE'S OWN CALENDAR. A circle that already keeps its meetings in
+ * Google Calendar, Apple or Outlook attaches that calendar's secret address
+ * (drizzle/0277_a_circle_attaches_its_own_calendar.sql). It becomes one of the
+ * village's own external calendar subscriptions (server/lib/externalCalendars.ts):
+ * the address sealed in the secrets store and never returned, fetched through
+ * the outbound guard every few hours, its events imported onto the circle
+ * layer. Its meetings then count as the circle's: in Coming up (the sooner of
+ * the rhythm's next meeting and the calendar's), the day-before notice, the
+ * circle's summary, and the calendars of members who follow the circle. The
+ * circle's members and admins attach, replace and detach it.
+ *
  * WHO: any member who may use Live Sessions follows circles and makes an
  * address. A meeting time is the circle's door, readable by every member
  * (shared/sessionRhythm.ts), so following asks no standing.
@@ -54,6 +65,11 @@ import { circleWords } from "./sessionTasks";
  * a bare 404 to anything it will not serve.
  */
 export const FOLLOW_API = `${CIRCLES_API}/following`;
+
+/** Attach (PUT `{ url }`) or detach (DELETE) a circle's own calendar: the circle's members and admins. */
+export function ownCalendarUrl(circleId: string): string {
+  return `${CIRCLES_API}/${encodeURIComponent(circleId)}/calendar`;
+}
 export const FOLLOW_KEY_API = `${FOLLOW_API}/key`;
 export const CIRCLE_FEED_PATH = "/api/calendar/circles.ics";
 
@@ -76,6 +92,8 @@ export const CALENDAR_LIMITS = {
   feedReadsPerAddressPerHour: 600,
   /** Reads of one address per hour. A calendar app reads a few times a day. */
   feedReadsPerKeyPerHour: 30,
+  /** Attaching or detaching a circle's own calendar, per member, per day. Each attach is read at once, from outside. */
+  ownCalendarWritesPerDay: 10,
 } as const;
 
 // ── Wire shapes ──────────────────────────────────────────────────────────────
@@ -97,6 +115,17 @@ export interface FollowPayload {
   address: { madeAt: string; lastReadAt: string | null } | null;
   /** Whether an address answers now: false while the module is in preview, the admins' own. */
   serving: boolean;
+}
+
+/** A circle's own calendar, as its members and admins see it. Never the address. */
+export interface OwnCalendarView {
+  /** Where the address points, "calendar.google.com". */
+  host: string;
+  /** Its last four characters, enough to recognise it. */
+  last4: string;
+  lastReadAt: string | null;
+  /** How the last read went. */
+  status: "ok" | "failed" | "never";
 }
 
 export interface FollowInput {
@@ -183,6 +212,42 @@ export const CALENDAR_COPY = {
   feedName: (villageName: string): string => `${villageName} circle meetings`,
   /** Under each meeting in a calendar app. */
   feedDescription: "The agenda items waiting for it are on the sessions page.",
+} as const;
+
+/** The words of a circle's own calendar. */
+export const OWN_CALENDAR_COPY = {
+  open: "Attach a circle's own calendar",
+  title: "A circle's own calendar",
+  lede: "If a circle keeps its meetings in Google Calendar, Apple or Outlook, attach that calendar here. Its meetings show under Coming up and reach everyone who follows the circle.",
+  findIt: "In Google Calendar, open Settings, choose the calendar, and copy its secret address in iCal format.",
+  circleLabel: "Which circle?",
+  circleChoose: "Choose a circle",
+  urlLabel: "The calendar's secret address",
+  attach: "Attach the calendar",
+  replace: "Attach a different calendar",
+  attaching: "Attaching...",
+  cancel: "Cancel",
+  /** One attached calendar, as its keepers see it. */
+  attachedLine: (circleName: string, host: string, last4: string): string => `${circleWords(circleName)}: ${host}, ending ${last4}`,
+  readOn: (day: string): string => `Last read on ${day}.`,
+  notReadYet: "Not read yet.",
+  readFailed: "The last read did not work. Check that the address is the secret one, and attach it again.",
+  detach: "Detach",
+  attached: (circleName: string): string => `Attached. The ${circleWords(circleName)} meetings from its own calendar now show under Coming up.`,
+  attachedUnread: (circleName: string): string =>
+    `Attached to the ${circleWords(circleName)}, but the first read did not work. Check that the address is the secret one.`,
+  detached: (circleName: string): string => `Detached. The ${circleWords(circleName)} meetings from that calendar have gone from Coming up.`,
+  /** The subscription's name on the admins' list of external calendars. */
+  subscriptionName: (circleName: string): string => `${circleWords(circleName)}, its own calendar`,
+  /** In place of a rhythm, on a row whose meetings come from the circle's own calendar. */
+  fromOwnCalendar: "From the circle's own calendar",
+} as const;
+
+export const OWN_CALENDAR_REFUSALS = {
+  notYours: "Only the circle's members and admins can attach its calendar.",
+  urlNeeded: "Paste the calendar's address, starting with https:// or webcal://.",
+  noneAttached: "This circle has no calendar of its own attached.",
+  slowDown: "That was a lot at once. Try again tomorrow.",
 } as const;
 
 export const CALENDAR_REFUSALS = {

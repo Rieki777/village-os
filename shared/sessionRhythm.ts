@@ -33,6 +33,7 @@
  * string a member reads lives in this file so the voice gate reads it.
  */
 import type { Recurrence } from "./gatherings";
+import type { OwnCalendarView } from "./sessionCalendar";
 import { civilParts, fullMoonsBetween, newMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { SESSION_LIMITS, SESSION_REFUSALS, SESSIONS_API } from "./sessions";
 import { circleWords } from "./sessionTasks";
@@ -129,9 +130,13 @@ export interface Meeting {
 export interface ComingUpRow {
   circleId: string;
   circleName: string;
-  /** "Every Thursday at 18:00", "At each new moon, 18:00". */
+  /** "Every Thursday at 18:00", "At each new moon, 18:00", or "From the circle's own calendar". */
   rhythmWords: string;
   next: Meeting;
+  /** Where the next meeting comes from: the rhythm, or the circle's own calendar (shared/sessionCalendar.ts). */
+  nextFrom: "rhythm" | "calendar";
+  /** The meeting's own title, when it comes from the circle's own calendar. */
+  nextTitle: string | null;
   /** "Today at 18:00", "Tomorrow at 18:00", "Thursday 23 October at 18:00". */
   words: string;
   durationMin: number;
@@ -142,7 +147,7 @@ export interface ComingUpRow {
   /** The viewer is one of the circle's members, or an admin. */
   mine: boolean;
   canKeep: boolean;
-  /** For the form: the rhythm as it is now, a weekly one starting from its next meeting, so a change keeps the circle's week. */
+  /** For the form: the rhythm as it is now, a weekly one starting from its next meeting, so a change keeps the circle's week. `none` while the circle has no rhythm. */
   rhythm: RhythmInput;
 }
 
@@ -152,6 +157,8 @@ export interface ComingUpPayload {
   zone: string;
   /** The circles this viewer may set a rhythm for. */
   keepCircleIds: string[];
+  /** The own calendars of the circles this viewer may keep, by circle. Never an address. */
+  ownCalendars: Record<string, OwnCalendarView>;
 }
 
 /** One circle's sessions, for its home page (the circle card). */

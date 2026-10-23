@@ -23,6 +23,10 @@
  * that anchor is lit, scrolled to and focused once the list holds it, on the
  * first visit and when the link is followed from the page itself.
  *
+ * A row's next meeting can come from the circle's own calendar
+ * (OwnCalendarPanel.tsx, for the circle's keepers): it then carries that
+ * meeting's own title, and no skip, since a meeting there is skipped there.
+ *
  * "Follow the calendar" sits at the foot of the section (FollowCalendar.tsx):
  * any member puts the circles they choose on their own calendar. It shows
  * whenever the village has a circle, a rhythm or not, so "every circle, new
@@ -44,6 +48,7 @@ import {
 } from "@shared/sessionRhythm";
 import { gameFetch } from "@/lib/gameApi";
 import FollowCalendar from "./FollowCalendar";
+import OwnCalendarPanel from "./OwnCalendarPanel";
 import RhythmForm from "./RhythmForm";
 import { useHash } from "./useHash";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, EYEBROW, HINT, LABEL_CAPS, PANEL } from "./roomUi";
@@ -166,6 +171,7 @@ function Row({
               <p id={`${anchor}-when`} className="mt-1 font-display text-xl leading-tight text-foreground">
                 {row.words}
               </p>
+              {row.nextTitle && <p className="mt-0.5 text-sm text-foreground">{row.nextTitle}</p>}
               <p className="mt-1 text-sm text-muted-foreground">
                 {row.rhythmWords} · {RHYTHM_COPY.waiting(row.waiting)}
               </p>
@@ -187,9 +193,11 @@ function Row({
               <button ref={changeButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={() => setEditing(true)}>
                 {RHYTHM_COPY.change}
               </button>
-              <button ref={skipButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={skip}>
-                {RHYTHM_COPY.skip}
-              </button>
+              {row.nextFrom === "rhythm" && (
+                <button ref={skipButton} type="button" className={BTN_QUIET} disabled={busy} aria-describedby={describedBy} onClick={skip}>
+                  {RHYTHM_COPY.skip}
+                </button>
+              )}
             </div>
           )}
           {error && (
@@ -340,6 +348,12 @@ export default function ComingUp({
           )}
         </div>
       )}
+      <OwnCalendarPanel
+        circles={circles.filter((c) => comingUp.keepCircleIds.includes(c.id))}
+        ownCalendars={comingUp.ownCalendars}
+        onChanged={onChanged}
+        onSaid={setSaid}
+      />
       <FollowCalendar />
     </section>
   );

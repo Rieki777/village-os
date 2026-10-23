@@ -127,6 +127,7 @@ function readPayload(body: unknown): ListPayload {
     rows: Array.isArray(cu.rows) ? (cu.rows as ComingUpRow[]).filter((r) => r && typeof r.circleId === "string" && r.next && typeof r.next.at === "string") : [],
     zone: typeof cu.zone === "string" ? cu.zone : "UTC",
     keepCircleIds: Array.isArray(cu.keepCircleIds) ? (cu.keepCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+    ownCalendars: cu.ownCalendars && typeof cu.ownCalendars === "object" ? (cu.ownCalendars as ComingUpPayload["ownCalendars"]) : {},
   };
   return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library, comingUp };
 }
