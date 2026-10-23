@@ -34,7 +34,7 @@ import { WAITING_URL } from "../../shared/waitingOnYou";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { createOrgRole, listOrgRoles } from "../lib/orgChart";
 import { insertNotification } from "../lib/notify";
-import { nudgeKey, runProposalNudges, wordsNotWritten } from "../lib/roleProposals";
+import { nudgeKey, ROLE_WORD_FIELDS, runProposalNudges, wordsNotWritten } from "../lib/roleProposals";
 import { insertEntry } from "../repos/liveSessions";
 import { insertProposal } from "../repos/roleProposals";
 import { insertApplication, readApplication } from "../repos/seatApplications";
@@ -44,6 +44,17 @@ import { harness, HOLDER, OWNER, P, PEOPLE, READER, SEASONS } from "../testkit/r
 const FOURTH = "u-four";
 const configured = testDbConfigured();
 if (!configured) console.warn("[roleProposals.consent] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
+
+describe("the word fields a proposal may change", () => {
+  it("are read off the role reader, the CCOS words included, with every list found as a list", () => {
+    expect(ROLE_WORD_FIELDS.fields).toEqual(
+      expect.arrayContaining(["name", "aim", "domain", "accountabilities", "whyItMatters", "bringMe", "notMine", "runbook", "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment"]),
+    );
+    expect([...ROLE_WORD_FIELDS.lists].sort()).toEqual(["accountabilities", "authorities", "bringMe", "notMine", "responsibilities"]);
+    // Structure, money and the recruitment pack are never words.
+    for (const f of ["seats", "circleId", "termsOffer", "valueMinor", "compensationReality", "archetypes"]) expect(ROLE_WORD_FIELDS.fields).not.toContain(f);
+  });
+});
 
 describe("a proposed word the draft path did not write", () => {
   it("is named by role and field, so an adoption can refuse instead of dropping it", () => {
@@ -202,8 +213,9 @@ describe.skipIf(!configured)("the circle consents to a role proposal, on a real 
   it("consented by the circle: one click records the adoption, creates the new role and writes the changed words", async () => {
     const orchard = await role("Orchard Keeper", "c-land", [READER, FOURTH]);
     const s = await submit(OWNER, [orchard], {
-      roles: [{ roleId: orchard, words: { domain: "The orchard, the nursery and the grafting." } }],
-      newRoles: [{ circleId: "c-land", seats: 1, words: { name: "Graft Keeper", aim: "Keep every graft alive.", accountabilities: "Graft each spring\nLabel each tree" } }],
+      // The CCOS words (0274) ride through by field name, a list sent as text one item per line.
+      roles: [{ roleId: orchard, words: { domain: "The orchard, the nursery and the grafting.", existsWhile: "the village keeps fruit trees", authorities: "Choose the rootstock\nSet the pruning days" } }],
+      newRoles: [{ circleId: "c-land", seats: 1, words: { name: "Graft Keeper", aim: "Keep every graft alive.", accountabilities: "Graft each spring\nLabel each tree\nKeep the scion wood cool" } }],
     });
     const newId = s.draft.newRoles[0].id;
     expect((await answer(READER, s.applicationId, { answer: "consent" })).status).toBe(200);
@@ -224,8 +236,8 @@ describe.skipIf(!configured)("the circle consents to a role proposal, on a real 
     expect(adopted.status, adopted.text).toBe(200);
     expect(adopted.body).toMatchObject({ status: "adopted", decided: `Adopted on ${shortDay(new Date(), "UTC")} after the circle consented` });
     const roles = new Map((await listOrgRoles(pool)).map((r) => [r.id, r]));
-    expect(roles.get(newId)).toMatchObject({ name: "Graft Keeper", circleId: "c-land", aim: "Keep every graft alive.", accountabilities: ["Graft each spring", "Label each tree"], seats: 1 });
-    expect(roles.get(orchard)?.domain).toBe("The orchard, the nursery and the grafting.");
+    expect(roles.get(newId)).toMatchObject({ name: "Graft Keeper", circleId: "c-land", aim: "Keep every graft alive.", accountabilities: ["Graft each spring", "Label each tree", "Keep the scion wood cool"], seats: 1 });
+    expect(roles.get(orchard)).toMatchObject({ domain: "The orchard, the nursery and the grafting.", existsWhile: "the village keeps fruit trees", authorities: ["Choose the rootstock", "Set the pruning days"] });
     expect((await readApplication(pool, s.applicationId))?.status).toBe("adopted");
     expect((await page(s.applicationId)).proposal.decided).toBe(adopted.body.decided);
   });

@@ -57,7 +57,7 @@ import { planTargetAt, type PlanSeason } from "../../shared/seasonPlans";
 import type { CycleClock } from "../../shared/cycleClock";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import { addChange, createDraft, publishDraft, revertDraft, withdrawDraft } from "./orgDrafts";
-import { listOrgAssignments, listOrgRoles, rowToRole, type LapseContext, type OrgRole } from "./orgChart";
+import { listOrgAssignments, listOrgRoles, ROLE_COLS, rowToRole, type LapseContext, type OrgRole } from "./orgChart";
 import { ensureMemberNo } from "./liveSessions";
 import type { NotifyInput } from "./notify";
 import { inTransaction, insertEntry, lastTimeInCircle } from "../repos/liveSessions";
@@ -66,10 +66,17 @@ import { readApplications, seatsWithCircles } from "../repos/seatApplications";
 
 /**
  * THE WORD FIELDS OF THIS PLATFORM'S ROLES, read off the role reader itself.
- * `rowToRole({})` names every field a role carries, so a field a later release
+ * `rowToRole` names every field a role carries, so a field a later release
  * adds there is a word a proposal can change with no edit in this file.
+ *
+ * WHICH ONES ARE LISTS, FOUND THE SAME WAY. Every column the reader selects
+ * (`ROLE_COLS`) is handed the same one-item JSON list: a field read through a
+ * list reader comes back as a list, and a text field comes back as text. So a
+ * list field a later release adds is a list here too, with no list of names
+ * to keep in step.
  */
-export const ROLE_WORD_FIELDS: WordFieldsContext = wordFieldsOf(rowToRole({}) as unknown as Record<string, unknown>);
+const PROBE_ROW = Object.fromEntries(ROLE_COLS.split(",").map((c) => [c.trim(), '["x"]']));
+export const ROLE_WORD_FIELDS: WordFieldsContext = wordFieldsOf(rowToRole(PROBE_ROW) as unknown as Record<string, unknown>);
 
 // ── Who the circle asks ─────────────────────────────────────────────────────
 
