@@ -186,6 +186,19 @@ describe("consent and arrival", () => {
     expect(consentTally([a(1, "consent")], []).consented).toBe(false);
     expect(consentNeedsWords("consent")).toBe(false);
     expect(consentNeedsWords("object")).toBe(true);
+    expect(consentNeedsWords("sleep")).toBe(false);
+  });
+
+  it("counts sleeping on it as answered for now, never as an objection, and keeps the round open for it", () => {
+    const a = (who: number, value: "consent" | "concern" | "object" | "sleep") => ({ who, value });
+    const t = consentTally([a(1, "consent"), a(2, "sleep"), a(3, "consent")], [1, 2, 3]);
+    expect(t).toMatchObject({ consent: 2, object: 0, sleeping: 1, waiting: 0, consented: false });
+    // The answer after the night closes it.
+    expect(consentTally([a(1, "consent"), a(2, "consent"), a(3, "consent")], [1, 2, 3]).consented).toBe(true);
+    expect(ROOM_COPY.tallyLine(t)).toBe("2 consent, 0 with a concern, 0 objecting, 1 sleeping on it, 0 still to answer");
+    // Nobody sleeping on it, and a record kept before anybody could: the line reads as it always did.
+    expect(ROOM_COPY.tallyLine({ consent: 1, concern: 0, object: 0, sleeping: 0, waiting: 2 })).toBe("1 consent, 0 with a concern, 0 objecting, 2 still to answer");
+    expect(ROOM_COPY.talliedLine({ consent: 3, concern: 1, object: 0 })).toBe("3 consent, 1 with a concern, 0 objecting");
   });
 
   it("names who a round is still waiting on: people here, once each, in order, and nobody who left", () => {

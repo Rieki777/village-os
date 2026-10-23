@@ -1,11 +1,14 @@
 /**
  * A consent round, on the agenda or on one proposal.
  *
- * Three tiles: I consent, I consent with a concern, I object. A concern or an
- * objection is said in one sentence so the room can hear it whole, and the
- * tile cannot be sent without it. The tally counts the people here; the round
- * is consented when everyone here has answered and nobody objects. Each member
- * can change their answer while the round is open.
+ * Four tiles: I consent, I consent with a concern, I object, and I'll sleep on
+ * it, for someone who decides best after a night. A concern or an objection is
+ * said in one sentence so the room can hear it whole, and the tile cannot be
+ * sent without it; sleeping on it needs none and is never an objection. The
+ * tally counts the people here; the round is consented when everyone here has
+ * answered, nobody is sleeping on it, and nobody objects, so while somebody
+ * sleeps on it the round stays open and says so. Each member can change their
+ * answer while the round is open.
  *
  * The answers are heard by the people in the room: the server sends them only
  * to the people who joined and to admins, so anybody else reads that sentence
@@ -100,7 +103,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
       </h3>
       {!readOnly && (
         <>
-          <div role="radiogroup" aria-labelledby={`${groupId}-ask`} className="grid gap-2 sm:grid-cols-3">
+          <div role="radiogroup" aria-labelledby={`${groupId}-ask`} className="grid gap-2 sm:grid-cols-2">
             {CONSENT_VALUES.map((v) => (
               <button
                 key={v}
@@ -145,6 +148,7 @@ export default function ConsentRound({ view, actions, target, ask, readOnly }: C
         {seesAnswers(view) ? ROOM_COPY.tallyLine(tally) : ROOM_COPY.answersHeardInRoom}
       </p>
       <WaitingLine view={view} target={target} />
+      {seesAnswers(view) && tally.sleeping > 0 && <p className="text-sm text-foreground">{ROOM_COPY.sleepingOpen}</p>}
       {seesAnswers(view) && tally.consented && <p className="text-sm font-semibold text-open">{ROOM_COPY.consented}</p>}
       {heard.length > 0 && (
         <ul className="space-y-1.5">
