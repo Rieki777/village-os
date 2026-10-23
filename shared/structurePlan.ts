@@ -50,6 +50,7 @@
  */
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
 import type { RoleWordsLike } from "./roleFieldChanges";
+import { ROLE_CCOS_FIELDS } from "./roleCcos";
 
 /** What the source's own status says, in the four words it uses, or `other`. */
 export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
@@ -462,8 +463,18 @@ export interface DecidedStructure {
   problems: string[];
 }
 
-/** The seat fields an update carries across. `seats` is never one: the live count holds its people. */
-const UPDATE_FIELDS = ["name", "aim", "domain", "whyItMatters", "accountabilities", "criticality", "recruiting"] as const;
+/**
+ * The seat fields an update carries across. `seats` is never one: the live count holds its people.
+ *
+ * The role's own words go across too: the handover words of 0268 and the CCOS
+ * words of 0274. The review lists each of them before and after under a
+ * moved role (`RoleFieldChanges`), so an update that dropped them would
+ * publish less than the steward read and consented to.
+ */
+const UPDATE_FIELDS = [
+  "name", "aim", "domain", "whyItMatters", "accountabilities", "criticality", "recruiting",
+  "bringMe", "notMine", "runbook", ...ROLE_CCOS_FIELDS,
+] as const;
 
 /**
  * Apply a steward's decisions to a plan.

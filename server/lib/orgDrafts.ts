@@ -49,6 +49,9 @@ import { ORG_DRAFT } from "../../shared/ballotSubjects";
 import { openBallotFor } from "./ballots";
 import { ROLE_HANDOVER_COLUMNS, ROLE_HANDOVER_FIELDS } from "../../shared/roleHandover";
 import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHandoverParse";
+import { applyCircleWords, captureCircleWords, previewCircleWords, revertCircleWords } from "./circleWordsDraft";
+import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS, ROLE_CCOS_WORDS, accountabilitiesProblem, payloadAccountabilitiesProblem } from "../../shared/roleCcos";
+import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse";
 
 export type DraftOp =
   | "create_seat"
@@ -58,7 +61,9 @@ export type DraftOp =
   | "seat_holder"
   | "end_holding"
   | "move_circle"
-  | "rest_circle";
+  | "rest_circle"
+  // 0270: a circle's words, changed by consent (server/lib/circleWordsDraft.ts).
+  | "update_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -988,6 +993,13 @@ export function previewLoadedDraft(
       continue;
     }
 
+    if (c.op === "update_circle") {
+      // A circle's words (0270), against the circles as this draft has left them so far.
+      const r = previewCircleWords(c, working);
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads: r.reads, blocked: r.blocked });
+      continue;
+    }
+
     if (c.op === "rest_circle") {
       /*
        * A CIRCLE A DRAFT RETIRES (0243): it rests as `dormant`, the status the
@@ -1093,6 +1105,10 @@ export function previewLoadedDraft(
       // 0268: the handover words, through the one parser the publish uses again.
       const handover = roleHandoverProblem(c.payload);
       if (handover) reasons.push(handover);
+      // 0274: the CCOS words and the 3 to 6 accountabilities, through the
+      // parser the publish runs again.
+      const ccos = roleCcosProblem(c.payload, "create_seat");
+      if (ccos) reasons.push(ccos);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
        *
@@ -1164,11 +1180,18 @@ export function previewLoadedDraft(
         // 0268: "Bring me", "Not mine to hold" and the runbook, checked by the
         // parser the publish runs again, so the preview's line is its refusal.
         if (!blocked) blocked = roleHandoverProblem(c.payload);
+        // 0274: the CCOS words and, when the change names them, 3 to 6
+        // accountabilities. Only the payload is judged, so a role stored
+        // with fewer keeps loading and can still be edited elsewhere.
+        if (!blocked) blocked = roleCcosProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
-        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS);
+        // `accountabilities` is written by its own branch in `applyChange`
+        // and is a real change: the card's "What you can count on me for"
+        // proposal carries nothing else, and this used to block it.
+        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities");
         if (!blocked && touched.length === 0) {
           blocked = "This names no field this village can change on a role";
         }
@@ -1209,7 +1232,8 @@ function carriesTerms(payload: Record<string, any> | null | undefined): boolean 
  */
 function termsBlock(payload: Record<string, any> | null | undefined): string | null {
   if (!payload || payload.termsOffer === undefined) return null;
-  const read = readTermsOffer(payload.termsOffer);
+  // A new write, so the CCOS limit on the scoreboard's measures applies.
+  const read = readTermsOffer(payload.termsOffer, { newWrite: true });
   return read.ok ? null : `These terms cannot be offered. ${read.problem}`;
 }
 
@@ -1390,6 +1414,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
   }
+  if (c.op === "update_circle") return captureCircleWords(conn, c.orgRoleId);
   if (c.op === "create_seat") return null;
   // Nothing existed to capture, exactly as for a seat.
   if (c.op === "create_circle") return null;
@@ -1402,7 +1427,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
   return row ?? null;
@@ -1423,7 +1448,40 @@ const SEAT_FIELDS: Record<string, string> = {
   bringMe: "bring_me",
   notMine: "not_mine",
   runbook: "runbook",
+  // 0274: the CCOS words (Rye, 2026-10-22), on the handover words' rule:
+  // `ccosColumns` parses each one, and the generic loop never sees them.
+  ...ROLE_CCOS_COLUMNS,
 };
+
+/**
+ * The CCOS words a change names, as column and value pairs ready to bind, in
+ * the shape `handoverColumns` gives. Parsed by the one parser the preview ran
+ * and refused again here, so a draft built by hand cannot write what the
+ * preview would block. A list is stored as JSON; null clears the column.
+ */
+export function ccosColumns(p: Record<string, unknown>): Array<[string, string | null]> {
+  const out: Array<[string, string | null]> = [];
+  for (const f of ROLE_CCOS_FIELDS) {
+    if (p[f] === undefined) continue;
+    const r = parseRoleCcosField(f, p[f]);
+    if (!r.ok) throw new Error(`This change cannot be published. ${ROLE_CCOS_WORDS[f]}: ${r.problem}`);
+    const v = r.value;
+    out.push([ROLE_CCOS_COLUMNS[f], v === null ? null : Array.isArray(v) ? JSON.stringify(v) : v]);
+  }
+  return out;
+}
+
+/**
+ * The CCOS limit on what a role answers for, refused again at publish: a new
+ * write names 3 to 6 accountabilities, or none. A role already stored with
+ * fewer is never touched by this, because only a payload is checked. A
+ * `create_seat` carrying in a role kept elsewhere (`CARRIED_FROM_KEY`, the
+ * ReGen Civics import) keeps its own count, as the preview says.
+ */
+function refuseAccountabilities(p: Record<string, unknown>, op: "create_seat" | "update_seat"): void {
+  const problem = op === "create_seat" ? payloadAccountabilitiesProblem(p) : accountabilitiesProblem(p.accountabilities);
+  if (problem) throw new Error(`This change cannot be published. ${problem}`);
+}
 
 /**
  * The handover words a change names, as column and value pairs ready to bind,
@@ -1444,7 +1502,7 @@ export function handoverColumns(p: Record<string, unknown>): Array<[string, stri
 }
 
 /** Payload keys `applyChange` writes by hand, never through the generic loop. */
-const HAND_WRITTEN_FIELDS = new Set<string>(["termsOffer", ...ROLE_HANDOVER_FIELDS]);
+const HAND_WRITTEN_FIELDS = new Set<string>(["termsOffer", ...ROLE_HANDOVER_FIELDS, ...ROLE_CCOS_FIELDS]);
 
 /**
  * A circle a publish set dormant, for the caller to hand to the dormancy hook
@@ -1479,7 +1537,7 @@ export function offerColumns(p: any, who: { machine: boolean; by: string | null 
   if (p.termsOffer === undefined && p.terms_offer === undefined) return undefined;
   if (who.machine) throw new Error(OFFER_WORDS.machineRefused);
   if (p.termsOffer === undefined) return undefined;
-  const read = readTermsOffer(p.termsOffer);
+  const read = readTermsOffer(p.termsOffer, { newWrite: true });
   if (!read.ok) throw new Error(`These terms cannot be offered. ${read.problem}`);
   return [read.settings ? canonicalJson(read.settings) : null, new Date(), who.by];
 }
@@ -1545,19 +1603,29 @@ async function applyChange(
     const offer = offerColumns(p, who) ?? [null, null, null];
     // 0268: and its handover words, parsed and refused like an update's.
     const words = new Map(handoverColumns(p));
+    // 0274: and its CCOS words, and the 3 to 6 accountabilities, refused like an update's.
+    refuseAccountabilities(p, "create_seat");
+    const ccos = new Map(ccosColumns(p));
     await conn.query(
-      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook) " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
-        words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null],
+        words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null,
+        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null)],
     );
     return null;
   }
   if (c.op === "rest_seat") {
     await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
+    return null;
+  }
+  if (c.op === "update_circle") {
+    // The purpose on `circles` (with the version bump) and the charter words, parsed again first.
+    await applyCircleWords(conn, c);
     return null;
   }
   if (c.op === "rest_circle") {
@@ -1636,6 +1704,12 @@ async function applyChange(
     sets.push("`" + col + "` = ?");
     args.push(v);
   }
+  // 0274: the CCOS words, and the 3 to 6 accountabilities when the change names them.
+  for (const [col, v] of ccosColumns(p)) {
+    sets.push("`" + col + "` = ?");
+    args.push(v);
+  }
+  refuseAccountabilities(p, "update_seat");
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));
@@ -1727,6 +1801,9 @@ export async function revertDraft(
           await conn.query("UPDATE circles SET status = ? WHERE id = ?", [String(c.beforeJson.status), c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
         }
+      } else if (c.op === "update_circle") {
+        // A circle's words (0270): put back only what still stands as this draft left it.
+        await revertCircleWords(conn, c);
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
@@ -1763,7 +1840,15 @@ export async function revertDraft(
         // 0268: the handover words, on the same rule. A draft published before
         // 0268 captured none, and its revert leaves words written since alone.
         const hadWords = "bring_me" in b ? 1 : 0;
+        // 0274: the CCOS words, on the same rule again. A draft published
+        // before 0274 captured none of the seven, and leaves them alone.
+        const hadCcos = "exists_while" in b ? 1 : 0;
         const asJson = (v: unknown) => (v === null || v === undefined ? null : typeof v === "string" ? v : JSON.stringify(v));
+        const ccosBack = ROLE_CCOS_FIELDS.flatMap((f) => {
+          const col = ROLE_CCOS_COLUMNS[f];
+          const v = col === "authorities" || col === "responsibilities" ? asJson(b[col]) : (b[col] ?? null);
+          return [hadCcos, v];
+        });
         const termsBack = b.terms_offer === null || b.terms_offer === undefined ? null
           : typeof b.terms_offer === "string" ? b.terms_offer : JSON.stringify(b.terms_offer);
         await conn.query(
@@ -1774,13 +1859,21 @@ export async function revertDraft(
              terms_offer_by = CASE WHEN ? = 1 THEN ? ELSE terms_offer_by END,
              bring_me = CASE WHEN ? = 1 THEN ? ELSE bring_me END,
              not_mine = CASE WHEN ? = 1 THEN ? ELSE not_mine END,
-             runbook = CASE WHEN ? = 1 THEN ? ELSE runbook END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+             runbook = CASE WHEN ? = 1 THEN ? ELSE runbook END,
+             exists_while = CASE WHEN ? = 1 THEN ? ELSE exists_while END,
+             authorities = CASE WHEN ? = 1 THEN ? ELSE authorities END,
+             responsibilities = CASE WHEN ? = 1 THEN ? ELSE responsibilities END,
+             signs_stretched = CASE WHEN ? = 1 THEN ? ELSE signs_stretched END,
+             flows_back = CASE WHEN ? = 1 THEN ? ELSE flows_back END,
+             step_back = CASE WHEN ? = 1 THEN ? ELSE step_back END,
+             time_commitment = CASE WHEN ? = 1 THEN ? ELSE time_commitment END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
             b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
             hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
             hadTerms, b.terms_offer_by ?? null,
-            hadWords, asJson(b.bring_me), hadWords, asJson(b.not_mine), hadWords, b.runbook ?? null, c.orgRoleId],
+            hadWords, asJson(b.bring_me), hadWords, asJson(b.not_mine), hadWords, b.runbook ?? null,
+            ...ccosBack, c.orgRoleId],
         );
       }
     }

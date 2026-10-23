@@ -251,6 +251,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} reminders to file your season.",
     celebrate: false,
   },
+  // Role proposals (2026-10-22). In the bell only (no case in emailCadenceFor):
+  // the feedback is read on the draft, which only its owner opens.
+  role_proposal_feedback: {
+    group: "people",
+    blurb: "A member who has the link to your role proposal left feedback on it. Open the draft to read it.",
+    many: "{n} pieces of feedback on your role proposal.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your role is running out. In a role that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
@@ -448,6 +456,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "work",
     blurb: "An agenda item you added is on a session's agenda now.",
     many: "{n} agenda items you added are on an agenda.",
+    celebrate: false,
+  },
+  // A circle's rhythm (server/lib/sessionRhythm.ts): the day before a circle
+  // meets, its members hear when, with what is on the agenda.
+  session_coming_up: {
+    group: "work",
+    blurb: "A circle you are part of meets soon. The notice says when, and what is on the agenda.",
+    many: "{n} of your circles meet soon.",
     celebrate: false,
   },
   session_item_settled: {
