@@ -270,7 +270,7 @@ can be rotated by someone else.
 |---|---|
 | **Village** | one deployment: one process, one database, one community |
 | **Circle** | a domain of work |
-| **Role** | a position inside a circle, held by a member, carrying capabilities. Members say role, never seat (2026-10-21); the code and the stored ids still say seat |
+| **Role** | a position inside a circle, held by a member, carrying capabilities. Members say role (2026-10-21); the code and the stored ids keep `seat` |
 | **Quest** | a unit of work, claimed and consented to |
 | **Gratitude** | recognition sent between members; a signal, not a payment |
 | **Cycle** | a lunar period; value settles when one closes |
