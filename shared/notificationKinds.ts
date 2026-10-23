@@ -450,6 +450,14 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} agenda items you added are on an agenda.",
     celebrate: false,
   },
+  // A circle's rhythm (server/lib/sessionRhythm.ts): the day before a circle
+  // meets, its members hear when, with what is on the agenda.
+  session_coming_up: {
+    group: "work",
+    blurb: "A circle you are part of meets soon. The notice says when, and what is on the agenda.",
+    many: "{n} of your circles meet soon.",
+    celebrate: false,
+  },
   session_item_settled: {
     group: "work",
     blurb: "A session that took up an agenda item you added has closed. The item says whether it was taken up or waits for next time.",

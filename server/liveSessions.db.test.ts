@@ -553,7 +553,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       ].sort(),
     );
     expect(JSON.stringify(ben)).not.toContain("Ana Reyes");
-    // A member who never joined a room exports nine empty lists, the task layer's two and the agenda library's three included.
+    // A member who never joined a room exports ten empty lists, the task layer's two, the agenda library's three and the rhythms they set included.
     expect(await exportMemberSessions(pool, "m-never")).toEqual({
       sessions: [],
       items: [],
@@ -564,6 +564,7 @@ describe.skipIf(!configured)("a live session against a real schema", () => {
       library: [],
       libraryTakes: [],
       libraryNotes: [],
+      rhythmsSet: [],
     });
   });
 
