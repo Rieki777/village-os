@@ -38,7 +38,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import {
   CYCLE_POOL_FAUCET,
   contributionTokens,
@@ -153,7 +153,7 @@ function makeRes() {
 describe.skipIf(!configured)("the rung the village pays you onto reaches every surface", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadTokenRegistry(pool);
     // A REAL payment, through the real primitive, from a village faucet, for a
     // source `server/lib/contributionPay.ts` counts as the village paying

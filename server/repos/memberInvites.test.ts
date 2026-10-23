@@ -12,7 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { hashInviteToken, inviteStanding, mintInviteToken } from "../lib/invites";
 import {
   claimInvite,
@@ -47,7 +47,7 @@ async function expire(id: string): Promise<void> {
 describe.skipIf(!configured)("member_invites on a real database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 harness pool against the scratch schema
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 harness pool against the scratch schema
   });
 
   afterAll(async () => {

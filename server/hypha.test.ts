@@ -27,7 +27,7 @@ import type { AddressInfo } from "node:net";
 import mysql from "mysql2/promise";
 import { encodeAbiParameters, parseAbiParameters } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import {
   FRESH_WINDOW_MS,
   formatUnits,
@@ -174,7 +174,7 @@ describe.skipIf(!configured)("the Hypha Bridge, driven against a chain", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     chain = await startFixtureChain(tokens);
     await pool.query("DELETE FROM game_variables"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadVariables(pool);

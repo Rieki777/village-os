@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   completionsFor,
   completionsForMany,
@@ -34,7 +34,7 @@ let pool: mysql.Pool;
 beforeAll(async () => {
   if (!configured) return;
   db = await provisionTestDb();
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+  pool = testPool(db, { connectionLimit: 4 });
 });
 
 afterAll(async () => {

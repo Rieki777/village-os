@@ -29,7 +29,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -88,7 +88,7 @@ beforeAll(async () => {
   if (!fs.existsSync(DIST)) throw new Error(`${DIST} is missing. Run \`pnpm build\` before the agent route test.`);
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-agent-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 });
+  pool = testPool(testDb, { connectionLimit: 4 });
 
   // The model stub: answers a member-mode question with a reply, an aboutYou
   // sentence and a draft naming the fixture gathering.

@@ -24,7 +24,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { loadVariables } from "./variables";
 import {
@@ -90,7 +90,7 @@ describe.skipIf(!configured)("a village that voted its needs dials", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   }, 180_000);
 
   afterAll(async () => {

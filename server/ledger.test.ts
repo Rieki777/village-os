@@ -53,7 +53,7 @@ import {
 } from "./lib/ledger";
 import { lockedBalanceRows } from "./repos/tokenBalances";
 import { repairTaintedListings } from "./lib/exchange";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 
@@ -63,7 +63,7 @@ let pool: mysql.Pool;
 describe.skipIf(!configured)("the MySQL token ledger", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     await loadTokenRegistry(pool);
   });
 
