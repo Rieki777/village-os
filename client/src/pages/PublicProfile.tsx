@@ -22,6 +22,7 @@ import VouchPanel from "@/components/profile/VouchPanel";
 import SeasonPlanSection from "@/components/profile/SeasonPlanSection";
 import AlignedSection from "@/components/profile/AlignedSection";
 import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
+import { PersonGeneKeysCard, PersonGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
@@ -143,6 +144,7 @@ export default function PublicProfile() {
       </p>
       <div className="mx-auto max-w-3xl px-4 py-10">
         <header className="flex flex-col items-center gap-5 sm:flex-row sm:items-end">
+          <div className="relative">
           <div className="h-40 w-32 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
             {hero?.avatar ? (
               <img
@@ -158,6 +160,9 @@ export default function PublicProfile() {
                 </div>
               </div>
             )}
+          </div>
+          {/* Their Gene Keys seal, when the module is on and they show their lines. */}
+          <PersonGeneKeysSeal handle={signedIn ? sheet.handle : null} firstName={sheet.name.split(" ")[0]} className="absolute -right-4 -top-4" />
           </div>
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-3xl font-semibold text-teal-deep">{sheet.name}</h1>
@@ -225,6 +230,11 @@ export default function PublicProfile() {
         ) : null}
 
         {sheet.handle ? <PlayerRoleCard handle={sheet.handle} className="mt-10" /> : null}
+        {sheet.handle && signedIn ? (
+          <div className="mt-10">
+            <PersonGeneKeysCard handle={sheet.handle} firstName={sheet.name.split(" ")[0]} />
+          </div>
+        ) : null}
         {/* Their season (season plans RC1): drawn for a reader holding terms.read, nothing for anybody else. */}
         {sheet.handle && signedIn ? (
           <div className="mt-10">

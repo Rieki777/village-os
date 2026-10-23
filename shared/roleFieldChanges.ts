@@ -3,9 +3,11 @@
  *
  * The structure review draws this under each role a change creates or moves,
  * so a steward reads the words that would change in plain language instead of
- * a payload. It covers the role's own words: its purpose, what it decides, why
- * it matters, what people can count on it for, and the handover words of 0268
- * ("Bring me", "Not mine to hold", the runbook).
+ * a payload. It covers the role's own words: its purpose, what it looks after,
+ * why it matters, what people can count on it for, the handover words of 0268
+ * ("Bring me", "Not mine to hold", the runbook), and the CCOS words of 0274
+ * (when it exists, what it can decide on its own, what it does regularly, the
+ * three "Holding this role well" lines and its time).
  *
  * A role a change creates has no before, so every field it writes is listed.
  * A role a change moves lists only the fields its payload names whose words
@@ -25,19 +27,38 @@ export interface RoleWordsLike {
   bringMe?: readonly string[] | null;
   notMine?: readonly string[] | null;
   runbook?: string | null;
+  // 0274: the CCOS words.
+  existsWhile?: string | null;
+  authorities?: readonly string[] | null;
+  responsibilities?: readonly string[] | null;
+  signsStretched?: string | null;
+  flowsBack?: string | null;
+  stepBack?: string | null;
+  timeCommitment?: string | null;
 }
 
 export type RoleWordKey = keyof RoleWordsLike;
 
-/** The fields, in the order the role card reads them, with the words for each. */
+/**
+ * The fields, in the order the role card reads them, with the words for each.
+ * The card speaks as the holder ("What I can decide on my own"); a steward
+ * reviewing a change reads about the role, so these speak of it.
+ */
 export const ROLE_WORD_FIELDS: ReadonlyArray<{ key: RoleWordKey; label: string; list: boolean }> = [
   { key: "aim", label: "Purpose", list: false },
-  { key: "domain", label: "What it decides", list: false },
+  { key: "existsWhile", label: "This role exists while", list: false },
+  { key: "domain", label: "What it looks after", list: false },
+  { key: "authorities", label: "What it can decide on its own", list: true },
   { key: "whyItMatters", label: "Why it matters", list: false },
   { key: "accountabilities", label: "What people can count on it for", list: true },
+  { key: "responsibilities", label: "What it does regularly", list: true },
   { key: "bringMe", label: ROLE_HANDOVER_WORDS.bringMe, list: true },
+  { key: "signsStretched", label: "Signs whoever holds it is stretched", list: false },
+  { key: "flowsBack", label: "What flows back to whoever holds it", list: false },
+  { key: "stepBack", label: "How whoever holds it can step back", list: false },
   { key: "notMine", label: ROLE_HANDOVER_WORDS.notMine, list: true },
   { key: "runbook", label: ROLE_HANDOVER_WORDS.runbook, list: false },
+  { key: "timeCommitment", label: "The time it asks", list: false },
 ];
 
 export const FIELD_CHANGE_WORDS = {

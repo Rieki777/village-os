@@ -341,3 +341,50 @@ describe("the role's words, before and after (0268)", () => {
     expect(made).not.toContain("Before:");
   });
 });
+
+describe("the role's CCOS words, before and after (0274)", () => {
+  it("lists what changes for a moved role, and every word a new role writes", async () => {
+    const liveWithWords: PlanLiveSeat[] = [
+      {
+        ...LIVE_SEATS[0],
+        words: { aim: "Keep things running", domain: "The tools", authorities: ["Order spare parts"], existsWhile: null, timeCommitment: "Two days a week" },
+      },
+    ];
+    const changes = [
+      {
+        op: "update_seat",
+        orgRoleId: "ops",
+        payload: {
+          name: "Operations Steward",
+          authorities: ["Order spare parts", "Book the van"],
+          existsWhile: "the village runs its own tools",
+          timeCommitment: "Two days a week",
+        },
+      },
+      {
+        op: "create_seat",
+        orgRoleId: "rec-9",
+        payload: { name: "Hearth Keeper", circleId: "general", responsibilities: ["Light the fire each evening"], stepBack: "Name it at the Friday check-in." },
+      },
+    ];
+    const { plan, decisions } = planFromDraft("draft-1", changes, LIVE_CIRCLES, liveWithWords);
+    answer = { ...answer, draft: { ...draftAnswer(), plan, decisions, counts: countDraft(changes) } };
+    await open();
+    const lists = screen.getAllByTestId("role-field-changes");
+    expect(lists).toHaveLength(2);
+    const moved = lists[0].textContent ?? "";
+    expect(moved).toContain("What it can decide on its own");
+    expect(moved).toContain("Before: Order spare parts");
+    expect(moved).toContain("After: Order spare parts; Book the van");
+    expect(moved).toContain("This role exists while");
+    expect(moved).toContain("Before: Not written yet");
+    expect(moved).toContain("After: the village runs its own tools");
+    // The time the payload names but does not change is not listed.
+    expect(moved).not.toContain("The time it asks");
+    const made = lists[1].textContent ?? "";
+    expect(made).toContain("What it does regularly");
+    expect(made).toContain("Light the fire each evening");
+    expect(made).toContain("How whoever holds it can step back");
+    expect(made).not.toContain("Before:");
+  });
+});

@@ -3418,7 +3418,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     // refuses a rule on it. The feed says what the engine does.
     const forWork = !ceilingBinds(trigger);
     if (forWork && String(r.token_slug) === HEARTS) {
-      return { trigger, token: name, says: `no ${name} for work, because ${name} only shares out the cycle pool` };
+      return { trigger, token: name, says: `no ${name} for work` };
     }
     // Work is paid in full, with no ceiling (Rye, 2026-10-22): the rule's own
     // amount when the work names none, and the work's own amount when it does.

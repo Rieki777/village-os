@@ -106,6 +106,7 @@ import { forgetStewardActs } from "./stewardship";
 import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
+import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberInOutbox } from "./saberraOutbox";
 import { eraseApplicationWords, withdrawUnseatedOf } from "../repos/seatApplications";
 import { deleteDraftsOf } from "./proposalDrafts";
@@ -114,6 +115,7 @@ import { recordPartyLeft } from "./alignmentEndings";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { forgetRoleTensionsFor } from "./roleTensions";
+import { forgetMemberProposals } from "../repos/roleProposals";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -699,6 +701,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Role proposals (0273): the member's drafts go, with the feedback on
+       * them; a proposal they submitted loses its words and its link, since
+       * the application keeps the record of what was decided; and feedback
+       * they left on somebody else's draft stays, naming nobody.
+       */
+      name: "role-proposals-after-tombstone",
+      run: async () => {
+        await forgetMemberProposals(pool, target.id);
+      },
+    },
+    {
+      /*
        * Live Sessions (0238): the member leaves every room. Their people rows,
        * answers and written entries are deleted, the actions they held go back
        * to nobody, the hosts and adders they were read 0, and every closed
@@ -714,6 +728,21 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "sessions-after-tombstone",
       run: async () => {
         await forgetMemberSessions(pool, target.id, (id) => members.byId(id));
+      },
+    },
+    {
+      /*
+       * Gene Keys (0272): the member's one saved result goes, deleted. It is
+       * a reading of their own birth, and no birth data was ever stored to
+       * de-attribute, so there is nothing to keep.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the save door
+       * writes for anybody signed in, and the tombstone is where the member's
+       * sessions die.
+       */
+      name: "gene-keys-after-tombstone",
+      run: async () => {
+        await forgetMemberGeneKeys(pool, target.id);
       },
     },
     {

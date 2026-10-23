@@ -91,11 +91,6 @@ export function rolePay(role: ValuedWork, rules: readonly MintRule[], cash: Stat
   return { value: readWorkValue(role.valueMinor, role.valueCurrency), lines, source, cadence: "cycle", cash };
 }
 
-/** The recognition token's live name: a village may call it something else. */
-export function recognitionName(): string | null {
-  return tokenDef(HEARTS)?.name ?? null;
-}
-
 /**
  * One token a steward may put on a quest or a role. No ceiling rides along:
  * work is paid in full (Rye, 2026-10-22, `ceilingBinds` in shared/workValue.ts).

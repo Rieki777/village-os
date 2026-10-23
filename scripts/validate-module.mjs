@@ -117,7 +117,7 @@ function readModuleDocs() {
   const block = /export const MODULE_DOCS[^=]*=\s*\{([\s\S]*?)\n\};/.exec(src);
   if (!block) return null;
   const out = {};
-  for (const m of block[1].matchAll(/([A-Za-z0-9_]+)\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
+  for (const m of block[1].matchAll(/["']?([A-Za-z0-9_-]+)["']?\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
   return out;
 }
 
