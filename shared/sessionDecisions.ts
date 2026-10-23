@@ -124,10 +124,8 @@ export function cleanReviewOn(raw: unknown, today: string): { ok: true; value: s
   return { ok: true, value: v };
 }
 
-/** What a review's agenda item says: "Review: <the decision>". */
-export function reviewItemText(decisionText: string): string {
-  return `Review: ${decisionText.replace(/\s+/g, " ").trim()}`;
-}
+/** What opens a review's agenda item: "Review: <the decision>". It opens the title only; a long decision's note is its own words, whole. */
+export const REVIEW_ITEM_LEAD = "Review: ";
 
 // ── Words ────────────────────────────────────────────────────────────────────
 
@@ -148,7 +146,7 @@ export const DECISION_COPY = {
   decidedOn: (date: string): string => `Decided on ${date}`,
   reviewOn: (date: string): string => `Review on ${date}`,
   reviewDue: "Up for review now",
-  reviewBrought: "Its review is one of the circle's agenda items",
+  reviewBrought: (date: string): string => `Its review came on ${date} and went to the circle's agenda items`,
   noReview: "No review date",
   setReview: "Set a review date",
   changeReview: "Change the review date",
@@ -160,7 +158,9 @@ export const DECISION_COPY = {
   saved: (date: string): string => `Saved. It comes back for review on ${date}.`,
   cleared: "Saved. It has no review date now.",
   failed: "That did not go through. Try again in a moment.",
-  loadFailed: "The decisions didn't load. Try again in a moment.",
+  loading: "Loading the circle's decisions.",
+  loadFailed: "The decisions didn't load.",
+  retry: "Try again",
 } as const;
 
 export const DECISION_REFUSALS = {

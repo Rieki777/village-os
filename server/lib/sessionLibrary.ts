@@ -59,6 +59,7 @@ import {
   LIBRARY_MINUTES,
   LIBRARY_NOTICES,
   LIBRARY_REFUSALS,
+  addedByCircle,
   agendaAimFor,
   broughtLink,
   broughtRights,
@@ -193,6 +194,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
     const readable = !!s && (s.open || viewer.admin || joined.has(r.sessionId!));
     const rights = broughtRights(r, viewer);
     const mine = viewer.no != null && viewer.no > 0 && r.broughtByNo === viewer.no;
+    const source = sources.get(r.id) ?? null;
     return {
       id: r.id,
       title: r.title,
@@ -200,7 +202,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
       note: r.note,
       circleId: r.circleId,
       circleName: deps.circleName(r.circleId),
-      broughtBy: names.get(r.broughtByNo)?.name ?? SESSION_SOMEONE,
+      broughtBy: (r.broughtByNo === 0 && source ? addedByCircle(source.kind, source.label) : null) ?? names.get(r.broughtByNo)?.name ?? SESSION_SOMEONE,
       mine,
       broughtAt: r.createdAt,
       status: r.status,
@@ -208,7 +210,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
       settledAt: r.settledAt,
       backAt: r.status === "waiting" ? (backAt.get(r.id) ?? null) : null,
       changedBy: r.editedByNo != null && r.editedByNo !== r.broughtByNo ? (names.get(r.editedByNo)?.name ?? SESSION_SOMEONE) : null,
-      source: sources.get(r.id) ?? null,
+      source,
       canEdit: rights.words && r.status === "waiting",
       canMoveCircle: rights.circle && r.status === "waiting",
       canWithdraw: rights.withdraw,
@@ -302,10 +304,10 @@ export class TensionSentAlready extends Error {
 export async function itemFromTension(
   conn: PoolConnection,
   // `origin`, never `source`: in server code `source:` is a ledger source's key, and server/lib/contributionPay.test.ts reads every one.
-  row: { circleId: string | null; text: string; broughtByNo: number; origin: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
+  row: { circleId: string | null; text: string; lead?: string; broughtByNo: number; origin: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
 ): Promise<number | null> {
   if ((await store.sourceByRef(conn, row.origin.kind, row.origin.ref, true)).length) return null;
-  const { title, note } = tensionAsItem(row.text);
+  const { title, note } = tensionAsItem(row.text, row.lead);
   const id = await store.insertItemRow(conn, { circleId: row.circleId, title, aim: null, note, broughtByNo: row.broughtByNo, now: row.now });
   try {
     await store.insertSource(conn, { libraryId: id, kind: row.origin.kind, ref: row.origin.ref, label: row.origin.label, now: row.now });
@@ -669,7 +671,15 @@ export async function broughtByItem(q: Pool | PoolConnection, sessionId: number,
   const rows = await store.broughtForSession(q, sessionId);
   if (!rows.length) return new Map();
   const names = await namesFor(q, rows.map((r) => Number(r.brought_by_no)), lookup);
-  return new Map(rows.map((r) => [Number(r.item_id), { libraryId: Number(r.library_id), broughtBy: names.get(Number(r.brought_by_no))?.name ?? SESSION_SOMEONE }]));
+  // An item added by nobody in particular says whose it is: a decision's review is the circle's.
+  const byNobody = rows.filter((r) => Number(r.brought_by_no) === 0).map((r) => Number(r.library_id));
+  const circleOwn = new Map((await store.sourceRows(q, byNobody)).map((s) => [Number(s.library_id), addedByCircle(String(s.kind), String(s.label ?? ""))] as const));
+  return new Map(
+    rows.map((r) => [
+      Number(r.item_id),
+      { libraryId: Number(r.library_id), broughtBy: circleOwn.get(Number(r.library_id)) ?? names.get(Number(r.brought_by_no))?.name ?? SESSION_SOMEONE },
+    ]),
+  );
 }
 
 /** The agenda items of a session that came from the library, so "From last time" does not offer them twice. */

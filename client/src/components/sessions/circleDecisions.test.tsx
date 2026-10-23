@@ -6,7 +6,10 @@
  * of the viewer's own circle loads first, each decision saying where it was
  * decided and its review; a quick choice fills the date and Save sends it;
  * the review can be taken off; a review that has come and one that is on the
- * agenda items say so; and a refusal is said in the server's words.
+ * agenda items say so; a refusal is said in the server's words; the form
+ * takes the focus and starts a review that has come six months on; a log that
+ * did not load can be tried again; and the chosen circle follows the circles
+ * the viewer may keep.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -91,8 +94,47 @@ describe("decisions", () => {
       json(log([decision({ review: { on: TODAY, due: true, brought: false } }), decision({ entryId: 12, text: "Compost goes left.", session: null, review: { on: "2026-10-20", due: true, brought: true } })]));
     render(<CircleDecisions circles={circles} keepCircleIds={["garden"]} myCircleIds={["garden"]} />);
     expect(await screen.findByText(DECISION_COPY.reviewDue)).toBeInTheDocument();
-    expect(screen.getByText(DECISION_COPY.reviewBrought)).toBeInTheDocument();
+    expect(screen.getByText(DECISION_COPY.reviewBrought(dateWords("2026-10-20")))).toBeInTheDocument();
     expect(screen.getByText(DECISION_COPY.decidedOn(dateWords("2026-10-01")))).toBeInTheDocument();
+  });
+
+  it("takes the focus into the form, keeps a date still to come, and starts a review that has come six months on", async () => {
+    answers["GET /api/sessions/circles/garden/decisions"] = () =>
+      json(log([decision({ review: { on: TODAY, due: true, brought: true } }), decision({ entryId: 12, text: "Compost goes left.", review: { on: "2027-02-01", due: false, brought: false } })]));
+    render(<CircleDecisions circles={circles} keepCircleIds={["garden"]} myCircleIds={["garden"]} />);
+    const [cameAlready, stillToCome] = await screen.findAllByRole("button", { name: DECISION_COPY.changeReview });
+    fireEvent.click(cameAlready);
+    expect(screen.getByRole("group", { name: DECISION_COPY.changeReview })).toHaveFocus();
+    expect((screen.getByLabelText(DECISION_COPY.dateLabel) as HTMLInputElement).value).toBe(addMonthsTo(TODAY, 6));
+    fireEvent.click(screen.getByRole("button", { name: DECISION_COPY.cancel }));
+    fireEvent.click(stillToCome);
+    expect((screen.getByLabelText(DECISION_COPY.dateLabel) as HTMLInputElement).value).toBe("2027-02-01");
+  });
+
+  it("offers to try again when the log did not load", async () => {
+    let first = true;
+    answers["GET /api/sessions/circles/garden/decisions"] = () => {
+      if (!first) return json(log([decision()]));
+      first = false;
+      return json({ error: "x" }, 503);
+    };
+    render(<CircleDecisions circles={circles} keepCircleIds={["garden"]} myCircleIds={["garden"]} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(DECISION_COPY.failed);
+    fireEvent.click(screen.getByRole("button", { name: DECISION_COPY.retry }));
+    expect(await screen.findByText("We fill the tanks on Mondays.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("follows the circles the viewer may keep as the page refreshes them", async () => {
+    answers["GET /api/sessions/circles/kitchen/decisions"] = () => json({ ...log([decision({ entryId: 20, text: "Knives go back on the rail." })]), circleId: "kitchen" });
+    const { rerender } = render(<CircleDecisions circles={circles} keepCircleIds={[]} myCircleIds={[]} />);
+    expect(calls).toEqual([]);
+    rerender(<CircleDecisions circles={circles} keepCircleIds={["garden"]} myCircleIds={["garden"]} />);
+    expect(await screen.findByText("We fill the tanks on Mondays.")).toBeInTheDocument();
+    // The garden is no longer theirs to keep; the kitchen now is.
+    rerender(<CircleDecisions circles={circles} keepCircleIds={["kitchen"]} myCircleIds={["kitchen"]} />);
+    expect(await screen.findByText("Knives go back on the rail.")).toBeInTheDocument();
+    expect(calls.at(-1)).toMatchObject({ path: "/api/sessions/circles/kitchen/decisions", method: "GET" });
   });
 
   it("says a refusal in the server's words", async () => {

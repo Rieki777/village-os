@@ -362,11 +362,13 @@ to somebody who was in it, or an admin, and otherwise the card says only when it
 **A review date.** The same people set one ("In 3 months", "In 6 months", "In a year", or a date from
 tomorrow up to three years ahead), change it, or take it off. When the date comes, the hourly
 `session-decision-reviews` job (nothing before the module is open to members) makes "Review: <the
-decision>" an item waiting for the circle, added by nobody in particular so it stays the circle's,
-its source the decision and that date (0279: "A decision the Garden circle set a date to review"). The
-card then says its review is on the agenda items. Each review date is its own cycle: a new date lets the
-last one go, and each date's review is made once. The decision's record is never written to: 0280 keeps
-the date beside it.
+decision>" an item waiting for the circle, added by nobody in particular so it stays the circle's
+(its card says "Added by the Garden circle"), its source the decision and that date (0279: "A decision
+the Garden circle set a date to review"). A long decision's words reach the item's note whole; the
+"Review:" opens only its title. The card then says when its review came and that it went to the agenda
+items. Each review date is its own cycle: a new date lets the last one go, and each date's review is made
+once. The job reads only live circles' reviews, so a dormant circle's never hold up anybody else's. The
+decision's record is never written to: 0280 keeps the date beside it.
 
 | Door | Who | Limit |
 |---|---|---|
@@ -711,7 +713,8 @@ goes, because those were their words. A note that became an entry in a room is a
 it goes with the rest. A circle's rhythm they set last says it was set by nobody: the rhythm is the
 circle's, and stays. The circles they followed and their calendar address go, so the address answers
 nothing from then on. A circle's own calendar they attached says it was attached by nobody, and stays,
-and so does a decision's review date they set.
+and so does a decision's review date they set. A decision they wrote went with the rest of their words,
+so its review date goes too, with every "Review:" item made from it, since those carried the words.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,

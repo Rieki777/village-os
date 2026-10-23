@@ -7,7 +7,8 @@
  * The room's, the agenda library's and the decisions' route modules are
  * registered on a fake Express with the scratch schema's pool behind them.
  * THE CASES RUN IN ORDER: the garden decides once in week 1, then sets a
- * review date, and the review comes back.
+ * review date, and the review comes back. In week 2 Ben decides, Ana leaves
+ * the village, and last the log grows past two hundred decisions.
  *
  * No TEST_DATABASE_URL and the suite skips (harness rule).
  */
@@ -20,7 +21,7 @@ import { exportMemberSessions, register as registerRoom } from "./routes/liveSes
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { liveCircles } from "./routes/sessionRhythm";
 import { register as registerDecisions } from "./routes/sessionDecisions";
-import { DECISION_REFUSALS, addMonthsTo, type CircleDecisionLog } from "../shared/sessionDecisions";
+import { DECISION_REFUSALS, addDaysTo, addMonthsTo, type CircleDecisionLog } from "../shared/sessionDecisions";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 
@@ -80,6 +81,8 @@ describe.skipIf(!configured)("a circle's decisions and their review dates, again
   ];
   let week1 = 0;
   let tanks = 0;
+  let week2 = 0;
+  let compost = 0;
   const today = new Date().toISOString().slice(0, 10);
 
   const q = async (sql: string, params: unknown[] = []) => (await pool.query<any[]>(sql, params))[0]; // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, never a production table
@@ -102,6 +105,28 @@ describe.skipIf(!configured)("a circle's decisions and their review dates, again
     lifecycle: () => "members",
     ...over,
   });
+  /** A copy of a closed session in another circle, closed some seconds after it. */
+  const copySession = async (from: number, circleId: string, laterSec: number): Promise<number> => {
+    const cols = (await q("SHOW COLUMNS FROM `live_sessions`")).map((c: any) => String(c.Field)).filter((f: string) => f !== "id");
+    const params: unknown[] = [];
+    const picks = cols.map((f: string) => {
+      if (f === "circle_id") return params.push(circleId), "?";
+      if (f === "closed_at") return params.push(laterSec), "`closed_at` + INTERVAL ? SECOND";
+      return `\`${f}\``;
+    });
+    const out: any = await q(`INSERT INTO \`live_sessions\` (${cols.map((f: string) => `\`${f}\``).join(", ")}) SELECT ${picks.join(", ")} FROM \`live_sessions\` WHERE \`id\` = ?`, [...params, from]);
+    return Number(out.insertId);
+  };
+  /** Some copies of a decided decision, in another session. */
+  const copyDecisions = async (from: number, sessionId: number, count: number): Promise<void> => {
+    const cols = (await q("SHOW COLUMNS FROM `live_session_entries`")).map((c: any) => String(c.Field)).filter((f: string) => f !== "id");
+    const picks = cols.map((f: string) => (f === "session_id" ? "?" : `e.\`${f}\``));
+    const numbers = Array.from({ length: count }, (_, i) => `SELECT ${i} AS n`).join(" UNION ALL ");
+    await q(
+      `INSERT INTO \`live_session_entries\` (${cols.map((f: string) => `\`${f}\``).join(", ")}) SELECT ${picks.join(", ")} FROM \`live_session_entries\` e JOIN (${numbers}) k WHERE e.\`id\` = ?`,
+      [sessionId, from],
+    );
+  };
   const reviewItems = async () =>
     q(
       "SELECT l.`circle_id`, l.`title`, l.`brought_by_no`, l.`status`, s.`ref`, s.`label` FROM `live_session_library` l " +
@@ -172,21 +197,27 @@ describe.skipIf(!configured)("a circle's decisions and their review dates, again
 
   it("makes a review that has come one of the circle's agenda items, once", async () => {
     expect(await runDecisionReviews(jobDeps())).toBe("0 decision review(s) on the agenda items");
-    // The date comes.
-    await q("UPDATE `live_session_decision_reviews` SET `review_on` = ? WHERE `entry_id` = ?", [today, tanks]);
+    // The date comes. It was set long ago, and the job never says otherwise: the export reports when it was set.
+    await q("UPDATE `live_session_decision_reviews` SET `review_on` = ?, `updated_at` = '2026-01-02 03:04:05' WHERE `entry_id` = ?", [today, tanks]);
     expect(await runDecisionReviews(jobDeps({ lifecycle: () => "preview" }))).toBe("the sessions module is not open to members");
     expect(await runDecisionReviews(jobDeps())).toBe("1 decision review(s) on the agenda items");
     expect(await reviewItems()).toEqual([
       { circle_id: "c-garden", title: "Review: We fill the tanks on Mondays.", brought_by_no: 0, status: "waiting", ref: `${tanks}:${today}`, label: "Garden circle" },
     ]);
     expect(((await log("m-ana")).body as CircleDecisionLog).decisions[0].review).toEqual({ on: today, due: true, brought: true });
+    expect(await q("SELECT DATE_FORMAT(`updated_at`, '%Y-%m-%d %H:%i:%s') AS `at` FROM `live_session_decision_reviews` WHERE `entry_id` = ?", [tanks])).toEqual([{ at: "2026-01-02 03:04:05" }]);
     // Asked again, nothing more.
     expect(await runDecisionReviews(jobDeps())).toBe("0 decision review(s) on the agenda items");
     expect(await reviewItems()).toHaveLength(1);
     // The circle's members find it with the rest of its agenda items, saying where it came from.
     const list = await as("m-cai", "GET /api/sessions");
     expect(list.body.library.items).toContainEqual(
-      expect.objectContaining({ title: "Review: We fill the tanks on Mondays.", circleId: "c-garden", source: { kind: "decision_review", label: "Garden circle" } }),
+      expect.objectContaining({
+        title: "Review: We fill the tanks on Mondays.",
+        circleId: "c-garden",
+        broughtBy: "the Garden circle",
+        source: { kind: "decision_review", label: "Garden circle" },
+      }),
     );
   });
 
@@ -204,11 +235,46 @@ describe.skipIf(!configured)("a circle's decisions and their review dates, again
     expect((await reviewItems()).map((r: any) => r.ref)).toEqual([`${tanks}:${today}`, `${tanks}:${tomorrow}`]);
   });
 
-  it("exports the review dates a member set, and keeps them as the circle's when the member leaves", async () => {
-    expect((await exportMemberSessions(pool, "m-ana")).reviewsSet).toEqual([expect.objectContaining({ entryId: tanks })]);
+  it("exports the review dates a member set; when they leave, a date they set stays the circle's, and a decision they wrote takes its review with it", async () => {
+    // Week 2: Ben decides compost goes left, with Ana in the room, and Ana sets when it is reviewed.
+    week2 = Number((await as("m-ben", "POST /api/sessions", { body: { title: "Garden, week 2", circleId: "c-garden", durationMin: 60 } })).body.id);
+    expect((await as("m-ana", "POST /api/sessions/:id/join", { params: { id: String(week2) } })).status).toBe(200);
+    compost = Number((await as("m-ben", "POST /api/sessions/:id/entries", { params: { id: String(week2) }, body: { kind: "decision", text: "Compost goes left.", itemId: null } })).body.id);
+    await q("UPDATE `live_session_entries` SET `status` = 'done' WHERE `id` = ?", [compost]);
+    expect((await as("m-ben", "POST /api/sessions/:id/close", { params: { id: String(week2) } })).status).toBe(200);
+    expect((await review("m-ana", compost, addMonthsTo(today, 2))).status).toBe(200);
+    expect((await exportMemberSessions(pool, "m-ana")).reviewsSet.map((r: any) => r.entryId)).toEqual([tanks, compost]);
     await forgetMemberSessions(pool, "m-ana", async (id) => PEOPLE[id] ?? null);
-    expect(await q("SELECT `set_by_no` FROM `live_session_decision_reviews` WHERE `entry_id` = ?", [tanks])).toEqual([{ set_by_no: 0 }]);
-    // The review items were the circle's, added by nobody in particular, and stay.
-    expect(await reviewItems()).toHaveLength(2);
+    // The date Ana set on Ben's decision is the circle's, and stays.
+    expect(await q("SELECT `entry_id`, `set_by_no` FROM `live_session_decision_reviews` ORDER BY `entry_id`")).toEqual([{ entry_id: compost, set_by_no: 0 }]);
+    // Her own decision went with the rest of her words, and so did its review and every "Review:" item that carried them.
+    expect(await reviewItems()).toEqual([]);
+    expect(await q("SELECT `id` FROM `live_session_library` WHERE CONCAT(`title`, ' ', COALESCE(`note`, '')) LIKE '%tanks%'")).toEqual([]);
+  });
+
+  it("brings a live circle's review when two hundred of a gone circle's wait first, and reads back a decision older than the newest two hundred", async () => {
+    // Two hundred decided decisions in a circle that is gone, each with a review that came a month ago...
+    const gone = await copySession(week2, "c-gone", 0);
+    await copyDecisions(compost, gone, 200);
+    await q(
+      "INSERT INTO `live_session_decision_reviews` (`entry_id`, `review_on`, `set_by_no`, `library_id`, `created_at`, `updated_at`) " +
+        "SELECT `id`, ?, 0, NULL, NOW(), NOW() FROM `live_session_entries` WHERE `session_id` = ?",
+      [addDaysTo(today, -30), gone],
+    );
+    // ...and two hundred more in the garden, decided after compost.
+    const newer = await copySession(week2, "c-garden", 60);
+    await copyDecisions(compost, newer, 200);
+    expect(((await log("m-founder")).body as CircleDecisionLog).decisions.map((d) => d.entryId)).not.toContain(compost);
+    // Compost is older than the log shows, and its new date reads back.
+    const on = addMonthsTo(today, 4);
+    const set = await review("m-founder", compost, on);
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    expect(set.body.decision).toMatchObject({ entryId: compost, text: "Compost goes left.", session: { id: week2, title: "Garden, week 2" }, review: { on, due: false, brought: false } });
+    // Its date comes, and the gone circle's two hundred do not stand in its way.
+    await q("UPDATE `live_session_decision_reviews` SET `review_on` = ? WHERE `entry_id` = ?", [today, compost]);
+    expect(await runDecisionReviews(jobDeps())).toBe("1 decision review(s) on the agenda items");
+    expect(await reviewItems()).toEqual([
+      { circle_id: "c-garden", title: "Review: Compost goes left.", brought_by_no: 0, status: "waiting", ref: `${compost}:${today}`, label: "Garden circle" },
+    ]);
   });
 });

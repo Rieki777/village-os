@@ -12,7 +12,9 @@
  * daily job makes "Review: <the decision>" an agenda item for the circle.
  *
  * Every write reads `res.ok` before it says anything, what landed is read out
- * in one polite line, and the focus returns to the button that opened a form.
+ * in one polite line, the focus moves into a form when it opens and returns to
+ * the button that opened it. A log that did not load can be tried again, and
+ * the chosen circle follows the circles the viewer may keep as they change.
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -28,6 +30,7 @@ import {
   type CircleDecisionLog,
 } from "@shared/sessionDecisions";
 import { gameFetch } from "@/lib/gameApi";
+import { cn } from "@/lib/utils";
 import { BTN_PRIMARY, BTN_QUIET, CHIP, HINT, INPUT, LABEL, PANEL, UNDER_BOX } from "./roomUi";
 
 type Sent<T> = { ok: true; body: T } | { ok: false; error: string };
@@ -56,19 +59,27 @@ function Decision({
   onSaved: (d: CircleDecision, said: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(decision.review?.on ?? addMonthsTo(today, 6));
+  const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  const group = useRef<HTMLDivElement>(null);
   const backToOpener = useRef(false);
   const idBase = `decision-${decision.entryId}`;
 
   useEffect(() => {
-    if (!open && backToOpener.current) {
+    if (open) group.current?.focus();
+    else if (backToOpener.current) {
       backToOpener.current = false;
       opener.current?.focus();
     }
   }, [open]);
+
+  // A review still to come keeps its date; one that has come starts the next cycle six months on.
+  const startForm = () => {
+    setDate(decision.review && decision.review.on > today ? decision.review.on : addMonthsTo(today, 6));
+    setOpen(true);
+  };
 
   const close = () => {
     backToOpener.current = true;
@@ -93,7 +104,7 @@ function Decision({
   const reviewLine = !review
     ? DECISION_COPY.noReview
     : review.brought
-      ? DECISION_COPY.reviewBrought
+      ? DECISION_COPY.reviewBrought(dateWords(review.on))
       : review.due
         ? DECISION_COPY.reviewDue
         : DECISION_COPY.reviewOn(dateWords(review.on));
@@ -105,10 +116,16 @@ function Decision({
         {decision.session ? DECISION_COPY.decidedIn(decision.session.title, dateWords(decision.decidedOn)) : DECISION_COPY.decidedOn(dateWords(decision.decidedOn))}
       </p>
       <p className="mt-1 text-sm">
-        <span className={review?.due && !review.brought ? `${CHIP} border-notice text-foreground` : "text-muted-foreground"}>{reviewLine}</span>
+        <span className={review?.due && !review.brought ? cn(CHIP, "border-notice text-foreground") : "text-muted-foreground"}>{reviewLine}</span>
       </p>
       {open ? (
-        <div role="group" aria-label={review ? DECISION_COPY.changeReview : DECISION_COPY.setReview} className="mt-3 space-y-3 rounded-xl border border-border bg-muted px-3 py-3">
+        <div
+          ref={group}
+          tabIndex={-1}
+          role="group"
+          aria-label={review ? DECISION_COPY.changeReview : DECISION_COPY.setReview}
+          className="mt-3 space-y-3 rounded-xl border border-border bg-muted px-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <div className="flex flex-wrap gap-2">
             {REVIEW_CHOICES.map((months) => (
               <button key={months} type="button" className={BTN_QUIET} disabled={busy} onClick={() => setDate(addMonthsTo(today, months))}>
@@ -151,7 +168,7 @@ function Decision({
         </div>
       ) : (
         <div className="mt-2">
-          <button ref={opener} type="button" className={BTN_QUIET} onClick={() => setOpen(true)}>
+          <button ref={opener} type="button" className={BTN_QUIET} onClick={startForm}>
             {review ? DECISION_COPY.changeReview : DECISION_COPY.setReview}
           </button>
         </div>
@@ -169,11 +186,33 @@ export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }:
   const [log, setLog] = useState<CircleDecisionLog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState("");
+  const [tries, setTries] = useState(0);
+  const sayLater = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepableIds = keepable.map((c) => c.id).join(" ");
+
+  // The circles the viewer may keep change with the page's refresh: the chosen one follows them.
+  useEffect(() => {
+    const ids = keepableIds ? keepableIds.split(" ") : [];
+    if (!ids.includes(circleId)) setCircleId(ids[0] ?? "");
+  }, [keepableIds, circleId]);
+
+  // What landed is read out each time, the same words twice included, and never under another circle.
+  const say = (words: string) => {
+    setSaid("");
+    if (sayLater.current) clearTimeout(sayLater.current);
+    sayLater.current = setTimeout(() => setSaid(words), 50);
+  };
+  useEffect(() => () => {
+    if (sayLater.current) clearTimeout(sayLater.current);
+  }, []);
 
   useEffect(() => {
+    setSaid("");
+    if (sayLater.current) clearTimeout(sayLater.current);
     if (!circleId) return;
     let live = true;
     setLog(null);
+    setError(null);
     void call<CircleDecisionLog>(circleDecisionsUrl(circleId), "GET").then((out) => {
       if (!live) return;
       // An answer without the list (an older server, a proxy's page) says it didn't load, and never takes the page down.
@@ -185,7 +224,7 @@ export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }:
     return () => {
       live = false;
     };
-  }, [circleId]);
+  }, [circleId, tries]);
 
   if (!keepable.length) return null;
   const circleName = keepable.find((c) => c.id === circleId)?.name ?? "";
@@ -212,10 +251,16 @@ export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }:
           </div>
         )}
         {error && (
-          <p role="alert" className="text-sm font-medium text-destructive">
-            {error}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p role="alert" className="text-sm font-medium text-destructive">
+              {error}
+            </p>
+            <button type="button" className={BTN_QUIET} onClick={() => setTries((n) => n + 1)}>
+              {DECISION_COPY.retry}
+            </button>
+          </div>
         )}
+        {!log && !error && <p className={HINT}>{DECISION_COPY.loading}</p>}
         {log &&
           (log.decisions.length === 0 ? (
             <p className={HINT}>{DECISION_COPY.empty(circleName)}</p>
@@ -229,7 +274,7 @@ export default function CircleDecisions({ circles, keepCircleIds, myCircleIds }:
                   decision={d}
                   onSaved={(next, words) => {
                     setLog((l) => (l ? { ...l, decisions: l.decisions.map((x) => (x.entryId === next.entryId ? next : x)) } : l));
-                    setSaid(words);
+                    say(words);
                   }}
                 />
               ))}

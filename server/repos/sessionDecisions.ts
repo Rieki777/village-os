@@ -7,7 +7,8 @@
  *
  * Each function hands back what the driver handed back. Mapping, rights and
  * refusals stay in the lib, the split server/repos/liveSessions.ts makes.
- * Every UPDATE sets `updated_at`: the column has no ON UPDATE.
+ * `updated_at` is when the date was set (the column has no ON UPDATE), which
+ * the export reports: the job marking a review brought leaves it alone.
  */
 import type { RowDataPacket } from "mysql2/promise";
 import type { Queryable } from "./liveSessions";
@@ -31,11 +32,11 @@ export async function decisionRows(q: Queryable, circleId: string, limit: number
   );
 }
 
-/** One decision, with its session's circle, when it is a decided decision of a closed session. */
+/** One decision, with its session's circle, title and close, when it is a decided decision of a closed session. */
 export async function decisionRow(q: Queryable, entryId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT e.`id`, e.`text`, e.`session_id`, s.`circle_id` FROM `live_session_entries` e JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
+    "SELECT e.`id`, e.`text`, e.`session_id`, s.`circle_id`, s.`title`, s.`closed_at` FROM `live_session_entries` e JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
       "WHERE e.`id` = ? AND s.`status` = 'closed' AND e.`kind` = 'decision' AND e.`status` = 'done' LIMIT 1",
     [entryId],
   );
@@ -60,22 +61,30 @@ export async function deleteReview(q: Queryable, entryId: number): Promise<void>
   await q.query("DELETE FROM `live_session_decision_reviews` WHERE `entry_id` = ?", [entryId]);
 }
 
-/** The reviews that have come and are not yet agenda items, with each decision's words and circle. */
-export async function dueRows(q: Queryable, today: string): Promise<RowDataPacket[]> {
+/**
+ * The reviews of live circles that have come and are not yet agenda items,
+ * with each decision's words and circle. Only live circles': a dormant one's
+ * waiting reviews would otherwise fill every run's two hundred for good.
+ */
+export async function dueRows(q: Queryable, today: string, circleIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (none(circleIds)) return [];
   return rowsOf(
     q,
     "SELECT r.`entry_id`, r.`review_on`, r.`set_by_no`, e.`text`, s.`circle_id` FROM `live_session_decision_reviews` r " +
       "JOIN `live_session_entries` e ON e.`id` = r.`entry_id` JOIN `live_sessions` s ON s.`id` = e.`session_id` " +
-      "WHERE r.`review_on` <= ? AND r.`library_id` IS NULL ORDER BY r.`review_on`, r.`entry_id` LIMIT 200",
-    [today],
+      "WHERE r.`review_on` <= ? AND r.`library_id` IS NULL AND s.`circle_id` IN (?) ORDER BY r.`review_on`, r.`entry_id` LIMIT 200",
+    [today, circleIds],
   );
 }
 
-/** A due review became an agenda item. Only the cycle it was due in: a date changed meanwhile is a new one. */
-export async function markBrought(q: Queryable, entryId: number, reviewOn: string, libraryId: number, now: Date): Promise<number> {
+/**
+ * A due review became an agenda item. Only the cycle it was due in: a date
+ * changed meanwhile is a new one. `updated_at` stays when the date was set.
+ */
+export async function markBrought(q: Queryable, entryId: number, reviewOn: string, libraryId: number): Promise<number> {
   const [r] = await q.query<any>(
-    "UPDATE `live_session_decision_reviews` SET `library_id` = ?, `updated_at` = ? WHERE `entry_id` = ? AND `review_on` = ? AND `library_id` IS NULL",
-    [libraryId, now, entryId, reviewOn],
+    "UPDATE `live_session_decision_reviews` SET `library_id` = ? WHERE `entry_id` = ? AND `review_on` = ? AND `library_id` IS NULL",
+    [libraryId, entryId, reviewOn],
   );
   return Number(r.affectedRows ?? 0);
 }
@@ -90,4 +99,20 @@ export async function memberRows(q: Queryable, no: number): Promise<RowDataPacke
 /** The member leaves: a review date they set says it was set by nobody. The date is the circle's, and stays. */
 export async function forgetMember(q: Queryable, no: number): Promise<void> {
   await q.query("UPDATE `live_session_decision_reviews` SET `set_by_no` = 0 WHERE `set_by_no` = ?", [no]);
+}
+
+/** Every agenda item some decisions' reviews became, whatever came of it since (a source's ref is "<entryId>:<reviewOn>"). */
+export async function reviewItemRows(q: Queryable, entryIds: readonly number[]): Promise<RowDataPacket[]> {
+  if (none(entryIds)) return [];
+  return rowsOf(
+    q,
+    "SELECT `library_id` FROM `live_session_library_sources` WHERE `kind` = 'decision_review' AND SUBSTRING_INDEX(`ref`, ':', 1) IN (?)",
+    [entryIds.map(String)],
+  );
+}
+
+/** Some decisions' review dates go. */
+export async function deleteReviews(q: Queryable, entryIds: readonly number[]): Promise<void> {
+  if (none(entryIds)) return;
+  await q.query("DELETE FROM `live_session_decision_reviews` WHERE `entry_id` IN (?)", [entryIds]);
 }

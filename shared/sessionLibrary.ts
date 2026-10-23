@@ -127,8 +127,9 @@ export interface LibrarySource {
  * fits, and otherwise the start of it as the title, with every word in the
  * note, so nothing the tension said is lost.
  */
-export function tensionAsItem(text: string): { title: string; note: string | null } {
-  const line = text.replace(/\s+/g, " ").trim();
+export function tensionAsItem(text: string, lead = ""): { title: string; note: string | null } {
+  // A lead ("Review: ") opens the title only, so the note keeps the words themselves whole.
+  const line = `${lead}${text.replace(/\s+/g, " ").trim()}`;
   if (line.length <= LIBRARY_LIMITS.title) return { title: line, note: null };
   const cut = line.slice(0, LIBRARY_LIMITS.title - 3);
   const atWord = cut.lastIndexOf(" ") > LIBRARY_LIMITS.title / 2 ? cut.slice(0, cut.lastIndexOf(" ")) : cut;
@@ -566,6 +567,15 @@ export const LIBRARY_COPY = {
 } as const;
 
 /** The line a card says about where it came from, keyed by the source union. */
+/**
+ * Who an item says added it when nobody in particular did (`brought_by_no` 0):
+ * a decision's review is the circle's own. Null for anything else, which keeps
+ * the name the library would give it.
+ */
+export function addedByCircle(kind: string, label: string): string | null {
+  return kind === "decision_review" && label.trim() ? `the ${circleWords(label)}` : null;
+}
+
 export const LIBRARY_SOURCE_LINE: Record<LibrarySourceKind, (label: string) => string> = {
   role_tension: (role) => `From a tension raised with ${role}`,
   room_tension: (circle) => (circle ? `From a tension named in a session of the ${circleWords(circle)}` : "From a tension named in a session"),

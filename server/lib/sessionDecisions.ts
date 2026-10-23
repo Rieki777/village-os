@@ -21,7 +21,9 @@
  * makes any sourced item), its source the decision and that date (0279), so
  * each review cycle is its own item and none is made twice. It is added by
  * nobody in particular: it is the circle's, and stays when the member who set
- * the date leaves. The decision's record is never written to.
+ * the date leaves. It carries the decision's words, so when the member who
+ * wrote the decision leaves, it goes with them. The decision's record is
+ * never written to.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
 import * as store from "../repos/sessionDecisions";
@@ -34,7 +36,7 @@ import { effectiveLifecycle } from "./modules";
 import type { LapseContext } from "./orgChart";
 import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import { mayKeepRhythm, villageKey } from "../../shared/sessionRhythm";
-import { DECISION_LIMITS, DECISION_REFUSALS, cleanReviewOn, reviewItemText, type CircleDecision, type CircleDecisionLog } from "../../shared/sessionDecisions";
+import { DECISION_LIMITS, DECISION_REFUSALS, REVIEW_ITEM_LEAD, cleanReviewOn, type CircleDecision, type CircleDecisionLog } from "../../shared/sessionDecisions";
 
 const refuse = (status: number, error: string): Refusal => ({ ok: false, status, error });
 const done = <T>(value: T): Outcome<T> => ({ ok: true, value });
@@ -125,10 +127,11 @@ export async function setReview(
   if (!input.ok) return refuse(400, input.error);
   if (input.value == null) await store.deleteReview(pool, entryId);
   else await store.putReview(pool, { entryId, reviewOn: input.value, setByNo: no ?? (await ensureMemberNo(pool, who.userId, now)), now });
-  const log = await circleDecisionLog(pool, who, circleId, deps, now);
-  const found = log.ok ? log.value.decisions.find((d) => d.entryId === entryId) : undefined;
-  if (!found) throw new Error("live sessions: a decision just reviewed could not be read back");
-  return done({ decision: found });
+  // Read back this one decision, wherever it sits in the log: the log shows only the newest.
+  const [review] = await store.reviewRows(pool, [entryId]);
+  const sessionId = Number(decision.session_id);
+  const readable = who.admin || (no != null && (await room.joinedRows(pool, no, [sessionId])).length > 0);
+  return done({ decision: asDecision(decision, review, readable, today, zone) });
 }
 
 /** The job's name and pace: hourly, so a review that has come is on the agenda items the same day. */
@@ -147,7 +150,7 @@ export async function runDecisionReviews(deps: DecisionDeps & { getPool: () => P
   const live = new Map(deps.circles().map((c) => [c.id, c]));
   const today = villageKey(now, villageTimezone());
   let made = 0;
-  for (const due of await store.dueRows(pool, today)) {
+  for (const due of await store.dueRows(pool, today, Array.from(live.keys()))) {
     const circle = due.circle_id == null ? undefined : live.get(String(due.circle_id));
     if (!circle) continue;
     const entryId = Number(due.entry_id);
@@ -157,14 +160,15 @@ export async function runDecisionReviews(deps: DecisionDeps & { getPool: () => P
       await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<null>> => {
         const id = await itemFromTension(conn, {
           circleId: circle.id,
-          text: reviewItemText(String(due.text ?? "")),
+          text: String(due.text ?? ""),
+          lead: REVIEW_ITEM_LEAD,
           broughtByNo: 0,
           origin: { kind: "decision_review", ref, label: circle.name },
           now,
         });
         // Made already in an earlier run that did not get as far as marking it: mark the one there is.
         const libraryId = id ?? Number((await libraryStore.sourceByRef(conn, "decision_review", ref))[0]?.library_id ?? 0);
-        if (libraryId > 0 && (await store.markBrought(conn, entryId, reviewOn, libraryId, now))) made += id != null ? 1 : 0;
+        if (libraryId > 0 && (await store.markBrought(conn, entryId, reviewOn, libraryId))) made += id != null ? 1 : 0;
         return done(null);
       });
     } catch (e) {
@@ -182,7 +186,14 @@ export async function exportReviewsFor(pool: Pool, no: number): Promise<Record<s
   return (await store.memberRows(pool, no)).map((r) => ({ entryId: Number(r.entry_id), reviewOn: String(r.review_on), setAt: asDate(r.updated_at).toISOString() }));
 }
 
-/** The member leaves, inside the erasure's transaction. */
-export async function forgetReviewsFor(conn: PoolConnection, no: number): Promise<void> {
+/**
+ * The member leaves, inside the erasure's transaction. A review date they set
+ * says it was set by nobody, and stays the circle's. The decisions they wrote
+ * went with the rest of their words, so each one's review date goes too, with
+ * every "Review:" agenda item made from it, since those carried the words.
+ */
+export async function forgetReviewsFor(conn: PoolConnection, no: number, writtenDecisionIds: readonly number[]): Promise<void> {
+  await libraryStore.deleteItems(conn, (await store.reviewItemRows(conn, writtenDecisionIds)).map((r) => Number(r.library_id)));
+  await store.deleteReviews(conn, writtenDecisionIds);
   await store.forgetMember(conn, no);
 }

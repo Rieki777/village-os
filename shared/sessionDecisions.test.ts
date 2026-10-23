@@ -4,8 +4,8 @@
  * against a real schema in server/sessionDecisions.db.test.ts.
  */
 import { describe, expect, it } from "vitest";
-import { DECISION_LIMITS, DECISION_REFUSALS, addDaysTo, addMonthsTo, cleanReviewOn, dateWords, reviewItemText } from "./sessionDecisions";
-import { LIBRARY_SOURCE_LINE } from "./sessionLibrary";
+import { DECISION_LIMITS, DECISION_REFUSALS, REVIEW_ITEM_LEAD, addDaysTo, addMonthsTo, cleanReviewOn, dateWords } from "./sessionDecisions";
+import { LIBRARY_LIMITS, LIBRARY_SOURCE_LINE, addedByCircle, tensionAsItem } from "./sessionLibrary";
 
 const TODAY = "2026-10-22";
 
@@ -39,9 +39,21 @@ describe("the date arithmetic", () => {
 });
 
 describe("the words", () => {
-  it("names a review's agenda item, a date, and where the item came from", () => {
-    expect(reviewItemText("  We fill the tanks\non Mondays. ")).toBe("Review: We fill the tanks on Mondays.");
+  it("names a review's agenda item, a date, where the item came from, and who added it", () => {
+    expect(tensionAsItem("  We fill the tanks\non Mondays. ", REVIEW_ITEM_LEAD)).toEqual({ title: "Review: We fill the tanks on Mondays.", note: null });
     expect(dateWords("2027-04-22")).toBe("22 April 2027");
     expect(LIBRARY_SOURCE_LINE.decision_review("Garden")).toBe("A decision the Garden circle set a date to review");
+    expect(addedByCircle("decision_review", "Garden")).toBe("the Garden circle");
+    expect(addedByCircle("decision_review", "Kitchen circle")).toBe("the Kitchen circle");
+    expect(addedByCircle("room_tension", "Garden")).toBeNull();
+  });
+
+  it("opens only the title with the lead, so a long decision reaches the note whole", () => {
+    const words = `${"We water the beds by the gate at dawn. ".repeat(60)}End.`.slice(-LIBRARY_LIMITS.note);
+    const out = tensionAsItem(words, REVIEW_ITEM_LEAD);
+    expect(out.title.startsWith(REVIEW_ITEM_LEAD)).toBe(true);
+    expect(out.title.length).toBeLessThanOrEqual(LIBRARY_LIMITS.title);
+    expect(out.note).toBe(words.trim());
+    expect(out.note!.endsWith("End.")).toBe(true);
   });
 });

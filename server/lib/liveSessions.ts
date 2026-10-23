@@ -2106,7 +2106,12 @@ export async function forgetMemberSessions(pool: Pool, userId: string, lookup: M
     // A circle's rhythm (0271): one they set last says it was set by nobody.
     await forgetRhythmsFor(conn, no);
     await forgetFollowsFor(conn, no);
-    await forgetReviewsFor(conn, no);
+    // A decision's review (0280): the date and its items go with a decision they wrote.
+    await forgetReviewsFor(
+      conn,
+      no,
+      written.filter((e) => String(e.kind) === "decision").map((e) => Number(e.id)),
+    );
   });
   await repo.deleteMemberNo(pool, no);
 }
