@@ -176,6 +176,9 @@ export type VouchRefusal = { error: string } | null;
  */
 const VOUCHING_OFF = "This village has turned vouching off. Its stewards admit new members.";
 
+/** What a vouch for a member who has left the village meets, ordinary or super. */
+export const VOUCHED_IS_GONE = "They have left the village, so there is nobody here to vouch for.";
+
 /**
  * The refusal an ordinary vouch meets in a village that has turned vouching off.
  *
@@ -204,6 +207,13 @@ export function refuseVouch(input: {
   vouchedUserId: string;
   existing: readonly Vouch[];
   vouchedIsMember: boolean;
+  /**
+   * The person receiving it is a tombstone: a member who asked to be
+   * forgotten. Required, so no caller can forget to answer it. A vouch for
+   * them would be a sentence about somebody gone, and a super vouch, or the
+   * vouch that meets the bar, would set a tombstone's membership back on.
+   */
+  vouchedIsGone: boolean;
   /** 'member' when absent. A super vouch passes a village with vouching off. */
   kind?: string;
   /** The village's bar. Absent reads as the launch bar, which is on. */
@@ -212,6 +222,9 @@ export function refuseVouch(input: {
   if (!input.voucherUserId || !input.vouchedUserId) {
     return { error: "A vouch needs somebody giving it and somebody receiving it." };
   }
+  // Before every other rule, including the village's own dial: whatever the
+  // village has set, there is nobody here to receive this one.
+  if (input.vouchedIsGone) return { error: VOUCHED_IS_GONE };
   const closed = vouchingOffRefusal(input.kind ?? "member", input.needed ?? DEFAULT_VOUCHES_FOR_MEMBERSHIP);
   if (closed) return closed;
   if (input.voucherUserId === input.vouchedUserId) {

@@ -1,5 +1,6 @@
 /**
- * Housing reads, in a repo because that is where reads live.
+ * Housing reads, in a repo because that is where reads live, and the one
+ * write the erasure makes (`scrubReservationsOf`, at the end of the file).
  *
  * `reservationsForMember` was written in `server/lib/housing.ts` on the
  * reasoning that a table's readers should stay in one file. The rule wants the
@@ -58,4 +59,39 @@ export async function reservationsForMember(
     userId: r.user_id == null ? null : String(r.user_id),
     createdAt: String(r.created_at),
   }));
+}
+
+/**
+ * Scrub every housing request that is this member's, for the erasure's
+ * `housing-reservations-after-tombstone` step (server/lib/erasure.ts).
+ *
+ * SCRUBBED, NEVER DELETED. A `reserved` row is a home held, and while a
+ * hamlet's `taken_source` is 'reservations' it counts toward that hamlet's
+ * homes taken, so deleting it would hand the home back on the public map with
+ * nobody having decided that. The row keeps its home type, hamlet, route and
+ * status, and loses everything that names the person: the name becomes the
+ * tombstone's label, the address becomes the tombstone's address, and the
+ * phone, the notes and the account link go.
+ *
+ * WHICH ROWS ARE THEIRS. Every row on their account, and every row sent under
+ * their address before they had one (the public form needs no sign-in, so a
+ * request made before joining carries no `user_id`). The address is matched
+ * the way the path facts match it (server/repos/commsPathFacts.ts), trimmed and
+ * lower-cased. `emailKey` is empty on a resume that reads the tombstone and
+ * no longer knows the old address, and then only the account's rows are found,
+ * the same limit the comms step states.
+ *
+ * Idempotent: it writes constants, and a second run either matches nothing or
+ * writes the same values again.
+ */
+export async function scrubReservationsOf(
+  pool: Pool,
+  input: { userId: string; emailKey: string; name: string; address: string },
+): Promise<number> {
+  const [r]: any = await pool.query(
+    "UPDATE housing_reservations SET name = ?, email = ?, phone = NULL, notes = NULL, user_id = NULL " +
+      "WHERE village_id = ? AND (user_id = ? OR (? <> '' AND LOWER(TRIM(email)) = ?))",
+    [input.name, input.address, VILLAGE, input.userId, input.emailKey, input.emailKey],
+  );
+  return Number(r?.affectedRows ?? 0);
 }
