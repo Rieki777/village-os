@@ -22,6 +22,11 @@
  * A notice about a meeting links to `/sessions#coming-<circle>`. The row with
  * that anchor is lit, scrolled to and focused once the list holds it, on the
  * first visit and when the link is followed from the page itself.
+ *
+ * "Follow the calendar" sits at the foot of the section (FollowCalendar.tsx):
+ * any member puts the circles they choose on their own calendar. It shows
+ * whenever the village has a circle, a rhythm or not, so "every circle, new
+ * ones too" can be chosen before the first rhythm is set.
  */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -38,6 +43,7 @@ import {
   type RhythmInput,
 } from "@shared/sessionRhythm";
 import { gameFetch } from "@/lib/gameApi";
+import FollowCalendar from "./FollowCalendar";
 import RhythmForm from "./RhythmForm";
 import { useHash } from "./useHash";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, EYEBROW, HINT, LABEL_CAPS, PANEL } from "./roomUi";
@@ -252,7 +258,7 @@ export default function ComingUp({
 
   // A circle that has a rhythm changes it from its own row, so this form only sets new ones.
   const keepable = circles.filter((c) => comingUp.keepCircleIds.includes(c.id) && !comingUp.rows.some((r) => r.circleId === c.id));
-  if (!comingUp.rows.length && !keepable.length) return null;
+  if (!comingUp.rows.length && !keepable.length && !circles.length) return null;
 
   const closeForm = () => {
     backToSet.current = true;
@@ -334,6 +340,7 @@ export default function ComingUp({
           )}
         </div>
       )}
+      <FollowCalendar />
     </section>
   );
 }

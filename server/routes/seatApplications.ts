@@ -128,6 +128,8 @@ import {
   type StoredApplication,
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
+import { proposalsForApplications, type StoredProposal } from "../repos/roleProposals";
+import { changesRoles, PROPOSAL_WORDS } from "../../shared/roleProposals";
 import { groupApplications, groupingContext, PAST_SEATING_WORDS } from "../../shared/applicationGroups";
 import { registerJob } from "../lib/scheduler";
 import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../lib/seatApplicationWaiting";
@@ -187,6 +189,39 @@ const MEMBERS_ONLY = { error: "auth_required", message: "Members read role appli
 /** A text not written yet has nothing to end (PR8). */
 const NO_ACTS = { mayGiveNotice: false, notice: null, mayEndByAgreement: false, ask: null };
 const PENDING_MESSAGE = "You already have an application waiting on a decision for one of these roles. Withdraw it first, or wait for it.";
+
+/** What the member door answers: a status and the JSON body the route would send. */
+export interface DoorAnswer {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+/** How a role proposal's submit asks the door for more than a plain application (role proposals PR A). */
+export interface ApplyOptions {
+  /** Roles the application names that the village has not created yet: a proposal's new roles, by id and name. */
+  pendingRoles?: ReadonlyArray<{ id: string; name: string }>;
+  /** Wait on a holder whatever the power's rule says, and never open a vote. */
+  holderOnly?: boolean;
+  /**
+   * Written inside the application's own transaction, after it. Throw an error
+   * with `code: "DOOR_REFUSED"`, a `status` and a `body` to refuse, and the
+   * whole application rolls back with it.
+   */
+  alsoWrite?: (conn: PoolConnection, applicationId: string) => Promise<void>;
+}
+
+export type ApplyDoor = (user: any, body: unknown, opts?: ApplyOptions) => Promise<DoorAnswer>;
+
+let door: ApplyDoor | null = null;
+
+/**
+ * The member door, as `register` built it, for a role proposal's submit
+ * (server/routes/roleProposals.ts). Null until this route module is
+ * registered, which server/index.ts does before the proposal routes.
+ */
+export function roleApplicationDoor(): ApplyDoor | null {
+  return door;
+}
 
 /** A seat's term as a civil date, from the terms' own length when no date is written. */
 function requestedEndsOn(settings: SeatSettings, startsAt: Date, timezone: string): string | null {
@@ -323,7 +358,7 @@ export function register(app: Express, deps: Deps): void {
     a: StoredApplication,
     viewerId: string | null,
     rule: Awaited<ReturnType<typeof adoptionRule>> | null,
-    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null },
+    known?: { ballot: ApplicationBallot | null; seats: SeatForCapacity[]; view: TextView | null; proposal: StoredProposal | null },
   ) {
     const pool = getPool();
     const seats = known ? known.seats : await seatsForUpdate(pool, a.seatIds);
@@ -331,8 +366,12 @@ export function register(app: Express, deps: Deps): void {
     // The newest ballot in ANY state (red team U1): a carried vote keeps its link.
     const ballot = known ? known.ballot : ((await latestBallotsFor(pool, [a.id])).get(a.id) ?? null);
     const isCandidate = viewerId === a.candidateUserId;
-    const awaiting = a.status === "awaiting-holder";
-    const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? id);
+    // The role proposal this came from, if any (role proposals PR A): its new roles have no row yet, so they are named from it.
+    const proposal = known ? known.proposal : ((await proposalsForApplications(pool, [a.id])).get(a.id) ?? null);
+    const proposed = new Map((proposal?.body.newRoles ?? []).map((r) => [r.id, typeof r.words.name === "string" ? r.words.name : r.id]));
+    const held = !!proposal && changesRoles(proposal.body);
+    const awaiting = a.status === "awaiting-holder" && !held;
+    const seatNames = a.seatIds.map((id) => seats.find((x) => x.id === id)?.name ?? proposed.get(id) ?? id);
     return {
       id: a.id,
       href: applicationHref(a.id),
@@ -342,8 +381,10 @@ export function register(app: Express, deps: Deps): void {
       candidate: { id: a.candidateUserId, name: await nameOf(a.candidateUserId) },
       seats: a.seatIds.map((id) => {
         const s = seats.find((x) => x.id === id);
-        return { id, name: s?.name ?? id, aim: s?.aim ?? null };
+        return { id, name: s?.name ?? proposed.get(id) ?? id, aim: s?.aim ?? null, ...(s ? {} : proposed.has(id) ? { proposedNew: true } : {}) };
       }),
+      // The role proposal it came from, and whether its role changes hold adoption until they can be applied.
+      proposal: proposal ? { id: proposal.id, changesRoles: held, waits: held ? PROPOSAL_WORDS.adoptionWaits : null } : null,
       note: a.note,
       deliverables: a.deliverables,
       settings: a.settings,
@@ -440,36 +481,40 @@ export function register(app: Express, deps: Deps): void {
   });
 
   // ── Apply ─────────────────────────────────────────────────────────────────
-  app.post("/api/governance/role-applications", async (req, res) => {
-    const user = await authedUser(req);
-    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to apply for a role." });
+  /*
+   * THE DOOR ITSELF, past the sign-in, the rung and the rate: everything that
+   * reads the body and writes the application. The POST below calls it, and
+   * so does submitting a role proposal (server/routes/roleProposals.ts,
+   * through `roleApplicationDoor`), so an application written from a
+   * proposal passes every check one written here does.
+   */
+  async function applyFor(user: any, body: unknown, opts: ApplyOptions = {}): Promise<DoorAnswer> {
     const userId = String(user.id);
-    if (!(await guardCapability(req, res, "terms.read", { status: 403, body: { error: "members_only", message: "Applying for a role opens at the member rung." } }))) return;
-    if (await overLimit(`seat-application:${userId}`, ASKS_PER_WINDOW, ASK_WINDOW_MS)) {
-      return res.status(429).json({ error: "too_many_asks", message: "That is a lot of applications in a few minutes. Wait a little and try again." });
-    }
-    const parsed = parseApplicationInput(req.body);
-    if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
+    const answer = (status: number, out: Record<string, unknown>): DoorAnswer => ({ status, body: out });
+    const parsed = parseApplicationInput(body);
+    if (!parsed.ok) return answer(400, { error: parsed.error, field: parsed.field });
     const input = parsed.input;
     const pool = getPool();
     const calendar = seatCalendar();
     const tz = calendar.timezone || "UTC";
     const now = new Date();
+    // Roles a proposal asks the village to create: named by the proposal, with no row yet.
+    const pending = new Map((opts.pendingRoles ?? []).map((r) => [r.id, r.name]));
 
     // A season named by the member's season plan: a season still to come sets
     // the first day to its own when the member set none, so the term sits in it.
     let startsOn = input.startsOn;
     if (input.seasonId) {
       const season = calendar.seasons.find((s) => s.id === input.seasonId);
-      if (!season) return res.status(400).json({ error: "There is no season by that id.", field: "seasonId" });
+      if (!season) return answer(400, { error: "There is no season by that id.", field: "seasonId" });
       const ends = season.endsOn ? civilDateInstant(season.endsOn, tz) : null;
-      if (ends && ends.getTime() <= now.getTime()) return res.status(409).json({ error: "That season has already ended.", field: "seasonId" });
+      if (ends && ends.getTime() <= now.getTime()) return answer(409, { error: "That season has already ended.", field: "seasonId" });
       const begins = civilDateInstant(season.startsOn, tz);
       if (!startsOn && begins && begins.getTime() > now.getTime()) startsOn = season.startsOn;
     }
     const startsAt = startsOn ? civilDateInstant(startsOn, tz) : null;
     if (startsOn && !startsAt) {
-      return res.status(400).json({ error: "That first day is not a date the calendar has.", field: "startsNoEarlierThan" });
+      return answer(400, { error: "That first day is not a date the calendar has.", field: "startsNoEarlierThan" });
     }
     const later = !!startsAt && startsAt.getTime() > now.getTime();
 
@@ -484,15 +529,15 @@ export function register(app: Express, deps: Deps): void {
     let supersedes: { id: string; version: number } | null = null;
     if (input.supersedesId) {
       const old = await readApplication(pool, input.supersedesId);
-      if (!old) return res.status(404).json({ error: "There is no application by that id to amend.", field: "supersedesId" });
-      if (old.candidateUserId !== userId) return res.status(403).json({ error: "Only the member who holds these terms can propose to amend them.", field: "supersedesId" });
+      if (!old) return answer(404, { error: "There is no application by that id to amend.", field: "supersedesId" });
+      if (old.candidateUserId !== userId) return answer(403, { error: "Only the member who holds these terms can propose to amend them.", field: "supersedesId" });
       const sameSeats = old.seatIds.length === input.seatIds.length && old.seatIds.every((s) => input.seatIds.includes(s));
       if (!sameSeats) {
-        return res.status(409).json({ error: "An amendment names the same roles as the terms it replaces. Apply for other roles in an application of their own.", field: "seatIds" });
+        return answer(409, { error: "An amendment names the same roles as the terms it replaces. Apply for other roles in an application of their own.", field: "seatIds" });
       }
       const oldView = old.textId ? await viewText(pool, old.textId, today(), tz) : null;
       if (old.status !== "adopted" || !oldView || oldView.derived.state !== "in-force") {
-        return res.status(409).json({ error: "Only terms in force can be amended. These are not in force now.", field: "supersedesId" });
+        return answer(409, { error: "Only terms in force can be amended. These are not in force now.", field: "supersedesId" });
       }
       supersedes = { id: oldView.text.id, version: oldView.text.version };
     }
@@ -502,27 +547,32 @@ export function register(app: Express, deps: Deps): void {
     const live = await liveSeatingsOf(pool, input.seatIds);
     const lapseNow = { ...lapse(), now };
     for (const id of input.seatIds) {
-      const seat = seats.find((s) => s.id === id);
-      if (!seat) return res.status(404).json({ error: "There is no role by that id.", seatId: id });
-      if (seat.isExample) {
-        return res.status(409).json({ error: `${seat.name} is one of the platform's example roles. Apply for one of this village's own.`, seatId: id });
+      // A role the proposal asks the village to create has no row and every place free.
+      if (pending.has(id)) {
+        if (seats.some((s) => s.id === id)) return answer(409, { error: "A role by that id already exists. Save the draft again to give the new role an id of its own.", seatId: id });
+        continue;
       }
-      if (!seat.active) return res.status(409).json({ error: `${seat.name} is not a role the village fills right now.`, seatId: id });
+      const seat = seats.find((s) => s.id === id);
+      if (!seat) return answer(404, { error: "There is no role by that id.", seatId: id });
+      if (seat.isExample) {
+        return answer(409, { error: `${seat.name} is one of the platform's example roles. Apply for one of this village's own.`, seatId: id });
+      }
+      if (!seat.active) return answer(409, { error: `${seat.name} is not a role the village fills right now.`, seatId: id });
       const here = live.filter((l) => l.orgRoleId === id);
       if (here.some((l) => l.userId === userId)) continue; // already seated: the terms will link to that seating
       // An application for a later day is counted when that day comes.
       if (later) continue;
       const current = here.filter((l) => !isLapsed({ ...l, endedAt: null }, seat, lapseNow).lapsed).length;
       if (current >= seat.seats) {
-        return res.status(409).json({ error: `${seat.name} is full: every place in it is held.`, seatId: id, code: "seat_full" });
+        return answer(409, { error: `${seat.name} is full: every place in it is held.`, seatId: id, code: "seat_full" });
       }
     }
-    const pending = (await openApplicationsOf(pool, userId)).find((a) => a.seatIds.some((s) => input.seatIds.includes(s)));
-    if (pending) return res.status(409).json({ error: PENDING_MESSAGE, applicationId: pending.id });
+    const pendingApp = (await openApplicationsOf(pool, userId)).find((a) => a.seatIds.some((s) => input.seatIds.includes(s)));
+    if (pendingApp) return answer(409, { error: PENDING_MESSAGE, applicationId: pendingApp.id });
 
-    // The road, decided now.
+    // The road, decided now. A proposal that changes roles always waits on a holder (role proposals PR A).
     const rule = await adoptionRule(user);
-    const path = adoptionPath(rule, userId);
+    const path = opts.holderOnly ? "holder" : adoptionPath(rule, userId);
 
     // The term, decided now and frozen. Counted from the latest the seats could be
     // taken up, so it stays good if a holder later sends the application to a vote.
@@ -536,7 +586,7 @@ export function register(app: Express, deps: Deps): void {
       now,
       startsNoEarlierThan,
     });
-    if (!term.ok) return res.status(term.code === "unreadable_date" ? 400 : 409).json({ error: term.error, code: term.code, field: "seatSettings" });
+    if (!term.ok) return answer(term.code === "unreadable_date" ? 400 : 409, { error: term.error, code: term.code, field: "seatSettings" });
 
     const id = `sa-${crypto.randomBytes(8).toString("hex")}`;
     const row = {
@@ -554,7 +604,7 @@ export function register(app: Express, deps: Deps): void {
       startsAt,
       supersedesId: input.supersedesId,
     };
-    const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? sid);
+    const seatNames = input.seatIds.map((sid) => seats.find((s) => s.id === sid)?.name ?? pending.get(sid) ?? sid);
 
     /*
      * THE WORDS THE CANDIDATE ALIGNS WITH (PR5). The Review step showed the
@@ -563,11 +613,12 @@ export function register(app: Express, deps: Deps): void {
      * before anything is written. Money asks the re-confirm first.
      */
     const prepared: PreparedText = prepareSeatTermsText({ ...row }, seatNames, userId, tz, supersedes);
-    if (req.body?.alignedWords !== undefined && String(req.body.alignedWords) !== prepared.text.body) {
-      return res.status(409).json({ error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
+    const aligned = (body as { alignedWords?: unknown } | null)?.alignedWords;
+    if (aligned !== undefined && String(aligned) !== prepared.text.body) {
+      return answer(409, { error: "words_changed", message: ALIGN_WORDS.wordsChanged, title: prepared.text.title, body: prepared.text.body });
     }
     const money = moneyRefusal(user, input.settings);
-    if (money) return res.status(403).json(money);
+    if (money) return answer(403, money);
     const stored = { ...row, textId: prepared.text.id, textHash: prepared.text.contentHash };
     /** The application, its text, its parties and the candidate's alignment: one transaction, so the candidate never clicks twice. */
     const writeAll = async (conn: PoolConnection, status: "awaiting-holder" | "voting") => {
@@ -592,13 +643,16 @@ export function register(app: Express, deps: Deps): void {
         method: "click",
         authorityRef: null,
       });
+      // A proposal stamps itself submitted in the same transaction, so the two never disagree.
+      if (opts.alsoWrite) await opts.alsoWrite(conn, id);
     };
 
     /** A refusal the locked check threw, or a write that lost a race with a twin, answered as a 409. */
-    const raced = (e: any) => {
-      if (e?.code === "SA_PENDING") return { status: 409, body: { error: PENDING_MESSAGE, applicationId: e.applicationId } };
+    const raced = (e: any): DoorAnswer | null => {
+      if (e?.code === "SA_PENDING") return answer(409, { error: PENDING_MESSAGE, applicationId: e.applicationId });
+      if (e?.code === "DOOR_REFUSED") return answer(Number(e.status) || 409, e.body ?? { error: String(e.message) });
       if (e?.code === "ER_LOCK_DEADLOCK" || e?.errno === 1213 || e?.errno === 1020) {
-        return { status: 409, body: { error: "Another application for these roles was written at the same moment. Read your applications, then try again." } };
+        return answer(409, { error: "Another application for these roles was written at the same moment. Read your applications, then try again." });
       }
       return null;
     };
@@ -608,10 +662,10 @@ export function register(app: Express, deps: Deps): void {
         await inApplicationTransaction(pool, (conn) => writeAll(conn, "awaiting-holder"));
       } catch (e) {
         const r = raced(e);
-        if (r) return res.status(r.status).json(r.body);
+        if (r) return r;
         throw e;
       }
-      for (const holder of rule.holders.filter((h) => h !== userId)) {
+      for (const holder of (rule.who === "live-holders" ? rule.holders : []).filter((h) => h !== userId)) {
         await notify({
           userId: holder,
           type: "governance",
@@ -623,7 +677,7 @@ export function register(app: Express, deps: Deps): void {
           dedupeKey: `sa:${id}:waiting:${holder}`,
         });
       }
-      return res.status(201).json({ success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: term.caution ?? null });
+      return answer(201, { success: true, id, url: applicationHref(id), status: "awaiting-holder", textId: prepared.text.id, caution: term.caution ?? null });
     }
 
     /*
@@ -633,7 +687,7 @@ export function register(app: Express, deps: Deps): void {
      * than a season plan's seats need.
      */
     if (await overLimit(`seat-application-ballot:${userId}`, BALLOTS_PER_DAY, DAY_MS)) {
-      return res.status(429).json({
+      return answer(429, {
         error: "too_many_votes",
         message: `You have opened ${BALLOTS_PER_DAY} votes on applications today, which is the most one day holds. Apply again tomorrow.`,
       });
@@ -643,11 +697,11 @@ export function register(app: Express, deps: Deps): void {
       opened = await openVote(row, userId, (conn) => writeAll(conn, "voting"));
     } catch (e) {
       const r = raced(e);
-      if (r) return res.status(r.status).json(r.body);
+      if (r) return r;
       throw e;
     }
-    if (!opened.ok) return res.status(opened.status).json({ error: opened.error });
-    res.status(201).json({
+    if (!opened.ok) return answer(opened.status, { error: opened.error });
+    return answer(201, {
       success: true,
       id,
       url: applicationHref(id),
@@ -656,6 +710,19 @@ export function register(app: Express, deps: Deps): void {
       ballot: { id: opened.ballotId, closesAt: opened.closesAt },
       caution: term.caution ?? null,
     });
+  }
+  door = applyFor;
+
+  app.post("/api/governance/role-applications", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to apply for a role." });
+    const userId = String(user.id);
+    if (!(await guardCapability(req, res, "terms.read", { status: 403, body: { error: "members_only", message: "Applying for a role opens at the member rung." } }))) return;
+    if (await overLimit(`seat-application:${userId}`, ASKS_PER_WINDOW, ASK_WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_asks", message: "That is a lot of applications in a few minutes. Wait a little and try again." });
+    }
+    const out = await applyFor(user, req.body);
+    res.status(out.status).json(out.body);
   });
 
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -687,12 +754,14 @@ export function register(app: Express, deps: Deps): void {
     const texts = await readTexts(pool, all.map((a) => a.textId).filter((t): t is string => !!t));
     const tz = seatCalendar().timezone || "UTC";
     const views = await viewTexts(pool, texts, today(), tz);
+    const proposals = await proposalsForApplications(pool, all.map((a) => a.id));
     const applications = await Promise.all(
       all.map((a) =>
         served(a, String(viewer.id), rule, {
           ballot: ballots.get(a.id) ?? null,
           seats,
           view: (a.textId && views.find((v) => v.text.id === a.textId)) || null,
+          proposal: proposals.get(a.id) ?? null,
         }),
       ),
     );
@@ -817,6 +886,12 @@ export function register(app: Express, deps: Deps): void {
     }
     if (a.status !== "awaiting-holder") {
       res.status(409).json({ error: `This application is ${STATUS_WORDS[a.status].toLowerCase()}, so it is not waiting for a role holder.`, status: a.status });
+      return null;
+    }
+    // A role proposal that changes a role's words or adds a role waits for the step that applies those changes.
+    const proposal = (await proposalsForApplications(getPool(), [a.id])).get(a.id);
+    if (proposal && changesRoles(proposal.body)) {
+      res.status(409).json({ error: "proposal_changes_roles", message: PROPOSAL_WORDS.adoptionWaits });
       return null;
     }
     return { user, a, rule: await adoptionRule(user) };
