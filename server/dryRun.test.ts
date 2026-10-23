@@ -170,7 +170,7 @@ describe("what a settlement would pay", () => {
       { moons: 2, from: FROM },
     );
     expect(sentences(r)).not.toMatch(/each thanked/i);
-    expect(sentences(r)).toMatch(/Gratitude rule for holding a role cannot pay, because Gratitude never pays for work/);
+    expect(sentences(r)).toMatch(/Gratitude rule for holding a role cannot pay: Quests and roles are not paid in Gratitude\.(?!\.)/);
   });
 
   it("names a token the ledger has no faucet for", () => {

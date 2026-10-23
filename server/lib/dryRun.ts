@@ -494,7 +494,7 @@ function settlementFindings(
         outcome: "refused",
         sentence:
           why && !why.includes("smallest amount")
-            ? `The ${tokenName} rule for holding a role cannot pay, because ${why}.`
+            ? `The ${tokenName} rule for holding a role cannot pay: ${why.replace(/\.$/, "")}.`
             : `The ${tokenName} role rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
       });
       continue;
