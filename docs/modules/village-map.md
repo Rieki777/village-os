@@ -13,23 +13,23 @@ Provenance: platform
 > the map renders. `roles` is a PERMISSION-GROUP carrier whose `capabilities[]`
 > is the only per-village source feeding the capability gate, and it held four
 > rows (`founders-circle`, `steward-circle`, `treasury`, `practitioners`), so
-> the map was drawing permission groups as org-chart seats. Nobody saw it
+> the map was drawing permission groups as org-chart roles. Nobody saw it
 > because the module ships off.
 >
-> `0049_org_roles.sql` split them. Seats now live in `org_roles`, holders in
+> `0049_org_roles.sql` split them. Roles now live in `org_roles`, holders in
 > `org_role_assignments` as dated rows with terms and history, and `/api/map`
 > reads that plane. Nothing in it reaches the gate.
 >
 > What still holds exactly as written: vacancy stays DERIVED with no status
-> column (now `seatState`, which gained a fifth state, `expired`, for a seat
+> column (now `seatState`, which gained a fifth state, `expired`, for a role
 > whose holders' mandates have run out); the `map.viewPeople` / `map.contact`
 > tiers; the deterministic-first concierge and its unmatched-query log as the
-> demand signal. What changed underneath: the concierge scores seat prose in
-> the `purpose` bucket and filters stopwords, because seats joining the
+> demand signal. What changed underneath: the concierge scores role prose in
+> the `purpose` bucket and filters stopwords, because roles joining the
 > candidate set let a long accountability list outrank the circle it sits in.
 >
 > `docs/ARCHITECTURE.md` §3.15 is the as-built description of the two planes,
-> and §3.16 covers what a season turn does to a seat. Where this file disagrees
+> and §3.16 covers what a season turn does to a role. Where this file disagrees
 > with either, they win.
 
 **A deterministic radial SVG map of circles, roles (holders' faces, vacancies greyed as open calls) and quest satellites that doubles as a coordination tool: type "I want to plant trees" and it routes you to the Food Forest circle lead with a one-click, privacy-respecting contact relay.**
@@ -43,7 +43,7 @@ Estimated sessions: 7
 - The map is also a demand sensor: every concierge query is logged (F13 'instrument now, dashboard later'), so UNMATCHED queries — things members want to do that no role covers — become the founders' signal for which role to create next. The 2020 concept only displayed supply.
 - Deterministic hand-rolled radial orbit layout instead of amcharts force-directed physics: positions are a pure function of (circle sortOrder, node index), so the map is spatially stable between visits (spatial memory), jitter-free, snapshot-testable, SSR-safe, and zero new dependencies — animated with the framer-motion already in the repo.
 - A privacy layer the slide never considered: faces/names are member-gated via shared/capabilities.ts (map.viewPeople), contactability is per-user opt-out, emails never render anywhere, and contact goes through a Resend relay with Reply-To so reply-by-email works with no DM system and no address leak in the UI.
-- Vacancy is a DERIVED state (zero role_holders rows) plus a seats count, so 'Food Forest crew — 1 of 3 seats filled' renders as a partial call instead of the slide's binary greyed/filled; no status column to drift out of sync.
+- Vacancy is a DERIVED state (zero role_holders rows) plus a `seats` count, so 'Food Forest crew — 1 of 3 held' renders as a partial call instead of the slide's binary greyed/filled; no status column to drift out of sync.
 - Circle name reconciliation: quests.circle free-text values ('Regenerative Agriculture') don't match the hardcoded Circles.tsx page ('Permaculture Council'); circles get an aliases[] column and an admin reconciliation helper, turning an existing latent data bug into structure.
 - Mobile-first honesty: below 768px the force/radial canvas is replaced by a circle-accordion list with identical data and actions — the 2020 concept ignored phones entirely, and a network graph at 390px is unusable.
 - White-label per the config mandate: all circle names live in server/seeds/circles-seed.json, colors come from CSS theme tokens, the module ships OFF behind map.enabled and contributes nav/route/admin-tab only when on.
@@ -140,9 +140,9 @@ This module moves zero tokens. Contact is unpaid; nothing touches `token_ledger`
 
 **Layout (deterministic radial orbit, ~200 LoC, zero deps — d3-force explicitly rejected):** village node at center; circle i of N placed at angle `-π/2 + 2πi/N` (sortOrder order) on radius R1; circle node radius scales `minR + k·log(1+members)`. Roles sit on an inner orbit around their circle (evenly spaced, sorted vacant-last); open quests are smaller satellites on an outer dashed orbit (capped display with a "+n more" chip). Sub-circles (parentCircleId) render as a second-level orbit in v2. Rationale vs d3-force: the data is a strict 2-level tree (~10 circles × ~15 nodes), not an arbitrary graph; a simulation buys nothing but nondeterminism, tick loops, hydration jank and untestability, and recharts is the wrong tool for networks entirely. Pure function -> stable positions -> framer-motion animates mount/hover/pulse.
 
-**Node states:** filled role = avatar chip (member view) / solid dot (public); vacant role (holders < seats) = grey dashed ring + slow pulse + "Open call" badge (the slide's default-faces idea, upgraded); circle status `forming` = whole circle greyed as a call.
+**Node states:** filled role = avatar chip (member view) / solid dot (public); vacant role (holders < `seats`) = grey dashed ring + slow pulse + "Open call" badge (the slide's default-faces idea, upgraded); circle status `forming` = whole circle greyed as a call.
 
-**Concierge pipeline (deterministic first):** 1) normalize query, score every circle/role/quest: +3 per quest tag hit, +2 per name hit, +1 per purpose/description hit, aliases count as circle-name hits; 2) if top score ≥3 and leads runner-up by ≥2 -> resolve WITHOUT the LLM; 3) else send top-8 candidates as compact JSON (ids, names, one-line purposes, holder FIRST names only — no emails) to the 'coordination' assistant kind; response schema `{matchKind, matchId, altIds, draft}`; server validates matchId against the candidate set and DISCARDS hallucinated ids (evidence-or-drop). 4) Contact resolution: quest -> its circle's leadRoleId holder; role -> its holders, or circle lead if vacant; circle -> lead; if the resolved seat is itself vacant, the answer becomes the call: "nobody holds this yet — raise your hand." Every query logged to concierge_queries.
+**Concierge pipeline (deterministic first):** 1) normalize query, score every circle/role/quest: +3 per quest tag hit, +2 per name hit, +1 per purpose/description hit, aliases count as circle-name hits; 2) if top score ≥3 and leads runner-up by ≥2 -> resolve WITHOUT the LLM; 3) else send top-8 candidates as compact JSON (ids, names, one-line purposes, holder FIRST names only — no emails) to the 'coordination' assistant kind; response schema `{matchKind, matchId, altIds, draft}`; server validates matchId against the candidate set and DISCARDS hallucinated ids (evidence-or-drop). 4) Contact resolution: quest -> its circle's leadRoleId holder; role -> its holders, or circle lead if vacant; circle -> lead; if the resolved role is itself vacant, the answer becomes the call: "nobody holds this yet — raise your hand." Every query logged to concierge_queries.
 
 **Contact relay state machine:** capability check -> contactable check -> caps (sender/day, recipient/day via variables) -> insert contact_requests (idempotency_key unique = safe retry) -> sendResendEmail to recipient with Reply-To = sender email, subject "[{project.name}] {First} wants to connect about {role}" -> email_status queued->sent|failed. Reply happens in the recipient's mail client; no DM system. Deliberately NOT written to the public Village Pulse (contact is private). When the Phase 3 spine lands, the same insert also calls insertNotification(dedupeKey=`contact:{id}`) — until then the only in-app trace is the recipient's own contact list on their profile, which reads the domain table directly and is not a shadow notification system.
 
@@ -160,7 +160,7 @@ This module moves zero tokens. Contact is unpaid; nothing touches `token_ledger`
 
 ## Admin controls
 
-One new Admin tab, "Circles & Map" (existing tab pattern in Admin.tsx): (1) Circles CRUD — name, purpose, icon, theme color token, parent circle, lead role picker, status, aliases editor; (2) role-to-circle assignment + seats, with an unassigned-roles bucket; (3) alias reconciliation helper — lists every distinct `quests.circle` value with no matching circle/alias ("4 quests reference 'Regenerative Agriculture' — map to Permaculture Council?") and one-click-adds the alias; (4) contact relay log (from, to-as-role, date, email status; message bodies collapsed behind an explicit 'view for abuse review' click); (5) concierge query log with the Unmatched filter — the 'what role is the village missing' report; (6) role-application submissions arrive in the EXISTING submissions inbox, no new surface. All seven map.* variables edited in the existing Game Variables admin surface (fail-loud registry).
+One new Admin tab, "Circles & Map" (existing tab pattern in Admin.tsx): (1) Circles CRUD — name, purpose, icon, theme color token, parent circle, lead role picker, status, aliases editor; (2) role-to-circle assignment + how many each role holds, with an unassigned-roles bucket; (3) alias reconciliation helper — lists every distinct `quests.circle` value with no matching circle/alias ("4 quests reference 'Regenerative Agriculture' — map to Permaculture Council?") and one-click-adds the alias; (4) contact relay log (from, to-as-role, date, email status; message bodies collapsed behind an explicit 'view for abuse review' click); (5) concierge query log with the Unmatched filter — the 'what role is the village missing' report; (6) role-application submissions arrive in the EXISTING submissions inbox, no new surface. All seven map.* variables edited in the existing Game Variables admin surface (fail-loud registry).
 
 ## Dependencies
 
@@ -261,14 +261,14 @@ lens now draws what the chart draws, on the land.
 | piece | where |
 |---|---|
 | Halos, satellites, three inks, the governing fallback | `patch_h5_01_lens.py`, `patch_h5_02_satarc.py`, `patch_h5_03_keyline.py` |
-| Round trip, the party, the live seat states | `patch_h5_04_roundtrip.py`, `patch_h5_06_live.py`, `patch_h5_07_reapply.py` |
+| Round trip, the party, the live role states | `patch_h5_04_roundtrip.py`, `patch_h5_06_live.py`, `patch_h5_07_reapply.py` |
 | Marks that answer to the party | `patch_h5_05_badges.py` |
 | Hardening (declaration order, canvas state) | `patch_h5_08_tdz.py`, `patch_h5_09_ctxstate.py` |
 | The drawn record, the lens plane, the ground line | `patch_h5_10_satlog.py`, `patch_h5_11_overcanvas.py`, `patch_h5_12_footline.py`, `patch_h5_13_plane.py`, `patch_h5_14_platedodge.py` |
 | A role gathers at its own circle's home; the fan opens | `patch_h5_15_govhome.py`, `patch_h5_16_fanwidth.py` |
 | Braided rim, prototype-safe name index, tooltip | `patch_h5_17_three.py` |
 | Circle tables a scene file cannot reach through | `patch_h5_18_circtables.py` |
-| Class tags on a seat | `drizzle/0069_characters.sql`, `server/lib/orgChart.ts` |
+| Class tags on a role | `drizzle/0069_characters.sql`, `server/lib/orgChart.ts` |
 | Shell relay | `client/src/pages/LivingMap.tsx` |
 | Gates | `qa/verify_org_lens.js` (the model), `qa/verify_org_ground.js` (the screen), `server/lib/orgArchetypes.test.ts` |
 
@@ -296,9 +296,9 @@ no seal while the lens drew three satellites on it, and the council fire's read
 would destroy the difference between a default and a founder's choice, which is
 the distinction `0060` exists to preserve.
 
-**The two seat counts on the map are now compared.** `seatsAt()` answers "which
-seats are ADDRESSED here" and feeds the hovercard and the seat seal;
-`roleSeatsBy()` answers "which seats DRAW here" and feeds the lens. Both were
+**The two role counts on the map are now compared.** `seatsAt()` answers "which
+roles are ADDRESSED here" and feeds the hovercard and the seal;
+`roleSeatsBy()` answers "which roles DRAW here" and feeds the lens. Both were
 computed every frame and compared by nothing. `verify_org_ground.js` S1-S4 reads
 the rendered hovercard's own text and the seal in the badge plane - the two
 surfaces a person reads - and requires them to equal what the lens drew, then
@@ -330,9 +330,9 @@ the model:
   screen, measured, and bounded at one by `verify_org_ground.js` G7b.
 
 **No name a scene file chose is looked up on an object with a prototype.**
-Seat names key the live-state merge in `roleApplyLive`, and circle names key
+Role names key the live-state merge in `roleApplyLive`, and circle names key
 `CIRCLE_COL`, `CIRCLE_HOMES` and `ROLE_GOV`. All four were plain objects, so a
-seat called `constructor` matched a phantom row, drew open and incremented the
+role called `constructor` matched a phantom row, drew open and incremented the
 count the shell reports; a circle with that name was treated as governing, was
 gathered off the building it is addressed to, and took a Function as its colour
 - which canvas refuses by KEEPING THE PREVIOUS strokeStyle, so the satellite is
@@ -361,12 +361,12 @@ fetched without credentials and returns the same answer to every reader, so the
 party cannot travel on it. It travels on `lens`, which is separate from `hand`
 on purpose: `hand` decides whether the Build button works and must not wait on
 the org chart. `lens` only narrows what is drawn, so it can land late, and if it
-never lands the map shows every mark and draws every seat as the scene wrote it.
+never lands the map shows every mark and draws every role as the scene wrote it.
 The party is read once, on the boot handshake, so a party edited in another tab
 reaches the map on the next open.
 
 **The open map follows the village's live org (Rye, D3, 2026-10-02).** `lens`
-carries the village's circles and every active seat from `GET /api/map/org`,
+carries the village's circles and every active role from `GET /api/map/org`,
 and `client/src/components/map/orgFollow.ts` asks again every 15 seconds while
 the tab is visible, sending the version it holds as If-None-Match. An
 unchanged village answers 304 and nothing is posted or redrawn; a hidden tab
@@ -374,17 +374,17 @@ asks nothing and asks once the moment it is shown; a 401, 403 or 404 stops the
 asking. Every later `lens` carries the party it found, because the map reads an
 absent party as "no narrowing".
 
-**Where a live seat sits.** A seat the scene already draws under the same name
-is that seat (the name join `roleApplyLive` has always made). Every other seat
+**Where a live role sits.** A role the scene already draws under the same name
+is that role (the name join `roleApplyLive` has always made). Every other role
 sits at its circle's home, and a circle's home is the first place on the land
 whose circle names it, by the circle's id or by its name: the founder's word,
 given with the inspector's circle picker in build mode (which offers the
 village's circles once they have arrived) and published with the land. A circle
-no place names has no home yet; it and its seats are listed on the Wall as not
+no place names has no home yet; it and its roles are listed on the Wall as not
 yet placed, the Org lens key counts them, and nothing is drawn for them. Once
 the village has sent its circles the lens rings those and none of the map's own
-eleven, and a drawn seat the village does not keep is no longer drawn. Live
-seats are their own list (`orgSeats` in the artifact) and never enter
+eleven, and a drawn role the village does not keep is no longer drawn. Live
+roles are their own list (`orgSeats` in the artifact) and never enter
 `SCENE.seats`, so a publish cannot freeze them into the land.
 
 **Empty means every class, everywhere.** `org_roles.archetypes` is nullable, so
@@ -396,8 +396,8 @@ nothing sees no narrowing at all, and a class never reaches `hasCapability`.
 `quests` as well as `org_roles`, but `server/repos/quests.ts` does not select
 the column and `/api/map` does not emit it, so a quest reaches the map untagged
 and `roleAny` answers true for every quest mark. Closing it is the same four
-moves the seat side took: select the column, emit it, send it, merge it. Until
-then only the seat mark narrows, which is the honest behaviour rather than a
+moves the role side took: select the column, emit it, send it, merge it. Until
+then only the role mark narrows, which is the honest behaviour rather than a
 guess about who a quest is for.
 
 ## Open questions
@@ -431,13 +431,13 @@ override, else circle, else village default. Vocabulary ids are CLOSED
 test, so today's map cannot drift. The camera is a pure reducer
 (`components/power/camera.ts`) on van Wijk's `interpolateZoom`: tap a circle
 to fly in (`?focus=` in the URL), tap the focused ring or backdrop to go out,
-and a tap on a SEAT never moves the camera. Five seat states draw as five
+and a tap on a ROLE never moves the camera. Five role states draw as five
 glyphs, colour never alone.
 
 **Who may declare (P10, N5).** `mayDeclare` in `orgChart.ts`: admin, the
 `org.declare` capability (an appointment, never a stage rung), or a live
-holder of a seat flagged `represents_circle`, for that one circle only. The
-third door is the single sanctioned bridge from the seat plane to a
+holder of a role flagged `represents_circle`, for that one circle only. The
+third door is the single sanctioned bridge from the role plane to a
 permission: `docs/ADR_2026-08_REPRESENTS_CIRCLE_DECLARES.md`, pinned by
 `server/lib/orgDeclare.test.ts`.
 
@@ -462,7 +462,7 @@ Stripe settlement never reads any of it.
 sets, because a gloss is free text and free text can hold a name. The circle
 markdown adds "Decides by: consent."
 
-**The setup walk (§8 item 16).** Admins walk every open or partial seat
+**The setup walk (§8 item 16).** Admins walk every open or partial role
 (assign / skip / open call), then every circle without a method, then the
 shape, ending at "publish structure to the network?". Assignment posts to the
 existing seating endpoint, so it stays a dated row.
@@ -531,7 +531,7 @@ site. `pushPhotos` in `client/src/pages/LivingMap.tsx` sends it, reading
 click at its own centre lands on it rather than on something covering it, and
 that the room paints alt text, attribution and the door.
 
-## Claiming a seat recorded under a name (2026-09-15)
+## Claiming a role recorded under a name (2026-09-15)
 
 A chart backfilled from a document holds its holders as free-text names,
 because that is all the document could carry. `GET /api/org/my-unclaimed-seats`
@@ -544,42 +544,42 @@ with no uniqueness check, and the name being matched against is published to
 them. `map.viewPeople` opens at the `guest` rung, which every account holds the
 moment it exists, and the member tier of `GET /api/org` carries a documented
 holder's full recorded name. So the old behaviour was: read the chart, set your
-own name to a holder's, press the button, hold the seat.
+own name to a holder's, press the button, hold the role.
 
-**A seat is not a label on a picture**, which is why this was worth closing.
+**A role is not a label on a picture**, which is why this was worth closing.
 Flipping a seating to `holder_kind = 'member'` with a `user_id` is the exact
 combination `seatHolder` refuses for an agent, and for the reasons stated
 there: the moon settlement pays live member seatings (`server/lib/economy.ts`,
-the `role.cycle` rules), and a seat flagged `represents_circle` opens
-`mayDeclare` for its circle, the one bridge from the seat plane to a permission
+the `role.cycle` rules), and a role flagged `represents_circle` opens
+`mayDeclare` for its circle, the one bridge from the role plane to a permission
 (`docs/ADR_2026-08_REPRESENTS_CIRCLE_DECLARES.md`). Two more ride along:
 `visibleRules` in `server/lib/resources.ts` shows a holder the spending rules a
-village keeps for holders of that seat and circle, and `greetersFor` in
+village keeps for holders of that role and circle, and `greetersFor` in
 `server/lib/arrival.ts` routes every arrival, carrying a new member's name, to
-whoever holds the greeter seat.
+whoever holds the greeter role.
 
 **Who says yes.** `POST /api/org/seatings/:id/claim/confirm` takes `{userId}`
-behind `org.seat`, the power that decides who sits in the village's seats. It
+behind `org.seat`, the power that decides who sits in the village's roles. It
 grants nothing `POST /api/admin/org/roles/:id/holders` did not already carry;
 what it adds is doing it IN PLACE, through `claimSeating`, so the seating keeps
-its id and its start date and the seat's history does not restart the day
+its id and its start date and the role's history does not restart the day
 somebody finally signs up. `POST /api/org/seat-claims/:id/decline` is the same
 power saying no: it closes the ask and touches no seating.
 
 **The ask is a row in the stewards' inbox**, `submissions` type `seat-claim`,
 which is the shape a raised hand already uses. It carries the seating id, the
-seat, the name recorded on the seating, and the claimant's name and email, with
+role, the name recorded on the seating, and the claimant's name and email, with
 `userId` set to the claimant, and it goes through the one `submissionsRepo` the
 rest of the server holds, so the admin inbox sees it without a restart. A
 second open ask for the same seating and member is refused and says so.
 `notifyAdmins` rings the stewards beside it, keyed on the seating and the
-member, and the seat's own journal (`GET /api/org/:kind/:id/journal`) keeps
+member, and the role's own journal (`GET /api/org/:kind/:id/journal`) keeps
 every ask whether or not the row was filed.
 
 **Where a steward answers.** `GET /api/org/seat-claims` behind `org.seat`
 returns the open asks, and `client/src/components/admin/SeatClaimAsks.tsx`
-draws them on the seat itself in the admin org chart tab: who asked, the name
-the seat was recorded under, Confirm and Decline. Nothing renders on a seat
+draws them on the role itself in the admin org chart tab: who asked, the name
+the role was recorded under, Confirm and Decline. Nothing renders on a role
 with no ask. Neither button says anything until the server has answered, and a
 refusal prints the server's own sentence through the tab's `call`.
 
