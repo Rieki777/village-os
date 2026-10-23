@@ -123,6 +123,7 @@ export const CIRCLE_CARD_WORDS = {
   proposeSend: "Propose this change",
   cancel: "Cancel",
   proposed: "Proposed, waiting for consent",
+  proposalSent: "Sent as a proposal for consent.",
   pending: "Proposed, waiting for consent",
   proposeFailed: "That did not go through. Try again.",
 

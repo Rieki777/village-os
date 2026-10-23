@@ -109,7 +109,7 @@ describe("proposing new words, for the circle's role holders", () => {
     expect(box.value).toBe("The food forest");
     fireEvent.change(box, { target: { value: "The food forest\nThe seed library" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
-    expect(await screen.findByText("Proposed, waiting for consent", { exact: false })).toBeTruthy();
+    expect(await screen.findByText("Sent as a proposal for consent.")).toBeTruthy();
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/org/circles/c-garden/card/propose");
     expect(JSON.parse(String(init.body))).toEqual({ domains: "The food forest\nThe seed library" });

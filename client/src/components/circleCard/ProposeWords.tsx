@@ -76,7 +76,7 @@ export function ProposeWords({ wordKey, initial }: { wordKey: CircleWordKey; ini
     const r = await proposeCircleWords(circleId, wordKey, text);
     setBusy(false);
     if (r.ok) {
-      setSaid(W.proposed);
+      setSaid(W.proposalSent);
       setOpen(false);
       reload();
     } else setSaid(r.error);
