@@ -118,6 +118,8 @@ export function makeInviteDoor(host: InviteDoorHost): InviteDoor {
           vouchedUserId: userId,
           existing: [],
           vouchedIsMember: false,
+          // The account was made a moment ago by this same sign-up, so it is never a tombstone.
+          vouchedIsGone: false,
           kind: "arrival",
           needed,
         });
