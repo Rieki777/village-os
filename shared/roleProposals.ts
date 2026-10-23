@@ -503,9 +503,6 @@ export const PROPOSAL_WORDS = {
   linkOff: "This link is no longer shared.",
   membersOnly: "Sign in as a member of the village to read this proposal.",
   commentMembersOnly: "Only members of the village can leave feedback.",
-  /** The adopt and put-to-village doors, until the circle consent step (PR B) applies a proposal's role changes. */
-  adoptionWaits:
-    "This application came from a role proposal that changes a role's words or adds a new role. The platform cannot apply those changes yet, so it cannot be adopted here. Nothing was changed.",
   /** The candidate's notice that a member left feedback. */
   commentNoticeTitle: "A member left feedback on your role proposal",
   anyoneNeedsPublicGovernance: "Anyone with the link can read it once the village shows its governance to the public.",
