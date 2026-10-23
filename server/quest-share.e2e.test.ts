@@ -21,7 +21,7 @@ import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -237,7 +237,7 @@ describe.skipIf(!DB_CONFIGURED)("a crew gets its room when the village has rooms
   };
 
   beforeAll(async () => {
-    pool = mysql.createPool({ uri: testDb!.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(testDb!, { connectionLimit: 4 });
     const boot = await call("POST", "/api/admin/bootstrap", {
       password: ADMIN,
       email: `crew-founder-${PORT}@example.test`,

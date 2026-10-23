@@ -32,7 +32,7 @@
  */
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { addChange, createDraft, draftChangeCap, openDraftCap, previewDraft, publishDraft } from "./orgDrafts";
 import { listOrgRoles } from "./orgChart";
 import { loadVariables, setVariable } from "./variables";
@@ -75,7 +75,7 @@ async function tune(value: string) {
 describe.skipIf(!configured)("the change limit on one outside batch", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadVariables(pool);
   });
   afterAll(async () => {

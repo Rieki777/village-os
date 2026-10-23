@@ -27,7 +27,7 @@ import mysql from "mysql2/promise";
 import { faucetAccounts, mintView, publicSupply } from "./lib/economy";
 import { loadTokenRegistry, memberAccount, postTransfer, registerToken } from "./lib/ledger";
 import { loadVariables } from "./lib/variables";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 
@@ -58,7 +58,7 @@ const PROBE_SOURCE = "probe_issue";
 describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
   });

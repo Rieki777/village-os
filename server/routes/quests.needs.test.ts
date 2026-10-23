@@ -27,7 +27,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { claimsRepo as makeClaimsRepo, questsRepo as makeQuestsRepo } from "../repos/quests";
 import { linkNeed, upsertScopeNeed } from "../lib/needs";
 import { register } from "./quests";
@@ -94,7 +94,7 @@ describe.skipIf(!configured)("a quest carries the needs it meets", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,

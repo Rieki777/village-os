@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { decidedThreadsToDerive, deriveDecisions } from "./villageBrain";
 import { READERS, callReader, wireReaders, type ReaderViewer } from "./villageReaders";
 
@@ -67,7 +67,7 @@ const member: ReaderViewer = { id: "u-member", isAdmin: false, holds: () => fals
 describe.skipIf(!configured)("deriving decisions into the village record (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+    pool = testPool(db, { connectionLimit: 8 });
     wireReaders({ moduleIsOn: () => true, boolVar: () => true });
   });
 
@@ -150,7 +150,7 @@ describe.skipIf(!configured)("deriving decisions into the village record (MySQL)
 describe.skipIf(!configured)("the record.decisions reader (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+    pool = testPool(db, { connectionLimit: 8 });
     wireReaders({ moduleIsOn: () => true, boolVar: () => true });
     await pool.query(
       "INSERT INTO village_record (id, section, slug, title, body, occurred_at, source, source_ref, is_example) VALUES " +

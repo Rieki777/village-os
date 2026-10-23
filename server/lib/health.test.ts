@@ -18,7 +18,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { HEALTH_METRICS_BY_KEY, SNAPSHOT_METRICS } from "../../shared/healthMetrics";
 import { allowanceFor } from "./economy";
 import { loadVariables } from "./variables";
@@ -141,7 +141,7 @@ const stagesFrom = (byId: Record<string, number>) => ({
 describe.skipIf(!configured)("R9: the allowance a village left unused", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // A base of 10 rather than the shipped 100, so every figure below can be
     // stated as a whole number a reader can check by hand.
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table

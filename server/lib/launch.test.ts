@@ -18,7 +18,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { confirmManual, issuanceCapDecisionFor, launchStatus, launchVoteBlocked, type LaunchDeps } from "./launch";
 import { MINT_CAP_KEY } from "./mintCap";
 import { ISSUANCE_CAP_KEY, ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
@@ -77,7 +77,7 @@ async function clearAnswers(): Promise<void> {
 describe.skipIf(!configured)("the issuance cap on the launch journey", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
   }, 180_000);
 
   afterAll(async () => {
