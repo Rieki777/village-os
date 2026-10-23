@@ -11,6 +11,13 @@
  *
  * The server checks everything again before it stores anything. This screen
  * only says early what the server would say late.
+ *
+ * ONE CURRENCY ON THE SCREEN: the village's, today. The server stamps that
+ * currency on every value it saves, so a box labelled in a record's OLD
+ * currency would store the same figure in the new one: 50 USD saved as 50
+ * CRC the day a village moves to colones (Rye, 2026-10-22). A record valued
+ * in another currency opens with the value box empty and its old value said
+ * beside it; left empty, the save leaves that value exactly as it was.
  */
 import { useEffect, useState } from "react";
 import { currencyExponent } from "@/lib/workPay";
@@ -38,6 +45,8 @@ export interface PayOptions {
 export interface WorkValueDraft {
   value: string;
   tokens: Record<string, string>;
+  /** A stored value in a currency that is no longer the village's, kept unless retyped. */
+  held?: { minor: number; currency: string };
 }
 
 let optionsOnce: Promise<PayOptions | null> | null = null;
@@ -82,15 +91,22 @@ export function draftFrom(
   offered: readonly PayOption[],
   currency: string,
 ): WorkValueDraft {
-  const exp = currencyExponent(record?.valueCurrency || currency);
-  const value = record?.valueMinor === null || record?.valueMinor === undefined ? "" : plain(record.valueMinor / 10 ** exp);
+  const minor = record?.valueMinor;
+  const stored = record?.valueCurrency || currency;
+  const held = minor !== null && minor !== undefined && !!currency && stored !== currency ? { minor, currency: stored } : undefined;
+  const value = minor === null || minor === undefined || held ? "" : plain(minor / 10 ** currencyExponent(currency));
   const tokens: Record<string, string> = {};
   for (const o of offered) {
     const own = record?.valueTokens?.find((t) => t.token === o.token);
     if (record?.valueTokens) tokens[o.token] = own ? plain(own.amount) : "0";
     else tokens[o.token] = o.standard !== null && o.standard > 0 ? plain(o.standard) : "0";
   }
-  return { value, tokens };
+  return held ? { value, tokens, held } : { value, tokens };
+}
+
+/** A held value as a person reads it: "50 USD". */
+export function heldWords(held: { minor: number; currency: string }): string {
+  return `${plain(held.minor / 10 ** currencyExponent(held.currency))} ${held.currency}`;
 }
 
 /**
@@ -102,10 +118,13 @@ export function draftToBody(
   offered: readonly PayOption[],
   currency: string,
   opts: { required: boolean },
-): { ok: true; valueMinor: number | null; valueTokens: TokenAmount[] } | { ok: false; error: string } {
+): { ok: true; valueMinor: number | null | undefined; valueTokens: TokenAmount[] } | { ok: false; error: string } {
   const raw = draft.value.replace(/,/g, "").trim();
-  let valueMinor: number | null = null;
-  if (raw === "") {
+  // undefined leaves the stored value alone: an empty box over a held value.
+  let valueMinor: number | null | undefined = null;
+  if (raw === "" && draft.held) {
+    valueMinor = undefined;
+  } else if (raw === "") {
     if (opts.required) return { ok: false, error: "Say what this is worth before it goes on the board." };
   } else {
     const major = Number(raw);
@@ -156,6 +175,12 @@ export default function WorkValueEditor({
           className={`w-full mt-1 ${inputClassName}`}
         />
       </label>
+      {draft.held && (
+        <p className="text-xs opacity-70">
+          Valued at {heldWords(draft.held)} before this village changed its currency. Left empty, that value stays as it is.
+          {currency ? ` Type a figure to value it in ${currency} instead.` : ""}
+        </p>
+      )}
       {offered === null ? (
         <p className="text-xs opacity-70">Reading which tokens this village pays for work.</p>
       ) : offered.length === 0 ? (

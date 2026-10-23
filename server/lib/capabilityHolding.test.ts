@@ -22,7 +22,7 @@ import {
   villageHeldCapabilities,
 } from "./capabilityHolding";
 import { ALL_CAPABILITIES, HANDOVER_SET } from "../../shared/capabilities";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -32,7 +32,7 @@ let pool: mysql.Pool;
 describe.skipIf(!configured)("capability holding", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
       "INSERT INTO roles (id, name, capabilities) VALUES " +
         "('keepers','The Library Keepers',?), ('greeters','The Greeters',?), ('steward','Steward',?)",

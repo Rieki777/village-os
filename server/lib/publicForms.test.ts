@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { forgetProposer } from "../repos/questProposals";
 import { recentDrops } from "./externalProposals";
 import {
@@ -84,7 +84,7 @@ describe.skipIf(!configured)("a quest idea from the public form reaches the revi
     db = await provisionTestDb();
     // Room for a burst to hold its own connections at once, and warmed, so the
     // burst case below races the code and not the driver opening sockets.
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 12 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 12 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     const warm = await Promise.all(Array.from({ length: 8 }, () => pool.getConnection()));
     warm.forEach((c) => c.release());
   });

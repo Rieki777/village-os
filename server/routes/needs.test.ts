@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { NEEDS_AGGREGATE_FLOOR } from "../lib/needs";
 import { loadVariables } from "../lib/variables";
 import { register } from "./needs";
@@ -198,7 +198,7 @@ describe.skipIf(!configured)("the scope round trips through the routes", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,
@@ -462,7 +462,7 @@ describe.skipIf(!configured)("the member's card round trips through the routes",
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const { app, handlers: h } = collect();
     register(app, {
       isAdmin: async () => true,

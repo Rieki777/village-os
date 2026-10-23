@@ -11,7 +11,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { rsvp, updateGathering, withdrawRsvp } from "./gatherings";
 import {
   MEET_ME_OPEN_CAP,
@@ -39,7 +39,7 @@ describe.skipIf(!configured)("the waitlist, against a real schema", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
   });
 
   afterAll(async () => {

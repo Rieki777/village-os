@@ -106,7 +106,7 @@ import {
   retryRelease,
   settleRedemption,
 } from "./lib/redemptionStore";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 
@@ -307,7 +307,7 @@ describe("who confirms", () => {
 describe.skipIf(!configured)("turning tokens into something real", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     // The stays and library modules register these at boot and a scratch

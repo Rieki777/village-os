@@ -845,6 +845,29 @@ jobs:
         # Before the build, with the other guards: it reads source files.
         run: node scripts/check-boot-imports.mjs
 
+      - name: Test pools pin their session zone
+        # A REPO-WIDE RATCHET THAT ONLY A TEST ENFORCED, until now.
+        #
+        # server/testPoolRatchet.test.ts spawns this script, so the only thing
+        # running it in CI was whichever of the four shards that file landed in.
+        # Every gate list built from the workflows therefore missed it, INCLUDING
+        # scripts/module-facts.mjs, which CLAUDE.md calls authoritative:
+        #
+        #   node scripts/module-facts.mjs | grep -c test-pool   ->  0
+        #
+        # On 2026-10-22 a local runner built from this file reported 43 of 43
+        # gates PASS on the very tree that took #532's push run red. Naming the
+        # script here costs a second and makes it visible to every such list.
+        #
+        # The baseline is 0 as of the sweep that pinned all 187: a new
+        # mysql.createPool in a test file is now a refusal, and the fix is
+        # testPool(db, { ... }) from server/db/testDb.ts, which sets the same
+        # timezone AND pins the session zone. Local MySQL and this runner both
+        # run UTC, so neither can ever show you the bug you are committing.
+        #
+        # Dependency-free, no database.
+        run: node scripts/check-test-pool-timezone.mjs
+
       - name: Build
         id: build
         # Runs even behind a failed guard, so a guard failure and a build

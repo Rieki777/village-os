@@ -23,7 +23,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, closeBallot, openBallot, type BallotRow } from "./ballots";
 import {
   applyDueGovernance,
@@ -200,7 +200,7 @@ describe("the sentences, decided from the row", () => {
 describe.skipIf(!configured)("a landing that failed at the close, told and refused honestly", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool
   }, 300000);
   afterAll(async () => {
     await pool?.end();

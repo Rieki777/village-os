@@ -8,7 +8,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ensureSky, mirrorCalendarSources, questCalendarInput } from "./calendarProviders";
 import { listCalendarItems } from "./calendar";
 import { questsRepo } from "../repos/quests";
@@ -40,7 +40,7 @@ describe.skipIf(!configured)("providers against a real schema", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
   });
 
   afterAll(async () => {
