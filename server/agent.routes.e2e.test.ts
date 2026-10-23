@@ -22,6 +22,7 @@
  * Order-dependent (fixtures build on each other): run the whole file, never a
  * -t slice. Skips loudly without TEST_DATABASE_URL.
  */
+import { createHash, randomBytes } from "crypto";
 import fs from "fs";
 import http from "http";
 import os from "os";
@@ -471,6 +472,37 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     const [rows] = await pool.query<any[]>("SELECT actor_kind, audience, text FROM health_events WHERE kind = 'agent_token'");
     expect(rows.length).toBeGreaterThanOrEqual(4);
     for (const r of rows) { expect(r.actor_kind).toBe("agent"); expect(r.audience).toBe("admin"); }
+  });
+
+  it("dies with its holder: erasing the member ends every token they made, and the rows go", async () => {
+    // The erasure keeps the member row as a tombstone and bumps tokenVersion,
+    // which kills sessions. An agent token is not a session: the resolver mints
+    // a fresh one from the row, so the bump alone never reached it.
+    const dora = await register("Dora", "agent-dora");
+    const minted = await call("POST", "/api/agent/tokens", { name: "dora laptop", scopes: ["calendar.read", "directory.read", "me.read"] }, dora.token);
+    expect(minted.status).toBe(200);
+    const vatDora = String(minted.json.token);
+    expect((await call("GET", "/api/agent/v1/me", undefined, vatDora)).status, "alive before the erasure").toBe(200);
+
+    const gone = await call("POST", "/api/profile/delete-account", { password: "AgentTest123!" }, dora.token);
+    expect(gone.status, JSON.stringify(gone.json)).toBe(200);
+
+    for (const route of ["/api/agent/v1/me", "/api/agent/v1/directory", "/api/agent/v1/calendar"]) {
+      expect((await call("GET", route, undefined, vatDora)).status, `${route} answered an erased member's agent`).toBe(401);
+    }
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [dora.id]); // module-review-ok: a test asserting the token rows did not outlive the erased member; the product has no reader for a count it is supposed to have emptied
+    expect(Number(rows[0].n), "the token rows outlived the member").toBe(0);
+
+    // The second layer, pinned on its own: a row that escaped the sweep (minted
+    // in a race, restored from a backup) still finds no holder to act for.
+    const stray = "vat_" + randomBytes(32).toString("base64url");
+    await pool.query( // module-review-ok: a fixture minting a row the product CANNOT mint, to prove a token that escaped the sweep still finds no holder
+      "INSERT INTO agent_tokens (id, user_id, name, token_hash, prefix, scopes, expires_at) VALUES (?,?,?,?,?,?, UTC_TIMESTAMP() + INTERVAL 90 DAY)",
+      ["atk-stray-dora", dora.id, "stray", createHash("sha256").update(stray, "utf8").digest("hex"), stray.slice(0, 10), JSON.stringify(["me.read"])],
+    );
+    const strayRead = await call("GET", "/api/agent/v1/me", undefined, stray);
+    expect(strayRead.status, "a surviving row reopened the erased member").toBe(401);
+    expect(strayRead.json.reason).toBe("holder gone");
   });
 });
 

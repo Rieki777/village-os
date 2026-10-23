@@ -30,6 +30,10 @@ function roleRow(i: number) {
     authority: null, first_year_outcomes: null, first_90_day_outcomes: null, location_expectations: null, compensation_reality: null,
     evidence_required: null, represents_circle: 0, how_chosen: null, how_chosen_gloss: null, terms_offer: JSON.stringify(OFFER),
     terms_offer_at: null, terms_offer_by: null, value_minor: null, value_currency: null, value_tokens: null,
+    // 0274: the CCOS words ride the same row, so they cost no read of their own.
+    exists_while: "people are still arriving", authorities: JSON.stringify(["Invite to a role"]),
+    responsibilities: JSON.stringify(["Run onboarding calls"]), signs_stretched: "Applications waiting",
+    flows_back: null, step_back: "Name it on Friday.", time_commitment: "Part of a full-time season",
   };
 }
 
@@ -123,6 +127,30 @@ describe("the player card's query count", () => {
     expect(six.queries.length).toBe(one.queries.length);
     // Each statement once: no read is repeated per role.
     expect(new Set(six.queries).size).toBe(six.queries.length);
+  });
+
+  it("carries the CCOS words (0274) off the one role read, for one role or six", async () => {
+    const one = stubPool(1);
+    const six = stubPool(6);
+    const a = await buildPlayerCards(one.pool, [{ userId: "u-owner", tier: MEMBER }], CTX);
+    clearSignMemo();
+    const b = await buildPlayerCards(six.pool, [{ userId: "u-owner", tier: MEMBER }], CTX);
+    for (const r of b.get("u-owner")!.card.roles) {
+      expect(r.existsWhile.text).toEqual({ kind: "shown", value: "people are still arriving" });
+      expect(r.authorities.items).toEqual({ kind: "shown", value: ["Invite to a role"] });
+      expect(r.holdingWell.written).toBe(true);
+      expect(r.time.text).toEqual({ kind: "shown", value: "Part of a full-time season" });
+      expect(r.chips).toContain("Review week of 16 Nov");
+    }
+    expect(a.get("u-owner")!.card.roles[0].responsibilities.items.kind).toBe("shown");
+    expect(six.queries.length).toBe(one.queries.length);
+    // The CCOS columns arrive on the role reads that already ran (ROLE_COLS),
+    // never on a read of their own: as many of those for six roles as for one,
+    // and each one a whole role read.
+    const ccosReads = (qs: string[]) => qs.filter((q) => /exists_while/.test(q));
+    expect(ccosReads(six.queries).length).toBe(ccosReads(one.queries).length);
+    expect(ccosReads(six.queries).every((q) => /terms_offer/.test(q) && /FROM org_roles/.test(q))).toBe(true);
+    expect(new Set(ccosReads(six.queries)).size).toBe(ccosReads(six.queries).length);
   });
 
   it("counts a sign once per cycle: a second card inside the memo's window reads no sign table", async () => {

@@ -36,6 +36,7 @@ import { HUMAN_NEEDS_BY_ID, NEED_DEPTH_LABELS, type NeedWeight } from "./needs";
 import { MODULES } from "./modules";
 import { DECIDES_BY } from "./power";
 import { CAP_DECLINED, type DecisionStatus, type ProfileCircle, type ProfileSeat, type RegenProfile } from "./regenFile";
+import { CARRIED_FROM_KEY } from "./roleCcos";
 
 /**
  * The modules a file never turns on (Rye, 2026-10-20): the ones that move or
@@ -599,7 +600,12 @@ export function draftChangesFor(plan: ImportPlan, choices: ImportChoices): Draft
       if (c.reused) return;
       out.push({ op: "create_circle", orgRoleId: `circle:${c.id}`, payload: { name: c.name, sortOrder: i + 1 } });
     });
-    for (const s of seats) if (!s.existing && s.payload) out.push({ op: "create_seat", orgRoleId: s.id, payload: s.payload });
+    // Each role is one the village already keeps on its ReGen Civics card, so
+    // it arrives with the lines it has: the CCOS count of what a role answers
+    // for (shared/roleCcos.ts) binds roles written here, not roles carried in.
+    for (const s of seats) {
+      if (!s.existing && s.payload) out.push({ op: "create_seat", orgRoleId: s.id, payload: { ...s.payload, [CARRIED_FROM_KEY]: "regen-civics" } });
+    }
   }
   if (choices.holders && plan.holdersWait === null) {
     for (const s of seats) {

@@ -94,8 +94,8 @@ describe("the player card, live", () => {
     const reload = vi.fn();
     render(<PlayerRoleCardView data={fixturePayload(1)} reload={reload} />);
     fireEvent.click(screen.getByRole("button", { name: "Edit my card" }));
-    fireEvent.click(screen.getByRole("button", { name: `Edit: What I decide, ${FIXTURE_ROLE_TITLE(1)}` }));
-    fireEvent.change(screen.getByLabelText(`What I decide, ${FIXTURE_ROLE_TITLE(1)}`), { target: { value: "New words." } });
+    fireEvent.click(screen.getByRole("button", { name: `Edit: What I look after, ${FIXTURE_ROLE_TITLE(1)}` }));
+    fireEvent.change(screen.getByLabelText(`What I look after, ${FIXTURE_ROLE_TITLE(1)}`), { target: { value: "New words." } });
     fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
     await screen.findAllByText("Proposed, waiting for consent");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];

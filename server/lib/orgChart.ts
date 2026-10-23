@@ -31,6 +31,7 @@ import {
 import { circlesOnCycles } from "../../shared/circleView";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
+import { ccosWordsFromRow } from "../../shared/roleCcos";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -156,6 +157,20 @@ export interface OrgRole {
   bringMe?: string[] | null;
   notMine?: string[] | null;
   runbook?: string | null;
+  /**
+   * THE CCOS WORDS (0274, Rye 2026-10-22): "This role exists while", what it
+   * can decide on its own, what it does regularly, the three "Holding this
+   * role well" lines and the time chip. Structure like the handover words,
+   * and changed the same way, only through a draft (shared/roleCcos.ts).
+   * Optional for the same reason: absent reads exactly as NULL.
+   */
+  existsWhile?: string | null;
+  authorities?: string[] | null;
+  responsibilities?: string[] | null;
+  signsStretched?: string | null;
+  flowsBack?: string | null;
+  stepBack?: string | null;
+  timeCommitment?: string | null;
 }
 
 export interface OrgAssignment {
@@ -225,7 +240,9 @@ export const ROLE_COLS =
   // 0265: the value and the list. Projected at the `terms.read` tier.
   "value_minor, value_currency, value_tokens, " +
   // 0268: the handover words. Structure like aim and domain, in every tier's core.
-  "bring_me, not_mine, runbook";
+  "bring_me, not_mine, runbook, " +
+  // 0274: the CCOS words. Structure like the handover words, in every tier's core.
+  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -294,6 +311,8 @@ export function rowToRole(r: any): OrgRole {
     bringMe: readStoredRoleList(r.bring_me),
     notMine: readStoredRoleList(r.not_mine),
     runbook: readStoredRunbook(r.runbook),
+    // 0274: the CCOS words, each through its reader.
+    ...ccosWordsFromRow(r),
   };
 }
 

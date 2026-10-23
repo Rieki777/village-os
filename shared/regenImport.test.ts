@@ -107,6 +107,9 @@ describe("the org draft built from a real card", () => {
       whyItMatters: "Meets Vitality",
       seats: 1,
       recruiting: false,
+      // 0274: the role is the village's own, already on its card, so it keeps
+      // the lines it has under the CCOS count (shared/roleCcos.ts).
+      carriedFrom: "regen-civics",
     });
   });
 
