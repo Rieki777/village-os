@@ -41,9 +41,13 @@ import {
   RULINGS,
   SUBJECT_WORDS,
   WITHDRAWN,
+  MIGRATION_DIR,
+  ROUTE_DIR,
   classifyDoor,
   collectFacts,
   dialCoverageProblem,
+  directoryInputs,
+  fingerprintFiles,
   generate,
   namedDialProblem,
   proseCoverageProblem,
@@ -53,6 +57,7 @@ import {
   schemaFacts,
   sourceFingerprint,
   subjectCoverageProblem,
+  unhashedInputsProblem,
 } from "./generate-governance-doc.mjs";
 import { checkSpan } from "./check-voice.mjs";
 
@@ -440,6 +445,130 @@ check("the fingerprint moves with CONTENT and not with commits, CRLF included", 
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/**
+ * A throwaway tree holding every source, one route module, its tests and one
+ * migration, for the checks below. It never touches this repository.
+ */
+function withSourceTree(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "govdoc-inputs-"));
+  const write = (rel, body) => {
+    fs.mkdirSync(path.join(dir, path.dirname(rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), body);
+  };
+  try {
+    for (const rel of SOURCES) {
+      if (rel.includes(".")) write(rel, "const x = 1;\n");
+      else fs.mkdirSync(path.join(dir, rel), { recursive: true });
+    }
+    write(`${ROUTE_DIR}/thing.ts`, 'app.get("/api/governance/thing", h);\n');
+    write(`${ROUTE_DIR}/thing.test.ts`, "it('a', () => {});\n");
+    write(`${ROUTE_DIR}/thing.e2e.test.ts`, "it('b', () => {});\n");
+    write(`${ROUTE_DIR}/thing.spec.ts`, "it('c', () => {});\n");
+    write(`${MIGRATION_DIR}/0001_first.sql`, "CREATE TABLE `t` (`id` int);\n");
+    fn({ dir, write, fp: () => sourceFingerprint(dir) });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+check("A ROUTE TEST DOES NOT MOVE THE FINGERPRINT, EDITED OR ADDED", () => {
+  /*
+   * The defect this pins. The route walk skipped tests and the fingerprint
+   * hashed them, so editing one moved the fingerprint and turned the guard red
+   * on a document none of whose facts could change. One pull request edited
+   * eighteen route tests and had to restamp it, and so did every lane that
+   * touched a route test.
+   */
+  withSourceTree(({ write, fp }) => {
+    const first = fp();
+    write(`${ROUTE_DIR}/thing.test.ts`, "it('a', () => { expect(1).toBe(1); });\n");
+    assert.strictEqual(fp(), first, "editing a .test.ts under a source directory must not move it");
+    write(`${ROUTE_DIR}/thing.e2e.test.ts`, "it('b', () => { expect(2).toBe(2); });\n");
+    assert.strictEqual(fp(), first, "editing an .e2e.test.ts must not move it");
+    write(`${ROUTE_DIR}/thing.spec.ts`, "it('c', () => { expect(3).toBe(3); });\n");
+    assert.strictEqual(fp(), first, "editing a .spec.ts must not move it");
+    write(`${ROUTE_DIR}/brandNew.test.ts`, "it('d', () => {});\n");
+    assert.strictEqual(fp(), first, "adding a test must not move it");
+  });
+});
+
+check("A ROUTE MODULE OR A MIGRATION THE READERS PARSE STILL MOVES IT", () => {
+  // The other half, without which the check above passes against a fingerprint
+  // that stopped hashing the directory altogether.
+  withSourceTree(({ write, fp }) => {
+    const first = fp();
+    write(`${ROUTE_DIR}/thing.ts`, 'app.post("/api/governance/thing", h);\n');
+    const afterEdit = fp();
+    assert.notStrictEqual(afterEdit, first, "editing a route module must move it");
+    write(`${ROUTE_DIR}/another.ts`, "export const y = 1;\n");
+    const afterAdd = fp();
+    assert.notStrictEqual(afterAdd, afterEdit, "adding a route module must move it, governance route or not");
+    write(`${MIGRATION_DIR}/0001_first.sql`, "CREATE TABLE `t` (`id` bigint);\n");
+    const afterSql = fp();
+    assert.notStrictEqual(afterSql, afterAdd, "editing a migration must move it");
+    write(`${MIGRATION_DIR}/0002_second.sql`, "CREATE TABLE `u` (`id` int);\n");
+    assert.notStrictEqual(fp(), afterSql, "adding a migration must move it: the document prints their count");
+  });
+});
+
+check("A FILE KIND NO READER PARSES DOES NOT MOVE IT", () => {
+  /*
+   * The fingerprint used to hash `.ts`, `.tsx`, `.mjs` and `.sql` in every
+   * source directory. The route walk parses `.ts` there and nothing else, and
+   * `importSource` resolves an import to `<spec>.ts` only; the schema reader
+   * parses `.sql` and nothing else. Every kind below is one that was hashed and
+   * that no reader can open, so none of them may move it.
+   */
+  withSourceTree(({ write, fp }) => {
+    const first = fp();
+    for (const name of ["thing.tsx", "thing.mjs", "thing.sql", "thing.test.tsx", "thing.test.mjs"]) {
+      write(`${ROUTE_DIR}/${name}`, "export const z = 1;\n");
+      assert.strictEqual(fp(), first, `${ROUTE_DIR}/${name} is parsed by no reader and must not move it`);
+    }
+    for (const name of ["config.ts", "helper.mjs", "view.tsx"]) {
+      write(`${MIGRATION_DIR}/${name}`, "export const z = 1;\n");
+      assert.strictEqual(fp(), first, `${MIGRATION_DIR}/${name} is parsed by no reader and must not move it`);
+    }
+  });
+});
+
+check("A FILE A READER PARSES AND THE FINGERPRINT DOES NOT HASH STOPS THE BUILD", () => {
+  /*
+   * The opposite defect, found while fixing the first one. Three subject names
+   * in the dispatcher table are computed keys, read out of files SOURCES did
+   * not name, so a change there could move a fact and leave the fingerprint
+   * where it was. `collectFacts` refuses that now, through this.
+   */
+  const problem = unhashedInputsProblem(
+    ["shared/a.ts", "shared/elsewhere.ts", "shared/a.ts"],
+    ["shared/a.ts", "drizzle/0001.sql"],
+  );
+  assert.ok(problem && /shared\/elsewhere\.ts/.test(problem), problem);
+  assert.ok(!/shared\/a\.ts/.test(problem), `a hashed file is not a complaint: ${problem}`);
+  assert.ok(/SOURCES/.test(problem), "the message must name where to fix it");
+  assert.strictEqual(unhashedInputsProblem(["shared/a.ts"], ["shared/a.ts", "shared/b.ts"]), null);
+
+  // A source directory with no rule for its files is refused too, because
+  // guessing which of them matter is how the two walks came apart.
+  assert.throws(() => directoryInputs(os.tmpdir(), "some/new/dir"), /DIRECTORY_INPUTS has no rule/);
+});
+
+check("ON THIS TREE THE FINGERPRINT HASHES WHAT THE READERS OPEN, AND IN A SOURCE DIRECTORY NOTHING ELSE", () => {
+  const f = collectFacts();
+  const hashed = fingerprintFiles();
+  assert.ok(f.inputs.length > 0, "the readers must report what they opened, not a clean zero");
+  const missing = f.inputs.filter((rel) => !hashed.includes(rel));
+  assert.deepStrictEqual(missing, [], "every file a reader opened is hashed");
+  const opened = new Set(f.inputs);
+  const inDirectory = (rel) => [ROUTE_DIR, MIGRATION_DIR].some((d) => rel.startsWith(`${d}/`));
+  const unread = hashed.filter((rel) => inDirectory(rel) && !opened.has(rel));
+  assert.deepStrictEqual(unread, [], "a file in a source directory that no reader opened must not be hashed");
+  assert.ok(
+    !hashed.some((rel) => /\.(test|spec)\.[a-z]+$/.test(rel)),
+    "no test or spec file is hashed",
+  );
 });
 
 check("the constitution comes before the long tables", () => {
