@@ -128,6 +128,7 @@ export default function RoleCcosEditor({
             id={id}
             value={boxes[f]}
             className={`${box} min-h-[44px]`}
+            aria-label={W[f]}
             aria-describedby={`${id}-hint`}
             aria-invalid={problem ? true : undefined}
             onChange={(e) => set(e.target.value)}
@@ -138,6 +139,7 @@ export default function RoleCcosEditor({
             rows={rows}
             value={boxes[f]}
             className={box}
+            aria-label={W[f]}
             aria-describedby={`${id}-hint`}
             aria-invalid={problem ? true : undefined}
             onChange={(e) => set(e.target.value)}
