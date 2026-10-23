@@ -168,3 +168,13 @@ export function withThemeVersion(html: string, version: string): string {
   if (typeof html !== "string" || !html.includes(anchor)) return html;
   return html.split(anchor).join(`href="${THEME_HREF}?v=${encodeURIComponent(version)}"`);
 }
+
+/**
+ * The village's brand colour as one hex value, for the places that cannot
+ * read a CSS variable: the install manifest's theme_color, and email. Derived
+ * exactly as theme.css derives --tone-brand; the platform's own neutral when
+ * the village has set no seed.
+ */
+export function brandColour(theme: BrandThemeFields | null | undefined): string {
+  return deriveTheme(theme?.seed, theme?.character, theme?.accent)?.vars["--tone-brand"] ?? "#404040";
+}

@@ -11,9 +11,10 @@
       village's host, or claim a canonical URL — a static file cannot know
       which fork it serves. The live identity arrives client-side: the title
       and favicon are repainted from /api/game/config (brand overlay over
-      shared/gameConfig.ts) the moment it answers. A fork that wants
-      crawler-visible metadata (og:image, canonical) adds it in its own fork,
-      where the values are actually true.
+      shared/gameConfig.ts) the moment it answers. What a crawler or a link
+      preview reads (title, description, og:image, canonical) is spliced in
+      per request by the server (server/lib/pageMeta.ts), from the village's
+      own settings, so the tags below are only ever the fallback.
     -->
     <!--
       The first paint waits for /api/game/config; fetch it beside the bundle,

@@ -7530,7 +7530,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("images", { images: brand.images })} disabled={savingSection === "images"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "images" ? "Saving..." : "Save pictures"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. Crawler-facing metadata (og:image, canonical URL) stays neutral in <code>client/index.html</code>; a fork that wants it adds it in its own fork.</p>
+        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. What a shared link shows (its sentence and picture) is set in Make it yours, Pages, Whole site, and falls back to your Tagline and homepage picture.</p>
         {/* Typography lives with Pictures: both are "how the village looks".
             Self-contained component — see client/src/components/TypographyPanel.tsx. */}
         <LookPanel password={password} />
@@ -7620,7 +7620,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
           <li>
             <p className="font-medium text-gray-900">5. Social image & favicon</p>
-            <p className="text-gray-500">Only in a fork you build yourself: edit <code>client/index.html</code> for the <code>og:image</code> and <code>twitter:image</code> links, which are build-time and not in this wizard.</p>
+            <p className="text-gray-500">Set the sentence and picture a shared link shows in Make it yours, Pages, Whole site. The tab icon is in Pictures. Both apply live, with no deploy.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">6. Full reference</p>
