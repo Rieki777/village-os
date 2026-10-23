@@ -3451,7 +3451,7 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     // refuses a rule on it. The feed says what the engine does.
     const forWork = trigger === "quest.completed" || trigger === "role.cycle";
     if (forWork && String(r.token_slug) === HEARTS) {
-      return { trigger, token: name, says: `no ${name} for work, because ${name} only shares out the cycle pool` };
+      return { trigger, token: name, says: `no ${name} for work` };
     }
     // A quest or role with its own amounts (0265) is paid those, up to the ceiling.
     const own =
