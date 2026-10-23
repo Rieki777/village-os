@@ -276,6 +276,8 @@ export default function CircleCardView({
   reload?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  // A decided proposal's confirmation, kept here: adopting the last one empties the panel.
+  const [decided, setDecided] = useState<string | null>(null);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
   return (
@@ -331,7 +333,13 @@ export default function CircleCardView({
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
-      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} />
+      {(card.proposals ?? []).length ? (
+        <ProposalsPanel proposals={card.proposals ?? []} reload={reload} onDone={setDecided} />
+      ) : decided ? (
+        <p role="status" className={`${SECTION} text-sm font-medium`}>
+          {decided}
+        </p>
+      ) : null}
       {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
         <SectionPanel key={g[0]!.key} group={g} />
       ))}

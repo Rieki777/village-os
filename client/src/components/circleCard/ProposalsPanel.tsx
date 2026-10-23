@@ -41,7 +41,16 @@ const DOOR_WORDS: DecideDoorWords = {
   failed: W.proposeFailed,
 };
 
-export default function ProposalsPanel({ proposals, reload }: { proposals: ProposalOut[]; reload: () => void }) {
+export default function ProposalsPanel({
+  proposals,
+  reload,
+  onDone,
+}: {
+  proposals: ProposalOut[];
+  reload: () => void;
+  /** Hears a door's confirmation, which the card keeps once this panel empties. */
+  onDone?: (said: string) => void;
+}) {
   if (!proposals.length) return null;
   return (
     <section aria-label={W.pending} className={`${SECTION} grid gap-4`} data-circle-proposals="">
@@ -63,7 +72,7 @@ export default function ProposalsPanel({ proposals, reload }: { proposals: Propo
               )}
             </div>
           ))}
-          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} />
+          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} onDone={onDone} />
         </div>
       ))}
     </section>

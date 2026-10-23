@@ -15,7 +15,7 @@
  * proposed change that waits for consent. Other roles are named by their full
  * title and nobody but the owner is named anywhere.
  */
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
@@ -58,6 +58,8 @@ function RoleWord({
 
 export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: Record<string, SignSheetOut>; timeZone: string }) {
   const headingId = `${role.anchor}-h`;
+  // A decided proposal's confirmation, kept here: adopting the last one empties its panel.
+  const [decided, setDecided] = useState<string | null>(null);
   return (
     <article id={role.anchor} aria-labelledby={headingId} className="grid scroll-mt-6 gap-4 rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8">
       <h3 id={headingId} className="font-display text-2xl font-bold">
@@ -92,7 +94,13 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
           ))}
         </ul>
       ) : null}
-      {role.proposals.length ? <RoleProposals role={role} /> : null}
+      {role.proposals.length ? (
+        <RoleProposals role={role} onDone={setDecided} />
+      ) : decided ? (
+        <p role="status" className="text-sm font-medium">
+          {decided}
+        </p>
+      ) : null}
       {role.plays ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">{role.plays.label}</span>
@@ -264,7 +272,7 @@ const DOOR_WORDS: DecideDoorWords = {
  * live and the doors that adopt it. A draft opened from a card is listed on no
  * review page, so the role's own section is where it is decided.
  */
-function RoleProposals({ role }: { role: RoleOut }) {
+function RoleProposals({ role, onDone }: { role: RoleOut; onDone: (said: string) => void }) {
   const { reload } = useContext(CardEditContext);
   return (
     <div className={`${BOX} grid gap-3`} data-role-proposals={role.id}>
@@ -286,7 +294,7 @@ function RoleProposals({ role }: { role: RoleOut }) {
               )}
             </div>
           ))}
-          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} />
+          <DecideDoors draftId={p.draftId} reload={reload} words={DOOR_WORDS} onDone={onDone} />
         </div>
       ))}
     </div>

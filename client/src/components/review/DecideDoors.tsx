@@ -15,6 +15,10 @@
  * and anybody else reads who decides it. Each step asks once before it acts,
  * and a refusal is the server's own sentence. The words are the card's, handed
  * in, so each card says what changes in its own terms.
+ *
+ * `onDone` hears the confirmation before the card reads itself again. Adopting
+ * the last proposal empties the panel these doors sit in, so a confirmation
+ * kept here would vanish with it: the parent that stays mounted keeps it.
  */
 import { useCallback, useEffect, useState } from "react";
 import { QUIET_BUTTON, TAP } from "@/components/playerCard/cardParts";
@@ -62,7 +66,18 @@ async function post(path: string, failed: string): Promise<{ ok: true } | { ok: 
   }
 }
 
-export default function DecideDoors({ draftId, reload, words: W }: { draftId: string; reload: () => void; words: DecideDoorWords }) {
+export default function DecideDoors({
+  draftId,
+  reload,
+  words: W,
+  onDone,
+}: {
+  draftId: string;
+  reload: () => void;
+  words: DecideDoorWords;
+  /** Hears "Adopted ..." or "Put to the village ..." once the server has done it. */
+  onDone?: (said: string) => void;
+}) {
   const [answer, setAnswer] = useState<DecideAnswer | null>(null);
   const [step, setStep] = useState<Step>("idle");
   const [said, setSaid] = useState<string | null>(null);
@@ -91,6 +106,7 @@ export default function DecideDoors({ draftId, reload, words: W }: { draftId: st
     setStep("idle");
     if (r.ok) {
       setSaid(done);
+      onDone?.(done);
       reload();
       read();
     } else setSaid(r.error);
