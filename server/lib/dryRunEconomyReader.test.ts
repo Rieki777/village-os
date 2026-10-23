@@ -33,7 +33,7 @@ import { economicsModel, readEconomicsMemo } from "../../shared/dryRun/economics
 import { simulate } from "../../shared/dryRun/simulate";
 import type { MintRuleSpec, TokenSpec, VillageSnapshot } from "../../shared/dryRun/types";
 import { VARIABLES, VARIABLES_BY_KEY } from "../../shared/gameVariables";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   economyProvenance,
   readEconomySnapshot,
@@ -117,7 +117,7 @@ describe.skipIf(!configured)("the economy snapshot of a live village", () => {
     // (server/db/testDb.ts), and the row counts below read that table. Nothing here
     // makes an account through the register route, so the closed door costs nothing.
     db = await provisionTestDb({ inviteOnly: true });
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     // Registers `village-voice` at VOICE_DECIMALS and writes the default rules.
     await seedEconomy(pool, VILLAGE);
@@ -441,7 +441,7 @@ describe.skipIf(!configured)("a rule written below its token's own resolution", 
 
   beforeAll(async () => {
     db = await provisionTestDb({ inviteOnly: true });
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
 
@@ -558,7 +558,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
 
   beforeAll(async () => {
     db = await provisionTestDb({ inviteOnly: true });
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     // What the migrations alone put in the registry, before any boot code runs.
     const [rows] = await pool.query<any[]>("SELECT `slug` FROM `tokens` ORDER BY `slug`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     migratedSlugs = rows.map((r: any) => String(r.slug));
@@ -699,7 +699,7 @@ describe.skipIf(!configured)("the seed fallback, and saying it is a seed", () =>
     // only honest check is to run the real thing and compare. This is the test
     // that fails the day somebody retunes the seed and forgets the mirror.
     const fresh = await provisionTestDb({ inviteOnly: true });
-    const other = mysql.createPool({ uri: fresh.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const other = testPool(fresh, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     try {
       await loadTokenRegistry(other);
       await seedEconomy(other, VILLAGE);

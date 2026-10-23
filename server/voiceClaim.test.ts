@@ -46,7 +46,7 @@ import {
   retryRefund,
   settleVoiceClaim,
 } from "./lib/voiceClaim";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 
@@ -122,7 +122,7 @@ async function cacheDrift(tokenSlug: string): Promise<number> {
 describe.skipIf(!configured)("carrying voice to Hypha", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");

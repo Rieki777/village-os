@@ -21,7 +21,7 @@ import {
   sealedCycleUsage,
 } from "./repos/moduleUsage";
 import { reachWeights } from "./lib/moduleUsage";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 const CYCLE = "lunar-000900";
@@ -33,7 +33,7 @@ let pool: mysql.Pool;
 describe.skipIf(!configured)("the module meter", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: the suite's own connection to a throwaway scratch schema, as every DB suite does
+    pool = testPool(db, { connectionLimit: 10 }); // module-review-ok: the suite's own connection to a throwaway scratch schema, as every DB suite does
   });
 
   afterAll(async () => {

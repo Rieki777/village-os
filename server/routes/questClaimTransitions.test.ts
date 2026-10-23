@@ -54,7 +54,7 @@ import os from "node:os";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestsRepo } from "../repos/quests";
 import { register as registerQuestRoutes } from "./quests";
 import { register as registerQuestClaimRoutes } from "./questClaims";
@@ -147,7 +147,7 @@ const consentAs = (steward: Person, claimId: string, amount: number) =>
 describe.skipIf(!configured)("the doors that move a quest claim (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     claims = claimsRepo(pool);
     quests = questsRepo(pool);
 

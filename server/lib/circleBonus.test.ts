@@ -25,7 +25,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { MINT_FAUCET, loadTokenRegistry, memberAccount, postTransfer } from "./ledger";
 import {
   burnFor,
@@ -221,7 +221,7 @@ async function standing(
 describe.skipIf(!configured)("the rollover, and the bonus that follows from it", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
     await loadTokenRegistry(pool);
     // Room to work in. Every posting below is issuance and meets this.
     await setVariable(pool, "ledger.admin_mint_cycle_cap", "100000");

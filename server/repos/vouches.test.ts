@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { recordVouch, vouchesBy, vouchesFor, vouchesForMany } from "./vouches";
 
 const configured = testDbConfigured();
@@ -29,7 +29,7 @@ const nextId = () => `vt-${String(++seq).padStart(3, "0")}`;
 describe.skipIf(!configured)("member_vouches on a real database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
   });
 
   afterAll(async () => {

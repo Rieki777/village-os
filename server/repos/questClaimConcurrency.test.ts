@@ -48,7 +48,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, untilALockIsAwaited, type TestDb } from "../db/testDb";
 import {
   claimsRepo,
   questsRepo,
@@ -87,7 +87,7 @@ describe.skipIf(!configured)("quest claims under concurrent actors (MySQL)", () 
     // Room for every racer to hold its own connection at once. A pool smaller
     // than the fan-out below would serialise the test rather than the code,
     // which is the quiet way a concurrency test stops testing concurrency.
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 12 });
+    pool = testPool(db, { connectionLimit: 12 });
     /*
      * PRE-WARM, AND IT IS NOT A DETAIL. mysql2 opens connections lazily, so an
      * unwarmed fan-out is serialised by the DRIVER: the first racer's write
