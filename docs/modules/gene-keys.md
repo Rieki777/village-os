@@ -79,6 +79,26 @@ is known, and asks the member to choose when the result changes. The saved row r
 | `GET /api/gene-keys/people/:handle` | any member | one member's shown lines, or `null` |
 | `GET /api/gene-keys/places` | any member | the birth-town list (`server/assets/places`), searched on the device |
 
+## Where it shows
+
+Every surface wears the profile's night world (`sheet-night`) and renders nothing while the module is off.
+
+- **`/profile/gene-keys`** (`client/src/pages/GeneKeys.tsx`, a lazy chunk so nobody downloads the sky maths
+  until they open it): birth date, time or "I don't know my birth time", the birth town searched on the device,
+  the window choice when time decides the result, the reveal, then show or hide and Maia's yes, then the save.
+- **The seal** (`GeneKeysSeal.tsx`) on the member's own portrait (`ProfileHero`) and on another member's
+  (`PublicProfile`): hover or focus shows the two words, a click or tap opens the lines card, as a dialog on a
+  wide screen and a sheet on a phone.
+- **The lines card** on the member's own profile, with their controls (show or hide, Maia, find again, remove),
+  and on another member's public profile without them. Before a result exists, the own-profile card invites.
+- **The character page** (`GeneKeysPrompt.tsx`): a card while the member has no result, and a popup once, after
+  a character joins their party. "Once" is per device (`localStorage`).
+- **The circle view** (`CircleLines.tsx`) inside each circle on `/circles`, from the role holders `/api/org`
+  names to a signed-in member: the six lines bottom up, the open ones as invitations, the type mix, and one count
+  for members who keep their lines private.
+- **Role applications** (`ApplicantGeneKeys` above the card on `/role-applications/:id`): the candidate's seal
+  and one plain sentence, read by their id, only when they show their lines. Information, never a score.
+
 ## Not built yet
 
 - The Venus (Love) and Pearl (Prosperity) sequences on screen. Open `SHOWN_SPHERES` after their own live test.

@@ -10,8 +10,9 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 export type Queryable = Pool | PoolConnection;
 
-export type GeneKeysVisibility = "show" | "hide";
-export type GeneKeysSource = "exact" | "chosen" | "typed";
+import type { GeneKeysSource, GeneKeysVisibility } from "../../shared/geneKeys";
+
+export type { GeneKeysSource, GeneKeysVisibility };
 
 export interface GeneKeysRow {
   userId: string;

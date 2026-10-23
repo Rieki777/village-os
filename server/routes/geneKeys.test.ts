@@ -109,7 +109,7 @@ describe("the gene keys doors, without a database", () => {
     const got = await call(c.handlers, "GET /api/gene-keys/places");
     expect(got.status).toBe(200);
     expect(got.headers["cache-control"]).toMatch(/^private, max-age=/);
-    const lines = (got.text ?? "").split("\n");
+    const lines = (got.text ?? "").split(/\r?\n/);
     expect(lines[0]).toMatch(/GeoNames.*CC BY 4\.0/);
     const blank = lines.indexOf("");
     expect(lines.slice(1, blank)).toContain("America/Costa_Rica");

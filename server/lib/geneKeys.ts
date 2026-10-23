@@ -12,7 +12,7 @@
  *   - Maia: a short paragraph, and only when the owner said yes to it.
  *
  * AT LAUNCH ONLY THE ACTIVATION SEQUENCE IS SHOWN (Rye, 2026-10-22). The
- * stored chart already holds the Venus and Pearl spheres; `SHOWN_SPHERES` is
+ * stored chart already holds the Venus and Pearl spheres; `SHOWN_SPHERES` (shared) is
  * the one line that opens them later, after their own live test (the Venus
  * sequence leans on the Moon, which changes line every couple of hours).
  *
@@ -21,92 +21,21 @@
 import type { Pool } from "mysql2/promise";
 import { effectiveLifecycle } from "./modules";
 import {
-  AUTHORITY_WORDS, BODIES, GENE_KEYS_CALC_VERSION, LINE_WORDS, SPHERE_WORDS, STRATEGY_WORDS,
-  analyse, chartProblems, lineWord, profileOf, sphereOf, withArticle,
-  type Authority, type Chart, type HdType, type Sphere,
+  BODIES, GENE_KEYS_CALC_VERSION, analyse, chartProblems, profileOf, viewOf, withArticle,
+  type Chart, type GeneKeysView, type OwnGeneKeysView,
 } from "../../shared/geneKeys";
 import {
   deleteGeneKeys, readGeneKeys, shownGeneKeysByHandle, shownGeneKeysFor, updateGeneKeysSettings, writeGeneKeys,
-  type GeneKeysRow, type GeneKeysSource, type GeneKeysVisibility,
+  type GeneKeysRow,
 } from "../repos/geneKeys";
-
-/** The spheres any reader is shown today. */
-export const SHOWN_SPHERES: readonly Sphere[] = ["lifesWork", "evolution", "radiance", "purpose"];
+import type { GeneKeysSource, GeneKeysVisibility } from "../../shared/geneKeys";
 
 /** At most this many members in one batched read: a circle, a roster page. */
 export const PEOPLE_READ_MAX = 60;
 
-export interface SphereView {
-  sphere: Sphere;
-  name: string;
-  tagline: string | null;
-  /** "12.2" */
-  keyLine: string;
-  gate: number;
-  line: number;
-  /** The word genekeys.com shows for this line in this sphere. */
-  word: string;
-}
-
-export interface GeneKeysView {
-  profile: string;
-  /** The two profile lines as one word each, "Dancer · Fixer". */
-  names: string;
-  lines: [number, number];
-  spheres: SphereView[];
-  type: HdType;
-  strategy: string;
-  strategyLine: string;
-  authority: Authority;
-  authorityName: string;
-  authorityLine: string;
-}
-
-export interface OwnGeneKeysView extends GeneKeysView {
-  visibility: GeneKeysVisibility;
-  maia: boolean;
-  source: GeneKeysSource;
-  /** Computed by an older calculator than this release runs: ask the member to read the sky again. */
-  stale: boolean;
-}
-
-function wordFor(sphere: Sphere, line: number): string {
-  const set = (LINE_WORDS as Record<string, readonly string[]>)[sphere];
-  return set ? set[line - 1] ?? "" : "";
-}
-
 /** The stored chart, trusted only after the same checks a save runs. */
 function chartOf(row: GeneKeysRow): Chart | null {
   return chartProblems(row.chart).length === 0 ? (row.chart as Chart) : null;
-}
-
-export function viewOf(chart: Chart): GeneKeysView {
-  const design = analyse(chart);
-  const p = chart.personality.Sun.line, d = chart.design.Sun.line;
-  const s = STRATEGY_WORDS[design.type], a = AUTHORITY_WORDS[design.authority];
-  return {
-    profile: profileOf(chart),
-    names: `${lineWord(p)} · ${lineWord(d)}`,
-    lines: [p, d],
-    spheres: SHOWN_SPHERES.map((sphere) => {
-      const act = sphereOf(chart, sphere);
-      return {
-        sphere,
-        name: SPHERE_WORDS[sphere].name,
-        tagline: SPHERE_WORDS[sphere].tagline,
-        keyLine: `${act.gate}.${act.line}`,
-        gate: act.gate,
-        line: act.line,
-        word: wordFor(sphere, act.line),
-      };
-    }),
-    type: design.type,
-    strategy: s.strategy,
-    strategyLine: s.line,
-    authority: design.authority,
-    authorityName: a.name,
-    authorityLine: a.line,
-  };
 }
 
 function ownViewOf(row: GeneKeysRow): OwnGeneKeysView | null {

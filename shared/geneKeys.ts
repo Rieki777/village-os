@@ -295,3 +295,87 @@ export const AUTHORITY_WORDS: Record<Authority, { name: string; line: string }> 
 export function withArticle(word: string): string {
   return `${/^[AEIOU]/.test(word) ? "an" : "a"} ${word}`;
 }
+
+// ── THE HTTP SHAPES ─────────────────────────────────────────────────────────
+//
+// What /api/gene-keys/** answers (server/routes/geneKeys.ts), so the browser and
+// the server read one definition.
+
+export type GeneKeysVisibility = "show" | "hide";
+export type GeneKeysSource = "exact" | "chosen" | "typed";
+
+export interface SphereView {
+  sphere: Sphere;
+  name: string;
+  tagline: string | null;
+  /** "12.2" */
+  keyLine: string;
+  gate: number;
+  line: number;
+  /** The word genekeys.com shows for this line in this sphere. */
+  word: string;
+}
+
+export interface GeneKeysView {
+  profile: string;
+  /** The two profile lines as one word each, "Dancer · Fixer". */
+  names: string;
+  lines: [number, number];
+  spheres: SphereView[];
+  type: HdType;
+  strategy: string;
+  strategyLine: string;
+  authority: Authority;
+  authorityName: string;
+  authorityLine: string;
+}
+
+export interface OwnGeneKeysView extends GeneKeysView {
+  visibility: GeneKeysVisibility;
+  maia: boolean;
+  source: GeneKeysSource;
+  /** Computed by an older calculator than this release runs: ask the member to read the sky again. */
+  stale: boolean;
+}
+
+/**
+ * The spheres any reader is shown today: the Activation Sequence (Rye,
+ * 2026-10-22). The stored chart holds the Venus and Pearl spheres too; this is
+ * the one line that opens them, after their own live test.
+ */
+export const SHOWN_SPHERES: readonly Sphere[] = ["lifesWork", "evolution", "radiance", "purpose"];
+
+function wordFor(sphere: Sphere, line: number): string {
+  const set = (LINE_WORDS as Record<string, readonly string[]>)[sphere];
+  return set ? set[line - 1] ?? "" : "";
+}
+
+/** What a reader sees of a chart. The server builds it to answer; the browser builds it to preview before a save. */
+export function viewOf(chart: Chart): GeneKeysView {
+  const design = analyse(chart);
+  const p = chart.personality.Sun.line, d = chart.design.Sun.line;
+  const s = STRATEGY_WORDS[design.type], a = AUTHORITY_WORDS[design.authority];
+  return {
+    profile: profileOf(chart),
+    names: `${lineWord(p)} · ${lineWord(d)}`,
+    lines: [p, d],
+    spheres: SHOWN_SPHERES.map((sphere) => {
+      const act = sphereOf(chart, sphere);
+      return {
+        sphere,
+        name: SPHERE_WORDS[sphere].name,
+        tagline: SPHERE_WORDS[sphere].tagline,
+        keyLine: `${act.gate}.${act.line}`,
+        gate: act.gate,
+        line: act.line,
+        word: wordFor(sphere, act.line),
+      };
+    }),
+    type: design.type,
+    strategy: s.strategy,
+    strategyLine: s.line,
+    authority: design.authority,
+    authorityName: a.name,
+    authorityLine: a.line,
+  };
+}

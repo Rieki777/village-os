@@ -34,7 +34,8 @@ import SeatSheet from "@/components/power/SeatSheet";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
-import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import CircleLines, { type CircleHolder } from "@/components/geneKeys/CircleLines";
 
 interface CircleEntry {
   id: string;
@@ -50,6 +51,8 @@ interface CircleEntry {
   color?: string;
   /** Optional scene override (motif id or /api/uploads/…); keywords otherwise. */
   scene?: string;
+  /** Holders with an id, which only a signed-in member's read carries: the circle's Gene Keys view reads these. */
+  holders: CircleHolder[];
 }
 
 /** Icon names a card may reference; anything unknown falls back to CircleDot. */
@@ -156,6 +159,8 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
                 )}
               </div>
 
+              {circle.holders.length > 0 ? <CircleLines holders={circle.holders} /> : null}
+
               {circle.seats.length > 0 && (
                 <div>
                   <h4 className="font-semibold text-foreground mb-3">Key Focus Areas</h4>
@@ -260,6 +265,15 @@ export default function Circles() {
              * have them, the true count when we do not, and "none held yet"
              * only when that is a fact.
              */
+            // One entry per person with an id, whichever roles they hold here.
+            const holders: CircleHolder[] = Array.from(
+              new Map(
+                seats
+                  .flatMap((s: any) => s.holders ?? [])
+                  .filter((h: any) => h?.userId && !h?.lapsed)
+                  .map((h: any) => [String(h.userId), { id: String(h.userId), name: orgHolderName(h) || "A member" }] as const),
+              ).values(),
+            );
             const heldSeats = seats.reduce(
               (n: number, s: any) => n + Number(s.holderCount ?? 0),
               0,
@@ -288,6 +302,7 @@ export default function Circles() {
                */
               icon: c.icon ?? undefined,
               color: c.color ?? undefined,
+              holders,
               members: heldBy.length
                 ? Array.from(new Set(heldBy)).join(", ")
                 : seats.length
