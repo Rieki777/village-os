@@ -19,6 +19,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { bodyOf, type ProposalBody, type ProposalStatus, type ShareAudience } from "../../shared/roleProposals";
+import type { ConsentAnswer } from "../../shared/roleProposalConsent";
 
 type Db = Pool | PoolConnection;
 
@@ -34,11 +35,13 @@ export interface StoredProposal {
   createdAt: Date;
   updatedAt: Date;
   submittedAt: Date | null;
+  /** The decision record in words, once adopted (0276). */
+  decidedWords: string | null;
 }
 
 const COLUMNS =
   "id, user_id, status, target_season_id, body_json, share_token, share_audience, application_id, " +
-  "UNIX_TIMESTAMP(created_at) AS created_s, UNIX_TIMESTAMP(updated_at) AS updated_s, UNIX_TIMESTAMP(submitted_at) AS submitted_s";
+  "UNIX_TIMESTAMP(created_at) AS created_s, UNIX_TIMESTAMP(updated_at) AS updated_s, UNIX_TIMESTAMP(submitted_at) AS submitted_s, decided_words";
 
 const json = (v: unknown): unknown => {
   if (v === null || v === undefined) return null;
@@ -67,6 +70,7 @@ function rowToProposal(r: any): StoredProposal {
     createdAt: fromSeconds(r.created_s) as Date,
     updatedAt: fromSeconds(r.updated_s) as Date,
     submittedAt: fromSeconds(r.submitted_s),
+    decidedWords: r.decided_words ?? null,
   };
 }
 
@@ -102,6 +106,13 @@ export async function draftOf(db: Db, userId: string): Promise<StoredProposal | 
 export async function proposalByShareToken(db: Db, token: string): Promise<StoredProposal | null> {
   const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM role_proposals WHERE share_token = ?`, [token]);
   return rows[0] ? rowToProposal(rows[0]) : null;
+}
+
+/** Several proposals by id, in one read. */
+export async function proposalsByIds(db: Db, ids: readonly string[]): Promise<StoredProposal[]> {
+  if (!ids.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${COLUMNS} FROM role_proposals WHERE id IN (?)`, [[...ids]]);
+  return rows.map(rowToProposal);
 }
 
 /** The proposals these applications came from, by application id, in one read. */
@@ -203,6 +214,118 @@ export async function commentsOn(db: Db, proposalId: string, authorId?: string):
   return rows.map(toComment);
 }
 
+// ── The circle's asks (0276) ────────────────────────────────────────────────
+
+export interface StoredAsk {
+  proposalId: string;
+  userId: string;
+  circleId: string;
+  askedAt: Date;
+  closesAt: Date;
+  answer: ConsentAnswer | null;
+  reason: string | null;
+  answeredAt: Date | null;
+  circleEntryId: number | null;
+}
+
+const ASK_COLUMNS =
+  "proposal_id, user_id, circle_id, UNIX_TIMESTAMP(asked_at) AS asked_s, UNIX_TIMESTAMP(closes_at) AS closes_s, answer, reason, " +
+  "UNIX_TIMESTAMP(answered_at) AS answered_s, circle_entry_id";
+
+const toAsk = (r: any): StoredAsk => ({
+  proposalId: String(r.proposal_id),
+  userId: String(r.user_id),
+  circleId: String(r.circle_id),
+  askedAt: fromSeconds(r.asked_s) as Date,
+  closesAt: fromSeconds(r.closes_s) as Date,
+  answer: r.answer === "consent" || r.answer === "object" ? r.answer : null,
+  reason: r.reason ?? null,
+  answeredAt: fromSeconds(r.answered_s),
+  circleEntryId: r.circle_entry_id === null || r.circle_entry_id === undefined ? null : Number(r.circle_entry_id),
+});
+
+/** Ask each holder once. Inside the submit's own transaction, so a proposal is never submitted half asked. */
+export async function insertAsks(db: Db, rows: ReadonlyArray<{ proposalId: string; userId: string; circleId: string; askedAt: Date; closesAt: Date }>): Promise<void> {
+  if (!rows.length) return;
+  await db.query(
+    `INSERT INTO role_proposal_asks (proposal_id, user_id, circle_id, asked_at, closes_at) VALUES ${rows.map(() => "(?,?,?,?,?)").join(",")}`,
+    rows.flatMap((r) => [r.proposalId, r.userId, r.circleId, r.askedAt, r.closesAt]),
+  );
+}
+
+/** Every ask on these proposals, by proposal id, in one read. */
+export async function asksFor(db: Db, proposalIds: readonly string[]): Promise<Map<string, StoredAsk[]>> {
+  const out = new Map<string, StoredAsk[]>();
+  if (!proposalIds.length) return out;
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${ASK_COLUMNS} FROM role_proposal_asks WHERE proposal_id IN (?) ORDER BY asked_at, user_id`, [[...proposalIds]]);
+  for (const r of rows) {
+    const a = toAsk(r);
+    const list = out.get(a.proposalId) ?? [];
+    list.push(a);
+    out.set(a.proposalId, list);
+  }
+  return out;
+}
+
+/** The asks a holder has not answered, oldest first. */
+export async function openAsksOf(db: Db, userId: string): Promise<StoredAsk[]> {
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT ${ASK_COLUMNS} FROM role_proposal_asks WHERE user_id = ? AND answer IS NULL ORDER BY asked_at, proposal_id`, [userId]);
+  return rows.map(toAsk);
+}
+
+/** One ask, locked when handed a transaction's connection. */
+export async function readAsk(db: Db, proposalId: string, userId: string, lock = false): Promise<StoredAsk | null> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${ASK_COLUMNS} FROM role_proposal_asks WHERE proposal_id = ? AND user_id = ?${lock ? " FOR UPDATE" : ""}`,
+    [proposalId, userId],
+  );
+  return rows[0] ? toAsk(rows[0]) : null;
+}
+
+/** Record an answer once. False when it was answered already. */
+export async function writeAnswer(
+  db: Db,
+  a: { proposalId: string; userId: string; answer: ConsentAnswer; reason: string | null; circleEntryId: number | null; now: Date },
+): Promise<boolean> {
+  const [r]: any = await db.query(
+    "UPDATE role_proposal_asks SET answer = ?, reason = ?, circle_entry_id = ?, answered_at = ? WHERE proposal_id = ? AND user_id = ? AND answer IS NULL",
+    [a.answer, a.reason, a.circleEntryId, a.now, a.proposalId, a.userId],
+  );
+  return Number(r?.affectedRows ?? 0) > 0;
+}
+
+/** Write the decision record once, when the proposal is adopted. */
+export async function setDecidedWords(db: Db, id: string, words: string): Promise<void> {
+  await db.query("UPDATE role_proposals SET decided_words = ? WHERE id = ? AND decided_words IS NULL", [words.slice(0, 200), id]);
+}
+
+/** Every proposal's owner, status and season, for the nudge sweep. One read. */
+export async function proposalSeasons(db: Db): Promise<Array<{ userId: string; status: ProposalStatus; targetSeasonId: string | null; applicationId: string | null; body: ProposalBody }>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT user_id, status, target_season_id, application_id, body_json FROM role_proposals");
+  return rows.map((r: any) => ({
+    userId: String(r.user_id),
+    status: r.status === "submitted" ? "submitted" : "draft",
+    targetSeasonId: r.target_season_id ?? null,
+    applicationId: r.application_id ?? null,
+    body: bodyOf(json(r.body_json)),
+  }));
+}
+
+/**
+ * The live member holders of the roles in these circles, each with the
+ * circles they hold in. One read; examples and documented holders left out.
+ */
+export async function holdersInCircles(db: Db, circleIds: readonly string[]): Promise<Array<{ userId: string; circleId: string; roleId: string }>> {
+  if (!circleIds.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT a.user_id, r.circle_id, a.org_role_id FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
+      "WHERE a.ended_at IS NULL AND a.holder_kind = 'member' AND a.is_example = 0 AND a.user_id IS NOT NULL AND r.is_example = 0 AND r.active = 1 AND r.circle_id IN (?) " +
+      "ORDER BY a.started_at, a.id",
+    [[...circleIds]],
+  );
+  return rows.map((r: any) => ({ userId: String(r.user_id), circleId: String(r.circle_id), roleId: String(r.org_role_id) }));
+}
+
 // ── Erasure ─────────────────────────────────────────────────────────────────
 
 /**
@@ -216,5 +339,7 @@ export async function forgetMemberProposals(db: Db, userId: string): Promise<{ d
   const [d]: any = await db.query("DELETE FROM role_proposals WHERE user_id = ? AND status = 'draft'", [userId]);
   await db.query("UPDATE role_proposals SET body_json = NULL, share_token = NULL WHERE user_id = ?", [userId]);
   const [c]: any = await db.query("UPDATE role_proposal_comments SET author_id = NULL WHERE author_id = ?", [userId]);
+  // Taken off every ask they held, their reasons with them (0276). A decision already reads in its words.
+  await db.query("DELETE FROM role_proposal_asks WHERE user_id = ?", [userId]);
   return { drafts: Number(d?.affectedRows ?? 0), comments: Number(c?.affectedRows ?? 0) };
 }

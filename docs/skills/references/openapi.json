@@ -94,7 +94,7 @@
     },
     "/api/agent/v1/directory": {
       "get": {
-        "summary": "Circles and seats, and who holds them at the tier the member may see. Scope directory.read.",
+        "summary": "Circles and roles, and who holds them at the tier the member may see. Scope directory.read.",
         "security": [{ "agentToken": [] }],
         "responses": { "200": { "description": "{circles, roles}. roles[].holders is empty when the member may not see people: that is a hidden field." } }
       }

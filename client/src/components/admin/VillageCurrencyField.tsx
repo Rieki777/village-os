@@ -150,8 +150,9 @@ export default function VillageCurrencyField({
         <p id="project-fiat-currency-note" role="alert" className="text-[11px] text-red-600 mt-0.5">{problem}</p>
       ) : code && fxCovered.length > 0 && !covered ? (
         <p id="project-fiat-currency-note" className="text-[11px] text-amber-700 mt-0.5">
+          {/* No control records a rate by hand yet, so this names none. */}
           There is no daily rate for {code}, so anyone viewing in another currency sees your
-          amounts unconverted until an admin records a rate by hand. Prices themselves are unaffected.
+          amounts unconverted. Prices themselves are unaffected.
         </p>
       ) : (
         <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
