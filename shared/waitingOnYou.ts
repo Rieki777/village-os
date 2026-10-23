@@ -24,6 +24,10 @@
  *                 the words, which only the role's holders and the raiser may
  *                 read, and the controls: take it, answer it, or bring it to
  *                 the circle. It never names who raised it.
+ *   toConsent     role proposals the reader's circle is asked about, inside
+ *                 the circle's 2 business days, that the reader has not
+ *                 answered (shared/roleProposalConsent.ts). Answered, or the
+ *                 window closed, and the row is gone.
  *
  * An application leaves the group the moment it leaves `awaiting-holder`:
  * adopted, put to the village or withdrawn. The read filters on the status,
@@ -78,6 +82,26 @@ export interface WaitingAcceptance {
   doneOn: string;
 }
 
+/**
+ * One role proposal the reader's circle is asked to consent to or object to
+ * (role proposals PR B), and the reader has not answered. The answer is given
+ * at `POST /api/governance/role-applications/:id/consent`.
+ */
+export interface WaitingConsent {
+  proposalId: string;
+  applicationId: string;
+  /** `/role-applications/:id`, where the proposal is read. */
+  href: string;
+  /** The roles it proposes, new ones by their proposed name. */
+  roles: string[];
+  /** The circle the reader was asked for. */
+  circle: string;
+  /** The proposer's first name only. */
+  applicant: string;
+  /** The last day of the circle's 2 business days, a civil date in the village's zone. */
+  closesOn: string;
+}
+
 export interface WaitingPayload {
   applications: WaitingApplication[];
   drafts: WaitingDraft[];
@@ -85,6 +109,8 @@ export interface WaitingPayload {
   toAccept?: WaitingAcceptance[];
   /** Absent from a server before PR 5 of the player card: read as none. */
   raisedWithYou?: HeldTension[];
+  /** Absent from a server before role proposals PR B: read as none. */
+  toConsent?: WaitingConsent[];
 }
 
 /** One gentle reminder, this long after an application was written, to a holder it still waits on. */
@@ -130,6 +156,9 @@ export const WAITING_COPY = {
   holderNoticeBody: "Open it to align for the village or put it to the village. It waits under Tasks on your profile too.",
   reminderTitle: (seats: readonly string[]): string => `Still waiting on a role holder: ${seatList(seats)}`,
   reminderBody: "This application has waited two days. Open it to align for the village or put it to the village.",
+  consentLine: (applicant: string, roles: readonly string[]): string => `${applicant || "A member"} proposes to hold ${seatList(roles)} next season`,
+  consentBy: (day: string): string => `Consent or object by ${civilDayWords(day)}`,
+  consentAction: "Consent or object",
 } as const;
 
 /** What a draft would create, read off its changes. */
@@ -170,5 +199,10 @@ export function readWaiting(v: unknown): WaitingPayload | null {
   }));
   // A server from before the tension group sends none: the group reads as empty.
   const raisedWithYou = readHeldTensions(p.raisedWithYou);
-  return { applications, drafts, toAccept, raisedWithYou };
+  // A server from before role proposals PR B sends no consent group: it reads as empty.
+  const toConsent = (Array.isArray(p.toConsent) ? (p.toConsent as any[]) : []).filter(
+    (c): c is WaitingConsent =>
+      !!c && typeof c.proposalId === "string" && typeof c.applicationId === "string" && typeof c.href === "string" && isStrings(c.roles) && typeof c.closesOn === "string",
+  );
+  return { applications, drafts, toAccept, raisedWithYou, toConsent };
 }

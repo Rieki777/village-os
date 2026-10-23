@@ -295,7 +295,7 @@ of six and the site still looks wrong, four of those six are their own word.
 
 **What it achieves:** a land project that designed its Game in ReGen Civics'
 Season 2 sessions brings that work in, instead of typing it again: its human
-needs, its circles and seats, who holds them, and, from the Village OS 1.0 file,
+needs, its circles and roles, who holds them, and, from the Village OS 1.0 file,
 its name, purpose and covenant.
 
 The card is at the top of Make This Site Yours, and the needs ceremony's first
@@ -307,16 +307,16 @@ own tick, and only "Load what you kept" sends anything:
 
 - the needs go through the same scope write the needs ceremony uses, and the
   whole-village figure through the variables route;
-- the circles, the seats, the holders the file names and the resting of the
+- the circles, the roles, the holders the file names and the resting of the
   councils a new village is born with become **one org draft**, which the
   founder reads line by line on the same screen and then publishes or
   withdraws. A published draft reverts whole;
-- after the publish, each circle's way of deciding is declared and each seat is
+- after the publish, each circle's way of deciding is declared and each role is
   tagged with its own needs;
 - identity, the purpose statement, the covenant, the recognition token's name,
   the exit policy's leaving words and each quest are put into their own
   editors unsaved, and the founder presses Save there;
-- everything else the stewards wrote (how the next holder of a seat is chosen,
+- everything else the stewards wrote (how the next holder of a role is chosen,
   voting, founders, stewards, the first step in, seasons, the pool token, the
   legal and land answers, tools, the web address) is a checklist of what to set
   by hand, each line saying where. Nothing on it is set.
@@ -324,8 +324,8 @@ own tick, and only "Load what you kept" sends anything:
 Nothing it loads is money. The stewards' answer to the issuance cap is shown
 beside the launch decision it answers, which stays the founders' own, and
 exchange, redemption, commerce, stays and the crowdpool view stay off whatever
-the file says. Modules are listed in the order they can be turned on. A seat a
-being holds goes in as an open seat with the being named on its card. Holders
+the file says. Modules are listed in the order they can be turned on. A role a
+being holds goes in as a role with an opening, the being named on its card. Holders
 need a running season with an end date, because every holding ends with its
 season; without one the screen says so and leaves them for a later load.
 
@@ -601,8 +601,8 @@ founder, and the three are not related to each other.
 | What | Where | What it decides |
 |---|---|---|
 | `users.role` | on the member record, set by `PUT /api/admin/users/:id/role` | Whether this account is a member, an admin, or the founder. This is the one that opens `/admin` |
-| The `roles` table | `drizzle/0002_roles_and_cycles.sql`, holders in `role_holders` | Named permission groups carrying a `capabilities` list. Village-authored, granted per person |
-| `org_roles` and `org_role_assignments` | `drizzle/0049_org_roles.sql` | Org-chart seats, in the sociocratic sense: a seat has an aim, a domain it may decide alone, accountabilities, and a seat count. Vacancy is derived from active assignments against seats. It grants no access to anything |
+| The `roles` table | `drizzle/0002_roles_and_cycles.sql`, holders in `role_holders` | Named permission groups (Power groups in Admin) carrying a `capabilities` list. Village-authored, granted per person |
+| `org_roles` and `org_role_assignments` | `drizzle/0049_org_roles.sql` | Org-chart roles, in the sociocratic sense: a role has an aim, a domain it may decide alone, accountabilities, and how many people it holds (the `seats` column). Vacancy is derived from active assignments against `seats`. It grants no access to anything |
 
 The third is the one founders mean when they talk about roles in the village,
 and it is the one that grants nothing. The first is the one that grants
