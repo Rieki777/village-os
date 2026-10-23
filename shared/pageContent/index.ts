@@ -7,10 +7,11 @@
  */
 import { HOME_PAGE } from "./home";
 import { SITE_PAGE } from "./site";
+import { RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE } from "./rights";
 import { PAGE_SECTION_PREFIX, pageSectionKey, type PageSpec } from "./types";
 import { pageDocumentProblems } from "./resolve";
 
-export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE];
+export const PAGE_SPECS: readonly PageSpec[] = [HOME_PAGE, SITE_PAGE, RIGHTS_RESIDENT_PAGE, RIGHTS_STEWARD_PAGE];
 
 export function pageSpecForSection(section: string): PageSpec | null {
   if (!section.startsWith(PAGE_SECTION_PREFIX)) return null;
