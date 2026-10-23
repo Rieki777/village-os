@@ -344,6 +344,8 @@ export interface RoleOut {
   title: string;
   purpose: { heading: string; text: Slot<string>; why: string | null; source: string };
   chips: string[];
+  /** The role's circle, linked to that circle's card (`/circles/:id`); null when it sits in none. */
+  circle: { name: string; href: string } | null;
   plays: { label: string; chips: { key: string; name: string }[] } | null;
   decide: { heading: string; text: Slot<string> };
   bringMe: { heading: string; items: Slot<string[]> };
@@ -620,7 +622,8 @@ function tensionDoorFor(role: PlayerRoleIn, input: PlayerCardInput): TensionDoor
 function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   const chips: string[] = [];
   if (role.criticality === "high") chips.push(W.keyRole);
-  if (role.circle) chips.push(role.circle.name);
+  // The circle is drawn as a link to its card, beside these chips.
+  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}` } : null;
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
 
@@ -647,6 +650,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
       source: "org_roles.aim, org_roles.why_it_matters",
     },
     chips,
+    circle,
     plays: playsAs(role, input.archetypeNames),
     decide: { heading: W.decide, text: textSlot(role.domain, W.notWritten) },
     bringMe: { heading: W.bringMe, items: wordsSlot(role.bringMe, W.notWritten) },

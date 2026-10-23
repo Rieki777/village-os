@@ -15,6 +15,7 @@
  * proposed change that waits for consent. Other roles are named by their full
  * title and nobody but the owner is named anywhere.
  */
+import { Link } from "wouter";
 import { CARD_WORDS as W, type RoleOut } from "@shared/playerCard";
 import type { RoleEditKey } from "@shared/playerCardEdit";
 import type { SignSheetOut } from "@shared/playerCardPayload";
@@ -68,8 +69,19 @@ export function RoleInFull({ role, sheets, timeZone }: { role: RoleOut; sheets: 
         <EditInPlace target={{ kind: "role", key: "purpose", roleId: role.id }} label={`${role.purpose.heading}, ${role.title}`} initial={asText(role.purpose.text)} />
       </div>
 
-      {role.chips.length ? (
-        <ul className="flex flex-wrap gap-2" aria-label="About this role">
+      {role.chips.length || role.circle ? (
+        <ul className="flex flex-wrap items-center gap-2" aria-label="About this role">
+          {role.circle ? (
+            <li>
+              {/* The circle this role sits in, linked to that circle's card. */}
+              <Link
+                href={role.circle.href}
+                className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-sm underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {role.circle.name}
+              </Link>
+            </li>
+          ) : null}
           {role.chips.map((c) => (
             <li key={c} className="rounded-full border border-border px-3 py-1 text-sm">
               {c}

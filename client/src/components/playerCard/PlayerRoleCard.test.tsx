@@ -37,6 +37,11 @@ describe("the player card, live", () => {
     expect(screen.getByText("Across my role")).toBeTruthy();
   });
 
+  it("links each role's circle to that circle's card", () => {
+    render(<PlayerRoleCardView data={fixturePayload(1)} />);
+    expect(screen.getByRole("link", { name: "Community Anchor" }).getAttribute("href")).toBe("/circles/c1");
+  });
+
   it("with six roles draws six tiles and six roles in full, in order, and names nobody but the owner", () => {
     render(<PlayerRoleCardView data={fixturePayload(6)} />);
     expect(screen.getByText("Across all 6 roles")).toBeTruthy();
