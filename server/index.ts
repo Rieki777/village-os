@@ -2886,7 +2886,7 @@ function withRoleHolderLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** The module-local singletons and the volume path the erasure sweep cannot import. */
-const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders, uploadsDir: UPLOADS_DIR };
+const erasureDeps = { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders, uploadsDir: UPLOADS_DIR, notify };
 
 /** Role ids a member holds. */
 function roleIdsFor(userId: string): string[] {
@@ -19146,7 +19146,7 @@ ${inner}
   });
   registerSeasonPlanRoutes(app, { authedUser, guardCapability, capabilityCtx, getPool, notify, overLimit, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, moduleGate: requireModule("governance") });
   registerPlayerCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, firstName, overLimit, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerCircleCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, overLimit, circles: () => circlesRepo.all() as any[], seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar });
+  registerCircleCardRoutes(app, { authedUser, isAdmin, capabilityCtx, getPool, overLimit, circles: () => circlesRepo.all() as any[], seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), sessionsLifecycle: () => effectiveLifecycle("sessions"), boolVar });
 
   // The quest board, the share card, crews, the admin CRUD and the two steps
   // a member takes through a quest, all thirteen registered at exactly the

@@ -46,6 +46,7 @@ import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationS
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
+import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
 
 export * from "./playerCardWords";
 export type { Read } from "./roleSheet";
@@ -184,6 +185,12 @@ export interface PlayerRoleIn {
   circleDecisions?: Read<number>;
   /** Role words an open org draft would change: "Proposed, waiting for consent". */
   pendingWords?: Read<RoleEditKey[]>;
+  /**
+   * The open drafts that would change this role's words, with what they
+   * propose, so the card lists them with the doors that adopt them (a draft
+   * opened from a card is on no review page). Read at the member tier.
+   */
+  proposals?: Read<RoleProposalIn[]>;
 }
 
 export interface TaskIn {
@@ -367,6 +374,8 @@ export interface RoleOut {
   existsWhile: TextSectionOut;
   /** "Key role", the circle, "Held until ...", and "Review week of ..." or "No review date set". */
   chips: string[];
+  /** The role's circle, linked to that circle's card (`/circles/:id`); null when it sits in none. */
+  circle: { name: string; href: string } | null;
   /** The time chip (0274), drawn after the chips when it is written. */
   time: TextSectionOut;
   plays: { label: string; chips: { key: string; name: string }[] } | null;
@@ -395,6 +404,8 @@ export interface RoleOut {
   handover: HandoverOut;
   /** Role words a proposed change is waiting on consent for. */
   pending: RoleEditKey[];
+  /** The open proposals for this role's words, oldest first; empty when none or unread. */
+  proposals: RoleProposalOut[];
 }
 
 export type TensionDoor = "raise" | "waiting" | null;
@@ -654,7 +665,8 @@ function tensionDoorFor(role: PlayerRoleIn, input: PlayerCardInput): TensionDoor
 function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
   const chips: string[] = [];
   if (role.criticality === "high") chips.push(W.keyRole);
-  if (role.circle) chips.push(role.circle.name);
+  // The circle is drawn as a link to its card, beside these chips.
+  const circle = role.circle ? { name: role.circle.name, href: `/circles/${encodeURIComponent(role.circle.id)}` } : null;
   const held = formatDay(role.termEndsAt ?? null, true, input.timeZone);
   if (held) chips.push(W.heldUntil(held));
   // 0274: the CCOS sections, and the review chip from the role's own terms.
@@ -687,6 +699,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     },
     existsWhile: ccos.existsWhile,
     chips,
+    circle,
     time: ccos.time,
     plays: playsAs(role, input.archetypeNames),
     decide: { heading: W.decide, term: roleTerm("decide", terms), text: textSlot(role.domain, W.notWritten) },
@@ -712,6 +725,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
     tensionDoor: tensionDoorFor(role, input),
     handover: roleHandover(role),
     pending: role.pendingWords ?? [],
+    proposals: role.proposals ? roleProposalsOut(role.proposals, input.timeZone) : [],
   };
 }
 

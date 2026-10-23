@@ -87,6 +87,7 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
       seasonState: () => ({ timezone: "UTC" }),
       lapse: () => ({ currentSeasonId: null, cadence: "never" }) as any,
       mapLifecycle: () => "public",
+      sessionsLifecycle: () => "off",
       boolVar: (key: string) => key !== "org.public_people",
     });
     await q(
