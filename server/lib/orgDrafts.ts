@@ -49,6 +49,7 @@ import { ORG_DRAFT } from "../../shared/ballotSubjects";
 import { openBallotFor } from "./ballots";
 import { ROLE_HANDOVER_COLUMNS, ROLE_HANDOVER_FIELDS } from "../../shared/roleHandover";
 import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHandoverParse";
+import { applyCircleWords, captureCircleWords, previewCircleWords, revertCircleWords } from "./circleWordsDraft";
 
 export type DraftOp =
   | "create_seat"
@@ -58,7 +59,9 @@ export type DraftOp =
   | "seat_holder"
   | "end_holding"
   | "move_circle"
-  | "rest_circle";
+  | "rest_circle"
+  // 0270: a circle's words, changed by consent (server/lib/circleWordsDraft.ts).
+  | "update_circle";
 export type DraftStatus = "open" | "published" | "reverted" | "withdrawn";
 
 export interface DraftChange {
@@ -988,6 +991,13 @@ export function previewLoadedDraft(
       continue;
     }
 
+    if (c.op === "update_circle") {
+      // A circle's words (0270), against the circles as this draft has left them so far.
+      const r = previewCircleWords(c, working);
+      lines.push({ changeId: c.id, op: c.op, orgRoleId: c.orgRoleId, reads: r.reads, blocked: r.blocked });
+      continue;
+    }
+
     if (c.op === "rest_circle") {
       /*
        * A CIRCLE A DRAFT RETIRES (0243): it rests as `dormant`, the status the
@@ -1390,6 +1400,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     const [[row]] = await conn.query<any[]>("SELECT id, parent_circle_id FROM circles WHERE id = ?", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     return row ?? null;
   }
+  if (c.op === "update_circle") return captureCircleWords(conn, c.orgRoleId);
   if (c.op === "create_seat") return null;
   // Nothing existed to capture, exactly as for a seat.
   if (c.op === "create_circle") return null;
@@ -1560,6 +1571,11 @@ async function applyChange(
     await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
     return null;
   }
+  if (c.op === "update_circle") {
+    // The purpose on `circles` (with the version bump) and the charter words, parsed again first.
+    await applyCircleWords(conn, c);
+    return null;
+  }
   if (c.op === "rest_circle") {
     // Raw SQL in the transaction and a version bump, for the reason create_circle gives above.
     await conn.query("UPDATE circles SET status = 'dormant' WHERE id = ? AND is_example = 0", [c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
@@ -1727,6 +1743,9 @@ export async function revertDraft(
           await conn.query("UPDATE circles SET status = ? WHERE id = ?", [String(c.beforeJson.status), c.orgRoleId.slice("circle:".length)]); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           await conn.query("UPDATE collection_versions SET version = version + 1 WHERE collection = 'circles'"); // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
         }
+      } else if (c.op === "update_circle") {
+        // A circle's words (0270): put back only what still stands as this draft left it.
+        await revertCircleWords(conn, c);
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
