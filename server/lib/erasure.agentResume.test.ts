@@ -399,5 +399,53 @@ describe.skipIf(!configured)("a member's agent written while an erasure is stopp
       expect((await storeMemberKey(pool, alive, input, SECRETS_ENV)).ok, "a living member still stores a key").toBe(true);
       expect(await memberKeyView(pool, alive)).not.toBeNull();
     });
+
+    /**
+     * A pool whose first INSERT into `table` waits for the whole sweep first.
+     * The request read whatever it read while the member was alive, and its
+     * write lands after the sweep's last delete: the order a write-time check
+     * has to survive. A check made before the write passes a living member and
+     * lets the row stand; only a check made after it sees the tombstone.
+     */
+    function sweepJustBefore(table: string, target: any): { pool: mysql.Pool; swept: () => boolean } {
+      let swept = false;
+      const racing = {
+        query: async (sql: string, params?: unknown[]) => {
+          if (!swept && new RegExp(`^INSERT INTO ${table}\\b`).test(sql)) {
+            swept = true;
+            await anonymizeMember(pool, target, null, deps());
+          }
+          return pool.query(sql, params);
+        },
+      } as unknown as mysql.Pool;
+      return { pool: racing, swept: () => swept };
+    }
+
+    it("setInbox reads its holder after the write, so a sweep that runs just before its INSERT still leaves no row", async () => {
+      const id = "er-agent-race-set";
+      const race = sweepJustBefore("agent_inboxes", await seedMember(id));
+
+      const out = await setInbox(race.pool, id, "https://192.0.2.10/hook", SECRETS_ENV);
+
+      expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
+      expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+      expect(out, "a write that lands after the sweep's last delete must still refuse itself").toMatchObject({
+        ok: false,
+        status: 403,
+      });
+      expect(await agentRowsRemaining(pool, id)).toEqual(NONE);
+    });
+
+    it("storeMemberKey reads its holder after the write, so a sweep that runs just before its INSERT still leaves no key", async () => {
+      const id = "er-agent-race-key";
+      const race = sweepJustBefore("member_llm_keys", await seedMember(id));
+
+      const out = await storeMemberKey(race.pool, id, { provider: "anthropic", key: "sk-ant-example-0000" }, SECRETS_ENV);
+
+      expect(race.swept(), "the sweep must run inside the write, or this is the after-the-sweep case again").toBe(true);
+      expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
+      expect(out.ok, "a key that lands after the sweep's last delete must still be taken back").toBe(false);
+      expect(await memberKeyView(pool, id)).toBeNull();
+    });
   });
 });
