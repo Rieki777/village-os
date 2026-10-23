@@ -426,7 +426,7 @@ export default function LoveLetter() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-card p-8 md:p-12 rounded-2xl shadow-lg font-accent text-lg leading-relaxed mb-10 border border-border"
+            className="bg-card p-6 sm:p-8 md:p-12 rounded-2xl shadow-lg font-accent text-lg leading-relaxed mb-10 border border-border"
           >
             <p className="mb-6 text-foreground">{parts.greeting}</p>
 
@@ -470,7 +470,7 @@ export default function LoveLetter() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-primary/5 border border-primary/20 rounded-2xl p-8 md:p-12"
+            className="bg-primary/5 border border-primary/20 rounded-2xl p-6 sm:p-8 md:p-12"
           >
             <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2 break-words">
               {user ? LETTER_WORDS.heading(letterTitle) : words.fields.visitorHeading}
@@ -676,20 +676,20 @@ export default function LoveLetter() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-teal-deep-dark transition disabled:opacity-60 flex items-center justify-center gap-3"
+                className="w-full px-4 py-4 bg-primary text-primary-foreground rounded-xl font-semibold text-lg hover:bg-teal-deep-dark transition disabled:opacity-60 flex items-center justify-center gap-3"
               >
                 {submitting ? (
                   <>
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                      className="w-5 h-5 flex-shrink-0 border-2 border-white/30 border-t-white rounded-full"
                     />
                     {user ? LETTER_WORDS.busy : "Signing your membership..."}
                   </>
                 ) : (
                   <>
-                    <Send className="w-5 h-5" />
+                    <Send className="w-5 h-5 flex-shrink-0" />
                     <span className="min-w-0 break-words">{user ? LETTER_WORDS.button(villageName) : words.fields.submitLabel}</span>
                   </>
                 )}

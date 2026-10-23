@@ -182,7 +182,10 @@ export default function MasterPlan() {
       {stats.length ? (
       <section className="py-12 bg-teal-deep text-white">
         <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {/* A figure steps down a size on a phone, and breaks only as a last
+              resort: "$4,200,000" at text-3xl measured 161px in a 128px
+              column at 320px wide and pushed the whole page sideways. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8">
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.key}
@@ -190,10 +193,10 @@ export default function MasterPlan() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="text-center"
+                className="text-center min-w-0"
               >
                 <stat.icon className="w-8 h-8 mx-auto mb-2 opacity-80" />
-                <div className="font-display text-3xl md:text-4xl font-bold mb-1">
+                <div className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mb-1 break-words">
                   {stat.value}
                 </div>
                 <div className="text-sm text-white break-words">{stat.label}</div>
@@ -229,11 +232,11 @@ export default function MasterPlan() {
                 viewport={{ once: true }}
                 className="bg-card p-6 sm:p-8 rounded-2xl shadow-sm"
               >
-                <div className="flex items-start gap-4 sm:gap-6">
+                <div className="flex flex-wrap items-start gap-4 sm:gap-6">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-teal-deep/10 flex items-center justify-center flex-shrink-0">
                     <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-teal-deep" />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[12rem]">
                     <h3 className="font-display text-2xl font-bold text-foreground mb-2 break-words">
                       {zone.title}
                     </h3>
@@ -333,9 +336,9 @@ export default function MasterPlan() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex items-center justify-between gap-3 p-4 bg-card rounded-lg"
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-4 bg-card rounded-lg"
                 >
-                  <div className="min-w-0">
+                  <div className="flex-1 min-w-[10rem]">
                     <div className="font-semibold text-foreground break-words">{item.phase}</div>
                     <div className="text-sm text-muted-foreground break-words">{item.items}</div>
                   </div>

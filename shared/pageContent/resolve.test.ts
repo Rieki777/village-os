@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HOME_PAGE } from "./home";
+import { MASTER_PLAN_PAGE } from "./masterPlan";
 import { pageContentProblem, PAGE_SPECS } from "./index";
 import {
   adoptedDocument,
@@ -102,6 +103,15 @@ describe("validating a saved page", () => {
     expect(pageDocumentProblems(HOME_PAGE, { personas: { items: tooMany } })[0]).toMatch(/has 10 rows; the most it holds is 9/);
     expect(pageDocumentProblems(HOME_PAGE, { paths: { cards: [{ id: "elder" }] } })[0]).toMatch(/is not one of/);
     expect(pageDocumentProblems(HOME_PAGE, { paths: { cards: [{ id: "investor" }, { id: "investor" }] } })[0]).toMatch(/appears twice/);
+  });
+
+  it("refuses a link into the investor vault, however it is spelled, and keeps every other link", () => {
+    const pdf = (pdfUrl: string) => pageDocumentProblems(MASTER_PLAN_PAGE, { valuation: { pdfUrl } });
+    for (const leak of ["/api/uploads/cap-table.pdf", "/api/./uploads/cap-table.pdf", "https://elsewhere.example/api/uploads/x.pdf"]) {
+      expect(pdf(leak)[0], leak).toMatch(/investor vault/);
+    }
+    for (const fine of ["", "/uploads/master-plan.pdf", "https://example.org/plan.pdf", "/visit"]) expect(pdf(fine), fine).toEqual([]);
+    expect(pdf("javascript:alert(1)")[0]).toMatch(/must start with/);
   });
 
   it("refuses hiding a section that cannot be hidden", () => {

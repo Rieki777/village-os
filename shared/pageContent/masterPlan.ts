@@ -132,7 +132,7 @@ export const MASTER_PLAN_PAGE: PageSpec = {
         {
           key: "pdfUrl",
           label: "Master plan document link",
-          help: "Where the button goes: an uploaded file or a page. Leave blank and no button is shown.",
+          help: "Where the button goes: a web address, or a page on this site. Investor vault files cannot be linked from a public page. Leave blank and no button is shown.",
           kind: "link",
           max: 500,
           default: "",

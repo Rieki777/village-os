@@ -125,6 +125,15 @@ export function adoptedDocument(spec: PageSpec, stored: unknown): Doc {
 
 const LINK_OK = /^(\/(?!\/)|#|https?:\/\/|mailto:)/i;
 
+/** Does this link resolve to a file in the vault? Parsed, so `/api/./uploads/x` is caught as the browser would read it. */
+function linksIntoTheVault(raw: string): boolean {
+  try {
+    return /^\/api\/uploads\//i.test(new URL(raw, "http://village.invalid").pathname);
+  } catch {
+    return false;
+  }
+}
+
 function fieldProblems(field: FieldSpec, value: unknown, where: string): string[] {
   if (typeof value !== "string") return [`${where} must be text.`];
   const problems: string[] = [];
@@ -132,6 +141,13 @@ function fieldProblems(field: FieldSpec, value: unknown, where: string): string[
   if (n > field.max) problems.push(`${where} is ${n} characters; the most it holds is ${field.max}.`);
   if (field.kind === "link" && value.trim() !== "" && !LINK_OK.test(value.trim())) {
     problems.push(`${where} must start with /, #, https://, http:// or mailto:.`);
+  } else if (field.kind === "link" && linksIntoTheVault(value.trim())) {
+    // The same refusal the Visit and investor buttons make (vaultLinkProblem,
+    // server/index.ts): a file under /api/uploads/ has no sign-in in front of
+    // it, so a link on a public page publishes it to everyone, for good.
+    problems.push(
+      `${where} points into the investor vault, which would publish that document to anyone who opens the page. Share it from Admin, Investors, Documents instead.`,
+    );
   }
   return problems;
 }
