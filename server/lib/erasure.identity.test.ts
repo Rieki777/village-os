@@ -300,6 +300,53 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     expect((await erasureRecord(pool, id))!.finishedAt).not.toBeNull();
   });
 
+  it("scrubs nobody's words with the tombstone's own strings, when no name is left to look for", async () => {
+    const id = "er-ident-5";
+    await seedMember(id, "wrenh9");
+    await seedNeighbour("er-ident-ned5");
+    // Another member's words naming a different departed member, by the
+    // sentence every tombstone reads as.
+    await q(
+      "INSERT INTO `seat_applications` (`id`, `candidate_user_id`, `proposed_by`, `seat_ids`, `note`, `settings_json`, `settings_hash`, `term_ends_at`, `status`) " +
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+      [
+        "sa-00000000000000a5",
+        "er-ident-ned5",
+        "er-ident-ned5",
+        JSON.stringify(["seat-orchard"]),
+        "I took this over from A departed member last spring.",
+        JSON.stringify({ v: 1 }),
+        "a".repeat(64),
+        "2029-06-30 00:00:00",
+        "voting",
+      ],
+    );
+    await anonymizeMember(pool, await usersRepo(pool).byId(id), null, deps());
+
+    // Asked again, of the tombstone, once the first sweep has finished and let go of the name.
+    await anonymizeMember(pool, await usersRepo(pool).byId(id), null, deps());
+
+    const [app] = await q("SELECT `note` FROM `seat_applications` WHERE `id` = 'sa-00000000000000a5'");
+    expect(app.note, "the tombstone's own name was scrubbed out of somebody else's words").toBe(
+      "I took this over from A departed member last spring.",
+    );
+  });
+
+  it("lets go of an identity a rolled-back image left on a finished record, at the next finish", async () => {
+    // What a release from before 0282 leaves behind: it finishes sweeps
+    // without knowing the column exists, so the name stays on a closed record.
+    await q(
+      "INSERT INTO `member_erasures` (`user_id`, `finished_at`, `attempts`, `steps_done`, `erased_identity`) VALUES (?, CURRENT_TIMESTAMP, 1, JSON_ARRAY(), ?)",
+      ["er-left-by-rollback", JSON.stringify({ name: NAME, email: "left@examples.invalid", handle: "left" })],
+    );
+    expect(await heldIdentity("er-left-by-rollback")).not.toBeNull();
+
+    const target = await seedMember("er-ident-4", "wrenh8");
+    await anonymizeMember(pool, target, null, deps());
+
+    expect(await heldIdentity("er-left-by-rollback"), "a finished record still held who it was for").toBeNull();
+  });
+
   it("re-runs every step before the close on a resume, so words written while the account still worked go too (findings 16 and 27)", async () => {
     const id = "er-second-pass-1";
     const ned = "er-second-pass-ned";
