@@ -239,7 +239,9 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "ballot.vote": "Cast a vote on a ballot",
   "member.vouch": "Vouch for an applicant",
   "member.superVouch": "Admit a member outright",
-  "org.seat": "Seat and unseat the holders of the village's roles",
+  // Rye, 2026-10-22: the words members read for the seating power. Wording
+  // only: who may seat, and how, is unchanged.
+  "org.seat": "Records role changes after the circle consents",
   "org.seatAgent": "Seat and unseat the software agents that hold roles",
   "org.decide": "Publish a change to the village's structure, or put it to the village",
   "intake.moderate": "Work the village's queues and act on what gets reported",

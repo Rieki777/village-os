@@ -370,3 +370,24 @@ describe("what the source says about each record", () => {
     expect(plain.seats.every((s) => s.sourceStatus === null && s.otherCircles.length === 0)).toBe(true);
   });
 });
+
+describe("a moved role takes the words the review shows (0268, 0274)", () => {
+  it("carries the handover words and the CCOS words onto the live role, as the review lists them", () => {
+    const words = {
+      bringMe: ["A weekly note"],
+      runbook: "https://example.org/ops",
+      existsWhile: "the village runs its own operations",
+      authorities: ["Order spare parts"],
+      timeCommitment: "Two days a week",
+    };
+    const proposals = batch();
+    const structure = proposals[0].payload as { seats: Array<Record<string, unknown>> };
+    structure.seats[0] = { ...structure.seats[0], ...words };
+    const d = decideStructure(planStructure(proposals, LIVE_CIRCLES, LIVE_SEATS), { conflicts: settled });
+    expect(d.problems).toEqual([]);
+    const ops = d.changes.find((c) => c.op === "update_seat" && c.orgRoleId === "operations-steward")!;
+    expect(ops.payload).toMatchObject(words);
+    // A key the source never sent is not invented on the way across.
+    expect(ops.payload).not.toHaveProperty("responsibilities");
+  });
+});

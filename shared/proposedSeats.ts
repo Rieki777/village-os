@@ -59,8 +59,11 @@
  * deciding; everything arriving here was written by something that read a
  * transcript.
  *
- * Pure: no pool, no clock, no imports. The caller hands in the circle list.
+ * Pure: no pool, no clock. Its one import is the CCOS field list
+ * (shared/roleCcos.ts), which imports nothing. The caller hands in the circle
+ * list.
  */
+import { ROLE_CCOS_ALIASES, ROLE_CCOS_FIELDS, isRoleCcosListField } from "./roleCcos";
 
 /** A circle as `circlesRepo.all()` returns it. Only these fields are read. */
 export interface LiveCircle {
@@ -97,6 +100,10 @@ export const PROPOSABLE_SEAT_FIELDS = [
   "bringMe",
   "notMine",
   "runbook",
+  // 0274: the role's CCOS words, on the same rule: carried as sent and
+  // checked by their one parser (shared/roleCcosParse.ts) at preview and at
+  // publish.
+  ...ROLE_CCOS_FIELDS,
 ] as const;
 
 /**
@@ -111,6 +118,8 @@ export const SEAT_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   circleId: ["circle_id"],
   bringMe: ["bring_me"],
   notMine: ["not_mine"],
+  // 0274: the CCOS words' column spellings.
+  ...ROLE_CCOS_ALIASES,
 };
 
 /**
@@ -488,6 +497,13 @@ export function normaliseProposedSeat(
   }
   const runbook = pick("runbook", orNull((v) => typeof v === "string"));
   if (runbook) out.runbook = runbook.value;
+
+  // 0274: the CCOS words, carried as sent the same way. A list field may be
+  // text with an item per line; the rest are text.
+  for (const k of ROLE_CCOS_FIELDS) {
+    const v = pick(k, orNull(isRoleCcosListField(k) ? listShape : (x) => typeof x === "string"));
+    if (v) out[k] = v.value;
+  }
 
   // THE CIRCLE. An explicit id always wins over a name. A name that places
   // exactly one live circle becomes that id. Anything else stays a name, with

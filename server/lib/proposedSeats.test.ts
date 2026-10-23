@@ -662,3 +662,38 @@ describe("the handover words a proposal may carry (0268)", () => {
     expect(r.ignored).toEqual(["bringMe", "runbook"]);
   });
 });
+
+describe("the CCOS words a proposal may carry (0274)", () => {
+  it("carries each one as sent, under its own key or its column spelling", () => {
+    const r = normaliseProposedSeat(
+      {
+        name: "Onboarding Lead",
+        exists_while: "people are still arriving",
+        authorities: ["Invite to a role"],
+        responsibilities: "Run onboarding calls\nAnswer applications",
+        signs_stretched: "Applications waiting",
+        flowsBack: "Runbooks from the Operations role",
+        step_back: "Name it on Friday",
+        time_commitment: "Part of a full-time season",
+      },
+      [],
+    );
+    expect(r.payload).toMatchObject({
+      existsWhile: "people are still arriving",
+      authorities: ["Invite to a role"],
+      responsibilities: "Run onboarding calls\nAnswer applications",
+      signsStretched: "Applications waiting",
+      flowsBack: "Runbooks from the Operations role",
+      stepBack: "Name it on Friday",
+      timeCommitment: "Part of a full-time season",
+    });
+    expect(r.ignored).toEqual([]);
+  });
+
+  it("reports a value of the wrong shape and leaves it out of the payload", () => {
+    const r = normaliseProposedSeat({ name: "Onboarding Lead", authorities: 42, existsWhile: ["a list"] }, []);
+    expect(r.payload).not.toHaveProperty("authorities");
+    expect(r.payload).not.toHaveProperty("existsWhile");
+    expect(r.ignored).toEqual(["authorities", "existsWhile"]);
+  });
+});
