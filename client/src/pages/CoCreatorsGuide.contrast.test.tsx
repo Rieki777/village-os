@@ -13,9 +13,12 @@
  * no dark mode, so nothing here measures `.dark`.
  *
  * WHAT IS ASSERTED:
- *   - every line of text on the four action cards, against its own card, in
- *     both Hypha states (the link, or the "Available once..." line), on the
- *     unseeded theme: what a village runs until a founder sets a brand colour.
+ *   - every line of text on the four action cards, against its own card, on
+ *     the unseeded theme: what a village runs until a founder sets a brand
+ *     colour. Since 2026-10-22 the section is drawn only while the village has
+ *     a Hypha DHO link (CoCreatorsGuide.test.tsx pins that), so the cards have
+ *     one state, with their links; the "Available once..." line they carried
+ *     without one went with the section.
  *     The cards are 5% tints of the band, and the light-page ink they carried
  *     measured 1.00 to 1.96:1 there, the body 1.17:1 at 393px;
  *   - every line of copy outside the cards, against the band;
@@ -40,7 +43,7 @@ class NoopIntersectionObserver {
 }
 vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 
-import { cleanup, render, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { CHARACTER_CARDS, deriveTheme } from "@shared/brandTokens";
@@ -55,26 +58,26 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useHypha: () => ({ configured: hyphaConfigured, orgUrl: "https://dho.example.org/village", links: {} }),
 }));
 vi.mock("@/lib/gameApi", () => ({
+  // The page's words come from its spec, with these names filled in (usePageContent).
+  useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Recognition", value: { name: "Village Credits" } } }),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
   // What quests and roles pay is read from the work (EarningsFromTheWork); nothing answers here.
   gameFetch: async () => ({ ok: false, status: 404, json: async () => null }),
 }));
-vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
-vi.mock("@/hooks/useTokenNames", () => ({
-  useTokenName: () => "Recognition",
-  useValueTokenName: () => "Village Credits",
-}));
-vi.mock("@/lib/moneyClaims", () => ({ useValueConversion: () => "" }));
+// Nothing saved: the page draws its defaults.
+vi.mock("@/hooks/useVillageContent", () => ({ readVillageSection: () => Promise.resolve(null) }));
 
 import CoCreatorsGuide from "./CoCreatorsGuide";
 
-function renderHypha(configured: boolean): HTMLElement {
+/** The page waits for its saved words before it draws, so the section is found after the headline. */
+async function renderHypha(configured: boolean): Promise<HTMLElement> {
   hyphaConfigured = configured;
   render(
     <Router>
       <CoCreatorsGuide />
     </Router>,
   );
+  await screen.findByRole("heading", { level: 1 });
   const section = document.getElementById("hypha");
   if (!section) throw new Error("the co-creators guide rendered no #hypha section");
   return section;
@@ -109,19 +112,27 @@ const underCardFloor = (results: TextContrast[]) =>
   describeFailures(results.map((r) => ({ ...r, floor: Math.max(r.floor, CARD_FLOOR) })));
 
 describe("the Hypha section, light", () => {
-  it.each([false, true])(
-    "every line of text on each action card clears 4.5:1 against that card, unseeded theme (Hypha connected: %s)",
-    (configured) => {
-      const perCard = actionCards(renderHypha(configured)).map((card) => measureText(card, "light"));
-      // Title, subtitle, body, and the link or its fallback: an empty or wrong subtree fails here.
-      perCard.forEach((lines) => expect(lines.length).toBeGreaterThanOrEqual(4));
-      const failures = underCardFloor(perCard.flat());
-      expect(failures, `${failures.length} card lines under 4.5:1:\n${failures.join("\n")}`).toEqual([]);
-    },
-  );
+  it("every line of text on each action card clears 4.5:1 against that card, unseeded theme (Hypha connected)", async () => {
+    const perCard = actionCards(await renderHypha(true)).map((card) => measureText(card, "light"));
+    // Title, subtitle, body, and the link: an empty or wrong subtree fails here.
+    perCard.forEach((lines) => expect(lines.length).toBeGreaterThanOrEqual(4));
+    const failures = underCardFloor(perCard.flat());
+    expect(failures, `${failures.length} card lines under 4.5:1:\n${failures.join("\n")}`).toEqual([]);
+  });
 
-  it("every line of copy outside the action cards clears its WCAG floor against the band", () => {
-    const section = renderHypha(false);
+  it("is not drawn at all while the village has no Hypha space, so there is no card to measure", async () => {
+    hyphaConfigured = false;
+    render(
+      <Router>
+        <CoCreatorsGuide />
+      </Router>,
+    );
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.getElementById("hypha")).toBeNull();
+  });
+
+  it("every line of copy outside the action cards clears its WCAG floor against the band", async () => {
+    const section = await renderHypha(true);
     // A copy with the card grid removed, so the rendered tree is left for React to unmount.
     const path: number[] = [];
     for (let e: Element = cardGrid(section); e !== section; e = e.parentElement!) {
@@ -153,14 +164,14 @@ const SEEDS = ["#157f7d", "#0b3d91", "#7a1f5c", "#b5462f", "#c9a227", "#2e7d32",
 const AMBER_TINTED_CARD = "Propose Expenses";
 
 describe("the Hypha action cards under a village's own brand, light", () => {
-  it("the teal, sage and coral cards clear 4.5:1 for every seed and character card", () => {
+  it("the teal, sage and coral cards clear 4.5:1 for every seed and character card", async () => {
     const failures: string[] = [];
     let measured = 0;
     for (const seed of SEEDS) {
       for (const style of CHARACTER_CARDS) {
         const theme = deriveTheme(seed, style.id);
         if (!theme) throw new Error(`deriveTheme produced nothing for ${seed}`);
-        const cards = actionCards(renderHypha(true)).filter(
+        const cards = actionCards(await renderHypha(true)).filter(
           (card) => !within(card).queryByRole("heading", { name: AMBER_TINTED_CARD }),
         );
         expect(cards).toHaveLength(3);
