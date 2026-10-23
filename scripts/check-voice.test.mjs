@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS } from "./check-voice.mjs";
+import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS, SEAT_HTML_FILES, htmlSeatHits } from "./check-voice.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./check-voice.mjs", import.meta.url));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -141,6 +141,45 @@ check("seat rule: ids, keys, class names and SQL are machinery", () => {
     '"seats - holderCount"',
   ]) assert.ok(!seatFlags(s), `should pass: ${s}`);
   assert.ok(SEAT_EXEMPT_DIRS.some((re) => re.test("shared/__fixtures__/regen-village-riverbend.json")));
+});
+
+// ── Rule 6 on the living map (an HTML page with inline scripts) ─────────────
+
+const MAP_PAGE = [
+  "<html><head><style>.seat { color: red }</style></head><body>",
+  '<span class="hint">open roles pulse as open calls</span>',
+  '<button title="Tap an opening">ok</button>',
+  "<script>",
+  "const tabs = ['Overview', 'Quests here', 'Roles here'];",
+  "const wall = `<div class=\"wallhead\">open seats</div>`;",
+  "const chip = `<section data-sec=\"seat\"><span data-conn=\"seat:${id}\">x</span></section>`;",
+  "if (x.kind === 'seat') go();",
+  "maiaSay(`This one has a price on its seat, so a single tap will not spend your credits.`);",
+  "const intent = { re: /seat|role|job/i };",
+  "</script>",
+  "<p>Every seat in the village is drawn here.</p>",
+  "</body></html>",
+].join("\n");
+
+check("seat rule on the map: flags the noun in a script's literals and in the page's text", () => {
+  const hits = htmlSeatHits(MAP_PAGE);
+  assert.deepStrictEqual(hits.map((h) => h.line), [6, 12], JSON.stringify(hits));
+  assert.match(hits[0].text, /open seats/);
+});
+
+check("seat rule on the map: leaves attributes, kinds, the intent regex, CSS and a gathering's price alone", () => {
+  const clean = MAP_PAGE.split("\n").filter((l) => !/open seats|Every seat/.test(l)).join("\n");
+  assert.deepStrictEqual(htmlSeatHits(clean), []);
+  assert.deepStrictEqual(SEAT_HTML_FILES, ["docs/prototypes/grounds-v0.html"]);
+});
+
+check("seat rule on the map: the real map says role today", () => {
+  const abs = path.join(ROOT, SEAT_HTML_FILES[0]);
+  if (!fs.existsSync(abs)) {
+    console.log("    (skipped: the map file is not in this tree)");
+    return;
+  }
+  assert.deepStrictEqual(htmlSeatHits(fs.readFileSync(abs, "utf8")), []);
 });
 
 // ── The two carve-outs, as tested facts rather than prose ───────────────────

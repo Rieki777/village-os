@@ -64,7 +64,7 @@ Trained Practitioners. These are NOT examples. Founders Circle ships carrying `p
 `proposal.decide`, `quest.consent`, `forum.moderate`, `forum.post` and `org.declare`, which makes it the
 strongest permission group in a fresh village. They carry no `is_example` flag, so the retirement sweep
 never removes them, and no route deletes a role. A fork that does not want them edits the seed BEFORE first
-boot. Separately, this module's EXAMPLE roles and org seats seed in `seedExamplesAtBoot()` rather than off a
+boot. Separately, this module's EXAMPLE roles and the org chart's example roles seed in `seedExamplesAtBoot()` rather than off a
 lifecycle change, because a core module cannot hang off one.
 
 There is no "current stage" column anywhere. A member's stage is computed on every read by `computeStage`
@@ -113,8 +113,8 @@ something calls `load()` or the process restarts. `stage_events` is a `dbCollect
 
 ### Two different things called "roles"
 
-`roles` (this module, 0002) is a list of PERMISSION groups. `org_roles` and `org_role_assignments`
-(`drizzle/0049_org_roles.sql`) are the sociocratic org chart: seats with an aim, a domain and
+`roles` (this module, 0002) is a list of PERMISSION groups, which Admin calls Power groups. `org_roles` and `org_role_assignments`
+(`drizzle/0049_org_roles.sql`) are the sociocratic org chart: roles with an aim, a domain and
 accountabilities. They share a word and nothing else. `/api/roles` serves the first, `/api/org` serves the
 second, and the client page at `client/src/pages/Roles.tsx` draws the SECOND one. A reader looking for the
 UI of `/api/roles` will not find it there.
@@ -151,7 +151,7 @@ declared progression prefix.
   `hand_already_up` (whose body names the hand that is up) or `not_recommended`, in that order, with 503
   `try_again` in place of `not_recommended` when the village's map could not be read. The row carries the
   power's key, its label and the member's classes it suits. It records an admin-audience event and rings the
-  founders (`notifyAdmins`, type `submission`), as a hand for a seat does, and when the row moves the member's
+  founders (`notifyAdmins`, type `submission`), as a hand for a role does, and when the row moves the member's
   notice names the power (`server/lib/submissionNotices.ts`). No route takes a hand down; Mechanics says why.
 
 **Reads that carry this module's data under another prefix.** `GET /api/game/config` serves the ladder
@@ -172,8 +172,8 @@ prefix.
   capability the appointer does not hold themselves.
 - `PUT /api/admin/roles/:id` (`server/index.ts`). Admin only, and it accepts `{ circleId, seats }` and
   NOTHING else: name, description, capabilities and `min_stage` are not editable here. It calls
-  `onRealItemPublished(getPool(), "progression", ...)`, so touching a role's seat count is what deletes this
-  module's example roles and the org chart's example seats.
+  `onRealItemPublished(getPool(), "progression", ...)`, so touching a role's `seats` is what deletes this
+  module's example roles and the org chart's example roles.
 - `PUT /api/admin/roles/:id/capabilities` (`server/index.ts`). Admin only, the runway that adds a power to
   an existing role, through `rolesRepo.replaceAll`. Two properties are load-bearing and an agent refactoring
   this route must not drop either. Unknown keys are refused 400 against `ALL_CAPABILITIES`. And
@@ -193,7 +193,7 @@ prefix.
   explainer: every capability key with the step that decided it, read out of `capabilityDecision` rather
   than re-implemented.
 
-**Writes by vote.** A whole second plane creates roles, seats members into them and takes seats back by a
+**Writes by vote.** A whole second plane creates roles, seats members into them and unseats them by a
 vote of the village. None of these is gated on admin: all three routes ask `refuseUnlessMemberMayOpen`,
 which is `proposal.open`.
 
@@ -205,7 +205,7 @@ which is `proposal.open`.
   writes the `role_holders` row under `withRoleHolderLock` and re-checks `min_stage` at close. The route
   refuses a role carrying `ballot.vote` or `member.vouch`, because seating into one of those would be a few
   members choosing who else gets a say.
-- `POST /api/governance/role-unseats` (`server/index.ts`) opens the ballot to take a seat back. Its
+- `POST /api/governance/role-unseats` (`server/index.ts`) opens the ballot to unseat a holder. Its
   `role_unseat` executor filters the holder row out, again under the lock.
 
 The vote takes effect the instant the row lands. `roleCapabilitiesFor` reads the holder rows and the role's
@@ -360,25 +360,25 @@ edit the map, and she is refused.
 **Every class suits something, The Builder since 2026-09-23.** It suited nothing under the 2026-09-09 ruling.
 The correction is that building is making in every form and not only making on the land: "in this context
 'building' is in all the forms (like developers for code are building the game, same builder archetype)". So
-`org.seatAgent` wires the software agents that hold seats and `dial.set` tunes the village's own dials, one
+`org.seatAgent` wires the software agents that hold roles and `dial.set` tunes the village's own dials, one
 wiring what runs and the other tuning it. `mechanics.propose` was the first choice and cannot live in this map:
 `STAGE_UNLOCKS` opens it at the member rung, so every member already holds it by climbing, and this map only
 ever names powers the village ENTRUSTS by appointment. A power the ladder opens needs nobody to suggest it.
 
 **A hand asks for a power, and it never grants one.** A member a power is `recommended` to can raise a hand for
 it (`server/routes/powerHands.ts`), and the hand is a `power-application` row in the same `submissions` inbox a
-hand for a seat lands in. The route rebuilds the member's catalogue for the request, so a profile loaded before
+hand for a role lands in. The route rebuilds the member's catalogue for the request, so a profile loaded before
 the village changed its map cannot file a hand the map no longer puts to them. A hand is up through `new`,
 `reviewing` and `in-conversation`, and an answer, yes or no, puts it down (`shared/powerHands.ts`). A member has
 at most one hand up per power, and requests for one member and one power run one at a time. Accepting the row
-changes nothing a gate reads: the power still reaches the member through a role that carries it and a seat on
-that role, and `PowerHandNote` says so beside the status select, naming Game Roles for the seat and The Handover
-for giving a role the power. `server/powerAffinity.routes.e2e.test.ts` has the founder say yes, then reads the
+changes nothing a gate reads: the power still reaches the member through a role that carries it and a place among
+that role's holders, and `PowerHandNote` says so beside the status select, naming Power groups for seating the
+member and The Handover for giving a role the power. `server/powerAffinity.routes.e2e.test.ts` has the founder say yes, then reads the
 member's catalogue back with the power still closed and the hand down.
 
 A yes puts a hand down because counting it as still up kept it up for good. Nothing moves an answered row, and
-every seat has a term, so once the seat that carried the power ended, the member's profile went on promising an
-appointment and refused every new hand. No route takes a hand down, the same as for a seat: the inbox is a
+every role is held for a term, so once the term that carried the power ended, the member's profile went on promising an
+appointment and refused every new hand. No route takes a hand down, the same as for a role: the inbox is a
 `dbCollection` whose only way to remove a row is `replaceAll`, the whole table written back from a cached
 snapshot, and a member's click must not do that to every row a founder works. A member who changes their mind
 tells the founders, who can decline or delete the row.
@@ -501,7 +501,7 @@ read a good deal it does not own:
   off; a member with no history gets three nulls and a page that renders nothing, never three zeroes.
 - **The examples seed.** `server/lib/examples.ts` lists `roles`, `org_roles` and `org_role_assignments` as
   progression's example tables, so this module's retirement sweep deletes the org chart's demonstration
-  seats as well as its own demonstration roles.
+  roles as well as its own.
 
 Consumers pointing the other way are wider than the module's own surfaces, and wider than any list will
 stay. **Any surface comparing a stage id resolves through `stageIndex`, so grep is the authority.** The ones
@@ -518,7 +518,7 @@ path reads `roleIdsFor` before it will let anybody leave.
 **The inbox a hand lands in is read by fewer people than can act on it.** `GET /api/admin/submissions` lists
 rows to admins only, and the Admin page is admin-only, while moving a row takes `intake.moderate`, and the bell
 for a new hand rings admins and founders (`notifyAdmins`). A member who holds `intake.moderate` can move a hand
-through the API and cannot see the inbox anywhere in the product. A hand for a seat had that shape before hands
+through the API and cannot see the inbox anywhere in the product. A hand for a role had that shape before hands
 for powers existed, and this change keeps it. The inbox's type filter (`FORM_TYPES` in `client/src/pages/Admin.tsx`)
 lists neither `role-application` nor `power-application`, so both show only under all types.
 
@@ -617,7 +617,7 @@ thousands of members should measure this before assuming it.
 demonstration roles, flagged `isExample`. Nothing downstream can tell them from the village's own without
 that flag, which is why the governance picker filters on it. `POST /api/admin/roles/:id/holders` refuses
 409 on an example role and on an example identity, because seating somebody into an example role announces
-it on the pulse and notifies them, and then retirement deletes the role and orphans the seat.
+it on the pulse and notifies them, and then retirement deletes the role and orphans the holder row.
 
 **A holder row naming a role that no longer exists renders as the id.** `namedRoles` falls back to the id
 rather than to blank, the same posture `capabilityLabel` takes with a key it cannot resolve: an
@@ -650,8 +650,8 @@ paths change:
 - `server/glassHandle.routes.e2e.test.ts`. The break-glass 409 carries what a browser needs, and the public
   record waits for the act instead of preceding it.
 - `server/steward.routes.e2e.test.ts`. R90 end to end: a village declares a role, votes it a power, votes
-  somebody into it, watches them act, and takes the seat back, with no admin anywhere.
-- `server/seatRecord.routes.e2e.test.ts`. Seat terms, the seat's history behind `map.viewPeople`, and the
+  somebody into it, watches them act, and unseats them, with no admin anywhere.
+- `server/seatRecord.routes.e2e.test.ts`. Role terms, the role's history behind `map.viewPeople`, and the
   electorate drop measured against a control.
 - `server/review.routes.e2e.test.ts`. A steward who is not an admin works the draft queue, edits a proposed
   role name and accepts a batch; a read failure renders as an error and never as an empty queue.

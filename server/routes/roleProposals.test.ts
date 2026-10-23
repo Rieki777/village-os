@@ -25,189 +25,25 @@
  *     season starting on its first day, the draft stamped, the season words
  *     saved as next season's plan, and the draft frozen;
  *   - a new role in the application under the id the draft gave it, named,
- *     and the adopt doors holding it until its changes can be applied;
+ *     and never sent to a village vote (adoption is the consent suite's);
  *   - next season with no dates: the words, a null target, and the target
  *     settling once the village dates one;
  *   - the list reads a fixed number of statements however many proposals.
  */
-import http from "node:http";
-import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
-import { LUNAR_CLOCK } from "../../shared/cycleClock";
 import { emptyBody, PROPOSAL_WORDS } from "../../shared/roleProposals";
-import type { SeatCalendar } from "../../shared/seatTerms";
+import { CONSENT_WORDS } from "../../shared/roleProposalConsent";
 import { WAITING_URL } from "../../shared/waitingOnYou";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
-import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole } from "../lib/orgChart";
 import { forgetMemberProposals, insertProposal } from "../repos/roleProposals";
 import { readApplication } from "../repos/seatApplications";
 import { insertPlanVersion, planVersions } from "../repos/seasonPlans";
-import { register as registerProposals } from "./roleProposals";
-import { register as registerApplications } from "./seatApplications";
-
-const LADDER = ["visitor", "guest", "member"];
-const DAY = 24 * 60 * 60 * 1000;
-const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
-
-/** The member who proposes, the holder who adopts, and another member who reads the link. */
-const OWNER = "u-one";
-const HOLDER = "u-two";
-const READER = "u-three";
-const PEOPLE: Record<string, { id: string; name: string }> = {
-  [OWNER]: { id: OWNER, name: "Member One" },
-  [HOLDER]: { id: HOLDER, name: "Member Two" },
-  [READER]: { id: READER, name: "Member Three" },
-  "u-guest": { id: "u-guest", name: "Guest Four" },
-};
-
-const GOAL_FOOD = "Grow food for thirty people";
-const GOAL_TEAM = "Ready to grow the team to 30";
-
-/** Dated from today, so "next season" is always next. */
-const NOW_STARTS = iso(Date.now() - 200 * DAY);
-const NEXT_STARTS = iso(Date.now() + 40 * DAY);
-const NEXT_ENDS = iso(Date.now() + 220 * DAY);
-const SEASONS = [
-  { id: "s-now", name: "This season", startsOn: NOW_STARTS, endsOn: NEXT_STARTS, goals: [{ text: "Plant the beds" }] },
-  { id: "s-next", name: "Next season", startsOn: NEXT_STARTS, endsOn: NEXT_ENDS, goals: [{ text: GOAL_FOOD }, { text: GOAL_TEAM }] },
-];
-
-/** Money in the terms, so there is something the public tier must not carry. XTS is the ISO code reserved for testing. */
-const MONEY_TERMS = { v: 1, pay: { kind: "fixed", currency: "XTS", amountMinor: 4321000, per: "month" } };
+import { GOAL_FOOD, GOAL_TEAM, harness, HOLDER, MONEY_TERMS, NEXT_STARTS, OWNER, P, PEOPLE, READER, SEASONS } from "../testkit/roleProposalHarness";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[roleProposals] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
-
-function harness() {
-  const state = {
-    viewer: null as { id: string; stage: string } | null,
-    holders: [HOLDER] as string[],
-    seasons: SEASONS as any[],
-    governance: "public" as "public" | "members",
-    /** Buckets that answer "over the limit", by prefix. */
-    limited: [] as string[],
-    queries: 0,
-    pool: (): any => {
-      throw new Error("the database was read before the gate answered");
-    },
-  };
-  const notices: any[] = [];
-  const closers: Record<string, SubjectCloser> = {};
-  let server: http.Server;
-  let base = "";
-
-  const ctxOf = () =>
-    ({
-      stageIndex: LADDER.indexOf(state.viewer?.stage ?? "visitor"),
-      stageIndexOf: (id: string) => LADDER.indexOf(id),
-      roleCapabilities: [],
-      villageHeld: [],
-      isAdmin: false,
-    }) as unknown as CapabilityCtx;
-  // Identity freshly confirmed, so terms carrying money do not ask the re-confirm.
-  const authedUser = async () =>
-    state.viewer ? { ...(PEOPLE[state.viewer.id] ?? { id: state.viewer.id, name: "Someone" }), tokenVersion: 0, prefs: { identityConfirmedAt: { at: Date.now(), v: 0 } } } : null;
-  const guardCapability = async (_req: any, res: any, cap: any, refusal?: { status: number; body: Record<string, unknown> }) => {
-    if (state.viewer && hasCapability(cap, ctxOf())) return true;
-    res.status(refusal?.status ?? 401).json(refusal?.body ?? { error: "auth_required" });
-    return false;
-  };
-  const firstName = (n: string) => String(n ?? "").split(" ")[0] ?? "";
-  const members = { byId: async (id: string) => PEOPLE[id] ?? null, all: async () => Object.values(PEOPLE) } as any;
-  const overLimit = async (bucket: string) => state.limited.some((p) => bucket.startsWith(p));
-  const notify = async (input: any) => {
-    notices.push(input);
-    return { fresh: true } as any;
-  };
-  const calendar = (): SeatCalendar => ({ seasons: state.seasons, currentSeasonId: "s-now", timezone: "UTC" });
-  const landing = {
-    vetoHours: () => 72,
-    autoApplyEnabled: () => true,
-    stewardCouncil: () => false,
-    stewardVetoTiers: () => "all",
-    consentNoticeHours: () => 0,
-    nextBoundaryAfter: (after: Date) => new Date(after.getTime() + 20 * DAY),
-    cycleNumberAt: () => 1,
-    landingExpiryCycles: () => 3,
-    closerFor: (t: string) => closers[t],
-    notify: async () => {},
-    endedUnclosedCycle: async () => false,
-    waitsForCycleClose: () => false,
-    snapsToBoundary: () => false,
-  };
-
-  const start = async () => {
-    const app = express();
-    app.use(express.json());
-    registerApplications(app, {
-      authedUser,
-      capabilityCtx: async () => ctxOf(),
-      guardCapability,
-      getPool: () => state.pool(),
-      notify,
-      notifyAdmins: async () => {},
-      overLimit,
-      members,
-      firstName,
-      liveHoldersOf: async () => [...state.holders],
-      rolesCarrying: () => [{ id: "role-founder", name: "Founder" }],
-      loadRoleHolders: () => state.holders.map((userId) => ({ roleId: "role-founder", userId })),
-      roleBallotSetup: async () => ({
-        method: "majority",
-        dials: { unityPct: 50, quorumPct: 0 },
-        snapshot: { mode: "equal", token: null },
-        tokenProblem: null,
-        electorate: [OWNER, HOLDER, READER].map((userId) => ({ userId, weight: 1 })),
-        durationDays: 7,
-      }),
-      seatCalendar: calendar,
-      lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
-      landingDeps: () => ({ pool: state.pool(), ...landing }) as unknown as LandingDeps,
-      closers,
-    } as any);
-    registerProposals(app, {
-      authedUser,
-      isAdmin: async () => false,
-      capabilityCtx: async () => ctxOf(),
-      guardCapability,
-      getPool: () => state.pool(),
-      firstName,
-      overLimit,
-      notify,
-      members,
-      seasonState: () => ({ seasons: state.seasons, timezone: "UTC" }),
-      lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
-      mapLifecycle: () => "public",
-      boolVar: () => false,
-      villageName: () => "Test village",
-      clock: () => LUNAR_CLOCK,
-      governanceLifecycle: () => state.governance,
-    } as any);
-    server = http.createServer(app);
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const addr = server.address();
-    if (!addr || typeof addr === "string") throw new Error("the test server did not report a port");
-    base = `http://127.0.0.1:${addr.port}`;
-  };
-  const stop = () => new Promise<void>((resolve) => server?.close(() => resolve()));
-  const call = async (method: string, url: string, body?: unknown) => {
-    const res = await fetch(`${base}${url}`, { // module-review-ok: this suite's own loopback server, not an outbound call
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { status: res.status, text: await res.clone().text(), body: (await res.json().catch(() => ({}))) as any };
-  };
-  const as = (id: string | null, stage = "member") => {
-    state.viewer = id ? { id, stage } : null;
-  };
-  return { state, notices, start, stop, call, as };
-}
-
-const P = "/api/governance/role-proposals";
 
 describe("every owner door turns away a visitor and a guest", () => {
   const h = harness();
@@ -628,7 +464,7 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
     expect(adopted.body.status).toBe("adopted");
   });
 
-  it("names a new role in the application by its draft id, and holds adoption until its changes can be applied", async () => {
+  it("names a new role in the application by its draft id, and never sends it to a village vote", async () => {
     const hives = await role("Hive Keeper");
     const draft = await readyDraft([hives], {
       newRoles: [{ circleId: "c-land", seats: 1, words: { name: "Pollinator Steward", aim: "Keep the pollinators fed." } }],
@@ -650,18 +486,15 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
       { id: hives, name: "Hive Keeper", aim: "Keep the hive keeper work moving." },
       { id: newId, name: "Pollinator Steward", aim: null, proposedNew: true },
     ]);
-    expect(page.body.application.proposal).toMatchObject({ id: draft.id, changesRoles: true, waits: PROPOSAL_WORDS.adoptionWaits });
-    expect(page.body.application.you).toMatchObject({ mayAdopt: false, mayPutToVillage: false });
-    const adopt = await h.call("POST", `/api/governance/role-applications/${r.body.id}/adopt`);
-    expect(adopt.status).toBe(409);
-    expect(adopt.body).toEqual({ error: "proposal_changes_roles", message: PROPOSAL_WORDS.adoptionWaits });
-    expect((await h.call("POST", `/api/governance/role-applications/${r.body.id}/put-to-village`)).status).toBe(409);
-    const waiting = await h.call("GET", WAITING_URL);
-    expect(waiting.body.applications.map((x: any) => x.id)).not.toContain(r.body.id);
-    // Nothing was created or seated.
-    const [rows] = await pool.query<any[]>("SELECT id FROM org_roles WHERE id = ?", [newId]); // module-review-ok: reading back what the refused adoption did not write
+    expect(page.body.application.proposal).toMatchObject({ id: draft.id, changesRoles: true, decided: null });
+    expect(page.body.application.you).toMatchObject({ mayAdopt: true, mayPutToVillage: false });
+    const vote = await h.call("POST", `/api/governance/role-applications/${r.body.id}/put-to-village`);
+    expect(vote.status).toBe(409);
+    expect(vote.body).toEqual({ error: "proposal_changes_roles", message: CONSENT_WORDS.noVote });
+    // Nothing was created by reading it or by the refused vote.
+    const [rows] = await pool.query<any[]>("SELECT id FROM org_roles WHERE id = ?", [newId]); // module-review-ok: reading back what the refused vote did not write
     expect(rows).toHaveLength(0);
-    // Control: the candidate can still take it back.
+    // The candidate can still take it back.
     h.as(OWNER);
     expect((await h.call("POST", `/api/governance/role-applications/${r.body.id}/withdraw`)).status).toBe(200);
   });
