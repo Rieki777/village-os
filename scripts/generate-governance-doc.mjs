@@ -98,6 +98,14 @@ export const SOURCES = [
   "shared/lunar.ts",
   "server/index.ts",
   "server/lib/ballots.ts",
+  // HASHED ON PURPOSE, though no reader opens them today: applyDue.ts,
+  // changeset.ts, delegation.ts, gratitude-cycles.ts and governanceWindows.ts.
+  // They are the governance machinery, so a reader over one of them is a
+  // likely next change, and the fingerprint should already be watching when it
+  // lands. The costs are not symmetric: hashing one too many costs a restamp
+  // somebody notices at once; hashing one too few lets this document go wrong
+  // in silence, which is what shared/moonSettlement.ts did until 2026-10-23.
+  // Do not trim these as unused.
   "server/lib/applyDue.ts",
   "server/lib/changeset.ts",
   "server/lib/stewardship.ts",
@@ -109,6 +117,16 @@ export const SOURCES = [
   "server/lib/gratitude-cycles.ts",
   "server/lib/governanceWindows.ts",
   "server/routes/governanceWizard.ts",
+  // Read one import away, and the fingerprint missed them until they were
+  // listed. Three of SUBJECT_CLOSERS' keys are computed (`[CYCLE_SETTLEMENT]`,
+  // `[REDEMPTION_SUBJECT]`, `[GPS_CHANGE]`), so the subject names in the
+  // dispatcher table are read out of these files, and a dial's choices are
+  // read out of `shared/needs.ts`. `collectFacts` now refuses any file a reader
+  // opens that the fingerprint does not hash, so the next one cannot be missed.
+  "shared/moonSettlement.ts",
+  "shared/governingPurpose.ts",
+  "shared/needs.ts",
+  "server/lib/redemptionBallot.ts",
   // Every route module, walked as a directory rather than named one by one.
   // The three-file list this replaced made `server/routes/delegation.ts`,
   // `governanceVetoes.ts` and `governanceLanding.ts` invisible, and the
@@ -132,7 +150,42 @@ function fail(message) {
 
 const sourceCache = new Map();
 
+/**
+ * EVERY FILE A READER OPENS, recorded so the fingerprint can be held to it.
+ *
+ * The readers follow imports, so the files a fact comes from are not only the
+ * ones SOURCES names. Three subject names in the dispatcher table were read
+ * out of files the fingerprint never hashed, so a change there could move a
+ * fact while the document went on naming the same fingerprint. `collectFacts`
+ * turns this on for the length of one run and refuses any file in it that the
+ * fingerprint does not cover. It is noted on every read, cache hit or not,
+ * because the cache outlives a run.
+ */
+let opened = null;
+
+function noteOpened(abs) {
+  if (opened) opened.add(path.resolve(abs));
+}
+
+/** Runs `fn` with every file a reader opens recorded, and returns both. */
+function recordingReads(fn) {
+  opened = new Set();
+  try {
+    const value = fn();
+    return { value, read: [...opened] };
+  } finally {
+    opened = null;
+  }
+}
+
+/** A source read as text, for the readers that match on it instead of parsing it. */
+function readText(abs) {
+  noteOpened(abs);
+  return fs.readFileSync(abs, "utf8");
+}
+
 function sourceFile(abs) {
+  noteOpened(abs);
   if (!sourceCache.has(abs)) {
     if (!fs.existsSync(abs)) fail(`${abs} is gone; the generator reads it`);
     sourceCache.set(abs, ts.createSourceFile(abs, fs.readFileSync(abs, "utf8"), ts.ScriptTarget.Latest, true));
@@ -141,6 +194,47 @@ function sourceFile(abs) {
 }
 
 const absOf = (root, rel) => path.join(root, ...rel.split("/"));
+
+/**
+ * WHICH FILES IN A SOURCE DIRECTORY ARE INPUTS, answered in one place.
+ *
+ * The route walk and the fingerprint used to answer this separately, and they
+ * disagreed. The walk read `*.ts` and skipped the tests; the fingerprint hashed
+ * every `.ts`, `.tsx`, `.mjs` and `.sql` it found. So editing a route TEST
+ * moved the fingerprint and turned the guard red on a document none of whose
+ * facts could change, and every lane that touched one paid a restamp for it.
+ *
+ * Both read this table now, so they cannot come apart again. A rule is a claim
+ * about what a reader parses: widen it when a reader starts reading more and
+ * the fingerprint follows by itself. A directory in SOURCES with no rule stops
+ * the build, because guessing which of its files matter is how the two walks
+ * diverged in the first place.
+ */
+const DIRECTORY_INPUTS = {
+  // Every route module, whether or not it registers a governance route: a door
+  // can be factored into a helper and a capability imported from anywhere, so
+  // no subset of the modules is safe to stop hashing. A test is never a route
+  // module. Nothing else here is ever read, because `importSource` resolves an
+  // import to `<spec>.ts` and only that, so a `.tsx` or `.mjs` beside them
+  // cannot reach a fact.
+  [ROUTE_DIR]: (name) => name.endsWith(".ts") && !/\.(test|spec)\.ts$/.test(name),
+  // Every migration. `schemaFacts` reads each one and the document prints the
+  // count, so adding a migration moves the fingerprint exactly as editing one
+  // does. The migration runner reads `.sql` and nothing else.
+  [MIGRATION_DIR]: (name) => name.endsWith(".sql"),
+};
+
+/** The input files under one source directory, as repository-relative paths, sorted. */
+export function directoryInputs(root, rel) {
+  const keep = DIRECTORY_INPUTS[rel];
+  if (!keep) {
+    fail(
+      `${rel} is a directory in SOURCES, and DIRECTORY_INPUTS has no rule saying which of its files a reader ` +
+        "parses. Add one: the walk and the fingerprint both read it.",
+    );
+  }
+  return fs.readdirSync(absOf(root, rel)).filter(keep).sort().map((n) => `${rel}/${n}`);
+}
 
 function eachChild(node, fn) {
   node.forEachChild((child) => { fn(child); eachChild(child, fn); });
@@ -758,7 +852,7 @@ export function changeSetFacts(root = ROOT) {
     if (typeof cap !== "number") fail(`${rel} declares CHANGE_SET_CAP as something other than a number`);
     return { maxChanges: cap };
   }
-  const text = fs.readFileSync(abs, "utf8");
+  const text = readText(abs);
   const m = /changes\.length\s*>\s*(\d+)/.exec(text);
   if (!m) {
     fail(`${rel} caps a change set neither with CHANGE_SET_CAP nor with "changes.length > N"; the dial ceiling is read from one of them`);
@@ -807,7 +901,7 @@ export function clockFacts(root = ROOT) {
   // both clocks now, and `gratitude-cycles.ts` calls through to it.
   const cyclesRel = "shared/cycleClock.ts";
   const cyclesAbs = absOf(root, cyclesRel);
-  const cyclesText = fs.readFileSync(cyclesAbs, "utf8");
+  const cyclesText = readText(cyclesAbs);
   const pad = /padStart\((\d+),\s*"0"\)/.exec(cyclesText);
   const prefix = /LUNAR_ID_PREFIX\s*=\s*"([a-z-]+)"/.exec(cyclesText);
   const calPrefix = /CALENDAR_ID_PREFIX\s*=\s*"([a-z-]+)"/.exec(cyclesText);
@@ -973,9 +1067,9 @@ const SCHEMA_SHAPES = [
 export function schemaFacts(root = ROOT) {
   const dir = absOf(root, MIGRATION_DIR);
   if (!fs.existsSync(dir)) fail(`${MIGRATION_DIR} is gone; the tables this document describes are read from it`);
-  const files = fs.readdirSync(dir).filter((n) => n.endsWith(".sql")).sort();
+  const files = directoryInputs(root, MIGRATION_DIR);
   if (!files.length) fail(`${MIGRATION_DIR} holds no migration; the tables this document describes are read from them`);
-  const sql = files.map((n) => fs.readFileSync(path.join(dir, n), "utf8")).join("\n");
+  const sql = files.map((rel) => readText(absOf(root, rel))).join("\n");
   for (const shape of SCHEMA_SHAPES) {
     if (shape.test.test(sql)) continue;
     fail(
@@ -1212,12 +1306,10 @@ function routesIn(root, rel, prefixes) {
 function routeModules(root) {
   const dir = absOf(root, ROUTE_DIR);
   if (!fs.existsSync(dir)) fail(`${ROUTE_DIR} is gone; every route module is read from it`);
-  const names = fs
-    .readdirSync(dir)
-    .filter((n) => n.endsWith(".ts") && !/\.(test|spec)\.ts$/.test(n))
-    .sort();
-  if (!names.length) fail(`${ROUTE_DIR} holds no route module; the route table is read from that directory`);
-  return names.map((n) => `${ROUTE_DIR}/${n}`);
+  // The same rule the fingerprint hashes by. See DIRECTORY_INPUTS.
+  const files = directoryInputs(root, ROUTE_DIR);
+  if (!files.length) fail(`${ROUTE_DIR} holds no route module; the route table is read from that directory`);
+  return files;
 }
 
 export function routeFacts(root = ROOT) {
@@ -1282,19 +1374,22 @@ const NUL = "\u0000";
 /** The first line of an error, for a message a person can act on. */
 const firstLine = (err) => String(err?.message ?? err).split("\n")[0];
 
-export function sourceFingerprint(root = ROOT) {
-  const hash = createHash("sha256");
-  /*
-   * A SOURCE CAN BE A DIRECTORY, which the git version handled for free.
-   * ROUTE_DIR and MIGRATION_DIR are both in SOURCES, so a fingerprint that only
-   * read files refuses on the first run. Every file in a listed directory
-   * counts, so adding a migration moves it exactly as editing one does.
-   */
-  const filesUnder = (rel) => {
-    const abs = path.join(root, rel);
+/**
+ * THE FILES THE FINGERPRINT HASHES: every file in SOURCES, and the inputs of
+ * every directory in it, sorted so a lane reordering SOURCES does not move it.
+ *
+ * A SOURCE CAN BE A DIRECTORY, which the git version handled for free.
+ * ROUTE_DIR and MIGRATION_DIR are both in SOURCES, so a fingerprint that only
+ * read files refuses on the first run. A directory contributes exactly the
+ * files its rule in DIRECTORY_INPUTS names, which is the rule its reader walks
+ * by, so a file no reader parses (a route test, say) cannot move it.
+ */
+export function fingerprintFiles(root = ROOT) {
+  const files = new Set();
+  for (const rel of SOURCES) {
     let stat;
     try {
-      stat = fs.statSync(abs);
+      stat = fs.statSync(path.join(root, rel));
     } catch (err) {
       fail(
         `this document is made from ${rel} and it could not be read (${firstLine(err)}). ` +
@@ -1302,15 +1397,36 @@ export function sourceFingerprint(root = ROOT) {
           "not open would be a guess.",
       );
     }
-    if (!stat.isDirectory()) return [rel];
-    return fs
-      .readdirSync(abs)
-      .filter((n) => /[.](ts|tsx|mjs|sql)$/.test(n))
-      .map((n) => `${rel}/${n}`);
-  };
+    if (!stat.isDirectory()) files.add(rel);
+    else for (const f of directoryInputs(root, rel)) files.add(f);
+  }
+  return [...files].sort();
+}
 
-  // Sorted, so a lane reordering SOURCES does not move the fingerprint.
-  for (const rel of [...SOURCES].sort().flatMap(filesUnder).sort()) {
+/**
+ * THE FILES A READER PARSED AND THE FINGERPRINT DOES NOT HASH, as a refusal.
+ *
+ * Pure, so the self-test can hand it fixtures. A file in the first list and
+ * not the second is a fact that can move while the document goes on naming the
+ * same fingerprint, which is the fingerprint being confidently wrong.
+ */
+export function unhashedInputsProblem(read, hashed) {
+  const covered = new Set(hashed);
+  const missing = [...new Set(read)].filter((rel) => !covered.has(rel)).sort();
+  if (!missing.length) return null;
+  // Named in full up to a point, so a broken directory rule does not print
+  // three hundred paths to say one thing.
+  const named = missing.length > 10 ? `${missing.slice(0, 10).join(", ")} and ${missing.length - 10} more` : missing.join(", ");
+  return (
+    `a reader parsed ${named} and the fingerprint does not hash ${missing.length === 1 ? "it" : "them"}, ` +
+    "so a change there could move a fact while this document goes on naming the same fingerprint. " +
+    "Add the file to SOURCES, or, if it sits in a source directory, widen that directory's rule in DIRECTORY_INPUTS."
+  );
+}
+
+export function sourceFingerprint(root = ROOT) {
+  const hash = createHash("sha256");
+  for (const rel of fingerprintFiles(root)) {
     let body;
     try {
       body = fs.readFileSync(path.join(root, rel), "utf8");
@@ -2712,22 +2828,31 @@ export function collectFacts(root = ROOT) {
     if (!fs.existsSync(absOf(root, rel))) fail(`${rel} is gone; the generator reads it`);
   }
 
-  const dispatcher = dispatcherKeys(root);
-  const subjects = subjectFloors(root);
-  const engine = engineFacts(root);
-  const statuses = ballotStatuses(root);
-  const dialFacts = governanceDials(root);
-  const caps = capabilityFacts(root);
-  const mod = moduleFacts(root);
-  const wizard = wizardTypes(root);
-  const weights = weightFacts(root);
-  const changeSet = changeSetFacts(root);
-  const launch = launchFacts(root);
-  const clock = clockFacts(root);
-  const routes = routeFacts(root);
-  const kinds = kindFacts(root);
-  const schema = schemaFacts(root);
-  const quorumFormula = quorumFormulaFacts(root);
+  // Every file the readers open is recorded, and the fingerprint is held to
+  // cover all of them. See `opened`.
+  const { value, read } = recordingReads(() => ({
+    dispatcher: dispatcherKeys(root),
+    subjects: subjectFloors(root),
+    engine: engineFacts(root),
+    statuses: ballotStatuses(root),
+    dialFacts: governanceDials(root),
+    caps: capabilityFacts(root),
+    mod: moduleFacts(root),
+    wizard: wizardTypes(root),
+    weights: weightFacts(root),
+    changeSet: changeSetFacts(root),
+    launch: launchFacts(root),
+    clock: clockFacts(root),
+    routes: routeFacts(root),
+    kinds: kindFacts(root),
+    schema: schemaFacts(root),
+    quorumFormula: quorumFormulaFacts(root),
+  }));
+  const { dispatcher, subjects, engine, statuses, dialFacts, caps, mod, wizard, weights } = value;
+  const { changeSet, launch, clock, routes, kinds, schema, quorumFormula } = value;
+  const inputs = read.map((abs) => path.relative(root, abs).split(path.sep).join("/")).sort();
+  const unhashed = unhashedInputsProblem(inputs, fingerprintFiles(root));
+  if (unhashed) fail(unhashed);
   const commit = sourceFingerprint(root);
 
   const byKey = Object.fromEntries(dialFacts.governance.map((d) => [d.key, d]));
@@ -2802,6 +2927,9 @@ export function collectFacts(root = ROOT) {
     schema,
     quorumFormula,
     staged,
+    // The files the readers opened, repository-relative and sorted. Not
+    // rendered; the self-test holds the fingerprint to them in both directions.
+    inputs,
   };
 }
 
