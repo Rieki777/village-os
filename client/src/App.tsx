@@ -234,6 +234,7 @@ const ResidentJourney = brochurePage(() => import("./pages/ResidentJourney"));
 const ProsperityJourney = brochurePage(() => import("./pages/ProsperityJourney"));
 const LoveLetter = brochurePage(() => import("./pages/LoveLetter"));
 const Circles = lazyPage(() => import("./pages/Circles"));
+const CircleCardPage = lazyPage(() => import("./pages/CircleCardPage"));
 const Places = lazyPage(() => import("./pages/Places"));
 const PlacePhotos = lazyPage(() => import("./pages/PlacePhotos"));
 const Photographs = lazyPage(() => import("./pages/Photographs"));
@@ -352,6 +353,8 @@ function Router() {
       <Route path="/prosperity" component={ProsperityJourney} />
       <Route path="/love-letter" component={LoveLetter} />
       <Route path="/circles" component={Circles} />
+      {/* One circle's card, its home page (server/routes/circleCard.ts). */}
+      <Route path="/circles/:id" component={CircleCardPage} />
       <Route path="/quests" component={Quests} />
       <Route path="/quests/:id" component={QuestDetail} />
       <Route path="/tools" component={ToolsHub} />

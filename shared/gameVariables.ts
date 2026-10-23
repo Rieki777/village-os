@@ -2241,6 +2241,15 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
     ring: "founder",
   },
+  {
+    key: "org.ccos_terms",
+    category: "The village's people",
+    label: "Show the CCOS term on circle card headings",
+    description:
+      "Each heading on a circle card is plain words, like \"What we look after\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter, like \"CCOS: Domains\", for a village that writes its charters with it. Off keeps the plain headings and shows no term.",
+    type: "boolean",
+    default: "true",
+  },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────
   //
