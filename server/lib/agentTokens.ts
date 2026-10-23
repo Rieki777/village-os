@@ -21,6 +21,7 @@
  * A changed echo, a missing token, an old token or someone else's token is a
  * 409 and nothing writes.
  */
+import { revokeLiveTokensOf } from "../repos/agentTokens";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { recordEvent } from "./events";
@@ -193,18 +194,44 @@ export async function revokeToken(pool: Pool, userId: string, id: string): Promi
     [id, userId],
   );
   const done = Number(r?.affectedRows ?? 0) > 0;
-  if (done) {
-    await recordEvent(pool, {
-      kind: "agent_token",
-      text: `revoked agent token ${id}`,
-      actorUserId: userId,
-      actorKind: "agent",
-      entityType: "agent_token",
-      entityRef: id,
-      audience: "admin",
-    });
-  }
+  if (done) await recordRevoke(pool, userId, id);
   return done;
+}
+
+/** The audit line a revoke writes, whichever door ended the token. */
+async function recordRevoke(pool: Pool, userId: string, id: string): Promise<void> {
+  await recordEvent(pool, {
+    kind: "agent_token",
+    text: `revoked agent token ${id}`,
+    actorUserId: userId,
+    actorKind: "agent",
+    entityType: "agent_token",
+    entityRef: id,
+    audience: "admin",
+  });
+}
+
+/**
+ * End every live token a member holds, and say how many.
+ *
+ * Setting a password (the first claim, a reset, a change) and an admin's
+ * "revoke sessions" call this once the credential has changed. Both bump
+ * tokenVersion, which ends every session, and an agent token is not a session:
+ * the agent resolver (server/index.ts) mints one from the holder's CURRENT
+ * tokenVersion on every call, so the bump alone never reached a token. Somebody
+ * holding a stolen password could mint one for a year and keep it past the
+ * reset that answered the theft.
+ *
+ * Call it AFTER the bump, never before: the bump is what stops an old session
+ * minting a replacement. The one window left is a mint request already past its
+ * session check when the bump lands, which can still insert after this returns.
+ *
+ * One audit line per token, the line `revokeToken` writes.
+ */
+export async function revokeAllTokens(pool: Pool, userId: string): Promise<number> {
+  const ids = await revokeLiveTokensOf(pool, userId);
+  for (const id of ids) await recordRevoke(pool, userId, id);
+  return ids.length;
 }
 
 export type VerifyResult =
