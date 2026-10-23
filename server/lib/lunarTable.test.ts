@@ -4,7 +4,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   EXAMPLE_MONTH_NAMES,
   listMonthNames,
@@ -51,7 +51,7 @@ describe.skipIf(!configured)("month names in the table", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 });
+    pool = testPool(db, { connectionLimit: 2 });
   });
   afterAll(async () => {
     await pool?.end();

@@ -39,7 +39,7 @@ import {
 import { dialsForSubject, thresholdsForSubject } from "../../shared/ballotSubjects";
 import { VARIABLES_BY_KEY, applyTimingOf, ringOf } from "../../shared/gameVariables";
 import { castVote, closeBallot, openBallot, type OpenBallotInput } from "../lib/ballots";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./testDb";
 // The generator is plain ESM with no types. It is the subject of this file, so
 // it is imported for real rather than re-implemented here.
 // @ts-expect-error - scripts/ is untyped JavaScript, deliberately outside tsconfig
@@ -152,7 +152,7 @@ describe.skipIf(!configured)("the governance doc's claims, against a real ballot
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     doc = published();
   }, 180_000);
 

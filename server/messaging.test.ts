@@ -19,7 +19,7 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { splitStatements } from "./db/migrate";
 import type { NotifyDeps } from "./lib/notify";
 import { presenceTest } from "./lib/memberPresence";
@@ -134,7 +134,7 @@ describe("messaging pure helpers", () => {
 describe.skipIf(!configured)("messaging repo (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     for (const [id, name] of [
       [ANA, "Ana Ruiz"],
       [BEN, "Ben Cole"],

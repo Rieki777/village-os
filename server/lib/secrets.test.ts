@@ -10,7 +10,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { keyFromEnv, openWith, sealWith } from "./sealedBox";
 import {
   ACCEPT_LEGACY_PLAINTEXT,
@@ -138,7 +138,7 @@ describe.skipIf(!configured)("the store against a real schema", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: a scratch schema, and reading the raw row IS the evidence
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: a scratch schema, and reading the raw row IS the evidence
   });
 
   afterAll(async () => {

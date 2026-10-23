@@ -12,9 +12,9 @@
  * nothing. It is deliberately a separate file: the picker and its placeholder
  * are another lane's, and this one only ever reads whether a value is stored.
  *
- * Typing is the answer here, so there is no confirm button. The box is empty
- * until somebody types, which is the difference from the timezone, where the
- * inherited value is already showing and agreeing needs a control of its own.
+ * Choosing is the answer here, so there is no confirm button. The picker is
+ * empty until somebody chooses, which is the difference from the timezone, where
+ * the inherited value is already showing and agreeing needs a control of its own.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -66,7 +66,7 @@ const stub = (storedCurrency: string) => {
   );
 };
 
-const field = () => document.getElementById("project-fiat-currency") as HTMLInputElement;
+const field = () => document.getElementById("project-fiat-currency") as HTMLSelectElement;
 
 describe("the currency question", () => {
   beforeEach(() => {
@@ -145,10 +145,11 @@ describe("the currency question", () => {
     await waitFor(() => expect(window.location.search).toBe("?tab=setup"));
   });
 
-  it("still lets the founder type a code, which is the answer", async () => {
+  it("still lets the founder choose a code, which is the answer", async () => {
     stub("");
     await open();
-    fireEvent.change(field(), { target: { value: "chf" } });
+    fireEvent.change(field(), { target: { value: "CHF" } });
     expect(field().value).toBe("CHF");
+    await waitFor(() => expect(screen.queryByText(/Needs your answer/)).toBeNull());
   });
 });

@@ -41,7 +41,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { agentRowsRemaining } from "../repos/memberAgent";
 import { anonymizeMember, resumeErasure, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
@@ -156,7 +156,7 @@ const portraitFileExists = (id: string) => fs.existsSync(path.join(uploadsDir, `
 describe.skipIf(!configured)("an erasure that stops part way", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-erasure-"));
   });
 
