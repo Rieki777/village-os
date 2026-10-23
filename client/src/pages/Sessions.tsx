@@ -10,6 +10,11 @@
  * Opening a room or joining one moves straight into it at /sessions/:id
  * (pages/SessionRoom.tsx), and only once the server has said yes.
  *
+ * COMING UP. Each circle's next meeting from its rhythm (components/sessions/
+ * ComingUp, shared/sessionRhythm.ts). "Get the room ready" on a row fills the
+ * start card for that meeting: its title, its circle, its length, and the
+ * circle's waiting agenda items ticked. A person still opens the room.
+ *
  * THE TICKS FOLLOW THE CIRCLE. A tick on an item that no longer fits (the
  * circle changed, or the list was read again and the item went elsewhere) is
  * dropped, never kept out of sight. An item that went elsewhere between the
@@ -50,11 +55,13 @@ import {
   type SessionListRow,
 } from "@shared/sessions";
 import { LIBRARY_COPY, LIBRARY_REFUSALS, offeredFor, type LibraryCard, type LibraryPayload } from "@shared/sessionLibrary";
+import { RHYTHM_COPY, type ComingUpPayload, type ComingUpRow } from "@shared/sessionRhythm";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
+import ComingUp from "@/components/sessions/ComingUp";
 import StartChecklist from "@/components/sessions/StartChecklist";
 import WaitingForCircle from "@/components/sessions/WaitingForCircle";
 import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
@@ -88,6 +95,8 @@ interface ListPayload {
   defaultMinutes: number | null;
   /** What members brought for a circle's next session. Empty from a server before the library. */
   library: LibraryPayload;
+  /** Each circle's next meeting. Empty from a server before the rhythm. */
+  comingUp: ComingUpPayload;
 }
 
 type LoadState =
@@ -113,7 +122,13 @@ function readPayload(body: unknown): ListPayload {
     items: Array.isArray(lib.items) ? (lib.items as LibraryCard[]).filter((c) => c && typeof c.id === "number" && typeof c.title === "string") : [],
     myCircleIds: Array.isArray(lib.myCircleIds) ? (lib.myCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
   };
-  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library };
+  const cu = (b.comingUp && typeof b.comingUp === "object" ? b.comingUp : {}) as Record<string, unknown>;
+  const comingUp: ComingUpPayload = {
+    rows: Array.isArray(cu.rows) ? (cu.rows as ComingUpRow[]).filter((r) => r && typeof r.circleId === "string" && r.next && typeof r.next.at === "string") : [],
+    zone: typeof cu.zone === "string" ? cu.zone : "UTC",
+    keepCircleIds: Array.isArray(cu.keepCircleIds) ? (cu.keepCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+  };
+  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library, comingUp };
 }
 
 /** The server's own sentence when it sent one (`{ error: <a sentence> }`), or the fallback. */
@@ -241,6 +256,25 @@ export default function Sessions() {
     [navigate],
   );
 
+  /**
+   * "Get the room ready" from a meeting coming up: the start card takes that
+   * meeting's title, circle and length, and the circle's own waiting agenda
+   * items ticked in the checklist's order; then the card is brought into view
+   * with its title box focused. Nothing is sent until the person opens it.
+   */
+  const getReady = (row: ComingUpRow) => {
+    const day = new Date(row.next.at).toLocaleDateString(undefined, { day: "numeric", month: "long", timeZone: load.kind === "ready" ? load.data.comingUp.zone : undefined });
+    setTitle(RHYTHM_COPY.roomTitle(row.circleName, day));
+    setCircleId(row.circleId);
+    setDuration(String(row.durationMin));
+    setDurationTouched(true);
+    const items = load.kind === "ready" ? load.data.library.items : [];
+    setPicked(offeredFor(items, row.circleId).filter((c) => c.circleId === row.circleId).map((c) => c.id));
+    setStartError(null);
+    startForm.current?.closest("section")?.scrollIntoView?.({ block: "start" });
+    window.requestAnimationFrame(() => document.getElementById("sessions-start-title")?.focus({ preventScroll: true }));
+  };
+
   const onStart = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (starting) return;
@@ -364,6 +398,13 @@ export default function Sessions() {
             {load.kind === "ready" && (
               <>
                 <OpenSessions rows={load.data.open} join={join} onJoin={(id) => void onJoin(id)} />
+                <ComingUp
+                  comingUp={load.data.comingUp}
+                  circles={load.data.circles}
+                  defaultMinutes={load.data.defaultMinutes}
+                  onGetReady={getReady}
+                  onChanged={fetchList}
+                />
                 <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
                 <RecentSessions rows={load.data.recent} />
               </>

@@ -15,7 +15,10 @@ Provenance: platform
 > in `drizzle/0255_a_task_keeps_going_after_the_call.sql`. What members bring before a call (below,
 > "Before the call: the agenda library") has its contract in `shared/sessionLibrary.ts`, its doors in
 > `server/routes/sessionLibrary.ts`, its rules in `server/lib/sessionLibrary.ts`, its statements in
-> `server/repos/sessionLibrary.ts` and its schema in `drizzle/0264_a_circle_keeps_an_agenda_library.sql`.
+> `server/repos/sessionLibrary.ts` and its schema in `drizzle/0264_a_circle_keeps_an_agenda_library.sql`. When a
+> circle meets (below, "When a circle meets: its rhythm") has its contract in `shared/sessionRhythm.ts`, its doors in
+> `server/routes/sessionRhythm.ts`, its rules in `server/lib/sessionRhythm.ts`, its statements in
+> `server/repos/sessionRhythm.ts` and its schema in `drizzle/0271_a_circle_keeps_a_rhythm.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -163,10 +166,11 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Eleven tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other ten holds that number. Three
-(0255) are the task layer, described under "After the call: tasks", and the last two (0264) are the
-agenda library, described under "Before the call: the agenda library".
+Twelve tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other eleven holds that number. Three
+(0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library,
+described under "Before the call: the agenda library", and the last (0271) is a circle's rhythm,
+described under "When a circle meets: its rhythm".
 
 | Table | Holds |
 |---|---|
@@ -180,6 +184,7 @@ agenda library, described under "Before the call: the agenda library".
 | `live_session_task_sends` | Each time a session's task emails went out: the send's number (1 is the close), who pressed, and the counts by outcome. Numbers only, never an address. |
 | `live_session_library` | One row per item a member brought for a circle's next session: its title, the aim it needs if they knew it, a note, the circle (or none), who brought it, where it stands now (`waiting`, `on_agenda`, `taken_up`), the session and agenda item it is on or was taken up in, and who last changed its words when that was somebody else. |
 | `live_session_library_takes` | Every time a session took an item, and how it left that session: `taken_up`, `back`, or nothing yet while the session is open. One take of an item per session. |
+| `live_session_rhythms` | One row per circle: how it meets (weekly, moon or once), the calendar's recurrence with any skipped dates, the village date of its first meeting and its wall-clock time, its length, and who set it last. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -210,6 +215,56 @@ later session that was brought over from it keeps its words and loses the link. 
 emails already sent keep their link as text. Everybody else in an open room finds it gone on their
 next poll and lands on the list, which says the session was discarded (`discardSession` in
 `server/lib/liveSessions.ts`).
+
+## When a circle meets: its rhythm
+
+A circle keeps a meeting rhythm, and /sessions shows each circle's next meeting under **Coming up**,
+between the rooms open now and the agenda items. The rhythm is every week or every two, three or four
+weeks on a weekday, at each new or full moon, or once on a date, at a time of day in the village's own
+zone (said under the form), for some minutes. It is stored in the calendar's own `Recurrence` shape
+(`shared/gatherings.ts`), so a circle's meetings can later sit on the village calendar unchanged. Beside
+it the rhythm keeps a village date (its first meeting) and a wall-clock time, never an instant: a
+daylight change, or a first meeting in the hour the clocks skip, or a new village zone, leaves "Thursday
+at 18:00" where it was. A first meeting is today or up to 120 days ahead, as far as Coming up looks, so a
+saved rhythm always shows; a later one is refused in words.
+
+**Who sets it:** the circle's own members, by the standing rule (in its last meeting, or one of its
+seats now), and admins. A circle sets its own rhythm, the way it holds its own meetings. They change it,
+skip one coming meeting (named by its village date, one of the next twelve), or stop it, which asks once
+first. **A change keeps the circle's week**: the form opens starting from the next meeting, so a new time
+or length on an every-other-week rhythm leaves its meetings on the same weeks (the door does the same for
+a weekly rhythm sent with no first date), and the skipped meetings still among its next ones stay
+skipped. "Set a meeting rhythm" offers only the circles with none; a circle that has one changes it from
+its own row. **Anybody may
+read when a circle meets**: a meeting time is the circle's door, and the agenda items behind it keep their
+own rule, so a row's count of waiting items counts only what the viewer may see.
+
+**Each row** says when in the village's words ("Tomorrow at 18:00"), how the circle meets ("Every
+Thursday at 18:00") and how many agenda items wait for it, the viewer's own circles first. While the
+circle's room is open the row offers it. Otherwise **Get the room ready** fills the start card for that
+meeting: its title ("Garden circle, 23 October"), its circle, its length, and the circle's own waiting
+items ticked, with the ones for no circle in particular left to choose. **Nothing opens a room by
+itself**: a person opens it, so a rhythm nobody keeps any more never fills the list with empty rooms.
+
+**The day before** (the hourly `session-coming-up` job, in the village's daytime window, nothing until
+the module is open to members: in preview the page answers admins alone, and a member's notice would open
+a door that refuses them), each of the circle's members hears when, with what is on the agenda: the people
+who sit in its seats now and the people of its last meeting. In the bell only (`session_coming_up`): no
+email preference a member has set covers a meeting reminder yet. Once per meeting per person: the key is
+`session-coming:<circle>:<date>T<time>:<user>`, so a skipped meeting, or one moved to another day or
+another time, is a new one. The notice opens the row on /sessions (`/sessions#coming-<circle>`), lit for a
+moment, from another page or from /sessions itself.
+
+**One circle's sessions** for its home page (the circle card): `GET
+/api/sessions/circles/:circleId/summary` answers its rhythm in words, its next meeting, when it last met
+(its last closed session two or more people were in), what waits for it as the viewer may see, its open
+room, and whether the viewer may keep its rhythm.
+
+| Door | Who | Limit |
+|---|---|---|
+| `PUT /api/sessions/circles/:circleId/rhythm` | the circle's members, admins | 60 an hour |
+| `POST /api/sessions/circles/:circleId/rhythm/skip` | the circle's members, admins | the same bucket |
+| `GET /api/sessions/circles/:circleId/summary` | a signed-in member | none |
 
 ## Before the call: the agenda library
 
@@ -523,7 +578,8 @@ The agenda library goes in the same transaction too, after every session row is 
 brought go (their takes stay, holding no words), a take they made reads as taken by nobody, where they
 last changed somebody else's words the item says nobody, and a note they wrote on somebody else's item
 goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
-it goes with the rest.
+it goes with the rest. A circle's rhythm they set last says it was set by nobody: the rhythm is the
+circle's, and stays.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -532,4 +588,5 @@ and their own answers. From the task layer it carries `tasks`, the tasks they ho
 a task they hold is that person's, and stays out. From the agenda library it carries `library`, the
 items they brought in their own words, `libraryTakes`, the times they put an item on an agenda, and
 `libraryNotes`, the notes they wrote on items somebody else brought (the note and nothing else of the
-item); a session's id travels only where they may read that session.
+item); a session's id travels only where they may read that session. From a circle's rhythm it carries
+`rhythmsSet`, the circles whose rhythm they set last.
