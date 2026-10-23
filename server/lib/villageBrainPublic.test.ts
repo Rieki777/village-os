@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { briefForPublicPrompt, briefIndexForPrompt, briefWrite } from "./villageBrain";
 
 const configured = testDbConfigured();
@@ -29,7 +29,7 @@ async function section(id: string, body: string, confirmedBy: string | null) {
 describe.skipIf(!configured)("the brief a stranger's guide may read (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });
 
   afterAll(async () => {

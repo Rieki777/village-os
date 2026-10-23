@@ -23,7 +23,7 @@ import http from "node:http";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { owedForClaim, postOwed, villageId, type OwedPosting } from "../lib/economy";
 import { seedEconomy } from "../lib/economySeed";
 import { recordGameStart } from "../lib/gameStart";
@@ -155,7 +155,7 @@ const owedRows = async (claimId: string) => {
 describe.skipIf(!configured)("what a consent owes, and paying it (MySQL, real ledger)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') ON DUPLICATE KEY UPDATE `name` = VALUES(`name`)",
       [MEMBER.id, MEMBER.name, `${MEMBER.id}@examples.invalid`],

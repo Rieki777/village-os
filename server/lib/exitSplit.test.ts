@@ -25,7 +25,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { CREDITS, ensureVoiceToken, fromLedgerUnits, VILLAGE_VOICE, VOICE_MINT } from "./economy";
 import {
   balanceOf,
@@ -202,7 +202,7 @@ describe.skipIf(!configured)("a departure on dials a village actually moved", ()
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the exit.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the exit.test.ts shape
     await loadTokenRegistry(pool);
     await ensureVoiceToken(pool, "Village Voice");
     await registerToken(pool, {

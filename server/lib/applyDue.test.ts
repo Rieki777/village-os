@@ -22,7 +22,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, closeBallot, openBallot, setSubjectCloserCheck, type BallotRow, type OpenBallotInput } from "./ballots";
 import {
   applyDueGovernance,
@@ -227,7 +227,7 @@ beforeAll(async () => {
   db = await provisionTestDb();
   // Same timezone discipline as the app pool. Without it a DATETIME comes
   // back parsed in the machine's own zone and every landing instant is hours out.
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+  pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
 }, 300000);
 
 afterAll(async () => {

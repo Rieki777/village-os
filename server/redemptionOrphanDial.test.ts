@@ -19,7 +19,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { CYCLE_POOL_FAUCET, loadTokenRegistry, memberAccount } from "./lib/ledger";
 import { CREDITS, cycleWindow, mint, toLedgerUnits } from "./lib/economy";
 import { allVariables, loadVariables, storedOverride, variable } from "./lib/variables";
@@ -40,7 +40,7 @@ describe.skipIf(!configured)("a stored value of a dial that no longer exists", (
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 4, timezone: "Z" }); // module-review-ok: fixture pool on the S5 scratch schema
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture pool on the S5 scratch schema
     await loadTokenRegistry(pool);
     // The row a village that used the old dial is carrying right now.
     await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, standing in for a village's own stored setting
