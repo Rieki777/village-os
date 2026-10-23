@@ -15,10 +15,11 @@
  * asks for the same end state an unbroken run reaches. The control case is
  * that unbroken run, against the same check.
  *
- * Two cases sit beside the table because they are about the seat refunds'
- * own resume: a refund whose claim landed and whose ledger leg did not is
- * finished exactly once, and giving up a place and refunding its fee are
- * judged on the same clock even when the step stops between them.
+ * Three cases sit beside the table. A member's own leave of a group, which
+ * has no resume behind it, is all or nothing. And two are about the seat
+ * refunds' own resume: a refund whose claim landed and whose ledger leg did
+ * not is finished exactly once, and giving up a place and refunding its fee
+ * are judged on the same clock even when the step stops between them.
  *
  * Runs against a scratch schema with every real migration applied. No
  * TEST_DATABASE_URL and the suite skips (harness rule).
@@ -39,7 +40,7 @@ import { rsvp } from "./gatherings";
 import { joinWaitlist, releasePlacesOf, setPromotionSink } from "./calendarCommunity";
 import { keysFor, seatChargeFor } from "./eventSeats";
 import { createReservation } from "./housing";
-import { createGroup } from "./messaging";
+import { createGroup, leaveConversation } from "./messaging";
 import { acceptDelegations, setDelegation } from "./delegation";
 import { recordEvent } from "./events";
 import { ensureContact } from "./comms/contacts";
@@ -309,6 +310,28 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
     expect(out.finished).toBe(true);
     expect(out.ran[0], "the resume starts at the step that stopped").toBe(step);
     await expectSwept(s);
+  });
+
+  it("leaves a group exactly as it was when a member's own leave dies between handing it on and the heir taking it", async () => {
+    // The member's own leave route has no resume to repair it, so the leave itself has to be all or nothing.
+    for (const id of ["rl-owner", "rl-ash", "rl-bo"]) await member(id, id);
+    const group = await createGroup(pool, { createdBy: "rl-owner", name: "Rota", memberIds: ["rl-ash", "rl-bo"] });
+    const broken = faultOnce(pool, has("SET role = 'owner'"));
+
+    await expect(leaveConversation(broken.pool, group.id, "rl-owner")).rejects.toThrow(/injected fault/);
+
+    expect(
+      await q("SELECT user_id, role, left_at IS NULL AS live FROM conversation_members WHERE conversation_id = ? ORDER BY user_id", [group.id]),
+      "nothing landed: the owner is still in and still owner",
+    ).toEqual([
+      { user_id: "rl-ash", role: "member", live: 1 },
+      { user_id: "rl-bo", role: "member", live: 1 },
+      { user_id: "rl-owner", role: "owner", live: 1 },
+    ]);
+    expect(await leaveConversation(pool, group.id, "rl-owner")).toBe(true);
+    expect(await q("SELECT user_id FROM conversation_members WHERE conversation_id = ? AND role = 'owner' AND left_at IS NULL", [group.id])).toEqual([
+      { user_id: "rl-ash" },
+    ]);
   });
 
   it("finishes a refund whose claim landed and whose ledger leg did not, exactly once", async () => {
