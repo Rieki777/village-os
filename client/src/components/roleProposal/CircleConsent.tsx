@@ -105,6 +105,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
   const reasonId = `${ids}-reason`;
   const goesId = `${ids}-goes`;
   const helpId = `${ids}-help`;
+  const errorId = `${ids}-error`;
 
   // A fresh read of the page wins over what this panel last heard.
   useEffect(() => setConsent(given), [given]);
@@ -184,7 +185,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
             rows={4}
             maxLength={OBJECTION_MAX}
             aria-required="true"
-            aria-describedby={`${goesId} ${helpId}`}
+            aria-describedby={`${goesId} ${helpId}${error ? ` ${errorId}` : ""}`}
             aria-invalid={error === CONSENT_WORDS.reasonNeeded ? true : undefined}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -194,6 +195,12 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
           <p id={helpId} className={LEDE}>
             {CONSENT_WORDS.reasonHelp}
           </p>
+          {/* The refusal sits under the box it is about. */}
+          {error && (
+            <p id={errorId} role="alert" className="text-sm font-medium text-coral">
+              {error}
+            </p>
+          )}
           <div className="grid gap-2 sm:flex sm:flex-wrap">
             <button type="submit" disabled={busy} className={PRIMARY}>
               {CONSENT_WORDS.sendObjection}
@@ -221,7 +228,7 @@ export default function CircleConsent({ applicationId, consent: given, decided, 
         </div>
       )}
 
-      {error && (
+      {error && !(mayAnswer && objecting) && (
         <p role="alert" className="text-sm font-medium text-coral">
           {error}
         </p>

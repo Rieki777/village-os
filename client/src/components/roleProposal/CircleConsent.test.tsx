@@ -109,6 +109,10 @@ describe("an answer", () => {
     // No reason: the page says why and the route is never asked.
     fireEvent.click(screen.getByRole("button", { name: CONSENT_WORDS.sendObjection }));
     expect(screen.getByRole("alert").textContent).toBe(CONSENT_WORDS.reasonNeeded);
+    // Said under the box it is about, and tied to it.
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect(box.getAttribute("aria-describedby")).toContain(screen.getByRole("alert").id);
+    expect(document.querySelector("[data-objection-form]")!.contains(screen.getByRole("alert"))).toBe(true);
     fireEvent.change(box, { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: CONSENT_WORDS.sendObjection }));
     expect(posts).toEqual([]);
