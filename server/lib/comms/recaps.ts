@@ -72,6 +72,7 @@ import { boolVar, numberVar } from "../variables";
 import type { ActionHandler, ActResult } from "./actions";
 import { addresseeOf, eveningValues, firstNameOf, personValues, readEvening, type Evening, type MemberLookup } from "./gatheringEvening";
 import { actionUrl, giveSeatBack, guestDoorFacts, standingOf, takeSeatOrQueue, zoneOf, type GuestDeps } from "./guests";
+import { LINK_PERSON_GONE, linkPersonStands } from "./linkPerson";
 import { signLink, type LinkPayload } from "./links";
 import { post } from "./postOffice";
 import { loadEmailVillage, renderTemplate } from "./render";
@@ -371,7 +372,16 @@ function linkTarget(payload: LinkPayload): { eventId: string; occurrenceKey: str
 
 const SEEN_BY_HOST = "Your host sees your answer and your name.";
 
-/** The handler for `recap_answer`: the first question yes or no, the second in words. */
+/** The refusal a recap or next-gathering link reads once the person it names is gone. */
+const PERSON_GONE: ActResult = { ok: false, status: 404, error: LINK_PERSON_GONE };
+
+/**
+ * The handler for `recap_answer`: the first question yes or no, the second in words.
+ *
+ * The link lives 30 days and outlives an erasure, so the page and the press
+ * both ask whether its person still stands (./linkPerson.ts). An erased
+ * member's link opens nothing and keeps none of their words.
+ */
 export function recapAnswerAction(deps: RecapDeps): ActionHandler {
   const questionOf = (payload: LinkPayload): RecapQuestionKey | null => (payload.q === "q1" || payload.q === "q2" ? payload.q : null);
 
@@ -379,6 +389,7 @@ export function recapAnswerAction(deps: RecapDeps): ActionHandler {
     const t = linkTarget(payload);
     const q = questionOf(payload);
     if (!t || !q) return null;
+    if (!(await linkPersonStands(deps, t.personKey))) return null;
     const pool = deps.getPool();
     const evening = await readEvening(pool, t.eventId, t.occurrenceKey, zoneOf(deps));
     if (!evening) return null;
@@ -424,6 +435,7 @@ export function recapAnswerAction(deps: RecapDeps): ActionHandler {
         if (!answer) return { ok: false, status: 400, error: "Write your answer, then press Send." };
         if (answer.length > RECAP_ANSWER_MAX) return { ok: false, status: 400, error: `Keep it under ${RECAP_ANSWER_MAX} characters.` };
       }
+      if (!(await linkPersonStands(deps, t.personKey))) return PERSON_GONE;
       await upsertFeedback(pool, { eventId: evening.row.id, occurrenceKey: evening.occurrenceKey, personKey: t.personKey, questionKey: q, answer });
       return { ok: true, outcome: { ok: true, title: "Thank you!", paragraphs: [], description: await describe(payload) } };
     },
@@ -486,12 +498,16 @@ export function rsvpNextAction(deps: RecapDeps): ActionHandler {
       if (body.choice !== "going") return { ok: false, status: 400, error: "Press Save me a seat." };
 
       if (isGuestKey(t.personKey)) {
-        // A guest confirms directly: the link reached their own inbox.
+        // A guest confirms directly: the link reached their own inbox. Their
+        // contact must still be held, because erasure takes it from a member who
+        // was a guest first, and this link would seat them again (./linkPerson.ts).
+        if (!(await linkPersonStands(deps, t.personKey))) return PERSON_GONE;
         const door = await guestDoorFacts(deps, eventId, occ);
         if (door.refusal) return { ok: false, status: 409, error: GUEST_REFUSAL_WORDS[door.refusal] };
       } else {
+        // `member` answers null for a tombstone, an example account or nobody.
         const member = await deps.member(t.personKey);
-        if (!member) return { ok: false, status: 404, error: "Sign in to answer this gathering." };
+        if (!member) return PERSON_GONE;
         const rsvpOpen = deps.rsvpEnabled ? deps.rsvpEnabled() : boolVar("events.rsvp_enabled");
         if (!rsvpOpen) return { ok: false, status: 409, error: "Answers are closed for now. Check back soon." };
         if (!(await deps.memberMayRsvp(t.personKey))) {

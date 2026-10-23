@@ -8,7 +8,7 @@ Provenance: platform
 
 An outside service keeps a record of how a village is actually organised, reads its
 meetings and documents, and **suggests** changes to the village's circles and roles.
-Suggest is the whole word. Nothing this module receives writes a seat.
+Suggest is the whole word. Nothing this module receives writes a role.
 
 Ships **off**, like every non-core module. A village that turns it on holds its own
 connection: its own address at the service and its own token.
@@ -26,7 +26,7 @@ connection: its own address at the service and its own token.
 - Suggestions land in the **review queue** that already exists. A steward reads, edits,
   accepts or refuses them, and the change limit, the preview and the publish step apply
   exactly as they do to any other producer.
-- What the service knows about a seat is stored beside that seat and shown on the role
+- What the service knows about a role is stored beside that role and shown on its role
   card to **every member**, so somebody can read what a role involves before deciding
   whether to put their hand up for it.
 
@@ -49,8 +49,8 @@ the structure half, which is most of the value, lands without waiting for anythi
 
 **Role assignments are in the structure half**, which is not obvious. It became true when
 `Assignment Title` was excluded: every value of that field was a person's name followed
-by their seat, so while it was allowed, every assignment carried a person. With it gone,
-what remains is state about a seat — its type, how energized it is, its term, when it is
+by their role, so while it was allowed, every assignment carried a person. With it gone,
+what remains is state about a role — its type, how energized it is, its term, when it is
 next reviewed.
 
 ## The boundary
@@ -63,13 +63,13 @@ raw vendor record.
 - A second net drops any value carrying an email address at any depth.
 - `Active Holders`, `Role Holders`, `Owner`, `Sensed By`, `Circle Lead`, `Rep Steward`,
   `Assignment Title` and the whole of the vendor's Profiles database are absent on
-  purpose. `Owner Role` crosses, because a role is a seat and not a person.
+  purpose. `Owner Role` crosses, because it names a role and not a person.
 - What was left behind is named, and an unmapped field is reported **separately** from one
   holding an address: the first is a gap in that file, the second is somebody to go and
   talk to.
 
 **Read the values of a field before allowing it, never the name.** `Assignment Title`
-sounds like a label and was the vendor's people-to-seats mapping. It was in the allow list
+sounds like a label and was the vendor's people-to-roles mapping. It was in the allow list
 for a day and nothing caught it: the address net looks for an address and that is a name.
 
 ## What a sync asks for
@@ -116,16 +116,16 @@ block's type and length, and whether that text parsed as JSON. The service's own
 a refusal are clipped to 400 characters and withheld whole when they carry an address. The
 panel repeats a detail only for a refused call and for the service saying no.
 
-## How a role becomes a seat
+## How the service's role becomes a role on the chart
 
 `server/lib/saberraProposals.ts` turns roles into one `org.proposed`. A role's `Circle`
 is a **relation** in the service's store (page ids, or objects carrying an id and maybe a
 name), so it is read in any of those shapes by `server/lib/saberraRelations.ts` and its ids
 are resolved against the circle records of the same read. An id that resolves to nothing is
-counted and never shown as a name. The sync's answer carries `circles`: how many seats were
+counted and never shown as a name. The sync's answer carries `circles`: how many roles were
 placed, unresolved, absent or named several circles, and the field's **shape** (never its
 value), so the shape is measured on every sync. The aim comes from `Body` when it is text.
-The first live sync (2026-10-09) lost every seat's circle and aim because only a string was
+The first live sync (2026-10-09) lost every role's circle and aim because only a string was
 read.
 
 The service's `Status` is carried as the source wrote it and applied by the structure
@@ -135,8 +135,8 @@ review (`shared/structurePlan.ts`):
 |---|---|
 | Active | proposed as usual |
 | Proposed | proposed, tagged "Proposed in" the service |
-| Vacant | proposed as an open seat; never sets `recruiting` |
-| Archived | never proposed as new; listed apart under "Archived in" the service, with its reason, and a seat in an archived circle goes with it. One that matches a live circle or seat here is a note, never a retirement |
+| Vacant | proposed as a role with an opening; never sets `recruiting` |
+| Archived | never proposed as new; listed apart under "Archived in" the service, with its reason, and a role in an archived circle goes with it. One that matches a live circle or role here is a note, never a retirement |
 
 **Pressing Sync now again replaces what is still waiting.** A changed claim supersedes
 the waiting one; an unchanged one is moved into the new delivery (`rebatchWaiting`), so
@@ -243,10 +243,10 @@ and be sent the village's key.
 | cause a sync, read connection status, read the run log (`GET /api/saberra/runs`) | `intake.moderate` |
 | set the schedule | admin, through the module config route like the addresses |
 | read what the journal bridge would send (`GET /api/saberra/outbox`) | `intake.moderate`. Kind, date, code-name, length and status only, never the words. |
-| read what the service holds about a seat | signed in, module on. No capability. |
+| read what the service holds about a role | signed in, module on. No capability. |
 
 The last is deliberate: the question that panel answers is whether to put your hand up
-for a seat, and that is not a steward's question.
+for a role, and that is not a steward's question.
 
 ## What it does not do yet
 

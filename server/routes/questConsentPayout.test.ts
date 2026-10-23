@@ -200,11 +200,11 @@ describe.skipIf(!configured)("what a quest consent moves (MySQL, real ledger)", 
     expect(consentedTitle()).toBe("Your quest was consented: Quest empty");
   });
 
-  it("holds a quest's own amount to the village's ceiling", async () => {
-    // The seeded voice rule caps one quest at 100.
+  it("pays a quest's own amount in full, far above the rule's ceiling", async () => {
+    // The seeded voice rule's ceiling is 100. No ceiling binds work (Rye, 2026-10-22).
     const id = await submittedOn("over", { valueMinor: 1, valueCurrency: "CRC", valueTokens: [{ token: VILLAGE_VOICE, amount: 500 }] });
     expect((await consent(id)).status).toBe(200);
-    expect(await movedFor(id)).toEqual([[VILLAGE_VOICE, toLedgerUnits(VILLAGE_VOICE, 100)]]);
+    expect(await movedFor(id)).toEqual([[VILLAGE_VOICE, toLedgerUnits(VILLAGE_VOICE, 500)]]);
   });
 
   it("releases a work-exchange quest's stay credits beside its list", async () => {
