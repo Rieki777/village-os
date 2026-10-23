@@ -14,8 +14,9 @@
  *
  *   a valued quest paid its own amounts AND the flat amounts, twice for one
  *   piece of work            "pays its own list and never the flat amounts"
- *   a typed figure minting past what the village voted
- *                            "holds a quest's own amount to the rule's ceiling"
+ *   a figure a quest names held down by a ceiling, which Rye ruled out on
+ *   2026-10-22 ("we definitely can't have caps on what things pay")
+ *                            "pays a quest's own amount in full, far above any ceiling"
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
@@ -122,7 +123,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(q.source).toBe("own");
       // Denominator first: the list was priced at all.
       expect(q.lines).toHaveLength(1);
-      expect(q.lines[0]).toMatchObject({ token: CREDITS, units: await unitsOf(CREDITS, 40), capped: false });
+      expect(q.lines[0]).toMatchObject({ token: CREDITS, units: await unitsOf(CREDITS, 40) });
       // Voice is a flat rule this quest did not name, so it pays none.
       expect(q.lines.map((l) => l.token)).not.toContain(VILLAGE_VOICE);
     });
@@ -134,9 +135,26 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(q.unpayable).toEqual([]);
     });
 
-    it("holds a quest's own amount to the rule's ceiling, and says it did", async () => {
-      const q = quoteWorkPay(rules(), [{ token: VILLAGE_VOICE, amount: 500 }], "quest");
-      expect(q.lines[0]).toMatchObject({ token: VILLAGE_VOICE, units: await unitsOf(VILLAGE_VOICE, 100), capped: true });
+    it("pays a quest's own amount in full, far above any ceiling", async () => {
+      // Rye, 2026-10-22: "no caps here! ... we definitely can't have caps on
+      // what things pay". The rules here cap Voice at 100 and Credits at 250.
+      const q = quoteWorkPay(rules(), [{ token: VILLAGE_VOICE, amount: 500 }, { token: CREDITS, amount: 25000 }], "quest");
+      expect(q.lines.map((l) => [l.token, l.units])).toEqual([
+        [CREDITS, await unitsOf(CREDITS, 25000)],
+        [VILLAGE_VOICE, await unitsOf(VILLAGE_VOICE, 500)],
+      ]);
+      expect(q.unpayable).toEqual([]);
+    });
+
+    it("pays a rule's own amount in full too, whatever its ceiling says, zero included", async () => {
+      // A row a ballot left at amount 25 over ceiling 5 used to pay 5, and a
+      // ceiling of 0 used to pay nobody. Neither binds work now.
+      for (const ceiling of [5, 0]) {
+        const q = quoteWorkPay([rule({ tokenSlug: CREDITS, amount: 25, ceiling })], null, "quest");
+        expect(q.lines.map((l) => [l.token, l.units]), `ceiling ${ceiling}`).toEqual([[CREDITS, await unitsOf(CREDITS, 25)]]);
+      }
+      const own = quoteWorkPay([rule({ tokenSlug: CREDITS, amount: 25, ceiling: 0 })], [{ token: CREDITS, amount: 900 }], "seat");
+      expect(own.lines[0]?.units).toBe(await unitsOf(CREDITS, 900));
     });
 
     it("lets a rule that reads its amount from the work pay the work that names one, and stay quiet otherwise", async () => {
@@ -147,7 +165,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(none.unpayable).toEqual([]);
     });
 
-    it("refuses a token the work names with no rule behind it, because nothing caps it", () => {
+    it("refuses a token the work names with no rule behind it, because no rule lets it pay this work", () => {
       const q = quoteWorkPay([rule({ tokenSlug: CREDITS })], [{ token: VILLAGE_VOICE, amount: 5 }], "quest");
       expect(q.lines).toEqual([]);
       expect(q.unpayable).toHaveLength(1);
@@ -270,8 +288,21 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       await seat("wp-s-src", "wp-role-src", u);
       const before = await balanceOf(pool, memberAccount(u), CREDITS);
       const out = await runSettlement(pool);
-      // Clamped to the village's ceiling of 80.
-      expect((await balanceOf(pool, memberAccount(u), CREDITS)) - before).toBe(await unitsOf(CREDITS, 80));
+      // In full: the rule's ceiling of 80 no longer binds role pay.
+      expect((await balanceOf(pool, memberAccount(u), CREDITS)) - before).toBe(await unitsOf(CREDITS, 120));
+      expect(out.unpayable).toEqual([]);
+    });
+
+    it("pays a role its own amount even when the rule's ceiling is zero", async () => {
+      // A ceiling of 0 used to take the rule out of the run before any seat was
+      // priced, so a role naming its own amount of that token was paid nothing.
+      await setRules("role.cycle", [{ token: CREDITS, amount: 25, ceiling: 0 }]);
+      const u = await makeMember("wp-seat-zero");
+      await role("wp-role-zero", [{ token: CREDITS, amount: 300 }]);
+      await seat("wp-s-zero", "wp-role-zero", u);
+      const before = await balanceOf(pool, memberAccount(u), CREDITS);
+      const out = await runSettlement(pool);
+      expect((await balanceOf(pool, memberAccount(u), CREDITS)) - before).toBe(await unitsOf(CREDITS, 300));
       expect(out.unpayable).toEqual([]);
     });
 
@@ -325,7 +356,7 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       ]);
       const feed = await publicRules(pool);
       const credits = feed.find((r) => r.trigger === "quest.completed" && /credit/i.test(r.token));
-      expect(credits?.says).toMatch(/^25 .* when a steward confirms finished work; a quest that names its own amount is paid that, up to 250$/);
+      expect(credits?.says).toMatch(/^25 .* when a steward confirms finished work; a quest that names its own amount is paid that$/);
       const hearts = feed.find((r) => r.trigger === "quest.completed" && !/credit/i.test(r.token));
       expect(hearts?.says).toMatch(/^no .* for work/);
     });
@@ -337,15 +368,16 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
         rule({ tokenSlug: "voice", amount: 1, ceiling: 1 }),
       ]);
       expect(offered.map((t) => t.token)).toEqual([CREDITS]);
-      expect(offered[0]).toMatchObject({ ceiling: 250, standard: 25 });
+      expect(offered[0]).toMatchObject({ standard: 25 });
+      // No ceiling rides to the editor: work is paid in full.
+      expect(offered[0]).not.toHaveProperty("ceiling");
     });
 
     it("refuses a line before it is stored, with a sentence naming what to change", () => {
       const rules = [rule({ tokenSlug: CREDITS, amount: 25, ceiling: 250 })];
-      expect(payLineProblem(rules, CREDITS, 250)).toBeNull();
-      expect(payLineProblem(rules, CREDITS, 251)).toMatch(/caps .* at 250/);
-      expect(payLineProblem(rules, VILLAGE_VOICE, 5)).toMatch(/no enabled rule/);
-      expect(payLineProblem(rules, HEARTS, 5)).toBe(GRATITUDE_NEVER_PAYS);
+      expect(payLineProblem(rules, CREDITS)).toBeNull();
+      expect(payLineProblem(rules, VILLAGE_VOICE)).toMatch(/no enabled rule/);
+      expect(payLineProblem(rules, HEARTS)).toBe(GRATITUDE_NEVER_PAYS);
     });
   });
 
@@ -413,14 +445,15 @@ describe.skipIf(!configured)("what a quest and a role pay", () => {
       expect(stored).toMatchObject({ valueMinor: 2500000, valueCurrency: "CRC", valueTokens: [{ token: CREDITS, amount: 40 }] });
     });
 
-    it("refuses Gratitude, and an amount above the village's ceiling, before anything is written", async () => {
+    it("refuses Gratitude before anything is written, and stores an amount far above the ceiling", async () => {
       const hearts = await call("POST /api/admin/quests", { body: { id: "wp-route-2", title: "A", valueMinor: 1, valueTokens: [{ token: HEARTS, amount: 40 }] } });
       expect(hearts.status).toBe(400);
       expect(hearts.body.error).toBe(GRATITUDE_NEVER_PAYS);
-      const over = await call("POST /api/admin/quests", { body: { id: "wp-route-3", title: "B", valueMinor: 1, valueTokens: [{ token: VILLAGE_VOICE, amount: 101 }] } });
-      expect(over.status).toBe(400);
-      expect(over.body.error).toMatch(/caps .* at 100/);
       expect(await makeQuestsRepo(pool).all()).toEqual([]);
+      // The Voice rule's ceiling is 100. No cap on what work pays (Rye, 2026-10-22).
+      const big = await call("POST /api/admin/quests", { body: { id: "wp-route-3", title: "B", valueMinor: 1, valueTokens: [{ token: VILLAGE_VOICE, amount: 5000 }] } });
+      expect(big.status).toBe(200);
+      expect((await makeQuestsRepo(pool).byId("wp-route-3"))?.valueTokens).toEqual([{ token: VILLAGE_VOICE, amount: 5000 }]);
     });
 
     it("leaves the value alone on a save that does not carry it, and never stores the card", async () => {

@@ -250,29 +250,21 @@ beforeAll(async () => {
   );
 
   /*
-   * The seat rule this suite defers a change on is the GRATITUDE one, and a
-   * village is no longer seeded paying it: since 0125 the defaults are Village
-   * Voice and Village Credits and the gratitude seat rule ships disabled, which
-   * a village switches on if it wants it (`server/lib/economySeed.ts`).
+   * The seat rule this suite defers a change on is the seeded VILLAGE CREDITS
+   * one, live from birth. It was the Gratitude seat rule, switched on here,
+   * until Gratitude stopped paying roles (Rye, 2026-10-21 and 2026-10-22:
+   * Gratitude is only sent player to player). The run now says that rule pays
+   * nobody, exactly as the settlement does, so it could no longer carry a
+   * deferred change worth measuring. This suite is about DEFERRAL, a queued
+   * change landing at the next moon and not this one, and it needs a live rule.
    *
-   * So the fixture switches it on, explicitly, and that is the honest shape:
-   * this suite is about DEFERRAL, a queued change landing at the next moon and
-   * not this one, and it needs a live rule to defer a change on. Deferring a
-   * change on a disabled rule would have measured nothing while still going
-   * green, which is the failure this whole suite exists to catch.
-   */
-  await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-    "UPDATE mint_rules SET enabled = 1 WHERE id = 'rule-role.cycle-gratitude'",
-  );
-
-  /*
-   * A queued change on the seat rule, stamped for a moon inside every run this
-   * suite makes. Written the way `queueRuleChange` writes it, because the
-   * route that queues one is the Mint panel and this suite is about the run.
+   * A queued change on it, stamped for a moon inside every run this suite
+   * makes. Written the way `queueRuleChange` writes it, because the route that
+   * queues one is the Mint panel and this suite is about the run.
    */
   await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     "UPDATE mint_rules SET pending_amount = 45, pending_ceiling = ceiling, pending_enabled = 1, " +
-      "pending_from_cycle = ? WHERE id = 'rule-role.cycle-gratitude'",
+      "pending_from_cycle = ? WHERE id = 'rule-role.cycle-credits'",
     [cycleBoundsFor(new Date()).cycleNumber + 1],
   );
 }, 180_000);
@@ -316,7 +308,7 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
     // path is dead code in every turn and the run looks fine anyway.
     const landings = r.json.turns.filter((t: any) => t.findings.some((f: any) => f.area === "rules"));
     expect(landings, "the queued rule change lands in one moon").toHaveLength(1);
-    expect(JSON.stringify(landings[0].findings)).toContain("20 becomes 45");
+    expect(JSON.stringify(landings[0].findings)).toContain("25 becomes 45");
     // Named by TOKEN, not by position. A village now pays a seat holder in
     // more than one token, so a turn carries several settlement findings and
     // `.find()` on the area alone returns whichever the rules query happened
@@ -326,12 +318,12 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
       r.json.turns[i].findings.find(
         (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes(token),
       )?.sentence ?? "";
-    expect(amountIn(0, "Gratitude")).toContain("20 Gratitude");
-    expect(amountIn(1, "Gratitude")).toContain("45 Gratitude");
-    // The defaults a village is actually born with settle alongside it, and
-    // the deferred change does not disturb them.
-    expect(amountIn(0, "Village Voice")).toContain("50 Village Voice");
     expect(amountIn(0, "Village Credits")).toContain("25 Village Credits");
+    expect(amountIn(1, "Village Credits")).toContain("45 Village Credits");
+    // The other default settles alongside it, and the deferred change does
+    // not disturb it.
+    expect(amountIn(0, "Village Voice")).toContain("50 Village Voice");
+    expect(amountIn(1, "Village Voice")).toContain("50 Village Voice");
   });
 
   it("refuses a stranger", async () => {
@@ -356,13 +348,13 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
       r.json.turns.some((t: any) => t.findings.some((f: any) => f.area === "rules")),
       "a member reads no queued change",
     ).toBe(false);
-    expect(JSON.stringify(r.json)).not.toContain("20 becomes 45");
+    expect(JSON.stringify(r.json)).not.toContain("25 becomes 45");
     // Every moon settles at the amount the rule carries today.
     for (const t of r.json.turns) {
       const paid = t.findings.find(
-        (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes("Gratitude"),
+        (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes("Village Credits"),
       );
-      expect(paid?.sentence, `moon ${t.cycleNumber}`).toContain("20 Gratitude");
+      expect(paid?.sentence, `moon ${t.cycleNumber}`).toContain("25 Village Credits");
     }
   });
 
@@ -497,14 +489,14 @@ describe.skipIf(!DB_CONFIGURED)("the test run before launch", () => {
 
   it("carries the refusals a founder needs, never only the successes", async () => {
     // A rule that pays nothing is the silent misconfiguration this exists for.
-    await pool.query("UPDATE mint_rules SET amount = NULL WHERE `trigger` = 'role.cycle' AND token_slug = 'gratitude'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("UPDATE mint_rules SET amount = NULL WHERE `trigger` = 'role.cycle' AND token_slug = 'credits'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const r = await call("POST", "/api/dry-run", { body: { moons: 6 } });
     expect(r.status).toBe(200);
     const refusals = r.json.refusals ?? [];
     expect(refusals.length, "the run reported at least one refusal").toBeGreaterThan(0);
     expect(JSON.stringify(refusals)).toMatch(/pays nothing|reads its amount/i);
     // Put it back so a later read of this schema is not confused by it.
-    await pool.query("UPDATE mint_rules SET amount = 20 WHERE `trigger` = 'role.cycle' AND token_slug = 'gratitude'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await pool.query("UPDATE mint_rules SET amount = 25 WHERE `trigger` = 'role.cycle' AND token_slug = 'credits'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   /*

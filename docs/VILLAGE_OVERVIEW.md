@@ -27,7 +27,7 @@ Five things the village keeps, and everything else is arrangement:
 | | |
 |---|---|
 | **People** | members, their stage, what they can do |
-| **Structure** | circles (domains of work) and roles (seats inside them) |
+| **Structure** | circles (domains of work) and the roles inside them |
 | **Work** | quests: posted, claimed, done, consented to |
 | **Recognition** | gratitude sent between people, settled per lunar cycle |
 | **Value** | a double-entry ledger whose balances sum to zero, per token |
@@ -139,7 +139,7 @@ language ("this role could hide forum posts"), and anything left unticked is
 stripped from what gets created.
 
 She is bounded on purpose: she recommends turning a module on and never turns one
-on; she proposes the fewest seats that cover the stated aims and says so when a
+on; she proposes the fewest roles that cover the stated aims and says so when a
 village is being asked to hold more structure than it has people for.
 
 ---
@@ -158,7 +158,7 @@ outside.
 | Endpoint | Gives you |
 |---|---|
 | `GET /.well-known/village.json` | **Start here.** The discovery root: `protocol`, `instanceId`, name, tagline, location, platform version and build, the village's **public signing key**, which document types it `supports`, `links` to everything else, and every module with its lifecycle |
-| `GET /api/public/org.json` | The org chart: circles and seats, **signed**, with an `updatedAt` |
+| `GET /api/public/org.json` | The org chart: circles and roles, **signed**, with an `updatedAt` |
 | `GET /org/index.md` | The same org chart as linked Markdown with YAML frontmatter, for a human or a model that would rather read than parse |
 | `GET /api/game/mechanics` | The village's rules as data: every behaviour variable with its bounds, default, current value, who may change it, and when a change takes effect. Plus the constitution and which modules are running |
 | `GET /api/platform/info` | The v0 handshake. Kept answering forever; prefer the well-known document |
@@ -237,7 +237,7 @@ It is never a fact about your village.
 ### 6.5 What a village will not do for you
 
 - Hand over member data. There is no endpoint for a roster, and seeing who holds
-  which seat is its own capability.
+  which role is its own capability.
 - Accept a write without a human in the loop.
 - Let an integration hold a permission the member it acts for does not have.
 - Join a registry, or depend on one to keep working.
@@ -270,7 +270,7 @@ can be rotated by someone else.
 |---|---|
 | **Village** | one deployment: one process, one database, one community |
 | **Circle** | a domain of work |
-| **Role** | a seat inside a circle, held by a member, carrying capabilities |
+| **Role** | a position inside a circle, held by a member, carrying capabilities. Members say role, never seat (2026-10-21); the code and the stored ids still say seat |
 | **Quest** | a unit of work, claimed and consented to |
 | **Gratitude** | recognition sent between members; a signal, not a payment |
 | **Cycle** | a lunar period; value settles when one closes |
