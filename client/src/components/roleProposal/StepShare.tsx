@@ -41,7 +41,7 @@ function SharePanel({ proposal, onShare }: { proposal: ProposalOut; onShare: (sh
   const [said, setSaid] = useState<string | null>(null);
   if (!share) return null;
 
-  const run = async (act: () => ReturnType<typeof setShare>, done: string | null = null) => {
+  const run = async (act: () => ReturnType<typeof setShare>, done: string | null = null): Promise<boolean> => {
     setBusy(true);
     setSaid(null);
     const r = await act();
@@ -49,7 +49,10 @@ function SharePanel({ proposal, onShare }: { proposal: ProposalOut; onShare: (sh
     if (r.ok) {
       onShare(r.data.share);
       setSaid(done);
-    } else setSaid(r.error);
+      return true;
+    }
+    setSaid(r.error);
+    return false;
   };
 
   const copy = async () => {
@@ -95,7 +98,14 @@ function SharePanel({ proposal, onShare }: { proposal: ProposalOut; onShare: (sh
                   value={a.key}
                   checked={share.audience === a.key}
                   disabled={busy}
-                  onChange={() => void run(() => setShare(proposal.id, a.key))}
+                  onChange={() => {
+                    // The toggle moves at once; the server's answer then confirms it, or puts it back.
+                    const before = share;
+                    onShare({ ...share, audience: a.key });
+                    void run(() => setShare(proposal.id, a.key)).then((ok) => {
+                      if (!ok) onShare(before);
+                    });
+                  }}
                   className={`mt-0.5 size-5 shrink-0 accent-teal-deep ${FOCUS}`}
                 />
                 <span className="grid gap-0.5">

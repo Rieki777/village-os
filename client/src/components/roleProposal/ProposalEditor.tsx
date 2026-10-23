@@ -169,6 +169,16 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
   const save = useAutosave(send);
   const isNewId = (id: string) => latest.current.newRoles.some((n) => n.id === id);
 
+  // A field scrolled to by focus stops above the sticky save bar, never under it.
+  useEffect(() => {
+    const root = document.documentElement;
+    const before = root.style.scrollPaddingBottom;
+    root.style.scrollPaddingBottom = "8rem";
+    return () => {
+      root.style.scrollPaddingBottom = before;
+    };
+  }, []);
+
   const go = async (next: StepKey) => {
     await save.flush();
     setStep(next);
