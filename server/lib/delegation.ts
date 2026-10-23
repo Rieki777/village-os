@@ -423,7 +423,7 @@ export async function revokeDelegation(pool: Pool, delegatorId: string): Promise
 
 /** The notice a member reads when the person carrying their voice leaves. It names nobody. */
 export const DELEGATE_LEFT_NOTICE = {
-  title: "The member carrying your voice has left the village",
+  title: "The member you handed your voice to has left the village",
   body: "Your delegation has ended, so you decide your own votes again. A vote they had cast for you on an open ballot is no longer cast, and you can cast your own before it closes.",
 };
 

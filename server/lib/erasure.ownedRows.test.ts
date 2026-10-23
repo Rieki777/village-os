@@ -39,7 +39,7 @@ import { recordVouch } from "../repos/vouches";
 import { recordFact } from "../repos/investorPath";
 import { register as registerVouchRoutes } from "../routes/vouches";
 import { rsvp, withdrawRsvp } from "./gatherings";
-import { createSlot, joinWaitlist, setPromotionSink, signupSlot } from "./calendarCommunity";
+import { createSlot, joinWaitlist, setPromotionSink, signupSlot, whoIsHere } from "./calendarCommunity";
 import { seatChargeFor } from "./eventSeats";
 import { createReservation, setReservationStatus } from "./housing";
 import { createGroup, openDirect, sendMessage } from "./messaging";
@@ -196,8 +196,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
 
     // The seat they freed on an upcoming gathering went to the person waiting for it.
     expect(await answer("own-ev-full", "own-ev-bo")).toBe("going");
-    // Nobody is seated into an evening that has already happened.
-    expect(await answer("own-ev-past", "own-ev-cy")).toBeNull();
+    expect(await answer("own-ev-past", "own-ev-cy"), "nobody is seated into an evening that has already happened").toBeNull();
     // Ash, who stays, keeps the seat ahead of the leaver's old queue place.
     expect(await answer("own-ev-queue", "own-ev-ash")).toBe("going");
 
@@ -253,8 +252,14 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     const theirs = await createReservation(pool, {
       structureKey: "ridgeA", homeType: "villa", name: "Ash Moreno", email: "ash@example.test", phone: "555 0199", notes: "Soon",
     });
+    await q("UPDATE housing_reservations SET updated_at = '2026-02-01 09:00:00.000' WHERE id = ?", [byAddress.id]);
 
     await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(
+      await q("SELECT DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS at FROM housing_reservations WHERE id = ?", [byAddress.id]),
+      "a scrub is not the founder moving the request along",
+    ).toEqual([{ at: "2026-02-01 09:00:00" }]);
 
     const rows = await q(
       "SELECT id, name, email, phone, notes, user_id, status, home_type FROM housing_reservations WHERE id IN (?, ?) ORDER BY id",
@@ -386,7 +391,8 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     await q("INSERT INTO member_ventures (id, user_id, name, summary, link) VALUES (?,?,?,?,?)", ["mv-own-1", leaver.id, "Halloway Honey", "Raw honey from the ridge", "https://honey.example.test"]);
     await q("INSERT INTO member_ventures (id, user_id, name) VALUES (?,?,?)", ["mv-own-2", "own-vx-ash", "Moreno Mill"]);
     const fact = await recordFact(pool, { userId: leaver.id, fact: "interest_registered", detail: "Wants to put in a little after the harvest" });
-    await q("INSERT INTO stays (id, user_id, accommodation_id, status, notes) VALUES (?,?,?,?,?)", ["st-own-1", leaver.id, "acc-1", "ended", "Allergic to wool, arriving by bus"]);
+    // Ended months ago. The who-is-here band reads an ended stay's departure off `updated_at`.
+    await q("INSERT INTO stays (id, user_id, accommodation_id, status, notes, updated_at) VALUES (?,?,?,?,?,?)", ["st-own-1", leaver.id, "acc-1", "ended", "Allergic to wool, arriving by bus", "2026-01-15 10:00:00"]);
     await q("INSERT INTO stays (id, user_id, accommodation_id, status, notes) VALUES (?,?,?,?,?)", ["st-own-2", "own-vx-ash", "acc-1", "ended", "Ash's note"]);
     await q("INSERT INTO product_purchases (id, product_id, user_id, payer_email, amount_minor, receipt_no) VALUES (?,?,?,?,?,?)", ["pp-own-1", "prod-1", leaver.id, leaver.email, 1200, 1]);
     // Paid before they signed in, under the same address.
@@ -404,6 +410,10 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       { id: "st-own-1", notes: null },
       { id: "st-own-2", notes: "Ash's note" },
     ]);
+    // Clearing a note is not a departure: the band must not show them leaving today.
+    const day = (offset: number) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);
+    const band = await whoIsHere(pool, { from: day(-2), to: day(1) }, true);
+    expect(JSON.stringify(band.departures), "a stay that ended in January does not leave again today").not.toContain(ANON);
     expect(await q("SELECT id, payer_email, amount_minor FROM product_purchases ORDER BY id")).toEqual([
       { id: "pp-own-1", payer_email: null, amount_minor: 1200 },
       { id: "pp-own-2", payer_email: null, amount_minor: 1200 },

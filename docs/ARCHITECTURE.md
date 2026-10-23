@@ -736,6 +736,22 @@ The retention sweep never deletes an unstamped row, at any age.
   refuses a link whose maker is a tombstone or has no row, as withdrawn and
   without naming them, and records no vouch from one, so a sweep that stops
   between the tombstone and the links still admits nobody.
+  **AND THE ROWS THEY OWNED THAT NOTHING SWEPT** (review of 2026-10-22).
+  Nine named steps after the tombstone, between the role tensions and the
+  role proposals. Their answers, queue places and slots at gatherings go; a
+  seat they held on an evening still ahead serves the queue, a fee held for
+  a place ahead comes back, and the waitlist passes over a tombstone. Their
+  housing requests are scrubbed in place, because a reserved row is a home
+  held, and the status route writes to nobody at the tombstone's address.
+  Vouches written about them go, vouches they gave keep their rows without
+  the words, and no vouch, ordinary or super, can be given to a tombstone.
+  They walk out of every conversation, so a group they owned passes on, and
+  their messages stay, read as a departed member's through the join. Every
+  delegation they gave or carried ends, each living delegator is told
+  through the notification spine, and open ballots are derived again.
+  Ventures go. Investor path facts, stays and orders stay as records and lose
+  their words and the payer's address. The header of `server/lib/erasure.ts`
+  says why each kept thing is kept.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one

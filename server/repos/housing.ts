@@ -81,6 +81,9 @@ export async function reservationsForMember(
  * no longer knows the old address, and then only the account's rows are found,
  * the same limit the comms step states.
  *
+ * `updated_at` is held where it was: a scrub is not the founder moving the
+ * request along, and the column would otherwise say it was touched today.
+ *
  * Idempotent: it writes constants, and a second run either matches nothing or
  * writes the same values again.
  */
@@ -89,7 +92,7 @@ export async function scrubReservationsOf(
   input: { userId: string; emailKey: string; name: string; address: string },
 ): Promise<number> {
   const [r]: any = await pool.query(
-    "UPDATE housing_reservations SET name = ?, email = ?, phone = NULL, notes = NULL, user_id = NULL " +
+    "UPDATE housing_reservations SET name = ?, email = ?, phone = NULL, notes = NULL, user_id = NULL, updated_at = updated_at " +
       "WHERE village_id = ? AND (user_id = ? OR (? <> '' AND LOWER(TRIM(email)) = ?))",
     [input.name, input.address, VILLAGE, input.userId, input.emailKey, input.emailKey],
   );

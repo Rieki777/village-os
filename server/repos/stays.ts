@@ -16,11 +16,17 @@ import type { Pool } from "mysql2/promise";
  * thousand characters the member wrote about themselves (dates, needs, who
  * they travel with), and nothing the village owes or is owed depends on them.
  *
+ * `updated_at` IS HELD WHERE IT WAS. The column moves on any write, and the
+ * who-is-here band reads an ended stay's departure day off it
+ * (`whoIsHere`, server/lib/calendarCommunity.ts), so clearing a note would
+ * show a stay that ended months ago leaving again today. Assigning the column
+ * its own value is what stops MySQL moving it.
+ *
  * Idempotent: an UPDATE writing NULL, keyed on the member.
  */
 export async function forgetStayNotesOf(pool: Pool, userId: string): Promise<number> {
   const [r]: any = await pool.query(
-    "UPDATE stays SET notes = NULL WHERE user_id = ? AND notes IS NOT NULL",
+    "UPDATE stays SET notes = NULL, updated_at = updated_at WHERE user_id = ? AND notes IS NOT NULL",
     [userId],
   );
   return Number(r?.affectedRows ?? 0);
