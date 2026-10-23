@@ -98,6 +98,14 @@ export const SOURCES = [
   "shared/lunar.ts",
   "server/index.ts",
   "server/lib/ballots.ts",
+  // HASHED ON PURPOSE, though no reader opens them today: applyDue.ts,
+  // changeset.ts, delegation.ts, gratitude-cycles.ts and governanceWindows.ts.
+  // They are the governance machinery, so a reader over one of them is a
+  // likely next change, and the fingerprint should already be watching when it
+  // lands. The costs are not symmetric: hashing one too many costs a restamp
+  // somebody notices at once; hashing one too few lets this document go wrong
+  // in silence, which is what shared/moonSettlement.ts did until 2026-10-23.
+  // Do not trim these as unused.
   "server/lib/applyDue.ts",
   "server/lib/changeset.ts",
   "server/lib/stewardship.ts",
