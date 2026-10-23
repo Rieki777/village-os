@@ -284,7 +284,7 @@ describe.skipIf(!configured)("every new erasure step, stopped part way and resum
   const cases: Array<[string, string, (s: Seeded) => Match]> = [
     ["rz1", "guest-places-after-tombstone", () => withParam("DELETE FROM event_waitlist WHERE user_id", (ps) => String(ps[0]).startsWith("guest:"))],
     ["rz2", "event-places-after-tombstone", (s) => withParam("DELETE FROM event_waitlist WHERE user_id", (ps) => ps[0] === s.leaver.id)],
-    ["rz3", "event-places-after-tombstone", (s) => withParam("INSERT INTO token_ledger", (ps) => ps.some((v) => typeof v === "string" && v.endsWith(":refund") && v.includes(s.leaver.id)))],
+    ["rz3", "event-places-after-tombstone", (s) => withParam("INTO token_ledger (id", (ps) => ps.some((v) => typeof v === "string" && v.endsWith(":refund") && v.includes(s.leaver.id)))],
     ["rz4", "housing-contacts-after-tombstone", (s) => withParam("DELETE FROM comms_contacts", (ps) => Array.isArray(ps[1]) && (ps[1] as unknown[]).includes(s.workContact))],
     ["rz5", "housing-reservations-after-tombstone", () => has("UPDATE health_events")],
     ["rz6", "vouches-after-tombstone", () => has("UPDATE member_vouches SET note = NULL")],
