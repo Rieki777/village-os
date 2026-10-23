@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `e6dca536a1778567`, which regenerating reproduces.
+It describes the sources at fingerprint `bdc73ef98013baf2`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -428,7 +428,7 @@ Powers are keys, not job titles. A member holds one by climbing to the rung that
 | `ballot.vote` | Cast a vote on a ballot | `member` | **no** |
 | `member.vouch` | Vouch for an applicant | `contributor` | **no** |
 | `member.superVouch` | Admit a member outright | never by rung; a role or a badge grants it | **no** |
-| `org.seat` | Seat and unseat the holders of the village's roles | never by rung; a role or a badge grants it | yes |
+| `org.seat` | Records role changes after the circle consents | never by rung; a role or a badge grants it | yes |
 | `org.seatAgent` | Seat and unseat the software agents that hold roles | never by rung; a role or a badge grants it | yes |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | never by rung; a role or a badge grants it | yes |
 | `dial.set` | Turn the village's own dials | never by rung; a role or a badge grants it | yes |
@@ -505,7 +505,6 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/role-applications/:id` | signed in | none |
 | POST | `/api/governance/role-applications/:id/adopt` | signed in | none |
 | GET | `/api/governance/role-applications/:id/card` | signed in | none |
-| POST | `/api/governance/role-applications/:id/consent` | signed in | none |
 | POST | `/api/governance/role-applications/:id/put-to-village` | signed in | none |
 | POST | `/api/governance/role-applications/:id/withdraw` | signed in | none |
 | POST | `/api/governance/role-applications/words` | signed in | none |
@@ -518,7 +517,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-63 routes: 49 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+62 routes: 48 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle they serve the ballot list, one decision in full and the objection lineage to anybody on the internet, which includes each voter's first name, their choice and their frozen weight. Ruling 22 changes that and is staged.
 
@@ -1055,7 +1054,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "e6dca536a1778567",
+  "commit": "bdc73ef98013baf2",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1809,7 +1808,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's roles",
+      "label": "Records role changes after the circle consents",
       "unlocksAtStage": null,
       "deniableByBadge": true
     },
@@ -2189,13 +2188,6 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "signed in",
       "capability": null,
       "file": "server/routes/applicationCard.ts"
-    },
-    {
-      "method": "POST",
-      "path": "/api/governance/role-applications/:id/consent",
-      "door": "signed in",
-      "capability": null,
-      "file": "server/routes/roleProposals.ts"
     },
     {
       "method": "POST",
@@ -2858,7 +2850,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 189 migration files in `drizzle/`.
+Checked against the 191 migration files in `drizzle/`.
 
 ## What this file is made from
 
