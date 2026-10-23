@@ -148,7 +148,7 @@ export const SEAT_GATHERING_FILES = [
   /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|failedActions|spending)\.ts$/,
 ];
 // Phrases about a chair at a gathering, never the bare word "gathering": a sentence can name both.
-export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|gives? (my|your|the) seat back|seat count and waitlist|a seat opening|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
+export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|giv(e|es|ing) (a|my|your|the) seat back|seat count and waitlist|a seat opening|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
 const SEAT_PERSON = "them|him|her|you|people|somebody|someone|anybody|anyone|nobody|no one|a member|members|the member|the stewards|stewards|a voice|software agents|the software agents|software|yourself|themselves|whoever|a software|an agent|agents|the people|a person|the person|roles|a role";
 const SEAT_VERB_AFTER = new RegExp(`^\\s+(${SEAT_PERSON})\\b`, "i");
 // "a seat you hold", "a seat nobody sits in": the person is the subject of a clause, so seat is a noun.
