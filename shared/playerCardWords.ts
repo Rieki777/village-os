@@ -15,9 +15,12 @@
  *   - Section headings speak in the first person: "My roles".
  *
  * Reference design: https://claude.ai/artifact/49Fh3tdkSoNYTmNDFv24D1 (version 12).
+ * The CCOS sections and their hover terms follow the approved CCOS version
+ * (https://claude.ai/artifact/XGP6VP5WFU1T6ti7RD482P, Rye 2026-10-22).
  */
 import type { ApplicationStatus } from "./seatApplications";
 import type { PayKind } from "./seatSettings";
+import { CCOS_TERMS as CIRCLE_CCOS_TERMS, CIRCLE_CARD_WORDS } from "./circleCardWords";
 
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
@@ -81,11 +84,22 @@ export const CARD_WORDS = {
   // One role in full
   keyRole: "Key role",
   heldUntil: (day: string) => `Held until ${day}`,
+  reviewWeekOf: (day: string) => `Review week of ${day}`,
   purpose: "Purpose",
   noPurpose: "No purpose written yet",
-  decide: "What I decide",
+  existsWhile: "This role exists while",
+  decide: "What I look after",
+  authorities: "What I can decide on my own",
   bringMe: "Bring me",
   countOnMe: "What you can count on me for",
+  responsibilities: "What I do regularly",
+  holdingWell: "Holding this role well",
+  signsStretched: "Signs I'm stretched",
+  flowsBack: "What flows back",
+  stepBack: "How I can step back",
+  timeCommitment: "Time",
+  // The circle card's own sentence, so the two cards say it once.
+  termsKey: CIRCLE_CARD_WORDS.termsKey,
   working: "How we'll know it's working",
   worksWith: "Works closely with",
   notMine: "Not mine to hold",
@@ -180,6 +194,31 @@ export const CARD_WORDS = {
   bonusRatedBy: (w: string) => `Rated by ${w}`,
   bonusCadence: (w: string) => `Cadence: ${w}`,
 } as const;
+
+/**
+ * THE CCOS TERM BEHIND EACH PLAIN HEADING of a role in full, shown as
+ * "CCOS: <term>" on hover or tap (Rye, 2026-10-22), the same pattern the
+ * circle card keeps. The five headings the CCOS Role Card and Circle Charter
+ * share are read from the circle card's own map, so the two cards cannot
+ * drift; the rest belong to the role card alone. A later change may move the
+ * shared five into one map in `shared/` once the circle cards lane has landed
+ * its parts (the merge session's call, 2026-10-22).
+ */
+export const ROLE_CCOS_TERMS = {
+  purpose: CIRCLE_CCOS_TERMS.purpose,
+  existsWhile: "Purpose, when the role should evolve or dissolve",
+  decide: CIRCLE_CCOS_TERMS.domains,
+  authorities: CIRCLE_CCOS_TERMS.authorities,
+  countOnMe: CIRCLE_CCOS_TERMS.accountabilities,
+  responsibilities: CIRCLE_CCOS_TERMS.responsibilities,
+  working: "Measurable Indicators (KPIs)",
+  signsStretched: "ARC Awareness, and the Energy & Sustainability Check",
+  flowsBack: "ARC Reciprocity",
+  stepBack: "ARC Choice",
+  notMine: "the edges of Domains and Authorities",
+  timeCommitment: "Time Commitment",
+} as const;
+export type RoleTermKey = keyof typeof ROLE_CCOS_TERMS;
 
 /** Pay in words only. A figure is never typed on this card. */
 export const PAY_WORDS: Record<PayKind, string> = {

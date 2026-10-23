@@ -24,6 +24,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { recordEvent } from "./events";
+import { isTombstone } from "./oauthAccounts";
 
 export const TOKEN_PREFIX = "vat_";
 
@@ -97,6 +98,16 @@ function toRow(r: RowDataPacket): AgentTokenRow {
     expiresAt: iso(r.expires_at) ?? "",
     revokedAt: iso(r.revoked_at),
   };
+}
+
+/**
+ * Whether a token's holder can still be acted for. "The row exists" is not the
+ * test: an erasure keeps the member row as a tombstone (server/lib/erasure.ts),
+ * and the resolver mints a fresh session from whatever row it finds, so without
+ * this an erased member's agent read the village as them until the token ran out.
+ */
+export function holderStands<T extends { email?: unknown }>(user: T | null | undefined): user is T {
+  return !!user && !isTombstone({ email: String(user.email ?? "") });
 }
 
 export function isLive(row: AgentTokenRow, now = new Date()): boolean {

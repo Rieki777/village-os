@@ -118,6 +118,8 @@ export async function cardContext(deps: CardDeps, viewerId: string | null, viewe
     lapse: deps.lapse(),
     archetypeNames: Object.fromEntries(archetypes.map((a) => [a.key, a.name])),
     firstName: deps.firstName,
+    // 0274: the role card shows the CCOS terms under the circle card's own switch.
+    frameworkTerms: deps.boolVar("org.ccos_terms"),
   };
 }
 

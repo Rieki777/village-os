@@ -2244,9 +2244,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.ccos_terms",
     category: "The village's people",
-    label: "Show the CCOS term on circle card headings",
+    label: "Show the CCOS term on circle and role card headings",
     description:
-      "Each heading on a circle card is plain words, like \"What we look after\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter, like \"CCOS: Domains\", for a village that writes its charters with it. Off keeps the plain headings and shows no term.",
+      "Each heading on a circle card, and on each role in full on a player's card, is plain words, like \"What we look after\" or \"What I can decide on my own\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter or Role Card, like \"CCOS: Domains\", for a village that writes its charters and roles with it. Off keeps the plain headings and shows no term.",
     type: "boolean",
     default: "true",
   },

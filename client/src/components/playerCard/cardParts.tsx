@@ -11,9 +11,9 @@
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import type { Slot } from "@shared/playerCard";
-import { EDIT_WORDS, type PersonalEditKey, type RoleEditKey } from "@shared/playerCardEdit";
-import { parseRoleWordList, parseRunbook } from "@shared/roleHandoverParse";
+import { EDIT_WORDS, roleWordPayload, type PersonalEditKey, type RoleEditKey } from "@shared/playerCardEdit";
 import { proposeRoleWords, savePersonalWords } from "./playerCardApi";
+import { CcosTerm } from "./CcosTerm";
 
 export const SECTION = "rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:p-8";
 export const BOX = "rounded-xl border border-border/70 p-4";
@@ -25,8 +25,16 @@ export const TAP =
 export const QUIET_BUTTON = `${TAP} border border-border text-card-foreground hover:bg-muted`;
 export const LINK = "inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring";
 
-export function Eyebrow({ children, gold = false }: { children: ReactNode; gold?: boolean }) {
-  return <p className={gold ? EYEBROW_GOLD : EYEBROW}>{children}</p>;
+/**
+ * A section's small heading. With a `term` it carries its CCOS term on hover
+ * or tap (CcosTerm), the circle card's pattern; without one it is plain words.
+ */
+export function Eyebrow({ children, gold = false, term = null }: { children: ReactNode; gold?: boolean; term?: string | null }) {
+  return (
+    <p className={gold ? EYEBROW_GOLD : EYEBROW}>
+      <CcosTerm term={term}>{children}</CcosTerm>
+    </p>
+  );
 }
 
 /** Draw a slot: nothing when unread, its words when empty, the value when shown. */
@@ -65,19 +73,15 @@ export const CardEditContext = createContext<CardEditState>({ editing: false, ow
 type Target = { kind: "personal"; key: PersonalEditKey; goal?: string } | { kind: "role"; key: RoleEditKey; roleId: string };
 
 /**
- * The handover words checked in the browser by the one parser before they are
- * proposed, so the refusal reads the same as the draft preview's. Null is fine.
+ * A role word checked in the browser before it is proposed, by the same
+ * function the card's route runs (`roleWordPayload`), so the refusal reads the
+ * same as the route's and the draft preview's: the handover words and the
+ * CCOS words through their parsers, and 3 to 6 lines of what the role answers
+ * for. Null is fine.
  */
 export function roleWordProblem(key: RoleEditKey, text: string): string | null {
-  if (key === "bringMe" || key === "notMine") {
-    const r = parseRoleWordList(text, key);
-    return r.ok ? null : r.problem;
-  }
-  if (key === "runbook") {
-    const r = parseRunbook(text);
-    return r.ok ? null : r.problem;
-  }
-  return null;
+  const r = roleWordPayload({ key, text });
+  return r.ok ? null : r.error;
 }
 
 /**

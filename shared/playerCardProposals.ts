@@ -15,6 +15,7 @@
 import { CARD_WORDS as W } from "./playerCardWords";
 import { ROLE_EDIT_KEYS, ROLE_WORD_FIELD, type RoleEditKey } from "./playerCardEdit";
 import { formatDay } from "./roleSheet";
+import { ROLE_CCOS_WORDS } from "./roleCcos";
 
 /** One open draft that would change a role's words. */
 export interface RoleProposalIn {
@@ -60,6 +61,14 @@ const LABEL: Record<RoleEditKey, string> = {
   bringMe: W.bringMe,
   notMine: W.notMine,
   runbook: W.runbook,
+  // 0274 (#566): the CCOS role words, under the headings the card prints them with.
+  existsWhile: ROLE_CCOS_WORDS.existsWhile,
+  authorities: ROLE_CCOS_WORDS.authorities,
+  responsibilities: ROLE_CCOS_WORDS.responsibilities,
+  signsStretched: ROLE_CCOS_WORDS.signsStretched,
+  flowsBack: ROLE_CCOS_WORDS.flowsBack,
+  stepBack: ROLE_CCOS_WORDS.stepBack,
+  timeCommitment: ROLE_CCOS_WORDS.timeCommitment,
 };
 
 function linesOf(v: unknown): string[] {

@@ -95,6 +95,7 @@ import { resolveSeatTerm } from "../../shared/seatTerms";
 import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
+import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
 type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null };
@@ -135,6 +136,22 @@ export const HANDOVER_WORDS_REFUSAL =
 export function carriesHandoverWords(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
   return HANDOVER_WORD_KEYS.some((k) => Object.prototype.hasOwnProperty.call(body, k));
+}
+
+/**
+ * The role's CCOS words (0274) change the same way, by consent through a
+ * draft, so the admin edit refuses them by name too, in either spelling.
+ * The recruitment pack's own `authority` note is a different, admin-only
+ * field and stays writable here.
+ */
+export const CCOS_WORD_KEYS: readonly string[] = [...ROLE_CCOS_FIELDS, ...ROLE_CCOS_FIELDS.map((f) => ROLE_CCOS_COLUMNS[f])];
+export const CCOS_WORDS_REFUSAL =
+  "These role words change by consent: this role exists while, what it can decide on its own, what it does regularly, holding it well, and its time. Propose them through an org chart draft.";
+
+/** Whether this admin body carries any of the role's CCOS words. */
+export function carriesCcosWords(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  return CCOS_WORD_KEYS.some((k) => Object.prototype.hasOwnProperty.call(body, k));
 }
 
 export function register(app: Express, deps: Deps): void {
@@ -854,6 +871,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
+    if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
@@ -873,6 +891,7 @@ export function register(app: Express, deps: Deps): void {
   app.put("/api/admin/org/roles/:id", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
+    if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);

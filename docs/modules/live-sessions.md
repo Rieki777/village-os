@@ -18,7 +18,11 @@ Provenance: platform
 > `server/repos/sessionLibrary.ts` and its schema in `drizzle/0264_a_circle_keeps_an_agenda_library.sql`. When a
 > circle meets (below, "When a circle meets: its rhythm") has its contract in `shared/sessionRhythm.ts`, its doors in
 > `server/routes/sessionRhythm.ts`, its rules in `server/lib/sessionRhythm.ts`, its statements in
-> `server/repos/sessionRhythm.ts` and its schema in `drizzle/0271_a_circle_keeps_a_rhythm.sql`.
+> `server/repos/sessionRhythm.ts` and its schema in `drizzle/0271_a_circle_keeps_a_rhythm.sql`. Circle
+> meetings on a calendar (below, "Circle meetings on a calendar") has its contract in `shared/sessionCalendar.ts`,
+> its doors in `server/routes/sessionCalendar.ts`, its rules in `server/lib/sessionCalendar.ts`, its statements in
+> `server/repos/sessionCalendar.ts` and its schema in
+> `drizzle/0275_a_member_follows_circles_on_their_calendar.sql`.
 
 **A circle holds a working call together in real time. The facilitator moves the room through six
 stages: drop in, arrival, agenda, items, actions and close. Everyone sees the stage the room is on
@@ -166,11 +170,12 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Twelve tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other eleven holds that number. Three
+Fourteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other thirteen holds that number. Three
 (0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library,
-described under "Before the call: the agenda library", and the last (0271) is a circle's rhythm,
-described under "When a circle meets: its rhythm".
+described under "Before the call: the agenda library", one (0271) is a circle's rhythm, described under
+"When a circle meets: its rhythm", and the last two (0275) are who follows which circles on their own
+calendar, described under "Circle meetings on a calendar".
 
 | Table | Holds |
 |---|---|
@@ -185,6 +190,8 @@ described under "When a circle meets: its rhythm".
 | `live_session_library` | One row per item a member brought for a circle's next session: its title, the aim it needs if they knew it, a note, the circle (or none), who brought it, where it stands now (`waiting`, `on_agenda`, `taken_up`), the session and agenda item it is on or was taken up in, and who last changed its words when that was somebody else. |
 | `live_session_library_takes` | Every time a session took an item, and how it left that session: `taken_up`, `back`, or nothing yet while the session is open. One take of an item per session. |
 | `live_session_rhythms` | One row per circle: how it meets (weekly, moon or once), the calendar's recurrence with any skipped dates, the village date of its first meeting and its wall-clock time, its length, and who set it last. |
+| `live_session_follows` | The circles a member follows on their own calendar, one row each, or one row `*` for every circle, the new ones too. |
+| `live_session_feed_keys` | One per member: the sha256 of their private calendar address's key, when it was made, and when a calendar app last read it. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -265,6 +272,44 @@ room, and whether the viewer may keep its rhythm.
 | `PUT /api/sessions/circles/:circleId/rhythm` | the circle's members, admins | 60 an hour |
 | `POST /api/sessions/circles/:circleId/rhythm/skip` | the circle's members, admins | the same bucket |
 | `GET /api/sessions/circles/:circleId/summary` | a signed-in member | none |
+
+### Circle meetings on a calendar
+
+**On the village calendar.** Each circle's rhythm is mirrored into the one calendar
+(`calendarUpsert`, source `sessions`, the circle's id, layer `circle`, kind `call`), titled "Garden
+circle meeting" and linking to its row on /sessions, so the Events calendar and its own feeds carry
+circle meetings. The calendar expands the rhythm's own `Recurrence`, so both count the weeks of an
+every-other-week rhythm from the same week and skip the same dates
+(`server/lib/sessionCalendar.test.ts` holds the two halves to the same meetings). A set, a skip or a
+stop mirrors at once; the hourly `session-calendar-mirror` job catches up a renamed circle, a new
+village zone, or a mirror that failed. While the module is off or in preview every mirrored row is
+retired, and they come back when it opens to members.
+
+**Follow the calendar.** Under Coming up, any member who may use Live Sessions picks the circles whose
+meetings they want on their own calendar, or **every circle, new ones too**. The list is the live
+circles, read from the village each time the panel opens, with how each meets. They make a private
+address once, and the panel offers **Add to Google Calendar** (Google's own add-by-address page),
+**Add to Apple or Outlook** (the `webcal://` link) and **Copy the address**. A calendar app reads the
+address every few hours and gets the meetings of the circles followed at that moment, so a changed
+rhythm, a skipped meeting or a new circle reaches it with no new address. A weekly rhythm leaves as one
+RRULE in the village's zone with its skipped dates as EXDATE; a moon rhythm leaves as its meetings one
+by one, through the calendar's own writer (`buildIcs`).
+
+**The address is a credential**: 32 random bytes in the address, stored only as a sha256, shown once
+the moment it is made. Later the panel says when it was made and last read, and offers a new one (the
+old one stops working) or none. `GET /api/calendar/circles.ics?key=` lives outside `/api/sessions`
+because a calendar app reads it with no sign-in. It is bounded generously per network address (Google
+reads every subscriber's calendar from a shared pool of its own) and tightly per address, and it answers one
+bare 404 to a key that does not read or is not live, a module off or in preview, or a member who has
+left, been anonymized or is no longer admitted; a gone member's key is stopped on the way out.
+
+| Door | Who | Limit |
+|---|---|---|
+| `GET /api/sessions/circles/following` | a signed-in member | none |
+| `PUT /api/sessions/circles/following` | a signed-in member | 60 an hour |
+| `POST /api/sessions/circles/following/key` | a signed-in member | 10 a day |
+| `DELETE /api/sessions/circles/following/key` | a signed-in member | none |
+| `GET /api/calendar/circles.ics?key=` | whoever holds the key | 30 an hour per address, 600 an hour per network address |
 
 ## Before the call: the agenda library
 
@@ -579,7 +624,8 @@ brought go (their takes stay, holding no words), a take they made reads as taken
 last changed somebody else's words the item says nobody, and a note they wrote on somebody else's item
 goes, because those were their words. A note that became an entry in a room is an entry they wrote, so
 it goes with the rest. A circle's rhythm they set last says it was set by nobody: the rhythm is the
-circle's, and stays.
+circle's, and stays. The circles they followed and their calendar address go, so the address answers
+nothing from then on.
 
 `GET /api/profile/export` carries a `sessions` key with what this module holds about the member:
 the sessions they were in, the agenda items they added or present, the entries they wrote or hold,
@@ -589,4 +635,6 @@ a task they hold is that person's, and stays out. From the agenda library it car
 items they brought in their own words, `libraryTakes`, the times they put an item on an agenda, and
 `libraryNotes`, the notes they wrote on items somebody else brought (the note and nothing else of the
 item); a session's id travels only where they may read that session. From a circle's rhythm it carries
-`rhythmsSet`, the circles whose rhythm they set last.
+`rhythmsSet`, the circles whose rhythm they set last. From the calendar it carries `circlesFollowed`,
+the circles they follow (`*` for every circle) and since when, and `calendarAddress`, when their
+address was made and last read, never its key.

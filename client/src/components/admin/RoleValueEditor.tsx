@@ -42,7 +42,7 @@ export default function RoleValueEditor({
       </button>
       {open && (
         <div className="mt-2 space-y-2">
-          <WorkValueEditor draft={shown} onChange={setDraft} offered={offered} currency={currency || null} cadence="cycle" inputClassName={inputCls} recognitionName={options?.recognition ?? null} />
+          <WorkValueEditor draft={shown} onChange={setDraft} offered={offered} currency={currency || null} cadence="cycle" inputClassName={inputCls} />
           <button
             type="button"
             disabled={!dirty}

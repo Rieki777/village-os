@@ -83,6 +83,8 @@ export function PlayerRoleCardView({
 
         {card.roles.length ? (
           <section aria-label={card.tiles.heading} className="grid gap-4">
+            {/* 0274: once, above the roles, what an underlined heading does. */}
+            {card.termsKey ? <p className="text-xs text-muted-foreground">{card.termsKey}</p> : null}
             {card.roles.map((r) => (
               <RoleInFull key={r.id} role={r} sheets={sheets} timeZone={timeZone} />
             ))}
