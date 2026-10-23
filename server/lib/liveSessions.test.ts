@@ -182,8 +182,8 @@ describe("what a close works out before it writes", () => {
     ];
     const plan = closePlan(entries, people, responses, T0);
     expect(plan.present).toBe(2);
-    expect(plan.tallies[10]).toEqual({ consent: 1, concern: 0, object: 1, waiting: 0, consented: false });
-    expect(plan.tallies[11]).toEqual({ consent: 1, concern: 1, object: 0, waiting: 0, consented: true });
+    expect(plan.tallies[10]).toEqual({ consent: 1, concern: 0, object: 1, sleeping: 0, waiting: 0, consented: false });
+    expect(plan.tallies[11]).toEqual({ consent: 1, concern: 1, object: 0, sleeping: 0, waiting: 0, consented: true });
     expect(Object.keys(plan.tallies)).toEqual(["10", "11"]);
   });
 
@@ -201,7 +201,7 @@ describe("what a close works out before it writes", () => {
       { no: 3, target: "decision:12", value: "consent" },
     ];
     const plan = closePlan(entries, people, responses, T0);
-    expect(plan.tallies[12]).toEqual({ consent: 2, concern: 0, object: 0, waiting: 1, consented: false });
+    expect(plan.tallies[12]).toEqual({ consent: 2, concern: 0, object: 0, sleeping: 0, waiting: 1, consented: false });
     // Once 2 answers, the round has heard everyone here.
     const heard = closePlan(entries, people, [...responses, { no: 2, target: "decision:12", value: "concern" }], T0);
     expect(heard.tallies[12]).toMatchObject({ waiting: 0, consented: true });

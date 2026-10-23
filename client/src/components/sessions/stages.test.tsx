@@ -167,6 +167,20 @@ describe("a consent round", () => {
     expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "consent", null]);
   });
 
+  it("sleeping on it carries no words, and the round says it stays open while anybody sleeps on it", async () => {
+    // Ada (1) sleeps on it; Bo (2), whose screen this is, has not answered yet.
+    const view = makeView({ responses: [{ target: "agenda", userId: 1, value: "sleep", text: null }] });
+    render(<ConsentRound view={view} actions={doors()} target="agenda" ask={SESSION_COPY.agendaConsentAsk} />);
+    expect(screen.getByText(ROOM_COPY.tallyLine({ consent: 0, concern: 0, object: 0, sleeping: 1, waiting: 1 }))).toBeInTheDocument();
+    expect(screen.getByText(ROOM_COPY.sleepingOpen)).toBeInTheDocument();
+    expect(screen.queryByText(ROOM_COPY.consented)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: CONSENT_LABELS.sleep }));
+    expect(screen.queryByPlaceholderText(ROOM_COPY.consentSentence)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.consentSend }));
+    await waitFor(() => expect(log).toHaveLength(1));
+    expect(log[0]!.args.slice(0, 3)).toEqual(["agenda", "sleep", null]);
+  });
+
   it("says when everyone here consents", () => {
     const view = makeView({
       responses: [
