@@ -2,8 +2,9 @@
  * The `{words}` a page field may use, from the village's own settings.
  *
  * One function for both sides: the browser fills a page with it
- * (`usePageVars`), and the server fills the words of an email a page's fields
- * also write (the Work With Us acknowledgement). Two copies of these rules
+ * (`usePageVars`), and the server fills the words it renders from page fields:
+ * the Work With Us acknowledgement email, and the membership letter it
+ * renders, fingerprints and stores (shared/membershipLetter.ts). Two copies of these rules
  * would drift, and a founder would see `{village}` filled one way on the page
  * and another way in the inbox.
  *

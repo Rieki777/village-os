@@ -40,7 +40,10 @@ import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import { userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import {
+  DEFAULT_GOVERNANCE,
+  DEFAULT_OPENING,
   letterBody,
+  LETTER_PAGE_SECTION,
   letterParts,
   letterSourceFrom,
   LETTER_VERSION,
@@ -168,6 +171,139 @@ describe("the letter's words: one rendering for the page and the store", () => {
     expect(membershipRef("lv-0123456789abcdef", "1760000000001-abcde")).toBe("lv-0123456789abcdef:1760000000001-abcde");
     expect(readMembershipRef("lv-0123456789abcdef:1760000000001-abcde")).toEqual({ letterVersion: "lv-0123456789abcdef", signingId: "1760000000001-abcde" });
     expect(readMembershipRef("sa-0123456789abcdef")).toBeNull();
+  });
+});
+
+/**
+ * THE LETTER'S WORDS BECAME PAGE FIELDS (2026-10-22), AND NO MEMBER'S LETTER MOVED.
+ *
+ * The greeting, the joining paragraph, the eight commitments, "In return...",
+ * the closing and the signature are now fields of Admin, Pages, Membership
+ * letter (shared/pageContent/loveLetter.ts), read by the server from the
+ * stored `page-love-letter` section. A member aligns with a fingerprint of the
+ * words, so for a village that calls its letter "Love Letter" and has written
+ * none of the fields, the words must be byte for byte the ones the old code
+ * rendered, or every such village would silently serve a new letter version.
+ *
+ * BEFORE is two things taken from the code as it stood at 1698f40, before this
+ * change: the fingerprints themselves, computed by running the old
+ * `currentLetter` over each source below, and the old rendering, kept here
+ * verbatim as `oldParts`. Both are compared, so a drift in the fingerprint
+ * function cannot hide a drift in the words, nor the other way round.
+ */
+describe("the letter's words as page fields keep every Love Letter's version", () => {
+  const LL = (name: string, token = "Seeds") => ({ project: { name, commitmentName: "Love Letter" }, currency: { name: token } });
+  const CASES: Array<[string, unknown, Record<string, unknown> | null, string]> = [
+    ["covenant, entity and contribution", LL("Fernhollow"), CONTENT, "lv-45a77f58c2f290b2"],
+    ["nothing written", LL("Fernhollow"), null, "lv-d92de5c7bc10bea7"],
+    ["an entity only", LL("Willowbrook", "Thanks"), { legal: { membership: { entityLabel: "Willowbrook Land Trust" } } }, "lv-041aa8c2f7091133"],
+    [
+      "names holding braces and dollar signs",
+      LL("Saint-Clair & Co. $& {token}", "$1 Gratitude"),
+      { legal: { membership: { entityLabel: "The {village} Trust $$" } }, covenant: { governance: "We decide together." } },
+      "lv-105811848526964a",
+    ],
+    ["names with spaces around them", LL("  Fernhollow  ", "  Seeds "), { covenant: { opening: "  An opening.  " } }, "lv-255cf5e41ef73c81"],
+    ["no name at all", { project: { commitmentName: "Love Letter" } }, null, "lv-c9dd81088f856825"],
+    ["the letter's name with spaces around it", { project: { name: "Fernhollow", commitmentName: "  Love Letter " }, currency: { name: "Seeds" } }, null, "lv-d92de5c7bc10bea7"],
+  ];
+
+  /** The letter as the old code wrote it, kept verbatim so the comparison is with the code, never with a memory of it. */
+  const oldParts = (src: LetterSource) => {
+    const t = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const village = src.villageName;
+    const entity = t(src.legal?.membership?.entityLabel) || village;
+    return {
+      greeting: `Dear Future ${village} Family Member,`,
+      opening: t(src.covenant?.opening) || DEFAULT_OPENING,
+      joining:
+        "By signing this Love Letter, you are not just joining a community. You are becoming a co-creator of the most beautiful village we can imagine together. You are saying yes to regeneration, of the land, of community, of yourself.",
+      commitLead: `As a member of ${entity}, you commit to:`,
+      commitments: [
+        "Treat all beings with respect, compassion, and authentic communication",
+        "Participate in community governance through our sociocratic circles",
+        "Contribute to the regeneration of the land and ecosystem",
+        "Support fellow community members in their growth and wellbeing",
+        `Honor the values and agreements of the ${village} community`,
+        "Practice Nonviolent Communication and authentic relating",
+        "Meet financial obligations as agreed with the community",
+        "Show up for community life, circles, celebrations, and shared care",
+      ],
+      inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, ${src.tokenName} economy, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
+      governance: t(src.covenant?.governance) || DEFAULT_GOVERNANCE,
+      contribution: t(src.legal?.membership?.contributionParagraph) || null,
+      closing: "With love and anticipation,",
+      signature: `The ${village} Community`,
+    };
+  };
+
+  it.each(CASES)("%s: the same words and the same fingerprint as before", (_label, config, content, before) => {
+    const src = letterSourceFrom(config, content);
+    const now = currentLetter(src);
+    expect(now.version).toBe(before);
+    expect(letterParts(src)).toEqual(oldParts(src));
+    expect(now.body).toBe(letterBody(oldParts(src)));
+  });
+
+  it("CONTROL: the fingerprint does move when the stored page changes one word of the letter", () => {
+    const [, config, content, before] = CASES[0];
+    const edited = letterSourceFrom(config, { ...content, [LETTER_PAGE_SECTION]: { letter: { closing: "With love," } } });
+    expect(currentLetter(edited).version).not.toBe(before);
+    expect(currentLetter(edited).parts.closing).toBe("With love,");
+    // A part the page does not store (the covenant's opening) is untouched.
+    expect(currentLetter(edited).parts.opening).toBe(currentLetter(letterSourceFrom(config, content)).parts.opening);
+  });
+
+  it("CONTROL: a village with no name for its letter now reads the platform's name where the letter said Love Letter", () => {
+    const parts = letterParts(letterSourceFrom({ project: { name: "Fernhollow" }, currency: { name: "Seeds" } }, null));
+    expect(parts.joining.startsWith("By signing this membership agreement, you are")).toBe(true);
+  });
+});
+
+/**
+ * THE SERVER READS THE VILLAGE'S OWN LETTER WORDS, so the letter it serves and
+ * stores is the letter the page draws (the page renders the same parts from the
+ * same section while the server's copy is on its way).
+ */
+describe("the letter's own words, from the stored page", () => {
+  const PAGE = {
+    letter: {
+      greeting: "Dear neighbour of {village},",
+      joining: "Signing this {commitment} makes you one of us, under {entity}.",
+      commitLead: "With {entity}, you promise to:",
+      commitments: [{ text: "Plant one tree a {member} can sit under" }, { text: "  " }, { text: "Keep {village} kind" }],
+      inReturn: "You hold {token} with everyone else.",
+      closing: "Warmly,",
+      signature: "Everyone at {village}",
+    },
+  };
+  const src = letterSourceFrom({ ...CONFIG, project: { ...CONFIG.project, memberName: "Fernling" } }, { ...CONTENT, [LETTER_PAGE_SECTION]: PAGE });
+
+  it("fills every field with the village's words, the entity included, and drops a blank commitment", () => {
+    const p = letterParts(src);
+    expect(p.greeting).toBe("Dear neighbour of Fernhollow,");
+    expect(p.joining).toBe("Signing this Love Letter makes you one of us, under Fernhollow Commons.");
+    expect(p.commitLead).toBe("With Fernhollow Commons, you promise to:");
+    expect(p.commitments).toEqual(["Plant one tree a Fernling can sit under", "Keep Fernhollow kind"]);
+    expect(p.inReturn).toBe("You hold Seeds with everyone else.");
+    expect(p.closing).toBe("Warmly,");
+    expect(p.signature).toBe("Everyone at Fernhollow");
+    // The covenant and legal paragraphs still come from their own sections.
+    expect(p.opening).toBe(CONTENT.covenant.opening);
+    expect(p.contribution).toBe(CONTENT.legal.membership.contributionParagraph);
+  });
+
+  it("a member who drew the old words is refused once the village changes them, and handed the new letter", () => {
+    const before = currentLetter(SOURCE);
+    const judged = judgeSigning(signing("u-tam", { letterVersion: before.version }), src);
+    expect("refused" in judged && judged.refused.letter?.parts.closing).toBe("Warmly,");
+  });
+
+  it("with no commitments, the line leading into them goes too, from the body as from the page", () => {
+    const none = letterSourceFrom(CONFIG, { [LETTER_PAGE_SECTION]: { letter: { commitments: [] } } });
+    const p = letterParts(none);
+    expect(p.commitments).toEqual([]);
+    expect(letterBody(p)).not.toContain(p.commitLead);
   });
 });
 
