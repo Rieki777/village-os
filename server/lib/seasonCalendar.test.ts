@@ -17,7 +17,7 @@ import {
 } from "./seasonCalendar";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { dbDocument } from "../repos/store-db";
 
 // ── D2-8 and D2-9: the stored season document ─────────────────────────────
@@ -92,7 +92,7 @@ describe.skipIf(!testDbConfigured())("the season document as it is actually stor
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool
+    pool = testPool(db, { connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool
   }, 300000);
   afterAll(async () => {
     await pool?.end();

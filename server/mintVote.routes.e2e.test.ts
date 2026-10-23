@@ -36,7 +36,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -173,7 +173,7 @@ beforeAll(async () => {
    * mid-life. The suite starts the Game itself when it is ready to.
    */
   testDb = await provisionTestDb({ gameStarted: false });
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY

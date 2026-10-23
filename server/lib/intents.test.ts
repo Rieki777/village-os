@@ -19,7 +19,7 @@ import fs from "fs";
 import path from "path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { wireAssistant } from "./assistant";
 import { presenceTest } from "./memberPresence";
 import {
@@ -428,7 +428,7 @@ function wireModelStub(answer: unknown, calls: any[] = []) {
 describe.skipIf(!configured)("intents repo (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
   });
 
   afterAll(async () => {

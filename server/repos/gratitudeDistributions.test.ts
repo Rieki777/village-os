@@ -18,7 +18,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { distributionsForMember, gratitudeDistributionsRepo } from "./gratitude";
 
 const configured = testDbConfigured();
@@ -29,7 +29,7 @@ describe.skipIf(!configured)("a member's own distributions", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     const repo = gratitudeDistributionsRepo(pool);
     await repo.add({
       id: "gd-mine-1", cycleId: "cyc-1", userId: "mine", received: 12, distinctSenders: 3,

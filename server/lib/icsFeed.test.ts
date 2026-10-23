@@ -8,7 +8,7 @@
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import ICAL from "ical.js";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import type { CalendarRow } from "./calendar";
 import {
   buildIcs,
@@ -217,7 +217,7 @@ describe.skipIf(!configured)("feed keys", () => {
   let pool: mysql.Pool;
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 });
+    pool = testPool(db, { connectionLimit: 2 });
   });
   afterAll(async () => { await pool?.end(); await db?.drop(); });
 

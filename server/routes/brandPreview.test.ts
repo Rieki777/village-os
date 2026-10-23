@@ -26,7 +26,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { dbDocument } from "../repos/store-db";
 import { readStoredBrand, register } from "./brandPreview";
 
@@ -208,7 +208,7 @@ describe.skipIf(!configured)("what the brand document does against a live row", 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
   }, 300_000);
 
   afterAll(async () => {
