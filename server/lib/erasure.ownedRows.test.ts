@@ -22,6 +22,17 @@
  * refusals are asserted at the door that makes them: the waitlist, and the
  * vouch route as the server registers it.
  *
+ * THE ADVERSARIAL ROUND OF 2026-10-23 added what the first pass missed: a
+ * vouch they gave somebody still waiting kept counting toward that person's
+ * admission; the housing scrub reached a living member's own request at a
+ * shared address; the admin audit kept the name the request was made under;
+ * a second address typed into a request kept its comms contact; seats and
+ * queue places held under their guest-era key skipped the seat rules; a group
+ * could pass to another tombstone; a recurring evening read as still ahead a
+ * day late east of UTC+12; and nothing proved a vote copied from them is
+ * withdrawn. The resume of each new step part way through is in
+ * server/lib/erasure.ownedRows.resume.test.ts.
+ *
  * Runs against a scratch schema with every real migration applied. No
  * TEST_DATABASE_URL and the suite skips (harness rule).
  */
@@ -35,15 +46,23 @@ import { anonymizeMember, type ErasureDeps } from "./erasure";
 import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord } from "../repos/memberErasure";
-import { recordVouch } from "../repos/vouches";
+import { recordVouch, vouchesFor } from "../repos/vouches";
 import { recordFact } from "../repos/investorPath";
+import { reservationsForMember } from "../repos/housing";
+import { ERASED_ADDRESS } from "../repos/commsPeople";
 import { register as registerVouchRoutes } from "../routes/vouches";
 import { rsvp, withdrawRsvp } from "./gatherings";
-import { createSlot, joinWaitlist, setPromotionSink, signupSlot, whoIsHere } from "./calendarCommunity";
+import { createSlot, eveningAhead, joinWaitlist, setPromotionSink, signupSlot, whoIsHere } from "./calendarCommunity";
 import { seatChargeFor } from "./eventSeats";
 import { createReservation, setReservationStatus } from "./housing";
-import { createGroup, openDirect, sendMessage } from "./messaging";
+import { createGroup, leaveConversation, openDirect, sendMessage } from "./messaging";
 import { acceptDelegations, setDelegation } from "./delegation";
+import { castVote, openBallot, talliesFor } from "./ballots";
+import { recordEvent } from "./events";
+import { makeInviteDoor } from "./inviteDoor";
+import { ensureContact } from "./comms/contacts";
+import { handlePathTrigger } from "./comms/paths";
+import { guestPersonKey } from "../../shared/comms/kinds";
 import { CYCLE_POOL_FAUCET, balanceOf, checkLedgerInvariants, loadTokenRegistry, memberAccount, postTransfer } from "./ledger";
 import { toLedgerUnits } from "./economy";
 
@@ -117,6 +136,42 @@ async function gathering(id: string, opts: { capacity?: number | null; startsAt?
 
 const answer = async (eventId: string, userId: string) =>
   (await q("SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, userId]))[0]?.status ?? null;
+
+/** Who runs a conversation now: the live rows holding the owner's role. */
+const ownersOf = async (conversationId: string): Promise<string[]> =>
+  (await q("SELECT user_id FROM conversation_members WHERE conversation_id = ? AND role = 'owner' AND left_at IS NULL ORDER BY user_id", [conversationId])).map(
+    (r) => String(r.user_id),
+  );
+
+/** A contact in the address book, the way a guest's confirm or an account path makes one. */
+async function contactFor(email: string, userId: string | null, source = "guest"): Promise<string> {
+  const made = await ensureContact({ getPool: () => pool }, { email, name: null, userId, source });
+  expect(made, `a contact for ${email}`).not.toBeNull();
+  return made!.id;
+}
+
+/** A ballot on the custom bar, which a delegation carries on (server/lib/delegation.test.ts uses the same shape). */
+let ballots = 0;
+async function ballotFor(electorate: string[]): Promise<string> {
+  const opened = await openBallot(pool, {
+    subjectType: "mechanics",
+    subjectRef: `own-ballot-${++ballots}`,
+    title: `Ballot ${ballots}`,
+    docMarkdown: "# The document as checked",
+    method: "custom",
+    weightMode: "equal",
+    unityPct: 80,
+    quorumPct: 20,
+    durationDays: 7,
+    openedBy: electorate[0],
+    electorate: electorate.map((userId) => ({ userId, weight: 1 })),
+  });
+  if (!opened.ok) throw new Error(`ballot refused to open: ${opened.error}`);
+  return opened.ballot.id;
+}
+
+const votesOn = async (ballotId: string) =>
+  q("SELECT user_id, choice, followed_user_id FROM ballot_votes WHERE ballot_id = ? ORDER BY user_id", [ballotId]);
 
 /** A fake Express that records handlers, the shape server/routes/liveSessions.test.ts uses. */
 function vouchRoutes(voucherId: string) {
@@ -237,6 +292,48 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     expect(await answer("own-wl-ev", "own-wl-bo"), "the seat goes to the next living person").toBe("going");
   });
 
+  it("gives up the seat and queue place they held as a guest before joining, and the freed seat serves the queue", async () => {
+    const leaver = await member("own-leaver-gs", "Wren Halloway");
+    await member("own-gs-ash", "Ash Moreno");
+    await member("own-gs-bo", "Bo Lind");
+    // The address they used as a guest is their account address, so the contact is theirs.
+    const guest = guestPersonKey(await contactFor(leaver.email, leaver.id));
+    await gathering("own-gs-full", { capacity: 1 });
+    expect((await rsvp(pool, "own-gs-full", guest, "going")).ok).toBe(true);
+    expect((await joinWaitlist(pool, "own-gs-full", "own-gs-ash")).ok).toBe(true);
+    await gathering("own-gs-queue", { capacity: 1 });
+    expect((await rsvp(pool, "own-gs-queue", "own-gs-bo", "going")).ok).toBe(true);
+    expect((await joinWaitlist(pool, "own-gs-queue", guest)).ok).toBe(true);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT event_id FROM event_rsvps WHERE user_id = ?", [guest]), "their guest seat is gone").toEqual([]);
+    expect(await q("SELECT event_id FROM event_waitlist WHERE user_id = ?", [guest]), "their guest queue place is gone").toEqual([]);
+    expect(await answer("own-gs-full", "own-gs-ash"), "the seat their guest key held went to the person waiting for it").toBe("going");
+    expect(await answer("own-gs-queue", "own-gs-bo")).toBe("going");
+    const steps = (await erasureRecord(pool, leaver.id))!.stepsDone;
+    expect(steps.indexOf("guest-places-after-tombstone")).toBeGreaterThan(steps.indexOf("member-agent-after-tombstone"));
+    expect(steps.indexOf("guest-places-after-tombstone"), "before comms deletes the contact that says whose key it is").toBe(steps.indexOf("comms") - 1);
+  });
+
+  it("never promotes a tombstone's guest-era key off the waitlist while its sweep is stopped", async () => {
+    const gone = await member("own-gq-gone", "Lark Benn");
+    await member("own-gq-sat", "Sol Tarn");
+    await member("own-gq-bo", "Bo Lind");
+    const guest = guestPersonKey(await contactFor(gone.email, gone.id));
+    await gathering("own-gq-ev", { capacity: 1 });
+    expect((await rsvp(pool, "own-gq-ev", "own-gq-sat", "going")).ok).toBe(true);
+    expect((await joinWaitlist(pool, "own-gq-ev", guest)).ok).toBe(true);
+    expect((await joinWaitlist(pool, "own-gq-ev", "own-gq-bo")).ok).toBe(true);
+    // The sweep stopped after the tombstone and before comms: the contact and the queue row still stand.
+    await tombstoneOnly(gone.id);
+
+    expect(await withdrawRsvp(pool, "own-gq-ev", "own-gq-sat")).toBe(true);
+
+    expect(await answer("own-gq-ev", guest), "a tombstone's guest key is never seated").toBeNull();
+    expect(await answer("own-gq-ev", "own-gq-bo"), "the seat goes to the next living person").toBe("going");
+  });
+
   it("scrubs their housing requests, the signed-in one and the one their address made, and keeps the row that holds a home", async () => {
     const leaver = await member("own-leaver-hs", "Wren Halloway");
     const signedIn = await createReservation(pool, {
@@ -278,22 +375,182 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     ]);
   });
 
-  it("drops the vouches written about them and the words of the ones they gave, and keeps the vouch that admitted somebody", async () => {
+  it("leaves a living member's own request at the leaver's address on their account, and takes only the leaver's address off it", async () => {
+    const leaver = await member("own-leaver-hx", "Wren Halloway");
+    const ash = await member("own-hx-ash", "Ash Moreno");
+    // A household: Ash, signed in, typed the leaver's address as the contact for the two of them.
+    const ashOwn = await createReservation(pool, {
+      structureKey: "ridgeA", homeType: "villa", name: "Ash Moreno", email: leaver.email,
+      phone: "555 0177", notes: "For the two of us", userId: ash.id,
+    });
+    expect(await setReservationStatus(pool, ashOwn.id, "reserved")).toBe(true);
+    // And an order on Ash's account that carries the leaver's address.
+    await q("INSERT INTO product_purchases (id, product_id, user_id, payer_email, amount_minor, receipt_no) VALUES (?,?,?,?,?,?)", ["pp-hx-ash", "prod-1", ash.id, leaver.email, 900, 41]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT user_id, name, phone, notes, status, home_type, email FROM housing_reservations WHERE id = ?", [ashOwn.id])).toEqual([
+      { user_id: ash.id, name: "Ash Moreno", phone: "555 0177", notes: "For the two of us", status: "reserved", home_type: "villa", email: `deleted-${leaver.id}@anonymized.invalid` },
+    ]);
+    expect((await reservationsForMember(pool, ash.id)).map((r) => r.id), "it is still on Ash's resident path").toContain(ashOwn.id);
+    expect(
+      await q("SELECT id FROM housing_reservations WHERE LOWER(TRIM(email)) = ?", [leaver.email.toLowerCase()]),
+      "and the leaver's address is on no request",
+    ).toEqual([]);
+    expect(await q("SELECT user_id, payer_email, amount_minor FROM product_purchases WHERE id = 'pp-hx-ash'")).toEqual([
+      { user_id: ash.id, payer_email: null, amount_minor: 900 },
+    ]);
+  });
+
+  it("rewrites the admin audit line each scrubbed request wrote, and leaves a living member's own line alone", async () => {
+    const leaver = await member("own-leaver-ha", "Wren Halloway");
+    const ash = await member("own-ha-ash", "Ash Moreno");
+    const signedIn = await createReservation(pool, {
+      structureKey: "ridgeA", homeType: "casita", name: "Wren Halloway", email: leaver.email, phone: null, notes: null, userId: leaver.id,
+    });
+    const byAddress = await createReservation(pool, {
+      structureKey: null, homeType: "tiny-home", name: "W. Halloway", email: leaver.email, phone: null, notes: null,
+    });
+    const ashOwn = await createReservation(pool, {
+      structureKey: "ridgeA", homeType: "villa", name: "Ash Moreno", email: ash.email, phone: null, notes: null, userId: ash.id,
+    });
+    // The line the request route writes for each (server/routes/housing.ts).
+    for (const [r, name, home, hamlet, actor] of [
+      [signedIn, "Wren Halloway", "casita", "ridgeA", leaver.id],
+      [byAddress, "W. Halloway", "tiny-home", null, null],
+      [ashOwn, "Ash Moreno", "villa", "ridgeA", ash.id],
+    ] as const) {
+      await recordEvent(pool, {
+        kind: "housing_reservation", text: `${name} asked for a ${home}${hamlet ? ` in ${hamlet}` : ""}`,
+        actorUserId: actor, entityType: "housing_reservation", entityRef: r.id, audience: "admin",
+      });
+    }
+    const lines = async () =>
+      q("SELECT entity_ref, text FROM health_events WHERE entity_type = 'housing_reservation' AND entity_ref IN (?, ?, ?) ORDER BY text", [signedIn.id, byAddress.id, ashOwn.id]);
+    expect((await lines()).filter((l) => String(l.text).includes("Halloway")), "the lines were written").toHaveLength(2);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await lines()).toEqual([
+      { entity_ref: signedIn.id, text: "A departed member asked for a casita in ridgeA" },
+      { entity_ref: byAddress.id, text: "A departed member asked for a tiny-home" },
+      { entity_ref: ashOwn.id, text: "Ash Moreno asked for a villa in ridgeA" },
+    ]);
+  });
+
+  it("forgets the comms contact behind a second address they typed into a request, and keeps every contact somebody else holds", async () => {
+    const leaver = await member("own-leaver-h2", "Wren Halloway");
+    const ash = await member("own-h2-ash", "Ash Moreno");
+    const work = "wren.work@x-own.test";
+    // Signed in, with an address that is not their account's, and the paths box ticked.
+    const second = await createReservation(pool, {
+      structureKey: "ridgeA", homeType: "casita", name: "Wren Halloway", email: work, phone: null, notes: null, userId: leaver.id,
+    });
+    const pathDeps = { getPool: () => pool, members: usersRepo(pool) };
+    await handlePathTrigger(pathDeps, { type: "housing_status", reservationId: second.id, status: "new", email: work, name: "Wren Halloway", consentPaths: true } as any);
+    const workContact = (await q("SELECT id FROM comms_contacts WHERE email_key = ?", [work]))[0]?.id;
+    expect(workContact, "the trigger made a contact for the typed address").toBeTruthy();
+    expect(await q("SELECT kind FROM comms_permissions WHERE contact_id = ?", [workContact]), "and a yes to paths on it").not.toEqual([]);
+    expect(await q("SELECT id FROM path_enrollments WHERE person_key = ?", [guestPersonKey(workContact)]), "and a place on the resident path").not.toEqual([]);
+    await q(
+      "INSERT INTO comms_messages (id, idempotency_key, to_email, email_key, contact_id, kind, origin, subject, status) VALUES ('msg-own-h2', 'key-own-h2', ?, ?, ?, 'essential', 'housing.ack', 'We have your reservation request', 'sent')",
+      [work, work, workContact],
+    );
+    // Two addresses on their requests that are somebody else's: Ash's account address, and one a stranger's own public request also uses.
+    await createReservation(pool, { structureKey: null, homeType: "villa", name: "Wren Halloway", email: ash.email, phone: null, notes: null, userId: leaver.id });
+    const ashContact = await contactFor(ash.email, ash.id, "account");
+    const shared = "porch@x-own.test";
+    await createReservation(pool, { structureKey: null, homeType: "villa", name: "Wren Halloway", email: shared, phone: null, notes: null, userId: leaver.id });
+    await createReservation(pool, { structureKey: null, homeType: "villa", name: "Ida Fenn", email: shared, phone: null, notes: null });
+    const strangerContact = await contactFor(shared, null);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id FROM comms_contacts WHERE email_key = ?", [work]), "the second address leaves the address book").toEqual([]);
+    expect(await q("SELECT kind FROM comms_permissions WHERE contact_id = ?", [workContact])).toEqual([]);
+    expect(await q("SELECT id FROM path_enrollments WHERE person_key = ?", [guestPersonKey(workContact)]), "and its journey ends").toEqual([]);
+    expect(await q("SELECT to_email, email_key, contact_id FROM comms_messages WHERE id = 'msg-own-h2'"), "the acknowledgement stays on the ledger, addressed to nobody").toEqual([
+      { to_email: ERASED_ADDRESS, email_key: ERASED_ADDRESS, contact_id: null },
+    ]);
+    expect(await q("SELECT id FROM comms_contacts WHERE id IN (?, ?) ORDER BY id", [ashContact, strangerContact]), "every contact somebody else holds stays").toEqual(
+      [{ id: ashContact }, { id: strangerContact }].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    );
+    const steps = (await erasureRecord(pool, leaver.id))!.stepsDone;
+    expect(steps.indexOf("housing-contacts-after-tombstone"), "read before the scrub takes the address off the row").toBe(
+      steps.indexOf("housing-reservations-after-tombstone") - 1,
+    );
+  });
+
+  it("drops the vouches written about them and the ones they gave somebody still waiting, and keeps the vouch that admitted somebody without its words", async () => {
     const leaver = await member("own-leaver-vc", "Wren Halloway");
     await member("own-vc-new", "Pip Arden");
+    await member("own-vc-in", "Juno Vale");
     await member("own-vc-friend", "Moss Tal");
     await member("own-vc-other", "Sage Okafor");
-    await recordVouch(pool, { id: "vch-own-1", voucherUserId: leaver.id, vouchedUserId: "own-vc-new", kind: "member", note: "Known Pip ten years" });
+    await q("UPDATE users SET membership_granted = 1 WHERE id = 'own-vc-in'");
+    await recordVouch(pool, { id: "vch-own-1", voucherUserId: leaver.id, vouchedUserId: "own-vc-in", kind: "member", note: "Known Juno ten years" });
     await recordVouch(pool, { id: "vch-own-2", voucherUserId: "own-vc-friend", vouchedUserId: leaver.id, kind: "member", note: "Wren mends every fence" });
     await recordVouch(pool, { id: "vch-own-3", voucherUserId: "own-vc-other", vouchedUserId: "own-vc-new", kind: "member", note: "Pip is steady" });
+    await recordVouch(pool, { id: "vch-own-4", voucherUserId: leaver.id, vouchedUserId: "own-vc-new", kind: "arrival", note: null });
 
     await anonymizeMember(pool, leaver, "admin-1", deps());
 
     expect(await q("SELECT id FROM member_vouches WHERE vouched_user_id = ?", [leaver.id]), "nothing written about them stays").toEqual([]);
-    expect(await q("SELECT id, kind, note FROM member_vouches WHERE voucher_user_id = ?", [leaver.id])).toEqual([
+    expect(await q("SELECT id, kind, note FROM member_vouches WHERE voucher_user_id = ?", [leaver.id]), "only the vouch that admitted Juno stays").toEqual([
       { id: "vch-own-1", kind: "member", note: null },
     ]);
+    expect((await vouchesFor(pool, "own-vc-new")).map((v) => v.voucherUserId), "Pip, still waiting, holds no vouch from somebody gone").toEqual(["own-vc-other"]);
     expect(await q("SELECT note FROM member_vouches WHERE id = 'vch-own-3'")).toEqual([{ note: "Pip is steady" }]);
+  });
+
+  it("admits nobody on a vouch the leaver gave: the next living vouches count from where the living ones stand", async () => {
+    const leaver = await member("own-leaver-va", "Wren Halloway");
+    await member("own-va-pip", "Pip Arden");
+    await member("own-va-sage", "Sage Okafor");
+    await member("own-va-moss", "Moss Tal");
+    await member("own-va-dan", "Dan Ruiz");
+    // The village's bar is its default of three. Wren and Sage vouched while Wren was here.
+    await recordVouch(pool, { id: "vch-va-1", voucherUserId: leaver.id, vouchedUserId: "own-va-pip", kind: "member" });
+    await recordVouch(pool, { id: "vch-va-2", voucherUserId: "own-va-sage", vouchedUserId: "own-va-pip", kind: "member" });
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    const third = await vouchRoutes("own-va-moss")("/api/members/:id/vouch", "own-va-pip");
+    expect(third.status).toBe(200);
+    expect(third.body.vouches.count, "two living people have vouched").toBe(2);
+    expect(third.body.admitted, "two living vouches and a departed one is not three").toBe(false);
+    expect((await usersRepo(pool).byId("own-va-pip"))!.membershipGranted).toBeFalsy();
+    // The control: a third living voucher does admit.
+    const fourth = await vouchRoutes("own-va-dan")("/api/members/:id/vouch", "own-va-pip");
+    expect(fourth.body.admitted).toBe(true);
+    expect((await usersRepo(pool).byId("own-va-pip"))!.membershipGranted).toBeTruthy();
+  });
+
+  it("admits nobody on a tombstone's vouch while its sweep is stopped, at the vouch route and at the invitation door", async () => {
+    const gone = await member("own-vs-gone", "Lark Benn");
+    await member("own-vs-pip", "Pip Arden");
+    await member("own-vs-kai", "Kai Brun");
+    await member("own-vs-sage", "Sage Okafor");
+    await member("own-vs-moss", "Moss Tal");
+    await member("own-vs-ash", "Ash Moreno");
+    for (const [id, vouched] of [["vch-vs-1", "own-vs-pip"], ["vch-vs-3", "own-vs-kai"]]) {
+      await recordVouch(pool, { id, voucherUserId: gone.id, vouchedUserId: vouched, kind: "member" });
+    }
+    for (const [id, vouched] of [["vch-vs-2", "own-vs-pip"], ["vch-vs-4", "own-vs-kai"]]) {
+      await recordVouch(pool, { id, voucherUserId: "own-vs-sage", vouchedUserId: vouched, kind: "member" });
+    }
+    // Stopped after the tombstone, before the vouches step: the rows still stand.
+    await tombstoneOnly(gone.id);
+
+    const viaRoute = await vouchRoutes("own-vs-moss")("/api/members/:id/vouch", "own-vs-pip");
+    expect(viaRoute.body.vouches.count).toBe(2);
+    expect(viaRoute.body.admitted).toBe(false);
+    expect((await usersRepo(pool).byId("own-vs-pip"))!.membershipGranted, "the route admits nobody on it").toBeFalsy();
+
+    // Kai arrives on Ash's link: Ash's arrival vouch is the second living one.
+    await makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) }).welcome("own-vs-ash", "own-vs-kai");
+    expect((await vouchesFor(pool, "own-vs-kai")).map((v) => v.voucherUserId), "the arrival vouch was recorded").toContain("own-vs-ash");
+    expect((await usersRepo(pool).byId("own-vs-kai"))!.membershipGranted, "the door admits nobody on it").toBeFalsy();
   });
 
   it("refuses a vouch, ordinary or super, for a tombstone, and records nothing", async () => {
@@ -338,6 +595,51 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     expect(kept).toEqual([{ body: "Picking Saturday", name: ANON }, { body: "Thanks for the ladder", name: ANON }]);
   });
 
+  it("hands a group they owned to a living member, never to another tombstone that sorts first", async () => {
+    const leaver = await member("own-leaver-ch", "Wren Halloway");
+    const earlier = await member("own-ch-a-gone", "Lark Benn");
+    await member("own-ch-b-live", "Bo Lind");
+    const group = await createGroup(pool, { createdBy: leaver.id, name: "Seed library", memberIds: [earlier.id, "own-ch-b-live"] });
+    // Erased before conversations were swept: their row is still live, and it sorts first.
+    await tombstoneOnly(earlier.id);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await ownersOf(group.id)).toEqual(["own-ch-b-live"]);
+  });
+
+  it("hands a group on to a living member when its owner leaves on their own and a tombstone sorts first", async () => {
+    await member("own-cl-owner", "Rowan Ise");
+    const earlier = await member("own-cl-a-gone", "Lark Benn");
+    await member("own-cl-b-live", "Bo Lind");
+    const group = await createGroup(pool, { createdBy: "own-cl-owner", name: "Bread rota", memberIds: [earlier.id, "own-cl-b-live"] });
+    await tombstoneOnly(earlier.id);
+
+    expect(await leaveConversation(pool, group.id, "own-cl-owner")).toBe(true);
+
+    expect(await ownersOf(group.id)).toEqual(["own-cl-b-live"]);
+  });
+
+  it("gives a group an owner again when a crash left it with none, and when its owner is a tombstone erased before this step existed", async () => {
+    const leaver = await member("own-leaver-cr", "Wren Halloway");
+    await member("own-cr-ash", "Ash Moreno");
+    await member("own-cr-bo", "Bo Lind");
+    const oldOwner = await member("own-cr-old", "Lark Benn");
+    // The state a death between the two writes of a leave used to leave: the leaver out and demoted, nobody owner.
+    const halfLeft = await createGroup(pool, { createdBy: leaver.id, name: "Orchard", memberIds: ["own-cr-ash", "own-cr-bo"] });
+    await q("UPDATE conversation_members SET left_at = CURRENT_TIMESTAMP, role = 'member' WHERE conversation_id = ? AND user_id = ?", [halfLeft.id, leaver.id]);
+    // A group whose owner was erased before conversations were swept, which the leaver is in.
+    const oldOwned = await createGroup(pool, { createdBy: oldOwner.id, name: "Choir", memberIds: [leaver.id, "own-cr-bo"] });
+    await tombstoneOnly(oldOwner.id);
+    const direct = await openDirect(pool, leaver.id, "own-cr-ash");
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await ownersOf(halfLeft.id), "the longest-standing living member").toEqual(["own-cr-ash"]);
+    expect(await ownersOf(oldOwned.id), "a tombstone holds the role for nobody").toEqual(["own-cr-bo"]);
+    expect(await ownersOf(direct.id), "a direct thread has no owner, by design").toEqual([]);
+  });
+
   it("ends every delegation they gave or carried, and tells each member who handed them a voice", async () => {
     const leaver = await member("own-leaver-dl", "Wren Halloway");
     await member("own-dl-ash", "Ash Moreno");
@@ -371,6 +673,51 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     notices = [];
     await anonymizeMember(pool, await usersRepo(pool).byId(leaver.id), null, deps());
     expect(notices).toEqual([]);
+  });
+
+  it("withdraws the vote a delegator's seat carried from the leaver, keeps a living delegation's copy, and tells no tombstone", async () => {
+    const leaver = await member("own-leaver-dv", "Wren Halloway");
+    await member("own-dv-ash", "Ash Moreno");
+    await member("own-dv-bo", "Bo Lind");
+    await member("own-dv-cy", "Cy Rook");
+    const gone = await member("own-dv-gone", "Lark Benn");
+    const ballot = await ballotFor([leaver.id, "own-dv-ash", "own-dv-bo", "own-dv-cy"]);
+    // Ash hands their voice to the leaver, who votes yes; Bo hands theirs to Cy, who votes no.
+    expect((await setDelegation(pool, "own-dv-ash", leaver.id)).ok).toBe(true);
+    await acceptDelegations(pool, leaver.id, "own-dv-ash");
+    expect((await setDelegation(pool, "own-dv-bo", "own-dv-cy")).ok).toBe(true);
+    await acceptDelegations(pool, "own-dv-cy", "own-dv-bo");
+    // A delegator erased before delegations were swept still points at the leaver.
+    expect((await setDelegation(pool, gone.id, leaver.id)).ok).toBe(true);
+    await tombstoneOnly(gone.id);
+    expect((await castVote(pool, ballot, leaver.id, "yes")).ok).toBe(true);
+    expect((await castVote(pool, ballot, "own-dv-cy", "no")).ok).toBe(true);
+    expect(await votesOn(ballot), "Ash's seat carries the leaver's yes").toContainEqual({ user_id: "own-dv-ash", choice: "yes", followed_user_id: leaver.id });
+    expect((await talliesFor(pool, ballot)).yesW).toBe(2);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    const after = await votesOn(ballot);
+    expect(after.filter((v) => v.followed_user_id === leaver.id), "no vote copied from them is still cast").toEqual([]);
+    expect(after.some((v) => v.user_id === "own-dv-ash"), "Ash's seat is Ash's again, uncast").toBe(false);
+    expect(after, "Bo still carries Cy's no").toContainEqual({ user_id: "own-dv-bo", choice: "no", followed_user_id: "own-dv-cy" });
+    // The leaver's own yes is a separate question (an erased member's own vote), so this asks only that Ash's copy left the count.
+    expect((await talliesFor(pool, ballot)).yesW, "Ash's seat no longer counts the leaver's yes").toBeLessThanOrEqual(1);
+    expect(notices.map((n) => n.userId), "Ash is told, and nobody gone is").toEqual(["own-dv-ash"]);
+  });
+
+  it("withdraws the vote the leaver's own seat carried from the member they handed it to", async () => {
+    const leaver = await member("own-leaver-dw", "Wren Halloway");
+    await member("own-dw-cy", "Cy Rook");
+    const ballot = await ballotFor([leaver.id, "own-dw-cy"]);
+    expect((await setDelegation(pool, leaver.id, "own-dw-cy")).ok).toBe(true);
+    await acceptDelegations(pool, "own-dw-cy", leaver.id);
+    expect((await castVote(pool, ballot, "own-dw-cy", "yes")).ok).toBe(true);
+    expect(await votesOn(ballot)).toContainEqual({ user_id: leaver.id, choice: "yes", followed_user_id: "own-dw-cy" });
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await votesOn(ballot), "their seat carries nobody's vote").toEqual([{ user_id: "own-dw-cy", choice: "yes", followed_user_id: null }]);
   });
 
   it("writes the delegation notice to the bell itself when the host hands it no spine", async () => {
@@ -414,7 +761,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     const day = (offset: number) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);
     const band = await whoIsHere(pool, { from: day(-2), to: day(1) }, true);
     expect(JSON.stringify(band.departures), "a stay that ended in January does not leave again today").not.toContain(ANON);
-    expect(await q("SELECT id, payer_email, amount_minor FROM product_purchases ORDER BY id")).toEqual([
+    expect(await q("SELECT id, payer_email, amount_minor FROM product_purchases WHERE id LIKE 'pp-own-%' ORDER BY id")).toEqual([
       { id: "pp-own-1", payer_email: null, amount_minor: 1200 },
       { id: "pp-own-2", payer_email: null, amount_minor: 1200 },
       { id: "pp-own-3", payer_email: "ash@example.test", amount_minor: 1200 },
@@ -427,9 +774,16 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     const steps = (await erasureRecord(pool, leaver.id))!.stepsDone;
     const at = steps.indexOf("role-tensions-after-tombstone");
     expect(at).toBeGreaterThan(steps.indexOf("tombstone"));
-    expect(steps.slice(at, at + 11)).toEqual([
+    expect(steps.slice(steps.indexOf("tombstone"), steps.indexOf("tombstone") + 4), "the guest-era places go before comms takes the contacts").toEqual([
+      "tombstone",
+      "member-agent-after-tombstone",
+      "guest-places-after-tombstone",
+      "comms",
+    ]);
+    expect(steps.slice(at, at + 12)).toEqual([
       "role-tensions-after-tombstone",
       "event-places-after-tombstone",
+      "housing-contacts-after-tombstone",
       "housing-reservations-after-tombstone",
       "vouches-after-tombstone",
       "conversations-after-tombstone",
@@ -444,5 +798,44 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     // An erasure asked for again runs every step again, over the tombstone, and finishes.
     await anonymizeMember(pool, await usersRepo(pool).byId(leaver.id), null, deps());
     expect((await erasureRecord(pool, leaver.id))!.finishedAt).not.toBeNull();
+  });
+});
+
+/**
+ * WHETHER AN EVENING IS STILL AHEAD, which decides whether a freed seat serves
+ * the queue and whether a held fee comes back. Pure, so it runs with no
+ * database. A recurring evening is named by its village date, so it is ahead
+ * through that whole day in the village's zone and not a moment longer, at
+ * either edge of the clock.
+ */
+describe("eveningAhead", () => {
+  const weekly = { startsAt: new Date("2026-10-02T06:00:00Z"), endsAt: null, recurrence: { freq: "weekly", byWeekday: [5] } };
+
+  it("ends a recurring evening at village midnight at UTC+13", () => {
+    // 21:00Z on the 23rd is 10:00 on the 24th in Tonga (UTC+13 all year) and in Auckland (NZDT, UTC+13 in October).
+    const now = new Date("2026-10-23T21:00:00Z");
+    for (const zone of ["Pacific/Tongatapu", "Pacific/Auckland"]) {
+      expect(eveningAhead(weekly, "2026-10-23", now, zone), `${zone}: the 23rd is over`).toBe(false);
+      expect(eveningAhead(weekly, "2026-10-24", now, zone), `${zone}: the 24th is today`).toBe(true);
+    }
+    // 10:30Z on the 23rd is 23:30 on the 23rd in Tonga: still that evening's day.
+    expect(eveningAhead(weekly, "2026-10-23", new Date("2026-10-23T10:30:00Z"), "Pacific/Tongatapu")).toBe(true);
+    expect(eveningAhead(weekly, "2026-10-23", new Date("2026-10-23T11:30:00Z"), "Pacific/Tongatapu"), "00:30 on the 24th").toBe(false);
+  });
+
+  it("keeps a recurring evening ahead through its whole village day at UTC-11", () => {
+    // 09:00Z on the 24th is 22:00 on the 23rd in Pago Pago (UTC-11).
+    expect(eveningAhead(weekly, "2026-10-23", new Date("2026-10-24T09:00:00Z"), "Pacific/Pago_Pago")).toBe(true);
+    expect(eveningAhead(weekly, "2026-10-23", new Date("2026-10-24T11:30:00Z"), "Pacific/Pago_Pago"), "00:30 on the 24th").toBe(false);
+    expect(eveningAhead(weekly, "2026-10-22", new Date("2026-10-23T09:00:00Z"), "Pacific/Pago_Pago"), "22:00 on the 22nd").toBe(true);
+  });
+
+  it("reads UTC and a one-off the way it always has", () => {
+    const now = new Date("2026-10-23T21:00:00Z");
+    expect(eveningAhead(weekly, "2026-10-23", now, "UTC")).toBe(true);
+    expect(eveningAhead(weekly, "2026-10-22", now, "UTC")).toBe(false);
+    const oneOff = { startsAt: new Date("2026-10-23T18:00:00Z"), endsAt: new Date("2026-10-23T22:00:00Z"), recurrence: null };
+    expect(eveningAhead(oneOff, "", now, "Pacific/Tongatapu"), "a one-off is ahead until it ends, in any zone").toBe(true);
+    expect(eveningAhead(oneOff, "", new Date("2026-10-23T22:00:01Z"), "Pacific/Pago_Pago")).toBe(false);
   });
 });

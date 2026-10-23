@@ -49,9 +49,11 @@
  *   walks out of every thread first, so nothing new reaches them and a group
  *   they owned has an owner again. Whether a direct message should go with its
  *   author instead is Rye's to decide (raised 2026-10-22).
- *   VOUCHES THEY GAVE. Each is the record of somebody else's admission, so the
- *   row stays and only the words they wrote on it go. The vouches written
- *   ABOUT them go whole.
+ *   VOUCHES THEY GAVE SOMEBODY ALREADY ADMITTED. Each is the record of that
+ *   admission, so the row stays and only the words they wrote on it go. A
+ *   vouch they gave somebody still waiting records no admission yet, and kept
+ *   it would count toward one in their name, so it goes whole, as do the
+ *   vouches written ABOUT them.
  *   INVESTOR PATH FACTS. A dated record that an interest was registered, a
  *   packet released, an accreditation declared or an agreement signed is the
  *   kind a village may be obliged to keep after a person leaves, and whether
@@ -151,10 +153,10 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
-import { forgetCommsPerson } from "../repos/commsPeople";
+import { contactsForPerson, forgetCommsPerson } from "../repos/commsPeople";
 import { revokeOpenInvitesOf } from "../repos/memberInvites";
 import { releasePlacesOf } from "./calendarCommunity";
-import { scrubReservationsOf } from "../repos/housing";
+import { scrubReservationsOf, secondAddressesOf } from "../repos/housing";
 import { forgetVouchesOf } from "../repos/vouches";
 import { leaveEveryConversation } from "./messaging";
 import { endDelegationsOf } from "./delegation";
@@ -164,6 +166,7 @@ import { forgetFactWordsOf } from "../repos/investorPath";
 import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf } from "../repos/productPurchases";
 import { emailKeyOf } from "../../shared/comms/address";
+import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
 import {
   beginErasure,
@@ -674,6 +677,32 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * THE SEATS AND QUEUE PLACES THEY HELD AS A GUEST, before they joined.
+       * A guest's answer is kept under `guest:<contactId>`, never moved onto
+       * the account when they join, and the contact found by their account or
+       * their address IS them (server/lib/comms/linkPerson.ts). The comms step
+       * below deletes those rows with the contact, and a bare delete frees a
+       * seat the queue never hears about: the next walk-up took it ahead of
+       * whoever was waiting. Given up here first, by the same rules as their
+       * own places (`releasePlacesOf`): a seat ahead serves the queue, and the
+       * queue place and slot go.
+       *
+       * BEFORE COMMS, and so outside the block of new steps further down,
+       * because comms deletes the contacts that say whose key it is. A new name,
+       * so an older record that already ran comms runs it and finds nothing.
+       * While the sweep is stopped before it, the waitlist passes over a guest
+       * key whose contact is a tombstone's (`promoteWaitlist`).
+       */
+      name: "guest-places-after-tombstone",
+      run: async () => {
+        const key = realEmailKey(target);
+        for (const contact of await contactsForPerson(pool, { userId: target.id, emailKeys: key ? [key] : [] })) {
+          await releasePlacesOf(pool, guestPersonKey(contact.id));
+        }
+      },
+    },
+    {
+      /*
        * EVERY COMMS ROW THAT IS THIS PERSON (Village Comms, 0244 to 0246): their
        * contacts and answers, journeys and paths, guest rows, votes,
        * attendance and feedback, the delivery reports that name them, and no
@@ -830,11 +859,12 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     /*
-     * THE ROWS A MEMBER OWNED THAT NOTHING SWEPT (review of 2026-10-22). Nine
+     * THE ROWS A MEMBER OWNED THAT NOTHING SWEPT (review of 2026-10-22). Ten
      * steps, each after the tombstone for the reason the needs step gives:
      * every one of these tables takes a write from anybody signed in, and the
      * tombstone is where the member's sessions die. Each has a new name of its
-     * own, so a resume of an older record runs it.
+     * own, so a resume of an older record runs it. (Their guest-era places
+     * have an eleventh, before comms, for the reason it gives.)
      */
     {
       /*
@@ -850,11 +880,39 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * A SECOND ADDRESS TYPED INTO A HOUSING REQUEST. Signed in, a member can
+       * give any contact address, and with the paths box ticked comms makes a
+       * contact for it, records the yes, and walks it onto the resident path.
+       * That contact carries no account, so the comms step never finds it, and
+       * the scrub below writes the tombstone address over the only row that
+       * said whose it was. So the addresses on their own requests that nobody
+       * else holds are read here, first, and forgotten in comms the way the
+       * comms step forgets them, after their guest places are given up the way
+       * the guest-places step gives them up. `secondAddressesOf` says which
+       * addresses count as nobody else's.
+       *
+       * BEFORE THE SCRUB, its own step, so a death between the two is resumed
+       * by a read that still finds the rows.
+       */
+      name: "housing-contacts-after-tombstone",
+      run: async () => {
+        const keys = await secondAddressesOf(pool, target.id);
+        if (!keys.length) return;
+        for (const contact of await contactsForPerson(pool, { emailKeys: keys })) {
+          await releasePlacesOf(pool, guestPersonKey(contact.id));
+        }
+        await forgetCommsPerson(pool, { emailKeys: keys });
+      },
+    },
+    {
+      /*
        * Housing requests (0077): SCRUBBED, never deleted, because a reserved
        * row is a home held and counts toward the homes taken. The name, the
        * address, the phone, the notes and the account link go; the request
-       * made under their address before they joined goes with the rest.
-       * server/repos/housing.ts says why.
+       * made under their address with no account on it goes with the rest,
+       * and so does the admin audit line each one wrote. A request another
+       * member made at their address stays that member's, and only the
+       * address comes off it. server/repos/housing.ts says why.
        */
       name: "housing-reservations-after-tombstone",
       run: async () => {
@@ -868,9 +926,12 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Vouches (0198): the ones written about them go, and the ones they gave
-       * stay without their words, because each is the record of somebody
-       * else's admission. The vouch route refuses a new one for a tombstone.
+       * Vouches (0198): the ones written about them go, and so do the ones they
+       * gave somebody still waiting, which would otherwise count toward that
+       * person's admission in the name of somebody gone. The ones that
+       * admitted somebody stay without their words, as the record of it. The
+       * vouch route refuses a new one for a tombstone, and both doors that
+       * admit on a count leave a tombstone's vouch out of it.
        */
       name: "vouches-after-tombstone",
       run: async () => {
@@ -880,8 +941,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     {
       /*
        * Conversations (0066): they leave every thread they are still in, so a
-       * group they owned passes to its longest-standing member. Their messages
-       * stay, de-attributed: see WHAT IT DELIBERATELY KEEPS at the top.
+       * group they owned passes to its longest-standing living member, and
+       * every group they were ever in is checked for a living owner, which a
+       * resume repeats. Their messages stay, de-attributed: see WHAT IT
+       * DELIBERATELY KEEPS at the top.
        */
       name: "conversations-after-tombstone",
       run: async () => {
