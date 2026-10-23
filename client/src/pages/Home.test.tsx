@@ -36,12 +36,15 @@ class NoopIntersectionObserver {
 }
 vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
+import { HOME_PAGE } from "@shared/pageContent/home";
+import { markerDocument } from "@shared/pageContent/resolve";
 
 const useBrandImagesMock = vi.fn();
-let gameConfig: { project: { tagline: string } } | null = { project: { tagline: "" } };
+let gameConfig: { project: Record<string, string>; currency: { name: string } } | null;
+let storedHome: unknown;
 
 vi.mock("@/components/Layout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -53,13 +56,13 @@ vi.mock("@/components/MapPeek", () => ({ default: () => null }));
 vi.mock("@/lib/gameApi", () => ({
   useBrandImages: () => useBrandImagesMock(),
   useGameConfig: () => gameConfig,
-  useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
+  useVillageLinks: () => ({ siteUrl: "", eventsUrl: "https://example.org/events", contactEmail: "", mailTo: () => "" }),
   altOr: (value: string | undefined, fallback: string) =>
     typeof value === "string" ? value : fallback,
 }));
-vi.mock("@/hooks/useVillageName", () => ({
-  useVillageName: () => "Willowbrook",
-  useVillageLocation: () => "",
+// The saved page, as GET /api/content/page-home would answer it (null = never saved).
+vi.mock("@/hooks/useVillageContent", () => ({
+  readVillageSection: () => Promise.resolve(storedHome),
 }));
 
 import Home from "./Home";
@@ -73,45 +76,119 @@ const renderHome = () =>
 
 /** The hero is the first section on the page. */
 const hero = () => document.querySelector("section") as HTMLElement;
+const headline = () => screen.findByRole("heading", { level: 1 });
+
+beforeEach(() => {
+  useBrandImagesMock.mockReset();
+  useBrandImagesMock.mockReturnValue({ hero: "" });
+  gameConfig = { project: { name: "Willowbrook", tagline: "", location: "" }, currency: { name: "Thanks" } };
+  storedHome = null;
+});
 
 describe("the homepage headline", () => {
-  beforeEach(() => {
-    useBrandImagesMock.mockReset();
-    useBrandImagesMock.mockReturnValue({ hero: "" });
-  });
-
-  it("is the village's own Tagline from the Setup Wizard", () => {
-    gameConfig = { project: { tagline: "Grow the village together" } };
+  it("is the village's own Tagline when the village has not written one for this page", async () => {
+    gameConfig = { project: { name: "Willowbrook", tagline: "Grow the village together" }, currency: { name: "Thanks" } };
     renderHome();
-    gameConfig = { project: { tagline: "" } };
 
-    const h1 = screen.getByRole("heading", { level: 1 });
+    const h1 = await headline();
     expect(h1).toHaveTextContent("Grow the village together");
     expect(h1).not.toHaveTextContent(/Co-Become/);
   });
 
-  it("stays hidden until the config arrives, so the old words never flash", () => {
+  it("is what the village wrote in Admin, Pages, Home, with its highlighted phrase", async () => {
+    storedHome = { hero: { headline: "A valley that remembers", highlight: "remembers" } };
+    renderHome();
+
+    const h1 = await headline();
+    expect(h1).toHaveTextContent("A valley that remembers");
+    expect(h1.querySelector(".text-amber-on-band")).toHaveTextContent("remembers");
+  });
+
+  it("never comes out blank when the Tagline is cleared", async () => {
+    renderHome();
+
+    expect(await headline()).toHaveTextContent("Welcome to Willowbrook");
+  });
+
+  it("stays hidden until the saved words arrive, so the defaults never flash first", () => {
     gameConfig = null;
     renderHome();
-    gameConfig = { project: { tagline: "" } };
 
     expect(screen.getByRole("heading", { level: 1, hidden: true })).toHaveClass("invisible");
   });
 
-  it("carries no badge above it", () => {
+  it("carries no badge unless the village writes one", async () => {
     renderHome();
-
+    await headline();
     expect(screen.queryByText(/co-create paradise/i)).toBeNull();
   });
 });
 
-describe("the homepage hero when the village has added no art", () => {
-  beforeEach(() => useBrandImagesMock.mockReset());
-
-  it("draws no picture and no placeholder mark", () => {
-    useBrandImagesMock.mockReturnValue({ hero: "" });
-
+describe("every field in the Home spec reaches the page", () => {
+  it("renders a distinct marker typed into each field and each list row", async () => {
+    // The Tagline bug, as a test: a field a founder can save but the page
+    // never reads is a marker missing from the page.
+    const doc = markerDocument(HOME_PAGE);
+    storedHome = doc;
     renderHome();
+    await headline();
+
+    const text = document.body.textContent ?? "";
+    const missing: string[] = [];
+    for (const [sectionId, section] of Object.entries(doc)) {
+      for (const [key, value] of Object.entries(section as Record<string, unknown>)) {
+        const values = Array.isArray(value)
+          ? value.flatMap((row) => Object.entries(row as Record<string, string>).filter(([k]) => k !== "id").map(([, v]) => v))
+          : [value as string];
+        for (const v of values) {
+          // The gold phrase only exists inside the headline; a marker for it
+          // is a separate word, so it is checked by the headline test above.
+          if (sectionId === "hero" && key === "highlight") continue;
+          if (!text.includes(v)) missing.push(`${sectionId}.${key} (${v})`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("draws nothing of a section the village hid", async () => {
+    storedHome = { personas: { hidden: true }, journey: { hidden: true } };
+    renderHome();
+    await headline();
+
+    expect(screen.queryByText("People like you")).toBeNull();
+    expect(screen.queryByText("From First Visit to Home")).toBeNull();
+    expect(screen.getByText("Choose your path")).toBeInTheDocument();
+  });
+
+  it("keeps the anchor the hero button points at, even with the paths hidden", async () => {
+    storedHome = { paths: { hidden: true } };
+    renderHome();
+    await headline();
+
+    expect(document.getElementById("choose-path")).not.toBeNull();
+  });
+
+  it("gives a path card the alt text the founder wrote for its picture", async () => {
+    useBrandImagesMock.mockReturnValue({ hero: "", investorHero: "/uploads/inv.webp", investorHeroAlt: "Hands planting a seedling" });
+    renderHome();
+    await headline();
+
+    expect(screen.getByAltText("Hands planting a seedling")).toHaveAttribute("src", "/uploads/inv.webp");
+  });
+
+  it("fills {village} in the defaults", async () => {
+    renderHome();
+    await headline();
+
+    expect(screen.getByText("Who Comes to Willowbrook?")).toBeInTheDocument();
+  });
+});
+
+describe("the homepage hero when the village has added no art", () => {
+  it("draws no picture and no placeholder mark", async () => {
+    renderHome();
+    await headline();
 
     expect(hero().querySelector("img")).toBeNull();
     // The mark Image draws is a role="img" wrapper. An empty village must
@@ -119,23 +196,12 @@ describe("the homepage hero when the village has added no art", () => {
     expect(hero().querySelector('[role="img"]')).toBeNull();
   });
 
-  it("still says what the village is, which is the part that was never missing", () => {
-    useBrandImagesMock.mockReturnValue({ hero: "" });
-
-    renderHome();
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      /Co-Become the Most Beautiful Village/i,
-    );
-  });
-
-  it("paints the copy on its own opaque band rather than on a fading scrim", () => {
+  it("paints the copy on its own opaque band rather than on a fading scrim", async () => {
     // The band is what makes the contrast a property of two named colours
     // instead of a property of whatever photograph is behind it. It is
     // decorative, so it carries aria-hidden and no accessible name.
-    useBrandImagesMock.mockReturnValue({ hero: "" });
-
     renderHome();
+    await headline();
     const band = hero().querySelector(".rounded-3xl.bg-teal-band");
 
     expect(band).toBeTruthy();
@@ -144,22 +210,21 @@ describe("the homepage hero when the village has added no art", () => {
 });
 
 describe("the homepage hero when the village HAS added art", () => {
-  beforeEach(() => useBrandImagesMock.mockReset());
-
-  it("draws the picture, with the village's own alt text", () => {
+  it("draws the picture, with the village's own alt text", async () => {
     useBrandImagesMock.mockReturnValue({
       hero: "/uploads/ridge.jpg",
       heroAlt: "Morning fog over the ridge",
     });
 
     renderHome();
+    await headline();
     const img = hero().querySelector("img");
 
     expect(img).toHaveAttribute("src", "/uploads/ridge.jpg");
     expect(img).toHaveAttribute("alt", "Morning fog over the ridge");
   });
 
-  it("keeps the accessible name when that picture fails to load", () => {
+  it("keeps the accessible name when that picture fails to load", async () => {
     // A 404 on a file the village DID upload is real breakage, so it keeps
     // both the deliberate mark and the description. Removing the mark for
     // this case too would leave a sighted visitor with a blank hero and no
@@ -170,11 +235,14 @@ describe("the homepage hero when the village HAS added art", () => {
     });
 
     renderHome();
+    await headline();
     const img = hero().querySelector("img") as HTMLImageElement;
     fireEvent.error(img);
 
-    const mark = hero().querySelector('[role="img"]');
-    expect(mark).toBeTruthy();
-    expect(mark).toHaveAttribute("aria-label", "Morning fog over the ridge");
+    await waitFor(() => {
+      const mark = hero().querySelector('[role="img"]');
+      expect(mark).toBeTruthy();
+      expect(mark).toHaveAttribute("aria-label", "Morning fog over the ridge");
+    });
   });
 });
