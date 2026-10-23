@@ -87,6 +87,7 @@ function doors(): RoomActions {
     discard: (...a) => ok("discard", ...a),
     library: async () => [],
     bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
+    sendTension: (...a) => ok("sendTension", ...a),
   };
 }
 

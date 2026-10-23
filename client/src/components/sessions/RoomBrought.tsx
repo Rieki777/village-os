@@ -21,7 +21,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AIM_DEFS, ROOM_COPY } from "@shared/sessions";
-import { LIBRARY_COPY, LIBRARY_MINUTES, agendaAimFor, broughtFor, type LibraryCard } from "@shared/sessionLibrary";
+import { LIBRARY_COPY, LIBRARY_MINUTES, LIBRARY_SOURCE_LINE, agendaAimFor, broughtFor, type LibraryCard } from "@shared/sessionLibrary";
 import ClampedNote from "./ClampedNote";
 import { BTN_SECONDARY, CARD, CHIP, H3, HINT, type StageProps } from "./roomUi";
 
@@ -58,6 +58,7 @@ function BroughtRow({
             {noCircleTag && <span className={CHIP}>{LIBRARY_COPY.roomNoCircle}</span>}
             <span>{card.mine ? LIBRARY_COPY.broughtByYou(when) : LIBRARY_COPY.broughtBy(card.broughtBy, when)}</span>
           </p>
+          {card.source && <p className="mt-1 text-sm text-muted-foreground">{LIBRARY_SOURCE_LINE[card.source.kind](card.source.label)}</p>}
         </div>
         {canAdd && (
           <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onAdd}>

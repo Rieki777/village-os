@@ -19,21 +19,22 @@
  * reader: the member who raised it and the role's live holders. Answering it
  * changes nothing about that; the card shows answered tensions as a count.
  * Only a bring to the circle makes the words readable to every member, and it
- * does so by writing them into the circle's backlog, where the circle's next
- * session carries them (`selectCarried`, server/lib/liveSessions.ts).
+ * does so by making them one of the circle's agenda items
+ * (server/lib/sessionLibrary.ts), where the circle's next session finds them.
  * `mayReadTensionWords` is the one rule every read here asks.
  *
  * NOTHING HERE NAMES THE RAISER to anybody but themselves. A row carries
  * `mine`, never an id or a name, and the notices say "a tension was raised".
  *
- * ── BRING TO THE CIRCLE, THROUGH THE CARRIED BACKLOG ─────────────────────
+ * ── BRING TO THE CIRCLE, AS ONE OF ITS AGENDA ITEMS ──────────────────────
  *
- * A circle's backlog is the tensions and parked entries of its last time
- * (`lastTimeInCircle`), offered to its next open session as "From last
- * time". A bring writes one `tension` entry, open, into that last session,
- * authored by the holder who brought it, so the next room offers it with the
- * rest and nothing new has to learn to read it. A circle that has not met has
- * no last time, and the bring is refused with a sentence saying so.
+ * Every tension becomes an agenda item (sessions feature 2, Rye 2026-10-22).
+ * A bring makes one item waiting for the role's circle, brought by the holder
+ * who brought it, with the tension's words and where it came from (0279), so
+ * the circle's members see it with the rest, the start card ticks it, and the
+ * room takes it up. It works for a circle that has never met, and it never
+ * writes into a closed session's record. `circle_entry_id` (0269) stays as it
+ * is for the brings made before; a new bring leaves it null.
  *
  * No `recordEvent`, no `addActivity`: both reach the village's public record
  * by default, and the words are private. The row is the record.
@@ -60,8 +61,9 @@ import { TASK_BOARD_PATH } from "../../shared/sessionTasks";
 import { addBusinessDays } from "../../shared/businessDays";
 import { civilDateKey } from "../../shared/lunar";
 import * as store from "../repos/roleTensions";
-import { inTransaction, insertEntry, lastTimeInCircle } from "../repos/liveSessions";
+import { inTransaction } from "../repos/liveSessions";
 import { ensureMemberNo } from "./liveSessions";
+import { itemFromTension } from "./sessionLibrary";
 import type { NotifyInput } from "./notify";
 import type { TensionRow } from "../repos/roleTensions";
 
@@ -175,11 +177,13 @@ export async function respondToTension(
 
   // Everything a bring needs from outside the transaction, asked first.
   let circleId: string | null = null;
+  let roleName = "";
   let authorNo = 0;
   if (action === "bring_to_circle") {
     if (!deps.sessionsOn()) return refuse(409, TENSION_REFUSALS.sessionsOff);
     const role = await store.roleForTension(pool, first.roleId);
     circleId = role?.circleId ?? null;
+    roleName = role?.name ?? "";
     if (!circleId) return refuse(409, TENSION_REFUSALS.noCircle);
     authorNo = await ensureMemberNo(pool, who.userId, now);
   }
@@ -189,21 +193,11 @@ export async function respondToTension(
     if (!t) return refuse(404, TENSION_REFUSALS.notFound);
     const why = respondRefusal(t.status, action);
     if (why) return refuse(409, TENSION_REFUSALS[why]);
-    let entryId: number | null = null;
     if (action === "bring_to_circle" && circleId) {
       if (!t.text.trim()) return refuse(409, TENSION_REFUSALS.wordsCleared);
-      const [last] = await lastTimeInCircle(conn, circleId, 0);
-      if (!last) return refuse(409, TENSION_REFUSALS.circleNotMet);
-      entryId = await insertEntry(conn, {
-        sessionId: Number(last.id),
-        itemId: null,
-        kind: "tension",
-        text: t.text,
-        authorNo,
-        ownerSeatId: null,
-        dueOn: null,
-        now,
-      });
+      // One item per tension: the status check above already refuses a second bring, and the source key holds it too.
+      const item = await itemFromTension(conn, { circleId, text: t.text, broughtByNo: authorNo, source: { kind: "role_tension", ref: t.id, label: roleName }, now });
+      if (item == null) return refuse(409, TENSION_REFUSALS.alreadyAnswered);
     }
     const status: TensionStatus = statusAfter(action);
     await store.writeResponse(conn, id, {
@@ -211,7 +205,7 @@ export async function respondToTension(
       answeredBy: who.userId,
       answerNote: action === "take" ? null : note,
       answeredAt: status === "taken" ? null : now,
-      circleEntryId: entryId,
+      circleEntryId: null,
     });
     return done(null);
   });

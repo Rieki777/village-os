@@ -171,13 +171,13 @@ every half minute while its tab is visible.
 
 ## What the record holds
 
-Fifteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
-or joins a session one number, and every person column in the other fourteen holds that number. Three
-(0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library,
-described under "Before the call: the agenda library", one (0271) is a circle's rhythm, described under
-"When a circle meets: its rhythm", two (0275) are who follows which circles on their own calendar, and
-the last (0277) is which circle keeps which calendar of its own, both described under "Circle meetings
-on a calendar".
+Sixteen tables, all new. A person is a number: `live_session_members` gives each member who ever opens
+or joins a session one number, and every person column in the other fifteen holds that number. Three
+(0255) are the task layer, described under "After the call: tasks", two (0264) are the agenda library and
+one (0279) where its items came from, described under "Before the call: the agenda library", one (0271)
+is a circle's rhythm, described under "When a circle meets: its rhythm", two (0275) are who follows
+which circles on their own calendar, and the last (0277) is which circle keeps which calendar of its
+own, both described under "Circle meetings on a calendar".
 
 | Table | Holds |
 |---|---|
@@ -195,6 +195,7 @@ on a calendar".
 | `live_session_follows` | The circles a member follows on their own calendar, one row each, or one row `*` for every circle, the new ones too. |
 | `live_session_feed_keys` | One per member: the sha256 of their private calendar address's key, when it was made, and when a calendar app last read it. |
 | `live_session_circle_calendars` | One per circle that attached its own calendar: which of the village's external calendar subscriptions it is, and who attached it. |
+| `live_session_library_sources` | One per agenda item that came from a tension: whether a role's or a room's, which one, and the role's or the circle's name as it was then. One item per tension. |
 
 When the facilitator closes, the session keeps its record, the arrival words and numbers are
 erased, every admin gets a notice that the record is ready to read, and each person who holds an
@@ -364,6 +365,26 @@ circles, or "No circle in particular" as a deliberate last choice. It is chosen 
 standing in exactly one circle. A member may bring something to a circle they are not in, the way a
 tension is raised with the circle that holds it, and they always see their own. Fifty waiting items
 per member at most.
+
+**Every tension becomes an agenda item** (Rye, 2026-10-22). A tension raised with a role, brought to the
+circle by one of the role's holders from the player card, becomes an item waiting for the role's circle
+(`server/lib/roleTensions.ts`), brought by that holder, with the tension's words: the whole of them as
+the title when they fit, otherwise the start as the title and every word in the note. It works for a
+circle that has never met, and it never writes into a closed session's record (the old road wrote a
+backlog entry into the circle's last session, and refused a circle that had not met). A tension named in
+a room is sent on from the room's backlog by whoever named it, the session's hosts or an admin, and from
+"From last time" by anybody who was in that session: "Send to a circle's agenda items", the room's own
+circle chosen first, any live circle or none, after a line saying who will read its words. The room then
+says where each one went (`sentTensions`) and "From last time" offers a sent one no more, while the closed
+record stays exactly as it was. Each such item says where it came from on its card ("From a tension
+raised with Water keeper", "From a tension named in a session of the Garden circle"), from 0279, which
+keeps the role's or circle's name as it was. The same tension never becomes two items: the unique key
+on the source refuses the second ("That tension has been sent to agenda items already."). No waiting cap
+applies: bringing a tension on is answering it.
+
+| Door | Who | Limit |
+|---|---|---|
+| `POST /api/sessions/library/from-tension` `{ sessionId, entryId, circleId }` | whoever named it, the hosts and admins in an open room; anybody who was in a closed one | the add bucket, 60 an hour |
 
 **The list.** One list per circle, the member's own circles first, then the others, then no circle in
 particular, each oldest first, and every card says where it stands in one line: waiting (and "back for

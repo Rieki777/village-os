@@ -61,7 +61,7 @@ import {
   type SessionState,
   type SessionView,
 } from "@shared/sessions";
-import type { LibraryCard } from "@shared/sessionLibrary";
+import { LIBRARY_TENSION_API, type LibraryCard } from "@shared/sessionLibrary";
 
 export type RoomStatus = "loading" | "ready" | "signed-out" | "refused" | "missing" | "gone" | "failed";
 
@@ -132,6 +132,13 @@ export interface RoomActions {
   library(): Promise<LibraryCard[] | null>;
   /** Bring items from the agenda library onto this room's agenda, all or none. */
   bringFromLibrary(ids: number[], opts?: WriteOptions): Promise<WriteResult<{ ids?: number[] }>>;
+  /**
+   * Send one of this room's tensions, or one from "From last time" (`sessionId`
+   * is the session it was named in), to a circle's agenda items, or to none in
+   * particular. The door is the agenda library's own; the room is read again
+   * after it, as after every write, so it shows where the tension went.
+   */
+  sendTension(input: { sessionId: number; entryId: number; circleId: string | null }, opts?: WriteOptions): Promise<WriteResult<{ item?: LibraryCard }>>;
 }
 
 export interface SessionRoom {
@@ -339,11 +346,11 @@ export function useSessionRoom(
   const refresh = useCallback(() => ask(true), [ask]);
 
   const write = useCallback(
-    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions): Promise<WriteResult<T>> => {
+    async <T,>(method: string, path: string, payload: unknown, opts?: WriteOptions, url?: string): Promise<WriteResult<T>> => {
       if (!base) return { ok: false, status: 0, error: ROOM_COPY.writeFailed, body: {}, room: null };
       let result: WriteResult<T>;
       try {
-        const res = await gameFetch(`${base}${path}`, {
+        const res = await gameFetch(url ?? `${base}${path}`, {
           method,
           ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         });
@@ -394,6 +401,7 @@ export function useSessionRoom(
       }
     },
     bringFromLibrary: (ids, opts) => write<{ ids?: number[] }>("POST", "/library", { ids }, opts),
+    sendTension: (input, opts) => write<{ item?: LibraryCard }>("POST", "", input, opts, LIBRARY_TENSION_API),
   }), [write, base]);
 
   return { view, status, lagging, offset, refresh, actions };

@@ -82,6 +82,7 @@ import {
   noteAuthor,
   noticesAfterSettle,
   releaseForDiscard,
+  sentTensionsFor,
   settleForClose,
   takenBySession,
   writeTakes,
@@ -1715,13 +1716,14 @@ export function selectCarried(
   current: readonly SessionItem[],
   prevId: number,
   fromLibrary: ReadonlySet<number> = new Set(),
+  sent: ReadonlySet<number> = new Set(),
 ): { actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } {
   const broughtOver = new Set(current.filter((i) => i.fromSessionId === prevId).map((i) => i.title.toLowerCase()));
   const asTitle = (text: string) => (cleanLine(text, SESSION_LIMITS.agendaTitle) ?? "").toLowerCase();
   return {
     actions: prev.entries.filter((e) => e.kind === "action" && e.status === "open"),
     backlog: prev.entries.filter(
-      (e) => ((e.kind === "tension" && e.status !== "done") || e.status === "parked") && !broughtOver.has(asTitle(e.text)),
+      (e) => ((e.kind === "tension" && e.status !== "done") || e.status === "parked") && !broughtOver.has(asTitle(e.text)) && !sent.has(e.id),
     ),
     parkedItems: [...prev.items]
       .sort((a, b) => a.position - b.position)
@@ -1764,7 +1766,7 @@ export async function buildView(
   s: SessionRec,
   viewer: Viewer,
   joined: boolean,
-  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext },
+  ctx: { lookup: MemberLookup; circleName: (id: string | null) => string | null; lapseContext?: () => LapseContext; circles?: () => { id: string; name: string }[] },
   now = Date.now(),
 ): Promise<SessionView> {
   const roles = rolesIn(s, viewer);
@@ -1834,6 +1836,12 @@ export async function buildView(
   // receives no answers to count from, and would read everyone as waiting.
   const waiting: ConsentWaiting = open && seesAnswers ? consentWaiting(peopleOut, entries, responsesOut) : {};
 
+  // Tensions sent on to a circle's agenda items (0279): this room says where each went, and "From last time" offers it no more.
+  const tensionIds = [...entries, ...(carriedFrom?.entries ?? [])].filter((e) => e.kind === "tension").map((e) => e.id);
+  const sent = await sentTensionsFor(pool, tensionIds);
+  const sentTensions: SessionView["sentTensions"] = {};
+  for (const e of entries) if (sent.has(e.id)) sentTensions[String(e.id)] = { circleName: ctx.circleName(sent.get(e.id) ?? null) };
+
   let carried: SessionView["carried"] = null;
   if (carriedFrom) {
     const picked = selectCarried(
@@ -1841,6 +1849,7 @@ export async function buildView(
       items,
       carriedFrom.prev.id,
       carriedFrom.fromLibrary,
+      new Set(sent.keys()),
     );
     if (picked.actions.length || picked.backlog.length || picked.parkedItems.length) {
       carried = { sessionId: carriedFrom.prev.id, title: carriedFrom.prev.title, ...picked };
@@ -1877,6 +1886,9 @@ export async function buildView(
     seats: seats.options,
     arrival: s.status === "closed" ? (s.summary?.arrival ?? null) : null,
     carried,
+    sentTensions,
+    // Only somebody in the room, or an admin, sends a tension on, so only they are handed the list.
+    circleOptions: joined || viewer.admin ? (ctx.circles?.() ?? []) : [],
     circleTasks: circle.cards,
     circleLastMetAt: circle.lastMetAt,
     me: { userId: viewer.no ?? 0, joined, facilitates: roles.facilitates, secretary: roles.secretary, admin: viewer.admin },

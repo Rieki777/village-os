@@ -19,6 +19,9 @@
 --   kind   role_tension  ref = the `role_tensions` id
 --          room_tension  ref = the `live_session_entries` id
 --
+-- THE LABEL is kept here so the card can say where an item came from without
+-- reading another module's tables, and still says it once a role is renamed.
+--
 -- ONE ITEM PER TENSION: the unique key on (kind, ref) is the guard, NOT NULL
 -- on both, so it holds.
 --
@@ -29,6 +32,9 @@ CREATE TABLE IF NOT EXISTS `live_session_library_sources` (
   `library_id` int NOT NULL,
   `kind` varchar(16) NOT NULL,
   `ref` varchar(64) NOT NULL,
+  -- What the card says it came from, kept as it was when it was sent: the
+  -- role's name for a role's tension, the circle's name (or '') for a room's.
+  `label` varchar(120) NOT NULL DEFAULT '',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`library_id`),
   UNIQUE KEY `live_session_library_sources_ref_uq` (`kind`, `ref`)

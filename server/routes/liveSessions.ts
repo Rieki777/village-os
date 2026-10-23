@@ -219,7 +219,7 @@ export function register(app: Express, deps: Deps): void {
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
     return c ? String(c.name ?? id) : null;
   };
-  const ctx = { lookup, circleName, lapseContext: deps.lapseContext };
+  const ctx = { lookup, circleName, lapseContext: deps.lapseContext, circles };
   /** The close's task emails, started and left. Absent when the post office is not wired, as in a suite. */
   const closeMail = deps.commsPostOffice
     ? (sessionId: number) => {
