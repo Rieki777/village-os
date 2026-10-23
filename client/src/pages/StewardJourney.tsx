@@ -235,13 +235,16 @@ export default function StewardJourney() {
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
+                            {/* The title keeps to the chip's line while it has 6rem there, and
+                                takes its own line below the chip when it does not: a long
+                                stage name at 320px left it a sliver one letter wide. */}
+                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
                               <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                                 isCompleted ? "bg-sage/10 text-sage" : "bg-muted text-muted-foreground"
                               }`}>
                                 {step.stage}
                               </span>
-                              <h3 className={`font-display text-lg font-semibold min-w-0 break-words ${
+                              <h3 className={`font-display text-lg font-semibold basis-24 grow max-w-full break-words ${
                                 isCompleted ? "text-muted-foreground" : "text-foreground"
                               }`}>
                                 {step.title}
@@ -280,7 +283,7 @@ export default function StewardJourney() {
                                     className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-sage" />
-                                    {detail}
+                                    <span className="min-w-0 break-words">{detail}</span>
                                   </motion.li>
                                 ))}
                               </ul>
@@ -669,14 +672,14 @@ function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+        className="w-full px-4 py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {loading ? (
           <span>Sending...</span>
         ) : (
           <>
             <Heart className="w-5 h-5 shrink-0" />
-            <span className="break-words">{words.submitLabel}</span>
+            <span className="min-w-0 break-words text-center">{words.submitLabel}</span>
           </>
         )}
       </button>

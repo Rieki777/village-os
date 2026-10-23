@@ -572,7 +572,7 @@ export default function InvestorJourney() {
                                     className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-teal-deep" />
-                                    {detail}
+                                    <span className="min-w-0 break-words">{detail}</span>
                                   </motion.li>
                                 ))}
                               </ul>
@@ -632,8 +632,11 @@ export default function InvestorJourney() {
                   whileHover={{ x: 8 }}
                   className="bg-white/10 rounded-lg p-4 backdrop-blur-sm"
                 >
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-4 min-w-0">
+                  {/* The status keeps to the name's line while the name has 9rem
+                      there, and drops below it when it does not: a long status
+                      at 320px left the name a sliver. */}
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-2">
+                    <div className="flex items-center gap-4 min-w-0 basis-36 grow">
                       <Building className="w-5 h-5 shrink-0 text-gold" />
                       <div className="min-w-0">
                         <div className="font-semibold break-words">{phase.name}</div>

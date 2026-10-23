@@ -382,7 +382,7 @@ export default function ResidentJourney() {
                                     className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 break-words"
                                   >
                                     <div className="w-1 h-1 shrink-0 rounded-full bg-teal-deep" />
-                                    {detail}
+                                    <span className="min-w-0 break-words">{detail}</span>
                                   </motion.li>
                                 ))}
                               </ul>

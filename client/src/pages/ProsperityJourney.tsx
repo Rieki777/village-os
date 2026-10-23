@@ -345,13 +345,16 @@ export default function ProsperityJourney() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
+                            {/* The title keeps to the chip's line while it has 6rem there, and
+                                takes its own line below the chip when it does not: a long
+                                stage name at 320px left it a sliver one letter wide. */}
+                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
                               <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                                 isCompleted ? "bg-gold/10 text-gold" : "bg-muted text-muted-foreground"
                               }`}>
                                 {step.stage}
                               </span>
-                              <h3 className={`font-display text-lg font-semibold min-w-0 break-words ${
+                              <h3 className={`font-display text-lg font-semibold basis-24 grow max-w-full break-words ${
                                 isCompleted ? "text-muted-foreground" : "text-foreground"
                               }`}>
                                 {step.title}
@@ -389,7 +392,7 @@ export default function ProsperityJourney() {
                                     className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
                                   >
                                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-gold" />
-                                    {detail}
+                                    <span className="min-w-0 break-words">{detail}</span>
                                   </motion.li>
                                 ))}
                               </ul>
@@ -461,7 +464,7 @@ export default function ProsperityJourney() {
                     {[tier.metric1, tier.metric2, tier.metric3].filter(Boolean).map((metric, i) => (
                       <li key={i} className="text-xs text-muted-foreground flex items-center gap-2 min-w-0 break-words">
                         <span className="w-1 h-1 shrink-0 rounded-full bg-current" />
-                        {metric}
+                        <span className="min-w-0 break-words">{metric}</span>
                       </li>
                     ))}
                   </ul>
