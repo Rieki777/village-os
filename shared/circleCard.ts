@@ -29,6 +29,7 @@ import { CCOS_TERMS, CIRCLE_CARD_WORDS as W, CIRCLE_HEADINGS, termLabel, type Ci
 import { circleWordLabel, CIRCLE_WORD_KEYS, type CircleWordKey, type CircleWordsPayload } from "./circleCharterParse";
 import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
+import type { SignReading } from "./roleSigns";
 import { proposeTermsHref } from "./seatTermsOffer";
 
 export type { Read } from "./roleSheet";
@@ -116,6 +117,42 @@ export interface CircleCardIn {
   pending?: Read<CircleWordKey[]>;
   /** The open drafts that would change the circle's words, with the words they propose. */
   proposals?: Read<{ draftId: string; proposedAt: string; words: CircleWordsPayload }[]>;
+  /**
+   * The live parts Amora reads itself (server/lib/circleLive.ts), at the
+   * member tier only. `sessionsOn` is false where Live Sessions is off, and
+   * then the meeting sections draw nothing.
+   */
+  live?: Read<{
+    signs: SignReading[];
+    lastMetAt: string | null;
+    openTensions: number;
+    sessionsOn: boolean;
+    /** Live Sessions' own words for the circle's rhythm ("Every Thursday at 18:00"), or null when none is kept. */
+    rhythm?: string | null;
+    /** Its next meeting in words ("Tomorrow at 18:00"), or null. */
+    next?: string | null;
+    /** What waits for the next meeting, as this reader may see it; null when unread. */
+    waiting?: number | null;
+  }>;
+  /** The last day of the current season, a civil date: the review is due then (Rye, 2026-10-22). Null with no season. */
+  reviewOn?: Read<string | null>;
+}
+
+/** One sign as the card prints it. */
+export interface SignOut {
+  label: string;
+  /** "3", or "2 of 5"; null when it is not counted. */
+  value: string | null;
+  /** "Up on last moon" and the rest; "Not counted yet" for a sign that is not counted. */
+  trend: string | null;
+  /** How it is counted, in a sentence; null when it is not counted. */
+  countedFrom: string | null;
+}
+
+/** Plain facts and the links beside them. */
+export interface FactsOut {
+  lines: string[];
+  links: { label: string; href: string }[];
 }
 
 /** One proposal waiting for consent, as a decider reads it. */
@@ -164,6 +201,8 @@ export type CircleSection =
   | (SectionBase<CharterListField> & { kind: "list"; slot: Slot<string[]>; note: string | null })
   | (SectionBase<"values"> & { kind: "values"; slot: Slot<CircleValue[]> })
   | (SectionBase<"roles"> & { kind: "roles"; slot: Slot<RoleRowOut[]>; note: string | null })
+  | (SectionBase<"signs"> & { kind: "signs"; slot: Slot<SignOut[]> })
+  | (SectionBase<"meet" | "wholeness" | "tensions" | "review"> & { kind: "facts"; slot: Slot<FactsOut> })
   | (SectionBase<"adoption"> & { kind: "adoption"; slot: Slot<AdoptionOut> });
 
 export interface CircleCard {
@@ -272,6 +311,84 @@ function proposalOut(p: { draftId: string; proposedAt: string; words: CircleWord
   return { draftId: p.draftId, proposedOn: W.proposedOn(formatDay(p.proposedAt, true, timeZone) ?? ""), fields };
 }
 
+/** Where Live Sessions lives, for the meeting sections' links. */
+export const SESSIONS_HREF = "/sessions";
+
+/** The catalog's own label for a key, for a sign that could not be counted. */
+const SIGN_LABELS: Record<string, string> = {
+  "circle-met": "Times the circle met",
+  "decisions-recorded": "Decisions recorded",
+  "roles-with-card-and-term": "Roles with a full card and a term",
+};
+
+function signOut(r: SignReading): SignOut {
+  if (r.kind === "not-counted") {
+    return { label: SIGN_LABELS[r.key ?? ""] ?? r.key ?? "", value: null, trend: W.notCountedYet, countedFrom: null };
+  }
+  const value = r.now.of === undefined ? String(r.now.n) : W.nOf(r.now.n, r.now.of);
+  const trend = !r.trend ? null : r.trend.kind === "later" ? W.trendLater : W.trend[r.trend.direction];
+  return { label: r.label, value, trend, countedFrom: r.countedFrom };
+}
+
+function liveSections(input: CircleCardIn, terms: boolean): CircleSection[] {
+  const live = input.live;
+  const day = (iso: string | null) => (iso ? formatDay(iso, true, input.timeZone) : null);
+  const signs: CircleSection =
+    live === undefined
+      ? { ...base("signs", terms), kind: "signs", slot: UNREAD }
+      : { ...base("signs", terms), kind: "signs", slot: shown(live.signs.map(signOut)) };
+  if (live === undefined) {
+    return [
+      signs,
+      { ...base("meet", terms), kind: "facts", slot: UNREAD },
+      { ...base("wholeness", terms), kind: "facts", slot: UNREAD },
+      { ...base("tensions", terms), kind: "facts", slot: UNREAD },
+    ];
+  }
+  const met = day(live.lastMetAt);
+  const meet: CircleSection = live.sessionsOn
+    ? {
+        ...base("meet", terms),
+        kind: "facts",
+        slot: shown({
+          lines: [
+            live.rhythm ? W.rhythm(live.rhythm) : W.rhythmNotSet,
+            ...(live.next ? [W.nextMeeting(live.next)] : []),
+            met ? W.lastMet(met) : W.notMetYet,
+            ...(typeof live.waiting === "number" ? [W.waiting(live.waiting)] : []),
+          ],
+          links: [{ label: W.openSessions, href: SESSIONS_HREF }],
+        }),
+      }
+    : { ...base("meet", terms), kind: "facts", slot: UNREAD };
+  const wholeness: CircleSection = live.sessionsOn
+    ? {
+        ...base("wholeness", terms),
+        kind: "facts",
+        slot: shown({ lines: [W.arrivalRound, W.sharedBreath, W.gratitudeRound], links: [{ label: W.bringSomething, href: SESSIONS_HREF }] }),
+      }
+    : { ...base("wholeness", terms), kind: "facts", slot: UNREAD };
+  const tensions: CircleSection = {
+    ...base("tensions", terms),
+    kind: "facts",
+    slot: shown({ lines: [W.openTensions(live.openTensions), W.tensionFlow, W.tensionWhere], links: [] }),
+  };
+  return [signs, meet, wholeness, tensions];
+}
+
+function reviewSection(input: CircleCardIn, terms: boolean): CircleSection {
+  if (input.reviewOn === undefined) return { ...base("review", terms), kind: "facts", slot: UNREAD };
+  const due = input.reviewOn ? formatDay(input.reviewOn, true, input.timeZone) : null;
+  const latest = (input.adoptions ?? [])
+    .map((a) => ({ iso: a.publishedAt, t: Date.parse(a.publishedAt) }))
+    .filter((x) => !Number.isNaN(x.t))
+    .sort((a, b) => a.t - b.t)
+    .pop();
+  const changed = latest ? formatDay(latest.iso, true, input.timeZone) : null;
+  const lines = [due ? W.reviewDue(due) : W.noReviewDate, ...(changed ? [W.lastChanged(changed)] : [])];
+  return { ...base("review", terms), kind: "facts", slot: shown({ lines, links: [] }) };
+}
+
 // ── The card ────────────────────────────────────────────────────────────────
 
 export function buildCircleCard(input: CircleCardIn): CircleCard {
@@ -302,12 +419,14 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
       list("authorities"),
       list("responsibilities"),
       rolesSection(roles, terms),
+      ...liveSections(input, terms),
       list("stewardship"),
       list("checks"),
       list("succession"),
       { ...base("values", terms), kind: "values", slot: valuesSlot },
       list("livingAgreement"),
       list("tools"),
+      reviewSection(input, terms),
       adoptionSection(adoptions, timeZone, terms),
     ],
     pending: Array.from(new Set(input.pending ?? [])),

@@ -27,6 +27,9 @@ import { charterFromRow } from "../../shared/circleCharter";
 import { circleWordKeysOf, parseCircleWords } from "../../shared/circleCharterParse";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { projectSeats, type SeatTier } from "./seatProjection";
+import { readCircleLive } from "./circleLive";
+import { circleSummary, type RhythmDeps } from "./sessionRhythm";
+import type { CycleClock } from "../../shared/cycleClock";
 import { handlesOf } from "../repos/orgRoleHealth";
 import { openCircleWordProposals, readCharterRow, readCircleAdoptions } from "../repos/circleCard";
 
@@ -48,6 +51,16 @@ export interface CircleCardCtx {
   tier: SeatTier;
   /** `org.ccos_terms`. */
   frameworkTerms: boolean;
+  /** The village clock the signs count their moons on. */
+  clock: CycleClock;
+  /** Live Sessions is on for this reader: the meeting sections draw. */
+  sessionsOn: boolean;
+  /** The last day of the current season (Rye, 2026-10-22: a charter is reviewed each season), or null. */
+  reviewOn: string | null;
+  /** The signed-in reader, for Live Sessions' own door (`circleSummary`), which tiers what waits. */
+  viewer: { userId: string; admin: boolean } | null;
+  /** What `circleSummary` reads the circles from. */
+  sessionsDeps: RhythmDeps;
 }
 
 /**
@@ -84,6 +97,25 @@ export async function buildCircleCardFor(
     firstName: (s) => s,
     ...(memberTier ? { handleOf: (id: string) => handles.get(String(id)) ?? null } : {}),
   });
+  // The live parts, at the tier the player card counts its signs at (`terms.read`).
+  // The meeting rhythm, the next meeting, the last one and what waits come through Live Sessions' own
+  // door (server/lib/sessionRhythm.ts `circleSummary`), so its rules stay in one place.
+  const summary =
+    ctx.tier.terms && ctx.sessionsOn && ctx.viewer
+      ? await circleSummary(pool, circle.id, ctx.viewer, ctx.sessionsDeps, ctx.now).catch(() => null)
+      : null;
+  const counted = ctx.tier.terms ? await readCircleLive(pool, circle.id, inCircle, held, { now: ctx.now, timeZone: ctx.timeZone, clock: ctx.clock }) : null;
+  const live = counted
+    ? {
+        ...counted,
+        sessionsOn: ctx.sessionsOn,
+        lastMetAt: summary ? summary.lastMetAt : counted.lastMetAt,
+        rhythm: summary?.rhythm?.words ?? null,
+        next: summary?.next?.words ?? null,
+        waiting: summary ? summary.waiting : null,
+      }
+    : undefined;
+
   const roleRows: CircleRoleIn[] = seats.map((s: any) => ({
     id: String(s.id),
     name: String(s.name ?? ""),
@@ -117,6 +149,8 @@ export async function buildCircleCardFor(
     })),
     timeZone: ctx.timeZone,
     frameworkTerms: ctx.frameworkTerms,
+    live,
+    reviewOn: ctx.reviewOn,
     pending: openProposals ? openProposals.flatMap((p) => circleWordKeysOf(p.payload)) : undefined,
     // The proposed words themselves, parsed by the one parser, so a decider reads what would go live.
     proposals: openProposals

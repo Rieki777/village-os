@@ -565,10 +565,12 @@ export interface RsvpRow {
 /**
  * Who answered, for the organiser.
  *
- * A LEFT JOIN, so an answer from a member who has since deleted their account
- * still counts toward the room rather than vanishing from a headcount the
- * organiser is catering against. Their name comes back null, which is what
- * the tombstone means.
+ * A LEFT JOIN, so an answer whose account row is missing still counts toward
+ * the room rather than vanishing from a headcount the organiser is catering
+ * against, and its name comes back null. A member who asked to be forgotten
+ * is a different case: the erasure gives up every answer they gave
+ * (`releasePlacesOf`, server/lib/calendarCommunity.ts), so they leave the
+ * headcount, and a seat they held on an evening ahead goes to the queue.
  *
  * Emails are deliberately absent. An organiser needs to know who is coming;
  * a downloadable address list is a different feature with its own consent

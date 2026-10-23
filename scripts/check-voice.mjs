@@ -18,7 +18,8 @@
  * `docs/knowledge/*.md` is checked too. It is the corpus Maia loads at boot
  * and reasons from, so her answers inherit its register: it is site language
  * that happens to be written in markdown. Only the hard rules apply there.
- * Every other doc under `docs/` is for developers and is left alone.
+ * Every other doc under `docs/` is for developers and is left alone, except that rule 6
+ * also reads the living map and the docs an AI reads (SEAT_HTML_FILES, SEAT_DOC_ROOTS).
  *
  *   1. No em-dashes or en-dashes. A comma, a period, a colon, or a rewrite.
  *      Hyphens are fine.
@@ -147,7 +148,7 @@ export const SEAT_GATHERING_FILES = [
   /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|failedActions|spending)\.ts$/,
 ];
 // Phrases about a chair at a gathering, never the bare word "gathering": a sentence can name both.
-export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|give (my|your|the) seat back|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
+export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|giv(e|es|ing) (a|my|your|the) seat back|seat count and waitlist|a seat opening|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
 const SEAT_PERSON = "them|him|her|you|people|somebody|someone|anybody|anyone|nobody|no one|a member|members|the member|the stewards|stewards|a voice|software agents|the software agents|software|yourself|themselves|whoever|a software|an agent|agents|the people|a person|the person|roles|a role";
 const SEAT_VERB_AFTER = new RegExp(`^\\s+(${SEAT_PERSON})\\b`, "i");
 // "a seat you hold", "a seat nobody sits in": the person is the subject of a clause, so seat is a noun.
@@ -228,6 +229,54 @@ export function htmlSeatHits(html) {
   for (const m of stripped.matchAll(/\b(?:title|aria-label|placeholder|alt)="([^"]*\bseats?\b[^"]*)"/gi)) {
     for (const [, hit, offset] of seatNounHits(m[1])) push(m.index + m[0].indexOf('"') + 1 + offset, hit);
   }
+  return out;
+}
+
+/**
+ * The docs an AI reads before it speaks to people, for rule 6 only. Maia loads docs/modules as
+ * what she knows of each module (MODULE_DOCS in server/lib/knowledge.ts), an agent working for a
+ * member reads docs/skills and the openapi document the server hands it, and a founder's AI
+ * starts at the overview and the founder agent guide. They said "seat" for a role until #579
+ * (2026-10-23) and nothing gated them, the same way nothing gated the map. The other rules stay
+ * off: these files are written for developers too, with their own dashes.
+ *
+ * Code is machinery in markdown as well: a fenced block or an inline `code span` (`seats`,
+ * `org.seat`) is never read. A "double-quoted" passage is somebody else's words, or what a screen
+ * said on a date, so it is skipped; the copy a screen shows today is gated where it is written.
+ * docs/modules/events.md is about seats at a gathering, whole.
+ */
+export const SEAT_DOC_ROOTS = ["docs/modules", "docs/skills"];
+export const SEAT_DOC_FILES = ["docs/VILLAGE_OVERVIEW.md", "docs/FOUNDER_AGENT_GUIDE.md"];
+export const SEAT_DOC_EXEMPT = [/^docs\/modules\/events\.md$/];
+
+/** Every role-meaning "seat" in a markdown file, line by line. Returns [{ line, hit, text }]. */
+export function mdSeatHits(md) {
+  const out = [];
+  let fenced = false;
+  md.split("\n").forEach((raw, i) => {
+    if (/^\s*(```|~~~)/.test(raw)) { fenced = !fenced; return; }
+    if (fenced || !/seat/i.test(raw) || /voice-ok:/.test(raw)) return;
+    const prose = raw.replace(/`[^`]*`/g, "CODE").replace(/"[^"]*"|“[^”]*”/g, "QUOTE");
+    for (const [, hit] of seatNounHits(prose)) out.push({ line: i + 1, hit, text: raw.trim().slice(0, 160) });
+  });
+  return out;
+}
+
+/** The same for a JSON document an agent reads: every string value, read as a quoted literal. */
+export function jsonSeatHits(text) {
+  const lines = text.split("\n");
+  const out = [];
+  const walk = (v) => {
+    if (typeof v === "string") {
+      if (!/seat/i.test(v)) return;
+      for (const [, hit] of seatNounHits(JSON.stringify(v))) {
+        const at = lines.findIndex((l) => l.includes(JSON.stringify(v).slice(1, 60)));
+        out.push({ line: at + 1, hit, text: v.trim().slice(0, 160) });
+      }
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  walk(JSON.parse(text));
   return out;
 }
 
@@ -417,6 +466,26 @@ if (isMain) {
     for (const f of htmlSeatHits(fs.readFileSync(abs, "utf8"))) findings.push({ file: rel, kind: "seat-noun", ...f });
   }
 
+  // The docs an AI reads, for rule 6 only, on the same terms: a default run always reads them, and
+  // a run handed paths reads those it names, a file or a folder above it.
+  const namesDoc = (rel) => !roots.length || roots.some((r) => {
+    const n = r.split(path.sep).join("/").replace(/\/$/, "");
+    return rel === n || rel.startsWith(`${n}/`);
+  });
+  const docFiles = [...SEAT_DOC_FILES];
+  for (const r of SEAT_DOC_ROOTS) {
+    const abs = path.join(ROOT, r);
+    if (fs.existsSync(abs)) for (const f of walkFiles(abs, [])) docFiles.push(path.relative(ROOT, f).replace(/\\/g, "/"));
+  }
+  for (const rel of docFiles) {
+    if (!/\.(md|json)$/.test(rel) || !namesDoc(rel) || SEAT_DOC_EXEMPT.some((re) => re.test(rel))) continue;
+    const abs = path.join(ROOT, rel);
+    if (!fs.existsSync(abs)) continue;
+    const text = fs.readFileSync(abs, "utf8");
+    const hits = rel.endsWith(".md") ? mdSeatHits(text) : jsonSeatHits(text);
+    for (const f of hits) findings.push({ file: rel, kind: "seat-noun", ...f });
+  }
+
   if (asJson) {
     console.log(JSON.stringify(findings, null, 0));
     process.exit(0);
@@ -424,7 +493,7 @@ if (isMain) {
   
   if (!findings.length) {
     console.log(`Voice guard: clean across ${files.length} file(s) in ${activeRoots.join(", ")}.` +
-      ` Excludes *.test.ts/*.spec.ts/__tests__ (developer language) and docs/ outside docs/knowledge.` +
+      ` Excludes *.test.ts/*.spec.ts/__tests__ (developer language) and docs/ outside docs/knowledge, which only rule 6 reads, in the map and the docs an AI reads.` +
       (waived ? ` ${waived} waiver(s).` : ""));
     process.exit(0);
   }
@@ -435,7 +504,7 @@ if (isMain) {
   for (const f of findings) (byFile[f.file] ||= []).push(f);
   
   console.log(`Voice guard: ${findings.length} violation(s) in ${Object.keys(byFile).length} file(s)` +
-    ` (scanned ${activeRoots.join(", ")}; excludes tests and docs/ outside docs/knowledge).\n`);
+    ` (scanned ${activeRoots.join(", ")}; excludes tests; rule 6 also reads the map and the docs an AI reads).\n`);
   for (const [k, n] of Object.entries(byKind).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${String(n).padStart(4)}  ${k}`);
   }

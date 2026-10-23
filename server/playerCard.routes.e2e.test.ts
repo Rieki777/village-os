@@ -253,6 +253,13 @@ describe.skipIf(!DB_CONFIGURED)("the player role card at three tiers", () => {
     expect(self.json.card.roles[0].purpose.text.value).toBe("Clean water for every house.");
     const member = await card(readerToken);
     expect(member.json.card.roles[0].pending).toEqual([]);
+    // The proposal itself, listed on the role for whoever decides it, with the words it would put live
+    // (a draft opened from a card is on no review page). The propose answer no longer points at /review.
+    expect(ok.json.review).toBeUndefined();
+    expect(member.json.card.roles[0].proposals).toEqual([
+      { draftId: ok.json.draftId, proposedOn: expect.stringMatching(/^Proposed on /), fields: [{ key: "purpose", label: "Purpose", lines: ["Water for all."] }] },
+    ]);
+    expect(self.json.links.review).toBeUndefined();
   });
 });
 

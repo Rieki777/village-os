@@ -712,6 +712,35 @@ export async function leaveConversation(pool: Pool, conversationId: string, user
   return true;
 }
 
+/**
+ * Walk one member out of every conversation they are still in, for the
+ * erasure's `conversations-after-tombstone` step (server/lib/erasure.ts).
+ *
+ * Each one goes through `leaveConversation`, so a group they owned passes to
+ * its longest-standing remaining member exactly as it would if they had left
+ * it themselves. Without this the tombstone stayed the owner, every
+ * owner-only door (add, remove, rename, hand on) answered to nobody, and the
+ * thread could not be run again without an admin editing a table by hand.
+ *
+ * THEIR MESSAGES STAY, and that is a decision written into the erasure's
+ * header: the other people in a thread keep the conversation they had, and
+ * the words read as "A departed member" through the join to the tombstone,
+ * the way forum posts do.
+ *
+ * Idempotent: a second run finds no conversation they are still in.
+ */
+export async function leaveEveryConversation(pool: Pool, userId: string): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the erasure's read of one member's live memberships, beside the membership writes this file already owns
+    "SELECT conversation_id FROM conversation_members WHERE user_id = ? AND left_at IS NULL ORDER BY conversation_id",
+    [userId],
+  );
+  let left = 0;
+  for (const r of rows) {
+    if (await leaveConversation(pool, String(r.conversation_id), userId)) left += 1;
+  }
+  return left;
+}
+
 /** Add people to a group. Rejoining someone who left restores their history. */
 export async function addMembers(
   pool: Pool,
