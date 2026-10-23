@@ -1,3 +1,4 @@
+import { documentTitle } from "@shared/pageTitles";
 import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -57,90 +58,6 @@ function LandingRoute() {
   return brochure ? <Home /> : <VillageWelcome />;
 }
 
-/**
- * The page's name, in the browser and to a screen reader.
- *
- * Every one of the twenty-six routes served the single <title> baked into
- * index.html, so this whole application announced itself as one page. Three
- * separate costs: a screen reader reads the title on navigation, so every
- * move sounded identical and gave no confirmation anything had happened; a
- * member with several tabs open could not tell them apart; and the title was
- * a hardcoded village name in a platform that is supposed to be forkable.
- *
- * The village's own name comes from the live config, so a fork's title is
- * the fork's name with no code change. The page part is a plain map — a
- * route that gains a page adds a line, and one that does not falls back to
- * the village name alone rather than to a lie.
- */
-const PAGE_TITLES: Record<string, string> = {
-  "/": "", // the home page is the village itself; no prefix
-  "/journey-to-launch": "Journey to launch",
-  "/project-history": "Command Centre",
-  "/feedback": "Feedback",
-  "/network": "Village network",
-  "/contribute": "Contribute",
-  "/seasonal-festivals": "Seasonal festivals",
-  "/investor": "Investor journey",
-  "/steward": "Steward journey",
-  "/resident": "Resident journey",
-  "/prosperity": "Prosperity journey",
-  "/love-letter": "Love letter",
-  "/request-membership": "Ask to join",
-  "/circles": "Circles",
-  "/quests": "Quests",
-  "/propose-quest": "Propose a quest",
-  "/roles": "Roles",
-  "/forum": "Forum",
-  "/messages": "Messages",
-  "/introductions": "Introductions",
-  "/feed": "Village feed",
-  "/map": "Village map",
-  "/map/circles": "Circles and roles",
-  "/events": "Village Calendar",
-  "/first-walk": "Your First Walk",
-  "/stay": "Stays",
-  "/library": "Material library",
-  "/badges": "Badges & skills",
-  "/powers": "What this village looks after",
-  "/review": "Review",
-  // Keys here are matched by longest PREFIX against the live location, so a
-  // key with no route behind it can never match and is dead weight that
-  // reads like a promise. /health, /exchange and /profiles were all three:
-  // the health dashboard is /village-health, the exchange lives inside the
-  // wallet, and the member directory is /profile.
-  "/village-health": "Village health",
-  // Both spellings resolve to the same page. /tokens is what the nav links to
-  // and what a member sees; /wallet stays mounted because Stripe return URLs
-  // and order notifications already carry it (server/index.ts), and a member's
-  // own balances now also live in a Wallet section on their profile.
-  "/tokens": "The Exchange",
-  "/wallet": "The Exchange",
-  "/profile": "My profile",
-  "/login": "Sign in",
-  "/set-password": "Choose a password",
-  "/forgot-password": "Set a new password",
-  "/game-mechanics": "Game Mechanics",
-  "/exit-policy": "Leaving well",
-  "/tools": "Tools",
-  // One line covers the shelf and every detail page: keys match by longest
-  // prefix, so /modules/stays reads as the library too.
-  "/modules": "Module Library",
-  // Longest-prefix matching makes /campaigns win over /campaign for the list
-  // page, so the pair costs two lines and no route can fall through them.
-  "/campaigns": "Our raisings",
-  "/campaign": "Crowdpool",
-  // One line covers the shelf and every place, by the same longest-prefix
-  // rule the module library uses above.
-  "/places": "Places, photographed",
-  // Its own address rather than /places/photos, because a place key called
-  // "photos" would shadow it and because this is a different object from a
-  // place: the whole village's record on one page.
-  "/photographs": "Every photograph",
-  "/admin": "Village settings",
-  "/journal": "Journal",
-  // One line covers the list and every room, by the longest-prefix rule.
-  "/sessions": "Live sessions",
-};
 
 /**
  * The old spelling of /role-applications/:id (Rye, 2026-10-21: members say role,
@@ -159,6 +76,7 @@ function SeatApplicationsAlias() {
 function PageTitle() {
   const [location] = useLocation();
   const [village, setVillage] = useState<string>("");
+  const [commitment, setCommitment] = useState<string>("");
 
   useEffect(() => {
     let alive = true;
@@ -167,6 +85,7 @@ function PageTitle() {
       .then((d) => {
         if (!alive) return;
         setVillage(d?.project?.name ?? "");
+        setCommitment(d?.project?.commitmentName ?? "");
         // The tab ICON is identity too. index.html ships a neutral platform
         // favicon (a static file cannot know which village it serves); this
         // swaps in the village's own the moment config arrives, same
@@ -190,13 +109,8 @@ function PageTitle() {
 
   useEffect(() => {
     if (!village) return;
-    // Longest matching prefix, so /forum/123 still reads as the forum.
-    const match = Object.keys(PAGE_TITLES)
-      .filter((p) => p === "/" ? location === "/" : location.startsWith(p))
-      .sort((a, b) => b.length - a.length)[0];
-    const page = match ? PAGE_TITLES[match] : "";
-    document.title = page ? `${page} · ${village}` : village;
-  }, [location, village]);
+    document.title = documentTitle(location, village, { commitment });
+  }, [location, village, commitment]);
 
   return null;
 }
