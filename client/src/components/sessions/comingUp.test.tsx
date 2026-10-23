@@ -5,10 +5,13 @@
  *
  * What each case holds: a row says when, how the circle meets and what waits;
  * only the circle's members and admins get the controls that change it; a
- * skip names that meeting; setting a rhythm sends what the form shows; an open
- * room is offered instead of getting one ready; and "Get the room ready" fills
- * the start card with the meeting's title, circle, length and the circle's
- * waiting items, sending nothing until the person opens it.
+ * skip names that meeting and says what is next; a change opens on the next
+ * meeting's date, so saving keeps the circle's week; stopping asks first;
+ * setting a rhythm sends what the form shows, for circles that have none; a
+ * notice's link lights its row when it is followed from the page itself; an
+ * open room is offered instead of getting one ready; and "Get the room ready"
+ * fills the start card with the meeting's title, circle, length and the
+ * circle's waiting items, sending nothing until the person opens it.
  */
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,9 +88,90 @@ describe("coming up", () => {
     expect(screen.queryByRole("button", { name: RHYTHM_COPY.skip })).toBeNull();
     expect(screen.queryByRole("button", { name: RHYTHM_COPY.setRhythm })).toBeNull();
     rerender(<ComingUp comingUp={payload([row()])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={onChanged} />);
-    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.skip }));
+    answers["POST /api/sessions/circles/garden/rhythm/skip"] = () => json({ row: row({ words: "Thursday 5 November at 18:00" }) });
+    const skip = screen.getByRole("button", { name: RHYTHM_COPY.skip });
+    // The button is told apart from other rows' by its circle and its meeting.
+    expect(skip).toHaveAccessibleDescription("Garden circle Thursday 29 October at 18:00");
+    fireEvent.click(skip);
     await waitFor(() => expect(calls).toEqual([{ path: "/api/sessions/circles/garden/rhythm/skip", method: "POST", body: { key: "2026-10-29" } }]));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(await screen.findByText("Skipped. The next Garden circle meeting is on Thursday 5 November at 18:00.")).toBeInTheDocument();
+  });
+
+  it("reads the list again when a skip is refused, so the row that moved is the one tried next", async () => {
+    const onChanged = vi.fn();
+    answers["POST /api/sessions/circles/garden/rhythm/skip"] = () => json({ error: "That meeting isn't one of this circle's next ones." }, 409);
+    render(<ComingUp comingUp={payload([row()])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={onChanged} />);
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.skip }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That meeting isn't one of this circle's next ones.");
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("opens a change on the next meeting's date, so saving a new length keeps the circle's week", async () => {
+    render(
+      <ComingUp
+        comingUp={payload([row({ rhythm: { kind: "weekly", weekday: 4, everyWeeks: 2, time: "18:00", startsOn: "2026-10-29", durationMin: 60 } })])}
+        circles={circles}
+        defaultMinutes={60}
+        onGetReady={() => undefined}
+        onChanged={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.change }));
+    // The form names its circle, and its first field takes the focus.
+    expect(screen.getByRole("form", { name: "Garden circle" })).toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByLabelText(RHYTHM_COPY.howOftenLabel));
+    expect((screen.getByLabelText(RHYTHM_COPY.startsOnLabel) as HTMLInputElement).value).toBe("2026-10-29");
+    fireEvent.change(screen.getByLabelText(RHYTHM_COPY.durationLabel), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.save }));
+    await waitFor(() =>
+      expect(calls).toEqual([
+        {
+          path: "/api/sessions/circles/garden/rhythm",
+          method: "PUT",
+          body: { kind: "weekly", weekday: 4, everyWeeks: 2, time: "18:00", startsOn: "2026-10-29", durationMin: 90 },
+        },
+      ]),
+    );
+  });
+
+  it("asks once before stopping a circle's rhythm, and keeping it sends nothing", async () => {
+    render(<ComingUp comingUp={payload([row()])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.change }));
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.clear }));
+    const ask = screen.getByRole("group", { name: RHYTHM_COPY.clear });
+    expect(within(ask).getByText(RHYTHM_COPY.clearConfirm("Garden"))).toBeInTheDocument();
+    fireEvent.click(within(ask).getByRole("button", { name: RHYTHM_COPY.keep }));
+    expect(calls).toEqual([]);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: RHYTHM_COPY.clear }));
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.clear }));
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.clearYes }));
+    await waitFor(() => expect(calls).toEqual([{ path: "/api/sessions/circles/garden/rhythm", method: "PUT", body: { kind: "none" } }]));
+    expect(await screen.findByText(RHYTHM_COPY.stopped("Garden"))).toBeInTheDocument();
+  });
+
+  it("offers a new rhythm only for the circles that have none", () => {
+    render(<ComingUp comingUp={payload([row()], ["garden", "kitchen"])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: RHYTHM_COPY.setRhythm }));
+    const select = screen.getByLabelText(RHYTHM_COPY.circleLabel) as HTMLSelectElement;
+    expect(Array.from(select.options).filter((o) => !o.disabled).map((o) => o.value)).toEqual(["kitchen"]);
+    expect(select.value).toBe("kitchen");
+  });
+
+  it("lights and focuses the row a notice's link names, when it is followed from the page itself", async () => {
+    render(<ComingUp comingUp={payload([row()])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={() => undefined} />);
+    const li = document.getElementById("coming-garden")!;
+    expect(li.className).not.toMatch(/ring-2/);
+    window.location.hash = "#coming-garden";
+    window.dispatchEvent(new Event("pushState"));
+    await waitFor(() => expect(document.activeElement).toBe(li));
+    expect(li.className).toMatch(/ring-2/);
+  });
+
+  it("leaves a hash it cannot read alone", () => {
+    window.location.hash = "#coming-%E0%A4%A";
+    render(<ComingUp comingUp={payload([row()])} circles={circles} defaultMinutes={60} onGetReady={() => undefined} onChanged={() => undefined} />);
+    expect(screen.getByRole("region", { name: RHYTHM_COPY.sectionTitle })).toBeInTheDocument();
   });
 
   it("sends the rhythm the form shows", async () => {

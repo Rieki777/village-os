@@ -31,8 +31,13 @@ CREATE TABLE IF NOT EXISTS `live_session_rhythms` (
   `kind` varchar(8) NOT NULL,
   -- JSON: the calendar's Recurrence. NULL for a single meeting.
   `recurrence` text NULL,
-  -- The first meeting, as an instant; the time of day every meeting keeps.
-  `starts_at` timestamp NOT NULL,
+  -- The village date of the first meeting, YYYY-MM-DD. A weekly rhythm
+  -- counts its weeks from this date's week.
+  `starts_on` varchar(10) NOT NULL,
+  -- The time of day every meeting keeps, HH:MM, in the village's zone. A
+  -- date and a wall-clock time, never an instant, so a daylight change or a
+  -- new village zone leaves "Thursday at 18:00" where it was.
+  `time_of_day` varchar(5) NOT NULL,
   `duration_min` smallint NOT NULL,
   -- Who set it last.
   `set_by_no` int NOT NULL DEFAULT 0,

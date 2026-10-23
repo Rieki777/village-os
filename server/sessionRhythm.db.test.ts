@@ -9,7 +9,8 @@
  * member list; the notices are recorded where they would have been sent.
  *
  * THE CASES RUN IN ORDER and share one story: a garden circle meets once, then
- * sets a rhythm, and its members hear the day before.
+ * sets a rhythm, and its members hear the day before. The kitchen circle's
+ * fortnightly rhythm, last, keeps its week and its skips through a change.
  *
  * No TEST_DATABASE_URL and the suite skips (harness rule).
  */
@@ -183,6 +184,12 @@ describe.skipIf(!configured)("a circle's rhythm against a real schema", () => {
     const out = await setRhythm("m-cai", "c-garden", { kind: "weekly", weekday, everyWeeks: 1, time: "18:00", durationMin: 45 });
     expect(out.status, JSON.stringify(out.body)).toBe(200);
     expect(out.body.row).toMatchObject({ circleId: "c-garden", durationMin: 45, next: { key: dayFromNow(2) }, canKeep: true });
+    // A date and a wall-clock time, never an instant.
+    expect(await q("SELECT `starts_on`, `time_of_day` FROM `live_session_rhythms` WHERE `circle_id` = 'c-garden'")).toEqual([
+      { starts_on: dayFromNow(2), time_of_day: "18:00" },
+    ]);
+    // The form opens on the next meeting, so a change keeps the circle's week.
+    expect(out.body.row.rhythm).toMatchObject({ kind: "weekly", startsOn: dayFromNow(2), time: "18:00", durationMin: 45 });
     expect((await setRhythm("m-founder", "c-kitchen", { kind: "moon", on: "full_moon", time: "19:00" })).status).toBe(200);
     expect((await setRhythm("m-eve", "c-kitchen", { kind: "none" })).status).toBe(403);
   });
@@ -257,7 +264,7 @@ describe.skipIf(!configured)("a circle's rhythm against a real schema", () => {
         title: "The Garden circle meets tomorrow at 18:00",
         body: "On the agenda: Shed roof.",
         link: "/sessions#coming-c-garden",
-        dedupeKey: `session-coming:c-garden:${next.key}:${n.userId}`,
+        dedupeKey: `session-coming:c-garden:${next.key}T18:00:${n.userId}`,
       });
     }
     // Every hour of the day asks with the same keys, so the bell keeps one each.
@@ -267,7 +274,7 @@ describe.skipIf(!configured)("a circle's rhythm against a real schema", () => {
     expect(notices.map((n) => n.dedupeKey).sort()).toEqual(keys);
   });
 
-  it("says nothing too early, outside the daytime window, or while the module is off", async () => {
+  it("says nothing too early, outside the daytime window, or before the module is open to members", async () => {
     notices.length = 0;
     const next = (await gardenRow("m-cai"))!.next;
     expect(await runComingUpNotes(jobDeps(), new Date(Date.parse(next.at) - 3 * DAY_MS))).toBe("no circle meets in the next day");
@@ -275,12 +282,22 @@ describe.skipIf(!configured)("a circle's rhythm against a real schema", () => {
     expect(await runComingUpNotes(jobDeps({ window: () => ({ start: 8, end: 9 }) }), new Date(Date.parse(next.at) - 20 * 3_600_000))).toBe(
       "outside the village's daytime window",
     );
+    // In preview the page answers admins alone, so a member's notice would open a door that refuses them.
+    for (const lifecycle of ["off", "preview"]) {
+      expect(await runComingUpNotes(jobDeps({ lifecycle: () => lifecycle }), new Date(Date.parse(next.at) - 3_600_000))).toBe(
+        "the sessions module is not open to members",
+      );
+    }
     expect(notices).toEqual([]);
-    expect(await runComingUpNotes(jobDeps({ lifecycle: () => "off" }), new Date(Date.parse(next.at) - 3_600_000))).toBe("the sessions module is off");
   });
 
   it("refuses a single meeting already gone, and stops a rhythm on request", async () => {
     expect((await setRhythm("m-ana", "c-garden", { kind: "once", on: dayFromNow(-3), time: "18:00" })).body.error).toBe(RHYTHM_REFUSALS.past);
+    // Further ahead than Coming up looks: refused in words, so a saved rhythm always shows.
+    expect((await setRhythm("m-ana", "c-garden", { kind: "once", on: dayFromNow(200), time: "18:00" })).body.error).toBe(RHYTHM_REFUSALS.tooFar);
+    expect((await setRhythm("m-ana", "c-garden", { kind: "weekly", weekday, everyWeeks: 1, time: "18:00", startsOn: dayFromNow(200) })).body.error).toBe(
+      RHYTHM_REFUSALS.tooFar,
+    );
     expect((await setRhythm("m-ana", "c-garden", { kind: "once", on: dayFromNow(5), time: "18:00" })).body.row.next.key).toBe(dayFromNow(5));
     expect((await setRhythm("m-ana", "c-garden", { kind: "none" })).body.row).toBeNull();
     expect((await comingUp("m-ana")).rows).toEqual([]);
@@ -295,5 +312,26 @@ describe.skipIf(!configured)("a circle's rhythm against a real schema", () => {
     expect((await q("SELECT `set_by_no` FROM `live_session_rhythms` WHERE `circle_id` = 'c-garden'"))[0].set_by_no).toBe(0);
     // The rhythm itself is the circle's, and stays.
     expect((await gardenRow("m-ana"))?.rhythmWords).toMatch(/^Every 2 weeks on \w+day at 07:30$/);
+  });
+
+  it("keeps a fortnightly circle's week and its skipped meetings when its time changes", async () => {
+    const kitchenRow = async () => (await comingUp("m-founder")).rows.find((r) => r.circleId === "c-kitchen")!;
+    expect((await setRhythm("m-founder", "c-kitchen", { kind: "weekly", weekday, everyWeeks: 2, time: "18:00" })).status).toBe(200);
+    // Its meetings: two days from now, then every other week. The second one is skipped.
+    expect((await skip("m-founder", "c-kitchen", dayFromNow(16))).status).toBe(200);
+    // A change that names no first date starts from the next meeting the old rhythm had.
+    const moved = await setRhythm("m-founder", "c-kitchen", { kind: "weekly", weekday, everyWeeks: 2, time: "19:30" });
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    expect(moved.body.row).toMatchObject({ next: { key: dayFromNow(2) }, rhythmWords: expect.stringMatching(/at 19:30$/) });
+    // The form's own change: the rhythm as it is, starting from its next meeting, with a new length.
+    const form = (await kitchenRow()).rhythm;
+    expect((await setRhythm("m-founder", "c-kitchen", { ...form, durationMin: 90 })).status).toBe(200);
+    const [row] = await q("SELECT `starts_on`, `recurrence` FROM `live_session_rhythms` WHERE `circle_id` = 'c-kitchen'");
+    expect(row.starts_on).toBe(dayFromNow(2));
+    expect(JSON.parse(row.recurrence).exceptions).toEqual([dayFromNow(16)]);
+    // A new weekday lets the skipped date go: no meeting falls on it any more.
+    expect((await setRhythm("m-founder", "c-kitchen", { kind: "weekly", weekday: (weekday + 1) % 7, everyWeeks: 2, time: "19:30" })).status).toBe(200);
+    const [after] = await q("SELECT `recurrence` FROM `live_session_rhythms` WHERE `circle_id` = 'c-kitchen'");
+    expect(JSON.parse(after.recurrence).exceptions).toBeUndefined();
   });
 });

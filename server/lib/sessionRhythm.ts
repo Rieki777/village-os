@@ -36,6 +36,7 @@ import { keptSeat, standingIn } from "./circleStanding";
 import { libraryViewer, mapLibrary } from "./sessionLibrary";
 import { villageTimezone } from "./villageReaders";
 import { effectiveLifecycle } from "./modules";
+import { LIFECYCLE_RANK, type ModuleLifecycle } from "../../shared/modules";
 import { numberVar } from "./variables";
 import { nextInWindow } from "../../shared/comms/quietHours";
 import { canSeeBrought, type LibraryViewer } from "../../shared/sessionLibrary";
@@ -47,6 +48,7 @@ import {
   RHYTHM_REFUSALS,
   cleanRhythm,
   comingLink,
+  keptSkips,
   mayKeepRhythm,
   meetingPhrase,
   meetingWords,
@@ -63,6 +65,8 @@ import {
 
 const refuse = (status: number, error: string): Refusal => ({ ok: false, status, error });
 const done = <T>(value: T): Outcome<T> => ({ ok: true, value });
+
+const toKey = (v: unknown): string => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? ""));
 
 const toIso = (v: unknown): string | null => {
   if (v == null) return null;
@@ -104,7 +108,8 @@ export function mapRhythm(r: Record<string, unknown>): StoredRhythm {
     circleId: String(r.circle_id),
     kind: (kind === "weekly" || kind === "moon" || kind === "once" ? kind : "once") as RhythmKind,
     recurrence,
-    startsAt: toIso(r.starts_at) ?? new Date(0).toISOString(),
+    startsOn: toKey(r.starts_on),
+    time: String(r.time_of_day ?? ""),
     durationMin: Number(r.duration_min),
   };
 }
@@ -161,7 +166,7 @@ function rowFor(
   return {
     circleId: circle.id,
     circleName: circle.name,
-    rhythmWords: rhythmWords(r, zone),
+    rhythmWords: rhythmWords(r, now, zone),
     next,
     words: meetingWords(new Date(next.at), now, zone),
     durationMin: r.durationMin,
@@ -169,7 +174,7 @@ function rowFor(
     openRoom: ctx.rooms.get(circle.id) ?? null,
     mine,
     canKeep: mayKeepRhythm(circle.id, ctx.lib),
-    rhythm: rhythmAsInput(r, zone),
+    rhythm: rhythmAsInput(r, next.key),
   };
 }
 
@@ -210,8 +215,13 @@ async function oneRow(pool: Pool, circleId: string, who: RhythmAsker, deps: Rhyt
  * Set a circle's rhythm, change it, or stop it (`{ kind: "none" }`): the
  * circle's members and admins. Refused in this order: a circle that is not a
  * live one (400), a body that does not read (400), a viewer who may not keep
- * it (403), a time already gone (400). A change takes the place of the old
- * rhythm whole, skipped meetings included.
+ * it (403), a time already gone or a first meeting too far ahead (400).
+ *
+ * A change keeps the circle's week: a weekly rhythm sent with no first date
+ * starts from the next meeting the old one had (the page always sends that
+ * date). It keeps the skipped meetings still among its next ones, so a new
+ * time leaves a skipped date skipped. The row is locked while it is read and
+ * written, the way a skip takes it.
  */
 export async function setRhythm(
   pool: Pool,
@@ -231,18 +241,29 @@ export async function setRhythm(
     return done({ row: null });
   }
   const zone = villageTimezone();
-  const record = rhythmRecord(input.value, now, zone);
-  if (!record) return refuse(400, RHYTHM_REFUSALS.past);
+  const value = input.value;
   const setByNo = v.no ?? (await ensureMemberNo(pool, who.userId, now));
-  await store.putRhythm(pool, {
-    circleId,
-    kind: record.kind,
-    recurrence: record.recurrence ? JSON.stringify(record.recurrence) : null,
-    startsAt: record.startsAt,
-    durationMin: record.durationMin,
-    setByNo,
-    now,
+  const out = await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<null>> => {
+    const [row] = await store.rhythmRow(conn, circleId, true);
+    const old = row ? mapRhythm(row) : null;
+    const asked = value.kind === "weekly" && !value.startsOn && old?.recurrence?.freq === "weekly" ? { ...value, startsOn: nextMeetings(old, now, zone, 1)[0]?.key } : value;
+    const record = rhythmRecord(asked, now, zone);
+    if (!record.ok) return refuse(record.status, record.error);
+    const skips = keptSkips(old?.recurrence ?? null, record.value, now, zone);
+    const recurrence = record.value.recurrence ? { ...record.value.recurrence, ...(skips.length ? { exceptions: skips } : {}) } : null;
+    await store.putRhythm(conn, {
+      circleId,
+      kind: record.value.kind,
+      recurrence: recurrence ? JSON.stringify(recurrence) : null,
+      startsOn: record.value.startsOn,
+      time: record.value.time,
+      durationMin: record.value.durationMin,
+      setByNo,
+      now,
+    });
+    return done(null);
   });
+  if (!out.ok) return out;
   return done({ row: await oneRow(pool, circleId, who, deps, now) });
 }
 
@@ -301,7 +322,7 @@ export async function circleSummary(pool: Pool, circleId: string, who: RhythmAsk
   const [closed] = last ? await store.closedAtRows(pool, [Number(last.id)]) : [];
   return {
     circleId,
-    rhythm: r ? { words: rhythmWords(r, zone), kind: r.kind } : null,
+    rhythm: r ? { words: rhythmWords(r, now, zone), kind: r.kind } : null,
     next: next ? { ...next, words: meetingWords(new Date(next.at), now, zone) } : null,
     lastMetAt: closed ? toIso(closed.closed_at) : null,
     waiting: (await waitingByCircle(pool, v)).get(circleId) ?? 0,
@@ -340,13 +361,16 @@ export const COMING_UP_EVERY_MS = 60 * 60 * 1000;
  * The day before a circle meets, each of its members hears when, with what is
  * on the agenda: in the bell, no email (no preference a member has set covers
  * a meeting reminder). Once per meeting per person: the key is
- * `session-coming:<circle>:<date>:<user>`, so the job can run every hour of
- * the day and a skipped or moved meeting is a new key. Nothing runs while the
- * module is off or outside the village's daytime window.
+ * `session-coming:<circle>:<date>T<time>:<user>`, so the job can run every
+ * hour of the day, and a skipped meeting, or one moved to another day or
+ * another time, is a new key. Nothing runs outside the village's daytime
+ * window, or before the module is open to members: in preview the page is
+ * still the admins' own, and a notice would send a member to a door that
+ * refuses them.
  */
 export async function runComingUpNotes(deps: RhythmNoticeDeps, now = new Date()): Promise<string> {
   const lifecycle = deps.lifecycle ?? (() => effectiveLifecycle("sessions"));
-  if (lifecycle() === "off") return "the sessions module is off";
+  if ((LIFECYCLE_RANK[lifecycle() as ModuleLifecycle] ?? 0) < LIFECYCLE_RANK.members) return "the sessions module is not open to members";
   const zone = villageTimezone();
   const hours = deps.window?.() ?? { start: numberVar("comms.quiet_start_hour"), end: numberVar("comms.quiet_end_hour") };
   if (nextInWindow(now, zone, hours.start, hours.end).getTime() !== now.getTime()) return "outside the village's daytime window";
@@ -374,7 +398,7 @@ export async function runComingUpNotes(deps: RhythmNoticeDeps, now = new Date())
           title,
           body,
           link: comingLink(r.circleId),
-          dedupeKey: `session-coming:${r.circleId}:${next!.key}:${userId}`,
+          dedupeKey: `session-coming:${r.circleId}:${next!.key}T${r.time}:${userId}`,
         });
         if ((fresh as { fresh?: boolean } | null)?.fresh !== false) sent += 1;
       } catch (e) {

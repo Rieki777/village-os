@@ -18,7 +18,10 @@
  *
  * THE RHYTHM IS THE CALENDAR'S OWN SHAPE (`Recurrence`, shared/gatherings.ts),
  * so a circle's meetings can later sit on the village calendar unchanged.
- * Every time is in the village's own zone, read by the server.
+ * Every time is in the village's own zone, read by the server. A rhythm keeps
+ * a village date (its first meeting) and a wall-clock time, never an instant:
+ * a daylight change or a new village zone leaves "Thursday at 18:00" where it
+ * was, and a change to the rhythm keeps the circle's week.
  *
  * WHO KEEPS IT: the circle's own members (standing, server/lib/circleStanding.ts:
  * in its last meeting, or in one of its seats now) and admins. A circle sets
@@ -105,10 +108,15 @@ export interface StoredRhythm {
   circleId: string;
   kind: RhythmKind;
   recurrence: Recurrence | null;
-  /** ISO instant of the first meeting; every meeting keeps its time of day. */
-  startsAt: string;
+  /** The village date of the first meeting, YYYY-MM-DD. A weekly rhythm counts its weeks from its week. */
+  startsOn: string;
+  /** The time of day every meeting keeps, HH:MM, in the village's zone. */
+  time: string;
   durationMin: number;
 }
+
+/** What a rhythm input stores. */
+export type RhythmRecord = Omit<StoredRhythm, "circleId">;
 
 /** One meeting: when, and its key (the village date, YYYY-MM-DD), which a skip names. */
 export interface Meeting {
@@ -134,7 +142,7 @@ export interface ComingUpRow {
   /** The viewer is one of the circle's members, or an admin. */
   mine: boolean;
   canKeep: boolean;
-  /** For the form: the rhythm as it is now. */
+  /** For the form: the rhythm as it is now, a weekly one starting from its next meeting, so a change keeps the circle's week. */
   rhythm: RhythmInput;
 }
 
@@ -228,124 +236,143 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const dateKey = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`;
 
 /** The village date of an instant, YYYY-MM-DD. */
-function villageKey(at: Date, zone: string): string {
+export function villageKey(at: Date, zone: string): string {
   const p = civilParts(at, zone);
   return dateKey(p.year, p.month, p.day);
 }
 
+/** A date key's day, as midnight UTC: the arithmetic on dates runs on these. */
+const keyDay = (key: string): number => {
+  const [y, m, d] = key.split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+
+const dayKey = (day: number): string => {
+  const dt = new Date(day);
+  return dateKey(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+};
+
+/** A date key some days later (or earlier). */
+export function addDays(key: string, days: number): string {
+  return dayKey(keyDay(key) + days * DAY_MS);
+}
+
+/** The instant a village date and wall-clock time name, in the village's zone. */
+function meetingAt(key: string, time: string, zone: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  const [hh, mm] = time.split(":").map(Number);
+  return zonedTimeToUtc(y, m, d, hh, mm, zone);
+}
+
 /**
- * What a rhythm input stores: its kind, the calendar's recurrence, and the
- * instant of its first meeting on or after `now` (for a weekly rhythm, from
- * `startsOn` when it is later). Null for a single meeting already past, or a
- * moon rhythm beyond the moon table, which the caller refuses in words.
+ * What a rhythm input stores: its kind, the calendar's recurrence, the village
+ * date of its first meeting and its time of day. A weekly rhythm starts on the
+ * first of its weekday on or after today, or on or after `startsOn` when that
+ * is later, and counts its weeks from there; a meeting of that day already
+ * over is simply passed by. Refused in words: a single meeting already over,
+ * a first meeting further ahead than "Coming up" looks, or a moon rhythm
+ * beyond the moon table.
  */
-export function rhythmRecord(
-  input: Exclude<RhythmInput, { kind: "none" }>,
-  now: Date,
-  zone: string,
-): { kind: RhythmKind; recurrence: Recurrence | null; startsAt: Date; durationMin: number } | null {
-  const [hh, mm] = input.time.split(":").map(Number);
+export function rhythmRecord(input: Exclude<RhythmInput, { kind: "none" }>, now: Date, zone: string): Clean<RhythmRecord> {
   const durationMin = input.durationMin ?? SESSION_LIMITS.durationDefault;
+  const today = villageKey(now, zone);
+  const lastDay = addDays(today, RHYTHM_LIMITS.lookAheadDays);
+  const tooFar = { ok: false as const, status: 400, error: RHYTHM_REFUSALS.tooFar };
+  const past = { ok: false as const, status: 400, error: RHYTHM_REFUSALS.past };
   if (input.kind === "once") {
-    const [y, m, d] = input.on.split("-").map(Number);
-    const at = zonedTimeToUtc(y, m, d, hh, mm, zone);
-    return at.getTime() + durationMin * 60_000 > now.getTime() ? { kind: "once", recurrence: null, startsAt: at, durationMin } : null;
+    if (input.on > lastDay) return tooFar;
+    if (meetingAt(input.on, input.time, zone).getTime() + durationMin * 60_000 <= now.getTime()) return past;
+    return { ok: true, value: { kind: "once", recurrence: null, startsOn: input.on, time: input.time, durationMin } };
   }
   if (input.kind === "weekly") {
-    const today = civilParts(now, zone);
-    let from = Date.UTC(today.year, today.month - 1, today.day);
-    if (input.startsOn) {
-      const [y, m, d] = input.startsOn.split("-").map(Number);
-      from = Math.max(from, Date.UTC(y, m - 1, d));
-    }
-    for (let day = from; day < from + 8 * DAY_MS; day += DAY_MS) {
-      const dt = new Date(day);
-      if (dt.getUTCDay() !== input.weekday) continue;
-      let at = zonedTimeToUtc(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), hh, mm, zone);
-      // Today's time already gone: the rhythm starts the week after.
-      if (at.getTime() + durationMin * 60_000 <= now.getTime()) {
-        const next = new Date(day + 7 * DAY_MS);
-        at = zonedTimeToUtc(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), hh, mm, zone);
-      }
-      return { kind: "weekly", recurrence: { freq: "weekly", byWeekday: [input.weekday], interval: input.everyWeeks }, startsAt: at, durationMin };
-    }
-    return null;
+    let day = input.startsOn && input.startsOn > today ? input.startsOn : today;
+    if (day > lastDay) return tooFar;
+    while (new Date(keyDay(day)).getUTCDay() !== input.weekday) day = addDays(day, 1);
+    return {
+      ok: true,
+      value: { kind: "weekly", recurrence: { freq: "weekly", byWeekday: [input.weekday], interval: input.everyWeeks }, startsOn: day, time: input.time, durationMin },
+    };
   }
-  const moons = (input.on === "new_moon" ? newMoonsBetween : fullMoonsBetween)(new Date(now.getTime() - 2 * DAY_MS), new Date(now.getTime() + 62 * DAY_MS));
-  for (const moon of moons) {
-    const p = civilParts(moon, zone);
-    const at = zonedTimeToUtc(p.year, p.month, p.day, hh, mm, zone);
-    if (at.getTime() + durationMin * 60_000 > now.getTime()) {
-      return { kind: "moon", recurrence: { freq: "lunar", on: input.on }, startsAt: at, durationMin };
-    }
-  }
-  return null;
+  const value: RhythmRecord = { kind: "moon", recurrence: { freq: "lunar", on: input.on }, startsOn: today, time: input.time, durationMin };
+  return nextMeetings({ circleId: "", ...value }, now, zone, 1).length ? { ok: true, value } : past;
 }
 
 /**
  * The next meetings of a rhythm that have not ended by `from`, at most
- * `count`, within `lookAheadDays`. A weekly rhythm keeps its wall-clock time
- * across a daylight change and counts its weeks from the first meeting's
- * week; a moon rhythm meets on the village date of the moon at the first
- * meeting's time of day. A date named in `exceptions` is skipped.
+ * `count`, within `lookAheadDays`. Every meeting is the rhythm's wall-clock
+ * time on a village date, so it keeps "18:00" across a daylight change. A
+ * weekly rhythm counts its weeks from its first meeting's week; a moon rhythm
+ * meets on the village date of the moon. Nothing comes before the first
+ * meeting's date, and a date named in `exceptions` is skipped.
  */
 export function nextMeetings(r: StoredRhythm, from: Date, zone: string, count = 1, lookAheadDays: number = RHYTHM_LIMITS.lookAheadDays): Meeting[] {
-  const base = new Date(r.startsAt);
-  if (!Number.isFinite(base.getTime())) return [];
-  const bp = civilParts(base, zone);
+  if (!DATE.test(r.startsOn) || !TIME.test(r.time)) return [];
   const lengthMs = r.durationMin * 60_000;
-  const horizon = from.getTime() + lookAheadDays * DAY_MS;
+  // Whole village days: the last one counts to its end, the way rhythmRecord counts it.
+  const lastKey = addDays(villageKey(from, zone), lookAheadDays);
   const skipped = new Set(r.recurrence?.exceptions ?? []);
   const out: Meeting[] = [];
-  const take = (at: Date) => {
-    const key = villageKey(at, zone);
-    if (at.getTime() < base.getTime() || at.getTime() + lengthMs <= from.getTime() || skipped.has(key)) return;
+  const take = (key: string) => {
+    if (key < r.startsOn || key > lastKey || skipped.has(key)) return;
+    const at = meetingAt(key, r.time, zone);
+    if (at.getTime() + lengthMs <= from.getTime()) return;
     out.push({ at: at.toISOString(), endsAt: new Date(at.getTime() + lengthMs).toISOString(), key });
   };
   if (!r.recurrence) {
-    take(base);
+    take(r.startsOn);
     return out.slice(0, count);
   }
   const rec = r.recurrence;
   if (rec.freq === "weekly") {
     const interval = Math.max(1, rec.interval ?? 1);
-    const baseDay = Date.UTC(bp.year, bp.month - 1, bp.day);
-    const baseWeekStart = baseDay - bp.weekday * DAY_MS;
-    const fp = civilParts(from, zone);
-    const first = Math.max(baseDay, Date.UTC(fp.year, fp.month - 1, fp.day) - DAY_MS);
+    const baseDay = keyDay(r.startsOn);
+    const baseWeekStart = baseDay - new Date(baseDay).getUTCDay() * DAY_MS;
+    const first = Math.max(baseDay, keyDay(villageKey(from, zone)) - DAY_MS);
     for (let day = first; day <= first + lookAheadDays * DAY_MS && out.length < count; day += DAY_MS) {
-      const dt = new Date(day);
-      if (!rec.byWeekday.includes(dt.getUTCDay())) continue;
+      if (!rec.byWeekday.includes(new Date(day).getUTCDay())) continue;
       if (Math.floor((day - baseWeekStart) / (7 * DAY_MS)) % interval !== 0) continue;
-      const at = zonedTimeToUtc(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), bp.hour, bp.minute, zone);
-      if (at.getTime() > horizon) break;
-      take(at);
+      take(dayKey(day));
     }
     return out;
   }
   if (rec.freq === "lunar" && (rec.on === "new_moon" || rec.on === "full_moon")) {
-    const moons = (rec.on === "new_moon" ? newMoonsBetween : fullMoonsBetween)(new Date(from.getTime() - 2 * DAY_MS), new Date(horizon));
+    const moons = (rec.on === "new_moon" ? newMoonsBetween : fullMoonsBetween)(new Date(from.getTime() - 2 * DAY_MS), new Date(from.getTime() + (lookAheadDays + 2) * DAY_MS));
     for (const moon of moons) {
       if (out.length >= count) break;
-      const p = civilParts(moon, zone);
-      take(zonedTimeToUtc(p.year, p.month, p.day, bp.hour, bp.minute, zone));
+      take(villageKey(moon, zone));
     }
     return out;
   }
   return out;
 }
 
-/** The rhythm as the form shows it, read back from what is stored. */
-export function rhythmAsInput(r: StoredRhythm, zone: string): RhythmInput {
-  const p = civilParts(new Date(r.startsAt), zone);
-  const time = `${pad(p.hour)}:${pad(p.minute)}`;
+/**
+ * The rhythm as the form shows it, read back from what is stored. Given the
+ * next meeting's date, a weekly rhythm starts from it, so saving a change
+ * (a new time, a new length) keeps the circle's week.
+ */
+export function rhythmAsInput(r: StoredRhythm, nextKey?: string): RhythmInput {
   if (r.recurrence?.freq === "weekly") {
-    return { kind: "weekly", weekday: r.recurrence.byWeekday[0] ?? p.weekday, everyWeeks: r.recurrence.interval ?? 1, time, durationMin: r.durationMin };
+    const weekday = r.recurrence.byWeekday[0] ?? new Date(keyDay(r.startsOn)).getUTCDay();
+    return { kind: "weekly", weekday, everyWeeks: r.recurrence.interval ?? 1, time: r.time, ...(nextKey ? { startsOn: nextKey } : {}), durationMin: r.durationMin };
   }
   if (r.recurrence?.freq === "lunar" && (r.recurrence.on === "new_moon" || r.recurrence.on === "full_moon")) {
-    return { kind: "moon", on: r.recurrence.on, time, durationMin: r.durationMin };
+    return { kind: "moon", on: r.recurrence.on, time: r.time, durationMin: r.durationMin };
   }
-  return { kind: "once", on: dateKey(p.year, p.month, p.day), time, durationMin: r.durationMin };
+  return { kind: "once", on: r.startsOn, time: r.time, durationMin: r.durationMin };
+}
+
+/**
+ * The skipped dates a changed rhythm keeps: those that are still among its
+ * next meetings. A new time keeps them; a new weekday lets them go, since no
+ * meeting falls on them any more.
+ */
+export function keptSkips(previous: Recurrence | null, next: RhythmRecord, now: Date, zone: string): string[] {
+  const was = previous?.exceptions ?? [];
+  if (!was.length || !next.recurrence) return [];
+  const open: StoredRhythm = { circleId: "", ...next, recurrence: { ...next.recurrence, exceptions: [] } };
+  const keys = new Set(nextMeetings(open, now, zone, RHYTHM_LIMITS.skipAhead).map((m) => m.key));
+  return was.filter((k) => keys.has(k)).sort();
 }
 
 // ── Words ────────────────────────────────────────────────────────────────────
@@ -353,23 +380,35 @@ export function rhythmAsInput(r: StoredRhythm, zone: string): RhythmInput {
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
 
-/** "Every Thursday at 18:00", "Every 2 weeks on Thursday at 18:00", "At each new moon, 18:00", "Once, Thursday 23 October at 18:00". */
-export function rhythmWords(r: StoredRhythm, zone: string): string {
-  const input = rhythmAsInput(r, zone);
+/**
+ * "Every Thursday at 18:00", "Every 2 weeks on Thursday at 18:00", "At each
+ * new moon, 18:00", "Once, Thursday 23 October at 18:00". A single meeting's
+ * year shows when it is not this one (`now` in the village's zone).
+ */
+export function rhythmWords(r: StoredRhythm, now?: Date, zone?: string): string {
+  const input = rhythmAsInput(r);
   if (input.kind === "weekly") {
     const day = WEEKDAYS[input.weekday] ?? "";
     return input.everyWeeks === 1 ? `Every ${day} at ${input.time}` : `Every ${input.everyWeeks} weeks on ${day} at ${input.time}`;
   }
   if (input.kind === "moon") return `${input.on === "new_moon" ? "At each new moon" : "At each full moon"}, ${input.time}`;
-  if (input.kind === "once") return `Once, ${dayWords(new Date(r.startsAt), zone)} at ${input.time}`;
+  if (input.kind === "once") {
+    const thisYear = now && zone ? civilParts(now, zone).year : Number(r.startsOn.slice(0, 4));
+    return `Once, ${keyWords(r.startsOn, thisYear)} at ${input.time}`;
+  }
   return "";
+}
+
+/** A village date in words, "Thursday 23 October", with the year only when it is not this one. */
+function keyWords(key: string, thisYear: number): string {
+  const dt = new Date(keyDay(key));
+  const year = dt.getUTCFullYear() === thisYear ? "" : ` ${dt.getUTCFullYear()}`;
+  return `${WEEKDAYS[dt.getUTCDay()]} ${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}${year}`;
 }
 
 /** "Thursday 23 October", with the year only when it is not this one. */
 function dayWords(at: Date, zone: string, now: Date = at): string {
-  const p = civilParts(at, zone);
-  const year = civilParts(now, zone).year === p.year ? "" : ` ${p.year}`;
-  return `${WEEKDAYS[p.weekday]} ${p.day} ${MONTHS[p.month - 1]}${year}`;
+  return keyWords(villageKey(at, zone), civilParts(now, zone).year);
 }
 
 /** "Today at 18:00", "Tomorrow at 18:00", or "Thursday 23 October at 18:00", in the village's zone. */
@@ -386,7 +425,11 @@ export function meetingWords(at: Date, now: Date, zone: string): string {
 
 /** The same moment inside a sentence: "today at 18:00", "tomorrow at 18:00", "on Thursday 23 October at 18:00". */
 export function meetingPhrase(at: Date, now: Date, zone: string): string {
-  const words = meetingWords(at, now, zone);
+  return phraseOf(meetingWords(at, now, zone));
+}
+
+/** `meetingWords` made ready for the middle of a sentence. */
+export function phraseOf(words: string): string {
   if (words.startsWith("Today") || words.startsWith("Tomorrow")) return words.charAt(0).toLowerCase() + words.slice(1);
   return `on ${words}`;
 }
@@ -425,8 +468,19 @@ export const RHYTHM_COPY = {
   save: "Save the rhythm",
   saving: "Saving...",
   clear: "Stop this rhythm",
+  /** The confirm "Stop this rhythm" opens. */
+  clearConfirm: (circleName: string): string =>
+    `Stop the meeting rhythm of the ${circleWords(circleName)}? Its meetings leave Coming up, and nobody hears the day before.`,
+  clearYes: "Stop it",
+  keep: "Keep it",
   cancel: "Cancel",
   failed: "That did not go through. Try again in a moment.",
+  /** Read out once a write lands. */
+  saved: (circleName: string): string => `Saved. The ${circleWords(circleName)} has its meeting rhythm.`,
+  /** `when` is `phraseOf` the next meeting: "tomorrow at 18:00", "on Thursday 5 November at 18:00". */
+  skipped: (circleName: string, when: string): string => `Skipped. The next ${circleWords(circleName)} meeting is ${when}.`,
+  skippedLast: (circleName: string): string => `Skipped. The ${circleWords(circleName)} has no meeting coming up now.`,
+  stopped: (circleName: string): string => `Stopped. The ${circleWords(circleName)} has no meeting rhythm now.`,
 } as const;
 
 export const RHYTHM_REFUSALS = {
@@ -438,6 +492,7 @@ export const RHYTHM_REFUSALS = {
   everyWeeks: `A circle meets every 1 to ${RHYTHM_LIMITS.everyWeeksMax} weeks.`,
   moonNeeded: "Choose the new moon or the full moon.",
   past: "That time has already gone. Choose one still to come.",
+  tooFar: `Choose a first meeting in the next ${RHYTHM_LIMITS.lookAheadDays} days.`,
   noRhythm: "This circle has no meeting rhythm yet.",
   skipUnknown: "That meeting isn't one of this circle's next ones.",
   circleUnknown: SESSION_REFUSALS.circleUnknown,

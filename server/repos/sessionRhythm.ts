@@ -19,7 +19,7 @@ const rowsOf = async (q: Queryable, sql: string, params: unknown[] = []): Promis
 /** `IN (?)` with an empty list is a syntax error, so an empty list reads nothing. */
 const none = <T>(list: readonly T[]): boolean => list.length === 0;
 
-const COLUMNS = "`circle_id`, `kind`, `recurrence`, `starts_at`, `duration_min`, `set_by_no`, `updated_at`";
+const COLUMNS = "`circle_id`, `kind`, `recurrence`, `starts_on`, `time_of_day`, `duration_min`, `set_by_no`, `updated_at`";
 
 /** Every rhythm, by circle. */
 export async function rhythmRows(q: Queryable): Promise<RowDataPacket[]> {
@@ -34,13 +34,14 @@ export async function rhythmRow(q: Queryable, circleId: string, lock = false): P
 /** Set a circle's rhythm, whole: a new one, or one written over the last. */
 export async function putRhythm(
   q: Queryable,
-  row: { circleId: string; kind: string; recurrence: string | null; startsAt: Date; durationMin: number; setByNo: number; now: Date },
+  row: { circleId: string; kind: string; recurrence: string | null; startsOn: string; time: string; durationMin: number; setByNo: number; now: Date },
 ): Promise<void> {
   await q.query(
-    "INSERT INTO `live_session_rhythms` (`circle_id`, `kind`, `recurrence`, `starts_at`, `duration_min`, `set_by_no`, `created_at`, `updated_at`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `kind` = VALUES(`kind`), `recurrence` = VALUES(`recurrence`), " +
-      "`starts_at` = VALUES(`starts_at`), `duration_min` = VALUES(`duration_min`), `set_by_no` = VALUES(`set_by_no`), `updated_at` = VALUES(`updated_at`)",
-    [row.circleId, row.kind, row.recurrence, row.startsAt, row.durationMin, row.setByNo, row.now, row.now],
+    "INSERT INTO `live_session_rhythms` (`circle_id`, `kind`, `recurrence`, `starts_on`, `time_of_day`, `duration_min`, `set_by_no`, `created_at`, `updated_at`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `kind` = VALUES(`kind`), `recurrence` = VALUES(`recurrence`), " +
+      "`starts_on` = VALUES(`starts_on`), `time_of_day` = VALUES(`time_of_day`), `duration_min` = VALUES(`duration_min`), " +
+      "`set_by_no` = VALUES(`set_by_no`), `updated_at` = VALUES(`updated_at`)",
+    [row.circleId, row.kind, row.recurrence, row.startsOn, row.time, row.durationMin, row.setByNo, row.now, row.now],
   );
 }
 
