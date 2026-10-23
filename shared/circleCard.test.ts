@@ -132,3 +132,66 @@ describe("the stored charter, read back", () => {
     expect(readStoredValues("[]")).toBeNull();
   });
 });
+
+describe("the live parts, which Amora reads and nobody types", () => {
+  const counted = (key: "circle-met" | "decisions-recorded" | "roles-with-card-and-term", n: number, of?: number, trend?: any): any => ({
+    kind: "counted",
+    key,
+    label: key,
+    countedFrom: `Counted from ${key}.`,
+    now: { n, ...(of === undefined ? {} : { of }), source: "t" },
+    trend: trend ?? null,
+  });
+
+  it("prints each sign as its count, its trend, or Not counted yet", () => {
+    const card = buildCircleCard(
+      base({
+        live: {
+          signs: [
+            counted("circle-met", 2, undefined, { kind: "compare", before: { n: 1, source: "t" }, direction: "up" }),
+            { kind: "not-counted", key: "decisions-recorded", words: "Not counted yet" } as any,
+            counted("roles-with-card-and-term", 1, 2, { kind: "later", words: "trend from next moon" }),
+          ],
+          lastMetAt: "2026-10-20T15:00:00Z",
+          openTensions: 2,
+          sessionsOn: true,
+        },
+      }),
+    );
+    const signs = find(card.sections, "signs") as Extract<CircleSection, { kind: "signs" }>;
+    expect(signs.slot.kind === "shown" && signs.slot.value.map((s) => [s.label, s.value, s.trend])).toEqual([
+      ["circle-met", "2", "Up on last moon"],
+      ["Decisions recorded", null, "Not counted yet"],
+      ["roles-with-card-and-term", "1 of 2", "Trend from next moon"],
+    ]);
+    const facts = (key: string) => {
+      const s = find(card.sections, key) as Extract<CircleSection, { kind: "facts" }>;
+      return s.slot.kind === "shown" ? s.slot.value.lines : null;
+    };
+    expect(facts("meet")).toEqual(["Last met on 20 Oct 2026", "Meeting rhythm: not set yet"]);
+    expect(facts("tensions")?.[0]).toBe("2 open tensions on this circle's roles");
+  });
+
+  it("draws no meeting section while Live Sessions is off, and nothing live below the member tier", () => {
+    const off = buildCircleCard(base({ live: { signs: [], lastMetAt: null, openTensions: 0, sessionsOn: false } }));
+    expect(find(off.sections, "meet").slot).toEqual({ kind: "unread" });
+    expect(find(off.sections, "wholeness").slot).toEqual({ kind: "unread" });
+    expect((find(off.sections, "tensions") as any).slot.value.lines[0]).toBe("No open tensions on this circle's roles");
+    const visitor = buildCircleCard(base());
+    for (const key of ["signs", "meet", "wholeness", "tensions"]) expect(find(visitor.sections, key).slot).toEqual({ kind: "unread" });
+  });
+
+  it("is due for review on the season's last day, and says when the words last changed", () => {
+    const card = buildCircleCard(
+      base({ reviewOn: "2026-12-21", adoptions: [{ draftId: "d-1", publishedAt: "2026-10-01T10:00:00Z", byVote: false, created: false }] }),
+    );
+    expect(find(card.sections, "review").slot).toEqual({
+      kind: "shown",
+      value: { lines: ["Due for review on 21 Dec 2026, the last day of this season.", "Last changed by consent on 1 Oct 2026."], links: [] },
+    });
+    expect(find(buildCircleCard(base({ reviewOn: null })).sections, "review").slot).toEqual({
+      kind: "shown",
+      value: { lines: ["No season is set, so there is no review date yet."], links: [] },
+    });
+  });
+});

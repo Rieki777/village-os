@@ -35,6 +35,8 @@ import { hasCapability } from "../../shared/capabilities";
 import { CIRCLE_WORD_REFUSALS as R } from "../../shared/circleCardWords";
 import { parseCircleWords } from "../../shared/circleCharterParse";
 import type { ModuleLifecycle } from "../../shared/modules";
+import type { CycleClock } from "../../shared/cycleClock";
+import { villageClock } from "../lib/stewardship";
 import type { AppDeps } from "../lib/appDeps";
 import { buildCircleCardFor, type StoredCircle } from "../lib/circleCardData";
 import type { LapseContext } from "../lib/orgChart";
@@ -45,11 +47,15 @@ import { holdsRoleInCircle } from "../repos/circleCard";
 type Deps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "overLimit"> & {
   /** Every circle in the store (`circlesRepo.all()`). */
   circles(): readonly StoredCircle[];
-  /** `seasonState()`, read for the village's zone. */
-  seasonState(): { timezone?: string };
+  /** `seasonState()`, read for the village's zone and the current season's last day. */
+  seasonState(): { timezone?: string; current?: { endsOn?: string | null } | null };
   lapse(): LapseContext;
   /** The map module's effective lifecycle, for the structure rule. */
   mapLifecycle(): ModuleLifecycle;
+  /** Live Sessions' effective lifecycle: the meeting sections draw only while it is on for the reader. */
+  sessionsLifecycle(): ModuleLifecycle;
+  /** The village clock; the live `cycle.mode` by default, as the player card reads it. */
+  clock?: () => CycleClock;
   boolVar(key: string): boolean;
   /** Tests hand in a fixed instant. */
   now?: () => Date;
@@ -77,6 +83,13 @@ async function orgTierFor(deps: Deps, req: any): Promise<SeatTier> {
 const PROPOSALS_PER_WINDOW = 10;
 const PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
 
+/** Live Sessions is open to this reader, by its lifecycle: members-only to a signed-in reader, preview to an admin. */
+function sessionsOnFor(lifecycle: ModuleLifecycle, signedIn: boolean, admin: boolean): boolean {
+  if (lifecycle === "public" || lifecycle === "members") return signedIn;
+  if (lifecycle === "preview") return admin;
+  return false;
+}
+
 /** A live holder of a role in this circle, or an admin: who may propose its words (Rye, 2026-10-22). */
 async function mayPropose(deps: Deps, req: any, viewer: any, circle: StoredCircle): Promise<boolean> {
   if (!viewer || circle.isExample) return false;
@@ -90,12 +103,17 @@ export function register(app: Express, deps: Deps): void {
     const circle = circles.find((c) => c.id === String(req.params.id ?? ""));
     if (!circle) return res.status(404).json({ error: "not_found", message: "There is no circle here." });
     const viewer = await deps.authedUser(req);
+    const state = deps.seasonState();
+    const admin = await deps.isAdmin(req);
     const card = await buildCircleCardFor(deps.getPool(), circle, circles, {
       now: deps.now ? deps.now() : new Date(),
-      timeZone: deps.seasonState().timezone || "UTC",
+      timeZone: state.timezone || "UTC",
       lapse: deps.lapse(),
       tier: await orgTierFor(deps, req),
       frameworkTerms: deps.boolVar("org.ccos_terms"),
+      clock: (deps.clock ?? villageClock)(),
+      sessionsOn: sessionsOnFor(deps.sessionsLifecycle(), !!viewer, admin),
+      reviewOn: state.current?.endsOn ?? null,
     });
     res.json({
       circleId: circle.id,

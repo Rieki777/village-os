@@ -75,6 +75,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
       seasonState: () => ({ timezone: "UTC" }),
       lapse: () => ({ currentSeasonId: null, cadence: "never" }) as any,
       mapLifecycle: () => "public",
+      sessionsLifecycle: () => "off",
       boolVar: (key: string) => (key === "org.ccos_terms" ? terms : key === "map.public_structure" || key === "org.public_people"),
       now: () => new Date("2026-10-22T12:00:00Z"),
     });
