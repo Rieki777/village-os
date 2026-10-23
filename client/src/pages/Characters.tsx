@@ -41,7 +41,8 @@ import { announceProfileChange } from "@/lib/profileRefresh";
 import { radioArrows } from "@/lib/radioArrows";
 import { Star, X } from "lucide-react";
 import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
-import RolesThatFit from "@/components/characters/RolesThatFit";
+import RolesThatFit from "@/components/characters/RolesThatFit";
+import GeneKeysPrompt from "@/components/geneKeys/GeneKeysPrompt";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -100,6 +101,8 @@ export default function Characters() {
   const [paths, setPaths] = useState<Paths | null>(null);
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  // Each new character joining the party raises this, which is what opens the Gene Keys popup (once).
+  const [joined, setJoined] = useState<{ count: number; name: string | null }>({ count: 0, name: null });
   const [error, setError] = useState("");
   /**
    * THREE READS, THREE STATES EACH.
@@ -239,6 +242,7 @@ export default function Characters() {
         return;
       }
       loadParty();
+      if (!playing) setJoined((j) => ({ count: j.count + 1, name: label }));
       setSaid(playing ? `${label} saved.` : `${label} joined your party.`);
       announceProfileChange();
     } catch {
@@ -669,6 +673,11 @@ export default function Characters() {
                 </>
               ) : null}
             </aside>
+          </div>
+
+          {/* Get your Gene Keys: a card while the member has none, and a popup once after a pick. */}
+          <div className="mt-6 empty:hidden">
+            <GeneKeysPrompt picked={joined.count} characterName={joined.name} />
           </div>
 
           {/* Roles that fit this character: the seats "Open paths" names, as cards to pick and propose.

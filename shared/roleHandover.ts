@@ -113,7 +113,9 @@ export type HandoverCheckKey = HandoverCardKey | "runbook";
 
 export const HANDOVER_CHECK_WORDS: Record<HandoverCheckKey, { label: string; done: string; missing: string }> = {
   purpose: { label: "Purpose", done: "Purpose written", missing: "No purpose written yet" },
-  decide: { label: "What it decides", done: "What it decides is written", missing: "What it decides is not written yet" },
+  // The domain, which the card labels "What I look after" since 0274 split
+  // out what the role can decide on its own. Still one of the five parts.
+  decide: { label: "What it looks after", done: "What it looks after is written", missing: "What it looks after is not written yet" },
   countOnMe: {
     label: "What people can count on it for",
     done: "What people can count on it for is written",

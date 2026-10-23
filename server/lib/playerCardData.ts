@@ -55,6 +55,12 @@
  * `readProposalRows`, five reads for every role every application in the
  * batch names. No sign is counted for a proposal.
  *
+ * A role proposal's DRAFT (role proposals PR A) is drawn the same way, with
+ * `proposal.draft` laid over it: the words it proposes over the posted ones,
+ * field by field (`proposedRole`), the new roles it asks for made from their
+ * words alone, and the draft's own season words in place of the plan. Nothing
+ * extra is read for it.
+ *
  * ── MY APPLICATIONS ────────────────────────────────────────────────────────
  *
  * Read by `applicationsOfCandidates`, the same statement the `?candidate=`
@@ -142,6 +148,11 @@ export interface CardContext {
    * so a host that never says reads no tensions.
    */
   viewerMember?: boolean;
+  /**
+   * Show the CCOS term on each heading of a role in full (`org.ccos_terms`,
+   * the variable the circle card reads). Absent is off: plain headings.
+   */
+  frameworkTerms?: boolean;
 }
 
 /** The four card words drawn under "How I hold my roles". The other two have their own boxes. */
@@ -158,6 +169,32 @@ export interface CardProposal {
   settings: unknown;
   /** `seat_applications.term_ends_at`. */
   termEndsAt: string | null;
+  /**
+   * A role proposal's draft (role proposals PR A): the words it proposes,
+   * drawn over the posted ones by field name, so a field a later release adds
+   * to roles is drawn with no edit here; roles the village has not created
+   * yet; and the member's own season words in place of their filed plan.
+   */
+  draft?: {
+    words: Record<string, Record<string, unknown>>;
+    newRoles: Array<{ id: string; circleId: string | null; circleName: string | null; seats: number; words: Record<string, unknown> }>;
+    season: { aim: string | null; servesGoals: ServedGoal[]; seasonalGoals: SeasonalGoal[] } | null;
+  };
+}
+
+/**
+ * A role as a draft proposes it: the posted role with the proposed words laid
+ * over it, or a new role made from its words alone. A list field the draft
+ * clears reads as an empty list, never null, so the projection reads it as it
+ * reads any role.
+ */
+function proposedRole(base: (OrgRole & { archetypesSuggested: boolean }) | undefined, made: { id: string; circleId: string | null; seats: number; words: Record<string, unknown> } | undefined, words: Record<string, unknown> | undefined) {
+  const role = base ?? (made ? { ...rowToRole({ id: made.id, name: made.words.name ?? made.id, circle_id: made.circleId, seats: made.seats, active: 1 }), archetypesSuggested: false } : undefined);
+  const over = words ?? made?.words;
+  if (!role || !over) return role;
+  const out: Record<string, unknown> = { ...role };
+  for (const [k, v] of Object.entries(over)) out[k] = v === null && Array.isArray((role as unknown as Record<string, unknown>)[k]) ? [] : v;
+  return out as unknown as OrgRole & { archetypesSuggested: boolean };
 }
 
 /** One owner in a batch: who, at what tier, and the application when the card is a proposal. */
@@ -382,16 +419,19 @@ export async function buildPlayerCards(
     const memberUp = level !== "stranger";
     const proposal = owner.proposal ?? null;
     const mine = seatings.filter((s) => s.userId === owner.userId && s.holderKind === "member" && !s.isExample);
+    // A draft's new roles have no row yet: they are drawn from the draft's own words.
+    const made = new Map((proposal?.draft?.newRoles ?? []).map((r) => [r.id, r]));
+    const roleOf = (id: string) => (proposal?.draft ? proposedRole(roles.get(id), made.get(id), proposal.draft.words[id]) : roles.get(id));
     // A proposal's roles are the ones it names, in its order; a live card's are the ones held.
     const heldIds = proposal
-      ? Array.from(new Set(proposal.seatIds)).filter((id) => roles.has(id))
+      ? Array.from(new Set(proposal.seatIds)).filter((id) => roles.has(id) || made.has(id))
       : Array.from(new Set(mine.map((s) => s.orgRoleId))).filter((id) => roles.has(id));
     // An application names its roles to every member who may read it.
     const rolesVisible = isSelf || !!proposal || seat.people !== "none";
     const proposalSettings = proposal ? settingsOf(proposal.settings) : null;
 
     const roleIns: PlayerRoleIn[] = heldIds.map((id) => {
-      const role = roles.get(id)!;
+      const role = roleOf(id)!;
       const held = seatingsByRole.get(id) ?? [];
       const own = proposal ? null : mine.find((s) => s.orgRoleId === id)!;
       // The /api/org seat object, at this reader's tier, holders never read.
@@ -418,7 +458,7 @@ export async function buildPlayerCards(
         domain: (p.domain as string | null) ?? null,
         accountabilities: (p.accountabilities as string[]) ?? [],
         criticality: p.criticality as "normal" | "high",
-        circle: role.circleId ? { id: role.circleId, name: circleName.get(role.circleId) ?? "" } : null,
+        circle: role.circleId ? { id: role.circleId, name: circleName.get(role.circleId) ?? made.get(id)?.circleName ?? "" } : null,
         termEndsAt: proposal
           ? iso(proposal.termEndsAt)
           : memberUp
@@ -432,6 +472,14 @@ export async function buildPlayerCards(
         bringMe: (p.bringMe as string[] | null) ?? null,
         notMine: (p.notMine as string[] | null) ?? null,
         runbook: (p.runbook as string | null) ?? null,
+        // The role's CCOS words (0274), off the same seat object, at the domain's tier.
+        existsWhile: (p.existsWhile as string | null) ?? null,
+        authorities: (p.authorities as string[] | null) ?? null,
+        responsibilities: (p.responsibilities as string[] | null) ?? null,
+        signsStretched: (p.signsStretched as string | null) ?? null,
+        flowsBack: (p.flowsBack as string | null) ?? null,
+        stepBack: (p.stepBack as string | null) ?? null,
+        timeCommitment: (p.timeCommitment as string | null) ?? null,
         worksWith: seat.structure ? worksWith : undefined,
         powers: seat.structure
           ? (grantsByRole.get(id) ?? []).map((g) => ({
@@ -468,6 +516,7 @@ export async function buildPlayerCards(
     const load = loads.get(owner.userId);
     const plans = rows.plans.filter((p) => String(p.user_id) === owner.userId);
     const plan = isSelf ? plans[plans.length - 1] : [...plans].reverse().find((p) => p.filed_at);
+    const draftSeason = proposal?.draft?.season ?? null;
     const applications: ApplicationIn[] = ownApps
       .filter((a) => a.candidateUserId === owner.userId)
       .map((a) => ({
@@ -496,15 +545,18 @@ export async function buildPlayerCards(
       nextSeasonId: ctx.nextSeasonId,
       archetypeNames: ctx.archetypeNames,
       roles: rolesVisible ? roleIns : undefined,
+      // A draft card shows the season the draft proposes, never the filed plan.
       plan: memberUp
-        ? plan
-          ? {
-              aim: plan.aim ?? null,
-              goals: servedGoalsOf(json<ServedGoal[] | null>(plan.serves_goals_json, null), plan.serves_goal ?? null),
-            }
-          : null
+        ? draftSeason
+          ? { aim: draftSeason.aim, goals: draftSeason.servesGoals }
+          : plan
+            ? {
+                aim: plan.aim ?? null,
+                goals: servedGoalsOf(json<ServedGoal[] | null>(plan.serves_goals_json, null), plan.serves_goal ?? null),
+              }
+            : null
         : undefined,
-      seasonalGoals: memberUp ? seasonalGoalsOf(plan?.seasonal_goals_json) : undefined,
+      seasonalGoals: memberUp ? (draftSeason ? (draftSeason.seasonalGoals.length ? draftSeason.seasonalGoals : null) : seasonalGoalsOf(plan?.seasonal_goals_json)) : undefined,
       tasks: memberUp && rolesVisible ? tasks : undefined,
       signRows: memberUp ? {} : undefined,
       howIHold: memberUp ? holdWords(words) : undefined,
@@ -521,6 +573,8 @@ export async function buildPlayerCards(
       whoCouldHoldNext: memberUp ? words?.nextHolder ?? null : undefined,
       signReader: (key, circleId) =>
         signs(key, circleId)?.reading ?? { kind: "not-counted", key: key ?? null, words: "Not counted yet" },
+      // 0274: the CCOS term on each heading, by the village's `org.ccos_terms`.
+      frameworkTerms: ctx.frameworkTerms === true,
     };
     const card = buildPlayerCard(input);
 

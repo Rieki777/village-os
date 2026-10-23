@@ -17,6 +17,7 @@ import {
   cleanScopes,
   echoHash,
   hashToken,
+  holderStands,
   isAgentBearer,
   mintConfirmToken,
   mintToken,
@@ -179,5 +180,21 @@ describe("the confirm token (harm metric 2, pure half)", () => {
     decoded.exp = Date.now() + 10 * 60 * 60 * 1000;
     const forged = `${Buffer.from(JSON.stringify(decoded)).toString("base64url")}.${sig}`;
     expect(verifyConfirmToken(secret, forged, claims)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+});
+
+describe("the holder: an erased member's token is dead", () => {
+  // The erasure keeps the member row as a tombstone (server/lib/erasure.ts),
+  // so "the row exists" is not the test. The resolver mints a fresh session
+  // from whatever row it finds, which is how a token outlived its holder.
+  it("stands for a member the village still holds", () => {
+    expect(holderStands({ email: "ana@example.test" })).toBe(true);
+  });
+
+  it("falls when the row is gone or the member was erased", () => {
+    expect(holderStands(null)).toBe(false);
+    expect(holderStands(undefined)).toBe(false);
+    expect(holderStands({ email: "deleted-u-1@anonymized.invalid" })).toBe(false);
+    expect(holderStands({ email: "Deleted-U-1@Anonymized.Invalid" }), "case must not reopen it").toBe(false);
   });
 });

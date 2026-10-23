@@ -19,6 +19,7 @@ import { Link } from "wouter";
 import { Star } from "lucide-react";
 import { announceProfileChange, onProfileRefresh } from "@/lib/profileRefresh";
 import { moonsOnLandPhrase } from "@shared/villageMoon";
+import { MyGeneKeysSeal } from "@/components/geneKeys/ProfileGeneKeys";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -246,6 +247,8 @@ export default function ProfileHero({
               </div>
             )}
           </div>
+          {/* Their Gene Keys seal, top right, opposite the stage chip. Nothing while the module is off or nothing is saved. */}
+          <MyGeneKeysSeal />
           {rung && (
             <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-notice/60 bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-widest text-notice">
               {rung}

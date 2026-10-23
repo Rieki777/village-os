@@ -409,18 +409,19 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const records: Record<string, unknown>[] = [
       {
         role_name: "Spring Keeper", aim: "The spring runs clean all year.", domain: null,
-        accountabilities: "Test the spring monthly; Keep the log.", circle: "springs & wells ", seat_count: 1, recruiting: true,
+        // Three lines each (0274): a role answers for 3 to 6 things, and this test is about the vendor's field names.
+        accountabilities: "Test the spring monthly; Keep the log; Report each reading.", circle: "springs & wells ", seat_count: 1, recruiting: true,
       },
       {
         role_name: "Pipe Mender", aim: "No line stays broken for a week.", domain: "The water lines.",
-        accountabilities: "Walk the lines after rain\nCarry the repair kit", circle: "Water Care", seat_count: 2,
+        accountabilities: "Walk the lines after rain\nCarry the repair kit\nLog each repair", circle: "Water Care", seat_count: 2,
         recruiting: false, vendor_rank: 3,
         // A batch of three gives its draft no rationale, so this one is reported.
         rationale: "The lines break every rain.",
       },
       {
         role_name: "Mill Warden", aim: "The mill turns when the grain is in.", domain: "The mill.",
-        accountabilities: "Run the mill", circle: "Milling Circle", seat_count: 1, recruiting: false,
+        accountabilities: "Run the mill; Dress the stones; Keep the grain dry", circle: "Milling Circle", seat_count: 1, recruiting: false,
       },
     ];
     const ids: string[] = [];
@@ -479,10 +480,10 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
 
     const one = await payloadsByName(first.json.draftId);
     expect(one["Spring Keeper"]).toMatchObject({
-      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log"],
+      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log", "Report each reading"],
     });
     expect(one["Pipe Mender"]).toMatchObject({
-      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit"],
+      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit", "Log each repair"],
     });
     expect(one["Pipe Mender"]).not.toHaveProperty("vendor_rank");
     expect(one["Mill Warden"]).not.toHaveProperty("circleId");

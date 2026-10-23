@@ -258,7 +258,7 @@ export function addDays(key: string, days: number): string {
 }
 
 /** The instant a village date and wall-clock time name, in the village's zone. */
-function meetingAt(key: string, time: string, zone: string): Date {
+export function meetingAt(key: string, time: string, zone: string): Date {
   const [y, m, d] = key.split("-").map(Number);
   const [hh, mm] = time.split(":").map(Number);
   return zonedTimeToUtc(y, m, d, hh, mm, zone);

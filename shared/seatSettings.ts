@@ -197,6 +197,7 @@ export const emptySettings = (): SeatSettings => ({ v: SEAT_SETTINGS_VERSION });
 
 export const LIMITS = {
   gatherings: 6,
+  /** The most measures a stored scoreboard is READ with. A new write holds 2 to 4 (`MEASURES_NEW`). */
   scoreMeasures: 8,
   noteChars: 300,
   wordsChars: 200,
@@ -208,6 +209,21 @@ export const LIMITS = {
   /** Whole minor units. A ceiling far above any stipend, to refuse typos. */
   amountMinor: 1_000_000_000_000,
 } as const;
+
+/**
+ * CCOS: "How we'll know it's working" names 2 to 4 measures (the CCOS Role
+ * Card's Measurable Indicators, Rye 2026-10-22). Bound on a NEW write only,
+ * when an org draft puts terms on offer (`parseSeatSettings(raw, { newWrite:
+ * true })`). A scoreboard stored before the limit keeps loading with what it
+ * holds, and a scoreboard with no measures is "none named yet", never refused.
+ */
+export const MEASURES_NEW = { min: 2, max: 4 } as const;
+export const MEASURES_NEW_MESSAGE = `Name ${MEASURES_NEW.min} to ${MEASURES_NEW.max} measures of how we'll know it's working.`;
+
+export interface ParseOptions {
+  /** A new write: apply the CCOS limits that bind only what is written from now on. */
+  newWrite?: boolean;
+}
 
 // ── The parser ───────────────────────────────────────────────────────────────
 
@@ -311,6 +327,12 @@ function currencyKnown(code: string): boolean | null {
 class Reader {
   problems: SettingsProblem[] = [];
   flags: SettingsProblem[] = [];
+
+  readonly newWrite: boolean;
+
+  constructor(newWrite = false) {
+    this.newWrite = newWrite;
+  }
 
   refuse(path: string, message: string): void {
     this.problems.push({ path, message });
@@ -594,6 +616,10 @@ function readScoreboard(r: Reader, raw: unknown): ScoreboardSettings | undefined
     });
     return measure ? [out as ScoreMeasure] : [];
   });
+  // CCOS, on a new write only: 2 to 4, once any measure is named.
+  if (r.newWrite && g.measures.length > 0 && (g.measures.length < MEASURES_NEW.min || g.measures.length > MEASURES_NEW.max)) {
+    r.refuse("scoreboard.measures", MEASURES_NEW_MESSAGE);
+  }
   return { measures };
 }
 
@@ -650,9 +676,13 @@ const READERS: { [G in SettingsGroup]: (r: Reader, raw: unknown) => SeatSettings
  * Read a seat's settings from anything: a stored JSON column, a request body,
  * the editor's state. Refuses what it cannot keep and says why, per field.
  * `null` and `undefined` read as an empty set of terms, every group not set.
+ *
+ * `newWrite` adds the limits that bind only what is written from now on
+ * (`MEASURES_NEW`). Every read of a stored value leaves it off, so terms
+ * written before a limit keep loading as they are.
  */
-export function parseSeatSettings(raw: unknown): ParsedSettings {
-  const r = new Reader();
+export function parseSeatSettings(raw: unknown, opts: ParseOptions = {}): ParsedSettings {
+  const r = new Reader(opts.newWrite === true);
   if (raw === undefined || raw === null) {
     return { ok: true, settings: emptySettings(), problems: [], flags: [] };
   }

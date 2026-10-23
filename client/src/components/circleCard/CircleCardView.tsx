@@ -16,11 +16,17 @@
  * player card uses (`bg-card`, `text-card-foreground`, `text-muted-foreground`,
  * `text-notice`); no colour of its own.
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
+import { Pencil } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
-import { BOX, EYEBROW, LINK, SECTION, SlotView } from "@/components/playerCard/cardParts";
-import type { CircleCard, CircleSection, RoleRowOut } from "@shared/circleCard";
+import { BOX, EYEBROW, LINK, QUIET_BUTTON, SECTION, SlotView } from "@/components/playerCard/cardParts";
+import type { CircleCard, CircleSection, RoleRowOut, Slot } from "@shared/circleCard";
+import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
+import type { CircleValue } from "@shared/circleCharter";
+import type { CircleWordKey } from "@shared/circleCharterParse";
+import { CircleEditContext, PendingWords, ProposeWords } from "./ProposeWords";
+import ProposalsPanel from "./ProposalsPanel";
 
 const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
@@ -55,11 +61,22 @@ function Bullets({ items }: { items: string[] }) {
   );
 }
 
+/** What a word reads now, as the proposer's text box starts: one line each. */
+function initialText(slot: Slot<string | string[] | CircleValue[]>): string {
+  if (slot.kind !== "shown") return "";
+  const v = slot.value;
+  if (typeof v === "string") return v;
+  return (v as Array<string | CircleValue>).map((x) => (typeof x === "string" ? x : `${x.value}: ${x.practice}`)).join(NEWLINE);
+}
+const NEWLINE = String.fromCharCode(10);
+
 /** One word section inside a shared panel. */
 function WordBox({ section }: { section: CircleSection }) {
+  const key = section.key as CircleWordKey;
   return (
     <div className={BOX} data-circle-section={section.key}>
       <Heading text={section.heading} term={section.term} level={3} />
+      <PendingWords wordKey={key} />
       {section.kind === "list" ? (
         <>
           <SlotView slot={section.slot}>{(items) => <Bullets items={items} />}</SlotView>
@@ -79,6 +96,7 @@ function WordBox({ section }: { section: CircleSection }) {
           )}
         </SlotView>
       ) : null}
+      {section.kind === "list" || section.kind === "values" ? <ProposeWords wordKey={key} initial={initialText(section.slot)} /> : null}
     </div>
   );
 }
@@ -191,12 +209,33 @@ function SectionPanel({ group }: { group: CircleSection[] }) {
   return null;
 }
 
-export default function CircleCardView({ card }: { card: CircleCard }) {
+export default function CircleCardView({
+  card,
+  circleId = "",
+  mayPropose = false,
+  reload = () => undefined,
+}: {
+  card: CircleCard;
+  circleId?: string;
+  /** A holder of a role in this circle, or an admin (`viewer.mayPropose`). */
+  mayPropose?: boolean;
+  reload?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
   return (
+    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
     <div data-circle-card="" className="grid gap-4 sm:gap-6">
       <section className={`${SECTION} grid gap-4`}>
+        {mayPropose ? (
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setEditing((e) => !e)} aria-pressed={editing} className={QUIET_BUTTON}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              {editing ? W.doneProposing : W.proposeWords}
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-1">
           <p className={EYEBROW}>{header.eyebrow}</p>
           <h1 className="font-display text-3xl font-bold text-card-foreground break-words sm:text-4xl">{header.name}</h1>
@@ -217,7 +256,9 @@ export default function CircleCardView({ card }: { card: CircleCard }) {
         {purpose && purpose.kind === "text" ? (
           <div className="grid gap-2" data-circle-section="purpose">
             <Heading text={purpose.heading} term={purpose.term} level={2} />
+            <PendingWords wordKey="purpose" />
             <SlotView slot={purpose.slot}>{(t) => <p className="whitespace-pre-line text-base">{t}</p>}</SlotView>
+            <ProposeWords wordKey="purpose" initial={initialText(purpose.slot)} />
             {header.existsWhile.kind !== "unread" ? (
               <p className="text-sm text-muted-foreground">
                 {header.existsWhileTerm ? (
@@ -230,13 +271,17 @@ export default function CircleCardView({ card }: { card: CircleCard }) {
                 {header.existsWhile.kind === "shown" ? ` ${header.existsWhile.value}` : `: ${header.existsWhile.words}`}
               </p>
             ) : null}
+            <PendingWords wordKey="existsWhile" />
+            {header.existsWhile.kind !== "unread" ? <ProposeWords wordKey="existsWhile" initial={initialText(header.existsWhile)} /> : null}
           </div>
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
+      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} />
       {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
         <SectionPanel key={g[0]!.key} group={g} />
       ))}
     </div>
+    </CircleEditContext.Provider>
   );
 }

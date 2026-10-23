@@ -3,6 +3,7 @@ import { buildPlayerCard, type PlayerCardInput, type PlayerRoleIn, type SignOut,
 import { roleHandover, roleHealth } from "./playerCardHealth";
 import { roleWordPayload, roleWordsIn, PERSONAL_EDIT_KEYS, ROLE_EDIT_KEYS, ROLE_WORD_FIELD } from "./playerCardEdit";
 import { HANDOVER_CHECK_WORDS, ROLE_HANDOVER_WORDS, handoverChecks } from "./roleHandover";
+import { ROLE_CCOS_WORDS } from "./roleCcos";
 import type { SignReading } from "./roleSigns";
 import type { SeatSettings } from "./seatSettings";
 
@@ -202,7 +203,11 @@ describe("the model carries health, handover, the load read and pending words", 
 describe("who owns each word on the card", () => {
   it("splits personal and role words, and every role word has a home now", () => {
     expect(PERSONAL_EDIT_KEYS).toContain("loadRead");
-    expect(ROLE_EDIT_KEYS).toEqual(["purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook"]);
+    expect(ROLE_EDIT_KEYS).toEqual([
+      "purpose", "decide", "countOnMe", "bringMe", "notMine", "runbook",
+      // 0274: the CCOS words, each proposed under its own key.
+      "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment",
+    ]);
     expect(ROLE_WORD_FIELD).toEqual({
       purpose: "aim",
       decide: "domain",
@@ -210,12 +215,25 @@ describe("who owns each word on the card", () => {
       bringMe: "bringMe",
       notMine: "notMine",
       runbook: "runbook",
+      existsWhile: "existsWhile",
+      authorities: "authorities",
+      responsibilities: "responsibilities",
+      signsStretched: "signsStretched",
+      flowsBack: "flowsBack",
+      stepBack: "stepBack",
+      timeCommitment: "timeCommitment",
     });
   });
 
   it("turns a role word into an update_seat payload, and refuses an unknown key", () => {
     expect(roleWordPayload({ key: "purpose", text: " Clean water. " })).toEqual({ ok: true, key: "purpose", payload: { aim: "Clean water." } });
-    expect(roleWordPayload({ key: "countOnMe", text: "One\n\nTwo" })).toEqual({ ok: true, key: "countOnMe", payload: { accountabilities: ["One", "Two"] } });
+    expect(roleWordPayload({ key: "countOnMe", text: "One\n\nTwo\nThree" })).toEqual({
+      ok: true,
+      key: "countOnMe",
+      payload: { accountabilities: ["One", "Two", "Three"] },
+    });
+    // CCOS (0274): a role answers for 3 to 6 things, so two lines are refused with the preview's sentence.
+    expect(roleWordPayload({ key: "countOnMe", text: "One\nTwo" })).toEqual({ ok: false, error: ROLE_CCOS_WORDS.accountabilities });
     expect(roleWordPayload({ key: "pay", text: "x" }).ok).toBe(false);
   });
 

@@ -191,7 +191,7 @@ Four columns need a word before the tables:
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
 | `org.declare` | Declare how the village holds power | yes | yes | yes | no rung | no module |
-| `org.seat` | Seat and unseat the holders of the village's roles | yes | yes | yes | no rung | no module |
+| `org.seat` | Records role changes after the circle consents | yes | yes | yes | no rung | no module |
 | `org.seatAgent` | Seat and unseat the software agents that hold roles | yes | yes | yes | no rung | no module |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | yes | yes | yes | no rung | no module |
 
@@ -654,7 +654,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's roles",
+      "label": "Records role changes after the circle consents",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
