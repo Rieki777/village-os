@@ -919,9 +919,8 @@ function identityOf(row: any): ErasedIdentity | null {
  * A row that is not a tombstone is the truth and is used as it stands. A
  * tombstone gets back the name, address and handle the first attempt held in
  * `member_erasures.erased_identity` (0282), which the finish clears. Only those
- * three fields: the id, and everything the tombstone step writes from, are the
- * row's own. A record from before 0282 holds nothing, and the tombstone is all
- * there is.
+ * three fields come back; the id and every other field stay the row's own. A
+ * record from before 0282 holds nothing, and the tombstone is all there is.
  */
 async function asTheyWere(pool: Pool, target: any): Promise<any> {
   if (identityOf(target)) return target;
