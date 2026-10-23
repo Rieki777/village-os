@@ -110,7 +110,8 @@ export async function liveChart(
       active: r.active,
       isExample: r.isExample,
       holders: held.get(r.id) ?? 0,
-      // The live words, for the review's before and after (0268 adds the handover three).
+      // The live words, for the review's before and after (0268 adds the
+      // handover three, 0274 the seven CCOS words).
       words: {
         aim: r.aim,
         domain: r.domain,
@@ -119,6 +120,13 @@ export async function liveChart(
         bringMe: r.bringMe ?? null,
         notMine: r.notMine ?? null,
         runbook: r.runbook ?? null,
+        existsWhile: r.existsWhile ?? null,
+        authorities: r.authorities ?? null,
+        responsibilities: r.responsibilities ?? null,
+        signsStretched: r.signsStretched ?? null,
+        flowsBack: r.flowsBack ?? null,
+        stepBack: r.stepBack ?? null,
+        timeCommitment: r.timeCommitment ?? null,
       },
     })),
   };

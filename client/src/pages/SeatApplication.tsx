@@ -54,7 +54,8 @@ import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
-import { call as alignCall } from "@/components/alignment/alignmentsApi";
+import { call as alignCall } from "@/components/alignment/alignmentsApi";
+import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
 
 export const APPLICATION_WORDS = {
   membersOnly: "Members read role applications.",
@@ -120,6 +121,8 @@ function TermsDrawer({ app }: { app: ServedApplication }) {
 /** The card the application asks for, then its terms. */
 function ApplicationCard({ app }: { app: ServedApplication }) {
   return (
+    <>
+    <ApplicantGeneKeys userId={app.candidate.id} firstName={(app.candidate.name ?? "The candidate").split(" ")[0]} />
     <PlayerRoleCard
       applicationId={app.id}
       mode="proposal"
@@ -131,6 +134,7 @@ function ApplicationCard({ app }: { app: ServedApplication }) {
         </div>
       }
     />
+    </>
   );
 }
 
