@@ -144,10 +144,9 @@ export default function InvestorJourney() {
     }
     try {
       /*
-       * The server keeps name, email and the accreditation answer for this
-       * request and nothing else (POST /api/investor-docs/request), so the
-       * range and message boxes are not sent. A village that switched the
-       * accreditation check off is recorded as not having confirmed it.
+       * Everything the form asks for reaches the lead (POST
+       * /api/investor-docs/request). A village that switched the
+       * accreditation question off sends null, recorded as "not asked".
        */
       const response = await fetch("/api/investor-docs/request", {
         method: "POST",
@@ -155,7 +154,9 @@ export default function InvestorJourney() {
         body: JSON.stringify({
           name: packFormData.name,
           email: packFormData.email,
-          accredited: accreditationOn ? packFormData.accredited : false,
+          accredited: accreditationOn ? packFormData.accredited : null,
+          investmentRange: packFormData.investmentRange,
+          message: packFormData.message,
           [FORM_CONSENT_FIELD]: packConsent,
         }),
       });

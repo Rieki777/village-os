@@ -129,6 +129,7 @@ import { type ConsentActor, register as registerQuestClaimRoutes } from "./route
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
 import { register as registerJourneyRoutes } from "./routes/journey";
+import { keepFirstPlanIfUsed } from "./lib/commandCentrePlanDefault";
 import { register as registerProfileRoutes } from "./routes/profile";
 import { register as registerPathLadderRoutes } from "./routes/pathLadders";
 import { register as registerVouchRoutes } from "./routes/vouches";
@@ -1905,6 +1906,7 @@ async function ensureDataFiles() {
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
+  await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
   await runOnce("founding-team-in-progress", markFoundingTeamInProgress);
   await runOnce("backfill-member-handles", backfillMemberHandles);
   await runOnce("membership-grants-from-email-match", freezeEmailMatchedMemberships);
@@ -18301,9 +18303,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (await overLimit(`investor-docs:${clientIp(req)}`, Math.max(1, numberVar("abuse.investor_docs_per_ip_hourly")), 60 * 60 * 1000)) {
       return res.status(429).json({ error: "Too many requests. Please try again shortly." });
     }
-    const { name: rawName, email: rawEmail, accredited } = req.body ?? {};
+    const { name: rawName, email: rawEmail, accredited, investmentRange, message } = req.body ?? {};
     const name = typeof rawName === "string" ? rawName.trim().slice(0, 190) : "", email = singlePublicAddress(rawEmail);
-    if (!name || !email || typeof accredited !== "boolean") {
+    // `null` = the village switched its accreditation question off, so nobody was asked (Rye, 2026-10-22).
+    if (!name || !email || (typeof accredited !== "boolean" && accredited !== null)) {
       return res.status(400).json({ error: email || rawEmail == null ? "Missing required fields" : "That email address does not look right" });
     }
     /*
@@ -18352,7 +18355,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       data: {
         name,
         email,
-        accredited: accredited ? "yes" : "no",
+        accredited: accredited === null ? "not asked" : accredited ? "yes" : "no",
+        // The two boxes the form always asked for and never sent (Rye, 2026-10-22: "store them").
+        investmentRange: typeof investmentRange === "string" ? investmentRange.trim().slice(0, 120) : "",
+        message: typeof message === "string" ? message.trim().slice(0, 2000) : "",
         /*
          * WHAT THIS PERSON WAS ACTUALLY SENT, kept with the lead.
          *

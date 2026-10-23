@@ -92,6 +92,9 @@ export interface CommandCentrePlan {
  * Every limit is at least the longest text today's plan carries, so the
  * default always fits. Proven by the route test against the real default.
  */
+/** The page's plan before the server answers. Nothing renders from it: the page shows Loading. */
+export const UNLOADED_PLAN: CommandCentrePlan = { revision: 0, intro: "", partnerName: "", weeks: [], decisions: [] };
+
 export const PLAN_LIMITS = {
   intro: 300,
   partnerName: 24,

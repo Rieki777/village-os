@@ -324,7 +324,7 @@ describe("/investor", () => {
     expect(posted.filter((p) => p.url.includes("investor-docs"))).toEqual([]);
   });
 
-  it("drops the accreditation box where the village switched it off, and records no confirmation", async () => {
+  it("drops the accreditation box where the village switched it off, and sends that nobody was asked", async () => {
     state.pages[pageSectionKey(INVESTOR_JOURNEY)] = { accreditation: { hidden: true } };
     show(InvestorJourney);
     fireEvent.click((await screen.findAllByRole("button", { name: /Request Investor Pack/ }))[0]);
@@ -332,7 +332,11 @@ describe("/investor", () => {
     expect(screen.queryByText("I confirm I am an accredited investor.")).toBeNull();
     fireEvent.submit(screen.getByRole("button", { name: /Send Request/ }).closest("form")!);
     await waitFor(() => expect(posted.some((p) => p.url.includes("investor-docs"))).toBe(true));
-    expect((posted.find((p) => p.url.includes("investor-docs"))!.body as Record<string, unknown>).accredited).toBe(false);
+    // Null: nobody was asked (Rye, 2026-10-22). The server records "not asked", never "no".
+    const sent = posted.find((p) => p.url.includes("investor-docs"))!.body as Record<string, unknown>;
+    expect(sent.accredited).toBeNull();
+    expect(sent).toHaveProperty("investmentRange");
+    expect(sent).toHaveProperty("message");
   });
 
   it("opens the call form with the village's hint, and thanks the visitor in the village's words", async () => {

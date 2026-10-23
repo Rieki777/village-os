@@ -26,7 +26,26 @@ import {
 
 const V = VILLAGE_OWNED;
 
+/**
+ * A NEW VILLAGE STARTS EMPTY (Rye, 2026-10-22: "start empty"). The six-week
+ * plan below was one village's build; a village that never used this tracker
+ * gets a blank board and writes its own.
+ */
 export const DEFAULT_COMMAND_CENTRE_PLAN: CommandCentrePlan = {
+  revision: 0,
+  intro: "",
+  partnerName: "Build partner",
+  weeks: [],
+  decisions: [],
+};
+
+/**
+ * The plan the tracker shipped with until 2026-10-22, kept for the villages
+ * that already used it: `keepFirstPlanIfUsed` writes it into their own
+ * document once, so their ticks, cards, notes and decision answers keep
+ * their weeks and tasks when the default above goes empty.
+ */
+export const FIRST_COMMAND_CENTRE_PLAN: CommandCentrePlan = {
   revision: 0,
   intro:
     "It holds the original build tracker: the six weeks that made this site, kept whole.",
@@ -519,3 +538,26 @@ export const DEFAULT_COMMAND_CENTRE_PLAN: CommandCentrePlan = {
     },
   ],
 };
+
+const STATE_KEYS = ["checkboxes", "kanban", "decisions", "copy", "owners"] as const;
+
+/**
+ * Once per village, at boot: a village that recorded any progress against the
+ * first plan's ids (a tick, a card, a decision answer, a note, an owner) and
+ * never saved a plan of its own keeps that plan as its own. A village with no
+ * such state gets nothing written, and reads the empty default.
+ */
+export async function keepFirstPlanIfUsed(repo: {
+  get(): Record<string, unknown> | null;
+  put(doc: Record<string, unknown>): Promise<unknown>;
+}): Promise<boolean> {
+  const doc = repo.get() ?? {};
+  if (doc.plan && typeof doc.plan === "object") return false;
+  const used = STATE_KEYS.some((k) => {
+    const v = doc[k];
+    return v && typeof v === "object" && Object.keys(v as object).length > 0;
+  });
+  if (!used) return false;
+  await repo.put({ ...doc, plan: JSON.parse(JSON.stringify(FIRST_COMMAND_CENTRE_PLAN)) });
+  return true;
+}

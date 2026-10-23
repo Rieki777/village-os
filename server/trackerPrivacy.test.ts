@@ -51,7 +51,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_COMMAND_CENTRE_PLAN } from "./lib/commandCentrePlanDefault";
+import { FIRST_COMMAND_CENTRE_PLAN } from "./lib/commandCentrePlanDefault";
 
 const ASSETS = path.resolve(process.cwd(), "dist/public/assets");
 
@@ -177,8 +177,8 @@ describe("the founders' tracker ships nothing private in its chunk", () => {
    */
   it("ships none of the build plan's own words in any client chunk", () => {
     const words = [
-      ...DEFAULT_COMMAND_CENTRE_PLAN.weeks.flatMap((w) => [w.goal, ...w.tasks.map((t) => t.text)]),
-      ...DEFAULT_COMMAND_CENTRE_PLAN.decisions.flatMap((d) => [d.title, d.description]),
+      ...FIRST_COMMAND_CENTRE_PLAN.weeks.flatMap((w) => [w.goal, ...w.tasks.map((t) => t.text)]),
+      ...FIRST_COMMAND_CENTRE_PLAN.decisions.flatMap((d) => [d.title, d.description]),
     ].filter((text) => !text.includes("{village}") && text.length > 30);
     expect(words.length, "the check must hold real sentences to mean anything").toBeGreaterThan(50);
     const offenders: string[] = [];

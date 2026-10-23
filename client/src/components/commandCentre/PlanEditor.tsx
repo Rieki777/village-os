@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { charCount } from "@shared/pageContent/resolve";
-import { PLAN_LIMITS, planIds, visibleTasks } from "@shared/commandCentrePlan";
+import { PLAN_LIMITS, planIds, visibleTasks, type CommandCentrePlan } from "@shared/commandCentrePlan";
 import {
   addDecision,
   addTask,
@@ -626,6 +626,19 @@ export function DecisionsEditor({
  * The way into editing, and once in, Save and Cancel. Drawn above the views
  * and again under the editor, so a long plan never hides the way out.
  */
+/**
+ * A new village's Command Centre starts empty (Rye, 2026-10-22: "start
+ * empty"). Say so, instead of drawing an empty board.
+ */
+export function EmptyPlanNote({ plan }: { plan: CommandCentrePlan }) {
+  if (plan.weeks.length > 0 || plan.decisions.length > 0) return null;
+  return (
+    <p className="text-white text-sm max-w-2xl mb-6">
+      No plan yet. Use Edit the plan to add your first week, its tasks and the decisions ahead.
+    </p>
+  );
+}
+
 export function PlanEditBar({
   editing,
   saving,

@@ -4,7 +4,7 @@ import { authToken, useCatalyst } from "@/lib/gameApi";
 import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
 import { usePageVars } from "@/hooks/usePageContent";
 import { withoutUntouchedNew } from "@/lib/planEdits";
-import { DecisionsEditor, PlanEditBar, PlanWeeksEditor } from "@/components/commandCentre/PlanEditor";
+import { DecisionsEditor, EmptyPlanNote, PlanEditBar, PlanWeeksEditor } from "@/components/commandCentre/PlanEditor";
 import { villageMoonLabel } from "@shared/villageMoon";
 import { fillVars } from "@shared/pageContent/resolve";
 import {
@@ -13,6 +13,7 @@ import {
   PLAN_LIMITS,
   planIds,
   planProblems,
+  UNLOADED_PLAN as EMPTY_PLAN,
   VILLAGE_OWNED,
   visibleTasks,
   type CommandCentrePlan,
@@ -171,9 +172,6 @@ interface JourneyState {
   /** Owner choices from each row's dropdown, by task id. */
   owners: Record<string, DeliveryStatus>;
 }
-
-/** Before the server answers. Nothing renders from it: the page shows Loading. */
-const EMPTY_PLAN: CommandCentrePlan = { revision: 0, intro: "", partnerName: "", weeks: [], decisions: [] };
 
 function getDefaultCheckboxState(d: PlanTask): 0 | 1 | 2 {
   return d.status === "done" ? 1 : 0;
@@ -971,6 +969,7 @@ export default function ProjectHistory() {
             For what's left before launch, see{" "}
             <Link href="/journey-to-launch" className="text-amber-on-band underline">Journey to Launch</Link>.
           </p>
+          {planLoaded && !planDraft && <EmptyPlanNote plan={serverState.plan} />}
 
           {/* Working documents, written by an admin and stored behind the
               admin gate. Empty until somebody adds one, so a fresh village

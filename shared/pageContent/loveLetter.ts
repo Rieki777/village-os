@@ -78,7 +78,7 @@ export const LOVE_LETTER_PAGE: PageSpec = {
           kind: "long",
           max: 400,
           default:
-            "In return, you become a full member of {entity}, gaining access to community spaces, governance participation, {token} economy, and the opportunity to deepen your involvement through roles, residency, or business creation.",
+            "In return, you become a full member of {entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.",
         },
         { key: "closing", label: "Closing line", kind: "text", max: 60, default: "With love and anticipation," },
         { key: "signature", label: "Signed by", kind: "text", max: 60, default: "The {village} Community" },

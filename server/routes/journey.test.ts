@@ -9,8 +9,9 @@
  * What it holds, in the order the page depends on it:
  *
  *   - every route refuses anybody `isAdmin` refuses, and writes nothing;
- *   - a document with no plan reads as today's plan, ids and all, so the
- *     ticks and answers already stored keep matching;
+ *   - a document with no plan reads as the EMPTY default (Rye, 2026-10-22:
+ *     a new village starts empty); a village that used the first plan keeps
+ *     it, written into its own document once at boot;
  *   - a save replaces the plan whole, but never drops an item (removing
  *     hides), never lands on a newer plan it did not see, and never parks a
  *     field the page does not read;
@@ -21,7 +22,11 @@ import http from "node:http";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { register } from "./journey";
-import { DEFAULT_COMMAND_CENTRE_PLAN } from "../lib/commandCentrePlanDefault";
+import {
+  DEFAULT_COMMAND_CENTRE_PLAN,
+  FIRST_COMMAND_CENTRE_PLAN,
+  keepFirstPlanIfUsed,
+} from "../lib/commandCentrePlanDefault";
 import {
   PLAN_LIMITS,
   planIds,
@@ -98,13 +103,13 @@ function editable(
   return rest;
 }
 
-describe("the default plan is today's plan", () => {
+describe("the first village's plan, kept for the villages that used it", () => {
   it("fits every limit the editor and the route enforce", () => {
-    expect(planProblems(DEFAULT_COMMAND_CENTRE_PLAN)).toEqual([]);
+    expect(planProblems(FIRST_COMMAND_CENTRE_PLAN)).toEqual([]);
   });
 
   it("carries the six weeks, 71 tasks and ten decisions with the ids stored state is keyed by", () => {
-    const plan = DEFAULT_COMMAND_CENTRE_PLAN;
+    const plan = FIRST_COMMAND_CENTRE_PLAN;
     expect(plan.weeks.map(w => w.id)).toEqual([
       "w1",
       "w2",
@@ -136,7 +141,7 @@ describe("the default plan is today's plan", () => {
   });
 
   it("names the village with {village}, never a village's own name", () => {
-    const text = JSON.stringify(DEFAULT_COMMAND_CENTRE_PLAN);
+    const text = JSON.stringify(FIRST_COMMAND_CENTRE_PLAN);
     expect(text).toContain("{village} Game Guide");
     expect(text).not.toContain("${");
   });
@@ -146,7 +151,7 @@ describe("every journey route refuses a non-admin and writes nothing", () => {
   const writesTo: Array<[string, unknown]> = [
     [
       "/api/journey/plan",
-      { plan: editable(DEFAULT_COMMAND_CENTRE_PLAN), revision: 0 },
+      { plan: editable(FIRST_COMMAND_CENTRE_PLAN), revision: 0 },
     ],
     ["/api/journey/owner", { id: "w1-1", status: "collab" }],
     ["/api/journey/owners/import", { owners: { "w1-1": "collab" } }],
@@ -180,7 +185,7 @@ describe("every journey route refuses a non-admin and writes nothing", () => {
 });
 
 describe("GET /api/journey/state", () => {
-  it("resolves a document with no plan to today's plan, with no owner choices", async () => {
+  it("resolves a document with no plan to the empty default, with no owner choices", async () => {
     stored = {
       checkboxes: { "w1-1": 2 },
       copy: {},
@@ -191,6 +196,7 @@ describe("GET /api/journey/state", () => {
     const res = await call("GET", "/api/journey/state");
     expect(res.status).toBe(200);
     expect(res.json.plan).toEqual(DEFAULT_COMMAND_CENTRE_PLAN);
+    expect(res.json.plan.weeks).toEqual([]);
     expect(res.json.owners).toEqual({});
     expect(res.json.checkboxes, "the stored ticks come back beside it").toEqual(
       { "w1-1": 2 }
@@ -213,7 +219,7 @@ describe("POST /api/journey/plan", () => {
         "dec-retainer": { status: "decided", chosen: "Yes", notes: "" },
       },
     };
-    const plan = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const plan = editable(FIRST_COMMAND_CENTRE_PLAN);
     plan.intro = "Our {village} plan.";
     plan.partnerName = "Builders Co";
     plan.weeks[0].label = "Week one";
@@ -250,7 +256,7 @@ describe("POST /api/journey/plan", () => {
   });
 
   it("refuses a plan saved over a newer one, and says what to do", async () => {
-    const plan = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const plan = editable(FIRST_COMMAND_CENTRE_PLAN);
     expect(
       (await call("POST", "/api/journey/plan", { plan, revision: 0 })).status
     ).toBe(200);
@@ -261,12 +267,14 @@ describe("POST /api/journey/plan", () => {
     expect(stale.status).toBe(409);
     expect(stale.json.error).toMatch(/Reload/);
     expect(stored?.plan.intro, "the newer plan is untouched").toBe(
-      DEFAULT_COMMAND_CENTRE_PLAN.intro
+      FIRST_COMMAND_CENTRE_PLAN.intro
     );
   });
 
   it("refuses a plan that drops an item: removing hides it", async () => {
-    const plan = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    // A village holding the first plan as its own (what keepFirstPlanIfUsed writes).
+    stored = { ...FALLBACK, plan: JSON.parse(JSON.stringify(FIRST_COMMAND_CENTRE_PLAN)) };
+    const plan = editable(FIRST_COMMAND_CENTRE_PLAN);
     plan.weeks[0].tasks = plan.weeks[0].tasks.filter(t => t.id !== "w1-2");
     const res = await call("POST", "/api/journey/plan", { plan, revision: 0 });
     expect(res.status).toBe(400);
@@ -276,7 +284,7 @@ describe("POST /api/journey/plan", () => {
   });
 
   it("refuses text over its limit, naming where and the limit", async () => {
-    const plan = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const plan = editable(FIRST_COMMAND_CENTRE_PLAN);
     plan.weeks[1].tasks[2].text = "x".repeat(PLAN_LIMITS.taskText + 1);
     const res = await call("POST", "/api/journey/plan", { plan, revision: 0 });
     expect(res.status).toBe(400);
@@ -286,7 +294,7 @@ describe("POST /api/journey/plan", () => {
   });
 
   it("refuses a repeated id, a blank partner name and a decision linked to no task", async () => {
-    const repeated = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const repeated = editable(FIRST_COMMAND_CENTRE_PLAN);
     repeated.weeks[2].tasks.push({
       id: "w1-1",
       text: "Twin",
@@ -298,7 +306,7 @@ describe("POST /api/journey/plan", () => {
     ).toContain("repeats the id w1-1");
 
     const blank = {
-      ...editable(DEFAULT_COMMAND_CENTRE_PLAN),
+      ...editable(FIRST_COMMAND_CENTRE_PLAN),
       partnerName: "  ",
     };
     expect(
@@ -306,7 +314,7 @@ describe("POST /api/journey/plan", () => {
         .status
     ).toBe(400);
 
-    const dangling = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const dangling = editable(FIRST_COMMAND_CENTRE_PLAN);
     dangling.decisions[0].linkedItem = "no-such-task";
     const res = await call("POST", "/api/journey/plan", {
       plan: dangling,
@@ -318,7 +326,7 @@ describe("POST /api/journey/plan", () => {
   });
 
   it("stores only the fields the page reads", async () => {
-    const plan: any = editable(DEFAULT_COMMAND_CENTRE_PLAN);
+    const plan: any = editable(FIRST_COMMAND_CENTRE_PLAN);
     plan.extra = "<script>";
     plan.weeks[0].tasks[0].html = "<b>";
     plan.weeks[0].tasks[0].text = "  Landing page, trimmed  ";
@@ -382,5 +390,40 @@ describe("owners live on the server", () => {
     });
     expect(bad.status).toBe(400);
     expect(stored?.owners).toEqual({ "w1-1": "collab" });
+  });
+});
+
+describe("a new village starts empty; a village that used the first plan keeps it (Rye, 2026-10-22)", () => {
+  const repo = (doc: Record<string, unknown> | null) => {
+    let current = doc;
+    return { get: () => current, put: async (next: Record<string, unknown>) => { current = next; }, now: () => current };
+  };
+
+  it("the empty default saves as it is, and holds no week, task or decision", () => {
+    expect(planProblems(DEFAULT_COMMAND_CENTRE_PLAN)).toEqual([]);
+    expect(DEFAULT_COMMAND_CENTRE_PLAN.weeks).toEqual([]);
+    expect(DEFAULT_COMMAND_CENTRE_PLAN.decisions).toEqual([]);
+  });
+
+  it("writes the first plan into a village that ticked anything against it", async () => {
+    const r = repo({ checkboxes: { "w1-1": 2 }, copy: {}, kanban: {}, decisions: {}, resources: [] });
+    expect(await keepFirstPlanIfUsed(r)).toBe(true);
+    expect(r.now()?.plan).toEqual(FIRST_COMMAND_CENTRE_PLAN);
+    expect(r.now()?.checkboxes).toEqual({ "w1-1": 2 });
+  });
+
+  it("writes nothing for a village that never used it, so it reads empty", async () => {
+    const fresh = { checkboxes: {}, copy: {}, kanban: {}, decisions: {}, resources: [] };
+    const r = repo(fresh);
+    expect(await keepFirstPlanIfUsed(r)).toBe(false);
+    expect(r.now()).toBe(fresh);
+    expect(await keepFirstPlanIfUsed(repo(null))).toBe(false);
+  });
+
+  it("never overwrites a plan a village already saved", async () => {
+    const own = { ...DEFAULT_COMMAND_CENTRE_PLAN, intro: "Ours" };
+    const r = repo({ checkboxes: { "w1-1": 1 }, plan: own });
+    expect(await keepFirstPlanIfUsed(r)).toBe(false);
+    expect(r.now()?.plan).toBe(own);
   });
 });

@@ -139,7 +139,8 @@ describe("the letter's words: one rendering for the page and the store", () => {
     expect(rest.trim()).toBe("");
     expect(parts.greeting).toBe("Dear Future Fernhollow Family Member,");
     expect(parts.commitLead).toBe("As a member of Fernhollow Commons, you commit to:");
-    expect(parts.inReturn).toContain("Seeds economy");
+    // Rye, 2026-10-22: the letter names no token's economy any more.
+    expect(parts.inReturn).not.toMatch(/economy/);
   });
 
   it("the title is what the village calls it; the version is a fingerprint of the words", () => {
@@ -194,18 +195,18 @@ describe("the letter's words: one rendering for the page and the store", () => {
 describe("the letter's words as page fields keep every Love Letter's version", () => {
   const LL = (name: string, token = "Seeds") => ({ project: { name, commitmentName: "Love Letter" }, currency: { name: token } });
   const CASES: Array<[string, unknown, Record<string, unknown> | null, string]> = [
-    ["covenant, entity and contribution", LL("Fernhollow"), CONTENT, "lv-45a77f58c2f290b2"],
-    ["nothing written", LL("Fernhollow"), null, "lv-d92de5c7bc10bea7"],
-    ["an entity only", LL("Willowbrook", "Thanks"), { legal: { membership: { entityLabel: "Willowbrook Land Trust" } } }, "lv-041aa8c2f7091133"],
+    ["covenant, entity and contribution", LL("Fernhollow"), CONTENT, "lv-6c3a84231463c518"],
+    ["nothing written", LL("Fernhollow"), null, "lv-325212c91db9e647"],
+    ["an entity only", LL("Willowbrook", "Thanks"), { legal: { membership: { entityLabel: "Willowbrook Land Trust" } } }, "lv-25cfd7db11e5c2ed"],
     [
       "names holding braces and dollar signs",
       LL("Saint-Clair & Co. $& {token}", "$1 Gratitude"),
       { legal: { membership: { entityLabel: "The {village} Trust $$" } }, covenant: { governance: "We decide together." } },
-      "lv-105811848526964a",
+      "lv-40493f31d67ede2e",
     ],
-    ["names with spaces around them", LL("  Fernhollow  ", "  Seeds "), { covenant: { opening: "  An opening.  " } }, "lv-255cf5e41ef73c81"],
-    ["no name at all", { project: { commitmentName: "Love Letter" } }, null, "lv-c9dd81088f856825"],
-    ["the letter's name with spaces around it", { project: { name: "Fernhollow", commitmentName: "  Love Letter " }, currency: { name: "Seeds" } }, null, "lv-d92de5c7bc10bea7"],
+    ["names with spaces around them", LL("  Fernhollow  ", "  Seeds "), { covenant: { opening: "  An opening.  " } }, "lv-4a90d6f48d4aaec7"],
+    ["no name at all", { project: { commitmentName: "Love Letter" } }, null, "lv-83b0b71bf339ecea"],
+    ["the letter's name with spaces around it", { project: { name: "Fernhollow", commitmentName: "  Love Letter " }, currency: { name: "Seeds" } }, null, "lv-325212c91db9e647"],
   ];
 
   /** The letter as the old code wrote it, kept verbatim so the comparison is with the code, never with a memory of it. */
@@ -229,7 +230,9 @@ describe("the letter's words as page fields keep every Love Letter's version", (
         "Meet financial obligations as agreed with the community",
         "Show up for community life, circles, celebrations, and shared care",
       ],
-      inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, ${src.tokenName} economy, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
+      // The ONE sentence that changed on purpose: Rye, 2026-10-22, "remove token
+      // economy" (copy never says what a token does). Every other word is the old code's.
+      inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
       governance: t(src.covenant?.governance) || DEFAULT_GOVERNANCE,
       contribution: t(src.legal?.membership?.contributionParagraph) || null,
       closing: "With love and anticipation,",
@@ -237,7 +240,7 @@ describe("the letter's words as page fields keep every Love Letter's version", (
     };
   };
 
-  it.each(CASES)("%s: the same words and the same fingerprint as before", (_label, config, content, before) => {
+  it.each(CASES)("%s: the old code's words, less the one token sentence Rye ruled out, and a pinned fingerprint", (_label, config, content, before) => {
     const src = letterSourceFrom(config, content);
     const now = currentLetter(src);
     expect(now.version).toBe(before);
