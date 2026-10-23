@@ -3,7 +3,7 @@
  * time. Every door is the "Doors" list in shared/sessions.ts, which is the
  * contract, and every rule behind a door is server/lib/liveSessions.ts:
  *
- *   GET    /api/sessions                          { open, recent, circles, library }
+ *   GET    /api/sessions                          { open, recent, circles, library, comingUp }
  *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      { title } -> { ok }
@@ -101,6 +101,7 @@ import {
 } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import { libraryFor, noticesAfterTakes, reconcileLibrary } from "../lib/sessionLibrary";
+import { comingUpFor } from "../lib/sessionRhythm";
 import { queueCloseMail } from "../lib/sessionTaskMail";
 import {
   SESSION_COPY,
@@ -295,7 +296,9 @@ export function register(app: Express, deps: Deps): void {
     await reconcileLibrary(pool);
     const lists = await listSessions(pool, viewer, ctx);
     const library = await libraryFor(pool, { userId: String(user.id), admin }, ctx);
-    res.json({ ...lists, circles: circles(), defaultMinutes: defaultDuration(), library });
+    // Each circle's next meeting, from its rhythm (server/lib/sessionRhythm.ts).
+    const comingUp = await comingUpFor(pool, { userId: String(user.id), admin }, { circles, lapseContext: deps.lapseContext });
+    res.json({ ...lists, circles: circles(), defaultMinutes: defaultDuration(), library, comingUp });
   });
 
   /**

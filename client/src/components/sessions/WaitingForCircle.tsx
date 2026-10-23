@@ -54,6 +54,7 @@ import {
 import { gameFetch } from "@/lib/gameApi";
 import BroughtForm, { type BroughtValues } from "./BroughtForm";
 import ClampedNote from "./ClampedNote";
+import { useHash } from "./useHash";
 import { BTN_DANGER, BTN_QUIET, BTN_SECONDARY, CHIP, HINT, LABEL_CAPS, PANEL } from "./roomUi";
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -84,25 +85,6 @@ async function send(path: string, method: string, body?: unknown): Promise<strin
   } catch {
     return LIBRARY_COPY.failed;
   }
-}
-
-/**
- * The page's hash, kept current. A notice's link is a client-side move
- * (wouter pushes the history entry), which fires no `hashchange`, so the
- * router's own events are read too.
- */
-function useHash(): string {
-  const read = () => (typeof window === "undefined" ? "" : window.location.hash);
-  const [hash, setHash] = useState(read);
-  useEffect(() => {
-    const update = () => setHash(read());
-    const events = ["hashchange", "popstate", "pushState", "replaceState"];
-    for (const e of events) window.addEventListener(e, update);
-    return () => {
-      for (const e of events) window.removeEventListener(e, update);
-    };
-  }, []);
-  return hash;
 }
 
 function StatusLine({ card }: { card: LibraryCard }) {
