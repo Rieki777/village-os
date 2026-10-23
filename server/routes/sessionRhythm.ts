@@ -22,12 +22,18 @@
  * THE DAY-BEFORE NOTICE'S JOB REGISTERS HERE, beside the doors that set what
  * it reminds people of, the way server/routes/sessionTasks.ts registers its
  * gentle notes. It reads the pool when it runs, never at boot.
+ *
+ * A RHYTHM THAT CHANGES REACHES THE VILLAGE CALENDAR AT ONCE: a set or a skip
+ * that lands runs the calendar mirror (server/lib/sessionCalendar.ts), and a
+ * mirror that fails is logged and never fails the change. The hourly mirror
+ * catches up whatever one missed.
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import type { Outcome } from "../lib/liveSessions";
 import { requireModule } from "../lib/modules";
 import { registerJob } from "../lib/scheduler";
+import { mirrorRhythms } from "../lib/sessionCalendar";
 import {
   COMING_UP_EVERY_MS,
   COMING_UP_JOB,
@@ -68,6 +74,12 @@ export function register(app: Express, deps: Deps): void {
   const answer = <T>(res: Response, out: Outcome<T>, ok: (v: T) => unknown) =>
     out.ok ? res.json(ok(out.value)) : res.status(out.status).json({ ...(out.body ?? {}), error: out.error });
 
+  /** A change that landed reaches the village calendar now. */
+  const mirrored = async <T>(out: Outcome<T>): Promise<Outcome<T>> => {
+    if (out.ok) await mirrorRhythms(getPool(), rhythm).catch((e) => console.error("[sessions] the calendar mirror did not run", e));
+    return out;
+  };
+
   /** The signed-in member behind a request, or a 401 already sent; with a bucket, or a 429 already sent. */
   const signedIn = async (req: Request, res: Response, limited: boolean) => {
     const user = await authedUser(req);
@@ -87,13 +99,13 @@ export function register(app: Express, deps: Deps): void {
   app.put(`${CIRCLES_API}/:circleId/rhythm`, async (req, res) => {
     const who = await signedIn(req, res, true);
     if (!who) return;
-    answer(res, await setRhythm(getPool(), who, circleIdOf(req), req.body, rhythm), (v) => ({ row: v.row }));
+    answer(res, await mirrored(await setRhythm(getPool(), who, circleIdOf(req), req.body, rhythm)), (v) => ({ row: v.row }));
   });
 
   app.post(`${CIRCLES_API}/:circleId/rhythm/skip`, async (req, res) => {
     const who = await signedIn(req, res, true);
     if (!who) return;
-    answer(res, await skipMeeting(getPool(), who, circleIdOf(req), req.body, rhythm), (v) => ({ row: v.row }));
+    answer(res, await mirrored(await skipMeeting(getPool(), who, circleIdOf(req), req.body, rhythm)), (v) => ({ row: v.row }));
   });
 
   app.get(`${CIRCLES_API}/:circleId/summary`, async (req, res) => {
