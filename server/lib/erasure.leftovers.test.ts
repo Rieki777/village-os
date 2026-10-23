@@ -213,9 +213,10 @@ describe.skipIf(!configured)("what an erased member left behind after the sweep"
       expect(await q("SELECT id FROM events WHERE kind = 'meet-me' AND (created_by = ? OR owner_user_id = ?)", [leaver, leaver])).toEqual([]);
       // The neighbour's answer to the window that went is not left pointing at nothing.
       expect(await q("SELECT id FROM event_rsvps WHERE event_id = ?", [mineId])).toEqual([]);
-      // The neighbour's own window, and the answer the leaver gave it, are the neighbour's record.
+      // The neighbour's own window is the neighbour's and stays. The answer the leaver gave it is
+      // their own place, which "event-places-after-tombstone" releases, so only the window is left.
       expect(await q("SELECT title, location_text FROM events WHERE id = ?", [theirsId])).toEqual([{ title: "Meet Bay", location_text: "the well" }]);
-      expect(await q("SELECT user_id FROM event_rsvps WHERE event_id = ?", [theirsId])).toEqual([{ user_id: leaver }]);
+      expect(await q("SELECT user_id FROM event_rsvps WHERE event_id = ?", [theirsId])).toEqual([]);
     });
   });
 
