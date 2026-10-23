@@ -370,9 +370,8 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
-  async function startDraft(req: any, res: any, from: "empty" | "card") {
-    const user = await member(req, res);
-    if (!user) return;
+  /** Start a draft for a member the caller has already signed in. */
+  async function startDraft(req: any, res: any, user: any, from: "empty" | "card") {
     const userId = String(user.id);
     if (await limited(res, `role-proposal-start:${userId}`, ACTS_PER_WINDOW)) return;
     const pool = getPool();
@@ -412,8 +411,17 @@ export function register(app: Express, deps: Deps): void {
     });
   });
 
-  app.post(BASE, (req, res) => startDraft(req, res, "empty"));
-  app.post(`${BASE}/prefill`, (req, res) => startDraft(req, res, "card"));
+  app.post(BASE, async (req, res) => {
+    const user = await member(req, res);
+    if (!user) return;
+    await startDraft(req, res, user, "empty");
+  });
+
+  app.post(`${BASE}/prefill`, async (req, res) => {
+    const user = await member(req, res);
+    if (!user) return;
+    await startDraft(req, res, user, "card");
+  });
 
   // ── The shared read ───────────────────────────────────────────────────────
 
@@ -486,8 +494,10 @@ export function register(app: Express, deps: Deps): void {
     if (await limited(res, `role-proposal-comment:${authorId}`, COMMENTS_PER_WINDOW)) return;
     const parsed = parseComment((req.body ?? {}).text);
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
-    const id = `rpc-${crypto.randomBytes(8).toString("hex")}`;
-    await store.insertComment(getPool(), { id, proposalId: p.id, authorId, body: parsed.value, now: now() });
+    // Time first, so comments read in the order they were written even within one millisecond's tie on `created_at`.
+    const at = now();
+    const id = `rpc-${at.getTime().toString(16).padStart(12, "0")}${crypto.randomBytes(2).toString("hex")}`;
+    await store.insertComment(getPool(), { id, proposalId: p.id, authorId, body: parsed.value, now: at });
     if (authorId !== p.userId) {
       await notify({
         userId: p.userId,

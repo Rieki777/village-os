@@ -43,7 +43,10 @@
 -- nobody.
 --
 -- Every instant here is written from Node's clock and read back with
--- UNIX_TIMESTAMP(col), so the database's own zone never moves one.
+-- UNIX_TIMESTAMP(col), so the database's own zone never moves one. They keep
+-- milliseconds, so two comments written in the same second still read in the
+-- order they were written; a comment's id starts with its time for the same
+-- reason.
 --
 -- NO FOREIGN KEYS, the same as every table in this schema.
 
@@ -60,9 +63,9 @@ CREATE TABLE IF NOT EXISTS `role_proposals` (
   `share_audience` varchar(16) NOT NULL DEFAULT 'members',
   -- The `seat_applications` row submitting wrote.
   `application_id` varchar(24) NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `submitted_at` timestamp NULL,
+  `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `submitted_at` timestamp(3) NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `role_proposals_share_token_uq` (`share_token`),
   KEY `role_proposals_owner_idx` (`user_id`, `status`),
@@ -75,7 +78,7 @@ CREATE TABLE IF NOT EXISTS `role_proposal_comments` (
   -- Who wrote it. NULL once they have left the village.
   `author_id` varchar(64) NULL,
   `body` varchar(1000) NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   KEY `role_proposal_comments_proposal_idx` (`proposal_id`, `created_at`),
   KEY `role_proposal_comments_author_idx` (`author_id`)
