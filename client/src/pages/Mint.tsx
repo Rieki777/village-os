@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { villageMoonSentence, type VillageMoon } from "@shared/villageMoon";
+import { ceilingBinds } from "@shared/workValue";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -409,18 +410,30 @@ export default function Mint() {
                       every payment was 5. The units and their scale both come
                       down in the payload and the division happens in the one
                       place it happens anywhere on this client.
+
+                      A rule that pays a quest or a role has no ceiling (Rye,
+                      2026-10-22: "we definitely can't have caps on what things
+                      pay"), so it says it pays in full and never shows one.
                     */}
                     <p className={ruleLine}>
                       {r.amount === null
-                        ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
+                        ? ceilingBinds(r.trigger)
+                          ? `up to ${formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)} ${r.tokenName}, as much as the work was posted for`
+                          : `as much ${r.tokenName} as each piece of work names`
                         : `${formatTokenAmount(r.pays.units ?? 0, r.pays.decimals)} ${r.tokenName}`}
                       {" to each "}
                       {r.recipient}
                     </p>
-                    <p className={ruleLine}>
-                      The most one payment may be: {formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)}{" "}
-                      {r.tokenName}
-                    </p>
+                    {ceilingBinds(r.trigger) ? (
+                      <p className={ruleLine}>
+                        The most one payment may be: {formatTokenAmount(r.pays.ceilingUnits, r.pays.decimals)}{" "}
+                        {r.tokenName}
+                      </p>
+                    ) : (
+                      <p className={ruleLine}>
+                        Paid in full, with no ceiling. A piece of work that names its own amount of {r.tokenName} is paid that amount.
+                      </p>
+                    )}
                     {r.problem ? (
                       <p className={ruleWarn}>
                         This rule pays nobody: {r.problem}.

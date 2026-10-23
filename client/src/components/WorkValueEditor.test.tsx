@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import WorkValueEditor, { draftFrom, draftToBody, type PayOption } from "./WorkValueEditor";
 
-const offered: PayOption[] = [{ token: "village-credits", name: "Village Credits", ceiling: 250, standard: 25, decimals: 0 }];
+const offered: PayOption[] = [{ token: "village-credits", name: "Village Credits", standard: 25, decimals: 0 }];
 const oldRole = { valueMinor: 5000, valueCurrency: "USD", valueTokens: [{ token: "village-credits", amount: 40 }] };
 
 describe("a value saved in a currency the village has since left", () => {
