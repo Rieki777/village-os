@@ -153,7 +153,7 @@ export function register(app: Express, deps: Deps): void {
   /*
    * WHAT A STEWARD MAY PUT ON A QUEST OR A ROLE: the currency a value is
    * stamped in, and for each kind of work the tokens the village has an
-   * enabled rule for, with the ceiling and the standard amount. The editor
+   * enabled rule for, with the standard amount (no ceiling: work is paid in full). The editor
    * prefills a new quest's list from the standard amounts, so what the steward
    * sees is what the quest pays.
    *
@@ -185,7 +185,7 @@ export function register(app: Express, deps: Deps): void {
     opts: { required: boolean },
   ): Promise<Record<string, unknown> | null> => {
     const rules = await questPayRules(getPool());
-    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug, 0));
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug));
     delete body.valueMinor;
     delete body.valueCurrency;
     delete body.valueTokens;
@@ -200,13 +200,6 @@ export function register(app: Express, deps: Deps): void {
     if (opts.required && (input.valueMinor === undefined || input.valueMinor === null)) {
       res.status(400).json({ error: "Every quest says what it is worth. Set a value before you publish it." });
       return null;
-    }
-    for (const t of input.tokens ?? []) {
-      const problem = payLineProblem(rules, t.token, t.amount);
-      if (problem) {
-        res.status(400).json({ error: problem });
-        return null;
-      }
     }
     const out: Record<string, unknown> = {};
     if (input.valueMinor !== undefined) {

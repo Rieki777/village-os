@@ -42,10 +42,8 @@ export interface PayLine {
   token: string;
   /** The token's live display name, so a rename reaches every card. */
   name: string;
-  /** Human units, after the village's ceiling. */
+  /** Human units, in full: no ceiling binds work (WORK_PAY_TRIGGERS). */
   amount: number;
-  /** True when the village's mint rule ceiling lowered the amount the work names. */
-  capped: boolean;
 }
 
 /**
@@ -85,6 +83,26 @@ export const VALUE_MINOR_MAX = 1_000_000_000_000;
 
 /** The largest single token amount one piece of work may name. */
 export const TOKEN_AMOUNT_MAX = 1_000_000_000;
+
+/**
+ * THE TWO TRIGGERS THAT PAY WORK, AND NO CEILING BINDS EITHER (Rye, 2026-10-22:
+ * "no caps here! Relatively most projects will have 1 token ~1USD (or their
+ * local currency) so we definitely can't have caps on what things pay").
+ *
+ * A quest or a role pays what it names, or the rule's own amount when it names
+ * nothing, in full. An enabled rule on a token still decides that the token
+ * may pay that kind of work at all, and Gratitude never does.
+ *
+ * Every rule the engine pays today is on one of these two triggers, so no
+ * ceiling binds anything it pays. The column is still stored. `ceilingBinds`
+ * keeps the old clamp for a rule on any other trigger, and nothing pays one.
+ */
+export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed", "role.cycle"];
+
+/** Whether a mint rule's ceiling binds what it pays. False for work. */
+export function ceilingBinds(trigger: string): boolean {
+  return !WORK_PAY_TRIGGERS.includes(trigger);
+}
 
 /** The one token that never pays for work. */
 export const GRATITUDE_NEVER_PAYS =

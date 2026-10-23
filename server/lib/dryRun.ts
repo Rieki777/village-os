@@ -58,9 +58,9 @@ import type { VillageMoon } from "../../shared/villageMoon";
 import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
 // `toLedgerUnits` is gone from this list on purpose: the conversion happens
-// inside `ceilingOutcome` now, so this module converts nothing of its own and
+// inside `quoteWorkPay`, so this module converts nothing of its own and
 // cannot come to disagree with the engine about the scale it converted at.
-import { ceilingOutcome, decimalsFor, faucetFor, humanAtScale, VILLAGE_VOICE } from "./economy";
+import { faucetFor, humanAtScale, quoteWorkPay, VILLAGE_VOICE } from "./economy";
 import { shareCapFor } from "./gratitude";
 import { tokenDef } from "./ledger";
 import { numberVar, stringVar } from "./variables";
@@ -477,42 +477,32 @@ function settlementFindings(
       continue;
     }
     /*
-     * THE CEILING, THROUGH THE ENGINE'S OWN FUNCTION.
+     * WHAT A SEAT IS PAID, THROUGH THE ENGINE'S OWN FUNCTION.
      *
-     * `DryRunRule` has carried `ceiling` since it was written and used it for
-     * exactly one thing: narrating a queued change to it. So a founder running
-     * the test run over `amount 25, ceiling 5` was told "each thanked 25", the
-     * one surface built to catch a setting that cannot work agreed with the
-     * two that were already wrong, and at a ceiling of 0 all three promised a
-     * payout of 25 that the engine would refuse outright.
-     *
-     * `ceilingOutcome` decides it, the same call `runSettlement` makes, so a
-     * disagreement between the run and the moon is now a compile-time
-     * impossibility instead of a habit.
+     * `quoteWorkPay` is what `runSettlement` pays each seat from, so a
+     * disagreement between this run and the moon is a compile-time
+     * impossibility instead of a habit. It used to ask `ceilingOutcome`, which
+     * was the engine's answer while a ceiling bound role pay; none does now
+     * (Rye, 2026-10-22), and the rule's own amount is posted in full.
      */
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, r.amount, decimals, tokenName);
-    if (capped.refusal) {
+    const quote = quoteWorkPay([r], null, "seat");
+    const line = quote.lines[0];
+    if (!line) {
+      const why = quote.unpayable[0]?.reason;
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a role cannot pay, because ${capped.refusal}.`,
-      });
-      continue;
-    }
-    if (capped.units <= 0) {
-      out.push({
-        area: "settlement",
-        outcome: "refused",
-        sentence: `The ${tokenName} role rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
+        sentence:
+          why && !why.includes("smallest amount")
+            ? `The ${tokenName} rule for holding a role cannot pay, because ${why}.`
+            : `The ${tokenName} role rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
       });
       continue;
     }
     // What the engine would actually post, converted back once for the
-    // sentence. The moon total is the per-seat integer times the seats, so it
-    // carries the clamp rather than restating the rule's own number.
-    const each = humanAtScale(capped.units, decimals);
-    const moon = humanAtScale(capped.units * snapshot.seatCount, decimals);
+    // sentence. The moon total is the per-seat integer times the seats.
+    const each = humanAtScale(line.units, line.decimals);
+    const moon = humanAtScale(line.units * snapshot.seatCount, line.decimals);
     out.push({
       area: "settlement",
       outcome: "issued",

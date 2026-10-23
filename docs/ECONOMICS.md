@@ -92,7 +92,7 @@ subtlety in this system; see section 7.
 | Trigger | Path | Notes |
 |---|---|---|
 | A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | A consent is a yes and posts no Gratitude (Rye, 2026-10-21). The quest pays its own list, or the standard rules when it has none, priced by `quoteWorkPay` (see "What a quest and a role pay" in section 4) and recorded in the claim's own commit, then posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
-| A moon closes | `runSettlement` | Pays each holder their role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay` under the `role.cycle` ceilings |
+| A moon closes | `runSettlement` | Pays each holder their role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay`, in full |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
@@ -410,6 +410,19 @@ Raise the ceiling or pause the rule." That is the same fail-closed reading of ze
 swap caps use, and it is what `mintRuleValueProblem` already promised a village when it
 said a ceiling is zero or more and zero means zero.
 
+**No ceiling binds work, since 2026-10-22.** Rye: "no caps here! Relatively most projects
+will have 1 token ~1USD (or their local currency) so we definitely can't have caps on what
+things pay." So everything above about clamping holds for every trigger EXCEPT the two that
+pay work, `quest.completed` and `role.cycle` (`WORK_PAY_TRIGGERS` and `ceilingBinds` in
+`shared/workValue.ts`). On those two the ceiling column is still stored and still editable,
+and binds nothing: not a quest's or a role's own amount, and not the rule's own fixed amount
+either, which `queueRuleChange` and the ballot check (`mintCeilingProblems`) no longer hold
+under it. A ceiling of 0 on a work rule pays in full too. Every rule the engine pays is on one
+of these two triggers (`rulesFor` is asked for nothing else, and the seed ships nothing else),
+so **no ceiling binds anything the engine pays today**. The column is still stored, and the Mint
+panel never offered a control for it. `ceilingBinds` keeps the old clamp for a rule on any other
+trigger, and nothing pays one.
+
 A rule the engine cannot honour is REPORTED rather than skipped. `ruleCannotPay`
 answers why, `reportUnpayable` logs it, and both `owedForClaim` and
 `runSettlement` return the list. This exists because a village once enabled a
@@ -439,16 +452,19 @@ settlement preview sums it seat by seat, and the cards render from it
 
 | The work carries | What it is paid |
 |---|---|
-| its own list | each line it names, at its own amount, clamped to the ceiling of the village's enabled rule on that token. A token it does not name pays nothing, so a valued quest is never also paid the flat amounts |
-| no list | every enabled rule's fixed amount, exactly as before 0265 |
-| a line on a token with no enabled rule | nothing. Nothing caps it, so it is refused at the save and reported if it is ever reached |
+| its own list | each line it names, at its own amount, in full, on a token the village has an enabled rule for. A token it does not name pays nothing, so a valued quest is never also paid the flat amounts |
+| no list | every enabled rule's fixed amount, in full |
+| a line on a token with no enabled rule | nothing. No rule lets that token pay this kind of work, so it is refused at the save and reported if it is ever reached |
 | a line on Gratitude | nothing. Refused at the save, and a rule on Gratitude for quests or roles is reported and skipped |
 
-**The rule is still the ceiling.** A steward types how much a piece of work pays; the
-village's rules decide which tokens work may pay at all and the most any one occurrence
-may pay. A rule that reads its amount from the work (`amount` NULL) now pays the work that
-names one, under its ceiling, and is quiet on work that names none. Until 0265 it could
-never pay anything, because the only amount a quest posted was its Gratitude range.
+**The rule decides which tokens, never how much (Rye, 2026-10-22).** Somebody holding the
+power to value a quest or a role types what it pays; the village's enabled rules decide
+which tokens work may pay at all. Until 2026-10-22 each line was also clamped to that rule's
+ceiling, so a quest worth thousands in a currency pegged near one token each was held to
+250. A rule that reads its amount from the work (`amount` NULL) pays the work that names
+one, in full, and is quiet on work that names none. Until 0265 it could never pay anything,
+because the only amount a quest posted was its Gratitude range. The only upper bound left is
+what the platform records: `TOKEN_AMOUNT_MAX`, a billion of a token on one line.
 
 **The double-pay trap this closes.** A quest valued at 40 credits while the flat 25-credit
 rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a list

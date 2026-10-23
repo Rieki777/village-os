@@ -3,8 +3,8 @@
  *
  * Roles are paid in the village's own tokens, never in Gratitude, and each role
  * says what it pays: the value in the village's currency, and the token amounts
- * the cycle settlement pays each seat, under the village's `role.cycle` rule
- * ceilings. A role with no list of its own is paid the standard amounts, which
+ * the cycle settlement pays each seat, in full, from the village's `role.cycle`
+ * rules (no ceiling binds work, Rye 2026-10-22). A role with no list of its own is paid the standard amounts, which
  * is what the boxes open on. The cash a role pays is in its terms, set through
  * the terms editor beside this one, and the platform states it and never pays it.
  *

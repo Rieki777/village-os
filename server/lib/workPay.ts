@@ -7,8 +7,8 @@
  *
  * Every figure here comes from `quoteWorkPay` (server/lib/economy.ts), the
  * function the consent and the cycle settlement pay from. A card therefore
- * cannot promise a token amount the engine would not post: the same rules, the
- * same ceilings, the same refusals. Nothing here posts anything.
+ * cannot promise a token amount the engine would not post: the same rules and
+ * the same refusals. Nothing here posts anything.
  *
  * MONEY IS THE VALUE ONLY. A token is never converted into money on a card,
  * because a token only has a price when the exchange posts one, and "no price
@@ -68,7 +68,6 @@ function linesOf(work: ValuedWork, rules: readonly MintRule[], kind: "quest" | "
       token: l.token,
       name: tokenDef(l.token)?.name ?? l.token,
       amount: humanAtScale(l.units, l.decimals),
-      capped: l.capped,
     })),
   };
 }
@@ -81,7 +80,7 @@ export function questPay(quest: ValuedWork & { stayCreditReward?: number | null 
   const { lines, source } = linesOf(quest, rules, "quest");
   const stay = Math.max(0, Math.floor(Number(quest.stayCreditReward ?? 0)));
   if (stay > 0 && !ruleCannotPay(STAY_TOKEN) && toLedgerUnits(STAY_TOKEN, stay) > 0) {
-    lines.push({ token: STAY_TOKEN, name: tokenDef(STAY_TOKEN)?.name ?? STAY_TOKEN, amount: stay, capped: false });
+    lines.push({ token: STAY_TOKEN, name: tokenDef(STAY_TOKEN)?.name ?? STAY_TOKEN, amount: stay });
   }
   return { value: readWorkValue(quest.valueMinor, quest.valueCurrency), lines, source, cadence: "once" };
 }
@@ -97,12 +96,13 @@ export function recognitionName(): string | null {
   return tokenDef(HEARTS)?.name ?? null;
 }
 
-/** One token a steward may put on a quest or a role, and the most it may pay. */
+/**
+ * One token a steward may put on a quest or a role. No ceiling rides along:
+ * work is paid in full (Rye, 2026-10-22, `ceilingBinds` in shared/workValue.ts).
+ */
 export interface PayableToken {
   token: string;
   name: string;
-  /** The village's ceiling for one quest or one seat a cycle, in human units. */
-  ceiling: number;
   /** The rule's fixed amount, which a quest with no list of its own is paid. Null when the rule reads it from the work. */
   standard: number | null;
   decimals: number;
@@ -110,7 +110,7 @@ export interface PayableToken {
 
 /**
  * The tokens the editor offers: a platform token the engine can issue, with an
- * enabled rule for this kind of work to cap it. Gratitude is never one of them.
+ * enabled rule saying it may pay this kind of work. Gratitude is never one of them.
  */
 export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
   const out: PayableToken[] = [];
@@ -121,7 +121,6 @@ export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
     out.push({
       token: r.tokenSlug,
       name: def?.name ?? r.tokenSlug,
-      ceiling: Number(r.ceiling),
       standard: r.amount,
       decimals: def?.decimals ?? 0,
     });
@@ -134,17 +133,14 @@ export function payableTokens(rules: readonly MintRule[]): PayableToken[] {
  * figure the engine would refuse is refused before it is ever written, in a
  * sentence that names what to change.
  */
-export function payLineProblem(rules: readonly MintRule[], token: string, amount: number): string | null {
+export function payLineProblem(rules: readonly MintRule[], token: string): string | null {
   if (token === HEARTS) return GRATITUDE_NEVER_PAYS;
   const offered = payableTokens(rules).find((t) => t.token === token);
   if (!offered) {
     const name = tokenDef(token)?.name ?? token;
     const cannot = ruleCannotPay(token);
     if (cannot) return `${name} cannot be paid here: ${cannot}.`;
-    return `This village has no enabled rule paying ${name} for this kind of work, so nothing caps it. Add one on the Mint panel first.`;
-  }
-  if (amount > offered.ceiling) {
-    return `The village caps ${offered.name} at ${offered.ceiling} here. Lower the amount, or ask the village to raise the ceiling.`;
+    return `This village has no enabled rule paying ${name} for this kind of work. Add one on the Mint panel first.`;
   }
   return null;
 }

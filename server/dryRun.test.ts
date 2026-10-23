@@ -29,10 +29,12 @@ import { dryRun, MAX_MOONS, type DryRunRule, type DryRunSnapshot } from "./lib/d
 const FROM = new Date("2026-08-29T12:00:00.000Z");
 const C0 = cycleBoundsFor(FROM).cycleNumber;
 
+// Village Credits, a token roles are paid in. Gratitude pays no work (Rye,
+// 2026-10-21), and the run says so through the engine's own function.
 const seatRule = (over: Partial<DryRunRule> = {}): DryRunRule => ({
-  id: "rule-role.cycle-gratitude",
+  id: "rule-role.cycle-credits",
   trigger: "role.cycle",
-  tokenSlug: "gratitude",
+  tokenSlug: "credits",
   amount: 20,
   ceiling: 100,
   enabled: true,
@@ -113,7 +115,7 @@ describe("what a settlement would pay", () => {
     const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
     expect(paid).toHaveLength(1);
     expect(paid[0].sentence).toContain("3 role holders");
-    expect(paid[0].sentence).toContain("20 Gratitude");
+    expect(paid[0].sentence).toContain("20 Village Credits");
     expect(paid[0].sentence).toContain("60 for the moon");
   });
 
@@ -145,29 +147,30 @@ describe("what a settlement would pay", () => {
    * on it printed the rule's amount where the engine prints the clamp, and it
    * agreed with the two surfaces that were already wrong.
    */
-  it("thanks every seat holder at the CLAMP, which is what the engine will pay", () => {
-    const r = dryRun(
-      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 5 })] }),
-      { moons: 2, from: FROM },
-    );
-    const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
-    expect(paid).toHaveLength(1);
-    // The engine pays 5 a seat. This said 20, and 60 for the moon.
-    expect(paid[0].sentence).toContain("5 Gratitude");
-    expect(paid[0].sentence).toContain("15 for the moon");
-    expect(paid[0].sentence).not.toContain("20 Gratitude");
+  it("thanks every seat holder at the rule's own amount, above its ceiling, which is what the engine will pay", () => {
+    // No ceiling binds role pay (Rye, 2026-10-22). This printed the clamp, 5,
+    // while a ceiling bound it.
+    for (const ceiling of [5, 0]) {
+      const r = dryRun(
+        snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling })] }),
+        { moons: 2, from: FROM },
+      );
+      const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
+      expect(paid, `ceiling ${ceiling}`).toHaveLength(1);
+      expect(paid[0].sentence).toContain("20 Village Credits");
+      expect(paid[0].sentence).toContain("60 for the moon");
+    }
   });
 
-  it("refuses a seat rule the ceiling stops outright, and names the ceiling", () => {
+  it("says a Gratitude role rule pays nobody, as the engine does", () => {
+    // It used to print "3 role holders each thanked 20 Gratitude", for a rule
+    // the settlement has refused since roles stopped paying Gratitude.
     const r = dryRun(
-      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 0 })] }),
+      snapshot({ seatCount: 3, rules: [seatRule({ tokenSlug: "gratitude" })] }),
       { moons: 2, from: FROM },
     );
-    // It used to print "3 seat holders each thanked 20 Gratitude" for a rule
-    // the engine refuses before it reaches a single seat.
     expect(sentences(r)).not.toMatch(/each thanked/i);
-    expect(sentences(r)).toMatch(/ceiling is 0, so it can pay no Gratitude at all/i);
-    expect(r.refusals.filter((f) => f.area === "settlement").length).toBeGreaterThan(0);
+    expect(sentences(r)).toMatch(/Gratitude rule for holding a role cannot pay, because Gratitude never pays for work/);
   });
 
   it("names a token the ledger has no faucet for", () => {
@@ -225,8 +228,8 @@ describe("queued dial changes", () => {
     // change lands in settles under the new number.
     const amountIn = (i: number) =>
       r.turns[i].findings.find((f) => f.area === "settlement" && f.outcome === "issued")!.sentence;
-    expect(amountIn(1)).toContain("20 Gratitude");
-    expect(amountIn(2)).toContain("45 Gratitude");
+    expect(amountIn(1)).toContain("20 Village Credits");
+    expect(amountIn(2)).toContain("45 Village Credits");
   });
 });
 
@@ -472,7 +475,7 @@ describe("a queued change is four columns, never one", () => {
     expect(f.sentence).toMatch(/already due/i);
     expect(f.sentence).toContain("20 becomes 45");
     expect(r.turns[0].findings.find((x) => x.area === "settlement" && x.outcome === "issued")!.sentence)
-      .toContain("45 Gratitude");
+      .toContain("45 Village Credits");
     // Said once, on the first moon, and never again.
     expect(r.turns.filter((t) => t.findings.some((x) => x.area === "rules"))).toHaveLength(1);
   });

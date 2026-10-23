@@ -828,17 +828,10 @@ export function register(app: Express, deps: Deps): void {
     res: Response,
   ): Promise<RoleValueEdit | null> => {
     const rules = await rolePayRules(getPool());
-    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug, 0));
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug));
     if (!input.ok) {
       res.status(400).json({ error: input.error });
       return null;
-    }
-    for (const t of input.tokens ?? []) {
-      const problem = payLineProblem(rules, t.token, t.amount);
-      if (problem) {
-        res.status(400).json({ error: problem });
-        return null;
-      }
     }
     const out: RoleValueEdit = {};
     if (input.valueMinor !== undefined) {

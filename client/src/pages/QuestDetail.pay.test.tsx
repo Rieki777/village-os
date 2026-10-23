@@ -83,8 +83,8 @@ describe("a quest's page says what the quest pays", () => {
       pay: {
         value: { minor: 2500000, currency: "CRC" },
         lines: [
-          { token: "credits", name: "Village Credits", amount: 40, capped: false },
-          { token: "village-voice", name: "Village Voice", amount: 5, capped: false },
+          { token: "credits", name: "Village Credits", amount: 40 },
+          { token: "village-voice", name: "Village Voice", amount: 5 },
         ],
         source: "own",
         cadence: "once",
@@ -112,7 +112,7 @@ describe("a quest's page says what the quest pays", () => {
   it("shows the standard amounts on a quest nobody valued, and says they are the standard", async () => {
     ctl.quest = {
       ...BASE,
-      pay: { value: null, lines: [{ token: "credits", name: "Village Credits", amount: 25, capped: false }], source: "standard", cadence: "once" },
+      pay: { value: null, lines: [{ token: "credits", name: "Village Credits", amount: 25 }], source: "standard", cadence: "once" },
     };
     serve(null);
     render(<QuestDetail />);

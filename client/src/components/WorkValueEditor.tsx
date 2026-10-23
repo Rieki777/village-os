@@ -4,8 +4,9 @@
  * The value in the village's own currency, and the token amounts beside it.
  * Every quest carries a value from the moment it is created. The tokens offered
  * are the ones this village has an enabled rule for, read from
- * `GET /api/quests/pay-options`, each with the most the village lets one piece
- * of work pay; Gratitude is never one of them, because it pays no work. A new
+ * `GET /api/quests/pay-options`, and each is paid in full: no ceiling binds
+ * work (Rye, 2026-10-22: "we definitely can't have caps on what things pay").
+ * Gratitude is never one of them, because it pays no work. A new
  * quest opens on the village's standard amounts, so what the steward sees is
  * what the quest will pay.
  *
@@ -27,7 +28,6 @@ import type { TokenAmount } from "@shared/workValue";
 export interface PayOption {
   token: string;
   name: string;
-  ceiling: number;
   /** The rule's fixed amount, which work with no list of its own is paid. */
   standard: number | null;
   decimals: number;
@@ -137,7 +137,6 @@ export function draftToBody(
     if (text === "") continue;
     const amount = Number(text);
     if (!Number.isFinite(amount) || amount < 0) return { ok: false, error: `The amount of ${o.name} is a number, zero or more.` };
-    if (amount > o.ceiling) return { ok: false, error: `The village caps ${o.name} at ${plain(o.ceiling)} here.` };
     if (amount > 0) valueTokens.push({ token: o.token, amount });
   }
   return { ok: true, valueMinor, valueTokens };
@@ -202,7 +201,7 @@ export default function WorkValueEditor({
                 aria-label={o.name}
               />
               <span>
-                {o.name} <span className="opacity-70">(up to {plain(o.ceiling)})</span>
+                {o.name}
               </span>
             </label>
           ))}
