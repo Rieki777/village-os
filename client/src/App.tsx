@@ -194,6 +194,10 @@ const Decisions = lazyPage(() => import("./pages/Decisions"));
 const Decision = lazyPage(() => import("./pages/Decision"));
 const Propose = lazyPage(() => import("./pages/Propose"));
 const SeatApplication = lazyPage(() => import("./pages/SeatApplication"));
+// One chunk for the three role proposal routes (role proposals PR C).
+const RoleProposal = lazyPage(() => import("./pages/RoleProposal"));
+const NewRoleProposal = lazyPage(() => import("./pages/RoleProposal").then((m) => ({ default: m.NewRoleProposal })));
+const SharedRoleProposal = lazyPage(() => import("./pages/RoleProposal").then((m) => ({ default: m.SharedRoleProposal })));
 const SeasonPlans = lazyPage(() => import("./pages/SeasonPlans"));
 const Aligned = lazyPage(() => import("./pages/Aligned"));
 const MySeason = lazyPage(() => import("./pages/MySeason"));
@@ -366,6 +370,10 @@ function Router() {
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
+      {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
+      <Route path="/role-proposals/new" component={NewRoleProposal} />
+      <Route path="/role-proposals/shared/:token" component={SharedRoleProposal} />
+      <Route path="/role-proposals/:id" component={RoleProposal} />
       {/* Your season: your own plan, then the village's page of everyone's, by name. */}
       <Route path="/season-plans/mine" component={MySeason} />
       <Route path="/season-plans" component={SeasonPlans} />

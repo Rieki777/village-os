@@ -48,6 +48,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/badges": "Badges & skills",
   "/powers": "What this village looks after",
   "/review": "Review",
+  "/role-proposals": "Propose my roles",
   // Keys here are matched by longest PREFIX against the live location, so a
   // key with no route behind it can never match and is dead weight that
   // reads like a promise. /health, /exchange and /profiles were all three:

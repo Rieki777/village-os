@@ -47,6 +47,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
+import { isTombstone } from "../lib/oauthAccounts";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 import { FORM_CONSENT_FIELD } from "../../shared/comms/contracts";
@@ -551,8 +552,10 @@ export function register(app: Express, deps: Deps): void {
     commsSink.fire({ type: "housing_status", reservationId: before.id, status, email: before.email ?? null });
 
     // Asked before the hamlet lookup, because two of the four statuses say
-    // nothing and a silent move should cost no reads.
-    let notice = reservationStatusNotice(status, {
+    // nothing and a silent move should cost no reads. A request the erasure
+    // scrubbed carries the tombstone's address, which reaches nobody, so it
+    // moves and nobody is written to.
+    let notice = isTombstone({ email: before.email }) ? null : reservationStatusNotice(status, {
       name: before.name,
       homeType: before.homeType,
       hamlet: null,
