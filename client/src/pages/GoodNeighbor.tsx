@@ -36,6 +36,15 @@ const CRITERION_LOOKS = [
   { icon: Baby, color: "bg-amber/10", iconColor: "text-amber-600" },
 ];
 
+/**
+ * The headline steps down a size when long, so a village's own longer name
+ * wraps between words on a phone instead of inside one. The default name
+ * keeps the size it always had.
+ */
+function nameSize(text: string): string {
+  return Array.from(text).length <= 24 ? "text-5xl md:text-6xl" : "text-4xl md:text-6xl";
+}
+
 /** The filled boxes of a row's numbered lines (`practice1`..`practice5`), in order. */
 function numberedLines(row: ResolvedItem, prefix: string): string[] {
   return [1, 2, 3, 4, 5].map((i) => (row[`${prefix}${i}`] ?? "").trim()).filter(Boolean);
@@ -84,7 +93,7 @@ export default function GoodNeighbor() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="font-display text-5xl md:text-6xl font-bold text-foreground mb-6 break-words"
+              className={`font-display ${nameSize(hero.fields.name)} font-bold text-foreground mb-6 break-words`}
             >
               {hero.fields.name}
             </motion.h1>

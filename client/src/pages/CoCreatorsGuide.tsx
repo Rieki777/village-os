@@ -60,11 +60,17 @@ type LoopId = (typeof CONTRIBUTION_LOOP_IDS)[number];
 type ElderId = (typeof GUIDE_ELDER_IDS)[number];
 type CtaId = (typeof GUIDE_CTA_IDS)[number];
 
-/** Where each circle's label sits on the diagram, and how its box is drawn. */
+/**
+ * Where each circle's label sits on the diagram, and how its box is drawn.
+ * The diagram is 440 wide (-20..420) and the two side labels sit 15 in from
+ * where they were: at 400 wide, today's own "What You're GOOD AT" and "What
+ * the VILLAGE NEEDS" ran past both edges and were clipped (measured
+ * 2026-10-22, 236..404 and -18..177), and a label at its limit ran further.
+ */
 const IKIGAI_LOOK: Record<IkigaiId, { x: number; y: number; fill: string; box: string; icon: typeof Heart; iconColor: string }> = {
   love: { x: 200, y: 80, fill: "fill-primary", box: "bg-primary/5 border-primary", icon: Heart, iconColor: "text-primary" },
-  good: { x: 320, y: 260, fill: "fill-sage", box: "bg-sage/5 border-sage", icon: Star, iconColor: "text-sage" },
-  needs: { x: 80, y: 320, fill: "fill-sage", box: "bg-emerald-100/50 border-emerald-600", icon: Leaf, iconColor: "text-emerald-600" },
+  good: { x: 305, y: 260, fill: "fill-sage", box: "bg-sage/5 border-sage", icon: Star, iconColor: "text-sage" },
+  needs: { x: 95, y: 320, fill: "fill-sage", box: "bg-emerald-100/50 border-emerald-600", icon: Leaf, iconColor: "text-emerald-600" },
   pays: { x: 280, y: 150, fill: "fill-amber", box: "bg-amber/5 border-amber", icon: DollarSign, iconColor: "text-amber" },
 };
 
@@ -150,6 +156,11 @@ const ELDER_LOOK: Record<ElderId, { card: string; icon: typeof Heart; title: str
 
 const PILLAR_ICONS = [Heart, MessageCircle, DollarSign, Users];
 
+/** The headline steps down a size when long, so it wraps between words on a phone. Short ones keep today's size. */
+function headlineSize(text: string): string {
+  return Array.from(text).length <= 28 ? "text-5xl md:text-6xl" : "text-4xl md:text-5xl";
+}
+
 const CTA_LOOK: Record<CtaId, { icon: typeof Heart; href: string; external: boolean; color: string }> = {
   commitment: { icon: Heart, href: "/love-letter", external: false, color: "text-primary" },
   quests: { icon: Compass, href: "/quests", external: false, color: "text-teal-deep" },
@@ -226,7 +237,7 @@ export default function CoCreatorsGuide() {
               transition={{ duration: 0.6 }}
             >
               <BookOpen className="w-16 h-16 mx-auto mb-6 opacity-90" />
-              <h1 className="font-display text-5xl md:text-6xl font-bold mb-6 leading-tight break-words">
+              <h1 className={`font-display ${headlineSize(hero.fields.headline)} font-bold mb-6 leading-tight break-words`}>
                 {hero.fields.headline}
               </h1>
               <p className="text-lg md:text-xl text-white leading-relaxed max-w-2xl mx-auto">
@@ -285,7 +296,7 @@ export default function CoCreatorsGuide() {
               <div className="grid md:grid-cols-2 gap-12 items-center">
                 {/* VENN DIAGRAM. The labels sit at fixed points with no wrapping, which is why their limit is short. */}
                 <div className="relative w-full h-80 flex items-center justify-center">
-                  <svg viewBox="0 0 400 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                  <svg viewBox="-20 0 440 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
                     {/* Top: Passion */}
                     <circle
                       cx="200"
