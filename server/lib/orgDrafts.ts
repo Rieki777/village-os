@@ -49,7 +49,7 @@ import { ORG_DRAFT } from "../../shared/ballotSubjects";
 import { openBallotFor } from "./ballots";
 import { ROLE_HANDOVER_COLUMNS, ROLE_HANDOVER_FIELDS } from "../../shared/roleHandover";
 import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHandoverParse";
-import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS, ROLE_CCOS_WORDS, accountabilitiesProblem } from "../../shared/roleCcos";
+import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS, ROLE_CCOS_WORDS, accountabilitiesProblem, payloadAccountabilitiesProblem } from "../../shared/roleCcos";
 import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse";
 
 export type DraftOp =
@@ -1097,7 +1097,7 @@ export function previewLoadedDraft(
       if (handover) reasons.push(handover);
       // 0274: the CCOS words and the 3 to 6 accountabilities, through the
       // parser the publish runs again.
-      const ccos = roleCcosProblem(c.payload);
+      const ccos = roleCcosProblem(c.payload, "create_seat");
       if (ccos) reasons.push(ccos);
       /*
        * ── THE SHAPE RULES, which the old block list did not have ──────────
@@ -1463,10 +1463,12 @@ export function ccosColumns(p: Record<string, unknown>): Array<[string, string |
 /**
  * The CCOS limit on what a role answers for, refused again at publish: a new
  * write names 3 to 6 accountabilities, or none. A role already stored with
- * fewer is never touched by this, because only a payload is checked.
+ * fewer is never touched by this, because only a payload is checked. A
+ * `create_seat` carrying in a role kept elsewhere (`CARRIED_FROM_KEY`, the
+ * ReGen Civics import) keeps its own count, as the preview says.
  */
-function refuseAccountabilities(p: Record<string, unknown>): void {
-  const problem = accountabilitiesProblem(p.accountabilities);
+function refuseAccountabilities(p: Record<string, unknown>, op: "create_seat" | "update_seat"): void {
+  const problem = op === "create_seat" ? payloadAccountabilitiesProblem(p) : accountabilitiesProblem(p.accountabilities);
   if (problem) throw new Error(`This change cannot be published. ${problem}`);
 }
 
@@ -1591,7 +1593,7 @@ async function applyChange(
     // 0268: and its handover words, parsed and refused like an update's.
     const words = new Map(handoverColumns(p));
     // 0274: and its CCOS words, and the 3 to 6 accountabilities, refused like an update's.
-    refuseAccountabilities(p);
+    refuseAccountabilities(p, "create_seat");
     const ccos = new Map(ccosColumns(p));
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
@@ -1691,7 +1693,7 @@ async function applyChange(
     sets.push("`" + col + "` = ?");
     args.push(v);
   }
-  refuseAccountabilities(p);
+  refuseAccountabilities(p, "update_seat");
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));

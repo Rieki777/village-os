@@ -189,3 +189,22 @@ export function accountabilitiesProblem(v: unknown): string | null {
   if (n === null || n === 0) return null;
   return n < ACCOUNTABILITIES_MIN || n > ACCOUNTABILITIES_MAX ? ROLE_CCOS_WORDS.accountabilities : null;
 }
+
+/**
+ * A `create_seat` line that carries in a role which already exists somewhere
+ * else names where it came from under this key. Today one door sets it: the
+ * ReGen Civics import (shared/regenImport.ts `draftChangesFor`), whose roles
+ * are the village's own, already written on its card. Such a role arrives with
+ * the lines it has, as a role stored before the limit keeps loading with its
+ * own: the 3 to 6 count binds roles written here. Every other check, and every
+ * other field's parser, still runs. Nothing writes the key to a column.
+ */
+export const CARRIED_FROM_KEY = "carriedFrom";
+
+/** The accountability count's refusal for a draft payload, or null; a carried-in role keeps its own count. */
+export function payloadAccountabilitiesProblem(payload: Record<string, unknown> | null | undefined): string | null {
+  if (!payload) return null;
+  const from = payload[CARRIED_FROM_KEY];
+  if (typeof from === "string" && from.trim() !== "") return null;
+  return accountabilitiesProblem(payload.accountabilities);
+}

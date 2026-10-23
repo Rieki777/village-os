@@ -23,7 +23,9 @@ import {
   ROLE_CCOS_FIELDS,
   ROLE_CCOS_TEXT_MAX,
   ROLE_CCOS_WORDS,
+  CARRIED_FROM_KEY,
   accountabilitiesProblem,
+  payloadAccountabilitiesProblem,
   ccosWordsFromRow,
   readStoredCcosList,
   readStoredRoleText,
@@ -181,5 +183,23 @@ describe("how we'll know it's working: 2 to 4 measures on a new write", () => {
   it("refuses at the terms-on-offer door a draft writes through", () => {
     expect(readTermsOffer(board(1), { newWrite: true })).toEqual({ ok: false, problem: MEASURES_NEW_MESSAGE });
     expect(readTermsOffer(board(3), { newWrite: true }).ok).toBe(true);
+  });
+});
+
+describe("a role carried in from its own card keeps its count", () => {
+  it("lets a create_seat that carries a role in keep 1, 2 or 7 lines, and holds every edit here to 3 to 6", () => {
+    const carried = { name: "Ceremony Keeper", accountabilities: ["The ceremony calendar"], [CARRIED_FROM_KEY]: "regen-civics" };
+    expect(payloadAccountabilitiesProblem(carried)).toBeNull();
+    expect(roleCcosProblem(carried, "create_seat")).toBeNull();
+    // The same payload as an edit to a role here is held to the limit.
+    expect(roleCcosProblem(carried, "update_seat")).toBe(ROLE_CCOS_WORDS.accountabilities);
+    expect(roleCcosProblem(carried)).toBe(ROLE_CCOS_WORDS.accountabilities);
+    // Without the key, a new role is held to it too; a blank key is no key.
+    expect(roleCcosProblem({ ...carried, [CARRIED_FROM_KEY]: undefined }, "create_seat")).toBe(ROLE_CCOS_WORDS.accountabilities);
+    expect(roleCcosProblem({ ...carried, [CARRIED_FROM_KEY]: " " }, "create_seat")).toBe(ROLE_CCOS_WORDS.accountabilities);
+  });
+
+  it("still runs every field's parser on a carried-in role", () => {
+    expect(roleCcosProblem({ [CARRIED_FROM_KEY]: "regen-civics", authorities: lines(9) }, "create_seat")).toBe("What I can decide on my own: Up to 8 lines.");
   });
 });

@@ -216,6 +216,14 @@ describe.skipIf(!configured)("the CCOS words change on the role, by draft", () =
     expect(r?.authorities).toEqual(["Close a tank"]);
   });
 
+  it("a role carried in from its own card keeps its count on create, and an edit here is still held to 3 to 6", async () => {
+    const two = ["The kitchen", "The pantry"];
+    await publishWith("create_seat", "ccos-carried", { name: "Cook", accountabilities: two, carriedFrom: "regen-civics" });
+    expect((await roleOf("ccos-carried"))?.accountabilities).toEqual(two);
+    const words = new RegExp(ROLE_CCOS_WORDS.accountabilities.replace(/[.]/g, "\\."));
+    await refused("update_seat", "ccos-water", { accountabilities: two, carriedFrom: "regen-civics" }, words);
+  });
+
   it("a change naming only the accountabilities is a change, and publishes (the card's proposal)", async () => {
     await publishWith("update_seat", "ccos-water", { accountabilities: three });
     expect((await roleOf("ccos-water"))?.accountabilities).toEqual(three);

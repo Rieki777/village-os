@@ -19,6 +19,7 @@ import {
   ROLE_CCOS_WORDS,
   accountabilitiesProblem,
   isRoleCcosListField,
+  payloadAccountabilitiesProblem,
   type RoleCcosField,
   type RoleCcosTextField,
 } from "./roleCcos";
@@ -80,13 +81,20 @@ export function parseRoleCcosField(field: RoleCcosField, v: unknown): ParseResul
  * carry is not checked: an absent key changes nothing. A draft names the
  * canonical keys only; a proposal's column spellings are read into them by
  * `normaliseProposedSeat` (shared/proposedSeats.ts) before any draft exists.
+ *
+ * `op` is the change the payload rides on. Only a `create_seat` may carry in a
+ * role that already exists elsewhere (`CARRIED_FROM_KEY`) and keep its own
+ * count of accountabilities; an edit to a role here is always held to 3 to 6.
  */
-export function roleCcosProblem(payload: Record<string, unknown> | null | undefined): string | null {
+export function roleCcosProblem(
+  payload: Record<string, unknown> | null | undefined,
+  op: "create_seat" | "update_seat" = "update_seat",
+): string | null {
   if (!payload) return null;
   for (const f of ROLE_CCOS_FIELDS) {
     if (payload[f] === undefined) continue;
     const r = parseRoleCcosField(f, payload[f]);
     if (!r.ok) return `${ROLE_CCOS_WORDS[f]}: ${r.problem}`;
   }
-  return accountabilitiesProblem(payload.accountabilities);
+  return op === "create_seat" ? payloadAccountabilitiesProblem(payload) : accountabilitiesProblem(payload.accountabilities);
 }
