@@ -408,6 +408,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "alignment-names-after-tombstone",
       "season-plan-words-after-tombstone",
       "role-tensions-after-tombstone",
+      "role-proposals-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
       "audit",

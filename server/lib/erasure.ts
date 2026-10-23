@@ -115,6 +115,7 @@ import { recordPartyLeft } from "./alignmentEndings";
 import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { forgetRoleTensionsFor } from "./roleTensions";
+import { forgetMemberProposals } from "../repos/roleProposals";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -696,6 +697,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "role-tensions-after-tombstone",
       run: async () => {
         await forgetRoleTensionsFor(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Role proposals (0273): the member's drafts go, with the feedback on
+       * them; a proposal they submitted loses its words and its link, since
+       * the application keeps the record of what was decided; and feedback
+       * they left on somebody else's draft stays, naming nobody.
+       */
+      name: "role-proposals-after-tombstone",
+      run: async () => {
+        await forgetMemberProposals(pool, target.id);
       },
     },
     {

@@ -138,6 +138,7 @@ import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./ro
 import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
 import { register as registerApplicationCardRoutes, orgRoleExtras } from "./routes/applicationCard";
+import { register as registerRoleProposalRoutes } from "./routes/roleProposals";
 import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
@@ -24898,6 +24899,7 @@ ${inner}
   seatVote.fill(registerSeatVote(app, { authedUser, capabilityCtx, members, firstName, stageOf, getPool, rolesRepo, loadRoleHolders, refuseUnlessMemberMayOpen, roleBallotSetup, roleConsequences, seatCalendar, landingDeps, addActivity, notifyRoll, serveBallot }));
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
+  registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 
