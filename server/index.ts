@@ -533,7 +533,7 @@ import {
   resolveNotifyPrefs,
   runNotificationDigest,
   runWeeklyBrief,
-  type NotifyDeps,
+  type NotifyDeps, type NoticeAbout,
 } from "./lib/notify";
 import { registerJob, registeredJobs, startScheduler } from "./lib/scheduler";
 import { cyclePoolProblem } from "./lib/cyclePool";
@@ -4060,10 +4060,10 @@ async function departureStrandingRefusal(target: any, self: boolean): Promise<st
  * suffixed per recipient so "each admin hears it once" and "the event fires
  * once" stay separate concerns.
  */
-async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = []): Promise<void> {
+async function notifyAdmins(type: string, title: string, dedupeKey: string, link = "/admin", except: readonly string[] = [], about: NoticeAbout = {}): Promise<void> {
   const admins = (await members.all()).filter((u: any) => (u.role === "admin" || u.role === "founder") && !except.includes(String(u.id)));
   for (const a of admins) {
-    await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}` });
+    await notify({ userId: a.id, type, title, link, dedupeKey: `${dedupeKey}:${a.id}`, actorUserId: about.actorUserId ?? null });
   }
 }
 
@@ -10036,7 +10036,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       "submission",
       `${firstName(user.name)} raised a hand for ${role.name}`,
       `role-application:${entry.id}`,
-      "/admin?tab=submissions",
+      "/admin?tab=submissions", [], { actorUserId: user.id },
     );
     res.json({ success: true });
   });
@@ -14396,7 +14396,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       note: note ? String(note) : null,
     });
     if (!r.ok) return res.status(409).json({ error: r.error });
-    await notifyAdmins("exit_opened", `${user.name ?? "A member"} has begun a departure`, `exit:${r.exit.id}:opened`);
+    await notifyAdmins("exit_opened", `${user.name ?? "A member"} has begun a departure`, `exit:${r.exit.id}:opened`, "/admin", [], { actorUserId: user.id });
     void recordEvent(getPool(), {
       kind: "audit", text: "exit:opened:voluntary", actorUserId: user.id,
       entityType: "user", entityRef: user.id, audience: "admin",
@@ -15388,7 +15388,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         link: "/gratitude",
         // One notification per send, keyed on the movement's own key, so a
         // retried request rings once for the same reason it pays once.
-        dedupeKey: `send:${user.id}:${nonce}`,
+        dedupeKey: `send:${user.id}:${nonce}`, actorUserId: user.id,
       });
       await recordEvent(getPool(), {
         kind: "member_send",
@@ -15471,7 +15471,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     }
     const r = await reserveItem(getPool(), { itemId: item.id, userId: user.id });
     if (!r.ok) return res.status(r.status).json({ error: r.error });
-    await notifyAdmins("library", `${user.name ?? "A member"} reserved ${item.name}`, `loan:${r.loanId}:reserved`);
+    await notifyAdmins("library", `${user.name ?? "A member"} reserved ${item.name}`, `loan:${r.loanId}:reserved`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true, loanId: r.loanId, escrow: r.escrow });
   });
 
@@ -15489,7 +15489,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // SWEEP. Reserve rings the stewards and return rings the stewards; cancel
     // was the one transition in the family that did not, so an item quietly
     // came free and the shelf list was the only place that knew.
-    await notifyAdmins("library", `${user.name ?? "A member"} cancelled a reservation, the item is free again`, `loan:${loan.id}:cancelled`);
+    await notifyAdmins("library", `${user.name ?? "A member"} cancelled a reservation, the item is free again`, `loan:${loan.id}:cancelled`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true, released: r.released });
   });
 
@@ -15500,7 +15500,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     if (!loan || loan.userId !== user.id) return res.status(404).json({ error: "No such loan" });
     const r = await markReturned(getPool(), loan.id, user.id);
     if (!r.ok) return res.status(409).json({ error: r.error });
-    await notifyAdmins("library", `${user.name ?? "A member"} returned an item, settle the loan`, `loan:${loan.id}:returned`);
+    await notifyAdmins("library", `${user.name ?? "A member"} returned an item, settle the loan`, `loan:${loan.id}:returned`, "/admin", [], { actorUserId: user.id });
     res.json({ success: true });
   });
 

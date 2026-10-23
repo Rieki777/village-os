@@ -38,6 +38,7 @@ import {
 } from "./ledger";
 import { numberVar, stringVar } from "./variables";
 import { tokenTypesPostedTo } from "../repos/tokenLedger";
+import { ownExitResolutions, setExitResolution } from "../repos/exitNotes";
 import { openRedemptionCount } from "./redemptionStore";
 
 /*
@@ -145,6 +146,47 @@ export async function createExit(
     [id, input.userId, input.kind, "open", input.openedBy, noticeEnds, input.note?.slice(0, 2000) ?? null],
   );
   return { ok: true, exit: (await exitById(pool, id))! };
+}
+
+/** A line the settle route appends to `exits.resolution`, as `sweepBalances` writes it. */
+const SETTLE_LINE = /^\[\d{4}-\d{2}-\d{2}\] (balances swept|exit policy applied|no balance moved): /;
+
+/** What stands where a departed member's own note was. */
+export const REMOVED_EXIT_NOTE = "[removed at member's request]";
+
+/**
+ * The erasure's exit step (server/lib/erasure.ts, "exit-notes-after-tombstone"):
+ * the note a member typed when they opened their own departure goes, and the
+ * record of leaving stays.
+ *
+ * `exits.resolution` holds two kinds of text. The opening note is the member's
+ * own words ("Anything you want the stewards to know"), often about another
+ * person. Every line after it is the settle route's, stamped and appended by
+ * `sweepBalances`, and one of those lines is the split of record that
+ * `capturedSplit` reads back. So the stamped lines are kept exactly, in order,
+ * and everything else is replaced by one constant line.
+ *
+ * ONLY A DEPARTURE THE MEMBER OPENED (`opened_by` is them). On one a steward
+ * opened, the note is the steward's account of the grounds, which is the
+ * village's record of why it acted, and whether that goes with the member is a
+ * decision this step does not make.
+ *
+ * Idempotent: the constant line is not a stamped line, so a second run finds
+ * it, replaces it with itself, and writes nothing that differs.
+ */
+export async function forgetOwnExitNotes(pool: Pool, userId: string): Promise<number> {
+  if (!userId) return 0;
+  let changed = 0;
+  for (const r of await ownExitResolutions(pool, userId)) {
+    const lines = r.resolution.split("\n");
+    const kept = lines.filter((l) => SETTLE_LINE.test(l));
+    const hadWords = lines.some((l) => l.trim() !== "" && !SETTLE_LINE.test(l));
+    const next = (hadWords ? REMOVED_EXIT_NOTE : "") + kept.map((l) => `\n${l}`).join("");
+    if (next === r.resolution) continue;
+    await setExitResolution(pool, r.id, next || null);
+    changed += 1;
+  }
+  return changed;
 }
 
 /**

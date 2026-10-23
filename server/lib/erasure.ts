@@ -126,7 +126,11 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
-import { forgetCommsPerson } from "../repos/commsPeople";
+import { forgetCommsPerson, forgetMailRepliedTo, housingAddressesOf } from "../repos/commsPeople";
+import { forgetNoticesOf } from "../repos/noticesNaming";
+import { forgetMeetMeWindowsOf } from "./gatherings";
+import { forgetOwnExitNotes } from "./exit";
+import { forgetCheckinNotesOf } from "./economy";
 import { emailKeyOf } from "../../shared/comms/address";
 import { isTombstone } from "./oauthAccounts";
 import {
@@ -222,6 +226,8 @@ interface Step {
  */
 function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: ErasureDeps): Step[] {
   const { members, submissionsRepo, roleHoldersRepo, withRoleHolderLock, loadRoleHolders } = deps;
+  const submissionIdsOf = (userId: string): string[] =>
+    (submissionsRepo.all() as any[]).filter((s) => s?.userId === userId).map((s) => String(s.id));
   return [
     {
       // Ledger descriptions first, while gratitude_log still links names to refs.
@@ -253,14 +259,13 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       // restorative intake notification carries "A private intake from <their
       // full name>" in the title and up to 2000 characters of their message in
       // the body, and nulling the actor id leaves every word of that in the
-      // steward's inbox.
+      // steward's inbox. Their own bell goes; every row naming them to
+      // somebody else, found by its actor or, for rows the admin producers
+      // wrote with no actor, by the record its key was built from, loses its
+      // words, and its emailed copies go blank first (server/repos/noticesNaming.ts).
       name: "notifications",
       run: async () => {
-        await pool.query("DELETE FROM notifications WHERE user_id = ?", [target.id]); // module-review-ok: notifications for a departed member are deleted outright; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
-        await pool.query( // module-review-ok: the notification TITLE and BODY restate the person in their own words, so nulling the actor id is not enough; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
-          "UPDATE notifications SET actor_user_id = NULL, title = 'A message from a departed member', body = NULL WHERE actor_user_id = ?",
-          [target.id],
-        );
+        await forgetNoticesOf(pool, { userId: target.id, submissionIds: submissionIdsOf(target.id) });
       },
     },
     {
@@ -690,6 +695,69 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
         await eraseApplicationWords(pool, target.id);
         // And nothing they applied for is seated after they have gone.
         await withdrawUnseatedOf(pool, target.id);
+      },
+    },
+    /*
+     * FIVE THINGS THE SWEEP NEVER REACHED (lane E2), each after the tombstone
+     * for the reason the needs step gives: until then the member's sessions
+     * live, and each of these is written by something a signed-in member
+     * does, so a pass that ran earlier could be followed by a fresh row.
+     */
+    {
+      /*
+       * Meet-me windows: "Meet <first name>", their place and their note, on
+       * the village layer a signed-out visitor reads. The window is the
+       * member's own offer, so it goes, freed the way any gathering is.
+       */
+      name: "meet-me-windows-after-tombstone",
+      run: async () => {
+        await forgetMeetMeWindowsOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * The notifications step again, once nothing can ring a bell in the
+       * member's name: a library reservation or a stay request in the window
+       * before the tombstone writes an admin's row after that step ran.
+       */
+      name: "notices-naming-after-tombstone",
+      run: async () => {
+        await forgetNoticesOf(pool, { userId: target.id, submissionIds: submissionIdsOf(target.id) });
+      },
+    },
+    {
+      /*
+       * The note a member wrote when they opened their own departure. The
+       * exit record stays, with the lines the settle step wrote under it,
+       * the split of record among them; a note a steward wrote on a departure
+       * the steward opened is the village's record and stays.
+       */
+      name: "exit-notes-after-tombstone",
+      run: async () => {
+        await forgetOwnExitNotes(pool, target.id);
+      },
+    },
+    {
+      /*
+       * An email that carried their words to somebody else loses its subject
+       * with its reply-to. The comms step reaches the ones sent from their
+       * account's address (a relay, a housing alert); these are the housing
+       * alerts sent under a different address they typed into a request of
+       * their own, read off that request here, before anything scrubs it.
+       */
+      name: "relayed-mail-after-tombstone",
+      run: async () => {
+        await forgetMailRepliedTo(pool, { emailKeys: await housingAddressesOf(pool, target.id), origins: ["housing.team_alert"] });
+      },
+    },
+    {
+      /*
+       * A steward's note on the member's check-in. The check-in stays, as the
+       * record of who was there; the note about them goes.
+       */
+      name: "checkin-notes-after-tombstone",
+      run: async () => {
+        await forgetCheckinNotesOf(pool, target.id);
       },
     },
     {

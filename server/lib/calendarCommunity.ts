@@ -617,7 +617,12 @@ export async function createMeetMe(
   return { ok: true, id };
 }
 
-/** The owner closes their window. Nobody else can. */
+/**
+ * The owner closes their window. Nobody else can. When the owner leaves the
+ * village, the erasure closes every window they ever opened through
+ * `forgetMeetMeWindowsOf` (server/lib/gatherings.ts), which frees the answers
+ * other members gave each one; this door deletes the window row alone.
+ */
 export async function cancelMeetMe(pool: Pool, id: string, userId: string): Promise<boolean> {
   const [res] = await pool.query<any>(
     "DELETE FROM events WHERE id = ? AND kind = 'meet-me' AND (created_by = ? OR owner_user_id = ?)",
