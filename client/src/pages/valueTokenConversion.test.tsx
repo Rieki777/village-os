@@ -141,9 +141,11 @@ const PAGES = [
   {
     name: "ProsperityJourney",
     render: () => render(<Router><ProsperityJourney /></Router>),
-    anchor: /Gratitude Economy/,
-    publishesConversion: true,
-    names: /Seeds/,
+    // Token row 27 (2026-10-22): the card is "Shared Enterprise", names no
+    // token, and no longer carries the founder's conversion sentence.
+    anchor: /Shared Enterprise/,
+    publishesConversion: false,
+    names: /agrees its revenue share with the village/,
   },
   {
     name: "CoCreatorsGuide",
@@ -232,7 +234,7 @@ for (const page of PAGES) {
         const said = document.body.textContent ?? "";
         expect(said).not.toContain("arranged directly with Willowbrook");
         expect(said).not.toMatch(/to cash or equity/i);
-        expect(said).toMatch(/Gratitude/);
+        expect(said).toMatch(page.names);
       });
     });
     continue;

@@ -624,12 +624,15 @@ const FIXED: Record<string, number> = {
   "client/src/pages/NotFound.tsx": 1,
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
-  "client/src/pages/ProsperityJourney.tsx": 3,
+  // The journey pages draw each step's button from ONE class list since their
+  // steps became admin-edited rows (2026-10-22): Prosperity's three fixed gold
+  // buttons and Resident's two are one each, still fixed. The total is 60.
+  "client/src/pages/ProsperityJourney.tsx": 1,
   "client/src/pages/ProposeQuest.tsx": 2,
   "client/src/pages/QuestDetail.tsx": 1,
   "client/src/pages/Quests.tsx": 2,
   "client/src/pages/RequestMembership.tsx": 2,
-  "client/src/pages/ResidentJourney.tsx": 2,
+  "client/src/pages/ResidentJourney.tsx": 1,
   "client/src/pages/ResidentRights.tsx": 1,
   "client/src/pages/SetPassword.tsx": 1,
   "client/src/pages/StewardRights.tsx": 1,
@@ -639,11 +642,11 @@ const FIXED: Record<string, number> = {
 
 describe("under the pointer, a brand button stays readable and visibly moves, light only", () => {
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(63);
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(60);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(63 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(60 + 25);
   });
 
   for (const list of POINTER_LISTS) {

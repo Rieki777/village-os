@@ -49,6 +49,12 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
   useBrandImages: () => ({ prosperityHero: "/hero.webp", investorHero: "/hero.webp" }),
   useVillageLinks: () => ({ siteUrl: "", eventsUrl: "", contactEmail: "", mailTo: () => "" }),
   useVillageSettings: () => null,
+  useGameConfig: () => ({ project: { name: "Willowbrook" }, currency: { name: "Recognition" } }),
+}));
+// The journey pages' own saved words: none, so each page's defaults.
+vi.mock("@/hooks/useVillageContent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useVillageContent")>()),
+  readVillageSection: () => Promise.resolve(null),
 }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Willowbrook" }));
 vi.mock("@/hooks/useTokenNames", () => ({
@@ -118,9 +124,9 @@ function measureOnStandIn(eyebrow: HTMLElement, standIn: (typeof STAND_INS)[numb
   }
 }
 
-/** The eyebrow, every line of the h1, and the paragraph under it. */
-function heroLines(eyebrowText: string): { eyebrow: HTMLElement; texts: string[] } {
-  const eyebrow = screen.getByText(eyebrowText);
+/** The eyebrow, every line of the h1, and the paragraph under it, once the page's words have arrived. */
+async function heroLines(eyebrowText: string): Promise<{ eyebrow: HTMLElement; texts: string[] }> {
+  const eyebrow = await screen.findByText(eyebrowText);
   const h1 = screen.getByRole("heading", { level: 1 });
   const paragraph = h1.nextElementSibling;
   if (!paragraph || paragraph.tagName !== "P") throw new Error("no paragraph follows the hero heading");
@@ -136,13 +142,13 @@ const HEROES = [
 describe.each(HEROES)("the $page hero copy, light", ({ Page, eyebrow: eyebrowText }) => {
   it.each(STAND_INS)(
     "eyebrow, heading and paragraph each clear their floor whatever paints the hero behind them (stand-in: %s)",
-    (standIn) => {
+    async (standIn) => {
       render(
         <Router>
           <Page />
         </Router>,
       );
-      const { eyebrow, texts } = heroLines(eyebrowText);
+      const { eyebrow, texts } = await heroLines(eyebrowText);
       // Eyebrow, the heading's two runs, the paragraph.
       expect(texts.length).toBeGreaterThanOrEqual(4);
       const measured = lines(measureOnStandIn(eyebrow, standIn), texts);
