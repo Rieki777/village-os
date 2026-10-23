@@ -33,7 +33,9 @@
  * the same power that puts a gathering on the calendar. Reading the vote is a
  * LOOK: `mayStillSee` decides only how much of the answer to build (whether
  * names travel), and never refuses. A vote is a person's own say, so it asks
- * only that the person can see the gathering.
+ * only that the person can see the gathering. A signed link speaks for its
+ * person only while that person stands (server/lib/comms/linkPerson.ts): an
+ * erased member's link is refused, and a session never stands in for it.
  *
  * Every door a stranger can knock on (the read and the vote) takes a per-IP
  * `overLimit` bucket.
@@ -42,6 +44,7 @@ import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { canViewRow, getCalendarRow } from "../lib/calendar";
 import { registerAction } from "../lib/comms/actions";
+import { linkPersonStands } from "../lib/comms/linkPerson";
 import { verifyLink } from "../lib/comms/links";
 import {
   addPollOptions,
@@ -59,6 +62,7 @@ import {
   timeVoteAction,
   updatePoll,
   vote,
+  VOTER_GONE,
   type PollResult,
   type TimePollDeps,
 } from "../lib/comms/timePolls";
@@ -120,14 +124,18 @@ export function register(app: Express, deps: PollRouteDeps): void {
 
   const eventId = (req: Request): string => String(req.params.id ?? "");
 
-  /** The person a signed `time_vote` link names, when it is for this gathering's vote. */
-  async function linkedPerson(req: Request): Promise<{ personKey: string } | null> {
+  /**
+   * The person a signed `time_vote` link names, when it is for this gathering's
+   * vote. `gone` when it names somebody erasure took (server/lib/comms/linkPerson.ts):
+   * the link then opens nothing it opened for them, and votes nothing.
+   */
+  async function linkedPerson(req: Request): Promise<{ personKey: string; gone: boolean } | null> {
     const t = typeof req.body?.t === "string" ? req.body.t : typeof req.query.t === "string" ? req.query.t : "";
     if (!t) return null;
     const payload = verifyLink("time_vote", t);
     const poll = await pollForEvent(getPool(), eventId(req));
     if (!payload || !poll || payload.p !== poll.id || typeof payload.k !== "string") return null;
-    return { personKey: payload.k };
+    return { personKey: payload.k, gone: !(await linkPersonStands(polls, payload.k)) };
   }
 
   /** Whether this request may see the gathering, and who is asking. */
@@ -143,7 +151,9 @@ export function register(app: Express, deps: PollRouteDeps): void {
 
   app.get("/api/events/:id/time-poll", async (req, res) => {
     if (await overLimit(`time-poll-read:${clientIp(req)}`, READ_PER_IP, WINDOW_MS)) return tooMany(res);
-    const linked = await linkedPerson(req);
+    // A gone person's link reads as no link: the request sees what its own session sees.
+    const found = await linkedPerson(req);
+    const linked = found && !found.gone ? found : null;
     const viewer = await viewerOf(req);
     if (!viewer.visible && !linked) return notFound(res);
     const view = await pollView(polls, eventId(req), {
@@ -162,6 +172,8 @@ export function register(app: Express, deps: PollRouteDeps): void {
       return res.status(400).json({ error: "Send the times you can make as a list." });
     }
     const linked = await linkedPerson(req);
+    // Refused outright, never filed under whoever is signed in: the press was for the link's person.
+    if (linked?.gone) return res.status(VOTER_GONE.status).json({ error: VOTER_GONE.error });
     let personKey = linked?.personKey ?? null;
     const viewer = await viewerOf(req);
     if (!personKey) {

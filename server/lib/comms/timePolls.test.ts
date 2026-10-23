@@ -4,6 +4,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../../
 import { civilDateKey } from "../../../shared/lunar";
 import { listCalendarItems } from "../calendar";
 import { createGathering, getGathering, rsvp } from "../gatherings";
+import { ensureContact } from "./contacts";
 import { enroll } from "./journeys";
 import type { CommsMode, PostOfficeDeps } from "./postOffice";
 import type { Transport } from "./transport";
@@ -292,7 +293,11 @@ describe.skipIf(!configured)("a guest's vote from a signed link", () => {
     const poll = (await pollForEvent(pool, g.id))!;
     const [, b] = (await pollView(deps(), g.id, { personKey: null, signedIn: false, canManage: false }))!.options;
     const action = timeVoteAction(deps());
-    const payload = { p: poll.id, o: b.id, k: "guest:ct_guest1" };
+    // A real guest, with the contact every guest a vote email reaches has: a
+    // link whose contact is gone names somebody erasure took (./linkPerson.ts).
+    const guest = await ensureContact({ getPool: () => pool }, { email: "guest1@village.example.test", name: "Gale Guest", source: "guest" });
+    const guestKey = `guest:${guest!.id}`;
+    const payload = { p: poll.id, o: b.id, k: guestKey };
     const before = await action.describe(payload, { village: "the village" });
     expect(before?.choices[0]).toMatchObject({ value: `yes:${b.id}`, primary: true });
     const first = await action.act(payload, { choice: `yes:${b.id}` }, { village: "the village" });
@@ -300,8 +305,8 @@ describe.skipIf(!configured)("a guest's vote from a signed link", () => {
     const again = await action.act(payload, { choice: `yes:${b.id}` }, { village: "the village" });
     expect(again.ok).toBe(true);
     const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: reading back the scratch schema this suite provisioned
-      "SELECT COUNT(*) AS n FROM event_time_poll_votes WHERE poll_id = ? AND person_key = 'guest:ct_guest1'",
-      [poll.id],
+      "SELECT COUNT(*) AS n FROM event_time_poll_votes WHERE poll_id = ? AND person_key = ?",
+      [poll.id, guestKey],
     );
     expect(Number(rows[0].n)).toBe(1);
     expect(await startOf(g.id), "the guest's pick moved the gathering live").toBe((await pollView(deps(), g.id, { personKey: null, signedIn: false, canManage: false }))!.options[1].startsAt);
