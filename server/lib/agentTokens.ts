@@ -218,8 +218,8 @@ async function recordRevoke(pool: Pool, userId: string, id: string): Promise<voi
  * End every live token a member holds, and say how many.
  *
  * Setting a password (the first claim, a reset, a change) and an admin's
- * "revoke sessions" reach this through `endAgentReach`, inside
- * `withAgentReachEnded`. Both bump tokenVersion, which ends every session, and
+ * "revoke sessions" reach this through `endAgentReach` (set-password inside
+ * `withAgentReachEnded`). Both bump tokenVersion, which ends every session, and
  * an agent token is not a session: the agent resolver (server/index.ts) mints
  * one from the holder's CURRENT tokenVersion on every call, so the bump alone
  * never reached a token. Somebody holding a stolen password could mint one for
@@ -318,9 +318,14 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
 }
 
 /**
- * Change a member's credential with their agent's reach ended on BOTH sides of
- * the change. Setting a password and an admin's revoke sessions both run
- * their tokenVersion bump through this (adversarial round 1, finding 28).
+ * Change a member's password with their agent's reach ended on BOTH sides of
+ * the change (adversarial round 1, finding 28). set-password runs its
+ * tokenVersion bump through this.
+ *
+ * An admin's revoke sessions does NOT. It has no link to keep unspent, and
+ * ending the sessions must never wait on anything else, because that revoke is
+ * the lever for a compromise. So it bumps first, then calls `endAgentReach`,
+ * whose failure answers 500 by name; pressing again finishes it.
  *
  * BEFORE the change, and a failure here throws: `change` never runs, so the
  * password and tokenVersion are as they were and a set-password link is still

@@ -748,4 +748,30 @@ describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every a
     await expectRevoked([laptop], "a reset finished on the second try");
     expect((await call("GET", "/api/profile", undefined, kit.token)).status, "the old session outlived the finished reset").toBe(401);
   });
+
+  /**
+   * An admin's revoke is the lever for a compromise, so the sessions end FIRST
+   * and never wait on the agent. A failure ending the rest answers 500, which
+   * the admin reads as "Revoke failed", and a second press finishes it.
+   */
+  it("an admin's revoke whose agent end fails still ends the sessions, and a second press finishes it", async () => {
+    const lia = await register("Lia Shore", "agent-lia");
+    const laptop = await mintFor(lia, "lia laptop");
+
+    await pool.query("RENAME TABLE agent_tokens TO agent_tokens_away"); // module-review-ok: breaking the token table on this suite's scratch schema for one request
+    let failed: Awaited<ReturnType<typeof call>>;
+    try {
+      failed = await call("POST", `/api/admin/users/${lia.id}/revoke-sessions`, {});
+    } finally {
+      await pool.query("RENAME TABLE agent_tokens_away TO agent_tokens"); // module-review-ok: putting the table back
+    }
+    expect(failed.status, "a revoke that could not end the agent must say so").toBe(500);
+    expect((await call("GET", "/api/profile", undefined, lia.token)).status, "the sessions outlived a revoke whose agent end failed").toBe(401);
+    expect((await call("GET", "/api/agent/v1/me", undefined, laptop)).status, "the token was ended although its table was away").toBe(200);
+
+    const again = await call("POST", `/api/admin/users/${lia.id}/revoke-sessions`, {});
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json.agentTokensRevoked).toBe(1);
+    await expectRevoked([laptop], "the second press");
+  });
 });

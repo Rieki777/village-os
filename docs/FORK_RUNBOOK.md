@@ -88,9 +88,11 @@ table. Setting a new password and `revoke-sessions` also end everything a
 session can leave standing for the member's agent (`endAgentReach`,
 `server/lib/agentTokens.ts`): every agent token (`vat_`), the private calendar
 feed address, the agent inbox with its queued deliveries, and the member's own
-model key. They end before the tokenVersion bump and again after it
-(`withAgentReachEnded`), so a failure leaves a set-password link unspent and the
-retry finishes the reset. The member's notes, drafts and agent profile stay.
+model key. A new password ends them before the tokenVersion bump and again
+after it (`withAgentReachEnded`), so a failure leaves the set-password link
+unspent and the retry finishes the reset. `revoke-sessions` bumps first, so the
+sessions end whatever happens next, then ends the rest; a failure answers 500
+and pressing again finishes it. The member's notes, drafts and agent profile stay.
 Signing out leaves all of these standing. A member who relied on a calendar
 subscription or an inbox sets it up again after a reset.
 
