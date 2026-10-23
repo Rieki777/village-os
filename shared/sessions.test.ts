@@ -306,7 +306,7 @@ describe("the minutes", () => {
       entry({ id: 14, kind: "note", text: "Rowan felt tired this week" }),
       entry({ id: 15, itemId: null, kind: "tension", text: "Nobody holds the tool shed." }),
     ],
-    tallies: { 10: { consent: 2, concern: 1, object: 0, waiting: 0, consented: true } },
+    tallies: { 10: { consent: 2, concern: 1, object: 0, sleeping: 0, waiting: 0, consented: true } },
   };
 
   it("for the people who were there: names on actions, notes kept", () => {
