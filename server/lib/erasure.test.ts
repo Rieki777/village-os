@@ -403,6 +403,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "comms",
       "needs-after-tombstone",
       "journal-after-tombstone",
+      "invites-after-tombstone",
       "saberra-bridge-after-tombstone",
       "seat-application-words-after-tombstone",
       "alignment-names-after-tombstone",

@@ -727,6 +727,15 @@ The retention sweep never deletes an unstamped row, at any age.
   short of deleting the account revokes its address the gentler way, by
   copying the bytes to a fresh stamped name and unlinking the old one, so
   the member keeps the picture and the old URL stops resolving.
+  **THEIR OPEN INVITATION LINKS TOO** (0209). A link is its maker's vouch,
+  and using one records an `arrival` vouch from them that can admit somebody
+  at a bar of one, so a departed member's links kept letting people in for
+  up to fourteen days. The `invites-after-tombstone` step withdraws every
+  link they made that nobody used, and a used link stays as the record of
+  the account it made. The invitation door (`server/lib/inviteDoor.ts`)
+  refuses a link whose maker is a tombstone or has no row, as withdrawn and
+  without naming them, and records no vouch from one, so a sweep that stops
+  between the tombstone and the links still admits nobody.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one

@@ -127,6 +127,7 @@ import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetProposer } from "../repos/questProposals";
 import { forgetCommsPerson } from "../repos/commsPeople";
+import { revokeOpenInvitesOf } from "../repos/memberInvites";
 import { emailKeyOf } from "../../shared/comms/address";
 import { isTombstone } from "./oauthAccounts";
 import {
@@ -624,6 +625,26 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "journal-after-tombstone",
       run: async () => {
         await forgetMemberJournal(pool, target.id);
+      },
+    },
+    {
+      /*
+       * Invitation links (0209): every link the member made that nobody has
+       * used is withdrawn. A link is its maker's vouch, and using one records
+       * an `arrival` vouch from them that can admit somebody on its own, so a
+       * departed member's open links would keep letting people in under the
+       * name "A departed member" for up to fourteen days. A used link made an
+       * account and stays the record of that.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives:
+       * `POST /api/invites` makes a link for anybody signed in who may vouch,
+       * and the tombstone is where the member's sessions die. The door refuses
+       * a tombstone's link on its own as well (server/lib/inviteDoor.ts), so a
+       * sweep that stops between the two still lets nobody in.
+       */
+      name: "invites-after-tombstone",
+      run: async () => {
+        await revokeOpenInvitesOf(pool, target.id);
       },
     },
     {
