@@ -421,6 +421,84 @@ export async function revokeDelegation(pool: Pool, delegatorId: string): Promise
   return Number(result.affectedRows) > 0;
 }
 
+/** The notice a member reads when the person carrying their voice leaves. It names nobody. */
+export const DELEGATE_LEFT_NOTICE = {
+  title: "The member you handed your voice to has left the village",
+  body: "Your delegation has ended, so you decide your own votes again. A vote they had cast for you on an open ballot is no longer cast, and you can cast your own before it closes.",
+};
+
+/** One stable key per (the leaving, the delegator who hears of it), so a resumed erasure tells nobody twice. */
+export const delegateLeftKey = (leaverId: string, delegatorId: string): string =>
+  `delegation-ended:${leaverId}:${delegatorId}`;
+
+/** The notice as the spine takes it (server/lib/notify.ts `NotifyInput`). */
+export interface DelegationNotice {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  link: string;
+  actorUserId: null;
+  dedupeKey: string;
+}
+
+/**
+ * END EVERY DELEGATION A DEPARTED MEMBER IS HALF OF, for the erasure's
+ * `delegations-after-tombstone` step (server/lib/erasure.ts).
+ *
+ * Without this the delegation map every tally reads (`loadDelegationMap`)
+ * kept pointing at somebody who will never vote again, and only the
+ * delegator could take it back, so a member who had handed their voice over
+ * stayed silently uncast on every ballot until they happened to look.
+ *
+ * Three acts, each the same act a member can make for themselves:
+ *
+ *   1. TELL each member who handed them a voice, live or still an offer,
+ *      through the spine with one stable key per delegator, BEFORE anything
+ *      is ended. The read that finds them is the live rows, so telling first
+ *      means a death between the two is resumed by the same read and the
+ *      same keys, and nobody hears twice. A delegator who is a tombstone
+ *      themselves is passed over. The notice names nobody and comes from the
+ *      village, with no actor, because its subject asked to be forgotten.
+ *   2. END both sides: the voice they gave (`revokeDelegation`) and every
+ *      voice offered to them or carried by them (`declineDelegations`).
+ *   3. RE-DERIVE every open ballot (`applyDelegatedVotesEverywhere`), the
+ *      call the routes make after any delegation change, so a vote copied
+ *      from them is no longer cast and each delegator's seat is theirs again.
+ *
+ * Idempotent: the second run finds no live row, tells nobody, ends nothing,
+ * and the derivation is a derivation.
+ */
+export async function endDelegationsOf(
+  pool: Pool,
+  userId: string,
+  notify: (notice: DelegationNotice) => Promise<unknown>,
+): Promise<{ told: number; ended: number }> {
+  const leaver = String(userId ?? "");
+  const [live] = await pool.query<RowDataPacket[]>( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)
+    "SELECT d.delegator_id FROM delegations d JOIN users u ON u.id = d.delegator_id " +
+      "WHERE d.delegate_id = ? AND d.delegator_id <> ? AND d.revoked_at IS NULL " +
+      "AND u.email NOT LIKE '%@anonymized.invalid' ORDER BY d.delegator_id",
+    [leaver, leaver],
+  );
+  for (const r of live) {
+    const delegatorId = String(r.delegator_id);
+    await notify({
+      userId: delegatorId,
+      type: "governance",
+      title: DELEGATE_LEFT_NOTICE.title,
+      body: DELEGATE_LEFT_NOTICE.body,
+      link: "/governance",
+      actorUserId: null,
+      dedupeKey: delegateLeftKey(leaver, delegatorId),
+    });
+  }
+  const gave = (await revokeDelegation(pool, leaver)) ? 1 : 0;
+  const carried = await declineDelegations(pool, leaver);
+  await applyDelegatedVotesEverywhere(pool);
+  return { told: live.length, ended: gave + carried.changed };
+}
+
 /** The delegation this member gave, live or revoked, or null if they never gave one. */
 export async function delegationOf(pool: Pool, delegatorId: string): Promise<DelegationRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)

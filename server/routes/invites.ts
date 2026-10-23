@@ -32,7 +32,7 @@ import {
   mintInviteToken,
   readInviteToken,
 } from "../lib/invites";
-import { createInvite, inviteByHash, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
+import { createInvite, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "mayAct" | "overLimit" | "clientIp"> & {
   invites: InviteDoor;
@@ -122,6 +122,10 @@ export function register(app: Express, deps: Deps): void {
    * guessing oracle, however long the token. It names the inviter by first
    * name only, which is what makes a link feel like a person and says nothing
    * a stranger could use.
+   *
+   * THE SAME ANSWER THE SIGN-UP DOORS GET, from the same `resolve`, so a link
+   * this page calls good is one sign-up takes. A link whose maker left is
+   * refused as withdrawn, and the maker is never named.
    */
   app.get("/api/invites/check", async (req, res) => {
     if (await overLimit(`invite-check:${clientIp(req)}`, 60, 60 * 60 * 1000)) {
@@ -129,16 +133,14 @@ export function register(app: Express, deps: Deps): void {
     }
     const inviteOnly = invites.required();
     const token = readInviteToken(req.query.token);
-    const row = token ? await inviteByHash(getPool(), hashInviteToken(token)) : null;
-    if (!row) return res.json({ inviteOnly, valid: false, error: INVITE_REFUSALS.unknown });
-    const standing = inviteStanding(row);
-    if (standing !== "open") return res.json({ inviteOnly, valid: false, error: INVITE_REFUSALS[standing] });
-    const inviter = await members.byId(row.inviterUserId);
+    if (!token) return res.json({ inviteOnly, valid: false, error: INVITE_REFUSALS.unknown });
+    const found = await invites.resolve(token);
+    if (!found.ok) return res.json({ inviteOnly, valid: false, error: found.error });
     res.json({
       inviteOnly,
       valid: true,
-      invitedBy: inviter ? firstName(inviter.name) : null,
-      daysLeft: daysLeft(row.secondsLeft),
+      invitedBy: firstName(found.inviterName),
+      daysLeft: daysLeft(found.secondsLeft),
     });
   });
 }

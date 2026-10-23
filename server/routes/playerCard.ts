@@ -183,6 +183,7 @@ export function register(app: Express, deps: Deps): void {
     if (!made.ok) return res.status(409).json({ error: made.error });
     const added = await addChange(pool, made.id, { op: "update_seat", orgRoleId: roleId, payload: parsed.payload });
     if (!added.ok) return res.status(400).json({ error: added.error });
-    res.json({ success: true, draftId: made.id, key: parsed.key, review: "/review" });
+    // The card lists the proposal on the role's section, with the doors that adopt it.
+    res.json({ success: true, draftId: made.id, key: parsed.key });
   });
 }

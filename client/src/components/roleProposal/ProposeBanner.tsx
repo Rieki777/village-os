@@ -10,8 +10,8 @@
  * governance module being off, and it draws nothing: a banner that guesses is
  * worse than none.
  *
- * The link is the payload's own `href`. The proposal steps are PR C; until
- * that page exists it is the role application page members use today.
+ * The link is the payload's own `href`: /role-proposals/new, the proposal
+ * steps (PR C), which open the member's draft when they already have one.
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
