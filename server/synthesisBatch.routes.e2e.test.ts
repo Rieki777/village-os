@@ -35,7 +35,7 @@ import type { AddressInfo } from "net";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -82,7 +82,7 @@ describe.skipIf(!DB_CONFIGURED)("call synthesis: the batch job and the route it 
     }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-synthesis-batch-"));
     testDb = await provisionTestDb();
-    pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(testDb, { connectionLimit: 4 });
 
     // Automation ON before the process starts, so the job's FIRST tick (15s
     // after boot) already sees a live module and its answer is about the

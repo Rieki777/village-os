@@ -27,7 +27,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { balanceOf, loadTokenRegistry, memberAccount } from "./ledger";
 import {
   CREDITS,
@@ -88,7 +88,7 @@ describe.skipIf(!configured)("what a consent is owed, and posting it", () => {
     // Provisioned with the Game already started, which is the state every
     // posting case needs; the not_launched case removes that row and restores it.
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
     await loadTokenRegistry(pool);

@@ -25,7 +25,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { CYCLE_POOL_FAUCET, balanceOf, loadTokenRegistry, memberAccount } from "./lib/ledger";
 import { CREDITS, cycleWindow, mint, toLedgerUnits, villageId } from "./lib/economy";
 import { loadVariables, setVariable } from "./lib/variables";
@@ -101,7 +101,7 @@ describe.skipIf(!configured)("a redemption the village votes on", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 4, timezone: "Z" }); // module-review-ok: fixture pool on the S5 scratch schema
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture pool on the S5 scratch schema
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await setVariable(pool, "redemption.holds_on_propose", "true");

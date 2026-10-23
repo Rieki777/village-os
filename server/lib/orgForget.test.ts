@@ -15,7 +15,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import mysql from "mysql2/promise";
 import { forgetDocumentedHolder, releaseSeatingsForUser } from "./orgChart";
 import { forgetMemberInDrafts } from "./orgDrafts";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -58,7 +58,7 @@ async function read(id: string): Promise<any> {
 describe.skipIf(!configured)("taking a person off the org chart", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     await pool.query(
       "INSERT INTO org_roles (id, name, seats) VALUES ('seat-a','Seat A',3), ('seat-b','Seat B',3)",
     );

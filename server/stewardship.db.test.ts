@@ -36,7 +36,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import type { Pool } from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { loadVariables, setVariable } from "./lib/variables";
 import { carriedUnseatingsOf } from "./repos/stewardshipBallots";
@@ -164,7 +164,7 @@ async function capabilitiesOf(userId: string): Promise<string[]> {
 describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
     await loadVariables(pool);
     await member("cat-1", "Wren Alder", "founder");
     await member("cat-2", "Iris Fenn", "founder");
@@ -374,7 +374,7 @@ describe.skipIf(!configured)("the steward seat, seated at the Birthing", () => {
 describe.skipIf(!configured)("the veto on a carried decision", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
     await loadVariables(pool);
     await member("st-1", "Wren Alder", "founder");
     await member("st-2", "Iris Fenn", "founder");
@@ -686,7 +686,7 @@ describe.skipIf(!configured)("the veto on a carried decision", () => {
 describe.skipIf(!configured)("a term that runs out, and the vacancy it leaves", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
     await loadVariables(pool);
     await member("lapse-1", "Wren Alder", "founder");
     await member("roll-1", "Rook Salt", "member");

@@ -31,7 +31,7 @@ import path from "node:path";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { seedEconomy } from "../lib/economySeed";
 import * as portraits from "../repos/characterPortraits";
 import { register } from "./characterPortraits";
@@ -79,7 +79,7 @@ async function givePublishedPortrait(fileName: string, body = "the picture itsel
 describe.skipIf(!configured)("taking a portrait back", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await seedEconomy(pool, VILLAGE);
     await pool.query( // module-review-ok: seeding the scratch schema this suite provisioned
       "INSERT INTO `users` (`id`, `name`, `email`, `password_hash`) VALUES (?,?,?,'x') " +

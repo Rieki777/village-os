@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, openBallot } from "../lib/ballots";
 import { acceptDelegations, liveDelegationOf, setDelegation } from "../lib/delegation";
 import { register } from "./delegation";
@@ -127,7 +127,7 @@ const handed = async (delegator: string, delegate: string) => {
 describe.skipIf(!configured)("delegation routes (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
   });
 
   afterAll(async () => {

@@ -43,7 +43,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ensureVoiceToken, fromLedgerUnits, toLedgerUnits, VILLAGE_VOICE } from "./economy";
 import {
   balanceOf,
@@ -174,7 +174,7 @@ describe.skipIf(!configured)("what a departing member's balance is worth, and in
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     await loadTokenRegistry(pool);
     await ensureVoiceToken(pool, "Village Voice");
     await registerToken(pool, {

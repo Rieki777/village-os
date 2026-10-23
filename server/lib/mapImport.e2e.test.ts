@@ -15,7 +15,7 @@ import path from "path";
 import fs from "fs";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 const REPO = path.resolve(__dirname, "..", "..");
@@ -42,7 +42,7 @@ describe.skipIf(!configured)("the importer's key plane", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     scenePath = path.join(REPO, "node_modules", ".cache", "map-import-test.json");
     fs.mkdirSync(path.dirname(scenePath), { recursive: true });
   });

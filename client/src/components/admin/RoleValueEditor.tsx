@@ -26,7 +26,8 @@ export default function RoleValueEditor({
 }) {
   const options = usePayOptions();
   const offered = options?.role ?? null;
-  const currency = role.valueCurrency || options?.currency || "";
+  // Always the village's currency today: the server stamps it on save (WorkValueEditor.tsx).
+  const currency = options?.currency || "";
   const [draft, setDraft] = useState<WorkValueDraft | null>(null);
   const [open, setOpen] = useState(false);
   const base = draftFrom(role, offered ?? [], currency);
