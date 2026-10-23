@@ -62,11 +62,36 @@ export const DEFAULT_EMAIL_CONFIG = {
   sender: "",
 };
 
+/**
+ * `local@domain.tld`, checked in one pass: exactly one `@` with something
+ * before it, no whitespace (nor any character in `banned`), and a dot in the
+ * domain with something on both sides of it.
+ *
+ * It replaces `/^[^@\s]+@[^@\s]+\.[^@\s]+$/` and its two siblings, which
+ * accept the same strings but backtrack polynomially on a long run of dots,
+ * and a stranger types the address on public forms (CodeQL
+ * js/polynomial-redos, alerts #449, #450, #451). mailerAddress.test.ts holds
+ * the two to the same answers.
+ */
+export function isPlainAddress(s: string, banned = ""): boolean {
+  const at = s.indexOf("@");
+  if (at <= 0 || at !== s.lastIndexOf("@")) return false;
+  for (const ch of s) if (ch.trim() === "" || banned.includes(ch)) return false;
+  const domain = s.slice(at + 1);
+  const dot = domain.indexOf(".", 1);
+  return dot !== -1 && dot < domain.length - 1;
+}
+
 /** `addr@dom.tld` or `Name <addr@dom.tld>`. Anything else is not sendable. */
 export function validEmailSender(v: string): boolean {
   const s = v.trim();
   if (!s) return false;
-  return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(s) || /^[^<>]+<[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>$/.test(s);
+  if (isPlainAddress(s, "<>")) return true;
+  if (!s.endsWith(">")) return false;
+  const lt = s.indexOf("<");
+  // One `<`, after a name with no angle brackets in it, and the `>` that ends the string.
+  if (lt <= 0 || lt !== s.lastIndexOf("<") || s.indexOf(">") !== s.length - 1) return false;
+  return isPlainAddress(s.slice(lt + 1, -1), "<>");
 }
 
 /**
@@ -156,7 +181,7 @@ const NOTICE_ACCEPTED: ReadonlySet<string> = new Set(["queued", "sending", "sent
  */
 export function normalizeRecipients(to: string[]): string[] {
   return Array.from(new Set(
-    to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
+    to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => isPlainAddress(s)),
   ));
 }
 
