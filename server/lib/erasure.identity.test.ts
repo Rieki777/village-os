@@ -20,6 +20,13 @@
  * stood for good. `member-agent-after-tombstone` fixed that for the agent
  * tables only.
  *
+ * ── A SAVE ALREADY PAST ITS SESSION CHECK ────────────────────────────────
+ *
+ * `PUT /api/profile` checks the session once, then writes under the row lock.
+ * A save that passed the check before the tombstone and took the lock after
+ * it wrote the member's real name and handle back onto the tombstone, and
+ * every surface that de-attributes through the join printed them again.
+ *
  * ── WHAT THIS FILE ASSERTS ───────────────────────────────────────────────
  *
  * ROWS, and every fixture proves its rows landed before the erasure is asked
@@ -37,6 +44,7 @@ import { clearMemberDrivers } from "./memberDrivers";
 import { usersRepo } from "../repos/users";
 import { erasureRecord, unfinishedErasures } from "../repos/memberErasure";
 import * as portraits from "../repos/characterPortraits";
+import { register as registerProfileRoutes } from "../routes/profile";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -141,6 +149,26 @@ async function seedNeighbour(id: string): Promise<void> {
 async function heldIdentity(id: string): Promise<unknown> {
   const rows = await q("SELECT `erased_identity` AS v FROM `member_erasures` WHERE `user_id` = ?", [id]);
   return rows[0]?.v ?? null;
+}
+
+/** The handlers `register` mounts, by "METHOD path", called with a plain request. */
+function profileRoutes(authedUser: () => Promise<any>) {
+  const routes = new Map<string, (req: any, res: any) => Promise<unknown>>();
+  const app = {
+    get: (p: string, h: any) => routes.set(`GET ${p}`, h),
+    put: (p: string, h: any) => routes.set(`PUT ${p}`, h),
+    post: (p: string, h: any) => routes.set(`POST ${p}`, h),
+  } as any;
+  registerProfileRoutes(app, { authedUser: authedUser as any, members: usersRepo(pool), publicUser: (u: any) => u });
+  return async (key: string, body: Record<string, unknown>) => {
+    const out: { status: number; body: any } = { status: 200, body: null };
+    const res: any = {
+      status: (s: number) => ((out.status = s), res),
+      json: (b: any) => ((out.body = b), res),
+    };
+    await routes.get(key)!({ body, headers: {} }, res);
+    return out;
+  };
 }
 
 describe.skipIf(!configured)("an erasure remembers who the member was until it finishes", () => {
@@ -335,5 +363,85 @@ describe.skipIf(!configured)("an erasure remembers who the member was until it f
     // From the top: before the close, a step recorded as done proves nothing.
     expect(out.ran[0]).toBe("ledger-descriptions");
     expect(out.ran.indexOf("notifications")).toBeLessThan(out.ran.indexOf("tombstone"));
+  });
+
+  it("refuses a profile save that passed its session check before the tombstone and wrote after it (finding 1)", async () => {
+    const id = "er-profile-race-1";
+    const target = await seedMember(id, "wrenh4");
+
+    // The session check reads the live member, and the erasure lands before
+    // the save takes the row lock: the request already in flight.
+    const call = profileRoutes(async () => {
+      const stale = await usersRepo(pool).byId(id);
+      await anonymizeMember(pool, target, null, deps());
+      return stale;
+    });
+    const res = await call("PUT /api/profile", { name: NAME, handle: "wren-again", bio: "I keep bees by the pond." });
+
+    const after = await usersRepo(pool).byId(id);
+    expect(after!.name, "a save in flight wrote the member's name back onto the tombstone").toBe(ANON);
+    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.bio).toBe("");
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses a contribution note that passed its session check before the tombstone (finding 1)", async () => {
+    const id = "er-profile-race-2";
+    const target = await seedMember(id, "wrenh5");
+    const call = profileRoutes(async () => {
+      const stale = await usersRepo(pool).byId(id);
+      await anonymizeMember(pool, target, null, deps());
+      return stale;
+    });
+    const res = await call("POST /api/profile/contribution", { type: "note", description: "Wren Halloway mended the bench." });
+
+    expect((await usersRepo(pool).byId(id))!.contributions).toEqual([]);
+    expect(res.status).toBe(401);
+  });
+
+  it("keeps a tombstone's identity fixed against every writer but the erasure, while value still moves (finding 1)", async () => {
+    const id = "er-pin-1";
+    const target = await seedMember(id, "wrenh6");
+    await anonymizeMember(pool, target, null, deps());
+    const repo = usersRepo(pool);
+
+    const written = await repo.update(id, (u: any) => {
+      u.name = NAME;
+      u.handle = "wrenh6";
+      u.email = `${id}@examples.invalid`;
+      u.bio = "I keep bees by the pond.";
+      u.prefs = { googleLink: "sealed" };
+      u.walletAddress = "0xabc";
+      u.role = "founder";
+      u.recognitionBalance = 7;
+    });
+
+    const after = await repo.byId(id);
+    expect(after!.name, "a write after the tombstone put the member's name back").toBe(ANON);
+    expect(after!.handle).toBe(`departed-${id.slice(-8)}`);
+    expect(after!.email).toBe(`deleted-${id}@anonymized.invalid`);
+    expect(after!.bio).toBe("");
+    expect(after!.prefs).toEqual({});
+    expect(after!.walletAddress).toBeNull();
+    expect(after!.role).toBe("member");
+    // A value row the village keeps still moves: a gratitude settled to them lands.
+    expect(after!.recognitionBalance).toBe(7);
+    // And what the caller is handed back is what was stored.
+    expect(written!.name).toBe(ANON);
+
+    // The erasure itself may still write: a second erasure clears what a first one missed.
+    await repo.update(id, (u: any) => void (u.prefs = { cleared: true }), { erasure: true });
+    expect((await repo.byId(id))!.prefs).toEqual({ cleared: true });
+  });
+
+  it("leaves a living member's own saves alone", async () => {
+    const id = "er-pin-2";
+    await seedMember(id, "wrenh7");
+    const call = profileRoutes(async () => usersRepo(pool).byId(id));
+    const res = await call("PUT /api/profile", { name: "Wren H.", bio: "Bees, still." });
+    expect(res.status).toBe(200);
+    const after = await usersRepo(pool).byId(id);
+    expect(after!.name).toBe("Wren H.");
+    expect(after!.bio).toBe("Bees, still.");
   });
 });
