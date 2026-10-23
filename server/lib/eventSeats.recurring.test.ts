@@ -30,7 +30,7 @@ import { toLedgerUnits } from "./economy";
 import { EVENT_ESCROW } from "./spending";
 import { seatChargeFor, seatEscrowDrift, settleFinishedSeats } from "./eventSeats";
 import { rsvp, withdrawRsvp } from "./gatherings";
-import { setPromotionSink } from "./calendarCommunity";
+import { releasePlacesOf, setPromotionSink } from "./calendarCommunity";
 import { wireReaders } from "./villageReaders";
 
 const configured = testDbConfigured();
@@ -248,6 +248,32 @@ describe.skipIf(!configured)("seat fees on a recurring gathering settle by their
     expect(await settleFinishedSeats(pool, { now: new Date(ended + 25 * HOUR) })).toEqual({ settled: 1, amount: units(5) });
     expect(await statusOf("ev-z", "u-zp", pastKey)).toBe("kept");
     expect(await statusOf("ev-z", "u-za", aheadKey)).toBe("held");
+    await conserves();
+  });
+
+  it("a member who leaves the village after a sweep still gets back the fee for an evening ahead", async () => {
+    // The erasure's `event-places-after-tombstone` step refunds only what is
+    // still held (releasePlacesOf reads `heldChargesOf`). While the settle kept
+    // a series' future fees, that rule refunded nothing on a weekly gathering.
+    const zone = "UTC";
+    const anchor = anchorAt(18);
+    await weekly("ev-l", anchor, zone);
+    await member("u-leaver", 40);
+    const pastKey = civilDateKey(new Date(anchor - 7 * DAY), zone);
+    const aheadKey = civilDateKey(new Date(anchor + 7 * DAY), zone);
+    await going("ev-l", "u-leaver", pastKey);
+    await going("ev-l", "u-leaver", aheadKey);
+    expect(await held("u-leaver")).toBe(units(30));
+
+    // The sweep runs first, the way the six-hour job would before anybody leaves.
+    expect(await settleFinishedSeats(pool, { now: new Date() })).toEqual({ settled: 1, amount: units(5) });
+
+    const r = await releasePlacesOf(pool, "u-leaver", { timeZone: zone });
+    expect(r.refunded, "the place ahead was given up, so its fee comes back").toBe(1);
+    expect(await statusOf("ev-l", "u-leaver", aheadKey)).toBe("released");
+    expect(await statusOf("ev-l", "u-leaver", pastKey), "the evening that happened keeps its fee").toBe("kept");
+    expect(await held("u-leaver")).toBe(units(35));
+    expect(await escrow()).toBe(0);
     await conserves();
   });
 });
