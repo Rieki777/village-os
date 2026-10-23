@@ -400,6 +400,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // the merge of wt/comms with main checks it against the source below.
     expect(out.ran).toEqual([
       "tombstone",
+      "member-agent-after-tombstone",
       "comms",
       "needs-after-tombstone",
       "journal-after-tombstone",
