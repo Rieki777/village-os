@@ -142,7 +142,9 @@ export const SEAT_GATHERING_FILES = [
   /^client\/src\/components\/calendar\//, /^client\/src\/components\/EventsAdminPanel\.tsx$/,
   /^client\/src\/pages\/(Events|Contribute)\.tsx$/,
   /^server\/lib\/comms\/(cantMakeIt|recaps|guests)\.ts$/, /^shared\/comms\/(guests|mergeFields)\.ts$/,
-  /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|calendarProviders|failedActions|spending)\.ts$/,
+  // Not calendarProviders.ts: its one member-facing string is a ROLE's term-end marker, and
+  // exempting the whole file hid "A seat: term ends" until the final sweep of 2026-10-23.
+  /^server\/lib\/(eventSeats|gatherings|calendar|calendarBrief|failedActions|spending)\.ts$/,
 ];
 // Phrases about a chair at a gathering, never the bare word "gathering": a sentence can name both.
 export const SEAT_GATHERING_LINE = /save (me )?a seat|your seat|seat at (a |the |\{\{)|seats? (fee|price|token)s?|waitlist seats?|give (my|your|the) seat back|seat given back|(moment|when|once) a seat opens|a seat opened|seat is yours|queue for a seat|already have a seat|seats? (are |is )?open\. answer|found you a seat|seat you can take|guest.s seat|reader.s seat|no seat held|\[seats\]|seat escrow|seat transaction|asked for a seat|price on its seat|what a seat costs/i;
