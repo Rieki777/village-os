@@ -26,8 +26,9 @@
  * roles. A proposal never writes the circle: it opens a one-change org draft
  * (`update_circle`, server/lib/circleWordsDraft.ts), decided where every org
  * draft is (server/routes/orgDraftDecide.ts), and the card says "Proposed,
- * waiting for consent" beside each word until it is adopted. Ten in ten
- * minutes is the most anybody may open.
+ * waiting for consent" beside each word and lists the proposal, with the
+ * words it proposes and the doors this reader may adopt it by, until it is
+ * decided. Ten in ten minutes is the most anybody may open.
  */
 import type { Express } from "express";
 import { hasCapability } from "../../shared/capabilities";
@@ -75,8 +76,6 @@ async function orgTierFor(deps: Deps, req: any): Promise<SeatTier> {
 
 const PROPOSALS_PER_WINDOW = 10;
 const PROPOSAL_WINDOW_MS = 10 * 60 * 1000;
-/** Where a member decides an open org draft. */
-const REVIEW_HREF = "/review";
 
 /** A live holder of a role in this circle, or an admin: who may propose its words (Rye, 2026-10-22). */
 async function mayPropose(deps: Deps, req: any, viewer: any, circle: StoredCircle): Promise<boolean> {
@@ -102,7 +101,6 @@ export function register(app: Express, deps: Deps): void {
       circleId: circle.id,
       card,
       viewer: { signedIn: !!viewer, mayPropose: await mayPropose(deps, req, viewer, circle) },
-      links: { review: REVIEW_HREF },
     });
   });
 
@@ -130,6 +128,7 @@ export function register(app: Express, deps: Deps): void {
     if (!made.ok) return res.status(409).json({ error: "refused", message: made.error });
     const added = await addChange(pool, made.id, { op: "update_circle", orgRoleId: `circle:${circle.id}`, payload: parsed.value });
     if (!added.ok) return res.status(400).json({ error: "refused", message: added.error });
-    res.json({ success: true, draftId: made.id, review: REVIEW_HREF });
+    // The card lists the proposal, with the doors that adopt it, until it is decided.
+    res.json({ success: true, draftId: made.id });
   });
 }

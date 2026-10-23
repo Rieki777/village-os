@@ -67,14 +67,27 @@ export async function holdsRoleInCircle(pool: Pool, userId: string, circleId: st
   return rows.length > 0;
 }
 
-/** The payloads of every open draft that would change this circle's words. */
-export async function openCircleWordPayloads(pool: Pool, circleId: string): Promise<unknown[]> {
+/** One open draft that would change this circle's words. */
+export interface OpenCircleProposal {
+  draftId: string;
+  /** Seconds since the epoch, read with UNIX_TIMESTAMP so no zone moves it. */
+  createdAt: number;
+  payload: unknown;
+}
+
+/** Every open draft that would change this circle's words, oldest first. */
+export async function openCircleWordProposals(pool: Pool, circleId: string): Promise<OpenCircleProposal[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT c.payload FROM org_draft_changes c JOIN org_drafts d ON d.id = c.draft_id " +
-      "WHERE d.status = 'open' AND c.op = 'update_circle' AND c.org_role_id = ?",
+    "SELECT d.id AS draft_id, UNIX_TIMESTAMP(d.created_at) AS created_at, c.payload FROM org_draft_changes c " +
+      "JOIN org_drafts d ON d.id = c.draft_id WHERE d.status = 'open' AND c.op = 'update_circle' AND c.org_role_id = ? " +
+      "ORDER BY d.created_at, c.sort_order LIMIT 20",
     [`circle:${circleId}`],
   );
-  return rows.map((r) => (typeof r.payload === "string" ? safeJson(r.payload) : r.payload));
+  return rows.map((r) => ({
+    draftId: String(r.draft_id),
+    createdAt: Number(r.created_at),
+    payload: typeof r.payload === "string" ? safeJson(r.payload) : r.payload,
+  }));
 }
 
 function safeJson(s: string): unknown {

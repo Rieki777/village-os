@@ -18,7 +18,7 @@ import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 
 type View =
   | { kind: "loading" }
-  | { kind: "ok"; card: CircleCard; mayPropose: boolean; reviewHref: string | null }
+  | { kind: "ok"; card: CircleCard; mayPropose: boolean }
   | { kind: "missing" }
   | { kind: "failed" };
 
@@ -38,7 +38,7 @@ export default function CircleCardPage() {
         if (!alive) return;
         setView(
           out?.card
-            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true, reviewHref: typeof out.links?.review === "string" ? out.links.review : null }
+            ? { kind: "ok", card: out.card as CircleCard, mayPropose: out.viewer?.mayPropose === true }
             : { kind: "failed" },
         );
       })
@@ -57,7 +57,7 @@ export default function CircleCardPage() {
             {W.backToCircles}
           </Link>
           {view.kind === "ok" ? (
-            <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reviewHref={view.reviewHref} reload={load} />
+            <CircleCardView card={view.card} circleId={id} mayPropose={view.mayPropose} reload={load} />
           ) : null}
           {view.kind === "missing" ? <p className="text-foreground">{W.notFound}</p> : null}
           {view.kind === "failed" ? (

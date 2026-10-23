@@ -142,7 +142,6 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
       values: "Reciprocity: We share every harvest first.",
     });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(r.body.review).toBe("/review");
     first = r.body.draftId;
     const draft = await getDraft(pool as any, first);
     expect(draft?.changes.map((c) => [c.op, c.orgRoleId])).toEqual([["update_circle", "circle:c-garden"]]);
@@ -150,6 +149,20 @@ describe.skipIf(!configured)("a circle's words change by consent, on a real sche
     expect((await q("SELECT purpose FROM circles WHERE id = 'c-garden'"))[0].purpose).toBe("Grow food together.");
     const read = await card("m-ana");
     expect(read.card.pending).toEqual(["purpose", "domains", "values"]);
+    // The proposal itself, with the words it would put live, for whoever decides it.
+    expect(read.card.proposals).toEqual([
+      {
+        draftId: first,
+        proposedOn: expect.stringMatching(/^Proposed on \d{1,2} \w{3} \d{4}$/),
+        fields: [
+          { key: "purpose", label: "Why this circle exists", lines: ["Grow food together for every household."] },
+          { key: "domains", label: "What we look after", lines: ["The food forest", "The seed library"] },
+          { key: "values", label: "What we value", lines: ["Reciprocity: We share every harvest first."] },
+        ],
+      },
+    ]);
+    // Below the member holder rows, nothing about an open proposal is read.
+    expect((await card(null)).card.proposals).toEqual([]);
     expect(section(read.card, "domains").slot).toEqual({ kind: "empty", words: "Not written yet" });
   });
 

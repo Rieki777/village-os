@@ -26,7 +26,7 @@
  */
 import { CHARTER_LIST_LIMITS, type CharterListField, type CircleCharter, type CircleValue } from "./circleCharter";
 import { CCOS_TERMS, CIRCLE_CARD_WORDS as W, CIRCLE_HEADINGS, termLabel, type CircleSectionKey } from "./circleCardWords";
-import type { CircleWordKey } from "./circleCharterParse";
+import { circleWordLabel, CIRCLE_WORD_KEYS, type CircleWordKey, type CircleWordsPayload } from "./circleCharterParse";
 import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
 import { proposeTermsHref } from "./seatTermsOffer";
@@ -114,6 +114,17 @@ export interface CircleCardIn {
   frameworkTerms: boolean;
   /** The words an open org draft would change: "Proposed, waiting for consent" beside each. */
   pending?: Read<CircleWordKey[]>;
+  /** The open drafts that would change the circle's words, with the words they propose. */
+  proposals?: Read<{ draftId: string; proposedAt: string; words: CircleWordsPayload }[]>;
+}
+
+/** One proposal waiting for consent, as a decider reads it. */
+export interface ProposalOut {
+  draftId: string;
+  /** "Proposed on 22 Oct 2026". */
+  proposedOn: string;
+  /** Each field it changes: the plain heading and the lines it would show. Empty lines clear the field. */
+  fields: { key: CircleWordKey; label: string; lines: string[] }[];
 }
 
 // ── Output ──────────────────────────────────────────────────────────────────
@@ -173,6 +184,8 @@ export interface CircleCard {
   pending: CircleWordKey[];
   /** The words "Proposed, waiting for consent". */
   pendingWords: string;
+  /** The open proposals, oldest first. Empty when none, or below the member tier. */
+  proposals: ProposalOut[];
 }
 
 // ── The pieces ──────────────────────────────────────────────────────────────
@@ -250,6 +263,15 @@ function adoptionSection(adoptions: Read<AdoptionIn[]>, timeZone: string, terms:
   };
 }
 
+function proposalOut(p: { draftId: string; proposedAt: string; words: CircleWordsPayload }, timeZone: string): ProposalOut {
+  const fields = CIRCLE_WORD_KEYS.filter((k) => p.words[k] !== undefined).map((key) => {
+    const v = p.words[key] as string | string[] | CircleValue[] | null | undefined;
+    const lines = v === null || v === undefined ? [] : typeof v === "string" ? [v] : (v as Array<string | CircleValue>).map((x) => (typeof x === "string" ? x : W.valueLine(x.value, x.practice)));
+    return { key, label: circleWordLabel(key), lines };
+  });
+  return { draftId: p.draftId, proposedOn: W.proposedOn(formatDay(p.proposedAt, true, timeZone) ?? ""), fields };
+}
+
 // ── The card ────────────────────────────────────────────────────────────────
 
 export function buildCircleCard(input: CircleCardIn): CircleCard {
@@ -290,5 +312,6 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
     ],
     pending: Array.from(new Set(input.pending ?? [])),
     pendingWords: W.pending,
+    proposals: (input.proposals ?? []).map((p) => proposalOut(p, timeZone)),
   };
 }

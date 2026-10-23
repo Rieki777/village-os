@@ -89,7 +89,7 @@ describe("proposing new words, for the circle's role holders", () => {
   it("checks the words in the browser by the server's own parser, and sends nothing when refused", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose reviewHref="/review" />);
+    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose />);
     fireEvent.click(screen.getByRole("button", { name: "Propose new words" }));
     fireEvent.click(screen.getByRole("button", { name: "Propose new words: What you can count on us for" }));
     fireEvent.change(screen.getByLabelText("What you can count on us for"), { target: { value: "Only one" } });
@@ -98,11 +98,11 @@ describe("proposing new words, for the circle's role holders", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("sends one field, then says it waits for consent and links to the proposal", async () => {
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ success: true, draftId: "d-1", review: "/review" }), { status: 200 }));
+  it("sends one field, then says it waits for consent", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ success: true, draftId: "d-1" }), { status: 200 }));
     vi.stubGlobal("fetch", fetch);
     const reload = vi.fn();
-    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose reviewHref="/review" reload={reload} />);
+    render(<CircleCardView card={buildCircleCard(input())} circleId="c-garden" mayPropose reload={reload} />);
     fireEvent.click(screen.getByRole("button", { name: "Propose new words" }));
     fireEvent.click(screen.getByRole("button", { name: "Propose new words: What we look after" }));
     const box = screen.getByLabelText("What we look after") as HTMLTextAreaElement;
@@ -110,7 +110,6 @@ describe("proposing new words, for the circle's role holders", () => {
     fireEvent.change(box, { target: { value: "The food forest\nThe seed library" } });
     fireEvent.click(screen.getByRole("button", { name: "Propose this change" }));
     expect(await screen.findByText("Proposed, waiting for consent", { exact: false })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "See the proposal" }).getAttribute("href")).toBe("/review");
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/org/circles/c-garden/card/propose");
     expect(JSON.parse(String(init.body))).toEqual({ domains: "The food forest\nThe seed library" });
@@ -120,5 +119,56 @@ describe("proposing new words, for the circle's role holders", () => {
   it("marks each word an open draft would change", () => {
     render(<CircleCardView card={buildCircleCard(input({ pending: ["domains", "purpose"] }))} circleId="c-garden" />);
     expect(screen.getAllByText("Proposed, waiting for consent")).toHaveLength(2);
+  });
+});
+
+describe("a proposal waiting for consent, decided on the card", () => {
+  const withProposal = () =>
+    buildCircleCard(
+      input({
+        pending: ["domains", "tools"],
+        proposals: [{ draftId: "d-7", proposedAt: "2026-10-22T10:00:00Z", words: { domains: ["The food forest", "The orchard"], tools: null } }],
+      }),
+    );
+  const decide = (over: Record<string, unknown>) =>
+    new Response(
+      JSON.stringify({ status: "open", blocked: 0, blockedLines: [], youMayPublish: false, youMayPutToVillage: false, adminMayPublish: false, ballotNeeded: false, ballot: null, ...over }),
+      { status: 200 },
+    );
+
+  it("shows the words it proposes, and says when a field would be cleared", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => decide({})));
+    render(<CircleCardView card={withProposal()} circleId="c-garden" />);
+    const panel = document.querySelector("[data-circle-proposals]")!;
+    expect(panel.textContent).toContain("Proposed on 22 Oct 2026");
+    expect(panel.textContent).toContain("The orchard");
+    expect(panel.textContent).toContain("Clears what is written now");
+    expect(await screen.findByText("The role that holds the power to change the structure decides this.")).toBeTruthy();
+  });
+
+  it("offers Adopt to a holder of the power, asks once, then publishes by power and reads the card again", async () => {
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => (String(url).endsWith("/decide") ? decide({ youMayPublish: true }) : new Response("{}", { status: 200 })));
+    vi.stubGlobal("fetch", fetch);
+    const reload = vi.fn();
+    render(<CircleCardView card={withProposal()} circleId="c-garden" reload={reload} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt these words" }));
+    expect(screen.getByText("Adopt now? The circle's card changes for everyone.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, adopt them" }));
+    expect(await screen.findByText("Adopted. The card now shows the new words.")).toBeTruthy();
+    expect(fetch.mock.calls.some(([u, init]) => u === "/api/org/drafts/d-7/publish-by-power" && init?.method === "POST")).toBe(true);
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("offers a vote where the village decides, and shows the server's refusal in its own words", async () => {
+    const fetch = vi.fn(async (url: string) =>
+      String(url).endsWith("/decide")
+        ? decide({ youMayPutToVillage: true, ballotNeeded: true })
+        : new Response(JSON.stringify({ message: "This village has not turned voting on, so there is nobody to put the draft to yet." }), { status: 409 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    render(<CircleCardView card={withProposal()} circleId="c-garden" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Put it to the village" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, open the vote" }));
+    expect(await screen.findByText("This village has not turned voting on, so there is nobody to put the draft to yet.")).toBeTruthy();
   });
 });

@@ -123,9 +123,24 @@ export const CIRCLE_CARD_WORDS = {
   proposeSend: "Propose this change",
   cancel: "Cancel",
   proposed: "Proposed, waiting for consent",
-  seeProposal: "See the proposal",
   pending: "Proposed, waiting for consent",
   proposeFailed: "That did not go through. Try again.",
+
+  // Deciding a proposal, through the doors every org draft has
+  proposedOn: (day: string) => `Proposed on ${day}`,
+  clears: "Clears what is written now",
+  adopt: "Adopt these words",
+  adoptConfirm: "Adopt now? The circle's card changes for everyone.",
+  adoptYes: "Yes, adopt them",
+  putToVillage: "Put it to the village",
+  putConfirm: "Open a village vote on these words?",
+  putYes: "Yes, open the vote",
+  voting: (day: string) => `The village is voting on this until ${day}.`,
+  waitingHolder: "The role that holds the power to change the structure decides this.",
+  waitingVillage: "The village decides this by vote.",
+  blocked: "This cannot be adopted as it stands:",
+  adopted: "Adopted. The card now shows the new words.",
+  putDone: "Put to the village. Members are asked to vote.",
 
   // Loading
   failed: "This circle card did not load.",

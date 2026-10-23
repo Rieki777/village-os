@@ -26,6 +26,7 @@ import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 import type { CircleValue } from "@shared/circleCharter";
 import type { CircleWordKey } from "@shared/circleCharterParse";
 import { CircleEditContext, PendingWords, ProposeWords } from "./ProposeWords";
+import ProposalsPanel from "./ProposalsPanel";
 
 const H2 = "font-display text-xl font-bold text-card-foreground sm:text-2xl";
 const H3 = "text-sm font-semibold text-card-foreground";
@@ -212,21 +213,19 @@ export default function CircleCardView({
   card,
   circleId = "",
   mayPropose = false,
-  reviewHref = null,
   reload = () => undefined,
 }: {
   card: CircleCard;
   circleId?: string;
   /** A holder of a role in this circle, or an admin (`viewer.mayPropose`). */
   mayPropose?: boolean;
-  reviewHref?: string | null;
   reload?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const { header } = card;
   const purpose = card.sections.find((s) => s.kind === "text");
   return (
-    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reviewHref, reload }}>
+    <CircleEditContext.Provider value={{ editing: mayPropose && editing, circleId, pending: card.pending ?? [], reload }}>
     <div data-circle-card="" className="grid gap-4 sm:gap-6">
       <section className={`${SECTION} grid gap-4`}>
         {mayPropose ? (
@@ -278,6 +277,7 @@ export default function CircleCardView({
         ) : null}
         {header.termsKey ? <p className="text-xs text-muted-foreground">{header.termsKey}</p> : null}
       </section>
+      <ProposalsPanel proposals={card.proposals ?? []} reload={reload} />
       {panels(card.sections.filter((s) => s.kind !== "text")).map((g) => (
         <SectionPanel key={g[0]!.key} group={g} />
       ))}

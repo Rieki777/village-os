@@ -4,17 +4,17 @@
  * Only a holder of a role in the circle, or an admin, sees the switch (the
  * server says so in `viewer.mayPropose`, and refuses anybody else again).
  * A proposal never writes the circle: it opens an org draft with one
- * `update_circle` change, and the section then says "Proposed, waiting for
- * consent" until the draft is adopted (server/routes/circleCard.ts).
+ * `update_circle` change, the section then says "Proposed, waiting for
+ * consent", and the card lists the proposal with the doors that adopt it
+ * (ProposalsPanel.tsx) until it is decided (server/routes/circleCard.ts).
  *
  * The text is checked in the browser by the one parser the server runs
  * (shared/circleCharterParse.ts), so the sentence under the box is the
  * refusal the server would send.
  */
 import { createContext, useContext, useId, useState } from "react";
-import { Link } from "wouter";
 import { Pencil } from "lucide-react";
-import { LINK, QUIET_BUTTON, TAP } from "@/components/playerCard/cardParts";
+import { QUIET_BUTTON, TAP } from "@/components/playerCard/cardParts";
 import { gameFetch } from "@/lib/gameApi";
 import { CIRCLE_CARD_WORDS as W } from "@shared/circleCardWords";
 import { circleWordLabel, parseCircleWord, type CircleWordKey } from "@shared/circleCharterParse";
@@ -25,12 +25,11 @@ export interface CircleEditState {
   circleId: string;
   /** The words an open draft would change. */
   pending: readonly CircleWordKey[];
-  reviewHref: string | null;
   /** Read the card again after a proposal. */
   reload: () => void;
 }
 
-export const CircleEditContext = createContext<CircleEditState>({ editing: false, circleId: "", pending: [], reviewHref: null, reload: () => undefined });
+export const CircleEditContext = createContext<CircleEditState>({ editing: false, circleId: "", pending: [], reload: () => undefined });
 
 /** POST /api/org/circles/:id/card/propose with one field. */
 export async function proposeCircleWords(circleId: string, key: CircleWordKey, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -56,7 +55,7 @@ export function PendingWords({ wordKey }: { wordKey: CircleWordKey }) {
 
 /** The proposer's control beside one word. Draws nothing until "Propose new words" is on. */
 export function ProposeWords({ wordKey, initial }: { wordKey: CircleWordKey; initial: string }) {
-  const { editing, circleId, reviewHref, reload } = useContext(CircleEditContext);
+  const { editing, circleId, reload } = useContext(CircleEditContext);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -126,14 +125,6 @@ export function ProposeWords({ wordKey, initial }: { wordKey: CircleWordKey; ini
       {said ? (
         <p role="status" className="mt-1 text-sm text-card-foreground">
           {said}
-          {said === W.proposed && reviewHref ? (
-            <>
-              {" "}
-              <Link href={reviewHref} className={LINK}>
-                {W.seeProposal}
-              </Link>
-            </>
-          ) : null}
         </p>
       ) : null}
     </div>
