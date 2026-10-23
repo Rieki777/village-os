@@ -25,6 +25,7 @@
  * naming boxes from the Setup Wizard that could never win against this
  * registry. Keeping the winner buried mid-monolith is how the losers survived.
  */
+import TokenJobsPanel from "./TokenJobsPanel";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { ModuleLifecycle } from "@shared/modules";
@@ -310,6 +311,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
           </span>
         </p>
       </div>
+      <TokenJobsPanel password={password} />
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
         <div className="space-y-6">
           <div className="border border-gray-200 rounded-xl overflow-hidden">

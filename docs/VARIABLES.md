@@ -247,7 +247,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
-| Show the CCOS term on circle card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
+| Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
@@ -3054,9 +3054,9 @@ On, anyone can read the first names of the people holding each role on the Team,
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Show the CCOS term on circle card headings
+### Show the CCOS term on circle and role card headings
 
-Each heading on a circle card is plain words, like "What we look after". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter, like "CCOS: Domains", for a village that writes its charters with it. Off keeps the plain headings and shows no term.
+Each heading on a circle card, and on each role in full on a player's card, is plain words, like "What we look after" or "What I can decide on my own". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter or Role Card, like "CCOS: Domains", for a village that writes its charters and roles with it. Off keeps the plain headings and shows no term.
 
 | Fact | Value |
 | --- | --- |

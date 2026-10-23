@@ -114,8 +114,8 @@ export function ceilingBinds(trigger: string): boolean {
 export const GRATITUDE_ONLY_SENT = "Gratitude is only ever sent from one member to another, so it cannot be minted, granted or paid here.";
 
 /** The one token that never pays for work. */
-export const GRATITUDE_NEVER_PAYS =
-  "Gratitude never pays for work. Its only job is sharing out the cycle pool.";
+// The refusal states the rule and never what the token does (Rye, 2026-10-22).
+export const GRATITUDE_NEVER_PAYS = "Quests and roles are not paid in Gratitude.";
 
 /**
  * The stored list, read tolerantly. NULL stays NULL (no list of its own); junk

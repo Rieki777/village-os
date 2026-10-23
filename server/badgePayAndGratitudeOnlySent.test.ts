@@ -132,7 +132,7 @@ describe.skipIf(!configured)("badge multipliers name a token, and Gratitude is o
         [u, u],
       );
       const before = await balanceOf(pool, memberAccount(u), CREDITS);
-      await runSettlement(pool, new Date(), { boostFor: async (who) => (who === u ? { [CREDITS]: 3 } : {}) });
+      await runSettlement(pool, new Date(), { boostFor: async (who): Promise<Record<string, number>> => (who === u ? { [CREDITS]: 3 } : {}) });
       // The seeded role rule pays 25 credits; the holder's badge makes it 75.
       expect((await balanceOf(pool, memberAccount(u), CREDITS)) - before).toBe(await unitsOf(CREDITS, 75));
     });

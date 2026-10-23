@@ -2,10 +2,10 @@
  * A member's own agent: its inbox, its queued deliveries, its drafts, and the
  * third-party key it speaks with.
  *
- * ── WHY FOUR TABLES IN ONE MODULE ────────────────────────────────────────────
+ * ── WHY THESE TABLES ARE IN ONE MODULE ──────────────────────────────────────
  *
  * The house rule is one table per repo, and this breaks it on purpose. These
- * four are one member's agent, and the reason they travel together is that
+ * are one member's agent, and the reason they travel together is that
  * deleting any one without the others leaves a live thing behind:
  *
  *   agent_inboxes      the webhook the village DELIVERS TO. Left standing, a
@@ -20,6 +20,15 @@
  *                      credential belonging to somebody who asked to be
  *                      forgotten is the sharpest row in this set.
  *   member_drafts      what their agent wrote for them and they never sent.
+ *   agent_tokens       the `vat_` tokens they minted. A token is not a session,
+ *                      so the tombstone's tokenVersion bump never reached it:
+ *                      the resolver mints a fresh session from the row, and an
+ *                      erased member's agent went on reading the calendar and
+ *                      the directory as them until the token expired.
+ *   agent_profiles     the member's own note to their agent, and what they said
+ *                      the assistant got wrong.
+ *   assistant_statements  sentences the assistant wrote ABOUT the member, built
+ *                      from that note.
  *
  * A module per table would put the ORDER these have to come out in nowhere, and
  * the order is the load-bearing part: deliveries before the inbox they point at.
@@ -46,6 +55,9 @@ export interface AgentSweepCounts {
   inboxes: number;
   keys: number;
   drafts: number;
+  tokens: number;
+  profiles: number;
+  statements: number;
 }
 
 const affected = (res: unknown): number => Number((res as { affectedRows?: number })?.affectedRows ?? 0);
@@ -71,11 +83,19 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
   const [inboxes] = await pool.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
   const [keys] = await pool.query("DELETE FROM `member_llm_keys` WHERE `user_id` = ?", [userId]);
   const [drafts] = await pool.query("DELETE FROM `member_drafts` WHERE `user_id` = ?", [userId]);
+  // Deleted rather than revoked: the row carries the member's own label for
+  // the token, and nothing joins back to it once its holder is gone.
+  const [tokens] = await pool.query("DELETE FROM `agent_tokens` WHERE `user_id` = ?", [userId]);
+  const [profiles] = await pool.query("DELETE FROM `agent_profiles` WHERE `user_id` = ?", [userId]);
+  const [statements] = await pool.query("DELETE FROM `assistant_statements` WHERE `subject_user_id` = ?", [userId]);
   return {
     deliveries: affected(deliveries),
     inboxes: affected(inboxes),
     keys: affected(keys),
     drafts: affected(drafts),
+    tokens: affected(tokens),
+    profiles: affected(profiles),
+    statements: affected(statements),
   };
 }
 
@@ -83,7 +103,7 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
  * Whether anything of this member's agent is still on record.
  *
  * Exists so a test can assert the erasure is COMPLETE rather than that it ran.
- * "The step did not throw" is what the sweep already told us before these four
+ * "The step did not throw" is what the sweep already told us before these
  * tables were in it.
  */
 export async function agentRowsRemaining(pool: Pool, userId: string): Promise<AgentSweepCounts> {
@@ -98,5 +118,8 @@ export async function agentRowsRemaining(pool: Pool, userId: string): Promise<Ag
     inboxes: await one("SELECT COUNT(*) AS n FROM `agent_inboxes` WHERE `user_id` = ?"),
     keys: await one("SELECT COUNT(*) AS n FROM `member_llm_keys` WHERE `user_id` = ?"),
     drafts: await one("SELECT COUNT(*) AS n FROM `member_drafts` WHERE `user_id` = ?"),
+    tokens: await one("SELECT COUNT(*) AS n FROM `agent_tokens` WHERE `user_id` = ?"),
+    profiles: await one("SELECT COUNT(*) AS n FROM `agent_profiles` WHERE `user_id` = ?"),
+    statements: await one("SELECT COUNT(*) AS n FROM `assistant_statements` WHERE `subject_user_id` = ?"),
   };
 }

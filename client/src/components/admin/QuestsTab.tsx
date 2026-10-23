@@ -128,7 +128,7 @@ export default function QuestsTab({ password }: { password: string }) {
           </button>
         </div>
         <div className="mt-3 text-gray-700">
-          <WorkValueEditor draft={addingPay} onChange={setAddingPay} offered={offered} currency={currency || null} cadence="once" inputClassName={inputCls} recognitionName={options?.recognition ?? null} />
+          <WorkValueEditor draft={addingPay} onChange={setAddingPay} offered={offered} currency={currency || null} cadence="once" inputClassName={inputCls} />
         </div>
       </div>
 
@@ -197,7 +197,6 @@ export default function QuestsTab({ password }: { password: string }) {
                     currency={currency || null}
                     cadence="once"
                     inputClassName={inputCls}
-                    recognitionName={options?.recognition ?? null}
                   />
                 </div>
 
