@@ -33,6 +33,8 @@
  *   ROLE_DOCUMENT_MAX_BYTES   5 MB a file (multer refuses past it first)
  *   ROLE_DOCUMENT_TEXT_MAX    60,000 characters of text, refused past it
  *   DOCX_XML_MAX_BYTES        20 MB of inflated document.xml, so a zip bomb stops early
+ *   PDF_MAX_PAGES             40 pages, refused past it before any page is read
+ *   PDF_PARSE_TIMEOUT_MS      10 seconds for the whole PDF read, then it is abandoned
  *   GOOGLE_DOC_TIMEOUT_MS     10 seconds for the whole fetch, redirects included
  *   GOOGLE_DOC_MAX_BYTES      1 MB of exported text
  *
@@ -52,6 +54,14 @@ import { sniffKind } from "./uploads";
 export const ROLE_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const ROLE_DOCUMENT_TEXT_MAX = 60_000;
 export const DOCX_XML_MAX_BYTES = 20 * 1024 * 1024;
+/**
+ * A PDF is read on the request path, so a crafted one could hold the server.
+ * The page cap bounds the work before it starts, and the timeout abandons a
+ * read that runs long. The read still shares the event loop while it runs;
+ * moving it into a worker thread is the follow-up that closes that.
+ */
+export const PDF_MAX_PAGES = 40;
+export const PDF_PARSE_TIMEOUT_MS = 10_000;
 export const GOOGLE_DOC_TIMEOUT_MS = 10_000;
 export const GOOGLE_DOC_MAX_BYTES = 1024 * 1024;
 
@@ -69,6 +79,8 @@ export const DOCUMENT_WORDS = {
   brokenWord: "That Word document could not be opened. Save it again, or as a PDF, and bring it in again.",
   brokenPdf: "That PDF could not be opened. Save it again, or paste its words.",
   lockedPdf: "That PDF is locked with a password. Bring in a copy without one, or paste its words.",
+  longPdf: `That PDF has more than ${PDF_MAX_PAGES} pages. Bring in the part about your role, or paste its words.`,
+  slowPdf: "That PDF took too long to read. Save it as .docx, or paste its words.",
   noText: "There are no words in that document to read. A scanned page is a picture: bring in the document it came from, or paste the words.",
   tooLong: `That holds more than ${ROLE_DOCUMENT_TEXT_MAX.toLocaleString("en-US")} characters. Bring in the part about your role.`,
   tooBig: `That file is over ${ROLE_DOCUMENT_MAX_BYTES / 1024 / 1024} MB. Bring in the part about your role, or paste its words.`,
@@ -224,7 +236,24 @@ interface PdfTextItem {
   hasEOL?: boolean;
 }
 
-async function readPdf(bytes: Buffer): Promise<Extracted> {
+/** A PDF's words, abandoned past the timeout. Exported for its tests; members reach it through extractRoleDocumentText. */
+export async function readPdf(bytes: Buffer, timeoutMs = PDF_PARSE_TIMEOUT_MS): Promise<Extracted> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abandoned = false;
+  const late = new Promise<Extracted>((resolve) => {
+    timer = setTimeout(() => {
+      abandoned = true;
+      resolve(fail(422, DOCUMENT_WORDS.slowPdf));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([readPdfPages(bytes, () => abandoned), late]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function readPdfPages(bytes: Buffer, abandoned: () => boolean): Promise<Extracted> {
   // Only when a PDF arrives: PDF.js is large, and boot should not pay for it.
   const { getDocumentProxy } = await import("unpdf");
   let pdf: Awaited<ReturnType<typeof getDocumentProxy>>;
@@ -236,9 +265,13 @@ async function readPdf(bytes: Buffer): Promise<Extracted> {
     return fail(422, /password/i.test(String(e?.name ?? "") + String(e?.message ?? "")) ? DOCUMENT_WORDS.lockedPdf : DOCUMENT_WORDS.brokenPdf);
   }
   try {
+    // Refused before any page is read: the page count bounds the work.
+    if (pdf.numPages > PDF_MAX_PAGES) return fail(413, DOCUMENT_WORDS.longPdf);
     const pages: string[] = [];
     let total = 0;
     for (let n = 1; n <= pdf.numPages; n += 1) {
+      // Past the timeout the answer has already gone back; stop spending on it.
+      if (abandoned()) return fail(422, DOCUMENT_WORDS.slowPdf);
       const page = await pdf.getPage(n);
       const content = await page.getTextContent();
       let text = "";

@@ -11,6 +11,7 @@ import {
   extractRoleDocumentText,
   fetchGoogleDocText,
   googleDocId,
+  PDF_MAX_PAGES,
   ROLE_DOCUMENT_MAX_BYTES,
   ROLE_DOCUMENT_TEXT_MAX,
   tidyText,
@@ -57,6 +58,26 @@ describe("extracting a document's words", () => {
     expect(txt).toEqual({ ok: true, kind: "txt", text: "Café keeper role" });
     const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Gate keeper", "utf16le")]);
     expect(await extractRoleDocumentText({ bytes: le, filename: "x.txt" })).toEqual({ ok: true, kind: "txt", text: "Gate keeper" });
+  });
+
+  it("refuses a PDF past the page cap before reading any page, and reads one at the cap", async () => {
+    const over = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"], PDF_MAX_PAGES + 1), filename: "long.pdf" });
+    expect(over).toEqual({ ok: false, status: 413, error: DOCUMENT_WORDS.longPdf });
+    const at = await extractRoleDocumentText({ bytes: makePdf(["Gate keeper"], PDF_MAX_PAGES), filename: "ok.pdf" });
+    expect(at.ok && at.kind).toBe("pdf");
+  });
+
+  it("abandons a PDF read that runs past the timeout", async () => {
+    vi.resetModules();
+    // A PDF.js that never answers, as a crafted file might.
+    vi.doMock("unpdf", () => ({ getDocumentProxy: () => new Promise(() => undefined) }));
+    try {
+      const fresh = await import("./roleDocumentText");
+      expect(await fresh.readPdf(makePdf(["Gate keeper"]), 20)).toEqual({ ok: false, status: 422, error: DOCUMENT_WORDS.slowPdf });
+    } finally {
+      vi.doUnmock("unpdf");
+      vi.resetModules();
+    }
   });
 
   it("reads the bytes, never the name: a PDF called .txt is read as a PDF", async () => {
