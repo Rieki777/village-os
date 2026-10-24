@@ -44,6 +44,9 @@
  * server now holds and never what this device hoped it would.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/** How often a closed record with a round still outliving its call is asked for again. */
+const CLOSED_NIGHT_ASK_MS = 60_000;
 import { toast } from "sonner";
 import { gameFetch } from "@/lib/gameApi";
 import {
@@ -117,7 +120,12 @@ export interface RoomActions {
   addEntry(input: EntryInput, opts?: WriteOptions): Promise<WriteResult<{ id?: number }>>;
   patchEntry(entryId: number, patch: EntryPatch, opts?: WriteOptions): Promise<WriteResult>;
   deleteEntry(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
-  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** `answerBy` (an ISO instant) goes with a night, `sleep`, and with nothing else. */
+  respond(target: ResponseTarget, value: string, text?: string | null, opts?: WriteOptions, answerBy?: string): Promise<WriteResult>;
+  /** On a closed record (0281): answer a round you slept on, by your time. */
+  answerNight(entryId: number, value: string, text: string | null, opts?: WriteOptions): Promise<WriteResult>;
+  /** On a closed record (0281): the facilitator marks a round that consented after the call decided. */
+  decideAfterNight(entryId: number, opts?: WriteOptions): Promise<WriteResult>;
   act(action: SessionAction, opts?: WriteOptions): Promise<WriteResult<{ state?: SessionState }>>;
   hosts(input: { facilitatorUserId?: number; secretaryUserId?: number | null }, opts?: WriteOptions): Promise<WriteResult>;
   close(opts?: WriteOptions): Promise<WriteResult & { unowned?: number[] }>;
@@ -187,6 +195,8 @@ export function useSessionRoom(
   const stopped = useRef(false);
   /** The room a poll is out asking for, so polls never stack; null when none is out. */
   const asking = useRef<number | null>(null);
+  /** When a closed record was last asked for, so one with a night still on it is asked again slowly. */
+  const closedAskedAt = useRef(0);
   const current = useRef<SessionView | null>(null);
   /** The shortest round trip the offset was measured on: the steadiest reading wins. */
   const bestTrip = useRef(Number.POSITIVE_INFINITY);
@@ -286,9 +296,17 @@ export function useSessionRoom(
   );
 
   const poll = useCallback(async () => {
-    // A closed session's record stays as it was, so there is nothing to ask for.
+    // A closed session's record stays as it was, so there is nothing to ask for,
+    // unless a round on it outlived the call (0281): then it is asked for once a
+    // minute, so a night that ends or an answer that lands shows without a reload.
     // A poll still out for an earlier room does not hold up this one.
-    if (stopped.current || asking.current === generation.current || !tabVisible() || current.current?.status === "closed") return;
+    if (stopped.current || asking.current === generation.current || !tabVisible()) return;
+    const record = current.current;
+    if (record?.status === "closed") {
+      const live = record.nights?.some((n) => n.open || n.canDecide);
+      if (!live || Date.now() - closedAskedAt.current < CLOSED_NIGHT_ASK_MS) return;
+      closedAskedAt.current = Date.now();
+    }
     const mine = generation.current;
     asking.current = mine;
     try {
@@ -378,7 +396,10 @@ export function useSessionRoom(
     addEntry: (input, opts) => write("POST", "/entries", input, opts),
     patchEntry: (entryId, patch, opts) => write("PATCH", `/entries/${entryId}`, patch, opts),
     deleteEntry: (entryId, opts) => write("DELETE", `/entries/${entryId}`, undefined, opts),
-    respond: (target, value, text, opts) => write("POST", "/respond", text ? { target, value, text } : { target, value }, opts),
+    respond: (target, value, text, opts, answerBy) =>
+      write("POST", "/respond", { target, value, ...(text ? { text } : {}), ...(answerBy ? { answerBy } : {}) }, opts),
+    answerNight: (entryId, value, text, opts) => write("POST", "/night", { entryId, value, ...(text ? { text } : {}) }, opts),
+    decideAfterNight: (entryId, opts) => write("POST", `/entries/${entryId}/decide`, {}, opts),
     act: (action, opts) => write<{ state?: SessionState }>("POST", "/act", { action }, opts),
     hosts: (input, opts) => write("POST", "/hosts", input, opts),
     close: async (opts) => {
