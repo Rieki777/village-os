@@ -24,6 +24,8 @@ import { INVITE_REFUSALS, hashInviteToken, mintInviteToken } from "./invites";
 import { MEMBER_SECRETS_ENV, memberKeyView, storeMemberKey } from "./memberSecrets";
 import { makeSetPasswordToken, readSetPasswordToken, setPasswordLinkRefusal } from "./memberTokens";
 import { feedFor, makeAddress } from "./sessionCalendar";
+import { castVote, openBallot, voteOf } from "./ballots";
+import { VOICE_BACK_NOTICE, acceptDelegations, delegationOf, isCarrying, revokeDelegation, setDelegation } from "./delegation";
 import { claimInvite, createInvite } from "../repos/memberInvites";
 
 const configured = testDbConfigured();
@@ -223,7 +225,7 @@ async function standing(userId: string, planted: Planted) {
 const ALL_STANDING = { token: true, feed: true, inbox: true, queued: 1, key: true, invite: true, address: true, usedLinkKept: true };
 const NONE_STANDING = { token: false, feed: false, inbox: false, queued: 0, key: false, invite: false, address: false, usedLinkKept: true };
 /** What `endAgentReach` answers when nothing stood. */
-const ENDED_NONE = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0 };
+const ENDED_NONE = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0, delegation: false };
 
 /** A pool whose connections drop: the token revoke (a transaction) throws, and every plain query still answers. */
 function droppingConnections(): mysql.Pool {
@@ -539,5 +541,153 @@ describe.skipIf(!configured)("a write already past its session check when the cr
     expect(ended.inbox, "the end after the bump must find the inbox the write left").toBe(true);
     expect(await getInbox(pool, id)).toBeNull();
     expect(Number((await usersRepo(pool).byId(id))!.tokenVersion)).toBe(version + 1);
+  });
+});
+
+/*
+ * THE VOTE A STOLEN SESSION HANDED ON (adversarial round 3, finding 8, a
+ * decision for Rye built as recommended). A session holding `ballot.vote`
+ * can hand the member's vote to an account the thief controls, and once that
+ * account accepts, every open ballot copies its choice onto the member's row
+ * unless the member votes in person. A new password and an admin's revoke
+ * sessions now end the delegation the member GAVE, accepted or still an
+ * offer, derive every open ballot again so nothing copied stays cast, and
+ * tell the member in the bell. A delegation somebody else handed TO the
+ * member is that member's choice and stays.
+ */
+describe.skipIf(!configured)("the vote the member handed on", () => {
+  const WREN = "usr-voice-wren";
+  const BEA = "usr-voice-bea";
+  const CAL = "usr-voice-cal";
+  const bump = (id: string) => usersRepo(pool).update(id, (u) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; });
+  let seq = 0;
+
+  async function seat(id: string): Promise<void> {
+    await q("INSERT INTO users (id, name, email, password_hash) VALUES (?,?,?,'x') ON DUPLICATE KEY UPDATE name = VALUES(name)", [id, `Member ${id}`, `${id}@examples.invalid`]);
+  }
+
+  /** An open ballot this roll votes on, on a subject where a delegation carries. */
+  async function ballot(roll: string[]) {
+    const opened = await openBallot(pool, {
+      subjectType: "mechanics",
+      subjectRef: `reach-delegation-${++seq}`,
+      title: `Ballot ${seq}`,
+      docMarkdown: "# The document as checked",
+      method: "custom",
+      weightMode: "equal",
+      unityPct: 80,
+      quorumPct: 20,
+      durationDays: 7,
+      openedBy: "usr-voice-proposer",
+      electorate: roll.map((userId) => ({ userId, weight: 1 })),
+    });
+    if (!opened.ok) throw new Error(`ballot refused to open: ${opened.error}`);
+    return opened.ballot;
+  }
+
+  /** Give a delegation and have it accepted, which is what makes it carry. */
+  async function handed(delegator: string, delegate: string): Promise<void> {
+    const given = await setDelegation(pool, delegator, delegate);
+    if (!given.ok) throw new Error(`delegation refused: ${given.error}`);
+    expect((await acceptDelegations(pool, delegate, delegator)).changed, "the acceptance must land, or nothing below carries").toBe(1);
+  }
+
+  const notices = (userId: string) =>
+    q("SELECT type, title, body, link, actor_user_id, dedupe_key FROM notifications WHERE user_id = ? ORDER BY created_at, id", [userId]);
+
+  it("a new password ends the delegation the member gave, takes back the votes it copied, tells them once, and leaves the one handed to them", async () => {
+    for (const id of [WREN, BEA, CAL]) await seat(id);
+    const open = await ballot([WREN, BEA, CAL]);
+    await handed(WREN, BEA); // the stolen session's gift, accepted by an account the thief holds
+    await handed(CAL, WREN); // a member who handed their own vote to Wren
+    await castVote(pool, open.id, BEA, "yes");
+    expect(await voteOf(pool, open.id, WREN), "the delegate's choice must be on Wren's row, or the take-back below proves nothing").toMatchObject({ choice: "yes", followedUserId: BEA });
+
+    const told: unknown[] = [];
+    const tell = async (notice: unknown) => { told.push(notice); };
+    const { ended } = await withAgentReachEnded(pool, WREN, () => bump(WREN), { notify: tell });
+
+    expect((await delegationOf(pool, WREN))?.revokedAt, "the vote a stolen session handed on outlived the new password").not.toBeNull();
+    expect(await voteOf(pool, open.id, WREN), "a vote copied from the delegate is still cast for the member").toBeNull();
+    expect(isCarrying(await delegationOf(pool, CAL)), "the vote somebody handed to the member was ended").toBe(true);
+    expect(ended.delegation).toBe(true);
+    expect(told, "the member was not told, or was told twice").toEqual([
+      { userId: WREN, type: "governance", title: VOICE_BACK_NOTICE.title, body: VOICE_BACK_NOTICE.body, link: "/governance", actorUserId: null, dedupeKey: expect.stringContaining(WREN) },
+    ]);
+
+    // A ballot opened since: the delegate's vote copies nothing onto Wren.
+    const later = await ballot([WREN, BEA, CAL]);
+    await castVote(pool, later.id, BEA, "no");
+    expect(await voteOf(pool, later.id, WREN), "a later ballot still copied the delegate's choice").toBeNull();
+
+    // A second reset finds nothing to end and tells nobody.
+    const again = await withAgentReachEnded(pool, WREN, () => bump(WREN), { notify: tell });
+    expect(again.ended.delegation).toBe(false);
+    expect(told).toHaveLength(1);
+  });
+
+  it("an admin's revoke sessions ends an offer still waiting on its delegate, writes the notice to the bell when handed no mailer, and nobody else's", async () => {
+    const DEE = "usr-voice-dee";
+    const FAY = "usr-voice-fay";
+    const GUS = "usr-voice-gus";
+    for (const id of [DEE, FAY, GUS]) await seat(id);
+    // An offer the stolen session made: it carries the day the thief's account accepts.
+    expect((await setDelegation(pool, DEE, BEA)).ok).toBe(true);
+    await handed(FAY, GUS); // a bystander's own delegation
+
+    await bump(DEE);
+    const ended = await endAgentReach(pool, DEE);
+
+    expect((await delegationOf(pool, DEE))?.revokedAt, "an offer the stolen session made outlived the revoke").not.toBeNull();
+    expect(ended.delegation).toBe(true);
+    expect(isCarrying(await delegationOf(pool, FAY)), "another member's delegation was ended").toBe(true);
+    expect(await notices(DEE)).toEqual([
+      { type: "governance", title: VOICE_BACK_NOTICE.title, body: VOICE_BACK_NOTICE.body, link: "/governance", actor_user_id: null, dedupe_key: expect.stringContaining(DEE) },
+    ]);
+    expect(await notices(FAY)).toEqual([]);
+  });
+
+  it("a member who handed nothing on, or took it back themselves, is told nothing", async () => {
+    const HAL = "usr-voice-hal";
+    const IDA = "usr-voice-ida";
+    for (const id of [HAL, IDA]) await seat(id);
+    await handed(IDA, BEA);
+    expect(await revokeDelegation(pool, IDA)).toBe(true);
+
+    for (const id of [HAL, IDA]) {
+      const { ended } = await withAgentReachEnded(pool, id, () => bump(id));
+      expect(ended.delegation, id).toBe(false);
+      expect(await notices(id), `${id} was told of a delegation a reset did not end`).toEqual([]);
+    }
+  });
+
+  it("a reset whose derivation fails after the delegation ended takes the copied vote back on the next try, and tells the member once", async () => {
+    const IVO = "usr-voice-ivo";
+    await seat(IVO);
+    const open = await ballot([IVO, BEA]);
+    await handed(IVO, BEA);
+    await castVote(pool, open.id, BEA, "yes");
+    expect(await voteOf(pool, open.id, IVO)).toMatchObject({ followedUserId: BEA });
+
+    let dropped = false;
+    const dropsTheDerivation = {
+      query: async (sql: string, params?: unknown[]) => {
+        if (!dropped && /FROM ballots WHERE status = 'open'/.test(sql)) {
+          dropped = true;
+          throw new Error("connection dropped");
+        }
+        return pool.query(sql, params); // module-review-ok: passes the code under test's own SQL through to this suite's scratch schema
+      },
+      getConnection: () => pool.getConnection(),
+    } as unknown as mysql.Pool;
+
+    await expect(endAgentReach(dropsTheDerivation, IVO)).rejects.toMatchObject({ name: "AgentReachNotEnded", parts: ["delegation"] });
+    expect(dropped, "the derivation must really have been dropped, or this is the plain case").toBe(true);
+    expect((await delegationOf(pool, IVO))?.revokedAt).not.toBeNull();
+
+    // Pressing again finishes it: the delegation is already ended, and the derivation runs.
+    expect((await endAgentReach(pool, IVO)).delegation).toBe(false);
+    expect(await voteOf(pool, open.id, IVO), "the copied vote outlived the retry that should take it back").toBeNull();
+    expect(await notices(IVO), "the member was not told, or was told twice").toHaveLength(1);
   });
 });

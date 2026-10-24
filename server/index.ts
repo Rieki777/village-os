@@ -8196,7 +8196,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       if ((lost.refusal = setPasswordLinkRefusal(claim, u.tokenVersion))) return;
       u.passwordHash = hash;
       u.tokenVersion = (u.tokenVersion ?? 0) + 1;
-    }));
+    }), { notify }); // notify: the member hears that a delegation they gave was ended (endVoiceGiven)
     if (lost.refusal) return res.status(401).json({ error: lost.refusal });
     if (!fresh) return res.status(404).json({ error: "Account not found" });
     const authTokenStr = encodeToken(AUTH_TOKEN_SECRET, fresh.id, fresh.email, fresh.tokenVersion ?? 0);
@@ -8260,13 +8260,13 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     res.json({ success: true, emailed });
   });
 
-  /** Revoke every session (S1's tokenVersion lever) and what a session left standing: agent tokens, private calendar feed, inbox, own model key, open invitation links, circle calendar address. */
+  /** Revoke every session (S1's tokenVersion lever) and what a session left standing: agent tokens, private calendar feed, inbox, own model key, open invitation links, circle calendar address, the delegation the member gave. */
   app.post("/api/admin/users/:id/revoke-sessions", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const target = await members.byId(req.params.id);
     if (!target) return res.status(404).json({ error: "Not found" });
     await members.update(target.id, (u: any) => { u.tokenVersion = (u.tokenVersion ?? 0) + 1; }); // sessions end first, whatever happens next
-    const ended = await endAgentReach(getPool(), target.id); // a failure answers 500 by name, and pressing again finishes it
+    const ended = await endAgentReach(getPool(), target.id, { notify }); // a failure answers 500 by name, and pressing again finishes it
     res.json({ success: true, agentTokensRevoked: ended.agentTokens, agentReachEnded: ended });
   });
 

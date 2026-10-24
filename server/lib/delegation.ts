@@ -499,6 +499,74 @@ export async function endDelegationsOf(
   return { told: live.length, ended: gave + carried.changed };
 }
 
+/** The notice a member reads when a new password or a session revoke ended the vote they had handed on. It names nobody. */
+export const VOICE_BACK_NOTICE = {
+  title: "Your vote is yours again",
+  body: "A new password or a session revoke on your account ended the delegation that handed your vote to another member, so nobody decides your votes for you now. A vote it had copied onto an open ballot is no longer cast. A vote cast from your account stays as it was cast, and you can change it before its ballot closes. If you hand your vote on again, it carries once they accept.",
+};
+
+/** One stable key per delegation a reset ended: who gave it, and when that delegation was given. */
+export const voiceBackKey = (delegatorId: string, givenAt: string): string =>
+  `delegation-ended-by-reset:${delegatorId}:${givenAt}`;
+
+/**
+ * END THE VOTE A MEMBER HANDED ON, for a new password or an admin's revoke
+ * sessions (`endAgentReach`, server/lib/agentTokens.ts). Adversarial round 3,
+ * finding 8: a decision for Rye, built as recommended in a commit of its own
+ * so it can be taken back alone.
+ *
+ * A session needs only `ballot.vote` to hand the member's vote to another
+ * account, and the member hears nothing when it does. Once that account
+ * accepts, every open ballot copies its choice onto the member's row unless
+ * the member votes in person. So the reset that answers a theft takes the
+ * delegation back the way it takes back the agent's tokens. Most resets are a
+ * forgotten password and the delegation was the member's own; that member is
+ * told, can hand the vote on again, and it carries once the delegate accepts
+ * again.
+ *
+ * Three acts, each the one the member's own DELETE makes:
+ *
+ *   1. END the delegation the member gave, accepted or still an offer
+ *      (`revokeDelegation`). A delegation somebody else handed TO the member
+ *      is that member's choice and is left alone.
+ *   2. TELL the member, once, under a key naming the delegation, and only
+ *      when this run ended it. A member who had none, or took it back
+ *      themselves, hears nothing. Told before the derivation, so a derivation
+ *      that fails loses no notice.
+ *   3. DERIVE every open ballot again (`applyDelegatedVotesEverywhere`), so a
+ *      vote copied onto the member's row is no longer cast. It runs whenever
+ *      the member has ever delegated, so a run whose derivation failed after
+ *      the end is finished by the next, which finds the delegation already
+ *      ended and tells nobody.
+ *
+ * A vote the stolen session cast in the member's own name stays as cast:
+ * nothing marks it apart from one the member cast. The notice says so.
+ *
+ * Returns whether this run ended a delegation.
+ */
+export async function endVoiceGiven(
+  pool: Pool,
+  delegatorId: string,
+  notify: (notice: DelegationNotice) => Promise<unknown>,
+): Promise<boolean> {
+  const given = await delegationOf(pool, delegatorId);
+  if (!given) return false;
+  const ended = given.revokedAt === null && (await revokeDelegation(pool, given.delegatorId));
+  if (ended) {
+    await notify({
+      userId: given.delegatorId,
+      type: "governance",
+      title: VOICE_BACK_NOTICE.title,
+      body: VOICE_BACK_NOTICE.body,
+      link: "/governance",
+      actorUserId: null,
+      dedupeKey: voiceBackKey(given.delegatorId, given.createdAt),
+    });
+  }
+  await applyDelegatedVotesEverywhere(pool);
+  return ended;
+}
+
 /** The delegation this member gave, live or revoked, or null if they never gave one. */
 export async function delegationOf(pool: Pool, delegatorId: string): Promise<DelegationRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>( // module-review-ok: the delegations table's one enumerable home (the ballots.ts pattern; no cache sits above it)

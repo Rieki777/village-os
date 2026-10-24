@@ -27,9 +27,11 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { revokeOpenInvitesOf } from "../repos/memberInvites";
 import { lockSessionFieldsForUpdate } from "../repos/users";
 import { removeInbox } from "./agentInbox";
+import { endVoiceGiven, type DelegationNotice } from "./delegation";
 import { recordEvent } from "./events";
 import { revokeFeedTokens } from "./icsFeed";
 import { removeMemberKey } from "./memberSecrets";
+import { insertNotification } from "./notify";
 import { isTombstone } from "./oauthAccounts";
 import { stopAddress } from "./sessionCalendar";
 
@@ -307,9 +309,37 @@ export interface AgentReachEnded {
   invites: number;
   /** The circle calendar's private address stopped, 1 or 0. */
   circleFeed: number;
+  /** The delegation the member gave, accepted or still an offer, ended (`endVoiceGiven`, lib/delegation.ts). */
+  delegation: boolean;
 }
 
-const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0 };
+const NOTHING_ENDED: AgentReachEnded = { agentTokens: 0, feeds: 0, inbox: false, key: false, invites: 0, circleFeed: 0, delegation: false };
+
+/** What `endAgentReach` needs from its host. */
+export interface AgentReachDeps {
+  /**
+   * The notification spine as the server holds it, so the one notice this
+   * writes, the member's vote handed back to them, follows their mail
+   * preference. Absent, the notice is written to the bell with no mail
+   * (`bellOnly` below), so leaving it out loses no notice: the daily digest
+   * still carries it.
+   */
+  notify?: (notice: DelegationNotice) => Promise<unknown>;
+}
+
+/** The notification spine with no mail, for a caller that hands no `notify`: a script or a test. */
+const bellOnly = (pool: Pool) => (notice: DelegationNotice) =>
+  insertNotification(
+    {
+      pool,
+      memberById: async () => null,
+      sendEmail: async () => ({ accepted: false, status: "skipped", reason: "the reach end was handed no mailer" }),
+      origin: () => "",
+      projectName: () => "",
+      isPresent: () => false,
+    },
+    notice,
+  );
 
 /** What the audit lines say ended the feeds, the inbox, the key and the links. */
 const ENDED_BY = "a new password or a session revoke ended it";
@@ -356,11 +386,19 @@ export class AgentReachNotEnded extends Error {
  * never what the member wrote. The member can make links and an address
  * again from the session the reset hands back.
  *
+ * And the vote the member handed on (round 3, finding 8, a decision for Rye
+ * built as recommended): a session needs only `ballot.vote` to hand it to an
+ * account the thief holds, and once that account accepts, every open ballot
+ * copies its choice onto the member's row. `endVoiceGiven` ends the
+ * delegation the member GAVE, derives every open ballot again and tells the
+ * member through `deps.notify`. One handed TO the member stays. A vote the
+ * stolen session cast directly stays as cast.
+ *
  * Every part is tried even when an earlier one throws, so one bad table never
  * leaves the others standing. Then, if any failed, it throws
  * `AgentReachNotEnded` naming them. Idempotent: a second run ends nothing.
  */
-export async function endAgentReach(pool: Pool, userId: string): Promise<AgentReachEnded> {
+export async function endAgentReach(pool: Pool, userId: string, deps: AgentReachDeps = {}): Promise<AgentReachEnded> {
   const failed: string[] = [];
   let cause: unknown;
   async function part<T>(name: string, end: () => Promise<T>, none: T): Promise<T> {
@@ -379,6 +417,7 @@ export async function endAgentReach(pool: Pool, userId: string): Promise<AgentRe
     key: await part("model key", () => removeMemberKey(pool, userId), false),
     invites: await part("invitation links", () => revokeOpenInvitesOf(pool, userId), 0),
     circleFeed: await part("circle calendar address", () => stopAddress(pool, { userId }), 0),
+    delegation: await part("delegation", () => endVoiceGiven(pool, userId, deps.notify ?? bellOnly(pool)), false),
   };
   const line = { actorUserId: userId, actorKind: "system" as const, audience: "admin" as const };
   if (ended.feeds) {
@@ -394,6 +433,9 @@ export async function endAgentReach(pool: Pool, userId: string): Promise<AgentRe
   if (ended.circleFeed) {
     await recordEvent(pool, { ...line, kind: "calendar_feed_revoked", text: `circle calendar address stopped: ${ENDED_BY}`, entityType: "calendar", entityRef: "circles" });
   }
+  if (ended.delegation) {
+    await recordEvent(pool, { ...line, kind: "delegation_ended", text: `vote delegation ended: ${ENDED_BY}`, entityType: "delegation", entityRef: userId });
+  }
   if (failed.length) throw new AgentReachNotEnded(failed, ended, cause);
   return ended;
 }
@@ -406,6 +448,7 @@ function addEnded(a: AgentReachEnded, b: AgentReachEnded): AgentReachEnded {
     key: a.key || b.key,
     invites: a.invites + b.invites,
     circleFeed: a.circleFeed + b.circleFeed,
+    delegation: a.delegation || b.delegation,
   };
 }
 
@@ -445,16 +488,22 @@ export async function withAgentReachEnded<T>(
   pool: Pool,
   userId: string,
   change: () => Promise<T>,
-  deps: { end?: (pool: Pool, userId: string) => Promise<AgentReachEnded>; log?: (message: string, err: unknown) => void } = {},
+  deps: {
+    end?: (pool: Pool, userId: string, reach?: AgentReachDeps) => Promise<AgentReachEnded>;
+    log?: (message: string, err: unknown) => void;
+    /** Handed to each end (`AgentReachDeps.notify`). */
+    notify?: AgentReachDeps["notify"];
+  } = {},
 ): Promise<{ changed: T; ended: AgentReachEnded }> {
   const end = deps.end ?? endAgentReach;
   const log = deps.log ?? ((message: string, err: unknown) => console.error(message, err));
-  const before = await end(pool, userId);
+  const reach: AgentReachDeps = { notify: deps.notify };
+  const before = await end(pool, userId, reach);
   const changed = await change();
   let after = NOTHING_ENDED;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      after = addEnded(after, await end(pool, userId));
+      after = addEnded(after, await end(pool, userId, reach));
       break;
     } catch (err) {
       if (err instanceof AgentReachNotEnded) after = addEnded(after, err.ended);
