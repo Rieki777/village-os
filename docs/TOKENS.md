@@ -74,7 +74,7 @@ Earned ownership. It accrues here from whichever rules the village turns on, and
 | Members may send it | no, because equity is never handed between members |
 | Can carry a price | no, a price is posted in credit tokens |
 
-**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded with no rule that does. Two rules ship switched OFF and pay nobody until the village turns them on: 1 on `quest.completed` to the claimant; 1 on `role.cycle` to the holder. They are seeded off rather than left out because no route creates a mint rule, so a village that wanted one back would have no way to add it. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded with no rule that does. Three rules ship switched OFF and pay nobody until the village turns them on: 1 on `proposal.accepted` to the claimant; 1 on `quest.completed` to the claimant; 1 on `role.cycle` to the holder. They are seeded off rather than left out because no route creates a mint rule, so a village that wanted one back would have no way to add it. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** Nothing. Balances carry across the moon unchanged.
 
@@ -94,7 +94,7 @@ The village's own money. It is what the cycle pool shares out when a moon closes
 | Members may send it | yes |
 | Can carry a price | yes, and spending it lands in `sys:treasury` |
 
-**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant, up to 250 a moon; 25 on `role.cycle` to the holder, up to 250 a moon. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant, up to 250 a moon; 25 on `role.cycle` to the holder, up to 250 a moon; 25 on `proposal.accepted` to the claimant, up to 250 a moon. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** A closing moon shares out as many of this token as the `gratitude.pool_per_cycle` dial says (default 1000, and 0 turns the pool off), split between members in proportion to the recognition each received that moon. Shares round down, and the remainder stays in the pool. Settlement pays everyone holding a seat 25 of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
@@ -155,7 +155,7 @@ Earned say. It accrues here as work is confirmed and seats are held, and a membe
 | Can carry a price | no, a price is posted in credit tokens |
 | Name | `Village Voice` unless the seed is given another. The slug stays `village-voice` either way |
 
-**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant, up to 100 a moon; 50 on `role.cycle` to the holder, up to 200 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant, up to 100 a moon; 50 on `role.cycle` to the holder, up to 200 a moon; 10 on `proposal.accepted` to the claimant, up to 100 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** Settlement pays everyone holding a seat 50 of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
@@ -318,6 +318,9 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 | `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
 | `role.cycle` | `credits` | 25 | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | no, seeded off |
+| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
 | `quest.completed` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
 | `role.cycle` | `earned-equity` | 1 | 1 | holder | no, seeded off |
 
@@ -395,6 +398,13 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "isVoteWeightDefault": false,
       "seededRules": [
         {
+          "trigger": "proposal.accepted",
+          "amount": 1,
+          "ceiling": 1,
+          "recipient": "claimant",
+          "enabled": false
+        },
+        {
           "trigger": "quest.completed",
           "amount": 1,
           "ceiling": 1,
@@ -441,6 +451,13 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "amount": 25,
           "ceiling": 250,
           "recipient": "holder",
+          "enabled": true
+        },
+        {
+          "trigger": "proposal.accepted",
+          "amount": 25,
+          "ceiling": 250,
+          "recipient": "claimant",
           "enabled": true
         }
       ],
@@ -516,6 +533,13 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "amount": 50,
           "ceiling": 200,
           "recipient": "holder",
+          "enabled": true
+        },
+        {
+          "trigger": "proposal.accepted",
+          "amount": 10,
+          "ceiling": 100,
+          "recipient": "claimant",
           "enabled": true
         }
       ],

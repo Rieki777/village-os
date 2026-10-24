@@ -178,7 +178,7 @@ export function register(app: Express, deps: Deps): void {
       // Example quests are never offered as a way to earn: this list is
       // shown to a guest running low on stay credits as real, claimable work.
       (q) => !q.isExample && String(q.status).toLowerCase() === "open" && ((q.stayCreditReward ?? 0) > 0 || (tag && q.tags.includes(tag))),
-    ).map((q) => ({ id: q.id, title: q.title, stayCreditReward: q.stayCreditReward ?? 0, gratitude: q.gratitude }));
+    ).map((q) => ({ id: q.id, title: q.title, stayCreditReward: q.stayCreditReward ?? 0 }));
     /*
      * THE NAME AND THE SCALE OF EVERY TOKEN ANY ROOM POSTS A RATE IN.
      *
@@ -251,7 +251,7 @@ export function register(app: Express, deps: Deps): void {
       "INSERT INTO stays (id, user_id, accommodation_id, status, arrive_on, autopay, notes) VALUES (?,?,?,?,?,?,?)",
       [id, user.id, acc.id, "requested", arrive, boolVar("stay.autopay_default") ? 1 : 0, String(notes ?? "").slice(0, 2000) || null],
     );
-    await notifyAdmins("stays", `${user.name ?? "A member"} requested a stay in ${acc.name}`, `stay:${id}:requested`);
+    await notifyAdmins("stays", `${user.name ?? "A member"} requested a stay in ${acc.name}`, `stay:${id}:requested`, "/admin", [], { actorUserId: user.id });
     res.json({ id, status: "requested" });
   });
 

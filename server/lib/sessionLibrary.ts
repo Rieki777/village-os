@@ -51,7 +51,7 @@ import * as room from "../repos/liveSessions";
 import * as store from "../repos/sessionLibrary";
 import { listOrgAssignments, type LapseContext } from "./orgChart";
 import { standingIn } from "./circleStanding";
-import { ensureMemberNo, memberNo, namesFor, type MemberLookup, type Outcome, type Refusal } from "./liveSessions";
+import { ensureMemberNo, mapSession, memberNo, namesFor, type MemberLookup, type Outcome, type Refusal } from "./liveSessions";
 import { SESSION_SOMEONE, isItemAim, type ItemAim } from "../../shared/sessions";
 import { liveSeatIdsFor } from "../../shared/sessionTasks";
 import {
@@ -59,16 +59,21 @@ import {
   LIBRARY_MINUTES,
   LIBRARY_NOTICES,
   LIBRARY_REFUSALS,
+  addedByCircle,
   agendaAimFor,
   broughtLink,
   broughtRights,
   canSeeBrought,
   cleanBrought,
   cleanBroughtPatch,
+  cleanTensionSend,
   isLibraryStatus,
+  maySendTension,
   mayTakeInto,
   planTakes,
+  tensionAsItem,
   type LibraryCard,
+  type LibrarySourceKind,
   type LibraryPayload,
   type LibrarySubject,
   type LibraryViewer,
@@ -162,6 +167,9 @@ export async function libraryViewer(
 
 async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: LibraryViewer, deps: LibraryDeps): Promise<LibraryCard[]> {
   if (!recs.length) return [];
+  const sources = new Map(
+    (await store.sourceRows(pool, recs.map((r) => r.id))).map((r) => [Number(r.library_id), { kind: String(r.kind) as LibrarySourceKind, label: String(r.label ?? "") }] as const),
+  );
   const nos = new Set<number>();
   for (const r of recs) {
     nos.add(r.broughtByNo);
@@ -186,6 +194,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
     const readable = !!s && (s.open || viewer.admin || joined.has(r.sessionId!));
     const rights = broughtRights(r, viewer);
     const mine = viewer.no != null && viewer.no > 0 && r.broughtByNo === viewer.no;
+    const source = sources.get(r.id) ?? null;
     return {
       id: r.id,
       title: r.title,
@@ -193,7 +202,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
       note: r.note,
       circleId: r.circleId,
       circleName: deps.circleName(r.circleId),
-      broughtBy: names.get(r.broughtByNo)?.name ?? SESSION_SOMEONE,
+      broughtBy: (r.broughtByNo === 0 && source ? addedByCircle(source.kind, source.label) : null) ?? names.get(r.broughtByNo)?.name ?? SESSION_SOMEONE,
       mine,
       broughtAt: r.createdAt,
       status: r.status,
@@ -201,6 +210,7 @@ async function cardsFor(pool: Pool, recs: readonly LibraryRec[], viewer: Library
       settledAt: r.settledAt,
       backAt: r.status === "waiting" ? (backAt.get(r.id) ?? null) : null,
       changedBy: r.editedByNo != null && r.editedByNo !== r.broughtByNo ? (names.get(r.editedByNo)?.name ?? SESSION_SOMEONE) : null,
+      source,
       canEdit: rights.words && r.status === "waiting",
       canMoveCircle: rights.circle && r.status === "waiting",
       canWithdraw: rights.withdraw,
@@ -267,6 +277,99 @@ export async function bringItem(
   const item = await oneCard(pool, id, viewer, deps);
   if (!item) throw new Error("live sessions: an item just brought could not be read back");
   return done({ item });
+}
+
+/**
+ * Thrown from inside a transaction when another send of the same tension won
+ * the race to the unique source key, so the transaction rolls back whole (no
+ * item is left behind) and the caller answers "sent already" outside it.
+ */
+export class TensionSentAlready extends Error {
+  constructor() {
+    super("live sessions: that tension became an agenda item already");
+  }
+}
+
+/**
+ * An agenda item from a tension, inside the caller's transaction: its words
+ * as the title (and every word in the note when they run long), for the
+ * circle given or none, brought by `broughtByNo`, with where it came from. No
+ * waiting cap: bringing a tension on is answering it, never adding to a pile.
+ *
+ * DECIDED BEFORE ANYTHING IS WRITTEN: the tension's source is read and held
+ * first, and null comes back, with nothing written, when it became an item
+ * already. Two sends at once still meet at the unique source key; the loser
+ * throws `TensionSentAlready`, so its transaction rolls back, item and all.
+ */
+export async function itemFromTension(
+  conn: PoolConnection,
+  // `origin`, never `source`: in server code `source:` is a ledger source's key, and server/lib/contributionPay.test.ts reads every one.
+  row: { circleId: string | null; text: string; lead?: string; broughtByNo: number; origin: { kind: LibrarySourceKind; ref: string; label: string }; now: Date },
+): Promise<number | null> {
+  if ((await store.sourceByRef(conn, row.origin.kind, row.origin.ref, true)).length) return null;
+  const { title, note } = tensionAsItem(row.text, row.lead);
+  const id = await store.insertItemRow(conn, { circleId: row.circleId, title, aim: null, note, broughtByNo: row.broughtByNo, now: row.now });
+  try {
+    await store.insertSource(conn, { libraryId: id, kind: row.origin.kind, ref: row.origin.ref, label: row.origin.label, now: row.now });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "ER_DUP_ENTRY") throw new TensionSentAlready();
+    throw e;
+  }
+  return id;
+}
+
+/**
+ * Send a room's tension to a circle's agenda items (or to none in
+ * particular). Refused in this order: a body that does not read (400), an
+ * entry that is no tension of that session, or one the asker may not read
+ * (404), one they may not send (403), one sent already (409). The session's
+ * record is never written to: the source row is what "From last time" reads.
+ */
+export async function sendRoomTension(
+  pool: Pool,
+  who: LibraryAsker,
+  raw: unknown,
+  circleIds: ReadonlySet<string>,
+  deps: LibraryDeps,
+  now = new Date(),
+): Promise<Outcome<{ item: LibraryCard }>> {
+  const input = cleanTensionSend(raw, circleIds);
+  if (!input.ok) return refuse(400, input.error);
+  const { sessionId, entryId, circleId } = input.value;
+  const [sessionRow] = await room.sessionRow(pool, sessionId);
+  const [entry] = sessionRow ? await room.entryRow(pool, sessionId, entryId) : [];
+  if (!sessionRow || !entry || String(entry.kind) !== "tension") return refuse(404, LIBRARY_REFUSALS.tensionNotFound);
+  const s = mapSession(sessionRow);
+  const no = await memberNo(pool, who.userId);
+  const wasThere = no != null && (await room.personRow(pool, sessionId, no)).length > 0;
+  // A closed record reaches its people and admins only; for anybody else it is not here.
+  if (s.status !== "open" && !wasThere && !who.admin) return refuse(404, LIBRARY_REFUSALS.tensionNotFound);
+  if (!maySendTension({ authorNo: Number(entry.author_no ?? 0) }, { open: s.status === "open", facilitatorNo: s.facilitatorNo, secretaryNo: s.secretaryNo }, { no, admin: who.admin, wasThere })) {
+    return refuse(403, LIBRARY_REFUSALS.tensionNotYours);
+  }
+  const broughtByNo = no ?? (await ensureMemberNo(pool, who.userId, now));
+  const fromCircle = s.circleId ? (deps.circleName(s.circleId) ?? "") : "";
+  let out: Outcome<number>;
+  try {
+    out = await room.inTransaction(pool, async (conn: PoolConnection): Promise<Outcome<number>> => {
+      const id = await itemFromTension(conn, { circleId, text: String(entry.text ?? ""), broughtByNo, origin: { kind: "room_tension", ref: String(entryId), label: fromCircle }, now });
+      return id == null ? refuse(409, LIBRARY_REFUSALS.alreadySent) : done(id);
+    });
+  } catch (e) {
+    if (e instanceof TensionSentAlready) return refuse(409, LIBRARY_REFUSALS.alreadySent);
+    throw e;
+  }
+  if (!out.ok) return out;
+  const viewer = await libraryViewer(pool, { userId: who.userId, no: broughtByNo, admin: who.admin }, deps);
+  const item = await oneCard(pool, out.value, viewer, deps);
+  if (!item) throw new Error("live sessions: an item just sent could not be read back");
+  return done({ item });
+}
+
+/** A session's tensions already sent on, by entry id: the circle each went to, or null. */
+export async function sentTensionsFor(q: Pool | PoolConnection, entryIds: readonly number[]): Promise<Map<number, string | null>> {
+  const rows = await store.sentRows(q, "room_tension", entryIds.map(String));
+  return new Map(rows.map((r) => [Number(r.ref), r.circle_id == null ? null : String(r.circle_id)] as const));
 }
 
 /**
@@ -568,7 +671,15 @@ export async function broughtByItem(q: Pool | PoolConnection, sessionId: number,
   const rows = await store.broughtForSession(q, sessionId);
   if (!rows.length) return new Map();
   const names = await namesFor(q, rows.map((r) => Number(r.brought_by_no)), lookup);
-  return new Map(rows.map((r) => [Number(r.item_id), { libraryId: Number(r.library_id), broughtBy: names.get(Number(r.brought_by_no))?.name ?? SESSION_SOMEONE }]));
+  // An item added by nobody in particular says whose it is: a decision's review is the circle's.
+  const byNobody = rows.filter((r) => Number(r.brought_by_no) === 0).map((r) => Number(r.library_id));
+  const circleOwn = new Map((await store.sourceRows(q, byNobody)).map((s) => [Number(s.library_id), addedByCircle(String(s.kind), String(s.label ?? ""))] as const));
+  return new Map(
+    rows.map((r) => [
+      Number(r.item_id),
+      { libraryId: Number(r.library_id), broughtBy: circleOwn.get(Number(r.library_id)) ?? names.get(Number(r.brought_by_no))?.name ?? SESSION_SOMEONE },
+    ]),
+  );
 }
 
 /** The agenda items of a session that came from the library, so "From last time" does not offer them twice. */
