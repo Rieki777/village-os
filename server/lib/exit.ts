@@ -329,17 +329,19 @@ const EVERY: Record<"month" | "year", string> = { month: "every month", year: "e
  */
 export async function subscriptionsState(pool: Pool, userId: string): Promise<ExitDomainState> {
   const subs = await liveSubscriptionsOf(pool, userId);
+  if (!subs.length) return { domain: "subscriptions", count: 0, description: "no recurring payments", blocking: false };
   const named = subs.map((s) => `${s.productName || "A product no longer listed"}${s.interval ? ` (${EVERY[s.interval]})` : ""}`);
+  // Read only when there is something to cancel: the secrets store throws
+  // until boot has loaded it, and every departure reads this domain.
   const cancel = stripeConfigured()
     ? "Deleting the account cancels each one in Stripe"
     : "Stripe is not connected to this village, so deleting the account asks the admins to cancel each one by hand in Stripe";
   return {
     domain: "subscriptions",
     count: subs.length,
-    description: subs.length
-      ? `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
-        `${cancel}, and nothing already paid is refunded`
-      : "no recurring payments",
+    description:
+      `${subs.length} recurring payment(s) still renewing through Stripe: ${named.join(", ")}. ` +
+      `${cancel}, and nothing already paid is refunded`,
     blocking: false,
   };
 }
